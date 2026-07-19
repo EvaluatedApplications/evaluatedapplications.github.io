@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NavPathfinder — movement and tactics for games, headless</title>
+<meta name="description" content="NavPathfinder is a headless .NET 8 movement and tactics engine: navmesh pathfinding, flow-field crowds, combat, fog of war, line of sight, influence maps and AI behaviors, held to a frame budget. Engine-agnostic, on NuGet.">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<button class="toggle" id="themeBtn" aria-label="Switch colour theme">◐ Theme</button>
+
+<nav class="nav">
+  <div class="wrap">
+    <a class="brand" href="index.html">Evaluated Applications</a>
+    <div class="links">
+      <a href="evalapp.html">EvalApp</a>
+      <a href="navpathfinder.html" class="on">NavPathfinder</a>
+      <a href="work.html">Work</a>
+      <a href="index.html#start">Contact</a>
+    </div>
+  </div>
+</nav>
+
+<header class="page-head">
+  <div class="wrap">
+    <span class="eyebrow">Product · .NET 8 · headless SDK</span>
+    <h1>Movement and tactics for games, in one headless SDK.</h1>
+    <p class="lede">NavPathfinder is more than a pathfinder. One <code>PathfindingWorld</code> gives you navmesh pathfinding, flow-field crowds, combat, perception and AI behaviors, all headless, engine-agnostic, and held to a frame budget. Feed it agent snapshots each tick; apply the waypoints it hands back.</p>
+    <div class="hero-tick">
+      <span><b>move · fight · perceive</b> in one library</span>
+      <span><b>engine-agnostic</b> · runs on a server or in CI</span>
+      <span><b>~680 agents</b> inside an ~80&nbsp;fps budget</span>
+    </div>
+    <div class="cta-row">
+      <a href="https://www.nuget.org/packages/NavPathfinder.Sdk" target="_blank" rel="noopener" class="btn btn-primary">Get it on NuGet →</a>
+      <a href="#quickstart" class="btn btn-ghost">See the quickstart</a>
+    </div>
+  </div>
+</header>
+
+<section>
+  <div class="wrap">
+    <div class="col">
+      <span class="eyebrow">More than a pathfinder</span>
+      <h2>The systems a game usually stitches together, in one place.</h2>
+      <p class="lede">Most projects wire up four or five libraries for movement, crowds, combat and vision. NavPathfinder ships them as one coherent, headless engine over a single baked navmesh.</p>
+    </div>
+    <div class="grid g3">
+      <div class="panel card">
+        <span class="k">Move</span>
+        <h3>Crowds that scale</h3>
+        <p>Navmesh baking, single-agent A*, and flow-field crowd pathfinding where agents heading to the same goal share one field, so high agent counts stay cheap. Dynamic obstacles and multi-layer ground, air and water are built in.</p>
+      </div>
+      <div class="panel card amber">
+        <span class="k">Fight</span>
+        <h3>Combat, not just collision</h3>
+        <p>Resolve two forces in a tick: hit, dodge, block and crit, with damage applied and per-attack outcomes returned for your animation and audio. Bring your own RPG math through <code>IGameMath</code>; layer masks keep melee off flyers; a per-tick attack budget keeps it bounded.</p>
+      </div>
+      <div class="panel card">
+        <span class="k">Perceive</span>
+        <h3>Vision and knowledge</h3>
+        <p>Explored-persists fog of war keyed to navmesh line of sight, cone vision for "can this guard see the player", and influence maps that turn enemy, loot and objective positions into a per-triangle field your AI can sample.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="band">
+  <div class="wrap">
+    <div class="col">
+      <span class="eyebrow">AI movement</span>
+      <h2>Behaviors, not a hand-written state machine.</h2>
+      <p class="lede">Compose movement from scored behaviors. Each tick every behavior scores every agent, the highest wins, then it pathfinds. Guards patrol, civilians flee, crowds queue and lane, and you can add your own.</p>
+    </div>
+    <div class="grid g2">
+      <div class="panel card">
+        <span class="k">Built-in behaviors</span>
+        <h3>Seek · Flee · Patrol · Wander · Queue · FlowLane</h3>
+        <p>Drop-in behaviors, all real: flee a threat, cycle patrol waypoints, form an orderly queue at a chokepoint, or take the right-hand lane to break a head-on deadlock in a corridor. Add your own by implementing one interface.</p>
+      </div>
+      <div class="panel card">
+        <span class="k">Crowd smarts</span>
+        <h3>Congestion, clustering, formations</h3>
+        <p>Congestion analysis finds chokepoints and opposing traffic to drive queueing and laning. Under load, agents with nearby goals cluster so only representatives pathfind and the rest follow in formation, with a narrow-corridor guard so followers never get pushed into walls.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="quickstart">
+  <div class="wrap">
+    <div class="col">
+      <span class="eyebrow">Quickstart</span>
+      <h2>One world, the services you need, a tick loop.</h2>
+      <p class="lede">Bake a navmesh once, then each frame feed agent snapshots and apply the waypoints. Everything hangs off a single <code>PathfindingWorld</code>.</p>
+    </div>
+    <div class="prose" style="margin-top:32px">
+      <span class="pre-cap">C# · .NET 8</span>
+<pre><code>// One world; pull the services you need. Add a license key for parallel + tuning.
+var world   = new PathfindingWorld();
+var baker   = world.CreateNavMeshBakerService();
+var agents  = world.CreateMultiAgentService();
+
+var navMesh = await baker.BakeAsync(vertices, triangles);
+
+// Each frame: feed agent snapshots, get waypoints back.
+var result = await agents.TickAsync(units, navMesh, tick);
+foreach (var path in result.Paths)
+    if (path.PathFound)
+        Move(path.AgentId, path.Waypoints);</code></pre>
+      <p style="color:var(--ink-soft)">The same <code>world</code> vends the combat (<code>CreateEngagementService</code>), vision (<code>CreateLineOfSightService</code>, <code>CreateFogOfWarService</code>), influence-map, congestion, navigator and multi-population simulation services, and registers through <code>services.AddNavPathfinder(...)</code> for dependency injection.</p>
+    </div>
+  </div>
+</section>
+
+<section class="band">
+  <div class="wrap">
+    <div class="col">
+      <span class="eyebrow">Performance</span>
+      <h2>Held to a frame budget, not a guessed constant.</h2>
+      <p class="lede">There is no "max agents" number to hand-tune. NavPathfinder self-tunes its concurrency to the machine it runs on, and can manage its own work to a target frame time, reporting how much headroom is left.</p>
+    </div>
+    <div class="grid g3">
+      <div class="panel card">
+        <span class="k">Self-tuning</span>
+        <h3>Finds the machine's limit</h3>
+        <p>Built on our EvalApp engine, it measures real work per tick and converges on the concurrency the hardware rewards, then re-adapts when load changes.</p>
+      </div>
+      <div class="panel card">
+        <span class="k">Frame-budget modes</span>
+        <h3>Manages to a target</h3>
+        <p>Tuned mode keeps the tick under a target frame time by adapting how much new work it takes on, and reports back a pressure signal you can drive difficulty or spawn caps from.</p>
+      </div>
+      <div class="panel card">
+        <span class="k">Many populations</span>
+        <h3>Split the budget</h3>
+        <p>The simulation service runs several populations in one tick and splits the frame budget between them by weight, "units get 60%, civilians 40%", adjustable per tick.</p>
+      </div>
+    </div>
+    <p class="note" style="max-width:var(--read)">~680 agents pathfinding and fighting inside an ~80&nbsp;fps budget under full load, measured in a headless siege harness.</p>
+  </div>
+</section>
+
+<section id="get">
+  <div class="wrap">
+    <div class="col">
+      <span class="eyebrow">Get it</span>
+      <h2>On NuGet. Headless, no engine required.</h2>
+      <p class="lede">Pure .NET 8. Feed it <code>System.Numerics</code> positions and apply the waypoints in your engine, on a server, or in CI. Runs the same everywhere.</p>
+    </div>
+    <div class="install">
+      <div class="cmd"><span class="sigil">&gt;</span> dotnet add package NavPathfinder.Sdk</div>
+      <div class="tier">
+        <div class="t free">
+          <b>Free · unlicensed</b>
+          <p>Every service runs correctly and sequentially: pathfinding, crowds, combat, perception, behaviors and simulation. No key required.</p>
+        </div>
+        <div class="t lic">
+          <b>Licensed</b>
+          <p>Unlocks parallel execution, the frame-budget adaptive tuner (Explicit and Tuned modes), and Surrounding mode for emergent encirclement.</p>
+        </div>
+      </div>
+      <div class="cta-row" style="margin-top:22px">
+        <a href="https://www.nuget.org/packages/NavPathfinder.Sdk" target="_blank" rel="noopener" class="btn btn-ghost ink">View on NuGet ↗</a>
+        <a href="mailto:dongyang.stephen.chen@gmail.com?subject=NavPathfinder" class="btn btn-ghost ink">Talk to us about licensing</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="close" id="start">
+  <div class="wrap">
+    <span class="eyebrow" style="color:var(--scope-muted)">Or point it at your game</span>
+    <h2>Building something that needs to move and fight at scale?</h2>
+    <p class="lede">NavPathfinder is one of the systems we build and run. If you want movement, crowds and tactics that hold a frame budget on your own project, start with a conversation.</p>
+    <div class="cta-row">
+      <a href="mailto:dongyang.stephen.chen@gmail.com?subject=NavPathfinder" class="btn btn-primary">Get in touch →</a>
+      <a href="work.html" class="btn btn-ghost">See our work</a>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <span class="sig">Evaluated Applications — performance engineering for .NET.</span>
+    <span class="mono">© <span id="yr"></span> Evaluated Applications · <a href="mailto:dongyang.stephen.chen@gmail.com">contact</a></span>
+  </div>
+</footer>
+
+<script src="script.js"></script>
+</body>
+</html>
