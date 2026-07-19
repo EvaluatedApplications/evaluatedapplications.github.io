@@ -95,6 +95,45 @@
   </div>
 </section>
 
+<section class="band" id="teach">
+  <div class="wrap">
+    <div class="col">
+      <span class="eyebrow">How to teach it</span>
+      <h2>It becomes what you say to it.</h2>
+      <p class="lede">The model starts blank, with no personality. It becomes whatever it is trained on, and it only ever learns from what real people say, never from its own output. The voice it grows is the voice you give it.</p>
+    </div>
+    <div class="grid g2">
+      <div class="panel card">
+        <span class="k">It learns your voice</span>
+        <h3>Every message trains it</h3>
+        <p>Each thing you type in the REPL is saved and trained as "the conversation so far → your reply". Talk to it about what you care about, in your own voice, and it drifts toward sounding like you. On the network, it also picks up the human turns of the people you are connected to.</p>
+      </div>
+      <div class="panel card">
+        <span class="k">Only humans count</span>
+        <h3>It never learns from a machine</h3>
+        <p>It only ever trains toward real human turns, never toward text a model generated, its own or a peer's. That is deliberate: its personality is made only of real people's words, so it cannot spiral into its own nonsense.</p>
+      </div>
+    </div>
+    <div class="prose" style="margin-top:34px">
+      <h3 style="font-family:var(--serif);font-size:1.28rem">Change its training data</h3>
+      <p style="color:var(--ink-soft)">Press <b>Open data folder</b> in the app (or browse to <code>%LOCALAPPDATA%\Prism\data</code>). Drop files into any of the lanes:</p>
+      <ul class="clean">
+        <li><b>text\</b> — plain <code>.txt</code> files. It learns to continue writing like them: a corpus, a style, an author.</li>
+        <li><b>pairs\</b> — tab-separated lines, <code>prompt&lt;TAB&gt;target</code>, one per line. It learns to answer these, like flash-card Q&amp;A.</li>
+        <li><b>chat\</b> — your REPL conversations, filled in automatically as you talk. This is where your own voice lands.</li>
+      </ul>
+      <p style="color:var(--ink-soft)">Then press <b>Train</b> to fold the new data in, and <b>Reset model</b> to wipe the weights and start over. Your data is kept either way, resetting only clears what it has learned, so you retrain to rebuild.</p>
+      <h3 style="font-family:var(--serif);font-size:1.28rem;margin-top:1.4em">How training works</h3>
+      <ul class="clean">
+        <li>Every lane gets an <b>equal share</b> of each training step, so a handful of <code>pairs</code> lines shape it as much as a giant text file. Small, deliberate data has real pull.</li>
+        <li>An <b>epoch is a length of time</b>, not a pass over the data. It trains on random draws for the minutes you give it, the corpus is far too big to read in full.</li>
+        <li><b>Numbers are frozen.</b> The codec that lets it do arithmetic is pinned, so teaching it new words never breaks its math.</li>
+        <li>Nothing is required. Add as little or as much as you like; an empty folder just means it has nothing to learn from yet.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
 <section>
   <div class="wrap">
     <div class="col">
