@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Prism Studio — train a language model on your CPU</title>
+<meta name="description" content="Prism Studio is a free, experimental Windows app that trains and chats with a tiny from-scratch language model on your CPU — no GPU, no PyTorch. Train from a folder of text, and optionally join a peer colony that learns together.">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<button class="toggle" id="themeBtn" aria-label="Switch colour theme">◐ Theme</button>
+
+<nav class="nav">
+  <div class="wrap">
+    <a class="brand" href="index.html">Evaluated Applications</a>
+    <div class="links">
+      <a href="evalapp.html">EvalApp</a>
+      <a href="navpathfinder.html">NavPathfinder</a>
+      <a href="prism-studio.html" class="on">Prism Studio</a>
+      <a href="work.html">Work</a>
+      <a href="index.html#start">Contact</a>
+    </div>
+  </div>
+</nav>
+
+<header class="page-head">
+  <div class="wrap">
+    <span class="eyebrow">Research preview · Windows · free</span>
+    <h1>Train a language model on your CPU.</h1>
+    <p class="lede">Prism Studio is our research made touchable: a small desktop app that trains a from-scratch language model on your CPU, no GPU and no PyTorch, then lets you chat with it. It is a curious experiment, not a polished assistant. The model is tiny and its replies are rough. What is interesting is how it learns.</p>
+    <div class="hero-tick">
+      <span><b>CPU-only</b> · no GPU, no PyTorch</span>
+      <span><b>train from a folder</b> of plain text</span>
+      <span><b>a peer colony</b> that learns together</span>
+    </div>
+    <div class="cta-row">
+      <a href="#download" class="btn btn-primary">Download for Windows →</a>
+      <a href="#what" class="btn btn-ghost">See what it does</a>
+    </div>
+  </div>
+</header>
+
+<section id="what">
+  <div class="wrap">
+    <div class="col">
+      <span class="eyebrow">What you can do</span>
+      <h2>One window: teach it, talk to it, network it.</h2>
+      <p class="lede">Everything is a training pair. Drop text into a folder, press Train, and watch it learn live. Then type at it, or connect it to other machines running the same thing.</p>
+    </div>
+    <div class="grid g3">
+      <div class="panel card">
+        <span class="k">Model</span>
+        <h3>Train and chat</h3>
+        <p>Train from a folder of plain text and <code>prompt→target</code> files, with a live log of loss, speed and the samples it is generating. Talk to it in a REPL. Save, load, or reset the model to a blank slate whenever you want.</p>
+      </div>
+      <div class="panel card">
+        <span class="k">Network</span>
+        <h3>A colony that learns together</h3>
+        <p>Optionally join a peer colony: nodes teach each other by trading training examples and averaging tiny slices of their weights. Group-chat several models at once. This is the research idea, many whole models cohering, made visible.</p>
+      </div>
+      <div class="panel card">
+        <span class="k">Sub-node</span>
+        <h3>Run a second cell</h3>
+        <p>Spin up a second independent model in the same window, with its own data and memory, that also joins the network. A little colony on one machine, so you can watch two learners diverge and converge.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="band">
+  <div class="wrap">
+    <div class="col">
+      <span class="eyebrow">Why it's interesting</span>
+      <h2>The mechanism, not the fluency.</h2>
+      <p class="lede">Prism is a from-scratch transformer built on a few unusual ideas. It will not out-talk a real chatbot. It does some things a normal small model cannot.</p>
+    </div>
+    <div class="grid g3">
+      <div class="panel card">
+        <span class="k">Numbers as phasors</span>
+        <h3>Arithmetic it was never taught</h3>
+        <p>Numbers are stored as decodable patterns, so the model computes on operands it has never seen rather than memorising. In our benchmark it reads held-out arithmetic at 52%, against 16% for a same-size ordinary transformer.</p>
+      </div>
+      <div class="panel card">
+        <span class="k">Mergeable gradients</span>
+        <h3>Mismatched machines, one model</h3>
+        <p>Gradients merge to the bit, so a slow laptop and a fast desktop contribute identical results. That is what lets a colony of ordinary machines train one coherent model, with every node holding the whole thing.</p>
+      </div>
+      <div class="panel card">
+        <span class="k">CPU-native</span>
+        <h3>No GPU, no framework</h3>
+        <p>The whole thing is plain C# double-precision math. It trains on the CPU you already have. If you happen to have an NVIDIA GPU it will use it, but nothing requires one.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="col">
+      <span class="eyebrow">Know before you run</span>
+      <h2>It's an experiment, and it talks to the internet.</h2>
+    </div>
+    <div class="grid g2">
+      <div class="panel card amber">
+        <span class="k">It joins a public colony</span>
+        <h3>Read this first</h3>
+        <p><b>On launch, Prism Studio connects to a public colony and shares training examples and small slices of its model weights with other people running it.</b> That is the colony experiment working as intended. But it means anything you put in the training folder can be sent to strangers. Do not train it on anything private.</p>
+      </div>
+      <div class="panel card">
+        <span class="k">Expectations</span>
+        <h3>A toy, honestly</h3>
+        <p>The model is small and character-level, so replies are short and often nonsense, closer to a talking parrot than an assistant. Large-scale colony training is unproven; it runs today at small scale. This is a window into the research, offered as-is, not a product with support.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="band" id="download">
+  <div class="wrap">
+    <div class="col">
+      <span class="eyebrow">Download</span>
+      <h2>Windows, no install, no .NET needed.</h2>
+      <p class="lede">A single self-contained app. Unzip it anywhere and run, everything it writes lives under your local app data, and it needs no runtime installed.</p>
+    </div>
+    <div class="install">
+      <div class="cta-row" style="margin-top:0">
+        <a href="https://github.com/EvaluatedApplications/PrismFormer/releases/latest/download/PrismStudio.zip" class="btn btn-primary">Download PrismStudio.zip →</a>
+        <a href="https://github.com/EvaluatedApplications/PrismFormer" target="_blank" rel="noopener" class="btn btn-ghost ink">Source on GitHub ↗</a>
+      </div>
+      <p class="note" style="margin-top:18px;max-width:var(--read)">Windows 10/11 · ~200&nbsp;MB zipped · connects to a public colony and shares training data on launch (see above).</p>
+      <div class="tier" style="grid-template-columns:1fr">
+        <div class="t">
+          <b>How to run it</b>
+          <p style="margin-top:8px">The app is not code-signed, so Windows SmartScreen will warn you. It runs fine; here is the safe way through:</p>
+          <ol style="margin:10px 0 0;padding-left:20px;color:var(--ink-soft);font-size:.95rem;line-height:1.7">
+            <li>Unzip the folder somewhere (keep <code>PrismStudio.exe</code> next to its <code>data</code> folder).</li>
+            <li>Right-click <code>PrismStudio.exe</code> → <b>Properties</b> → tick <b>Unblock</b> → OK.</li>
+            <li>Double-click it. If a blue "Windows protected your PC" box appears, click <b>More info</b> → <b>Run anyway</b>.</li>
+          </ol>
+          <p style="margin-top:10px;font-size:.92rem;color:var(--muted)">You do not need to run it as administrator. If your antivirus quarantines it, that is a false positive on an unsigned app; allow it or skip the download.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="close" id="start">
+  <div class="wrap">
+    <span class="eyebrow" style="color:var(--scope-muted)">The research behind it</span>
+    <h2>This is the depth we bring to client work.</h2>
+    <p class="lede">Prism is our own R&amp;D: a language model built from first principles, backward pass hand-derived, gradients merged to the bit. If you want engineering like this pointed at your problem, get in touch.</p>
+    <div class="cta-row">
+      <a href="mailto:dongyang.stephen.chen@gmail.com?subject=Prism" class="btn btn-primary">Get in touch →</a>
+      <a href="work.html" class="btn btn-ghost">See our work</a>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <span class="sig">Evaluated Applications — performance engineering for .NET.</span>
+    <span class="mono">© <span id="yr"></span> Evaluated Applications · <a href="mailto:dongyang.stephen.chen@gmail.com">contact</a></span>
+  </div>
+</footer>
+
+<script src="script.js"></script>
+</body>
+</html>
