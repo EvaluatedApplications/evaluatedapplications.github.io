@@ -3,8 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>EvalApp — self-tuning pipeline engine for .NET</title>
-<meta name="description" content="EvalApp is a self-tuning async pipeline engine for .NET 8. Declare what work to do; it finds how fast your hardware can run it. Zero dependencies, one DLL, on NuGet.">
+<title>EvalApp — the .NET framework for doing things fast</title>
+<meta name="description" content="EvalApp is a .NET 8 pipeline framework built for speed: your topology is resolved once into a pre-built delegate chain, and it learns the fastest concurrency for your hardware as it runs. Zero dependencies, one DLL, on NuGet.">
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -25,8 +25,13 @@
 <header class="page-head">
   <div class="wrap">
     <span class="eyebrow">Product · .NET 8 · on NuGet</span>
-    <h1>EvalApp — a pipeline engine that tunes itself to your hardware.</h1>
-    <p class="lede">You declare <em>what</em> work to do, as a chain of small steps over one immutable data record. EvalApp works out <em>how fast the machine it is running on can do it</em>, and re-adapts when load or hardware changes. Zero dependencies, in-process, one DLL.</p>
+    <h1>The .NET framework for doing things fast.</h1>
+    <p class="lede">You describe the work as records and steps. EvalApp resolves the whole pipeline once into a single pre-built delegate chain, then runs it with no per-call reflection, container lookups, or re-assembly, and learns the fastest concurrency for the machine it is on as it runs.</p>
+    <div class="hero-tick">
+      <span><b>resolved once</b>, reused on every run</span>
+      <span><b>self-tuning</b> concurrency, no thread count to guess</span>
+      <span><b>zero dependencies</b> · one DLL · in-process</span>
+    </div>
     <div class="cta-row">
       <a href="https://www.nuget.org/packages/EvalApp.Consumer" target="_blank" rel="noopener" class="btn btn-primary">Get it on NuGet →</a>
       <a href="#quickstart" class="btn btn-ghost">See the 60-second start</a>
@@ -37,28 +42,25 @@
 <section>
   <div class="wrap">
     <div class="col">
-      <span class="eyebrow">What it is</span>
-      <h2>Declared parallelism, tuned at runtime.</h2>
-      <p class="lede">Most .NET code defaults to sequential <code>await</code> chains because getting real parallelism right, correct throttling, exception aggregation, cancellation across every branch, is hard to sustain. EvalApp makes that a one-line declaration and then finds the concurrency your hardware actually rewards.</p>
+      <span class="eyebrow">Built for speed</span>
+      <h2>Three pieces, all pointed at throughput.</h2>
+      <p class="lede">Records for state, a pipeline that is built once instead of per call, and a fluent interface that only lets you build the fast, correct thing. None of it needs a broker, a database, or a config file.</p>
     </div>
     <div class="grid g3">
       <div class="panel card">
-        <span class="k">Self-tuning</span>
-        <h3>Finds its own concurrency</h3>
-        <p>The tuner watches real throughput on every run, probes neighbouring concurrency values, and converges on the number that suits the hardware, from the first run, with no benchmarking exercise.</p>
-        <span class="metric">→ 30–40% over hand-tuned baselines</span>
+        <span class="k">Records</span>
+        <h3>State with no locks</h3>
+        <p>All pipeline state is one immutable record; each step returns a new one with <code>with</code>. No shared mutable state means no locks and no defensive copying, so parallel branches never contend. The record is also the design: non-null fields are inputs, nullable fields are outputs the steps fill in.</p>
       </div>
       <div class="panel card">
-        <span class="k">Zero infrastructure</span>
-        <h3>One DLL, no broker</h3>
-        <p>Pure .NET 8 with no NuGet dependencies, no message broker, no external store, no config files. Add the package and it runs in-process. The tuner persists to a local JSON file on its own.</p>
-        <span class="metric">→ nothing to deploy, nothing to configure</span>
+        <span class="k">Compiled pipelines</span>
+        <h3>Resolved once, not per call</h3>
+        <p>You build the pipeline once at startup. EvalApp folds the whole tree, steps, gates, branches, sagas, into a single nested delegate. Every run after that is a chain of direct calls with no reflection, no container lookup, and no middleware re-assembly. On the plain path a step hands back its <code>ValueTask</code> with no async state machine at all.</p>
       </div>
       <div class="panel card amber">
-        <span class="k">Compile-time safe</span>
-        <h3>Whole bug classes can't be written</h3>
-        <p>The type-state builder only offers the steps that are valid where you are. After <code>.BeginSaga()</code> the compiler requires <code>.EndSaga()</code> before it will run. Bad async structures simply don't compile.</p>
-        <span class="metric">→ the pipeline is its own architecture map</span>
+        <span class="k">Guided fluent interface</span>
+        <h3>Correct concurrency you don't hand-write</h3>
+        <p>Bounded parallelism, saga rollback, exception aggregation are each solved but hard to combine under pressure. The type-state builder offers only the moves valid where you are, and refuses to compile the invalid ones, after <code>.BeginSaga()</code> it requires <code>.EndSaga()</code>. You get fast, safe concurrency without writing the fiddly parts.</p>
       </div>
     </div>
   </div>
@@ -67,21 +69,32 @@
 <section class="band">
   <div class="wrap">
     <div class="col">
-      <span class="eyebrow">The idea</span>
-      <h2>State is one record. Steps only touch the record.</h2>
-      <p class="lede">The data record is the function signature and the shared state at once. Non-nullable fields are inputs, required to start. Nullable fields are outputs, null until the step that fills them runs. Adding a field touches only the steps that use it, so the refactoring cascade never happens.</p>
+      <span class="eyebrow">Throughput</span>
+      <h2>It finds the fastest concurrency for your hardware.</h2>
+      <p class="lede">Declare parallelism with a <code>ForEach</code> or a resource gate. EvalApp bounds it with a shared semaphore per resource kind, then tunes the degree by measuring real wall-time on every run, so there is no thread-count constant to guess and none to go stale when the environment changes.</p>
     </div>
-    <div class="prose" style="margin-top:34px">
-      <span class="pre-cap">The whole shape of a process, in one type</span>
-<pre><code>record BatchData(
-    int BatchId,                       // INPUT:   what batch to run
-    DateTime ScheduledAt,              // INPUT:   when it was scheduled
-    List&lt;Item&gt;?   LoadedItems,          // STAGE 1: loaded from the database
-    List&lt;Item&gt;?   ValidatedItems,       // STAGE 2: passed validation
-    List&lt;string&gt;? ProcessedIds,         // STAGE 3: processed successfully
-    string?       ConfirmationRef       // STAGE 4: external confirmation
-);</code></pre>
-      <p style="color:var(--ink-soft)">Design the record well and the steps almost write themselves. Reading the builder chain tells you, on one screen, which resources exist and at what limits, which steps are gated, which collections run in parallel, and which steps have rollback registered. It is always correct because it <em>is</em> the code.</p>
+    <div class="grid g2">
+      <div class="panel card">
+        <span class="k">Adaptive · hill-climbing</span>
+        <h3>Probe, measure, keep what's faster</h3>
+        <p>A four-phase tuner probes the concurrency up and down, keeps a change only when it beats the recent best by a real margin, converges, then keeps watching for regressions and backs off if throughput drops.</p>
+      </div>
+      <div class="panel card">
+        <span class="k">Bayesian · Thompson sampling</span>
+        <h3>Warm-starts after a restart</h3>
+        <p>An opt-in variant treats each concurrency level as a bandit arm with its own posterior. The posteriors survive process restarts, so a freshly deployed instance starts near last time's best instead of re-exploring from scratch.</p>
+      </div>
+    </div>
+    <div class="prose" style="margin-top:30px">
+      <span class="pre-cap">Declared parallelism · C#</span>
+<pre><code>.ForEach(
+    name:      "ProcessOrders",
+    select:    d =&gt; d.Orders,
+    configure: inner =&gt; inner
+        .Gate(ResourceKind.Database, g =&gt; g
+            .AddStep("Save", async (o, ct) =&gt; o with { Saved = await db.Save(o, ct) })),
+    merge:     (orig, results) =&gt; orig with { Orders = results })</code></pre>
+      <p class="note" style="max-width:var(--read)">Below a small-collection threshold it runs the items inline, because tiny batches don't earn their scheduling cost. The tuner learns the concurrency your hardware rewards by measuring throughput, rather than a number you hard-code and hope stays right.</p>
     </div>
   </div>
 </section>
@@ -91,15 +104,15 @@
     <div class="col">
       <span class="eyebrow">60-second start</span>
       <h2>Build once at startup. Call on every request.</h2>
-      <p class="lede">Define the record, chain the steps, and run. The same pipeline is thread-safe, reusable, and self-tuning from the first call.</p>
+      <p class="lede">Define the record, chain the steps, build. The same pipeline is thread-safe, reusable, and self-tuning from the first call.</p>
     </div>
     <div class="prose" style="margin-top:32px">
       <span class="pre-cap">C# · .NET 8</span>
 <pre><code>// 1. One immutable record holds the entire pipeline state
 record OrderData(int OrderId, bool IsValid = false, decimal Price = 0, string? Receipt = null);
 
-// 2. Build once
-EvalApp.App("ProcessOrder")
+// 2. Build once — the topology is resolved into a pre-built delegate here
+Eval.App("ProcessOrder")
     .WithTuning()
     .DefineDomain("Orders")
         .DefineTask&lt;OrderData&gt;("Process")
@@ -107,16 +120,17 @@ EvalApp.App("ProcessOrder")
             .AddStep("FetchPrice",  async (d, ct) =&gt; d with { Price = await catalog.GetPrice(d.OrderId, ct) })
             .AddStep("SendReceipt", async (d, ct) =&gt; d with { Receipt = await email.Send(d, ct) })
             .Run(out var pipeline)
-        .Build(licenseKey: "YOUR-KEY");   // omit for the free sequential tier
+        .Build();
 
-// 3. Call on every request
+// 3. Call on every request — reused, no per-call rebuild
 var result = await pipeline.RunAsync(new OrderData(orderId));
 switch (result)
 {
-    case PipelineResult&lt;OrderData&gt;.Success s: await Save(s.Data); break;
-    case PipelineResult&lt;OrderData&gt;.Failure f: log.Error(f.Exception); break;
+    case PipelineResult&lt;OrderData&gt;.Success s: await Save(s.GetData()); break;
+    case PipelineResult&lt;OrderData&gt;.Failure f: log.Error(f.Exception);  break;
+    case PipelineResult&lt;OrderData&gt;.Skipped sk: log.Debug(sk.Reason);   break;
 }</code></pre>
-      <p style="color:var(--ink-soft)">Parallel fan-out is a declaration too: <code>.ForEach(...)</code> runs the items concurrently in licensed mode and the tuner sets the degree for you. Unlicensed, the same call runs sequentially, same results, no tuner.</p>
+      <p style="color:var(--ink-soft)">Add <code>.BeginSaga()</code> for steps that register compensation and roll back in reverse on failure, <code>.If()</code>/<code>.Else()</code> for conditional branches, and <code>.Gate(ResourceKind.Network, ...)</code> to bound and tune an I/O region, all in the same chain, all resolved into the one delegate at build time.</p>
     </div>
   </div>
 </section>
@@ -125,23 +139,21 @@ switch (result)
   <div class="wrap">
     <div class="col">
       <span class="eyebrow">Where it fits</span>
-      <h2>Built for throughput, not durability.</h2>
-      <p class="lede">EvalApp is the right tool when throughput and latency matter and infrastructure doesn't belong in the picture. If you need a workflow that runs for hours and survives process restarts, a durable engine like Temporal is the better fit.</p>
+      <h2>Built for in-process throughput.</h2>
+      <p class="lede">EvalApp is the right tool when latency and throughput matter and infrastructure doesn't belong in the picture. If you need a workflow that runs for hours and must survive process restarts, a durable engine is the better fit. If you want reactive retry and circuit-breaking around a call, a resilience library is enough on its own.</p>
     </div>
     <div class="tbl-wrap">
       <table class="cmp">
         <colgroup><col><col class="me"><col><col></colgroup>
         <thead>
-          <tr><th>x</th><th>EvalApp</th><th>Temporal</th><th>Polly</th></tr>
+          <tr><th>x</th><th>EvalApp</th><th>Durable engines</th><th>Resilience libraries</th></tr>
         </thead>
         <tbody>
-          <tr><td>Infrastructure</td><td class="yes">None — in-process DLL</td><td>Server + DB</td><td>None</td></tr>
-          <tr><td>Step overhead</td><td class="yes">Sub-millisecond</td><td>~100 ms (replay)</td><td>N/A</td></tr>
+          <tr><td>Infrastructure</td><td class="yes">None — in-process DLL</td><td>Server + database</td><td>None</td></tr>
+          <tr><td>Execution model</td><td class="yes">Pre-built delegate chain, in-memory</td><td>Durable replay, persisted</td><td>Inline policy wrappers</td></tr>
           <tr><td>Concurrency tuning</td><td class="yes">Automatic, continuous</td><td>Manual</td><td>Manual</td></tr>
-          <tr><td>Multi-instance coordination</td><td class="yes">Automatic, no comms</td><td>Via server</td><td>None</td></tr>
-          <tr><td>Pipeline topology</td><td class="yes">First-class, compile-time safe</td><td>Code + YAML</td><td>None</td></tr>
-          <tr><td>Visualizer / audit map</td><td class="yes">Built in</td><td>External tooling</td><td>None</td></tr>
-          <tr><td>Target workload</td><td class="yes">High-throughput, sub-second</td><td>Long-running, durable</td><td>Reactive resilience</td></tr>
+          <tr><td>Pipeline topology</td><td class="yes">First-class, compile-time safe</td><td>Code + config</td><td>None</td></tr>
+          <tr><td>Best for</td><td class="yes">High-throughput, low-latency, in-process</td><td>Long-running, survives restarts</td><td>Reactive resilience</td></tr>
         </tbody>
       </table>
     </div>
@@ -152,27 +164,17 @@ switch (result)
   <div class="wrap">
     <div class="col">
       <span class="eyebrow">Get it</span>
-      <h2>On NuGet. Free tier needs no key.</h2>
-      <p class="lede">Add the package and start. The free tier runs every step correctly and sequentially with no license, ever, so development, CI, and low-volume production cost nothing. A key unlocks the parallel engine and the tuner.</p>
+      <h2>On NuGet. Add the package and go.</h2>
+      <p class="lede">Pure .NET 8, no dependencies to pull in behind it. Add the package, build your pipeline, and run. Commercial licensing and support are available for teams that want them.</p>
     </div>
     <div class="install">
       <div class="cmd"><span class="sigil">&gt;</span> dotnet add package EvalApp.Consumer</div>
-      <div class="tier">
-        <div class="t free">
-          <b>Free · unlicensed</b>
-          <p>Every step runs correctly and sequentially. No key required, ever. Ideal for development, CI, and low-volume production.</p>
-        </div>
-        <div class="t lic">
-          <b>Licensed</b>
-          <p>Unlocks the full parallel engine, the adaptive concurrency tuner, the pre-compiled hot path, and multi-instance convergence.</p>
-        </div>
-      </div>
       <div class="cta-row" style="margin-top:22px">
         <a href="https://www.nuget.org/packages/EvalApp.Consumer" target="_blank" rel="noopener" class="btn btn-ghost ink">View on NuGet ↗</a>
-        <a href="mailto:dongyang.stephen.chen@gmail.com?subject=EvalApp%20license" class="btn btn-ghost ink">Ask about a licence</a>
+        <a href="mailto:dongyang.stephen.chen@gmail.com?subject=EvalApp" class="btn btn-ghost ink">Talk to us about licensing</a>
       </div>
     </div>
-    <p class="note" style="max-width:var(--read)">EvalApp assembles well-known ideas, data-driven design, railway-oriented programming, the saga pattern, adaptive concurrency, into one coherent .NET engine. It didn't invent them; it made them work together in-process with nothing to deploy.</p>
+    <p class="note" style="max-width:var(--read)">EvalApp assembles well-known ideas, data-driven records, railway-oriented steps, the saga pattern, adaptive concurrency, into one coherent in-process .NET engine, with nothing to deploy and nothing to configure.</p>
   </div>
 </section>
 
