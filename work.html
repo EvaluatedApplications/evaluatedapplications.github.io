@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Work — Evaluated Applications</title>
+<meta name="description" content="Three systems built from scratch, each an extreme of one skill: getting maximum performance out of ordinary hardware.">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<button class="toggle" id="themeBtn" aria-label="Switch colour theme">◐ Theme</button>
+
+<nav class="nav">
+  <div class="wrap">
+    <a class="brand" href="index.html">Evaluated Applications</a>
+    <div class="links">
+      <a href="work.html" class="on">Work</a>
+      <a href="index.html#start">Contact</a>
+    </div>
+  </div>
+</nav>
+
+<header class="page-head">
+  <div class="wrap">
+    <span class="eyebrow">The work</span>
+    <h1>Proof, not promises.</h1>
+    <p class="lede">No client list yet — I am just opening the doors. What I have instead is better for judging an engineer: three systems I built from scratch, alone, each one an extreme of the same skill. Getting the most out of ordinary hardware.</p>
+  </div>
+</header>
+
+<section>
+  <div class="wrap">
+
+    <div class="panel proj" id="evalapp">
+      <div class="top">
+        <span class="chip verified">Measured in test</span>
+        <h3>EvalApp <span style="font-family:var(--mono);font-size:.9rem;color:var(--muted);letter-spacing:.06em">· throughput</span></h3>
+      </div>
+      <p>A self-tuning pipeline engine for .NET. You declare <em>what</em> work to do; it discovers <em>how fast your hardware can run it</em> and converges on the optimal concurrency at runtime, then re-adapts when load or hardware changes. No more hand-guessing thread counts that go stale the moment the environment shifts.</p>
+      <p>Zero external dependencies, in-process, one DLL. The type-state API makes whole classes of concurrency and saga bugs impossible to even write, and the pipeline exports itself as an always-correct architecture diagram.</p>
+      <span class="metric">30–40% more throughput than hand-tuned baselines · independent instances converge on a shared-resource optimum with no communication</span>
+      <p class="note">Validated in integration and simulation testing; not yet deployed to a production client (there isn't one yet — that's the honest state).</p>
+    </div>
+
+    <div class="panel proj" id="nav">
+      <div class="top">
+        <span class="chip verified">Measured</span>
+        <h3>NavPathfinder <span style="font-family:var(--mono);font-size:.9rem;color:var(--muted);letter-spacing:.06em">· real-time</span></h3>
+      </div>
+      <p>Multi-agent pathfinding, crowd avoidance, influence maps, and combat, in one headless SDK over a single baked navmesh, replacing the four or five systems a game or simulation usually stitches together. Fully async, engine-agnostic, and built headless-first so it runs on servers and in CI with no renderer attached.</p>
+      <p>It self-tunes to a target frame budget, so there is no "max agents" constant to guess — it holds the frame and tells you how much headroom is left.</p>
+      <span class="metric">~680 agents pathfinding and fighting inside an ~80 fps frame budget, under full load</span>
+      <p class="note">Measured in a headless siege harness. "Thousands" is plausible for pure navigation, but the honest, full-combat number is the one above.</p>
+    </div>
+
+    <div class="panel proj amber" id="prism">
+      <div class="top">
+        <span class="chip verified">Reproducible</span>
+        <h3>Prism <span style="font-family:var(--mono);font-size:.9rem;color:var(--muted);letter-spacing:.06em">· to the metal</span></h3>
+      </div>
+      <p>My deepest research, and the clearest window into how far I take this. Prism is a language model that runs on a CPU with no GPU, and trains itself across a colony of ordinary machines — every node holds the whole model, and switching one off leaves the rest running. Built entirely from scratch in pure C# with no PyTorch, no GPU, and no autograd; the whole backward pass is hand-derived and gradient-checked.</p>
+      <p>The hard part is a genuine distributed-systems property: <b>gradients that merge to the bit</b>. A slow laptop and a fast desktop contribute mathematically identical results, so a mix of mismatched machines trains one coherent model — something datacenter stacks cannot do without matched hardware. And because numbers are stored as decodable phasor patterns, you can read the arithmetic straight out of the network instead of staring at an opaque vector.</p>
+      <span class="metric">~3× the unseen-task generalisation of a same-size conventional transformer · every number reproducible from a committed script in seconds</span>
+      <p class="note">Empirical research at toy scale, framed honestly: I even report an experiment that overturned one of my own hypotheses. It is here as proof of engineering depth, not as a product.</p>
+    </div>
+
+    <p class="col" style="margin-top:34px;font-size:1.12rem;color:var(--ink)">If I can make a neural network train to the exact bit across a swarm of mismatched laptops, I can make your API faster.</p>
+  </div>
+</section>
+
+<section class="close">
+  <div class="wrap">
+    <span class="eyebrow" style="color:var(--scope-muted)">Same skill, pointed at your problem</span>
+    <h2>Bring me your slowest service.</h2>
+    <p class="lede">Start with a fixed-fee performance audit: I profile it, tell you what's achievable, and hand you a report you can act on. Low risk, fully measured.</p>
+    <div class="cta-row">
+      <a href="mailto:dongyang.stephen.chen@gmail.com?subject=Performance%20audit" class="btn btn-primary">Book an audit →</a>
+      <a href="index.html" class="btn btn-ghost">Back to home</a>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <span class="sig">Evaluated Applications — high-performance .NET, built from first principles.</span>
+    <span class="mono">© <span id="yr"></span> Evaluated Applications · <a href="mailto:dongyang.stephen.chen@gmail.com">contact</a></span>
+  </div>
+</footer>
+
+<script src="script.js"></script>
+</body>
+</html>
