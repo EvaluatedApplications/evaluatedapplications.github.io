@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Research — PrismFormer: arithmetic as algebra, mergeable gradients</title>
+<meta name="description" content="PrismFormer is our open-access research: a transformer where numbers are phasors and arithmetic falls out of the algebra, with bit-exact gradients that let a colony of ordinary CPUs train one coherent model. Paper, code and a runnable verification kit on Zenodo.">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<nav class="nav">
+  <div class="wrap">
+    <a class="brand" href="index.html">Evaluated Applications</a>
+    <div class="links">
+      <a href="evalapp.html">EvalApp</a>
+      <a href="navpathfinder.html">NavPathfinder</a>
+      <a href="prism-studio.html">Prism Studio</a>
+      <a href="research.html" class="on">Research</a>
+      <a href="work.html">Work</a>
+      <a href="index.html#start">Contact</a>
+    </div>
+  </div>
+</nav>
+
+<header class="page-head">
+  <div class="wrap">
+    <span class="eyebrow">Research · open access · reproducible</span>
+    <h1>Arithmetic as algebra, and gradients that merge to the bit.</h1>
+    <p class="lede">PrismFormer is our own research: a transformer where every token, word or number, is a bundle of unit complex numbers, and arithmetic falls out of the algebra rather than being memorised. Because its gradients merge exactly, a colony of ordinary CPUs can train one coherent model. The full paper, the code, and a runnable verification kit are open access.</p>
+    <div class="cta-row">
+      <a href="https://doi.org/10.5281/zenodo.21384525" target="_blank" rel="noopener" class="btn btn-primary">Read the paper on Zenodo →</a>
+      <a href="https://github.com/EvaluatedApplications/PrismFormer" target="_blank" rel="noopener" class="btn btn-ghost">Code on GitHub ↗</a>
+    </div>
+    <p class="note" style="color:var(--scope-muted);margin-top:1.6em">Chen, D. S. (2026). <em>A Self-Replicating Swarm of Tiny AIs: Phasor-Face Transformers (PrismFormer) with Arithmetic as Algebra and Bit-Exact, Mergeable Gradients.</em> Zenodo. DOI 10.5281/zenodo.21384525</p>
+  </div>
+</header>
+
+<section>
+  <div class="wrap">
+    <div class="col">
+      <span class="eyebrow">The idea</span>
+      <h2>Let the representation carry the reasoning.</h2>
+      <p class="lede">The starting question was simple: if you want a model to reason rather than recall, what would you actually have to represent? The answer that kept falling out was a codec, a fixed way to write any concept down so that one operation composes two of them and the answer can be read back.</p>
+    </div>
+    <div class="grid g3">
+      <div class="panel card">
+        <span class="k">Numbers as phasors</span>
+        <h3>Arithmetic, not memory</h3>
+        <p>Every token is a phasor face: a bundle of unit complex numbers composed by one operation, a complex multiply. Numbers are written so that this bind <em>adds</em> on one frequency band and <em>multiplies</em> on another, and the result is decoded by correlation. The arithmetic is in the algebra; it emerges from the codec with no training at all.</p>
+      </div>
+      <div class="panel card">
+        <span class="k">Legible working</span>
+        <h3>You can read the answer out</h3>
+        <p>Because a computed value is <em>decodable</em> rather than merely reachable, the model's working is legible one step at a time, column by column, with no trained probe bolted on to interpret it. The structure does the reasoning; the network only learns which moves to make.</p>
+      </div>
+      <div class="panel card amber">
+        <span class="k">Mergeable gradients</span>
+        <h3>Mismatched machines, one model</h3>
+        <p>The substrate can be read during backprop, so gradients accumulate into a detached buffer. A minibatch split into shards and summed is <b>bit-for-bit identical</b> to the serial result. That is what lets a full-replication swarm of plain CPUs train one model that stays coherent across mismatched hardware, where sharded GPU systems need matched accelerators.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="band">
+  <div class="wrap">
+    <div class="col">
+      <span class="eyebrow">Results, honestly</span>
+      <h2>Every number against a fair baseline.</h2>
+      <p class="lede">Each result is measured against a parameter-matched dense transformer at the same setting, and we state plainly what does not work yet.</p>
+    </div>
+    <ul class="clean">
+      <li><b>Arithmetic with no training.</b> Binding two number faces decodes straight to their exact sum and product, 100/100 and 81/81 single-digit pairs exact, before any gradient step.</li>
+      <li><b>Generalises to unseen operands.</b> Given the same worked, column-by-column problem, it learns multi-digit add, subtract, and multiply/divide and generalises to operand pairs it never saw (held-out add 54.9%, subtract 70.0%, multiply 27.7%, divide 33.2%), where a matched transformer given the identical problem stays near zero.</li>
+      <li><b>Better relational generalisation.</b> On comparison and relational tasks it generalises better than a transformer that fits the same training data, 65.9% vs 49.1% held-out on the fair tasks (both reach 100% on copy).</li>
+      <li><b>A competitive language model at size.</b> 41.0% vs 21.7% next-character accuracy against the matched transformer.</li>
+      <li><b>Remembers more, for its size.</b> Pound for pound it holds more than twice as many facts as a standard model the same size, and keeps working smoothly where the standard model becomes unstable and falls apart.</li>
+      <li><b>What is still open.</b> Out-of-range extrapolation, relational reverse-inference, and large-scale convergence of the full colony remain unsolved. The paper includes a two-sided ablation that argues <em>against</em> part of our own central design choice in isolation, and says exactly when it holds and when it does not.</li>
+    </ul>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="col">
+      <span class="eyebrow">Reproducible</span>
+      <h2>Re-run every result yourself.</h2>
+      <p class="lede">Every quantitative claim is produced by a committed script. The exact source, the benchmarks, and a runnable verification kit are archived as a frozen snapshot alongside the paper, so the numbers are not something to take on trust, they are something to re-run in seconds.</p>
+    </div>
+    <div class="cta-row">
+      <a href="https://doi.org/10.5281/zenodo.21384525" target="_blank" rel="noopener" class="btn btn-ghost ink">Paper + verification kit on Zenodo ↗</a>
+      <a href="https://github.com/EvaluatedApplications/PrismFormer" target="_blank" rel="noopener" class="btn btn-ghost ink">Source on GitHub ↗</a>
+    </div>
+    <p class="note" style="max-width:var(--read)">Independent research, built from first principles in C# with the backward pass hand-derived and gradient-checked, by a full-stack developer with a networking background rather than a machine-learning lab. The origin story is in the paper's introduction.</p>
+  </div>
+</section>
+
+<section class="band">
+  <div class="wrap">
+    <div class="col">
+      <span class="eyebrow">Touch it</span>
+      <h2>Or run the model yourself.</h2>
+      <p class="lede">Prism Studio puts this research in your hands: train the model on your own CPU or GPU, chat with it, and watch it learn, no GPU cluster and no framework required.</p>
+    </div>
+    <div class="cta-row">
+      <a href="prism-studio.html" class="btn btn-primary">Get Prism Studio →</a>
+      <a href="work.html" class="btn btn-ghost">See our work</a>
+    </div>
+  </div>
+</section>
+
+<section class="close" id="start">
+  <div class="wrap">
+    <span class="eyebrow" style="color:var(--scope-muted)">The depth behind the products</span>
+    <h2>This is the engineering we bring to client work.</h2>
+    <p class="lede">A model built from the math up, gradients merged to the bit, every result reproducible. If you want that kind of rigour pointed at your problem, get in touch.</p>
+    <div class="cta-row">
+      <a href="mailto:dongyang.stephen.chen@gmail.com?subject=Research" class="btn btn-primary">Get in touch →</a>
+      <a href="index.html" class="btn btn-ghost">Back to home</a>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <span class="sig">Evaluated Applications — performance engineering for .NET.</span>
+    <span class="mono">© <span id="yr"></span> Evaluated Applications · <a href="mailto:dongyang.stephen.chen@gmail.com">contact</a></span>
+  </div>
+</footer>
+
+<script src="script.js"></script>
+</body>
+</html>

@@ -1,13 +1,3 @@
-// theme toggle
-(function(){
-  var btn = document.getElementById('themeBtn');
-  if(btn) btn.addEventListener('click', function(){
-    var r = document.documentElement, cur = r.getAttribute('data-theme');
-    if(!cur){ cur = matchMedia('(prefers-color-scheme:dark)').matches ? 'dark' : 'light'; }
-    r.setAttribute('data-theme', cur === 'dark' ? 'light' : 'dark');
-  });
-})();
-
 // current year
 (function(){ var y = document.getElementById('yr'); if(y) y.textContent = new Date().getFullYear(); })();
 
