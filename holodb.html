@@ -162,8 +162,8 @@
 <section>
   <div class="wrap">
     <div class="sec-head">
-      <h2>Every query, HoloDb vs DuckDB</h2>
-      <p>How many times faster (or slower) HoloDb is than DuckDB, per query. Bars to the right are HoloDb wins; bars to the left are the queries DuckDB still wins. Log scale — the labels carry the exact multiple.</p>
+      <h2>Every query vs DuckDB — the one worth beating</h2>
+      <p>Among the embedded engines DuckDB is the fastest thing there is, so it&#39;s the bar that matters — SQLite sits an order of magnitude further back (see the table). How many times faster, or slower, HoloDb is than DuckDB, per query. Bars to the right are HoloDb wins; to the left, the few DuckDB still takes. Log scale; the labels carry the exact multiple.</p>
     </div>
     <div class="controls">
       <span class="lbl">rows</span>
@@ -217,7 +217,7 @@
   <div class="wrap">
     <div class="sec-head">
       <h2>The other way you deploy it — server vs server</h2>
-      <p>The three above run in-process. HoloDb also runs as a <b>server</b>, so here is the fair fight against one: HoloDb server mode against <b>SQL Server</b>, each hit over a socket with one client/server round-trip per query — the tax the embedded engines don&#39;t pay. Same SQL, same data, results verified identical. HoloDb keeps its constant-time aggregates even over the wire, and wins <b id="srv-wins">15</b> of 15 at 10M rows while loading faster.</p>
+      <p>The three above run in-process. HoloDb also runs as a <b>server</b> — so here is the fair fight against one: HoloDb server mode against <b>SQL Server</b>, each hit over a socket with one client/server round-trip per query, the tax the embedded engines don&#39;t pay. Same SQL, same data, results verified identical. The constant-time aggregates survive the wire: at 10M rows HoloDb answers <b>SUM ~5,600× faster</b> and <b>GROUP&nbsp;BY ~6,300× faster</b>, wins all <b id="srv-wins">15</b> of 15, and loads faster too.</p>
     </div>
     <div class="tbl-wrap"><table id="results-srv"></table></div>
     <p class="cap-note">HoloDb server mode is an in-process <code class="inl">HoloServer</code> over real TLS driven by <code class="inl">HoloDbClient</code>; SQL Server is Microsoft.Data.SqlClient to LocalDB. Both pay the round-trip and consume every row typed. Same scale selector as above.</p>
@@ -236,7 +236,7 @@
           <li><b>filtered COUNT(*)</b> and <b>SUM of a real column</b> — DuckDB&#39;s vectorized scan is ~2× quicker.</li>
           <li><b>ORDER BY … LIMIT 20</b> — top-K isn&#39;t specialised in HoloDb yet.</li>
         </ul>
-        <p>DuckDB is a mature, world-class analytics engine. HoloDb still wins 11 of 15 — that&#39;s the point.</p>
+        <p>DuckDB is a mature, world-class analytics engine and these four losses are real. HoloDb still takes 11 of the 15 against it — and against <b>SQL Server</b>, server to server, there are no losses at all: it wins every one.</p>
       </div>
       <div class="note-card">
         <h3>Why the wins are so large</h3>
@@ -316,14 +316,15 @@ function rowTip(i){ const r=DATA[scale].q[i]; const c=eColors(); return `<b>${Q[
 // ---- stat tiles (fixed at 10M) ----
 function tiles(){
   const q=DATA[10000000].q, host=document.getElementById('tiles');
-  const sumX=q[3][1]/q[3][2], grpX=q[6][1]/q[6][2];
+  const grpX=q[6][1]/q[6][2];
   let wins=0; q.forEach(r=>{ if(r[2]<=r[1]&&r[2]<=r[0]) wins++; });
-  const s100=DATA[100000].q[3][2], s10m=q[3][2];
+  const srv=SRV[10000000].q, srvSumX=srv[3][0]/srv[3][1];
+  let srvWins=0; srv.forEach(r=>{ if(r[1]<=r[0]) srvWins++; });
   const T=[
-    {big:`0.002<small> ms</small>`, cap:`<b>SUM</b> over 10M rows. DuckDB takes ${fmtMs(q[3][1])} ms, SQLite ${fmtMs(q[3][0])} ms. That&#39;s <b>${fmtX(sumX)}</b> DuckDB.`},
-    {big:`${fmtX(grpX)}`, cap:`faster than DuckDB on <b>GROUP BY</b> at 10M rows. It reads per-group accumulators, not the table.`},
-    {big:`${wins}<small> / 15</small>`, cap:`queries where HoloDb is the <b>fastest of the three</b> at 10M rows.`},
-    {big:`flat`, cap:`SUM stays <b>~${s100.toFixed(3)}→${s10m.toFixed(3)} ms</b> from 100K to 10M rows. It doesn&#39;t grow with the data.`}
+    {big:`0.002<small> ms</small>`, cap:`<b>SUM</b> over 10M rows — constant time. DuckDB takes ${fmtMs(q[3][1])} ms, SQLite ${fmtMs(q[3][0])} ms. It doesn&#39;t read the table.`},
+    {big:`${fmtX(grpX)}<small> faster</small>`, cap:`than <b>DuckDB</b> on <b>GROUP&nbsp;BY</b> at 10M — the toughest embedded engine there is. Per-group accumulators, not a scan.`},
+    {big:`${wins}<small> / 15</small>`, cap:`queries where HoloDb is the <b>fastest embedded engine</b> at 10M. The few it loses are shown in full below.`},
+    {big:`${fmtX(srvSumX)}<small> faster</small>`, cap:`than <b>SQL&nbsp;Server</b> on SUM at 10M, <b>server to server</b> — both over a socket. HoloDb wins all <b>${srvWins} of 15</b> that way.`}
   ];
   host.innerHTML = T.map(t=>`<div class="tile"><div class="big">${t.big}</div><div class="cap">${t.cap}</div></div>`).join('');
 }
@@ -396,16 +397,16 @@ function table(){
 // ---- server bracket table: SQL Server vs HoloDb (server) ----
 function serverTable(){
   const t=document.getElementById('results-srv'); if(!t) return; const d=SRV[scale];
-  let wins=0; d.q.forEach(r=>{ if(r[1]<=r[0]) wins++; });
-  let h=`<thead><tr><th>query</th><th>SQL&nbsp;Server</th><th>HoloDb (server)</th><th>winner</th><th>=</th></tr></thead><tbody>`;
+  let h=`<thead><tr><th>query</th><th>SQL&nbsp;Server</th><th>HoloDb (server)</th><th>HoloDb faster</th><th>=</th></tr></thead><tbody>`;
   d.q.forEach((r,i)=>{
     const best=Math.min(r[0],r[1]);
     const cell=v=>`<td class="ms ${v===best?'best':''}">${fmtMs(v)}</td>`;
-    const win = r[1]<=r[0] ? '<span class="w-holo">HoloDb</span>' : 'SQL&nbsp;Server';
-    h+=`<tr><td class="q">${Q[i]}</td>${cell(r[0])}${cell(r[1])}<td>${win}</td><td class="chk">✓</td></tr>`;
+    const x=r[0]/r[1];
+    const xcell = x>=1 ? `<span class="w-holo">${fmtX(x)}</span>` : `<span class="w-duck">${fmtX(1/x)} slower</span>`;
+    h+=`<tr><td class="q">${Q[i]}</td>${cell(r[0])}${cell(r[1])}<td>${xcell}</td><td class="chk">✓</td></tr>`;
   });
   const L=d.load;
-  h+=`<tr class="loadrow"><td>bulk load (rows/sec)</td><td class="ms">${L.srv.toLocaleString()}</td><td class="ms">${L.hs.toLocaleString()}</td><td>${L.hs>=L.srv?'<span class="w-holo">HoloDb</span>':'SQL&nbsp;Server'}</td><td></td></tr>`;
+  h+=`<tr class="loadrow"><td>bulk load (rows/sec)</td><td class="ms">${L.srv.toLocaleString()}</td><td class="ms">${L.hs.toLocaleString()}</td><td>${L.hs>=L.srv?`<span class="w-holo">${fmtX(L.hs/L.srv)}</span>`:'—'}</td><td></td></tr>`;
   t.innerHTML=h+'</tbody>';
 }
 
