@@ -174,7 +174,7 @@
     <div class="feats">
       <div class="feat">
         <h3><i></i>Bounded async fan-out</h3>
-        <p><code>ForEach</code> streams a collection through a worker pool. You keep far more in flight than you have threads, but never all of it — so a million-row job runs at a fixed memory ceiling instead of launching a million operations at once.</p>
+        <p><code>ForEach</code> streams a collection through a worker pool at a concurrency <code>Tunable.ForItems()</code> tunes to the data. You keep far more in flight than you have threads, but never all of it — a million-row job runs at a fixed memory ceiling instead of launching a million operations at once.</p>
       </div>
       <div class="feat">
         <h3><i></i>Resource gates</h3>
@@ -203,16 +203,17 @@
 <section>
   <div class="wrap">
     <div class="sec-head">
-      <h2>Fan out a million operations — without running them all at once</h2>
-      <p>The tempting way to run an async operation over a big list is <code class="inl">Task.WhenAll(list.Select(WorkAsync))</code>. It launches every operation simultaneously: every buffer, every open connection, live at the same time. It works right up until the list is large enough, and then it is an <code class="inl">OutOfMemoryException</code> or an exhausted connection pool. EvalApp&#39;s <code class="inl">ForEach</code> streams the same work through a bounded worker pool — you keep far more in flight than you have threads, but never all of it, and the in-flight number is a knob the tuner can set for you.</p>
+      <h2>Fan out a million operations — at a concurrency you don&#39;t have to guess</h2>
+      <p>The tempting way to run an async operation over a big list is <code class="inl">Task.WhenAll(list.Select(WorkAsync))</code>. It launches every operation at once — every buffer, every open connection, live together — and on a big enough list that is an <code class="inl">OutOfMemoryException</code> or an exhausted pool. Bounding it is the easy part. The hard part is the <em>number</em>: cap it too low and the machine idles, too high and the backend falls over — and the right value shifts with the data, the hardware, and every downstream limit, so a constant you hard-code is wrong the moment any of those change. EvalApp&#39;s <code class="inl">ForEach</code> takes <code class="inl">Tunable.ForItems()</code>: instead of a number you guessed, the adaptive tuner starts hot, measures goodput, and settles on the in-flight count that drains this dataset fastest — then holds it across runs.</p>
     </div>
     <div class="codegrid">
-      <pre><code><span class="cmt">// launches all 1,000,000 at once</span>
+      <pre><code><span class="cmt">// launches all 1,000,000 at once —</span>
+<span class="cmt">// you own the crash</span>
 <span class="kw">await</span> Task.<span class="bad-t">WhenAll</span>(
     rows.Select(ProcessAsync));</code></pre>
-      <pre><code><span class="cmt">// bounded fan-out, tuner picks the count</span>
-<span class="kw">await</span> pipeline.<span class="good-t">RunAsync</span>(rows);
-    <span class="cmt">// ForEach(r =&gt; ProcessAsync(r))</span></code></pre>
+      <pre><code><span class="cmt">// concurrency the tuner finds, then holds</span>
+task.ForEach(ProcessAsync, <span class="good-t">Tunable.ForItems()</span>);
+<span class="kw">await</span> pipeline.<span class="good-t">RunAsync</span>(rows);</code></pre>
     </div>
     <div class="panel" style="margin-top:16px">
       <div class="legend">
@@ -222,7 +223,7 @@
       </div>
       <div id="fanchart"></div>
     </div>
-    <p class="cap-note">200,000 async operations, each holding an 8&nbsp;KB buffer across a 300&nbsp;ms wait, capped at 10,000 in flight. Peak operations in flight × their buffer = live memory. The naive <code class="inl">WhenAll</code> is actually the <em>fastest</em> here — because it is reckless; at a few million rows or with real connections that speed is the crash. EvalApp caps it, and so can <code class="inl">Parallel.ForEachAsync</code> and a hand-rolled semaphore — the difference is that in EvalApp the cap is a tunable, and it is the same <code class="inl">ForEach</code> you already use inside a governed pipeline.</p>
+    <p class="cap-note">200,000 async operations, each holding an 8&nbsp;KB buffer across a 300&nbsp;ms wait. Every bounded approach here is pinned to the same 10,000 so the memory comparison is fair — peak in flight × buffer = live memory. The naive <code class="inl">WhenAll</code> is <em>fastest</em> precisely because it is reckless; at a few million rows or with real connections that speed is the crash. The difference shows in your own code: <code class="inl">Parallel.ForEachAsync</code>, a hand-rolled semaphore and TPL Dataflow all make you pick that 10,000 and live with it, while <code class="inl">Tunable.ForItems()</code> lets the tuner find it and keep it there (the twelve-drain proof is below) — inside the same governed pipeline that gates your backends and retries your failures.</p>
   </div>
 </section>
 
@@ -258,7 +259,7 @@
   <div class="wrap">
     <div class="sec-head">
       <h2>The in-flight number tunes itself — and stays put</h2>
-      <p>Nobody tells the service how many requests to keep in flight — EvalApp&#39;s adaptive tuner finds the number and holds it. Drain the same backlog twelve times: it settles on the first run and stays pinned at the ceiling on every one after, without anyone ever picking a value.</p>
+      <p>The same adaptive tuner behind <code class="inl">Tunable.ForItems()</code> runs here too — nobody tells the service how many requests to keep in flight, it finds the number and holds it. Drain the same backlog twelve times: it settles on the first run and stays pinned at the ceiling on every one after, without anyone ever picking a value.</p>
     </div>
     <div class="panel">
       <div class="legend">
@@ -389,9 +390,9 @@ function hideTip(){tip.style.opacity=0;}
 addEventListener('scroll',hideTip,{passive:true});
 
 function tiles(){
-  const ev = A.find(a=>a.fam==="eval"), comp = A.find(a=>a.n==="MediatR + Polly"), naive=FAN[0];
+  const ev = A.find(a=>a.fam==="eval"), comp = A.find(a=>a.n==="MediatR + Polly"), naive=FAN[0], bounded=FAN.find(f=>f.fam==="eval");
   const T=[
-    {big:`10,000`, cap:`in flight, your cap — while a naive million-wide <b>WhenAll</b> ran <b>${naive.inflight.toLocaleString()}</b> at once (${naive.mem.toFixed(0)}&nbsp;MB live).`},
+    {big:`${bounded.mem.toFixed(0)}<small> MB</small>`, cap:`live memory for a fan-out <b>Tunable.ForItems()</b> keeps bounded — where a naive million-wide <b>WhenAll</b> held <b>${naive.inflight.toLocaleString()}</b> operations at once, <b>${naive.mem.toFixed(0)}&nbsp;MB</b> live.`},
     {big:`0<small> dropped</small>`, cap:`Under an 8,000-request flood EvalApp completed <b>all</b> of them; fire-and-forget dropped <b>97%</b>.`},
     {big:`2.7×<small> leaner</small>`, cap:`<b>${ev.kb} KB/req</b> vs the composed MediatR+Polly stack&#39;s <b>${comp.kb} KB/req</b> — same throughput, one dependency.`},
     {big:`holds`, cap:`Auto-tunes the in-flight count and stays there: <b>1,097–1,099 req/s</b> across every drain.`},
