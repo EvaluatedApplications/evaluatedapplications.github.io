@@ -237,12 +237,9 @@
 
 <section>
   <div class="wrap">
-    <div class="sec-head"><h2>Reproduce it</h2>
-      <p>Nothing here is cherry-picked from a lucky run. The harness loads the same rows into all three engines via each one&#39;s idiomatic bulk path, verifies every result identical, then times the median. Run it yourself:</p>
+    <div class="sec-head"><h2>How it was measured</h2>
+      <p>Nothing here is cherry-picked from a lucky run. The harness loads the same rows into all three engines via each one&#39;s idiomatic bulk path, verifies every result is identical to the row, then times the median of repeated runs. Consumption is like-for-like: every value is read typed — no boxing — through each engine&#39;s fast accessor, so what&#39;s timed is the engines, not the client glue.</p>
     </div>
-    <pre><code>dotnet run --project HoloDb.Bench -c Release -- vsmulti 10000000
-# multi-scale sweep to JSON:
-dotnet run --project HoloDb.Bench -c Release -- sweep 100000 1000000 10000000</code></pre>
     <p class="cap-note">Measured on an Intel Core i9-11950H (8 cores / 16 threads), 32&nbsp;GB, .NET 8, in-memory tables, ServerGC. SQLite via Microsoft.Data.Sqlite, DuckDB via DuckDB.NET. Your numbers will vary with hardware; the shape won&#39;t.</p>
   </div>
 </section>
@@ -331,8 +328,9 @@ function bars(){
     rect.addEventListener('mouseleave',hideTip);
     svg.appendChild(rect);
     const ql=el('text',{x:PX0-10,y:cy+4,fill:c.ink,'font-size':12.5,'text-anchor':'end'}); ql.textContent=Q[i]; svg.appendChild(ql);
-    const vl=el('text',{y:cy+4,'font-size':12,'font-weight':600,'font-family':'var(--mono)',fill:col});
-    if(win){ vl.setAttribute('x',x2+7); vl.setAttribute('text-anchor','start'); } else { vl.setAttribute('x',x2-7); vl.setAttribute('text-anchor','end'); }
+    const vl=el('text',{y:cy+4,'font-size':12,'font-weight':600,fill:col});
+    if(win){ vl.setAttribute('x',x2+7); vl.setAttribute('text-anchor','start'); }
+    else { vl.setAttribute('x',x1+8); vl.setAttribute('text-anchor','start'); }   // losses: label the open space right of parity, never into the query gutter
     vl.textContent=fmtX(win?sp:1/sp); svg.appendChild(vl);
   });
   host.appendChild(svg);
