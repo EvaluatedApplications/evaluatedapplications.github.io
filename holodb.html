@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HoloDb — benchmarks</title>
+<meta name="description" content="HoloDb vs DuckDB vs SQLite: the same SQL over the same data, results verified identical, up to 10 million rows. A holographic SQL database whose aggregates run in constant time.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%238b7dff'/%3E%3Cstop offset='.5' stop-color='%2335d0c0'/%3E%3Cstop offset='1' stop-color='%23e6b450'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='32' height='32' rx='7' fill='%230a0c11'/%3E%3Cpath d='M16 5l9.5 5.5v11L16 27l-9.5-5.5v-11z' fill='none' stroke='url(%23g)' stroke-width='2'/%3E%3C/svg%3E">
+<style>
+  :root{
+    --bg:#0a0c11; --bg-2:#0d1017; --surface:#12151d; --surface-2:#171b25;
+    --border:#232a37; --border-2:#31394a;
+    --ink:#e9ecf3; --ink-soft:#98a2b3; --ink-faint:#6b7486;
+    --accent:#8b7dff; --accent-ink:#b3a9ff;
+    --spectrum:linear-gradient(90deg,#8b7dff,#4aa3ff,#35d0c0,#7bd86a,#e6b450,#f0796a);
+    --e-holo:#8b7dff; --e-duck:#c2862c; --e-sqlite:#3f8fe6;
+    --grid:#212734; --win:#7bd86a;
+    --radius:14px; --wrap:1080px;
+    --font:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    --mono:ui-monospace,"Cascadia Code","SF Mono","JetBrains Mono",Menlo,Consolas,monospace;
+  }
+  @media (prefers-color-scheme:light){
+    :root{
+      --bg:#f6f7fb; --bg-2:#ffffff; --surface:#ffffff; --surface-2:#f1f3f9;
+      --border:#e4e8f0; --border-2:#d3d9e6;
+      --ink:#121620; --ink-soft:#59647a; --ink-faint:#8a94a8;
+      --accent:#5b4fe0; --accent-ink:#4c40d6;
+      --e-holo:#7b5cf0; --e-duck:#b5791f; --e-sqlite:#2f7fd6;
+      --grid:#e7ebf2; --win:#3f9d54;
+    }
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0; background:var(--bg); color:var(--ink); font-family:var(--font); font-size:17px; line-height:1.65; -webkit-font-smoothing:antialiased}
+  .wrap{max-width:var(--wrap); margin:0 auto; padding:0 24px}
+  a{color:var(--accent-ink); text-decoration:none} a:hover{text-decoration:underline}
+  h1,h2,h3{margin:0; line-height:1.15; letter-spacing:-.02em; font-weight:650}
+  .beam{height:3px; background:var(--spectrum); opacity:.9}
+  .mono{font-family:var(--mono)}
+
+  nav{position:sticky; top:0; z-index:20; background:color-mix(in srgb,var(--bg-2) 88%,transparent); backdrop-filter:blur(10px); border-bottom:1px solid var(--border)}
+  nav .wrap{display:flex; align-items:center; justify-content:space-between; height:62px}
+  .brand{display:flex; align-items:center; gap:11px; color:var(--ink); font-weight:650}
+  .brand:hover{text-decoration:none}
+  .mark{width:22px; height:22px; flex:none}
+  .nav-links{display:flex; gap:22px; align-items:center}
+  .nav-links a{color:var(--ink-soft); font-size:.94rem} .nav-links a:hover{color:var(--ink); text-decoration:none}
+
+  header{padding:76px 0 26px}
+  .eyebrow{font-family:var(--mono); font-size:.8rem; letter-spacing:.08em; text-transform:uppercase; color:var(--ink-faint)}
+  h1{font-size:clamp(2.3rem,5.6vw,3.6rem); margin:16px 0 0; max-width:15ch; text-wrap:balance}
+  .lede{font-size:clamp(1.05rem,2vw,1.25rem); color:var(--ink-soft); max-width:62ch; margin:22px 0 0}
+  .facts{display:flex; flex-wrap:wrap; gap:10px; margin-top:26px}
+  .fact{font-family:var(--mono); font-size:.82rem; color:var(--ink-soft); border:1px solid var(--border); border-radius:999px; padding:6px 13px; background:var(--surface)}
+  .fact b{color:var(--ink); font-weight:600}
+
+  section{padding:26px 0}
+  .sec-head{padding-top:24px; border-top:1px solid var(--border); margin-bottom:18px}
+  .sec-head h2{font-size:1.3rem}
+  .sec-head p{margin:8px 0 0; color:var(--ink-soft); max-width:70ch; font-size:.96rem}
+
+  /* stat tiles */
+  .tiles{display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:14px}
+  .tile{background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:20px; position:relative; overflow:hidden}
+  .tile::before{content:""; position:absolute; left:0; top:0; bottom:0; width:3px; background:var(--e-holo)}
+  .tile .big{font-size:2.1rem; font-weight:680; letter-spacing:-.03em; font-variant-numeric:tabular-nums; line-height:1}
+  .tile .big small{font-size:1rem; font-weight:500; color:var(--ink-soft); letter-spacing:0}
+  .tile .cap{margin-top:9px; font-size:.9rem; color:var(--ink-soft); line-height:1.45}
+  .tile .cap b{color:var(--ink)}
+
+  /* scale selector */
+  .controls{display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin:2px 0 18px}
+  .controls .lbl{font-family:var(--mono); font-size:.8rem; color:var(--ink-faint); text-transform:uppercase; letter-spacing:.06em}
+  .seg{display:inline-flex; border:1px solid var(--border-2); border-radius:9px; overflow:hidden}
+  .seg button{font-family:var(--mono); font-size:.86rem; color:var(--ink-soft); background:transparent; border:0; padding:7px 14px; cursor:pointer; border-right:1px solid var(--border-2)}
+  .seg button:last-child{border-right:0}
+  .seg button.on{background:var(--e-holo); color:#0a0c11}
+  @media (prefers-color-scheme:light){ .seg button.on{color:#fff} }
+
+  .panel{background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:20px 20px 12px}
+  .legend{display:flex; gap:18px; flex-wrap:wrap; margin:2px 0 10px; font-family:var(--mono); font-size:.82rem; color:var(--ink-soft)}
+  .legend span{display:inline-flex; align-items:center; gap:7px}
+  .legend i{width:11px; height:11px; border-radius:3px; display:inline-block}
+  .cap-note{color:var(--ink-faint); font-size:.85rem; margin:8px 2px 0}
+  svg{display:block; width:100%; height:auto; overflow:visible}
+  svg text{font-family:var(--font)} svg .mn{font-family:var(--mono)}
+  .scaling-grid{display:grid; grid-template-columns:1fr 1fr; gap:16px}
+  @media (max-width:720px){ .scaling-grid{grid-template-columns:1fr} }
+
+  /* table */
+  .tbl-wrap{overflow-x:auto; border:1px solid var(--border); border-radius:var(--radius)}
+  table{border-collapse:collapse; width:100%; font-size:.92rem; min-width:560px}
+  th,td{text-align:right; padding:9px 14px; border-bottom:1px solid var(--border); font-variant-numeric:tabular-nums}
+  th:first-child,td:first-child{text-align:left}
+  thead th{font-family:var(--mono); font-size:.76rem; text-transform:uppercase; letter-spacing:.05em; color:var(--ink-faint); font-weight:500}
+  tbody tr:last-child td{border-bottom:0}
+  td.q{color:var(--ink)}
+  .ms{font-family:var(--mono)}
+  .best{color:var(--ink); font-weight:600}
+  .w-holo{color:var(--e-holo); font-weight:600}
+  .w-duck{color:var(--e-duck); font-weight:600}
+  .chk{color:var(--win)}
+  tr.loadrow td{color:var(--ink-soft); font-style:italic; border-top:2px solid var(--border-2)}
+
+  .cols2{display:grid; grid-template-columns:1fr 1fr; gap:18px}
+  @media (max-width:720px){ .cols2{grid-template-columns:1fr} }
+  .note-card{background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:20px 22px}
+  .note-card h3{font-size:1.05rem; margin-bottom:9px}
+  .note-card p, .note-card li{color:var(--ink-soft); font-size:.95rem}
+  .note-card ul{margin:6px 0 0; padding-left:18px} .note-card li{margin:4px 0}
+  code.inl{font-family:var(--mono); font-size:.86em; color:var(--accent-ink); background:color-mix(in srgb,var(--accent) 12%,transparent); padding:1px 6px; border-radius:5px}
+  pre{margin:10px 0 0; background:var(--bg-2); border:1px solid var(--border); border-radius:9px; padding:12px 14px; overflow-x:auto}
+  pre code{font-family:var(--mono); font-size:.84rem; color:var(--ink)}
+
+  /* tooltip */
+  #tip{position:fixed; z-index:50; pointer-events:none; opacity:0; transition:opacity .1s; background:var(--bg-2); border:1px solid var(--border-2); border-radius:9px; padding:9px 11px; font-family:var(--mono); font-size:.78rem; color:var(--ink); box-shadow:0 8px 24px rgba(0,0,0,.35); max-width:240px}
+  #tip b{color:var(--ink)} #tip .r{display:flex; justify-content:space-between; gap:14px} #tip .r span:first-child{color:var(--ink-soft)}
+
+  footer{border-top:1px solid var(--border); margin-top:34px; padding:30px 0 50px; color:var(--ink-faint)}
+  footer .wrap{display:flex; flex-wrap:wrap; gap:14px; justify-content:space-between; align-items:center}
+  footer a{color:var(--ink-soft)}
+  @media (prefers-reduced-motion:reduce){*{transition:none!important; scroll-behavior:auto}}
+</style>
+</head>
+<body>
+<div class="beam"></div>
+
+<nav>
+  <div class="wrap">
+    <a class="brand" href="index.html">
+      <svg class="mark" viewBox="0 0 32 32" aria-hidden="true"><defs><linearGradient id="m" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#8b7dff"/><stop offset=".5" stop-color="#35d0c0"/><stop offset="1" stop-color="#e6b450"/></linearGradient></defs><path d="M16 4l10.4 6v12L16 28 5.6 22V10z" fill="none" stroke="url(#m)" stroke-width="2"/></svg>
+      Evaluated Applications
+    </a>
+    <div class="nav-links">
+      <a href="index.html">All packages</a>
+      <a href="https://www.nuget.org/packages/EvaluatedApplications.HoloDb" target="_blank" rel="noopener">NuGet</a>
+      <a href="https://github.com/EvaluatedApplications" target="_blank" rel="noopener">GitHub</a>
+    </div>
+  </div>
+</nav>
+
+<header>
+  <div class="wrap">
+    <span class="eyebrow">HoloDb · holographic SQL database</span>
+    <h1>A database that doesn&#39;t scan.</h1>
+    <p class="lede">Same SQL, same data, results verified identical to the row — HoloDb against DuckDB and SQLite, up to 10&nbsp;million rows. HoloDb keeps its aggregates as maintained holographic accumulators, so <b>SUM</b>, <b>COUNT</b>, <b>GROUP&nbsp;BY</b>, <b>MIN/MAX</b> and <b>DISTINCT</b> answer in constant time instead of reading the table. Here is what that does to the clock.</p>
+    <div class="facts">
+      <span class="fact">up to <b>10M</b> rows</span>
+      <span class="fact"><b>15</b> queries</span>
+      <span class="fact">results <b>identical</b> across all three</span>
+      <span class="fact">i9-11950H laptop</span>
+    </div>
+  </div>
+</header>
+
+<section>
+  <div class="wrap">
+    <div class="tiles" id="tiles"></div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="sec-head">
+      <h2>Every query, HoloDb vs DuckDB</h2>
+      <p>How many times faster (or slower) HoloDb is than DuckDB, per query. Bars to the right are HoloDb wins; bars to the left are the queries DuckDB still wins. Log scale — the labels carry the exact multiple.</p>
+    </div>
+    <div class="controls">
+      <span class="lbl">rows</span>
+      <div class="seg" id="scale-seg">
+        <button data-n="100000">100K</button>
+        <button data-n="1000000">1M</button>
+        <button data-n="10000000" class="on">10M</button>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="legend">
+        <span><i style="background:var(--e-holo)"></i> HoloDb faster →</span>
+        <span><i style="background:var(--e-duck)"></i> ← DuckDB faster</span>
+      </div>
+      <div id="barchart"></div>
+    </div>
+    <p class="cap-note">Speedup = DuckDB time ÷ HoloDb time on the same query. Hover any bar for the raw milliseconds.</p>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="sec-head">
+      <h2>Aggregates don&#39;t grow with the table</h2>
+      <p>The whole story in one shape. As the table grows 100× — from 100K to 10M rows — DuckDB and SQLite have more rows to read, so their times climb. HoloDb reads a fixed-size accumulator, so its line stays flat on the floor. Both axes are logarithmic.</p>
+    </div>
+    <div class="legend" style="margin-bottom:14px">
+      <span><i style="background:var(--e-holo)"></i> HoloDb</span>
+      <span><i style="background:var(--e-duck)"></i> DuckDB</span>
+      <span><i style="background:var(--e-sqlite)"></i> SQLite</span>
+    </div>
+    <div class="scaling-grid">
+      <div class="panel"><div id="scale-sum"></div></div>
+      <div class="panel"><div id="scale-grp"></div></div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="sec-head">
+      <h2>The full results</h2>
+      <p>All fifteen queries, milliseconds, median of repeated runs. Every row was checked identical across the three engines before timing — the <span class="chk">✓</span> is not decoration. Use the selector above to switch scale.</p>
+    </div>
+    <div class="tbl-wrap"><table id="results"></table></div>
+    <p class="cap-note">Consumption is like-for-like: every value read TYPED (no boxing) through each engine&#39;s fast accessor. Bulk-load rows/sec shown at the bottom — DuckDB&#39;s appender loads fastest; that one is theirs.</p>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="sec-head"><h2>Where DuckDB wins, and why HoloDb wins</h2></div>
+    <div class="cols2">
+      <div class="note-card">
+        <h3>DuckDB is still ahead on four</h3>
+        <p>An honest benchmark shows the losses. At 10M rows DuckDB beats HoloDb on:</p>
+        <ul>
+          <li><b>GROUP BY int, SUM of a real column</b> — ~9× slower. Real-valued group sums are HoloDb&#39;s weakest path (the constant-time trick is exact-integer only).</li>
+          <li><b>filtered COUNT(*)</b> and <b>SUM of a real column</b> — DuckDB&#39;s vectorized scan is ~2× quicker.</li>
+          <li><b>ORDER BY … LIMIT 20</b> — top-K isn&#39;t specialised in HoloDb yet.</li>
+        </ul>
+        <p>DuckDB is a mature, world-class analytics engine. HoloDb is young. That it wins 11 of 15 anyway is the point.</p>
+      </div>
+      <div class="note-card">
+        <h3>Why the wins are so large</h3>
+        <p>HoloDb doesn&#39;t compute aggregates by reading rows. Integer columns feed <b>CRT bind-accumulators</b> — a holographic running SUM/COUNT per group, maintained on write — so a whole-table <code class="inl">SUM</code> or a <code class="inl">GROUP BY</code> is a fixed-size vector read, independent of row count. Scans use a columnar store with compiled predicates and per-block zone-maps that skip blocks that can&#39;t match. The aggregates are exact, not sampled.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="sec-head"><h2>Reproduce it</h2>
+      <p>Nothing here is cherry-picked from a lucky run. The harness loads the same rows into all three engines via each one&#39;s idiomatic bulk path, verifies every result identical, then times the median. Run it yourself:</p>
+    </div>
+    <pre><code>dotnet run --project HoloDb.Bench -c Release -- vsmulti 10000000
+# multi-scale sweep to JSON:
+dotnet run --project HoloDb.Bench -c Release -- sweep 100000 1000000 10000000</code></pre>
+    <p class="cap-note">Measured on an Intel Core i9-11950H (8 cores / 16 threads), 32&nbsp;GB, .NET 8, in-memory tables, ServerGC. SQLite via Microsoft.Data.Sqlite, DuckDB via DuckDB.NET. Your numbers will vary with hardware; the shape won&#39;t.</p>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="note-card" style="display:flex; flex-wrap:wrap; gap:18px; align-items:center; justify-content:space-between">
+      <div>
+        <h3 style="font-size:1.15rem">It&#39;s on NuGet. Embedded or as a server.</h3>
+        <p style="margin-top:6px">Add the package, or pull the container and connect over the network.</p>
+      </div>
+      <div class="mono" style="font-size:.85rem; color:var(--ink-soft)">
+        <div>dotnet add package <b style="color:var(--ink)">EvaluatedApplications.HoloDb</b></div>
+        <div style="margin-top:6px">docker pull <b style="color:var(--ink)">ghcr.io/evaluatedapplications/holodb</b></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <span>HoloDb — a holographic SQL database. Evaluated Applications, England.</span>
+    <span class="mono" style="font-size:.82rem">© <span id="yr"></span> · <a href="index.html">all packages</a> · <a href="https://www.nuget.org/packages/EvaluatedApplications.HoloDb" target="_blank" rel="noopener">NuGet</a></span>
+  </div>
+</footer>
+
+<div id="tip"></div>
+
+<script>
+document.getElementById('yr').textContent = new Date().getFullYear();
+
+// ---- the measured data (median ms; s=SQLite d=DuckDB h=HoloDb). All results verified identical across engines. ----
+const Q = ["point lookup","filter scan (~50%)","filtered COUNT(*)","SUM whole table","filter AND","GROUP BY int","GROUP BY text","GROUP BY + HAVING","ORDER BY + LIMIT","MIN / MAX","DISTINCT","filter REAL (~50%)","SUM real","MIN / MAX real","GROUP BY int SUM real"];
+const DATA = {
+  100000:  { load:{s:436674,d:1279049,h:484986}, q:[[0.0057,0.2019,0.0026],[13.8818,2.6173,0.9616],[2.6523,0.3931,0.5906],[2.6246,0.3982,0.0034],[5.7677,1.1298,1.8894],[22.4934,0.6803,0.0705],[19.6506,1.0897,0.0166],[22.8433,0.9688,0.0342],[4.1884,0.6702,1.0501],[3.9324,0.3859,0.0024],[4.9691,1.9550,0.0246],[13.2425,1.5474,0.9666],[3.0141,0.3350,0.0515],[4.4951,0.9620,0.0446],[23.1068,0.5863,1.0572]] },
+  1000000: { load:{s:710419,d:1497988,h:770072}, q:[[0.0052,0.4072,0.0010],[124.8898,9.1856,3.2895],[31.7888,0.7387,1.0282],[31.1261,0.5098,0.0013],[58.2354,2.5169,2.5460],[224.2835,1.1406,0.0257],[202.9699,1.9051,0.0130],[224.8389,1.0633,0.0485],[44.5739,1.5534,1.1012],[45.8796,0.7023,0.0056],[57.1530,3.9018,0.0265],[133.4678,9.5916,2.7571],[36.5057,0.5798,0.4242],[53.1250,1.8665,0.2255],[244.1251,1.1542,4.8360]] },
+  10000000:{ load:{s:788060,d:1457839,h:613105}, q:[[0.0041,0.4188,0.0027],[1308.6868,103.7192,24.2720],[343.5277,2.3290,5.6330],[343.2446,1.5328,0.0020],[623.0543,21.9395,13.4837],[2786.7272,4.7922,0.0276],[2474.5082,8.9852,0.0132],[2722.7310,4.1295,0.0442],[490.0431,1.9481,4.3412],[475.6130,2.2634,0.0157],[587.1259,16.4477,0.0292],[1362.0594,95.2663,22.1560],[378.1055,2.4832,4.2743],[555.5999,8.9240,4.5988],[2978.2842,4.3841,39.9369]] }
+};
+const NKEYS = [100000,1000000,10000000];
+let scale = 10000000;
+
+const css = v => getComputedStyle(document.body).getPropertyValue(v).trim();
+function eColors(){ return { h:css('--e-holo'), d:css('--e-duck'), s:css('--e-sqlite'), grid:css('--grid'), ink:css('--ink-soft'), faint:css('--ink-faint') }; }
+const fmtMs = x => x>=100? x.toFixed(0) : x>=10? x.toFixed(1) : x>=1? x.toFixed(2) : x.toFixed(3);
+const fmtX  = x => x>=100? Math.round(x)+'×' : x>=10? x.toFixed(0)+'×' : x.toFixed(1)+'×';
+const SVGNS='http://www.w3.org/2000/svg';
+function el(n,a){ const e=document.createElementNS(SVGNS,n); for(const k in a) e.setAttribute(k,a[k]); return e; }
+
+// ---- tooltip ----
+const tip=document.getElementById('tip');
+function showTip(html,ev){ tip.innerHTML=html; tip.style.opacity=1; moveTip(ev); }
+function moveTip(ev){ const p=12; let x=ev.clientX+p, y=ev.clientY+p; const r=tip.getBoundingClientRect(); if(x+r.width>innerWidth-8)x=ev.clientX-r.width-p; if(y+r.height>innerHeight-8)y=ev.clientY-r.height-p; tip.style.left=x+'px'; tip.style.top=y+'px'; }
+function hideTip(){ tip.style.opacity=0; }
+function rowTip(i){ const r=DATA[scale].q[i]; const c=eColors(); return `<b>${Q[i]}</b><div class="r"><span><i style="color:${c.h}">■</i> HoloDb</span><span>${fmtMs(r[2])} ms</span></div><div class="r"><span><i style="color:${c.d}">■</i> DuckDB</span><span>${fmtMs(r[1])} ms</span></div><div class="r"><span><i style="color:${c.s}">■</i> SQLite</span><span>${fmtMs(r[0])} ms</span></div>`; }
+
+// ---- stat tiles (fixed at 10M) ----
+function tiles(){
+  const q=DATA[10000000].q, host=document.getElementById('tiles');
+  const sumX=q[3][1]/q[3][2], grpX=q[6][1]/q[6][2];
+  let wins=0; q.forEach(r=>{ if(r[2]<=r[1]&&r[2]<=r[0]) wins++; });
+  const s100=DATA[100000].q[3][2], s10m=q[3][2];
+  const T=[
+    {big:`0.002<small> ms</small>`, cap:`<b>SUM</b> over 10M rows. DuckDB takes ${fmtMs(q[3][1])} ms, SQLite ${fmtMs(q[3][0])} ms. That&#39;s <b>${fmtX(sumX)}</b> DuckDB.`},
+    {big:`${fmtX(grpX)}`, cap:`faster than DuckDB on <b>GROUP BY</b> at 10M rows. It reads per-group accumulators, not the table.`},
+    {big:`${wins}<small> / 15</small>`, cap:`queries where HoloDb is the <b>fastest of the three</b> at 10M rows.`},
+    {big:`flat`, cap:`SUM stays <b>~${s100.toFixed(3)}→${s10m.toFixed(3)} ms</b> from 100K to 10M rows. It doesn&#39;t grow with the data.`}
+  ];
+  host.innerHTML = T.map(t=>`<div class="tile"><div class="big">${t.big}</div><div class="cap">${t.cap}</div></div>`).join('');
+}
+
+// ---- diverging log bar chart: speedup vs DuckDB ----
+function bars(){
+  const host=document.getElementById('barchart'); host.innerHTML='';
+  const c=eColors(), rows=DATA[scale].q.map((r,i)=>({i,sp:r[1]/r[2]}));
+  const W=760, Lg=150, PX0=Lg+8, PX1=W-40, plotW=PX1-PX0, TP=34, rowH=30, H=TP+rows.length*rowH+10;
+  const minD=-1, maxD=3, x=sp=>PX0+(Math.log10(sp)-minD)/(maxD-minD)*plotW;
+  const svg=el('svg',{viewBox:`0 0 ${W} ${H}`,role:'img'});
+  // gridlines + top labels
+  [0.1,1,10,100,1000].forEach(t=>{ const gx=x(t); svg.appendChild(el('line',{x1:gx,y1:TP-6,x2:gx,y2:H-6,stroke:t===1?c.faint:c.grid,'stroke-width':t===1?1.4:1})); const lb=el('text',{x:gx,y:TP-12,fill:c.faint,'font-size':11,'text-anchor':'middle','font-family':'var(--mono)'}); lb.textContent=(t<1?'0.1':t)+'×'; svg.appendChild(lb); });
+  rows.forEach(({i,sp})=>{
+    const cy=TP+i*rowH+rowH/2, x1=x(1), x2=x(sp), win=sp>=1, col=win?c.h:c.d;
+    const bx=Math.min(x1,x2), bw=Math.max(2,Math.abs(x2-x1));
+    const rect=el('rect',{x:bx,y:cy-7,width:bw,height:14,rx:4,fill:col,opacity:.92});
+    rect.style.cursor='pointer';
+    rect.addEventListener('mousemove',ev=>showTip(rowTip(i)+`<div class="r" style="margin-top:5px"><span>speedup</span><span>${fmtX(sp)}</span></div>`,ev));
+    rect.addEventListener('mouseleave',hideTip);
+    svg.appendChild(rect);
+    const ql=el('text',{x:PX0-10,y:cy+4,fill:c.ink,'font-size':12.5,'text-anchor':'end'}); ql.textContent=Q[i]; svg.appendChild(ql);
+    const vl=el('text',{y:cy+4,'font-size':12,'font-weight':600,'font-family':'var(--mono)',fill:col});
+    if(win){ vl.setAttribute('x',x2+7); vl.setAttribute('text-anchor','start'); } else { vl.setAttribute('x',x2-7); vl.setAttribute('text-anchor','end'); }
+    vl.textContent=fmtX(win?sp:1/sp); svg.appendChild(vl);
+  });
+  host.appendChild(svg);
+}
+
+// ---- log-log scaling line chart ----
+function lineChart(hostId, qi, title){
+  const host=document.getElementById(hostId); host.innerHTML='';
+  const c=eColors();
+  const W=500, H=300, ml=52, mr=16, mt=34, mb=34, pw=W-ml-mr, ph=H-mt-mb;
+  const xs=NKEYS, xmin=5, xmax=7; // log10
+  const series=[['h',2],['d',1],['s',0]].map(([key,idx])=>({key, col:key==='h'?c.h:key==='d'?c.d:c.s, pts:xs.map(n=>DATA[n].q[qi][idx])}));
+  const ymin=-3.2, ymax=3.7; // log10 ms domain (0.0006 .. ~5000)
+  const X=n=>ml+(Math.log10(n)-xmin)/(xmax-xmin)*pw, Y=v=>mt+(1-(Math.log10(Math.max(v,0.0006))-ymin)/(ymax-ymin))*ph;
+  const svg=el('svg',{viewBox:`0 0 ${W} ${H}`,role:'img'});
+  const tt=el('text',{x:ml,y:16,fill:c.ink,'font-size':13,'font-weight':600}); tt.textContent=title; svg.appendChild(tt);
+  // y gridlines at decades
+  for(let d=-3; d<=3; d++){ const gy=Y(Math.pow(10,d)); svg.appendChild(el('line',{x1:ml,y1:gy,x2:W-mr,y2:gy,stroke:c.grid,'stroke-width':1})); const lb=el('text',{x:ml-8,y:gy+3.5,fill:c.faint,'font-size':10,'text-anchor':'end','font-family':'var(--mono)'}); lb.textContent=d<0?('0.'+ '0'.repeat(-d-1)+'1'):(d===0?'1':d===1?'10':d===2?'100':'1000'); if(d>=-3) svg.appendChild(lb); }
+  // x labels
+  [[100000,'100K'],[1000000,'1M'],[10000000,'10M']].forEach(([n,l])=>{ const gx=X(n); const lb=el('text',{x:gx,y:H-12,fill:c.faint,'font-size':10.5,'text-anchor':'middle','font-family':'var(--mono)'}); lb.textContent=l; svg.appendChild(lb); });
+  const yl=el('text',{x:ml-38,y:mt-10,fill:c.faint,'font-size':10,'font-family':'var(--mono)'}); yl.textContent='ms'; svg.appendChild(yl);
+  series.forEach(se=>{
+    let d=''; se.pts.forEach((v,k)=>{ d+=(k?'L':'M')+X(xs[k])+' '+Y(v); });
+    svg.appendChild(el('path',{d,fill:'none',stroke:se.col,'stroke-width':2.4,'stroke-linejoin':'round','stroke-linecap':'round'}));
+    se.pts.forEach((v,k)=>{ const cx=X(xs[k]),cy=Y(v); const dot=el('circle',{cx,cy,r:4.5,fill:se.col,stroke:css('--surface'),'stroke-width':2}); dot.style.cursor='pointer'; const nm=se.key==='h'?'HoloDb':se.key==='d'?'DuckDB':'SQLite'; dot.addEventListener('mousemove',ev=>showTip(`<b>${nm}</b> · ${title}<div class="r"><span>${(xs[k]/1e6>=1?xs[k]/1e6+'M':xs[k]/1e3+'K')} rows</span><span>${fmtMs(v)} ms</span></div>`,ev)); dot.addEventListener('mouseleave',hideTip); svg.appendChild(dot); });
+  });
+  host.appendChild(svg);
+}
+
+// ---- results table ----
+function table(){
+  const t=document.getElementById('results'), d=DATA[scale];
+  let h=`<thead><tr><th>query</th><th>SQLite</th><th>DuckDB</th><th>HoloDb</th><th>winner</th><th>=</th></tr></thead><tbody>`;
+  d.q.forEach((r,i)=>{
+    const best=Math.min(r[0],r[1],r[2]);
+    const cell=(v,idx)=>`<td class="ms ${v===best?'best':''}">${fmtMs(v)}</td>`;
+    const win = r[2]===best?'<span class="w-holo">HoloDb</span>' : r[1]===best?'<span class="w-duck">DuckDB</span>' : 'SQLite';
+    h+=`<tr><td class="q">${Q[i]}</td>${cell(r[0])}${cell(r[1])}${cell(r[2])}<td>${win}</td><td class="chk">✓</td></tr>`;
+  });
+  const L=d.load;
+  h+=`<tr class="loadrow"><td>bulk load (rows/sec)</td><td class="ms">${L.s.toLocaleString()}</td><td class="ms">${L.d.toLocaleString()}</td><td class="ms">${L.h.toLocaleString()}</td><td>DuckDB</td><td></td></tr>`;
+  t.innerHTML=h+'</tbody>';
+}
+
+function renderScaleDependent(){ bars(); table(); }
+function renderAll(){ tiles(); renderScaleDependent(); lineChart('scale-sum',3,'SUM whole table'); lineChart('scale-grp',5,'GROUP BY int'); }
+
+document.getElementById('scale-seg').addEventListener('click',e=>{
+  const b=e.target.closest('button'); if(!b) return;
+  document.querySelectorAll('#scale-seg button').forEach(x=>x.classList.remove('on')); b.classList.add('on');
+  scale=+b.dataset.n; renderScaleDependent();
+});
+window.addEventListener('scroll',hideTip,{passive:true});
+matchMedia('(prefers-color-scheme:dark)').addEventListener('change',renderAll);
+addEventListener('resize',()=>{ clearTimeout(window._rt); window._rt=setTimeout(renderAll,150); });
+renderAll();
+</script>
+</body>
+</html>
