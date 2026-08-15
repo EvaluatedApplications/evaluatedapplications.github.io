@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>HoloDb — benchmarks</title>
-<meta name="description" content="HoloDb vs DuckDB vs SQLite: the same SQL over the same data, results verified identical, up to 10 million rows. A holographic SQL database whose aggregates run in constant time.">
+<meta name="description" content="HoloDb vs DuckDB, SQLite and SQL Server: the same SQL over the same data, results verified identical, up to 10 million rows, embedded and as a server. A holographic SQL database whose aggregates run in constant time.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%238b7dff'/%3E%3Cstop offset='.5' stop-color='%2335d0c0'/%3E%3Cstop offset='1' stop-color='%23e6b450'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='32' height='32' rx='7' fill='%230a0c11'/%3E%3Cpath d='M16 5l9.5 5.5v11L16 27l-9.5-5.5v-11z' fill='none' stroke='url(%23g)' stroke-width='2'/%3E%3C/svg%3E">
 <style>
   :root{
@@ -142,11 +142,12 @@
   <div class="wrap">
     <span class="eyebrow">HoloDb · holographic SQL database</span>
     <h1>A database that doesn&#39;t scan.</h1>
-    <p class="lede">Same SQL, same data, results verified identical to the row — HoloDb against DuckDB and SQLite, up to 10&nbsp;million rows. HoloDb keeps its aggregates as maintained holographic accumulators, so <b>SUM</b>, <b>COUNT</b>, <b>GROUP&nbsp;BY</b>, <b>MIN/MAX</b> and <b>DISTINCT</b> answer in constant time instead of reading the table. Here is what that does to the clock.</p>
+    <p class="lede">Same SQL, same data, results verified identical to the row — HoloDb against DuckDB, SQLite and SQL Server, up to 10&nbsp;million rows, embedded and as a server. HoloDb keeps its aggregates as maintained holographic accumulators, so <b>SUM</b>, <b>COUNT</b>, <b>GROUP&nbsp;BY</b>, <b>MIN/MAX</b> and <b>DISTINCT</b> answer in constant time instead of reading the table. Here is what that does to the clock.</p>
     <div class="facts">
       <span class="fact">up to <b>10M</b> rows</span>
       <span class="fact"><b>15</b> queries</span>
-      <span class="fact">results <b>identical</b> across all three</span>
+      <span class="fact">results <b>identical</b> across all five</span>
+      <span class="fact">embedded <b>+</b> server</span>
       <span class="fact">i9-11950H laptop</span>
     </div>
   </div>
@@ -204,11 +205,22 @@
 <section>
   <div class="wrap">
     <div class="sec-head">
-      <h2>The full results</h2>
-      <p>All fifteen queries, milliseconds, median of repeated runs. Every row was checked identical across the three engines before timing — the <span class="chk">✓</span> is not decoration. Use the selector above to switch scale.</p>
+      <h2>The full results — serverless (in-process)</h2>
+      <p>All fifteen queries, milliseconds, median of repeated runs, for the three embedded engines. Every row was checked identical across all five engines before timing — the <span class="chk">✓</span> is not decoration. Use the selector above to switch scale.</p>
     </div>
     <div class="tbl-wrap"><table id="results"></table></div>
-    <p class="cap-note">Consumption is like-for-like: every value read TYPED (no boxing) through each engine&#39;s fast accessor. Bulk-load rows/sec is at the bottom; DuckDB&#39;s appender is the fastest loader of the three.</p>
+    <p class="cap-note">Consumption is like-for-like: every value read TYPED (no boxing) through each engine&#39;s fast accessor. Bulk-load rows/sec is at the bottom; DuckDB&#39;s appender is the fastest loader of the three embedded engines.</p>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="sec-head">
+      <h2>The other way you deploy it — server vs server</h2>
+      <p>The three above run in-process. HoloDb also runs as a <b>server</b>, so here is the fair fight against one: HoloDb server mode against <b>SQL Server</b>, each hit over a socket with one client/server round-trip per query — the tax the embedded engines don&#39;t pay. Same SQL, same data, results verified identical. HoloDb keeps its constant-time aggregates even over the wire, and wins <b id="srv-wins">15</b> of 15 at 10M rows while loading faster.</p>
+    </div>
+    <div class="tbl-wrap"><table id="results-srv"></table></div>
+    <p class="cap-note">HoloDb server mode is an in-process <code class="inl">HoloServer</code> over real TLS driven by <code class="inl">HoloDbClient</code>; SQL Server is Microsoft.Data.SqlClient to LocalDB. Both pay the round-trip and consume every row typed. Same scale selector as above.</p>
   </div>
 </section>
 
@@ -237,9 +249,9 @@
 <section>
   <div class="wrap">
     <div class="sec-head"><h2>How it was measured</h2>
-      <p>Nothing here is cherry-picked from a lucky run. The harness loads the same rows into all three engines via each one&#39;s idiomatic bulk path, verifies every result is identical to the row, then times the median of repeated runs. Consumption is like-for-like: every value is read typed — no boxing — through each engine&#39;s fast accessor, so what&#39;s timed is the engines, not the client glue.</p>
+      <p>Nothing here is cherry-picked from a lucky run. The harness loads the same rows into all five engines via each one&#39;s idiomatic bulk path, verifies every result is identical to the row, then times the median of repeated runs. Consumption is like-for-like: every value is read typed — no boxing — through each engine&#39;s fast accessor, so what&#39;s timed is the engines, not the client glue. The two brackets keep it fair: embedded is compared to embedded, and the two servers (both over a socket) to each other.</p>
     </div>
-    <p class="cap-note">Measured on an Intel Core i9-11950H (8 cores / 16 threads), 32&nbsp;GB, .NET 8, in-memory tables, ServerGC. SQLite via Microsoft.Data.Sqlite, DuckDB via DuckDB.NET. Your numbers will vary with hardware; the shape won&#39;t.</p>
+    <p class="cap-note">Measured on an Intel Core i9-11950H (8 cores / 16 threads), 32&nbsp;GB, .NET 8, in-memory tables, ServerGC. SQLite via Microsoft.Data.Sqlite, DuckDB via DuckDB.NET, SQL Server via Microsoft.Data.SqlClient (LocalDB), HoloDb server mode over TLS via HoloDbClient. Your numbers will vary with hardware; the shape won&#39;t.</p>
   </div>
 </section>
 
@@ -279,6 +291,13 @@ const DATA = {
 };
 const NKEYS = [100000,1000000,10000000];
 let scale = 10000000;
+
+// ---- server bracket: SQL Server (LocalDB) vs HoloDb in server mode. Both pay a client/server round-trip. q=[SQLServer, HoloDb-server] ms ----
+const SRV = {
+  100000:  { load:{srv:422808,hs:394992},   q:[[0.108,0.138],[20.730,2.465],[5.132,0.818],[8.678,0.085],[5.646,1.419],[14.391,0.171],[17.260,0.131],[13.791,0.164],[11.580,0.499],[9.923,0.085],[10.826,0.114],[7.865,1.881],[10.079,0.129],[10.289,0.169],[14.346,4.121]] },
+  1000000: { load:{srv:769493,hs:686995},   q:[[0.074,0.141],[79.281,11.594],[50.493,1.122],[91.047,0.124],[55.583,3.977],[143.624,0.177],[172.032,0.141],[141.205,0.172],[118.372,1.057],[105.569,0.152],[107.238,0.165],[78.813,11.253],[97.303,0.349],[106.466,0.364],[146.226,4.721]] },
+  10000000:{ load:{srv:802383,hs:1091636},  q:[[0.157,0.156],[802.329,121.189],[513.464,5.651],[942.138,0.168],[554.013,33.416],[1472.433,0.234],[1723.877,0.165],[1425.813,0.220],[1191.885,5.963],[1087.565,0.214],[1088.091,0.163],[831.117,118.757],[940.361,5.397],[1105.172,5.992],[1467.844,44.591]] }
+};
 
 const css = v => getComputedStyle(document.body).getPropertyValue(v).trim();
 function eColors(){ return { h:css('--e-holo'), d:css('--e-duck'), s:css('--e-sqlite'), grid:css('--grid'), ink:css('--ink-soft'), faint:css('--ink-faint') }; }
@@ -374,7 +393,23 @@ function table(){
   t.innerHTML=h+'</tbody>';
 }
 
-function renderScaleDependent(){ bars(); table(); }
+// ---- server bracket table: SQL Server vs HoloDb (server) ----
+function serverTable(){
+  const t=document.getElementById('results-srv'); if(!t) return; const d=SRV[scale];
+  let wins=0; d.q.forEach(r=>{ if(r[1]<=r[0]) wins++; });
+  let h=`<thead><tr><th>query</th><th>SQL&nbsp;Server</th><th>HoloDb (server)</th><th>winner</th><th>=</th></tr></thead><tbody>`;
+  d.q.forEach((r,i)=>{
+    const best=Math.min(r[0],r[1]);
+    const cell=v=>`<td class="ms ${v===best?'best':''}">${fmtMs(v)}</td>`;
+    const win = r[1]<=r[0] ? '<span class="w-holo">HoloDb</span>' : 'SQL&nbsp;Server';
+    h+=`<tr><td class="q">${Q[i]}</td>${cell(r[0])}${cell(r[1])}<td>${win}</td><td class="chk">✓</td></tr>`;
+  });
+  const L=d.load;
+  h+=`<tr class="loadrow"><td>bulk load (rows/sec)</td><td class="ms">${L.srv.toLocaleString()}</td><td class="ms">${L.hs.toLocaleString()}</td><td>${L.hs>=L.srv?'<span class="w-holo">HoloDb</span>':'SQL&nbsp;Server'}</td><td></td></tr>`;
+  t.innerHTML=h+'</tbody>';
+}
+
+function renderScaleDependent(){ bars(); table(); serverTable(); }
 function renderAll(){ tiles(); renderScaleDependent(); lineChart('scale-sum',3,'SUM whole table'); lineChart('scale-grp',5,'GROUP BY int'); }
 
 document.getElementById('scale-seg').addEventListener('click',e=>{
