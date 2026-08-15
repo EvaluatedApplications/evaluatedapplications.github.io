@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>EvalApp — benchmarks</title>
+<title>EvalApp — async pipeline runtime for .NET</title>
 <meta name="description" content="EvalApp governs concurrency for async .NET work: fan a job out across far more operations than you have threads without running them all at once, and hold every backend at its real limit. One dependency in place of a MediatR + Polly + Dataflow stack.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%238b7dff'/%3E%3Cstop offset='.5' stop-color='%2335d0c0'/%3E%3Cstop offset='1' stop-color='%23e6b450'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='32' height='32' rx='7' fill='%230a0c11'/%3E%3Cpath d='M16 5l9.5 5.5v11L16 27l-9.5-5.5v-11z' fill='none' stroke='url(%23g)' stroke-width='2'/%3E%3C/svg%3E">
 <style>
@@ -66,6 +66,14 @@
   .tile .big small{font-size:1rem; font-weight:500; color:var(--ink-soft); letter-spacing:0}
   .tile .cap{margin-top:9px; font-size:.9rem; color:var(--ink-soft); line-height:1.45}
   .tile .cap b{color:var(--ink)}
+
+  .feats{display:grid; grid-template-columns:repeat(auto-fit,minmax(250px,1fr)); gap:14px}
+  .feat{background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:18px 20px}
+  .feat h3{font-size:1rem; margin:0 0 7px; display:flex; align-items:center; gap:9px; font-weight:640}
+  .feat h3 i{width:9px; height:9px; border-radius:2px; background:var(--e-eval); flex:none}
+  .feat p{margin:0; color:var(--ink-soft); font-size:.92rem; line-height:1.5}
+  .feat p b{color:var(--ink); font-weight:600}
+  .feat code{font-family:var(--mono); font-size:.85em; color:var(--accent-ink)}
 
   .panel{background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:20px 20px 12px}
   .legend{display:flex; gap:16px; flex-wrap:wrap; margin:2px 0 12px; font-family:var(--mono); font-size:.82rem; color:var(--ink-soft)}
@@ -160,6 +168,41 @@
 <section>
   <div class="wrap">
     <div class="sec-head">
+      <h2>What it is</h2>
+      <p>A pipeline runtime for async .NET. You describe the work as a sequence of steps against a data type; EvalApp compiles that description into a single delegate and runs it — governing how much executes at once, holding every backend at its real limit, and recovering when a step fails. The fluent builder is the whole surface; everything below is opt-in and costs nothing on a pipeline that doesn&#39;t use it.</p>
+    </div>
+    <div class="feats">
+      <div class="feat">
+        <h3><i></i>Bounded async fan-out</h3>
+        <p><code>ForEach</code> streams a collection through a worker pool. You keep far more in flight than you have threads, but never all of it — so a million-row job runs at a fixed memory ceiling instead of launching a million operations at once.</p>
+      </div>
+      <div class="feat">
+        <h3><i></i>Resource gates</h3>
+        <p>Declare a real limit for each backend — a DB pool, an API cap, a CPU budget — and every stage that touches it contends for the same gate. One shared ceiling across the whole pipeline, so a flood can&#39;t oversubscribe a downstream service.</p>
+      </div>
+      <div class="feat">
+        <h3><i></i>Adaptive tuner</h3>
+        <p>Nobody has to pick the in-flight number. A hill-climbing or Bayesian tuner watches wall-time across runs, finds the concurrency that maximises goodput, and holds it — persisted between runs.</p>
+      </div>
+      <div class="feat">
+        <h3><i></i>Sagas with compensation</h3>
+        <p>Chain steps that each have an undo. When a later step fails, EvalApp runs the compensations in reverse order — the payment is refunded, the reservation released — so a half-finished job doesn&#39;t leave torn state behind.</p>
+      </div>
+      <div class="feat">
+        <h3><i></i>Middleware</h3>
+        <p>Wrap every step with retry, timeout, circuit-breaker, validation, audit, timing, or mutation-tracking — built in and composable. The mutation tracker uses compiled expression trees, so it reads changed fields with zero runtime reflection.</p>
+      </div>
+      <div class="feat">
+        <h3><i></i>Compiled, near-zero overhead</h3>
+        <p>The fluent tree is compiled once into one delegate; the checks a run doesn&#39;t need are branched away at build time, not re-tested per step. A pipeline step is cheap enough to stand in for a plain function call.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="sec-head">
       <h2>Fan out a million operations — without running them all at once</h2>
       <p>The tempting way to run an async operation over a big list is <code class="inl">Task.WhenAll(list.Select(WorkAsync))</code>. It launches every operation simultaneously: every buffer, every open connection, live at the same time. It works right up until the list is large enough, and then it is an <code class="inl">OutOfMemoryException</code> or an exhausted connection pool. EvalApp&#39;s <code class="inl">ForEach</code> streams the same work through a bounded worker pool — you keep far more in flight than you have threads, but never all of it, and the in-flight number is a knob the tuner can set for you.</p>
     </div>
@@ -196,7 +239,7 @@
       </div>
       <div id="goodput"></div>
     </div>
-    <p class="cap-note">Ungoverned code pushes ~5,000–6,000 req/s but times out ~97% of it (it drove the 28-connection DB pool to 7,800). Its useful throughput is ~160 req/s. EvalApp holds every resource at capacity and completes all 8,000 — same throughput as a hand-rolled SemaphoreSlim, Polly, or a MediatR+Polly stack, and zero drops.</p>
+    <p class="cap-note">Ungoverned code pushes ~5,000–6,000 req/s but times out ~97% of it (it drove the 28-connection DB pool to 7,800). Its useful throughput is ~175 req/s. EvalApp holds every resource at capacity and completes all 8,000 — same throughput as a hand-rolled SemaphoreSlim, Polly, or a MediatR+Polly stack, and zero drops.</p>
   </div>
 </section>
 
@@ -312,10 +355,10 @@ document.getElementById('yr').textContent = new Date().getFullYear();
 // ---- fan-out: 200,000 async ops, 8 KB each, cap 10,000 ----
 const BUFKB = 8;
 const FAN = [
-  {n:"Task.WhenAll (naive)",   fam:"none", inflight:158649, sec:0.76},
-  {n:"Parallel.ForEachAsync",  fam:"lib",  inflight:10000,  sec:6.20},
-  {n:"SemaphoreSlim throttle", fam:"lib",  inflight:10000,  sec:6.21},
-  {n:"TPL Dataflow",           fam:"lib",  inflight:10000,  sec:6.24},
+  {n:"Task.WhenAll (naive)",   fam:"none", inflight:135294, sec:0.85},
+  {n:"Parallel.ForEachAsync",  fam:"lib",  inflight:10000,  sec:6.25},
+  {n:"SemaphoreSlim throttle", fam:"lib",  inflight:10000,  sec:6.19},
+  {n:"TPL Dataflow",           fam:"lib",  inflight:10000,  sec:6.26},
   {n:"EvalApp ForEach",        fam:"eval", inflight:10000,  sec:6.24},
 ];
 FAN.forEach(f => f.mem = f.inflight * BUFKB / 1024);   // MB of live buffers
@@ -323,16 +366,16 @@ FAN.forEach(f => f.mem = f.inflight * BUFKB / 1024);   // MB of live buffers
 // ---- soak: 8000-request backlog. rps = total/wall; completed = 8000 - errors ----
 const TOTAL = 8000, DBCAP = 28;
 const A = [
-  {n:"Naive (no gating)",  fam:"none",  rps:5366, err:7763, kb:1.9,  cpu:0.4, db:7766},
-  {n:"MediatR alone",      fam:"none",  rps:6078, err:7766, kb:2.2,  cpu:0.3, db:7797},
+  {n:"Naive (no gating)",  fam:"none",  rps:5930, err:7764, kb:1.9,  cpu:0.1, db:7790},
+  {n:"MediatR alone",      fam:"none",  rps:6186, err:7765, kb:2.2,  cpu:0.5, db:7802},
   {n:"SemaphoreSlim",      fam:"lib",   rps:1099, err:0,    kb:3.0,  cpu:0.3, db:28},
-  {n:"TPL Dataflow",       fam:"lib",   rps:1097, err:0,    kb:3.5,  cpu:0.4, db:28},
-  {n:"Polly limiter",      fam:"lib",   rps:1097, err:0,    kb:5.4,  cpu:0.6, db:28},
-  {n:"MediatR + Polly",    fam:"stack", rps:1096, err:0,    kb:13.6, cpu:1.2, db:28},
-  {n:"EvalApp",            fam:"eval",  rps:1089, err:0,    kb:5.0,  cpu:0.9, db:28},
+  {n:"TPL Dataflow",       fam:"lib",   rps:1098, err:0,    kb:3.5,  cpu:0.5, db:28},
+  {n:"Polly limiter",      fam:"lib",   rps:1097, err:0,    kb:5.5,  cpu:0.4, db:28},
+  {n:"MediatR + Polly",    fam:"stack", rps:1097, err:0,    kb:13.6, cpu:0.5, db:28},
+  {n:"EvalApp",            fam:"eval",  rps:1089, err:0,    kb:5.0,  cpu:0.8, db:28},
 ];
 A.forEach(a => { a.done = TOTAL - a.err; a.good = a.rps * a.done / TOTAL; });
-const CONV_AFTER  = [1097,1098,1099,1098,1098,1099,1097,1097,1098,1098,1099,1097];
+const CONV_AFTER  = [1098,1098,1099,1097,1098,1099,1098,1097,1099,1098,1097,1098];
 
 const css = v => getComputedStyle(document.body).getPropertyValue(v).trim();
 const SVGNS='http://www.w3.org/2000/svg';
