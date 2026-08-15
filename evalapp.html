@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>EvalApp — benchmarks</title>
+<meta name="description" content="EvalApp vs a hand-rolled SemaphoreSlim, Polly, TPL Dataflow, and a composed MediatR+Polly stack: one integrated runtime that governs concurrency across a 5-stage service, at parity throughput, zero dropped requests, and a third of the allocation.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%238b7dff'/%3E%3Cstop offset='.5' stop-color='%2335d0c0'/%3E%3Cstop offset='1' stop-color='%23e6b450'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='32' height='32' rx='7' fill='%230a0c11'/%3E%3Cpath d='M16 5l9.5 5.5v11L16 27l-9.5-5.5v-11z' fill='none' stroke='url(%23g)' stroke-width='2'/%3E%3C/svg%3E">
+<style>
+  :root{
+    --bg:#0a0c11; --bg-2:#0d1017; --surface:#12151d; --surface-2:#171b25;
+    --border:#232a37; --border-2:#31394a;
+    --ink:#e9ecf3; --ink-soft:#98a2b3; --ink-faint:#6b7486;
+    --accent:#8b7dff; --accent-ink:#b3a9ff;
+    --spectrum:linear-gradient(90deg,#8b7dff,#4aa3ff,#35d0c0,#7bd86a,#e6b450,#f0796a);
+    --e-eval:#8b7dff; --e-stack:#c2862c; --e-drop:#e5595d; --e-lib:#6f7a90; --good:#7bd86a;
+    --grid:#212734;
+    --radius:14px; --wrap:1080px;
+    --font:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    --mono:ui-monospace,"Cascadia Code","SF Mono","JetBrains Mono",Menlo,Consolas,monospace;
+  }
+  @media (prefers-color-scheme:light){
+    :root{
+      --bg:#f6f7fb; --bg-2:#ffffff; --surface:#ffffff; --surface-2:#f1f3f9;
+      --border:#e4e8f0; --border-2:#d3d9e6;
+      --ink:#121620; --ink-soft:#59647a; --ink-faint:#8a94a8;
+      --accent:#5b4fe0; --accent-ink:#4c40d6;
+      --e-eval:#7b5cf0; --e-stack:#b5791f; --e-drop:#d1383d; --e-lib:#7b8698; --good:#3f9d54;
+      --grid:#e7ebf2;
+    }
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0; background:var(--bg); color:var(--ink); font-family:var(--font); font-size:17px; line-height:1.65; -webkit-font-smoothing:antialiased}
+  .wrap{max-width:var(--wrap); margin:0 auto; padding:0 24px}
+  a{color:var(--accent-ink); text-decoration:none} a:hover{text-decoration:underline}
+  h1,h2,h3{margin:0; line-height:1.15; letter-spacing:-.02em; font-weight:650}
+  .beam{height:3px; background:var(--spectrum); opacity:.9}
+  .mono{font-family:var(--mono)}
+
+  nav{position:sticky; top:0; z-index:20; background:color-mix(in srgb,var(--bg-2) 88%,transparent); backdrop-filter:blur(10px); border-bottom:1px solid var(--border)}
+  nav .wrap{display:flex; align-items:center; justify-content:space-between; height:62px}
+  .brand{display:flex; align-items:center; gap:11px; color:var(--ink); font-weight:650}
+  .brand:hover{text-decoration:none}
+  .mark{width:22px; height:22px; flex:none}
+  .nav-links{display:flex; gap:22px; align-items:center}
+  .nav-links a{color:var(--ink-soft); font-size:.94rem} .nav-links a:hover{color:var(--ink); text-decoration:none}
+
+  header{padding:76px 0 26px}
+  .eyebrow{font-family:var(--mono); font-size:.8rem; letter-spacing:.08em; text-transform:uppercase; color:var(--ink-faint)}
+  h1{font-size:clamp(2.2rem,5.2vw,3.4rem); margin:16px 0 0; max-width:17ch; text-wrap:balance}
+  .lede{font-size:clamp(1.05rem,2vw,1.25rem); color:var(--ink-soft); max-width:64ch; margin:22px 0 0}
+  .facts{display:flex; flex-wrap:wrap; gap:10px; margin-top:26px}
+  .fact{font-family:var(--mono); font-size:.82rem; color:var(--ink-soft); border:1px solid var(--border); border-radius:999px; padding:6px 13px; background:var(--surface)}
+  .fact b{color:var(--ink); font-weight:600}
+
+  section{padding:26px 0}
+  .sec-head{padding-top:24px; border-top:1px solid var(--border); margin-bottom:18px}
+  .sec-head h2{font-size:1.3rem}
+  .sec-head p{margin:8px 0 0; color:var(--ink-soft); max-width:72ch; font-size:.96rem}
+
+  .tiles{display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:14px}
+  .tile{background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:20px; position:relative; overflow:hidden}
+  .tile::before{content:""; position:absolute; left:0; top:0; bottom:0; width:3px; background:var(--e-eval)}
+  .tile .big{font-size:2.05rem; font-weight:680; letter-spacing:-.03em; font-variant-numeric:tabular-nums; line-height:1}
+  .tile .big small{font-size:1rem; font-weight:500; color:var(--ink-soft); letter-spacing:0}
+  .tile .cap{margin-top:9px; font-size:.9rem; color:var(--ink-soft); line-height:1.45}
+  .tile .cap b{color:var(--ink)}
+
+  .panel{background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:20px 20px 12px}
+  .legend{display:flex; gap:16px; flex-wrap:wrap; margin:2px 0 12px; font-family:var(--mono); font-size:.82rem; color:var(--ink-soft)}
+  .legend span{display:inline-flex; align-items:center; gap:7px}
+  .legend i{width:11px; height:11px; border-radius:3px; display:inline-block}
+  .cap-note{color:var(--ink-faint); font-size:.85rem; margin:8px 2px 0}
+  svg{display:block; width:100%; height:auto; overflow:visible}
+  svg text{font-family:var(--font)}
+
+  .tbl-wrap{overflow-x:auto; border:1px solid var(--border); border-radius:var(--radius)}
+  table{border-collapse:collapse; width:100%; font-size:.92rem; min-width:640px}
+  th,td{text-align:right; padding:9px 14px; border-bottom:1px solid var(--border); font-variant-numeric:tabular-nums}
+  th:first-child,td:first-child{text-align:left}
+  thead th{font-family:var(--mono); font-size:.76rem; text-transform:uppercase; letter-spacing:.05em; color:var(--ink-faint); font-weight:500}
+  tbody tr:last-child td{border-bottom:0}
+  td.a{color:var(--ink)}
+  .ms{font-family:var(--mono)}
+  .ok{color:var(--good); font-weight:600}
+  .bad{color:var(--e-drop); font-weight:600}
+  tr.eval td{background:color-mix(in srgb,var(--e-eval) 9%,transparent)}
+  tr.eval td.a{font-weight:650}
+
+  .cols2{display:grid; grid-template-columns:1fr 1fr; gap:18px}
+  @media (max-width:720px){ .cols2{grid-template-columns:1fr} }
+  .note-card{background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:20px 22px}
+  .note-card h3{font-size:1.05rem; margin-bottom:9px}
+  .note-card p, .note-card li{color:var(--ink-soft); font-size:.95rem}
+  .note-card ul{margin:6px 0 0; padding-left:18px} .note-card li{margin:5px 0}
+  .note-card b{color:var(--ink)}
+  code.inl{font-family:var(--mono); font-size:.86em; color:var(--accent-ink); background:color-mix(in srgb,var(--accent) 12%,transparent); padding:1px 6px; border-radius:5px}
+
+  .replace{display:grid; grid-template-columns:1fr auto 1fr; gap:16px; align-items:center}
+  @media (max-width:720px){ .replace{grid-template-columns:1fr} .replace .eq{transform:rotate(90deg)} }
+  .stackbox{background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:18px 20px}
+  .stackbox h3{font-size:.95rem; color:var(--ink-faint); font-family:var(--mono); text-transform:uppercase; letter-spacing:.05em; font-weight:500; margin-bottom:12px}
+  .dep{display:flex; align-items:center; gap:9px; padding:7px 0; font-size:.95rem}
+  .dep i{width:8px; height:8px; border-radius:2px; flex:none}
+  .dep small{color:var(--ink-faint); font-size:.82rem}
+  .eq{font-size:1.6rem; color:var(--ink-faint); text-align:center}
+  .stackbox.hero{border-color:color-mix(in srgb,var(--e-eval) 45%,var(--border))}
+  .stackbox.hero .dep{font-size:1.1rem; font-weight:600}
+
+  #tip{position:fixed; z-index:50; pointer-events:none; opacity:0; transition:opacity .1s; background:var(--bg-2); border:1px solid var(--border-2); border-radius:9px; padding:9px 11px; font-family:var(--mono); font-size:.78rem; color:var(--ink); box-shadow:0 8px 24px rgba(0,0,0,.35); max-width:250px}
+  #tip .r{display:flex; justify-content:space-between; gap:14px} #tip .r span:first-child{color:var(--ink-soft)}
+
+  footer{border-top:1px solid var(--border); margin-top:34px; padding:30px 0 50px; color:var(--ink-faint)}
+  footer .wrap{display:flex; flex-wrap:wrap; gap:14px; justify-content:space-between; align-items:center}
+  footer a{color:var(--ink-soft)}
+  @media (prefers-reduced-motion:reduce){*{transition:none!important; scroll-behavior:auto}}
+</style>
+</head>
+<body>
+<div class="beam"></div>
+
+<nav>
+  <div class="wrap">
+    <a class="brand" href="index.html">
+      <svg class="mark" viewBox="0 0 32 32" aria-hidden="true"><defs><linearGradient id="m" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#8b7dff"/><stop offset=".5" stop-color="#35d0c0"/><stop offset="1" stop-color="#e6b450"/></linearGradient></defs><path d="M16 4l10.4 6v12L16 28 5.6 22V10z" fill="none" stroke="url(#m)" stroke-width="2"/></svg>
+      Evaluated Applications
+    </a>
+    <div class="nav-links">
+      <a href="index.html">All packages</a>
+      <a href="https://www.nuget.org/packages/EvaluatedApplications.EvalApp" target="_blank" rel="noopener">NuGet</a>
+      <a href="https://github.com/EvaluatedApplications" target="_blank" rel="noopener">GitHub</a>
+    </div>
+  </div>
+</nav>
+
+<header>
+  <div class="wrap">
+    <span class="eyebrow">EvalApp · async pipeline runtime</span>
+    <h1>One dependency, the whole concurrency stack.</h1>
+    <p class="lede">A real service has stages behind real limits — a DB pool, an API rate cap, a CPU budget. Govern them with a stack of libraries (MediatR + Polly + Dataflow + DI glue), or with one integrated runtime. We flooded a 5-stage service with 8,000 requests at once and measured every approach. EvalApp matches the hand-tuned libraries on throughput, drops nothing, holds every backend exactly at its limit — at a third of the allocation of the composed stack.</p>
+    <div class="facts">
+      <span class="fact"><b>8,000</b> requests</span>
+      <span class="fact"><b>5</b> gated stages</span>
+      <span class="fact"><b>0</b> dropped</span>
+      <span class="fact">i9-11950H · 16 threads</span>
+    </div>
+  </div>
+</header>
+
+<section>
+  <div class="wrap"><div class="tiles" id="tiles"></div></div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="sec-head">
+      <h2>Fast is not the same as done</h2>
+      <p>Fire everything at once with no concurrency management and the raw numbers look great — until you count what actually finished. Each bar is total throughput; the coloured part is what completed, the red part is what was dropped when the backends were oversubscribed and timed out. Useful throughput is the coloured part.</p>
+    </div>
+    <div class="panel">
+      <div class="legend">
+        <span><i style="background:var(--good)"></i> completed (useful)</span>
+        <span><i style="background:var(--e-drop)"></i> dropped / timed out</span>
+      </div>
+      <div id="goodput"></div>
+    </div>
+    <p class="cap-note">"No gating" and "MediatR alone" push ~5,000–6,000 req/s but time out ~97% of requests (they oversubscribed the 28-connection DB pool to 7,800). Their <em>useful</em> throughput is ~160 req/s — 7× slower than any managed approach.</p>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="sec-head">
+      <h2>The cost of getting it right from a library stack</h2>
+      <p>Every managed approach lands the same ~1,100 req/s with zero drops. The difference is what you pay per request in allocation — the framework overhead that compounds forever under load. To assemble EvalApp's integrated behaviour from libraries you compose MediatR (dispatch + behaviours) with Polly (concurrency + retry + timeout); that stack allocates 2.7× what EvalApp does in one pass.</p>
+    </div>
+    <div class="panel"><div id="alloc"></div></div>
+    <p class="cap-note">Bytes allocated per request while draining the backlog, measured with <code class="inl">GC.GetTotalAllocatedBytes</code>. A hand-rolled SemaphoreSlim is leanest — it does one thing in five lines; EvalApp does the whole service (five resources, retry/timeout/saga/middleware, and auto-tuning) and still comes in at a third of the composed stack.</p>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="sec-head">
+      <h2>It tunes the one number you shouldn&#39;t have to guess</h2>
+      <p>Nobody told any of these services how many requests to keep in flight. EvalApp&#39;s adaptive tuner finds it and — this is the part that matters — <em>holds</em> it. Drained the same backlog twelve times in a row: the tuner settles immediately and stays at the ceiling. (For contrast, the faint line is an earlier build whose tuner drifted and collapsed — the bug this release fixed.)</p>
+    </div>
+    <div class="panel">
+      <div class="legend">
+        <span><i style="background:var(--e-eval)"></i> EvalApp 1.5.0 — converges and holds</span>
+        <span><i style="background:var(--e-drop)"></i> earlier build — drifted &amp; collapsed</span>
+      </div>
+      <div id="converge"></div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="sec-head">
+      <h2>One dependency vs the stack</h2>
+      <p>What you actually take on to get resource-governed, resilient request handling.</p>
+    </div>
+    <div class="replace">
+      <div class="stackbox">
+        <h3>The library stack</h3>
+        <div class="dep"><i style="background:var(--e-stack)"></i> MediatR <small>· dispatch + pipeline behaviours</small></div>
+        <div class="dep"><i style="background:var(--e-lib)"></i> Polly <small>· concurrency + retry + timeout</small></div>
+        <div class="dep"><i style="background:var(--e-lib)"></i> TPL Dataflow <small>· stage parallelism</small></div>
+        <div class="dep"><i style="background:var(--e-lib)"></i> DI container <small>· wiring it all together</small></div>
+      </div>
+      <div class="eq">=</div>
+      <div class="stackbox hero">
+        <h3>EvalApp</h3>
+        <div class="dep"><i style="background:var(--e-eval)"></i> EvalApp <small>· one integrated, compiled pass</small></div>
+        <p style="color:var(--ink-soft); font-size:.9rem; margin-top:12px">Resource gates, sagas with compensation, middleware, and an adaptive tuner — in a single dependency, one compiled pipeline, ⅓ the allocation.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="sec-head"><h2>The full scorecard</h2>
+      <p>Every architecture through the same 8,000-request backlog. "DB pool" is the peak concurrent connections each approach drove against a pool whose real limit is 28 — over that number means it oversubscribed the backend.</p>
+    </div>
+    <div class="tbl-wrap"><table id="scorecard"></table></div>
+    <p class="cap-note">Deterministic backlog, identical base latencies; only concurrency management differs. SemaphoreSlim / Polly / Dataflow / MediatR+Polly / EvalApp all hold every resource exactly at capacity with zero errors — they differ only in overhead and in how much you had to assemble by hand.</p>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="sec-head"><h2>Where a library wins, and where EvalApp does</h2></div>
+    <div class="cols2">
+      <div class="note-card">
+        <h3>A five-line SemaphoreSlim is faster and leaner</h3>
+        <p>If your whole problem is "cap one resource at N," a hand-rolled <code class="inl">SemaphoreSlim</code> wins — 1,099 req/s, 3.0 KB/req, nothing to learn. EvalApp is not trying to beat that on raw speed, and the honest numbers say it doesn&#39;t. Naive fire-and-forget is "fastest" of all — and drops 97% of the work.</p>
+      </div>
+      <div class="note-card">
+        <h3>EvalApp wins when it&#39;s a whole service</h3>
+        <p>Five resources, retries, timeouts, compensation, and a concurrency number nobody wants to hand-pick — that&#39;s where a stack of libraries turns into glue you own forever. EvalApp is <b>one dependency</b>, at parity throughput, <b>zero dropped</b>, every backend held at its limit, <b>2.7× leaner</b> than the composed stack, and it <b>auto-tunes and holds</b>. Consolidation and reliability, not raw speed, are the pitch.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="sec-head"><h2>How it was measured</h2>
+      <p>A soak/load test, not a microbenchmark. One deterministic backlog of 8,000 requests is drained through a service built on each architecture; every stage (Cache / DbRead / Cpu / Api / DbWrite) sits behind a simulated resource that inflates latency and times out at 750 ms once its concurrency limit is exceeded — so oversubscribing a backend actually costs you, exactly as it does in production. The numbers that matter are drain time, dropped requests, tail latency, per-request allocation, and how far each approach oversubscribed each resource.</p>
+    </div>
+    <p class="cap-note">Measured on an Intel Core i9-11950H (8 cores / 16 threads), 32&nbsp;GB, .NET 8, ServerGC. Comparables: MediatR 12.4, Polly 8.4, TPL Dataflow 8.0. Your numbers will vary with hardware; the shape won&#39;t.</p>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="note-card" style="display:flex; flex-wrap:wrap; gap:18px; align-items:center; justify-content:space-between">
+      <div>
+        <h3 style="font-size:1.15rem">It&#39;s on NuGet.</h3>
+        <p style="margin-top:6px; color:var(--ink-soft)">The shared runtime under the Evaluated Applications libraries — and usable on its own.</p>
+      </div>
+      <div class="mono" style="font-size:.9rem; color:var(--ink-soft)">dotnet add package <b style="color:var(--ink)">EvaluatedApplications.EvalApp</b></div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <span>EvalApp — an async pipeline runtime. Evaluated Applications, England.</span>
+    <span class="mono" style="font-size:.82rem">© <span id="yr"></span> · <a href="index.html">all packages</a> · <a href="https://www.nuget.org/packages/EvaluatedApplications.EvalApp" target="_blank" rel="noopener">NuGet</a></span>
+  </div>
+</footer>
+
+<div id="tip"></div>
+
+<script>
+document.getElementById('yr').textContent = new Date().getFullYear();
+
+// measured — 8000-request soak, i9-11950H. rps = total/wall; completed = 8000 - errors.
+const TOTAL = 8000, DBCAP = 28;
+const A = [
+  {n:"Naive (no gating)",  fam:"none",  rps:5366, err:7763, kb:1.9,  cpu:0.4, db:7766},
+  {n:"MediatR alone",      fam:"none",  rps:6078, err:7766, kb:2.2,  cpu:0.3, db:7797},
+  {n:"SemaphoreSlim",      fam:"lib",   rps:1099, err:0,    kb:3.0,  cpu:0.3, db:28},
+  {n:"TPL Dataflow",       fam:"lib",   rps:1097, err:0,    kb:3.5,  cpu:0.4, db:28},
+  {n:"Polly limiter",      fam:"lib",   rps:1097, err:0,    kb:5.4,  cpu:0.6, db:28},
+  {n:"MediatR + Polly",    fam:"stack", rps:1096, err:0,    kb:13.6, cpu:1.2, db:28},
+  {n:"EvalApp",            fam:"eval",  rps:1089, err:0,    kb:5.0,  cpu:0.9, db:28},
+];
+A.forEach(a => { a.done = TOTAL - a.err; a.good = a.rps * a.done / TOTAL; a.droprps = a.rps - a.good; });
+const CONV_AFTER  = [1097,1098,1099,1098,1098,1099,1097,1097,1098,1098,1099,1097];
+const CONV_BEFORE = [448,162,464,256,55,101,465,223,56,321,115,22];
+
+const css = v => getComputedStyle(document.body).getPropertyValue(v).trim();
+const SVGNS='http://www.w3.org/2000/svg';
+const el=(n,a)=>{const e=document.createElementNS(SVGNS,n);for(const k in a)e.setAttribute(k,a[k]);return e;};
+const famColor = f => f==="eval"?css('--e-eval'):f==="stack"?css('--e-stack'):f==="none"?css('--e-drop'):css('--e-lib');
+
+const tip=document.getElementById('tip');
+function showTip(h,ev){tip.innerHTML=h;tip.style.opacity=1;moveTip(ev);}
+function moveTip(ev){const p=12;let x=ev.clientX+p,y=ev.clientY+p;const r=tip.getBoundingClientRect();if(x+r.width>innerWidth-8)x=ev.clientX-r.width-p;if(y+r.height>innerHeight-8)y=ev.clientY-r.height-p;tip.style.left=x+'px';tip.style.top=y+'px';}
+function hideTip(){tip.style.opacity=0;}
+addEventListener('scroll',hideTip,{passive:true});
+
+function tiles(){
+  const ev = A.find(a=>a.fam==="eval"), comp = A.find(a=>a.n==="MediatR + Polly"), naive=A[0];
+  const dropPct = Math.round(naive.err/TOTAL*100);
+  const T=[
+    {big:`0<small> dropped</small>`, cap:`EvalApp completed all <b>8,000</b> requests. Fire-and-forget dropped <b>${dropPct}%</b> of them.`},
+    {big:`2.7×<small> leaner</small>`, cap:`<b>${ev.kb} KB/req</b> vs the composed MediatR+Polly stack&#39;s <b>${comp.kb} KB/req</b> — same throughput, one dependency.`},
+    {big:`28<small> / 28</small>`, cap:`EvalApp held the DB pool <b>exactly at capacity</b>. Ungoverned code drove it to <b>7,800</b>.`},
+    {big:`holds`, cap:`Auto-tunes the in-flight count and stays there — <b>1,097–1,099 req/s</b> across every drain.`},
+  ];
+  document.getElementById('tiles').innerHTML = T.map(t=>`<div class="tile"><div class="big">${t.big}</div><div class="cap">${t.cap}</div></div>`).join('');
+}
+
+// hero: total throughput split into completed (family colour) + dropped (red)
+function goodput(){
+  const host=document.getElementById('goodput'); host.innerHTML='';
+  const W=760, Lg=150, PX0=Lg+8, PX1=W-70, plotW=PX1-PX0, TP=16, rowH=34, H=TP+A.length*rowH+22;
+  const max=Math.max(...A.map(a=>a.rps)), x=v=>PX0+v/max*plotW, drop=css('--e-drop'), good=css('--good'), faint=css('--ink-faint'), ink=css('--ink-soft');
+  const svg=el('svg',{viewBox:`0 0 ${W} ${H}`,role:'img'});
+  [0,2000,4000,6000].forEach(t=>{const gx=x(t);svg.appendChild(el('line',{x1:gx,y1:TP,x2:gx,y2:H-22,stroke:css('--grid'),'stroke-width':1}));const l=el('text',{x:gx,y:H-8,fill:faint,'font-size':10.5,'text-anchor':'middle'});l.textContent=t?(t/1000+'k'):'0';svg.appendChild(l);});
+  A.forEach((a,i)=>{
+    const cy=TP+i*rowH+rowH/2, gw=Math.max(1,x(a.good)-PX0), dw=x(a.rps)-x(a.good);
+    const g=el('rect',{x:PX0,y:cy-9,width:gw,height:18,rx:3,fill:a.fam==="eval"?css('--e-eval'):good,opacity:.95});
+    g.style.cursor='pointer'; g.addEventListener('mousemove',e=>showTip(bar(a),e)); g.addEventListener('mouseleave',hideTip); svg.appendChild(g);
+    if(dw>0.5){const d=el('rect',{x:PX0+gw+2,y:cy-9,width:Math.max(1,dw-2),height:18,rx:3,fill:drop,opacity:.9});d.style.cursor='pointer';d.addEventListener('mousemove',e=>showTip(bar(a),e));d.addEventListener('mouseleave',hideTip);svg.appendChild(d);}
+    const nm=el('text',{x:PX0-10,y:cy+4,fill:a.fam==="eval"?css('--e-eval'):ink,'font-size':12.5,'text-anchor':'end','font-weight':a.fam==="eval"?'650':'400'});nm.textContent=a.n;svg.appendChild(nm);
+    const vl=el('text',{x:x(a.rps)+7,y:cy+4,fill:ink,'font-size':11.5,'text-anchor':'start'});
+    vl.textContent = a.err? `${Math.round(a.good)} useful` : `${a.rps}`; svg.appendChild(vl);
+  });
+  host.appendChild(svg);
+}
+const bar = a => `<b>${a.n}</b><div class="r"><span>completed</span><span>${Math.round(a.good)} req/s</span></div>`+(a.err?`<div class="r"><span>dropped</span><span>${a.err.toLocaleString()} (${Math.round(a.err/TOTAL*100)}%)</span></div>`:`<div class="r"><span>dropped</span><span>0</span></div>`)+`<div class="r"><span>raw throughput</span><span>${a.rps.toLocaleString()} req/s</span></div>`;
+
+// allocation bars
+function alloc(){
+  const host=document.getElementById('alloc'); host.innerHTML='';
+  const rows=[...A].filter(a=>a.err===0).sort((x,y)=>y.kb-x.kb);
+  const W=760, Lg=150, PX0=Lg+8, PX1=W-60, plotW=PX1-PX0, TP=16, rowH=34, H=TP+rows.length*rowH+22;
+  const max=Math.max(...rows.map(r=>r.kb)), x=v=>PX0+v/max*plotW, ink=css('--ink-soft'), faint=css('--ink-faint');
+  const svg=el('svg',{viewBox:`0 0 ${W} ${H}`,role:'img'});
+  [0,5,10].forEach(t=>{const gx=x(t);svg.appendChild(el('line',{x1:gx,y1:TP,x2:gx,y2:H-22,stroke:css('--grid'),'stroke-width':1}));const l=el('text',{x:gx,y:H-8,fill:faint,'font-size':10.5,'text-anchor':'middle'});l.textContent=t;svg.appendChild(l);});
+  rows.forEach((a,i)=>{
+    const cy=TP+i*rowH+rowH/2, col=famColor(a.fam);
+    const r=el('rect',{x:PX0,y:cy-9,width:Math.max(1,x(a.kb)-PX0),height:18,rx:3,fill:col,opacity:a.fam==="lib"?.6:.95});
+    r.style.cursor='pointer';r.addEventListener('mousemove',e=>showTip(`<b>${a.n}</b><div class="r"><span>allocation</span><span>${a.kb} KB/req</span></div>`,e));r.addEventListener('mouseleave',hideTip);svg.appendChild(r);
+    const nm=el('text',{x:PX0-10,y:cy+4,fill:a.fam==="eval"?css('--e-eval'):ink,'font-size':12.5,'text-anchor':'end','font-weight':a.fam==="eval"?'650':'400'});nm.textContent=a.n;svg.appendChild(nm);
+    const vl=el('text',{x:x(a.kb)+7,y:cy+4,fill:ink,'font-size':11.5,'font-weight':600});vl.textContent=`${a.kb} KB`;svg.appendChild(vl);
+  });
+  const lbl=el('text',{x:PX1,y:H-8,fill:faint,'font-size':10.5,'text-anchor':'end'});lbl.textContent='KB allocated / request';svg.appendChild(lbl);
+  host.appendChild(svg);
+}
+
+// convergence line (two series, 12 drains)
+function converge(){
+  const host=document.getElementById('converge'); host.innerHTML='';
+  const W=760, H=280, ml=48, mr=16, mt=14, mb=30, pw=W-ml-mr, ph=H-mt-mb;
+  const n=12, ymax=1200, X=i=>ml+i/(n-1)*pw, Y=v=>mt+(1-v/ymax)*ph;
+  const svg=el('svg',{viewBox:`0 0 ${W} ${H}`,role:'img'}), faint=css('--ink-faint');
+  for(let g=0;g<=1200;g+=300){const gy=Y(g);svg.appendChild(el('line',{x1:ml,y1:gy,x2:W-mr,y2:gy,stroke:css('--grid'),'stroke-width':1}));const l=el('text',{x:ml-8,y:gy+3.5,fill:faint,'font-size':10,'text-anchor':'end'});l.textContent=g;svg.appendChild(l);}
+  for(let i=0;i<n;i+=1){const gx=X(i);const l=el('text',{x:gx,y:H-10,fill:faint,'font-size':9.5,'text-anchor':'middle'});l.textContent=i+1;svg.appendChild(l);}
+  const yl=el('text',{x:ml-34,y:mt-2,fill:faint,'font-size':10});yl.textContent='req/s';svg.appendChild(yl);
+  function line(data,color,w,op){let d='';data.forEach((v,i)=>d+=(i?'L':'M')+X(i)+' '+Y(v));svg.appendChild(el('path',{d,fill:'none',stroke:color,'stroke-width':w,'stroke-linejoin':'round',opacity:op}));data.forEach((v,i)=>{const c=el('circle',{cx:X(i),cy:Y(v),r:3.5,fill:color,opacity:op});c.style.cursor='pointer';c.addEventListener('mousemove',e=>showTip(`<div class="r"><span>drain ${i+1}</span><span>${v} req/s</span></div>`,e));c.addEventListener('mouseleave',hideTip);svg.appendChild(c);});}
+  line(CONV_BEFORE, css('--e-drop'), 1.8, .55);
+  line(CONV_AFTER, css('--e-eval'), 2.6, 1);
+  const lx=X(n-1); const lb=el('text',{x:lx+4,y:Y(1098)-6,fill:css('--e-eval'),'font-size':11,'font-weight':600,'text-anchor':'end'});svg.appendChild(lb);
+  host.appendChild(svg);
+}
+
+function scorecard(){
+  let h=`<thead><tr><th>architecture</th><th>req/s</th><th>useful</th><th>dropped</th><th>KB/req</th><th>CPU(s)</th><th>DB pool</th></tr></thead><tbody>`;
+  A.forEach(a=>{
+    const over = a.db>DBCAP;
+    h+=`<tr class="${a.fam==="eval"?"eval":""}"><td class="a">${a.n}</td><td class="ms">${a.rps.toLocaleString()}</td><td class="ms">${Math.round(a.good).toLocaleString()}</td>`+
+       `<td class="ms ${a.err?'bad':'ok'}">${a.err?a.err.toLocaleString():'0'}</td><td class="ms">${a.kb.toFixed(1)}</td><td class="ms">${a.cpu.toFixed(1)}</td>`+
+       `<td class="ms ${over?'bad':'ok'}">${a.db}${over?' ⚠':' ✓'}</td></tr>`;
+  });
+  document.getElementById('scorecard').innerHTML=h+'</tbody>';
+}
+
+function renderAll(){ tiles(); goodput(); alloc(); converge(); scorecard(); }
+matchMedia('(prefers-color-scheme:dark)').addEventListener('change',renderAll);
+addEventListener('resize',()=>{clearTimeout(window._rt);window._rt=setTimeout(renderAll,150);});
+renderAll();
+</script>
+</body>
+</html>
