@@ -230,6 +230,41 @@ task.ForEach(ProcessAsync, <span class="good-t">Tunable.ForItems()</span>);
 <section>
   <div class="wrap">
     <div class="sec-head">
+      <h2>The right in-flight number is the top of a curve — you can&#39;t guess it</h2>
+      <p>Bounding the fan-out still leaves the question of how many run at once, and that number isn&#39;t a preference — it&#39;s the peak of a goodput curve specific to this workload and this hardware. Below it the machine idles; above it the backends oversubscribe and shed. On the load below, the peak sits at <b>96 in flight</b> — 723 useful/sec, drained in 1.0&nbsp;s. Guess <b>8</b> and you get 82 useful/sec and an 8.6&nbsp;s drain. Guess <b>256</b> and it <b>collapses</b> to 234, requests timing out. The only way to find 96 by hand is to run exactly this sweep — and re-run it every time the load or a backend changes.</p>
+    </div>
+    <div class="panel">
+      <div class="legend">
+        <span><i style="background:var(--e-eval)"></i> useful throughput</span>
+        <span><i style="background:var(--e-drop)"></i> oversubscribed — dropping requests</span>
+      </div>
+      <div id="curve"></div>
+    </div>
+    <p class="cap-note">Goodput vs a fixed in-flight level, same 700-request backlog through backends that inflate latency and time out when oversubscribed. This is the hand sweep you&#39;d run to find the number — and past ~128 in flight, useful throughput falls off a cliff.</p>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="sec-head">
+      <h2>EvalApp runs that sweep for you — live — and settles on the peak</h2>
+      <p>Same workload, but nobody sets the number: <code class="inl">Tunable.ForItems()</code> and the adaptive tuner probe the in-flight level across drains. It starts cautious, explores, and locks onto <b>~690 useful/sec</b> — within a few percent of the 723 the hand sweep found — then holds it. The cost of not sweeping by hand is honest and on the chart: a couple of exploratory drains overshoot into the drop zone before it settles. You pay that once, you never pick the number, and it re-finds the peak when the load shifts.</p>
+    </div>
+    <div class="panel">
+      <div class="legend">
+        <span><i style="background:var(--e-eval)"></i> tuner goodput per drain</span>
+        <span><i style="background:var(--e-drop)"></i> exploratory overshoot</span>
+        <span><i style="background:var(--ink-faint)"></i> hand-swept peak</span>
+      </div>
+      <div id="tunerconv"></div>
+    </div>
+    <p class="cap-note">EvalApp&#39;s built-in tuner, 30 consecutive drains, in-flight range [4,&nbsp;512] starting at 32. The dashed line is the hand-swept peak (723 useful/sec). It converges by drain ~26 and holds there — nobody set the value.</p>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="sec-head">
       <h2>Hold every backend at its limit under a flood</h2>
       <p>Fan-out solves how much you run at once; the other half is what each stage is allowed to touch. Point a burst of 8,000 requests at a service whose five stages each sit behind a real limit — a DB pool, an API cap, a CPU budget. Fire it all with no governance and the raw throughput looks great, until you count what finished: the backends oversubscribe and time out. The bars below are total throughput; the coloured part completed, the red part was dropped.</p>
     </div>
@@ -258,8 +293,8 @@ task.ForEach(ProcessAsync, <span class="good-t">Tunable.ForItems()</span>);
 <section>
   <div class="wrap">
     <div class="sec-head">
-      <h2>The in-flight number tunes itself — and stays put</h2>
-      <p>The same adaptive tuner behind <code class="inl">Tunable.ForItems()</code> runs here too — nobody tells the service how many requests to keep in flight, it finds the number and holds it. Drain the same backlog twelve times: it settles on the first run and stays pinned at the ceiling on every one after, without anyone ever picking a value.</p>
+      <h2>When the ceiling is a known backend, it pegs there on the first drain</h2>
+      <p>Discovering a hidden optimum takes exploration (above). When the ceiling is instead a real backend cap — a DB pool, an API limit — there&#39;s nothing to hunt for: the same tuner behind <code class="inl">Tunable.ForItems()</code> fills straight to it and holds. Here the five gated backends bound the service; drain the same backlog twelve times and throughput stays pinned at <b>1,097–1,099 req/s</b> from the first run on, without anyone ever picking a value.</p>
     </div>
     <div class="panel">
       <div class="legend">
@@ -378,6 +413,16 @@ const A = [
 A.forEach(a => { a.done = TOTAL - a.err; a.good = a.rps * a.done / TOTAL; });
 const CONV_AFTER  = [1098,1098,1099,1097,1098,1099,1098,1097,1099,1098,1097,1098];
 
+// ---- goodput vs in-flight: the load's profile (ungated; backends degrade when oversubscribed) ----
+const CURVE = [
+  {p:8,gp:82},{p:16,gp:135},{p:24,gp:199},{p:32,gp:264},{p:48,gp:390},{p:64,gp:510},
+  {p:96,gp:723},{p:128,gp:612},{p:192,gp:350,err:5},{p:256,gp:234,err:223},{p:384,gp:162,err:437},{p:512,gp:174,err:466},
+];
+const PEAK = 723;
+// EvalApp's built-in tuner draining the SAME workload 30x; nobody set the number. err = drains that overshot into collapse.
+const TUNER = [420,438,435,433,429,436,433,431,435,434,442,441,433,432,435,433,433,429,214,432,208,619,695,359,623,690,693,691,691,690];
+const TUNER_ERR = {19:290, 21:298};
+
 const css = v => getComputedStyle(document.body).getPropertyValue(v).trim();
 const SVGNS='http://www.w3.org/2000/svg';
 const el=(n,a)=>{const e=document.createElementNS(SVGNS,n);for(const k in a)e.setAttribute(k,a[k]);return e;};
@@ -480,7 +525,43 @@ function scorecard(){
   document.getElementById('scorecard').innerHTML=h+'</tbody>';
 }
 
-function renderAll(){ tiles(); fanchart(); goodput(); alloc(); converge(); scorecard(); }
+// goodput-vs-in-flight profile: the hump you'd have to sweep by hand
+function curveChart(){
+  const host=document.getElementById('curve'); if(!host) return; host.innerHTML='';
+  const W=760,H=300, ml=46,mr=64,mt=22,mb=42, pw=W-ml-mr, ph=H-mt-mb;
+  const lo=Math.log10(8), hi=Math.log10(512), X=p=>ml+(Math.log10(p)-lo)/(hi-lo)*pw, gmax=800, Y=v=>mt+(1-v/gmax)*ph;
+  const svg=el('svg',{viewBox:`0 0 ${W} ${H}`,role:'img'}), faint=css('--ink-faint'), ink=css('--ink-soft'), ev=css('--e-eval'), drop=css('--e-drop');
+  for(let g=0; g<=800; g+=200){const gy=Y(g);svg.appendChild(el('line',{x1:ml,y1:gy,x2:W-mr,y2:gy,stroke:css('--grid'),'stroke-width':1}));const l=el('text',{x:ml-8,y:gy+3.5,fill:faint,'font-size':10,'text-anchor':'end'});l.textContent=g;svg.appendChild(l);}
+  [8,32,96,256,512].forEach(p=>{const gx=X(p);const l=el('text',{x:gx,y:H-16,fill:faint,'font-size':10,'text-anchor':'middle'});l.textContent=p;svg.appendChild(l);});
+  const xl=el('text',{x:ml+pw/2,y:H-2,fill:faint,'font-size':10,'text-anchor':'middle'});xl.textContent='in-flight (log scale)';svg.appendChild(xl);
+  const yl=el('text',{x:ml-32,y:mt-7,fill:faint,'font-size':10});yl.textContent='useful/sec';svg.appendChild(yl);
+  let d=''; CURVE.forEach((c,i)=>d+=(i?'L':'M')+X(c.p)+' '+Y(c.gp));
+  svg.appendChild(el('path',{d,fill:'none',stroke:ev,'stroke-width':2.4,'stroke-linejoin':'round'}));
+  CURVE.forEach(c=>{const col=c.err?drop:ev, isPk=c.p===96; const dot=el('circle',{cx:X(c.p),cy:Y(c.gp),r:isPk?5.5:3.6,fill:col,stroke:isPk?css('--bg'):'none','stroke-width':isPk?1.5:0}); dot.style.cursor='pointer'; dot.addEventListener('mousemove',e=>showTip(`<b>${c.p} in flight</b><div class="r"><span>useful/sec</span><span>${c.gp}</span></div><div class="r"><span>dropped</span><span>${c.err||0}</span></div>`,e)); dot.addEventListener('mouseleave',hideTip); svg.appendChild(dot);});
+  const pk=el('text',{x:X(96),y:Y(723)-13,fill:ev,'font-size':11.5,'text-anchor':'middle','font-weight':650});pk.textContent='peak · 96 in flight';svg.appendChild(pk);
+  const a1=el('text',{x:X(8)+7,y:Y(82)-7,fill:ink,'font-size':10.5,'text-anchor':'start'});a1.textContent='guess low: idle';svg.appendChild(a1);
+  const a2=el('text',{x:X(256),y:Y(234)+19,fill:drop,'font-size':10.5,'text-anchor':'middle'});a2.textContent='guess high: collapse';svg.appendChild(a2);
+  host.appendChild(svg);
+}
+
+// EvalApp's built-in tuner draining the same load 30x — climbs to the peak, nobody set the number
+function tunerConverge(){
+  const host=document.getElementById('tunerconv'); if(!host) return; host.innerHTML='';
+  const W=760,H=260, ml=46,mr=16,mt=20,mb=34, pw=W-ml-mr, ph=H-mt-mb;
+  const n=TUNER.length, X=i=>ml+i/(n-1)*pw, gmax=800, Y=v=>mt+(1-v/gmax)*ph;
+  const svg=el('svg',{viewBox:`0 0 ${W} ${H}`,role:'img'}), faint=css('--ink-faint'), ev=css('--e-eval'), drop=css('--e-drop');
+  for(let g=0; g<=800; g+=200){const gy=Y(g);svg.appendChild(el('line',{x1:ml,y1:gy,x2:W-mr,y2:gy,stroke:css('--grid'),'stroke-width':1}));const l=el('text',{x:ml-8,y:gy+3.5,fill:faint,'font-size':10,'text-anchor':'end'});l.textContent=g;svg.appendChild(l);}
+  svg.appendChild(el('line',{x1:ml,y1:Y(PEAK),x2:W-mr,y2:Y(PEAK),stroke:faint,'stroke-width':1,'stroke-dasharray':'5 4',opacity:.85}));
+  const pl=el('text',{x:W-mr,y:Y(PEAK)-6,fill:faint,'font-size':10,'text-anchor':'end'});pl.textContent='hand-swept peak · 723';svg.appendChild(pl);
+  [1,5,10,15,20,25,30].forEach(i=>{const gx=X(i-1);const l=el('text',{x:gx,y:H-12,fill:faint,'font-size':9.5,'text-anchor':'middle'});l.textContent=i;svg.appendChild(l);});
+  const xl=el('text',{x:ml+pw/2,y:H-1,fill:faint,'font-size':10,'text-anchor':'middle'});xl.textContent='drain';svg.appendChild(xl);
+  let d=''; TUNER.forEach((v,i)=>d+=(i?'L':'M')+X(i)+' '+Y(v));
+  svg.appendChild(el('path',{d,fill:'none',stroke:ev,'stroke-width':2,'stroke-linejoin':'round',opacity:.9}));
+  TUNER.forEach((v,i)=>{const err=TUNER_ERR[i+1], col=err?drop:ev; const c=el('circle',{cx:X(i),cy:Y(v),r:err?4:2.8,fill:col}); c.style.cursor='pointer'; c.addEventListener('mousemove',e=>showTip(`<div class="r"><span>drain ${i+1}</span><span>${v} useful/sec</span></div>`+(err?`<div class="r"><span>dropped</span><span>${err}</span></div>`:''),e)); c.addEventListener('mouseleave',hideTip); svg.appendChild(c);});
+  host.appendChild(svg);
+}
+
+function renderAll(){ tiles(); fanchart(); curveChart(); tunerConverge(); goodput(); alloc(); converge(); scorecard(); }
 matchMedia('(prefers-color-scheme:dark)').addEventListener('change',renderAll);
 addEventListener('resize',()=>{clearTimeout(window._rt);window._rt=setTimeout(renderAll,150);});
 renderAll();
