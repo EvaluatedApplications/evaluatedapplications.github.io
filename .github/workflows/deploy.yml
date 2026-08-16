@@ -1,6 +1,8 @@
 name: Deploy site to Pages
 
-# Builds the Blazor WebAssembly showroom and publishes it to GitHub Pages.
+# Assembles the site: static content (site/) at the root, with the Blazor WebAssembly
+# tools app published under /tools. Content is plain HTML (instant + fully indexable);
+# the .NET runtime only loads when a visitor opens a tool.
 # One-time setup: Settings -> Pages -> Source = "GitHub Actions".
 
 on:
@@ -13,7 +15,6 @@ permissions:
   pages: write
   id-token: write
 
-# Let a newer push cancel an in-flight deploy, but never interrupt a running one midway.
 concurrency:
   group: pages
   cancel-in-progress: false
@@ -29,13 +30,20 @@ jobs:
         with:
           dotnet-version: '10.0.x'
 
-      - name: Publish
+      - name: Publish tools app
         run: dotnet publish Showroom/Showroom.csproj -c Release -o publish
+
+      - name: Assemble site
+        run: |
+          mkdir -p _site
+          cp -r site/. _site/
+          mkdir -p _site/tools
+          cp -r publish/wwwroot/. _site/tools/
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: publish/wwwroot
+          path: _site
 
   deploy:
     needs: build

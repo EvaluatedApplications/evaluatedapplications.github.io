@@ -1,5 +1,4 @@
-/* Evaluated Applications — site design system.
-   Ported from the org's static site so the Blazor app is one continuous brand.
+/* Evaluated Applications — one brand stylesheet, shared by the static content site and the Blazor tools app.
    Dark-first, with a light palette under prefers-color-scheme:light. */
 
 :root{
@@ -37,13 +36,12 @@ h1,h2,h3{margin:0; line-height:1.15; letter-spacing:-.02em; font-weight:650}
 .wrap{max-width:var(--wrap); margin:0 auto; padding:0 24px}
 .mono{font-family:var(--mono)}
 
-/* spectral signature rule at the very top */
 .beam{height:3px; background:var(--spectrum); opacity:.9}
 
-/* nav */
-.site-nav{position:sticky; top:0; z-index:10; background:color-mix(in srgb,var(--bg-2) 88%,transparent);
+/* ---- nav (with CSS-only mobile menu) ---- */
+.site-nav{position:sticky; top:0; z-index:20; background:color-mix(in srgb,var(--bg-2) 88%,transparent);
     backdrop-filter:blur(10px); border-bottom:1px solid var(--border)}
-.site-nav .wrap{display:flex; align-items:center; justify-content:space-between; height:62px}
+.site-nav .wrap{display:flex; align-items:center; justify-content:space-between; min-height:62px; gap:12px; flex-wrap:wrap}
 .brand{display:flex; align-items:center; gap:11px; color:var(--ink); font-weight:650; letter-spacing:-.01em}
 .brand:hover{text-decoration:none}
 .mark{width:22px; height:22px; flex:none}
@@ -51,8 +49,21 @@ h1,h2,h3{margin:0; line-height:1.15; letter-spacing:-.02em; font-weight:650}
 .nav-links a{color:var(--ink-soft); font-size:.94rem}
 .nav-links a:hover{color:var(--ink); text-decoration:none}
 .nav-links a.active{color:var(--ink)}
+.nav-toggle{position:absolute; opacity:0; pointer-events:none}
+.nav-burger{display:none; flex-direction:column; gap:5px; cursor:pointer; padding:8px; margin:-8px; border-radius:8px}
+.nav-burger span{display:block; width:22px; height:2px; background:var(--ink-soft); border-radius:2px; transition:transform .2s, opacity .2s}
 
-/* hero */
+@media (max-width:640px){
+  .nav-burger{display:flex}
+  .nav-links{display:none; flex-basis:100%; flex-direction:column; align-items:flex-start; gap:2px; padding:6px 0 12px}
+  .nav-links a{padding:9px 4px; width:100%; font-size:1rem}
+  .nav-toggle:checked ~ .nav-links{display:flex}
+  .nav-toggle:checked ~ .nav-burger span:nth-child(1){transform:translateY(7px) rotate(45deg)}
+  .nav-toggle:checked ~ .nav-burger span:nth-child(2){opacity:0}
+  .nav-toggle:checked ~ .nav-burger span:nth-child(3){transform:translateY(-7px) rotate(-45deg)}
+}
+
+/* ---- hero ---- */
 .hero{padding:84px 0 34px}
 .eyebrow{font-family:var(--mono); font-size:.8rem; letter-spacing:.08em; text-transform:uppercase; color:var(--ink-faint)}
 .hero h1{font-size:clamp(2.3rem,5.4vw,3.5rem); margin:16px 0 0; max-width:18ch; text-wrap:balance}
@@ -61,15 +72,17 @@ h1,h2,h3{margin:0; line-height:1.15; letter-spacing:-.02em; font-weight:650}
 .fact{font-family:var(--mono); font-size:.82rem; color:var(--ink-soft);
       border:1px solid var(--border); border-radius:999px; padding:6px 13px; background:var(--surface)}
 .fact b{color:var(--ink); font-weight:600}
+.hero-cta{margin-top:28px; max-width:560px}
+.cta-row{display:flex; flex-wrap:wrap; gap:10px; margin-top:14px}
 
-/* section framing */
+/* ---- section framing ---- */
 .sec{padding:30px 0}
 .sec-head{display:flex; align-items:baseline; gap:14px; margin:0 0 20px; padding-top:22px; border-top:1px solid var(--border)}
 .sec-head h2{font-size:1.15rem}
 .sec-head .dot{width:9px; height:9px; border-radius:3px; flex:none; align-self:center}
 .sec-head p{margin:0 0 0 auto; color:var(--ink-faint); font-size:.9rem; font-family:var(--mono)}
 
-/* card grid */
+/* ---- card grid ---- */
 .grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(330px,1fr)); gap:16px}
 .card{position:relative; background:var(--surface); border:1px solid var(--border);
       border-radius:var(--radius); padding:22px 22px 20px; overflow:hidden;
@@ -86,39 +99,25 @@ h1,h2,h3{margin:0; line-height:1.15; letter-spacing:-.02em; font-weight:650}
 .pkgid{font-family:var(--mono); font-size:.8rem; color:var(--ink-faint); margin:9px 0 0; word-break:break-all}
 .desc{color:var(--ink-soft); font-size:.96rem; margin:12px 0 0; line-height:1.55}
 .note{font-size:.86rem; color:var(--ink-faint); margin:11px 0 0}
-.note code{font-family:var(--mono); color:var(--accent-ink); background:color-mix(in srgb,var(--accent) 12%,transparent); padding:1px 5px; border-radius:5px; word-break:break-all}
-
+.note code, .desc code{font-family:var(--mono); font-size:.86em; color:var(--accent-ink); background:color-mix(in srgb,var(--accent) 12%,transparent); padding:1px 5px; border-radius:5px; word-break:break-all}
 .install{display:flex; align-items:center; gap:8px; margin-top:16px; background:var(--bg-2);
          border:1px solid var(--border); border-radius:9px; padding:8px 10px; overflow:hidden}
-.install code{font-family:var(--mono); font-size:.82rem; color:var(--ink); white-space:nowrap;
-              overflow-x:auto; flex:1; scrollbar-width:none}
+.install code{font-family:var(--mono); font-size:.82rem; color:var(--ink); white-space:nowrap; overflow-x:auto; flex:1; scrollbar-width:none}
 .install code::-webkit-scrollbar{display:none}
 .copy{flex:none; font-family:var(--mono); font-size:.72rem; color:var(--ink-soft); cursor:pointer;
       background:var(--surface); border:1px solid var(--border-2); border-radius:6px; padding:4px 8px; transition:color .15s, border-color .15s}
 .copy:hover{color:var(--ink); border-color:var(--accent)}
+.copy.done{color:var(--ok); border-color:var(--ok)}
 .links{display:flex; gap:16px; margin-top:15px; font-size:.85rem; font-family:var(--mono)}
 .links a{color:var(--ink-soft)}
 .links a:hover{color:var(--accent-ink)}
-.card code, .desc code{font-family:var(--mono); font-size:.86em; color:var(--accent-ink); background:color-mix(in srgb,var(--accent) 12%,transparent); padding:1px 5px; border-radius:5px}
 
-/* product-page hero call-to-action */
-.hero-cta{margin-top:28px; max-width:520px}
-.cta-row{display:flex; flex-wrap:wrap; gap:10px; margin-top:14px}
-
-/* buttons / CTAs */
-.btn{display:inline-flex; align-items:center; gap:8px; font-family:var(--font); font-size:.95rem; font-weight:600;
-     border-radius:10px; padding:.6rem 1.2rem; cursor:pointer; border:1px solid transparent; transition:all .15s ease}
-.btn-primary{background:var(--accent); color:#fff; border-color:var(--accent)}
-.btn-primary:hover{filter:brightness(1.08); text-decoration:none}
-.btn-ghost{background:transparent; color:var(--ink); border-color:var(--border-2)}
-.btn-ghost:hover{border-color:var(--accent); color:var(--accent-ink); text-decoration:none}
-
-/* a card that is itself a link to a tool room */
+/* a card that is itself a link to a tool */
 a.tool{display:block; color:inherit}
 a.tool:hover{text-decoration:none}
 a.tool .go-in{margin-top:16px; font-family:var(--mono); font-size:.85rem; color:var(--accent-ink)}
 
-/* foundation callout */
+/* ---- foundation callout ---- */
 .stack{background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:24px 26px; margin-top:6px}
 .stack h2{font-size:1.15rem; margin-bottom:10px}
 .stack p{color:var(--ink-soft); margin:0; max-width:72ch}
@@ -126,30 +125,64 @@ a.tool .go-in{margin-top:16px; font-family:var(--mono); font-size:.85rem; color:
 .stack .flow span{border:1px solid var(--border-2); border-radius:7px; padding:5px 10px; color:var(--ink)}
 .stack .flow em{color:var(--ink-faint); font-style:normal}
 
+/* ---- buttons ---- */
+.btn{display:inline-flex; align-items:center; gap:8px; font-family:var(--font); font-size:.95rem; font-weight:600;
+     border-radius:10px; padding:.6rem 1.2rem; cursor:pointer; border:1px solid transparent; transition:all .15s ease}
+.btn-primary{background:var(--accent); color:#fff; border-color:var(--accent)}
+.btn-primary:hover{filter:brightness(1.08); text-decoration:none}
+.btn-ghost{background:transparent; color:var(--ink); border-color:var(--border-2)}
+.btn-ghost:hover{border-color:var(--accent); color:var(--accent-ink); text-decoration:none}
+
+/* ---- crumb ---- */
+.crumb{font-family:var(--mono); font-size:.82rem; color:var(--ink-faint); margin-bottom:.75rem}
+.crumb a{color:var(--ink-soft)}
+.crumb span{margin:0 .4rem; opacity:.6}
+
+/* ---- prose (manual / docs) ---- */
+.prose{max-width:760px; margin:0 auto; padding:8px 0 40px}
+.prose h2{font-size:1.5rem; margin:2.4rem 0 .3rem; scroll-margin-top:80px}
+.prose h3{font-size:1.12rem; margin:1.8rem 0 .3rem; color:var(--ink)}
+.prose p{color:var(--ink-soft); margin:.7rem 0}
+.prose ul,.prose ol{color:var(--ink-soft); padding-left:1.3rem; margin:.7rem 0}
+.prose li{margin:.3rem 0}
+.prose strong{color:var(--ink)}
+.prose a{color:var(--accent-ink)}
+.prose p code,.prose li code,.prose td code{font-family:var(--mono); font-size:.88em; color:var(--accent-ink);
+      background:color-mix(in srgb,var(--accent) 12%,transparent); padding:1px 5px; border-radius:5px}
+.prose pre{background:var(--bg-2); border:1px solid var(--border); border-radius:12px; padding:16px 18px;
+      overflow-x:auto; margin:1rem 0; font-size:.86rem; line-height:1.55}
+.prose pre code{font-family:var(--mono); color:var(--ink)}
+.prose table{width:100%; border-collapse:collapse; margin:1rem 0; font-size:.9rem; display:block; overflow-x:auto}
+.prose th{text-align:left; color:var(--ink); border-bottom:1px solid var(--border-2); padding:.5rem .7rem; white-space:nowrap}
+.prose td{color:var(--ink-soft); border-bottom:1px solid var(--border); padding:.5rem .7rem; vertical-align:top}
+.prose blockquote{margin:1rem 0; padding:.6rem 1rem; border-left:3px solid var(--accent); background:var(--surface); color:var(--ink-soft); border-radius:0 8px 8px 0}
+.toc{background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:16px 20px; margin:1.5rem 0 2rem}
+.toc h2{font-size:.8rem; text-transform:uppercase; letter-spacing:.06em; color:var(--ink-faint); font-family:var(--mono); margin:0 0 .6rem}
+.toc ul{list-style:none; padding:0; margin:0; columns:2; column-gap:24px}
+.toc li{margin:.25rem 0}
+.toc a{color:var(--ink-soft); font-size:.92rem}
+
+/* ---- footer ---- */
 footer.site{border-top:1px solid var(--border); margin-top:34px; padding:30px 0 50px; color:var(--ink-faint)}
 footer.site .wrap{display:flex; flex-wrap:wrap; gap:14px; justify-content:space-between; align-items:center}
 footer.site .mono{font-family:var(--mono); font-size:.82rem}
 footer.site a{color:var(--ink-soft)}
 
 @media (max-width:640px){
-  .hero{padding:56px 0 20px}
+  .hero{padding:48px 0 20px}
   .sec-head p{display:none}
+  .toc ul{columns:1}
 }
 @media (prefers-reduced-motion:reduce){*{transition:none!important; scroll-behavior:auto}}
 
-/* ---- pre-Blazor loading screen (on-brand) ---- */
-#app:has(.loading-progress){min-height:100vh; display:flex; flex-direction:column; align-items:center; justify-content:center; background:var(--bg)}
+/* ---- Blazor tools app: loading shell + error ui ---- */
+#app:has(.loading-progress){min-height:70vh; display:flex; flex-direction:column; align-items:center; justify-content:center; background:var(--bg)}
 .loading-progress{position:relative; display:block; width:6rem; height:6rem}
 .loading-progress circle{fill:none; stroke:var(--border-2); stroke-width:.5rem; transform-origin:50% 50%; transform:rotate(-90deg)}
-.loading-progress circle:last-child{stroke:var(--accent);
-  stroke-dasharray:calc(3.141*var(--blazor-load-percentage,0%)) 500%;
-  transition:stroke-dasharray .1s ease-in-out}
+.loading-progress circle:last-child{stroke:var(--accent); stroke-dasharray:calc(3.141*var(--blazor-load-percentage,0%)) 500%; transition:stroke-dasharray .1s ease-in-out}
 .loading-progress-text{margin-top:1rem; font-family:var(--mono); font-size:.85rem; color:var(--ink-soft)}
-.loading-progress-text:after{content:var(--blazor-load-percentage-text,"Loading the showroom…")}
-
-#blazor-error-ui{
-  color:var(--ink); background:var(--surface); border-top:1px solid var(--bad);
-  bottom:0; box-shadow:0 -1px 12px rgba(0,0,0,.3); display:none; left:0; padding:.8rem 1.4rem 1rem; position:fixed; width:100%; z-index:1000;
-}
+.loading-progress-text:after{content:var(--blazor-load-percentage-text,"Loading the tool…")}
+#blazor-error-ui{color:var(--ink); background:var(--surface); border-top:1px solid var(--bad); bottom:0;
+      box-shadow:0 -1px 12px rgba(0,0,0,.3); display:none; left:0; padding:.8rem 1.4rem 1rem; position:fixed; width:100%; z-index:1000}
 #blazor-error-ui .dismiss{cursor:pointer; position:absolute; right:1rem; top:.6rem}
 #blazor-error-ui .reload{color:var(--accent-ink)}

@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HoloDb — holographic SQL database</title>
+<meta name="description" content="HoloDb: an embeddable holographic SQL database for .NET. ACID with a write-ahead log, constant-time aggregates, hash joins, similarity search, a larger-than-memory tier — and small enough to run in a browser tab.">
+<link rel="canonical" href="https://evaluatedapplications.github.io/holodb/">
+<meta property="og:type" content="website">
+<meta property="og:title" content="HoloDb — holographic SQL database">
+<meta property="og:description" content="An embeddable holographic SQL database for .NET. ACID, constant-time aggregates, similarity search, up to 766× faster than per-scan engines — and it runs in the browser.">
+<meta property="og:url" content="https://evaluatedapplications.github.io/holodb/">
+<meta name="twitter:card" content="summary">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%238b7dff'/%3E%3Cstop offset='.5' stop-color='%2335d0c0'/%3E%3Cstop offset='1' stop-color='%23e6b450'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='32' height='32' rx='7' fill='%230a0c11'/%3E%3Cpath d='M16 5l9.5 5.5v11L16 27l-9.5-5.5v-11z' fill='none' stroke='url(%23g)' stroke-width='2'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="/assets/site.css">
+</head>
+<body>
+<div class="beam"></div>
+
+<nav class="site-nav">
+  <div class="wrap">
+    <a class="brand" href="/">
+      <svg class="mark" viewBox="0 0 32 32" aria-hidden="true"><defs><linearGradient id="m" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#8b7dff"/><stop offset=".5" stop-color="#35d0c0"/><stop offset="1" stop-color="#e6b450"/></linearGradient></defs><path d="M16 4l10.4 6v12L16 28 5.6 22V10z" fill="none" stroke="url(#m)" stroke-width="2"/></svg>
+      Evaluated Applications
+    </a>
+    <input type="checkbox" id="navtoggle" class="nav-toggle">
+    <label for="navtoggle" class="nav-burger" aria-label="Toggle menu"><span></span><span></span><span></span></label>
+    <div class="nav-links">
+      <a href="/">Home</a>
+      <a href="/holodb/" class="active">HoloDb</a>
+      <a href="/holodb/manual/">Manual</a>
+      <a href="https://www.nuget.org/packages/EvaluatedApplications.HoloDb" target="_blank" rel="noopener">NuGet</a>
+    </div>
+  </div>
+</nav>
+
+<header class="hero">
+  <div class="wrap">
+    <span class="eyebrow">Data · EvaluatedApplications.HoloDb</span>
+    <h1>HoloDb</h1>
+    <p class="lede">An embeddable holographic SQL database for .NET. ACID with a write-ahead log, columnar storage with
+      compiled predicates, constant-time integer aggregates, hash joins, similarity search, and an optional
+      larger-than-memory tier — and small enough to compile to WebAssembly and run in a browser tab.</p>
+    <div class="facts">
+      <span class="fact">v<b>1.4.0</b></span>
+      <span class="fact"><b>ACID</b> + WAL</span>
+      <span class="fact">up to <b>766×</b> faster aggregates</span>
+      <span class="fact">runs in the <b>browser</b></span>
+    </div>
+    <div class="hero-cta">
+      <div class="install"><code>dotnet add package EvaluatedApplications.HoloDb</code><button class="copy" type="button">copy</button></div>
+      <div class="cta-row">
+        <a class="btn btn-primary" href="/holodb/manual/">Read the manual →</a>
+        <a class="btn btn-ghost" href="/holodb.html">Benchmarks</a>
+        <a class="btn btn-ghost" href="https://www.nuget.org/packages/EvaluatedApplications.HoloDb" target="_blank" rel="noopener">NuGet</a>
+      </div>
+    </div>
+  </div>
+</header>
+
+<section class="sec">
+  <div class="wrap">
+    <div class="sec-head"><span class="dot" style="background:var(--c-data)"></span><h2>Demonstrations</h2><p>the engine, live in your browser</p></div>
+    <div class="grid">
+      <a class="card tool" href="/tools/analyst" style="--cat:var(--c-data)">
+        <div class="card-top"><h3>The Analyst</h3><span class="tag live">live</span></div>
+        <p class="desc">Paste any data — a CSV, a log, JSON lines, a spreadsheet dump — and HoloDb profiles the whole thing
+          in your browser: types, distributions, anomalies, hidden entities. Then query it yourself at a live SQL prompt.
+          Nothing leaves your device.</p>
+        <div class="go-in">Open The Analyst →</div>
+      </a>
+      <div class="card tool" style="--cat:var(--c-data)">
+        <div class="card-top"><h3>Similarity search</h3><span class="tag soon">soon</span></div>
+        <p class="desc">Load rows, then find the nearest ones by content with HoloDb's holographic <code>NEAREST</code>
+          operator — content-addressable retrieval, no vector index to build.</p>
+        <div class="go-in" style="color:var(--ink-faint)">In the workshop</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="sec">
+  <div class="wrap">
+    <div class="sec-head"><span class="dot" style="background:var(--c-data)"></span><h2>What's inside</h2><p>the engine</p></div>
+    <div class="grid">
+      <article class="card" style="--cat:var(--c-data)"><div class="card-top"><h3>Real ACID</h3></div>
+        <p class="desc">Transactions with a write-ahead log and crash recovery. Concurrent readers never block, and commits
+          are durable — not an in-memory toy.</p></article>
+      <article class="card" style="--cat:var(--c-data)"><div class="card-top"><h3>Constant-time aggregates</h3></div>
+        <p class="desc">COUNT and SUM over integer columns are answered from maintained accumulators, independent of row
+          count — the source of the 766× benchmark wins over per-scan engines.</p></article>
+      <article class="card" style="--cat:var(--c-data)"><div class="card-top"><h3>Joins &amp; similarity</h3></div>
+        <p class="desc">Hash joins, a full boolean WHERE with compiled predicates, and holographic <code>NEAREST</code>
+          similarity search over the same rows — SQL and vector retrieval in one engine.</p></article>
+      <article class="card" style="--cat:var(--c-data)"><div class="card-top"><h3>Bigger than memory</h3></div>
+        <p class="desc">An optional memory-mapped tier spills to disk when a table outgrows RAM, so the same API scales past
+          what fits in memory.</p></article>
+    </div>
+  </div>
+</section>
+
+<footer class="site">
+  <div class="wrap">
+    <span>Evaluated Applications — .NET libraries, England.</span>
+    <span class="mono">© <span id="yr"></span> · <a href="/">Home</a> · <a href="/holodb/manual/">Manual</a></span>
+  </div>
+</footer>
+
+<script>
+  document.getElementById('yr').textContent = new Date().getFullYear();
+  document.querySelectorAll('.copy').forEach(function(btn){
+    btn.addEventListener('click', function(){
+      var code = btn.parentElement.querySelector('code').textContent;
+      navigator.clipboard.writeText(code).then(function(){
+        var old = btn.textContent; btn.textContent = 'copied'; btn.classList.add('done');
+        setTimeout(function(){ btn.textContent = old; btn.classList.remove('done'); }, 1400);
+      });
+    });
+  });
+</script>
+</body>
+</html>

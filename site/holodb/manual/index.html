@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HoloDb manual — how to use it</title>
+<meta name="description" content="How to use HoloDb: install, open a database, create tables, insert and bulk-load, query with the SQL dialect (aggregates, joins, WHERE, GROUP BY, ORDER BY, similarity search), transactions, DI, and running it in the browser.">
+<link rel="canonical" href="https://evaluatedapplications.github.io/holodb/manual/">
+<meta property="og:type" content="article">
+<meta property="og:title" content="HoloDb manual — how to use it">
+<meta property="og:description" content="A practical guide to HoloDb: open a database, create tables, insert and bulk-load, query, transactions, similarity search, DI, and running it in the browser.">
+<meta property="og:url" content="https://evaluatedapplications.github.io/holodb/manual/">
+<meta name="twitter:card" content="summary">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%238b7dff'/%3E%3Cstop offset='.5' stop-color='%2335d0c0'/%3E%3Cstop offset='1' stop-color='%23e6b450'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='32' height='32' rx='7' fill='%230a0c11'/%3E%3Cpath d='M16 5l9.5 5.5v11L16 27l-9.5-5.5v-11z' fill='none' stroke='url(%23g)' stroke-width='2'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="/assets/site.css">
+</head>
+<body>
+<div class="beam"></div>
+
+<nav class="site-nav">
+  <div class="wrap">
+    <a class="brand" href="/">
+      <svg class="mark" viewBox="0 0 32 32" aria-hidden="true"><defs><linearGradient id="m" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#8b7dff"/><stop offset=".5" stop-color="#35d0c0"/><stop offset="1" stop-color="#e6b450"/></linearGradient></defs><path d="M16 4l10.4 6v12L16 28 5.6 22V10z" fill="none" stroke="url(#m)" stroke-width="2"/></svg>
+      Evaluated Applications
+    </a>
+    <input type="checkbox" id="navtoggle" class="nav-toggle">
+    <label for="navtoggle" class="nav-burger" aria-label="Toggle menu"><span></span><span></span><span></span></label>
+    <div class="nav-links">
+      <a href="/">Home</a>
+      <a href="/holodb/">HoloDb</a>
+      <a href="/holodb/manual/" class="active">Manual</a>
+      <a href="/tools/analyst">The Analyst</a>
+      <a href="https://www.nuget.org/packages/EvaluatedApplications.HoloDb" target="_blank" rel="noopener">NuGet</a>
+    </div>
+  </div>
+</nav>
+
+<main class="wrap">
+<article class="prose">
+
+  <nav class="crumb"><a href="/holodb/">HoloDb</a> <span>/</span> Manual</nav>
+  <h1>HoloDb manual</h1>
+  <p class="lede" style="margin-top:12px">An embeddable holographic SQL database for .NET. It speaks SQL, is transactional
+    (ACID with a write-ahead log), stores data in a columnar engine with compiled predicates and constant-time aggregates,
+    and is small enough to run in a browser tab. This page is the practical guide: install it, put data in, get answers out.</p>
+
+  <div class="toc">
+    <h2>On this page</h2>
+    <ul>
+      <li><a href="#install">Install</a></li>
+      <li><a href="#quickstart">Quick start</a></li>
+      <li><a href="#durability">In-memory or durable</a></li>
+      <li><a href="#tables">Tables &amp; types</a></li>
+      <li><a href="#inserting">Inserting data</a></li>
+      <li><a href="#bulkload">Bulk loading</a></li>
+      <li><a href="#querying">Querying (the dialect)</a></li>
+      <li><a href="#results">Reading results</a></li>
+      <li><a href="#transactions">Transactions</a></li>
+      <li><a href="#similarity">Similarity search</a></li>
+      <li><a href="#indexes">Indexes</a></li>
+      <li><a href="#di">Dependency injection</a></li>
+      <li><a href="#evalapp">EvalApp pipelines</a></li>
+      <li><a href="#browser">Running in the browser</a></li>
+      <li><a href="#networked">Networked (client/server)</a></li>
+    </ul>
+  </div>
+
+  <h2 id="install">Install</h2>
+  <p>Add the package from NuGet:</p>
+  <pre><code>dotnet add package EvaluatedApplications.HoloDb</code></pre>
+  <p>It targets .NET 8+, is dependency-light, and AOT / trim-friendly. The package ships the compiled library only; every
+    capability is free to use.</p>
+
+  <h2 id="quickstart">Quick start</h2>
+  <p>Create a service, run some SQL, read the rows back. This is the whole surface for most apps:</p>
+  <pre><code>using HoloDb;
+
+var db = new HoloDbService(new HoloDbOptions());   // in-memory
+
+db.Execute("CREATE TABLE users (id INT PRIMARY KEY, age INT, name TEXT)");
+db.Execute("INSERT INTO users VALUES (1, 30, 'Ada'), (2, 24, 'Linus')");
+
+var result = db.Execute("SELECT name FROM users WHERE age >= 18 ORDER BY age DESC");
+foreach (var row in result.Rows)
+    Console.WriteLine(row["name"]);</code></pre>
+  <p>Everything runs synchronously through <code>Execute</code>. There is also <code>ExecuteAsync(sql, ct)</code>, which
+    offloads the work to the thread pool so a request thread isn't blocked:</p>
+  <pre><code>var result = await db.ExecuteAsync("SELECT COUNT(*) FROM users");</code></pre>
+
+  <h2 id="durability">In-memory or durable</h2>
+  <p>By default the database lives in memory and is gone when the process ends. To make writes durable, give it a
+    write-ahead log path — on restart it replays the log to recover state:</p>
+  <pre><code>var db = new HoloDbService(new HoloDbOptions { WalPath = "app.wal" });</code></pre>
+  <blockquote>In WebAssembly (a browser tab) there is no file system, so leave <code>WalPath</code> null and use the
+    in-memory engine — which is exactly what the <a href="/tools/analyst">Analyst demo</a> does.</blockquote>
+  <p>If you want the raw engine directly (no async wrapper, no licensing surface), open it yourself:</p>
+  <pre><code>Database engine = Database.Open("app.wal");   // or Database.Open(null) for in-memory
+engine.Execute("...");</code></pre>
+  <p>The <code>HoloDbService.Database</code> property exposes the same engine underneath the service.</p>
+
+  <h2 id="tables">Tables &amp; types</h2>
+  <p>Three storage types, each with the usual SQL aliases:</p>
+  <table>
+    <thead><tr><th>Type</th><th>Aliases</th><th>.NET</th></tr></thead>
+    <tbody>
+      <tr><td><code>INT</code></td><td>INTEGER</td><td>long</td></tr>
+      <tr><td><code>REAL</code></td><td>FLOAT, DOUBLE, DECIMAL, NUMERIC</td><td>double</td></tr>
+      <tr><td><code>TEXT</code></td><td>VARCHAR, STRING</td><td>string</td></tr>
+    </tbody>
+  </table>
+  <pre><code>CREATE TABLE sales (
+  id     INT PRIMARY KEY,
+  region TEXT,
+  amount REAL
+)</code></pre>
+  <p>One column may be <code>PRIMARY KEY</code>; it is enforced unique.</p>
+
+  <h2 id="inserting">Inserting data</h2>
+  <p>Single or batched rows, with or without a column list:</p>
+  <pre><code>db.Execute("INSERT INTO sales VALUES (1, 'EU', 42.50)");
+db.Execute("INSERT INTO sales (id, region, amount) VALUES (2, 'US', 17.00), (3, 'EU', 61.10)");</code></pre>
+  <p>Strings use single quotes; escape a quote by doubling it (<code>'O''Neil'</code>). <code>UPDATE</code> and
+    <code>DELETE</code> with a <code>WHERE</code> clause work as expected:</p>
+  <pre><code>db.Execute("UPDATE sales SET amount = 0 WHERE region = 'US'");
+db.Execute("DELETE FROM sales WHERE amount = 0");</code></pre>
+
+  <h2 id="bulkload">Bulk loading</h2>
+  <p>For large loads, skip the SQL parser entirely and hand the engine typed column arrays. This is the fast path — one
+    array per column (<code>long[]</code>, <code>double[]</code>, or <code>string[]</code>):</p>
+  <pre><code>var ids     = new long[]   { 1, 2, 3 };
+var regions = new string[] { "EU", "US", "EU" };
+var amounts = new double[] { 42.50, 17.00, 61.10 };
+
+db.BulkLoad("sales", new[] { "id", "region", "amount" },
+            new Array[] { ids, regions, amounts }, count: 3);</code></pre>
+  <p>It is atomic and validates primary-key uniqueness before committing. Load in chunks (e.g. 100k rows) for very large
+    datasets — that is how the Analyst ingests a big paste without stalling the browser.</p>
+
+  <h2 id="querying">Querying (the dialect)</h2>
+  <p>HoloDb speaks a substantial SQL dialect. A <code>SELECT</code> supports:</p>
+  <ul>
+    <li>Aggregates: <code>COUNT</code>, <code>SUM</code>, <code>AVG</code>, <code>MIN</code>, <code>MAX</code></li>
+    <li>A full boolean <code>WHERE</code>: <code>AND</code> / <code>OR</code> / <code>NOT</code> / parentheses,
+      the comparisons <code>= != &lt; &gt; &lt;= &gt;=</code>, plus <code>LIKE</code>, <code>IN (…)</code>,
+      <code>IN (SELECT …)</code>, and <code>BETWEEN … AND …</code></li>
+    <li><code>GROUP BY</code> with <code>HAVING</code></li>
+    <li><code>ORDER BY</code> (multiple keys, <code>ASC</code> / <code>DESC</code>)</li>
+    <li><code>LIMIT</code> and <code>DISTINCT</code></li>
+    <li><code>INNER JOIN … ON …</code></li>
+  </ul>
+  <pre><code>SELECT region, COUNT(*), SUM(amount), AVG(amount)
+FROM sales
+WHERE amount BETWEEN 10 AND 1000
+GROUP BY region
+HAVING SUM(amount) > 50
+ORDER BY sum(amount) DESC
+LIMIT 10</code></pre>
+  <p>A join across two tables:</p>
+  <pre><code>SELECT o.id, c.name, o.total
+FROM orders o
+INNER JOIN customers c ON o.customer_id = c.id
+WHERE o.total > 100
+ORDER BY o.total DESC</code></pre>
+
+  <h2 id="results">Reading results</h2>
+  <p><code>Execute</code> returns a <code>QueryResult</code>. The simplest way to read it is row-by-row as dictionaries
+    keyed by column name:</p>
+  <pre><code>var r = db.Execute("SELECT region, COUNT(*) FROM sales GROUP BY region");
+foreach (var row in r.Rows)
+    Console.WriteLine($"{row["region"]}: {row["count(*)"]}");</code></pre>
+  <p>Aggregate columns are named by the function applied: <code>count(*)</code>, <code>sum(amount)</code>,
+    <code>avg(amount)</code>, <code>min(amount)</code>, <code>max(amount)</code>. Use <code>r.Columns</code> to enumerate
+    the result's column names in order (handy for building a table generically), and for a write statement
+    <code>r.Affected</code> is the number of rows changed.</p>
+  <blockquote>For hot paths, <code>QueryResult</code> also keeps results columnar and exposes direct accessors so you can
+    read values without materialising a dictionary per row.</blockquote>
+
+  <h2 id="transactions">Transactions</h2>
+  <p>ACID transactions with explicit control. Wrap statements in <code>BEGIN</code> … <code>COMMIT</code>, or discard with
+    <code>ROLLBACK</code>:</p>
+  <pre><code>db.Execute("BEGIN");
+try
+{
+    db.Execute("UPDATE accounts SET balance = balance - 100 WHERE id = 1");
+    db.Execute("UPDATE accounts SET balance = balance + 100 WHERE id = 2");
+    db.Execute("COMMIT");
+}
+catch
+{
+    db.Execute("ROLLBACK");
+    throw;
+}</code></pre>
+  <p>With a <code>WalPath</code> set, a committed transaction is durable — it survives a crash and is replayed on restart.</p>
+
+  <h2 id="similarity">Similarity search</h2>
+  <p>Because rows are stored holographically, HoloDb can do content-addressable retrieval: rank rows by similarity to a
+    partial key, no separate vector index to build. Use the <code>NEAREST</code> clause with the fields you know and a
+    <code>LIMIT</code> for how many neighbours you want:</p>
+  <pre><code>SELECT id, title
+FROM articles
+NEAREST (title = 'holographic database')
+LIMIT 5</code></pre>
+  <p>This returns the five rows whose content is closest to the query, ordered by similarity — SQL and vector-style
+    retrieval from the same engine, over the same rows.</p>
+
+  <h2 id="indexes">Indexes &amp; why aggregates are instant</h2>
+  <p>Add a sorted index on a column to speed range and lookup queries:</p>
+  <pre><code>CREATE INDEX ON sales (region)</code></pre>
+  <p>You rarely need indexes for counting, though: <code>COUNT(*)</code> and <code>SUM</code> over integer columns are
+    served from maintained accumulators in constant time, independent of how many rows the table holds. That is the source
+    of HoloDb's benchmark wins — it doesn't scan to count.</p>
+
+  <h2 id="di">Dependency injection</h2>
+  <p>Register HoloDb in a .NET host and inject <code>HoloDbService</code> wherever you need it:</p>
+  <pre><code>builder.Services.AddHoloDb(options =>
+{
+    options.WalPath = "app.wal";
+});
+
+// then, in a controller / service:
+public class ReportService(HoloDbService db)
+{
+    public Task&lt;QueryResult&gt; Totals() =>
+        db.ExecuteAsync("SELECT region, SUM(amount) FROM sales GROUP BY region");
+}</code></pre>
+
+  <h2 id="evalapp">EvalApp pipelines</h2>
+  <p>HoloDb runs inside an <strong>EvalApp</strong> harness, so heavy queries execute as compiled, resource-gated,
+    self-tuning pipelines. Attach a service to a pipeline app and query it from any step:</p>
+  <pre><code>var app = AppBuilder.Create()
+    .WithHoloDb(db)
+    .Build();</code></pre>
+
+  <h2 id="browser">Running in the browser</h2>
+  <p>HoloDb is pure managed .NET, so it compiles to WebAssembly and runs client-side with no server. Open the in-memory
+    engine, load data, and query it — nothing leaves the device. The <a href="/tools/analyst">Analyst tool</a> on this site
+    is exactly that: a real HoloDb, in your browser tab, profiling and querying whatever you paste in.</p>
+
+  <h2 id="networked">Networked (client/server)</h2>
+  <p>The same engine runs as a server. Pull the image and run it:</p>
+  <pre><code>docker pull ghcr.io/evaluatedapplications/holodb</code></pre>
+  <p>Then talk to it from .NET with the client package — connect over TLS with a token and run the same SQL and bulk-load
+    surface as the in-process engine, so moving from embedded to networked changes only how you get the handle:</p>
+  <pre><code>dotnet add package EvaluatedApplications.HoloDb.Client</code></pre>
+
+  <p style="margin-top:2.5rem"><a href="/holodb/">← Back to HoloDb</a> &nbsp;·&nbsp; <a href="/tools/analyst">Try the Analyst →</a></p>
+
+</article>
+</main>
+
+<footer class="site">
+  <div class="wrap">
+    <span>Evaluated Applications — .NET libraries, England.</span>
+    <span class="mono">© <span id="yr"></span> · <a href="/">Home</a> · <a href="https://www.nuget.org/packages/EvaluatedApplications.HoloDb" target="_blank" rel="noopener">NuGet</a></span>
+  </div>
+</footer>
+<script>document.getElementById('yr').textContent = new Date().getFullYear();</script>
+</body>
+</html>
