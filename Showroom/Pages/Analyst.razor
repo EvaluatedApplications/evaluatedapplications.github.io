@@ -56,6 +56,12 @@
         }
     </div>
 
+    <div class="feed-url">
+        <input type="url" class="feed-url-input" @bind="_feedUrl" @bind:event="oninput" disabled="@_busy"
+               placeholder="…or paste any CSV / JSON feed URL that allows browser access" @onkeydown="FeedUrlKey" />
+        <button class="ghost" @onclick="LoadUrl" disabled="@_busy" type="button">Fetch URL</button>
+    </div>
+
     <details class="paste-wrap">
         <summary>…or paste data instead</summary>
         <textarea class="paste" @bind="Text" @bind:event="oninput" rows="7" disabled="@_busy"
@@ -341,7 +347,17 @@
         new Feed("🚦", "NYC traffic crashes", "NYC Open Data",
             "The latest 5,000 collisions — borough, people injured and killed, contributing factor, vehicle type. Where crashes cluster, and why.",
             "https://data.cityofnewyork.us/resource/h9gi-nx95.csv?%24select=crash_date,borough,number_of_persons_injured,number_of_persons_killed,contributing_factor_vehicle_1,vehicle_type_code1&%24order=crash_date%20DESC&%24limit=5000"),
+        new Feed("🚔", "Chicago crime reports", "Chicago Open Data",
+            "The latest 5,000 reported crimes — type, location, whether an arrest was made, district. What's reported where, and how often it leads to an arrest.",
+            "https://data.cityofchicago.org/resource/ijzp-q8t2.csv?%24select=date,primary_type,description,location_description,arrest,domestic,district,ward&%24order=date%20DESC&%24limit=5000"),
+        new Feed("🌦️", "Seattle weather", "Vega Datasets",
+            "Daily precipitation, max/min temperature and wind, each day labelled rain / sun / snow / fog / drizzle. Seasonality, and what the rainy days look like.",
+            "https://raw.githubusercontent.com/vega/vega-datasets/main/data/seattle-weather.csv"),
+        new Feed("🎬", "Movies", "Vega Datasets",
+            "~3,000 films — budget, US and worldwide gross, IMDB and Rotten Tomatoes ratings, genre, MPAA rating. What earns, what rates well. Loads as JSON.",
+            "https://raw.githubusercontent.com/vega/vega-datasets/main/data/movies.json"),
     };
+    string _feedUrl = "";
 
     string _text = SampleCsv;
     string Text { get => _text; set { _text = value; _charCount = value.Length; } }
@@ -404,6 +420,28 @@
         catch (Exception ex)
         {
             _error = $"Couldn't fetch {f.Name}: {ex.Message}. The source may be rate-limiting or briefly down — try again, or upload a file.";
+            _busy = false; StateHasChanged();
+            return;
+        }
+        await Analyze();
+    }
+
+    async Task FeedUrlKey(KeyboardEventArgs e) { if (e.Key == "Enter") await LoadUrl(); }
+
+    async Task LoadUrl()
+    {
+        var url = _feedUrl.Trim();
+        if (url.Length == 0) return;
+        if (!url.StartsWith("http://") && !url.StartsWith("https://")) { _error = "Enter a full http(s):// URL."; StateHasChanged(); return; }
+        _busy = true; _error = null; _done = false; _progress = 0; _phase = "Fetching URL…"; StateHasChanged(); await Task.Delay(1);
+        try
+        {
+            Text = await Http.GetStringAsync(url);
+            _fileName = $"{new Uri(url).Host} (live)";
+        }
+        catch (Exception ex)
+        {
+            _error = $"Couldn't fetch that URL ({ex.Message}). Most likely the source doesn't allow direct browser access — no CORS header. Download the file and drop it here instead, or try one of the datasets above.";
             _busy = false; StateHasChanged();
             return;
         }
