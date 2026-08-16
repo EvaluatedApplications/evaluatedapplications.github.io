@@ -5,6 +5,7 @@
 @using System.Globalization
 @using System.Text
 @using System.Text.RegularExpressions
+@using System.Text.Json
 @using HoloDb
 
 <PageTitle>The Analyst — free in-browser data analytics</PageTitle>
@@ -35,7 +36,7 @@
             <svg viewBox="0 0 24 24" width="34" height="34" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                 <path d="M12 16V4" /><path d="M7 9l5-5 5 5" /><path d="M4 16v3a1 1 0 001 1h14a1 1 0 001-1v-3" />
             </svg>
-            <strong>Drop a CSV, TSV, or log file</strong>
+            <strong>Drop a CSV, TSV, JSON, or log file</strong>
             <span>or click to browse — up to ~50&nbsp;MB, and it stays on your device</span>
             @if (_fileName is not null) { <span class="dz-file">@_fileName · @_charCount.ToString("N0") chars</span> }
         </div>
@@ -176,6 +177,7 @@
                     <option value="auto">auto</option>
                     <option value="bars">bars</option>
                     <option value="line">line</option>
+                    <option value="pie">pie</option>
                 </select>
             </label>
             <button class="go" @onclick="BuildChart" disabled="@_cbBusy">@(_cbBusy ? "…" : "Draw it")</button>
@@ -287,7 +289,7 @@
                 {
                     <div class="table-scroll">
                         <table class="result">
-                            <thead><tr>@foreach (var col in _replCols) { <th>@col</th> }</tr></thead>
+                            <thead><tr>@foreach (var col in _replCols) { <th class="sortable" @onclick="() => SortResult(col)" title="sort by @col">@col @if (_sortCol == col) { <span class="sort-arrow">@(_sortDesc ? "▼" : "▲")</span> }</th> }</tr></thead>
                             <tbody>
                                 @foreach (var row in _replRows)
                                 {
@@ -374,6 +376,7 @@
     List<Dictionary<string, object>> _replRows = new();
     Chart? _replChart;
     string _replView = "table";
+    string? _sortCol; bool _sortDesc;
     const int ReplRowCap = 200;
 
     // no-SQL chart builder
@@ -439,38 +442,46 @@
         {
             var swAll = Stopwatch.StartNew();
 
-            // ---- sniff + parse into columns ----
-            var lines = SplitLines(_text, RowCap + 1);
-            if (lines.Count == 0) { _error = "Nothing to profile."; return; }
-            char delim = SniffDelimiter(lines);
-            bool tabular = delim != '\0';
-            _format = tabular ? $"{DelimName(delim)}-separated, {lines.Count:N0} rows" : "plain text";
-
+            // ---- sniff + parse into columns (JSON / JSONL first, then delimited, then plain text) ----
             List<string> names;
             string[][] cells;
             int malformed = 0;
-            if (tabular)
+
+            if (TryParseJson(_text, RowCap + 1, out var jNames, out var jCells))
             {
-                var header = SplitRow(lines[0], delim);
-                bool hasHeader = header.All(h => !IsNumber(h)) && header.Distinct().Count() == header.Length;
-                names = hasHeader ? header.Select((h, i) => string.IsNullOrWhiteSpace(h) ? $"col{i + 1}" : h.Trim()).ToList()
-                                  : Enumerable.Range(1, header.Length).Select(i => $"col{i}").ToList();
-                int ncol = names.Count;
-                int startRow = hasHeader ? 1 : 0;
-                var rows = new List<string[]>(lines.Count);
-                for (int i = startRow; i < lines.Count; i++)
-                {
-                    var r = SplitRow(lines[i], delim);
-                    if (r.Length != ncol) { malformed++; if (r.Length < ncol) r = r.Concat(Enumerable.Repeat("", ncol - r.Length)).ToArray(); else r = r.Take(ncol).ToArray(); }
-                    rows.Add(r);
-                    if ((i & 0x1FFFF) == 0) { _progress = 0.35 * i / lines.Count; _phase = $"Parsing… {rows.Count:N0} rows"; StateHasChanged(); await Task.Delay(1); }
-                }
-                cells = rows.ToArray();
+                names = jNames; cells = jCells;
+                _format = $"JSON, {cells.Length:N0} records";
             }
             else
             {
-                names = new() { "line" };
-                cells = lines.Select(l => new[] { l }).ToArray();
+                var lines = SplitLines(_text, RowCap + 1);
+                if (lines.Count == 0) { _error = "Nothing to profile."; return; }
+                char delim = SniffDelimiter(lines);
+                bool tabular = delim != '\0';
+                _format = tabular ? $"{DelimName(delim)}-separated, {lines.Count:N0} rows" : "plain text";
+                if (tabular)
+                {
+                    var header = SplitRow(lines[0], delim);
+                    bool hasHeader = header.All(h => !IsNumber(h)) && header.Distinct().Count() == header.Length;
+                    names = hasHeader ? header.Select((h, i) => string.IsNullOrWhiteSpace(h) ? $"col{i + 1}" : h.Trim()).ToList()
+                                      : Enumerable.Range(1, header.Length).Select(i => $"col{i}").ToList();
+                    int ncol = names.Count;
+                    int startRow = hasHeader ? 1 : 0;
+                    var rows = new List<string[]>(lines.Count);
+                    for (int i = startRow; i < lines.Count; i++)
+                    {
+                        var r = SplitRow(lines[i], delim);
+                        if (r.Length != ncol) { malformed++; if (r.Length < ncol) r = r.Concat(Enumerable.Repeat("", ncol - r.Length)).ToArray(); else r = r.Take(ncol).ToArray(); }
+                        rows.Add(r);
+                        if ((i & 0x1FFFF) == 0) { _progress = 0.35 * i / lines.Count; _phase = $"Parsing… {rows.Count:N0} rows"; StateHasChanged(); await Task.Delay(1); }
+                    }
+                    cells = rows.ToArray();
+                }
+                else
+                {
+                    names = new() { "line" };
+                    cells = lines.Select(l => new[] { l }).ToArray();
+                }
             }
             _rows = cells.Length;
             if (_rows == 0) { _error = "No records found."; return; }
@@ -585,6 +596,54 @@
         fields.Add(sb.ToString().Trim());
         return fields.ToArray();
     }
+
+    // Parse a JSON array-of-objects or JSONL (one object per line) into columns. Nested objects/arrays become raw-JSON text.
+    static bool TryParseJson(string text, int cap, out List<string> names, out string[][] cells)
+    {
+        names = new(); cells = Array.Empty<string[]>();
+        var t = text.TrimStart();
+        if (t.Length == 0 || (t[0] != '[' && t[0] != '{')) return false;
+        var rows = new List<Dictionary<string, string>>();
+        var order = new List<string>(); var seen = new HashSet<string>();
+        void Add(JsonElement el)
+        {
+            if (el.ValueKind != JsonValueKind.Object) return;
+            var d = new Dictionary<string, string>();
+            foreach (var p in el.EnumerateObject()) { if (seen.Add(p.Name)) order.Add(p.Name); d[p.Name] = JsonValToStr(p.Value); }
+            rows.Add(d);
+        }
+        try
+        {
+            if (t[0] == '[')
+            {
+                using var doc = JsonDocument.Parse(t);
+                if (doc.RootElement.ValueKind != JsonValueKind.Array) return false;
+                foreach (var el in doc.RootElement.EnumerateArray()) { if (rows.Count >= cap) break; Add(el); }
+            }
+            else   // '{': single object, or JSONL (one object per line)
+            {
+                var lines = t.Split('\n').Select(l => l.Trim()).Where(l => l.Length > 0).ToList();
+                if (lines.Count > 1 && lines.All(l => l[0] == '{'))
+                    foreach (var l in lines) { if (rows.Count >= cap) break; try { using var d = JsonDocument.Parse(l); Add(d.RootElement); } catch { return false; } }
+                else { using var doc = JsonDocument.Parse(t); Add(doc.RootElement); }
+            }
+        }
+        catch { return false; }
+        if (rows.Count == 0 || order.Count == 0) return false;
+        names = order;
+        cells = rows.Select(r => order.Select(c => r.TryGetValue(c, out var v) ? v : "").ToArray()).ToArray();
+        return true;
+    }
+
+    static string JsonValToStr(JsonElement v) => v.ValueKind switch
+    {
+        JsonValueKind.String => v.GetString() ?? "",
+        JsonValueKind.Number => v.GetRawText(),
+        JsonValueKind.True => "true",
+        JsonValueKind.False => "false",
+        JsonValueKind.Null or JsonValueKind.Undefined => "",
+        _ => v.GetRawText(),   // nested object/array -> raw JSON text
+    };
 
     static FieldType InferType(string[][] cells, int c, long rows)
     {
@@ -788,6 +847,20 @@
     void RemoveFilter((string Col, string Val) f) { _filters.Remove(f); RunProfile(); }
     void ClearFilters() { _filters.Clear(); RunProfile(); }
 
+    // click a result-grid header to sort the shown rows (numeric-aware), toggling direction
+    void SortResult(string col)
+    {
+        if (_sortCol == col) _sortDesc = !_sortDesc; else { _sortCol = col; _sortDesc = false; }
+        _replRows.Sort((a, b) => { int c = CompareVals(a.GetValueOrDefault(col), b.GetValueOrDefault(col)); return _sortDesc ? -c : c; });
+    }
+    static int CompareVals(object? a, object? b)
+        => TryNum(a, out var da) && TryNum(b, out var db) ? da.CompareTo(db) : string.Compare(a?.ToString(), b?.ToString(), StringComparison.OrdinalIgnoreCase);
+    static bool TryNum(object? o, out double d)
+    {
+        switch (o) { case long l: d = l; return true; case double x: d = x; return true; case int i: d = i; return true; }
+        d = 0; return o != null && double.TryParse(o.ToString(), NumberStyles.Any, CultureInfo.InvariantCulture, out d);
+    }
+
     static string HistLabel(double lo, double hi) => $"{Num(lo)}–{Num(hi)}";
 
     // Queries worth trying, inferred from what the profile found in the data.
@@ -829,6 +902,7 @@
             _replTotal = rows.Count;
             _replCols = res.Columns.ToArray();
             _replRows = rows.Take(ReplRowCap).ToList();
+            _sortCol = null; _sortDesc = false;
             _replChart = BuildReplChart(_replCols, _replRows);
             _replView = _replChart is not null ? "chart" : "table";
         }
@@ -920,7 +994,40 @@
     }
 
     // ---- SVG chart builders (rendered in C#, styled by the .razor.css) ----
-    MarkupString RenderChart(Chart ch) => ch.Kind == "line" ? LineChart(ch.Data) : HBars(ch.Data);
+    MarkupString RenderChart(Chart ch) => ch.Kind switch { "line" => LineChart(ch.Data), "pie" => PieChart(ch.Data), _ => HBars(ch.Data) };
+
+    static readonly string[] Palette = { "#8b7dff", "#35d0c0", "#e6b450", "#f0796a", "#4aa3ff", "#b06ab3", "#7bd86a", "#e88bbf", "#5bc8d8", "#c0a15a" };
+    static (double, double) Polar(double cx, double cy, double r, double a) => (cx + r * Math.Cos(a), cy + r * Math.Sin(a));
+
+    static MarkupString PieChart(List<(string Label, double Value)> data)
+    {
+        var d = data.Where(x => x.Value > 0).Take(10).ToList();
+        double total = d.Sum(x => x.Value);
+        if (d.Count == 0 || total <= 0) return HBars(data);
+        int W = 720, H = 240, cx = 118, cy = 118, r = 100, ir = 56;
+        var sb = new StringBuilder();
+        sb.Append($"<svg class=\"chart-svg\" viewBox=\"0 0 {W} {H}\" role=\"img\" preserveAspectRatio=\"xMidYMid meet\">");
+        double ang = -Math.PI / 2;
+        for (int i = 0; i < d.Count; i++)
+        {
+            double frac = d[i].Value / total, a2 = ang + frac * 2 * Math.PI;
+            var (x1, y1) = Polar(cx, cy, r, ang); var (x2, y2) = Polar(cx, cy, r, a2);
+            var (ix1, iy1) = Polar(cx, cy, ir, a2); var (ix2, iy2) = Polar(cx, cy, ir, ang);
+            int large = frac > 0.5 ? 1 : 0; string col = Palette[i % Palette.Length];
+            sb.Append($"<path d=\"M {F(x1)},{F(y1)} A {r},{r} 0 {large} 1 {F(x2)},{F(y2)} L {F(ix1)},{F(iy1)} A {ir},{ir} 0 {large} 0 {F(ix2)},{F(iy2)} Z\" fill=\"{col}\"><title>{Esc(d[i].Label)}: {Esc(Fmt(d[i].Value))} ({(frac * 100).ToString("F1", Inv)}%)</title></path>");
+            ang = a2;
+        }
+        int ly = 22;
+        for (int i = 0; i < d.Count; i++)
+        {
+            sb.Append($"<rect x=\"280\" y=\"{ly - 9}\" width=\"11\" height=\"11\" rx=\"2\" fill=\"{Palette[i % Palette.Length]}\"/>");
+            sb.Append($"<text class=\"c-lbl\" x=\"298\" y=\"{ly}\">{Esc(Trunc(string.IsNullOrEmpty(d[i].Label) ? "(empty)" : d[i].Label, 28))}</text>");
+            sb.Append($"<text class=\"c-val\" x=\"704\" y=\"{ly}\" text-anchor=\"end\">{Esc(Fmt(d[i].Value))}</text>");
+            ly += 21;
+        }
+        sb.Append("</svg>");
+        return (MarkupString)sb.ToString();
+    }
 
     static string F(double v) => v.ToString("0.##", Inv);
     static string Fmt(double v)
