@@ -96,8 +96,8 @@
 
     <div class="race">
       <h3>Total invoiced across 25,000,000 invoices — <code>SELECT SUM(amount_cents)</code> — in-process, same query, same data, verified identical</h3>
-      <div class="race-row"><span class="race-name"><b>HoloDb</b></span><div class="race-track"><div class="race-fill holo"></div></div><span class="race-time win">0.006 ms ✓</span></div>
-      <div class="race-row"><span class="race-name">DuckDB</span><div class="race-track"><div class="race-fill duck"></div></div><span class="race-time">5.3 ms</span></div>
+      <div class="race-row"><span class="race-name"><b>HoloDb</b></span><div class="race-track"><div class="race-fill holo"></div></div><span class="race-time win">0.003 ms ✓</span></div>
+      <div class="race-row"><span class="race-name">DuckDB</span><div class="race-track"><div class="race-fill duck"></div></div><span class="race-time">5.5 ms</span></div>
       <p class="race-note">HoloDb reads a maintained total instead of adding up 25 million rows — so it doesn't scan, and the answer doesn't get slower as the ledger grows. Below: the full per-query scoreboard, in-process against DuckDB and as a networked service against an on-disk SQL&nbsp;Server.</p>
     </div>
 
@@ -146,7 +146,7 @@
           <path d="M150 210 H240 V120" stroke="#35d0c0" stroke-width="2" fill="none" stroke-dasharray="4 3" marker-end="url(#ar2)"/>
           <defs><marker id="ar2" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0 0l6 3-6 3z" fill="#35d0c0"/></marker></defs>
           <text x="150" y="236" fill="#7bd86a" font-family="ui-monospace,monospace" font-size="12">→ reads the tally, skips the rows</text>
-          <text x="150" y="256" fill="#e9ecf3" font-family="ui-monospace,monospace" font-size="13" font-weight="700">0.006 ms</text>
+          <text x="150" y="256" fill="#e9ecf3" font-family="ui-monospace,monospace" font-size="13" font-weight="700">0.003 ms</text>
         </svg>
       </div>
     </div>
@@ -191,47 +191,47 @@
 
     <div class="stat-row" style="margin-top:24px">
       <div class="stat"><div class="n">6 rollups in µs</div><div class="l">In-process, the whole billing dashboard — revenue by status / month / region, totals, counts, lookups — answers in <strong>microseconds</strong>, from maintained accumulators, not scans. Constant-time: they don't grow as the ledger does.</div></div>
-      <div class="stat"><div class="n">10 of 11</div><div class="l">As a networked service, HoloDb beats a durable on-disk SQL&nbsp;Server on ten of the eleven billing queries — most by 400–2,000×.</div></div>
-      <div class="stat"><div class="n">shown, not hidden</div><div class="l">The heavy scans HoloDb loses — top-K, high-cardinality and multi-column groups — are in the tables too. If that's your <em>whole</em> job, DuckDB is the right tool.</div></div>
+      <div class="stat"><div class="n">11 of 11</div><div class="l">As a networked service, HoloDb beats a durable on-disk SQL&nbsp;Server on <strong>every one</strong> of the eleven billing queries — most by 400–2,000×.</div></div>
+      <div class="stat"><div class="n">shown, not hidden</div><div class="l">In-process, DuckDB's columnar engine still wins a few heavy scans (a filtered sum, a top-K, a multi-column group) — they're in the tables too, not buried.</div></div>
     </div>
 
     <h3 style="margin:36px 0 6px;font-size:1.05rem">In-process, in memory <span style="color:var(--ink-faint);font-weight:400;font-size:.9rem">— HoloDb (embedded) vs DuckDB (in-process), 25M invoices, median ms</span></h3>
     <table class="cmp">
       <thead><tr><th>billing query</th><th>HoloDb</th><th>DuckDB</th><th>faster</th></tr></thead>
       <tbody>
-        <tr><td><b class="ql">invoices by status</b><span class="q">SELECT status, COUNT(*), SUM(amount_cents) … GROUP BY status</span></td><td class="holo">0.016</td><td>95.3</td><td class="mult">HoloDb ~5,900×</td></tr>
-        <tr><td><b class="ql">revenue by region</b><span class="q">SELECT region, SUM(amount_cents) … GROUP BY region</span></td><td class="holo">0.012</td><td>68.8</td><td class="mult">HoloDb ~5,900×</td></tr>
-        <tr><td><b class="ql">revenue by month</b><span class="q">SELECT month, SUM(amount_cents) … GROUP BY month</span></td><td class="holo">0.033</td><td>13.2</td><td class="mult">HoloDb ~400×</td></tr>
-        <tr><td><b class="ql">total invoiced</b><span class="q">SELECT SUM(amount_cents) FROM invoices</span></td><td class="holo">0.006</td><td>5.27</td><td class="mult">HoloDb ~880×</td></tr>
-        <tr><td><b class="ql">invoice count</b><span class="q">SELECT COUNT(*) FROM invoices</span></td><td class="holo">0.0065</td><td>0.99</td><td class="mult">HoloDb ~150×</td></tr>
-        <tr><td><b class="ql">look up one invoice</b><span class="q">SELECT … WHERE invoice_id = ?</span></td><td class="holo">0.009</td><td>0.47</td><td class="mult">HoloDb ~54×</td></tr>
-        <tr><td><b class="ql">big-ticket invoices (&gt;$5k)</b><span class="q">SELECT COUNT(*) … WHERE amount_cents &gt; 500000</span></td><td>7.55</td><td class="win">5.55</td><td>DuckDB ~1.4×</td></tr>
-        <tr><td><b class="ql">largest invoices</b><span class="q">ORDER BY amount_cents DESC LIMIT 20</span></td><td>13.6</td><td class="win">3.77</td><td>DuckDB ~3.6×</td></tr>
-        <tr><td><b class="ql">revenue by region &amp; status</b><span class="q">GROUP BY region, status  (multi-column)</span></td><td>232.6</td><td class="win">126.6</td><td>DuckDB ~1.8×</td></tr>
-        <tr><td><b class="ql">overdue outstanding</b><span class="q">SELECT SUM(amount_cents) … WHERE status = 'overdue'</span></td><td>181.9</td><td class="win">24.5</td><td>DuckDB ~7.4×</td></tr>
-        <tr><td><b class="ql">top customers by revenue</b><span class="q">GROUP BY customer_id … ORDER BY SUM(amount_cents) DESC LIMIT 10</span></td><td>3168</td><td class="win">447</td><td>DuckDB ~7.1×</td></tr>
+        <tr><td><b class="ql">invoices by status</b><span class="q">SELECT status, COUNT(*), SUM(amount_cents) … GROUP BY status</span></td><td class="holo">0.021</td><td>91.5</td><td class="mult">HoloDb ~4,400×</td></tr>
+        <tr><td><b class="ql">revenue by region</b><span class="q">SELECT region, SUM(amount_cents) … GROUP BY region</span></td><td class="holo">0.009</td><td>69.9</td><td class="mult">HoloDb ~7,800×</td></tr>
+        <tr><td><b class="ql">revenue by month</b><span class="q">SELECT month, SUM(amount_cents) … GROUP BY month</span></td><td class="holo">0.026</td><td>13.7</td><td class="mult">HoloDb ~530×</td></tr>
+        <tr><td><b class="ql">total invoiced</b><span class="q">SELECT SUM(amount_cents) FROM invoices</span></td><td class="holo">0.003</td><td>5.49</td><td class="mult">HoloDb ~1,800×</td></tr>
+        <tr><td><b class="ql">invoice count</b><span class="q">SELECT COUNT(*) FROM invoices</span></td><td class="holo">0.003</td><td>0.99</td><td class="mult">HoloDb ~330×</td></tr>
+        <tr><td><b class="ql">look up one invoice</b><span class="q">SELECT … WHERE invoice_id = ?</span></td><td class="holo">0.016</td><td>0.48</td><td class="mult">HoloDb ~30×</td></tr>
+        <tr><td><b class="ql">top customers by revenue</b><span class="q">GROUP BY customer_id … ORDER BY SUM(amount_cents) DESC LIMIT 10</span></td><td>533</td><td>509</td><td>≈ tie</td></tr>
+        <tr><td><b class="ql">big-ticket invoices (&gt;$5k)</b><span class="q">SELECT COUNT(*) … WHERE amount_cents &gt; 500000</span></td><td>7.52</td><td class="win">5.90</td><td>DuckDB ~1.3×</td></tr>
+        <tr><td><b class="ql">revenue by region &amp; status</b><span class="q">GROUP BY region, status  (multi-column)</span></td><td>236.6</td><td class="win">137.9</td><td>DuckDB ~1.7×</td></tr>
+        <tr><td><b class="ql">largest invoices</b><span class="q">ORDER BY amount_cents DESC LIMIT 20</span></td><td>14.4</td><td class="win">4.33</td><td>DuckDB ~3.3×</td></tr>
+        <tr><td><b class="ql">overdue outstanding</b><span class="q">SELECT SUM(amount_cents) … WHERE status = 'overdue'</span></td><td>182.5</td><td class="win">26.9</td><td>DuckDB ~6.8×</td></tr>
       </tbody>
     </table>
-    <p class="lim">HoloDb answers the top six from maintained accumulators and its primary-key index — no scan — so they're microseconds. The bottom five it has to <b>scan</b> for: a top-K sort, a filtered sum, a multi-column and a half-million-key group. DuckDB's columnar engine wins those. Bulk load, rows/sec: DuckDB 1.28M · HoloDb 414k.</p>
+    <p class="lim">HoloDb answers the top six from maintained accumulators and its primary-key index — no scan — so they're microseconds, and <code>top customers by revenue</code> (500k-key group + top-K) is now a dead heat. DuckDB's columnar engine still wins the remaining scans: a filtered sum, a top-K, a multi-column group. Bulk load, rows/sec: DuckDB 1.32M · HoloDb 426k.</p>
 
     <h3 style="margin:36px 0 6px;font-size:1.05rem">Networked service, persistent storage <span style="color:var(--ink-faint);font-weight:400;font-size:.9rem">— HoloDb server vs SQL&nbsp;Server 2022 (on disk), 25M invoices, median ms</span></h3>
     <table class="cmp">
       <thead><tr><th>billing query</th><th>HoloDb&nbsp;server</th><th>SQL&nbsp;Server</th><th>faster</th></tr></thead>
       <tbody>
-        <tr><td><b class="ql">invoices by status</b><span class="q">SELECT status, COUNT(*), SUM(amount_cents) … GROUP BY status</span></td><td class="holo">0.205</td><td>394.3</td><td class="mult">HoloDb ~1,920×</td></tr>
-        <tr><td><b class="ql">revenue by region</b><span class="q">SELECT region, SUM(amount_cents) … GROUP BY region</span></td><td class="holo">0.182</td><td>366.5</td><td class="mult">HoloDb ~2,010×</td></tr>
-        <tr><td><b class="ql">revenue by month</b><span class="q">SELECT month, SUM(amount_cents) … GROUP BY month</span></td><td class="holo">0.253</td><td>270.9</td><td class="mult">HoloDb ~1,070×</td></tr>
-        <tr><td><b class="ql">total invoiced</b><span class="q">SELECT SUM(amount_cents) FROM invoices</span></td><td class="holo">0.204</td><td>168.1</td><td class="mult">HoloDb ~825×</td></tr>
-        <tr><td><b class="ql">invoice count</b><span class="q">SELECT COUNT(*) FROM invoices</span></td><td class="holo">0.232</td><td>113.2</td><td class="mult">HoloDb ~490×</td></tr>
-        <tr><td><b class="ql">big-ticket invoices (&gt;$5k)</b><span class="q">SELECT COUNT(*) … WHERE amount_cents &gt; 500000</span></td><td class="holo">8.46</td><td>164.8</td><td class="mult">HoloDb ~19×</td></tr>
-        <tr><td><b class="ql">largest invoices</b><span class="q">ORDER BY amount_cents DESC LIMIT 20</span></td><td class="holo">10.8</td><td>820.6</td><td class="mult">HoloDb ~76×</td></tr>
-        <tr><td><b class="ql">revenue by region &amp; status</b><span class="q">GROUP BY region, status  (multi-column)</span></td><td class="holo">232.4</td><td>493.4</td><td class="mult">HoloDb ~2.1×</td></tr>
-        <tr><td><b class="ql">look up one invoice</b><span class="q">SELECT … WHERE invoice_id = ?</span></td><td class="holo">0.188</td><td>0.82</td><td class="mult">HoloDb ~4.4×</td></tr>
-        <tr><td><b class="ql">overdue outstanding</b><span class="q">SELECT SUM(amount_cents) … WHERE status = 'overdue'</span></td><td class="holo">183.6</td><td>253.4</td><td class="mult">HoloDb ~1.4×</td></tr>
-        <tr><td><b class="ql">top customers by revenue</b><span class="q">GROUP BY customer_id … ORDER BY SUM(amount_cents) DESC LIMIT 10</span></td><td>3060</td><td class="win">583</td><td>SQL&nbsp;Server ~5.3×</td></tr>
+        <tr><td><b class="ql">invoices by status</b><span class="q">SELECT status, COUNT(*), SUM(amount_cents) … GROUP BY status</span></td><td class="holo">0.294</td><td>396.9</td><td class="mult">HoloDb ~1,350×</td></tr>
+        <tr><td><b class="ql">revenue by region</b><span class="q">SELECT region, SUM(amount_cents) … GROUP BY region</span></td><td class="holo">0.191</td><td>374.9</td><td class="mult">HoloDb ~1,960×</td></tr>
+        <tr><td><b class="ql">revenue by month</b><span class="q">SELECT month, SUM(amount_cents) … GROUP BY month</span></td><td class="holo">0.186</td><td>264.9</td><td class="mult">HoloDb ~1,420×</td></tr>
+        <tr><td><b class="ql">total invoiced</b><span class="q">SELECT SUM(amount_cents) FROM invoices</span></td><td class="holo">0.161</td><td>170.0</td><td class="mult">HoloDb ~1,060×</td></tr>
+        <tr><td><b class="ql">invoice count</b><span class="q">SELECT COUNT(*) FROM invoices</span></td><td class="holo">0.177</td><td>106.9</td><td class="mult">HoloDb ~600×</td></tr>
+        <tr><td><b class="ql">big-ticket invoices (&gt;$5k)</b><span class="q">SELECT COUNT(*) … WHERE amount_cents &gt; 500000</span></td><td class="holo">7.51</td><td>158.1</td><td class="mult">HoloDb ~21×</td></tr>
+        <tr><td><b class="ql">largest invoices</b><span class="q">ORDER BY amount_cents DESC LIMIT 20</span></td><td class="holo">20.2</td><td>815.2</td><td class="mult">HoloDb ~40×</td></tr>
+        <tr><td><b class="ql">revenue by region &amp; status</b><span class="q">GROUP BY region, status  (multi-column)</span></td><td class="holo">244.4</td><td>469.2</td><td class="mult">HoloDb ~1.9×</td></tr>
+        <tr><td><b class="ql">top customers by revenue</b><span class="q">GROUP BY customer_id … ORDER BY SUM(amount_cents) DESC LIMIT 10</span></td><td class="holo">500</td><td>531</td><td class="mult">HoloDb ~1.06×</td></tr>
+        <tr><td><b class="ql">look up one invoice</b><span class="q">SELECT … WHERE invoice_id = ?</span></td><td class="holo">0.153</td><td>0.92</td><td class="mult">HoloDb ~6×</td></tr>
+        <tr><td><b class="ql">overdue outstanding</b><span class="q">SELECT SUM(amount_cents) … WHERE status = 'overdue'</span></td><td class="holo">177.6</td><td>245.1</td><td class="mult">HoloDb ~1.4×</td></tr>
       </tbody>
     </table>
-    <p class="lim">SQL&nbsp;Server 2022 in Docker, a persistent database on a volume, buffer pool capped at <b>1&nbsp;GB</b> — so at 25M invoices its data outgrows the cache and it reads from disk. HoloDb's server serves the working set from RAM with the same maintained accumulators, and both pay a client/server round-trip. It wins ten of eleven; the one loss is the same half-million-key group. Bulk load, rows/sec: HoloDb server 688k · SQL&nbsp;Server 532k.</p>
+    <p class="lim">SQL&nbsp;Server 2022 in Docker, a persistent database on a volume, buffer pool capped at <b>1&nbsp;GB</b> — so at 25M invoices its data outgrows the cache and it reads from disk. HoloDb's server serves the working set from RAM with the same maintained accumulators, and both pay a client/server round-trip. HoloDb wins <b>all eleven</b>. Bulk load, rows/sec: HoloDb server 698k · SQL&nbsp;Server 532k.</p>
 
     <p class="lim">HoloDb's bet is the <strong>mixed</strong> workload: a real ACID transactional store, durable and larger-than-memory, that <em>also</em> answers your dashboard rollups in microseconds and does vector search — in one embeddable dependency. <a href="/holodb.html">Full methodology &amp; every number →</a></p>
   </div>
