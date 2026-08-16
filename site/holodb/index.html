@@ -3,12 +3,12 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>HoloDb — the database that already knows the answer</title>
-<meta name="description" content="HoloDb is an embeddable .NET database that keeps aggregates maintained, not scanned — so SUM, COUNT and GROUP BY resolve in microseconds at any scale. A transactional ACID SQL store, an analytics engine, and a vector-search index over one copy of the data.">
+<title>HoloDb — the holographic .NET database</title>
+<meta name="description" content="HoloDb stores data as holograms in one associative store, queried three ways over one copy: exact SQL by key, similarity search by content (NEAREST), and constant-time analytics. Relational, vector and analytical in one embeddable .NET package.">
 <link rel="canonical" href="https://evaluatedapplications.github.io/holodb/">
 <meta property="og:type" content="website">
-<meta property="og:title" content="HoloDb — the database that already knows the answer">
-<meta property="og:description" content="Microsecond whole-table analytics at any scale, in one embeddable .NET dependency. SQL, analytics and vector search over one copy of the data. Reproducible benchmarks against DuckDB and SQL Server.">
+<meta property="og:title" content="HoloDb — the holographic .NET database">
+<meta property="og:description" content="Data stored as holograms in one associative store: query by key (SQL), by content (NEAREST similarity), or by aggregate — over one copy, in an embeddable .NET package. Reproducible benchmarks against DuckDB and SQL Server.">
 <meta property="og:url" content="https://evaluatedapplications.github.io/holodb/">
 <meta name="twitter:card" content="summary_large_image">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%238b7dff'/%3E%3Cstop offset='.5' stop-color='%2335d0c0'/%3E%3Cstop offset='1' stop-color='%23e6b450'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='32' height='32' rx='7' fill='%230a0c11'/%3E%3Cpath d='M16 5l9.5 5.5v11L16 27l-9.5-5.5v-11z' fill='none' stroke='url(%23g)' stroke-width='2'/%3E%3C/svg%3E">
@@ -89,10 +89,11 @@
 <header class="hero hd-hero">
   <div class="wrap">
     <span class="eyebrow">HoloDb · v1.7.2 · embeddable .NET · <span class="hd-kicker">holographic SQL</span></span>
-    <h1>The database that already knows the answer.</h1>
-    <p class="lede">HoloDb keeps aggregates <em>maintained, not scanned</em>, so <code>SUM</code>, <code>COUNT</code> and
-      <code>GROUP BY</code> resolve in <strong>microseconds from one million rows to tens of millions</strong>. A transactional
-      ACID database, an analytics engine, and a vector-search index over one copy of the data.</p>
+    <h1>One store. Query by key, content, or aggregate.</h1>
+    <p class="lede">HoloDb encodes every value as a phase vector and every row as a hologram, in a single <strong>associative store</strong>.
+      Because rows can be retrieved by resemblance as well as by key, one copy of the data answers three kinds of question —
+      exact SQL by primary key, <strong>similarity search by content</strong> with <code>NEAREST</code>, and analytics that read
+      maintained totals instead of scanning. No separate vector index, no OLAP cube, nothing to keep in sync.</p>
 
     <div class="race">
       <h3>Total invoiced across 25,000,000 invoices — <code>SELECT SUM(amount_cents)</code> — in-process, same query, same data, verified identical</h3>
@@ -108,9 +109,10 @@
     <div class="install" style="max-width:520px;margin-top:16px"><code>dotnet add package EvaluatedApplications.HoloDb</code><button class="copy" type="button">copy</button></div>
 
     <div class="fourstrip">
+      <span><b>Holographic</b> · one associative store</span>
       <span><b>SQL</b> · real ACID</span>
-      <span><b>Analytics</b> · size-independent</span>
-      <span><b>Vector</b> · NEAREST search</span>
+      <span><b>Vector</b> · NEAREST in SQL</span>
+      <span><b>Analytics</b> · maintained, not scanned</span>
       <span><b>Metered</b> · billing spine</span>
     </div>
   </div>
@@ -119,13 +121,13 @@
 <!-- HOW IT WORKS -->
 <section class="sec" id="how">
   <div class="wrap">
-    <div class="sec-head"><span class="dot" style="background:var(--c-foundation)"></span><h2>Answers kept, not just rows</h2><p>how it works</p></div>
+    <div class="sec-head"><span class="dot" style="background:var(--c-foundation)"></span><h2>How the holographic store works</h2><p>how it works</p></div>
     <div class="how-grid">
       <div>
-        <p class="desc" style="font-size:1.02rem">Most databases answer <code>SELECT SUM(amount_cents)</code> by reading every invoice and adding it up. Ten times the invoices, ten times the wait.</p>
-        <p class="desc" style="font-size:1.02rem">HoloDb keeps a <strong>running answer</strong> instead. Each column's total lives in a small maintained accumulator — a tally updated as rows go in and out, using a holographic encoding that packs a running sum into a fixed-size vector read back in constant time.</p>
-        <p class="desc" style="font-size:1.02rem">A request for the total reads that tally rather than adding up the ledger, so the answer stays a <strong>few microseconds from one million invoices to twenty-five million</strong>. The same mechanism powers <code>COUNT</code>, single-column <code>GROUP BY</code> (revenue by status, by month, by region), <code>MIN/MAX</code> and <code>DISTINCT</code>: the work happens once, at write time, and every read is nearly free.</p>
-        <p class="lim">Money stored as <b>integer minor units (cents)</b> — the standard for Stripe and accounting ledgers — makes revenue sums <b>exact and constant-time</b>, via a residue-phase codec. Real-valued columns use a fast SIMD pass instead.</p>
+        <p class="desc" style="font-size:1.02rem">Most databases store rows and bolt the rest on top — a separate analytical cube, a separate vector index — each kept in sync with the source of truth. HoloDb stores the source of truth <em>as holograms</em>.</p>
+        <p class="desc" style="font-size:1.02rem">Every value is encoded as a <strong>phase vector</strong>, and a row's columns are bound into one hologram; those holograms form a single associative store. Retrieval works by resemblance, not only by address — <code>NEAREST (region='EU', status='overdue')</code> returns the rows whose holograms are closest to a partial description, ranked by similarity: a vector query in SQL, over the same rows, with no separate index.</p>
+        <p class="desc" style="font-size:1.02rem">Aggregates fall out of the same algebra. An integer column's running total <em>is</em> a single vector — a residue-phase encoding read back in constant time — so <code>SUM</code>, <code>COUNT</code> and single-column <code>GROUP BY</code> read a maintained total rather than scanning, and hold their speed from one million rows to tens of millions.</p>
+        <p class="lim">Similarity uses a sublinear index above a few thousand rows. Integer sums are exact and constant-time; real-valued columns use a fast SIMD pass.</p>
       </div>
       <div class="how-diagram">
         <svg viewBox="0 0 360 280" width="100%" height="auto" aria-label="Rows flow into a maintained accumulator; reads bypass the rows">
@@ -252,17 +254,20 @@
 <!-- FEATURES -->
 <section class="sec" id="features">
   <div class="wrap">
-    <div class="sec-head"><span class="dot" style="background:var(--c-ml)"></span><h2>Four databases, one <code>dotnet add package</code></h2><p>capabilities</p></div>
+    <div class="sec-head"><span class="dot" style="background:var(--c-ml)"></span><h2>One store, four databases' worth of jobs</h2><p>capabilities</p></div>
+    <p class="desc" style="max-width:74ch;margin-bottom:20px">Relational rows, analytical rollups and a vector index are usually three separate systems kept in sync. Here they are three views of the same holographic store — one <code>dotnet add package</code>, one copy of the data.</p>
     <div class="grid">
+      <article class="card" style="--cat:var(--c-ml)"><div class="card-top"><h3>Holographic, associative store</h3></div>
+        <p class="desc">Values are encoded as complex <strong>phase vectors</strong>, and a row's columns are bound into one hologram, so rows can be retrieved by resemblance, not just by key. The maintained totals are superpositions — sums of encodings — that a row is removed from by exact subtraction, which keeps <code>UPDATE</code> and <code>DELETE</code> exact. Holograms are derived from the columns, not stored per row, so there is no per-row space cost.</p></article>
       <article class="card" style="--cat:var(--c-foundation)"><div class="card-top"><h3>Transactional SQL</h3></div>
         <p class="desc">Real ACID: a reader/writer lock, pre-transaction snapshot rolled back on any error, fsync write-ahead log, and crash recovery bounded by <em>live data, not write history</em>. A substantial SQL dialect — joins, subqueries in <code>IN</code>, <code>LIKE</code>, <code>BETWEEN</code>, <code>GROUP BY</code>/<code>HAVING</code>, transactions.</p>
         <p class="lim">One <code>PRIMARY KEY</code> per table (INT or TEXT). <b>No</b> OUTER joins or <code>ALTER TABLE</code> yet.</p></article>
+      <article class="card" style="--cat:var(--c-spatial)"><div class="card-top"><h3>Content-addressable search</h3></div>
+        <p class="desc">Retrieve by resemblance, not just by key: <code>SELECT … FROM t NEAREST (col=val,…) LIMIT k</code> ranks rows by similarity to a partial description — a vector query <em>in SQL</em>, over the <strong>same rows</strong>, with no separate index to build or keep in sync. A sublinear index takes over above ~8,000 rows in the in-memory engine.</p>
+        <p class="lim"><code>NEAREST</code> can't yet combine with <code>WHERE</code>/<code>GROUP</code>.</p></article>
       <article class="card" style="--cat:var(--c-data)"><div class="card-top"><h3>Size-independent analytics</h3></div>
-        <p class="desc">Whole-table <code>COUNT</code>/<code>SUM</code>/<code>MIN</code>/<code>MAX</code> and single-column <code>GROUP BY</code> answer from maintained holographic accumulators and per-block zone maps — <strong>O(1)</strong>, no scan, flat as the table grows. Compiled predicates and a columnar path keep ordinary filters fast too.</p>
+        <p class="desc">Because an integer total is itself one vector, whole-table <code>COUNT</code>/<code>SUM</code>/<code>MIN</code>/<code>MAX</code> and single-column <code>GROUP BY</code> read a maintained value in <strong>O(1)</strong> — no scan, flat as the table grows. Zone maps, compiled predicates and a columnar path keep ordinary filters fast.</p>
         <p class="lim">Integer aggregates are exact + constant-time; <b>real</b>-number sums use a SIMD scan.</p></article>
-      <article class="card" style="--cat:var(--c-spatial)"><div class="card-top"><h3>Vector search (NEAREST)</h3></div>
-        <p class="desc">Holographic similarity search <em>in SQL</em>: <code>SELECT … FROM t NEAREST (col=val,…) LIMIT k</code> ranks rows by similarity to a partial key — a vector-DB query over the <strong>same rows</strong>, with no separate vector index to build or keep in sync. Sublinear LSH index above ~8,000 rows.</p>
-        <p class="lim">In-RAM engine has the LSH index; <code>NEAREST</code> can't yet combine with <code>WHERE</code>/<code>GROUP</code>.</p></article>
       <article class="card" style="--cat:var(--c-data)"><div class="card-top"><h3>Durable, larger-than-memory</h3></div>
         <p class="desc">The paged engine stores tables on an 8&nbsp;KB buffer-pool page store with a redo-only WAL: cold pages spill to disk, so a table can <strong>exceed RAM</strong>, with bounded crash recovery — and the size-independent aggregates are maintained <em>on disk</em>.</p>
         <p class="lim">The primary-key index stays in RAM (~16&nbsp;B/row) — the limit for tables far bigger than memory.</p></article>
