@@ -1,5 +1,6 @@
 @page "/analyst"
 @inject IJSRuntime JS
+@inject HttpClient Http
 @using System.Diagnostics
 @using System.Globalization
 @using System.Text
@@ -12,16 +13,17 @@
     <header class="room-head">
         <nav class="crumb"><a href="/holodb/">HoloDb</a> <span>/</span> The Analyst</nav>
         <h1>The Analyst</h1>
-        <p class="lede">Your data analyst — <strong>free</strong>, and it never uploads a thing. Drop a CSV and it
-            profiles the whole file with a real SQL database <strong>running inside your browser tab</strong>: what it is,
-            what's typical, what's weird. Then it charts it, and answers any question you can put in SQL.</p>
+        <p class="lede">Your data analyst — <strong>free</strong>, and it never uploads a thing. Drop a CSV or pull a
+            <strong>live public feed</strong>, and a real SQL database <strong>running inside your browser tab</strong>
+            profiles the whole thing: what it is, what's typical, what's weird. Then it charts it, and answers any
+            question you can put in SQL — the sort of triage that usually means a database and a notebook.</p>
         <div class="badges">
-            <span>Free, no sign-up</span><span>Private — runs on your device</span><span>Real SQL, not a mock</span><span>Works offline</span>
+            <span>Free, no sign-up</span><span>Private — runs on your device</span><span>Real SQL, not a mock</span><span>Live public datasets</span>
         </div>
     </header>
 
     <ol class="steps">
-        <li><b>1</b> Drop your data</li>
+        <li><b>1</b> Load or fetch data</li>
         <li><b>2</b> Read the profile</li>
         <li><b>3</b> Chart &amp; query it</li>
         <li><b>4</b> Export the answer</li>
@@ -37,6 +39,20 @@
             <span>or click to browse — up to ~50&nbsp;MB, and it stays on your device</span>
             @if (_fileName is not null) { <span class="dz-file">@_fileName · @_charCount.ToString("N0") chars</span> }
         </div>
+    </div>
+
+    <div class="feeds-lead">…or pull a live public dataset — fetched straight into the in-browser database:</div>
+    <div class="feeds">
+        @foreach (var f in _feeds)
+        {
+            <button class="feed" @onclick="() => LoadFeed(f)" disabled="@_busy" type="button">
+                <span class="feed-emoji">@f.Emoji</span>
+                <span class="feed-body">
+                    <span class="feed-name">@f.Name <span class="feed-src">@f.Source</span></span>
+                    <span class="feed-task">@f.Task</span>
+                </span>
+            </button>
+        }
     </div>
 
     <details class="paste-wrap">
@@ -275,6 +291,21 @@
     record Entity(string Kind, long Count, List<string> Examples);
     record Flag(string Level, string Text);
     record Chart(string Title, string Kind, List<(string Label, double Value)> Data);
+    record Feed(string Emoji, string Name, string Source, string Task, string Url);
+
+    // Live public feeds that send CORS headers, so the browser can fetch them straight into the in-browser database.
+    readonly List<Feed> _feeds = new()
+    {
+        new Feed("🌎", "Earthquakes, last 30 days", "USGS",
+            "Every M2.5+ quake worldwide — magnitude, depth, place, time. Which regions, how deep, how the daily count trends.",
+            "https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/2.5_month.csv"),
+        new Feed("🏙️", "NYC 311 complaints", "NYC Open Data",
+            "The latest 5,000 service requests — complaint type, agency, borough, status. What the city is complaining about, and where.",
+            "https://data.cityofnewyork.us/resource/erm2-nwe9.csv?%24select=created_date,agency_name,complaint_type,descriptor,borough,status&%24order=created_date%20DESC&%24limit=5000"),
+        new Feed("🚦", "NYC traffic crashes", "NYC Open Data",
+            "The latest 5,000 collisions — borough, people injured and killed, contributing factor, vehicle type. Where crashes cluster, and why.",
+            "https://data.cityofnewyork.us/resource/h9gi-nx95.csv?%24select=crash_date,borough,number_of_persons_injured,number_of_persons_killed,contributing_factor_vehicle_1,vehicle_type_code1&%24order=crash_date%20DESC&%24limit=5000"),
+    };
 
     string _text = SampleCsv;
     string Text { get => _text; set { _text = value; _charCount = value.Length; } }
@@ -318,6 +349,23 @@
     static string ColFill(Col c, long n) { long m = c.Top.Count > 0 ? c.Top[0].N : 1; return (m > 0 ? n * 100.0 / m : 0).ToString("F1") + "%"; }
 
     void LoadSample() { Text = SampleCsv; _fileName = null; _done = false; _error = null; }
+
+    async Task LoadFeed(Feed f)
+    {
+        _busy = true; _error = null; _done = false; _progress = 0; _phase = $"Fetching {f.Name} from {f.Source}…"; StateHasChanged(); await Task.Delay(1);
+        try
+        {
+            Text = await Http.GetStringAsync(f.Url);
+            _fileName = $"{f.Name} · {f.Source} (live)";
+        }
+        catch (Exception ex)
+        {
+            _error = $"Couldn't fetch {f.Name}: {ex.Message}. The source may be rate-limiting or briefly down — try again, or upload a file.";
+            _busy = false; StateHasChanged();
+            return;
+        }
+        await Analyze();
+    }
 
     async Task OnFile(InputFileChangeEventArgs e)
     {
@@ -502,7 +550,28 @@
         return '\0';
     }
     static string DelimName(char d) => d switch { '\t' => "tab", ',' => "comma", ';' => "semicolon", '|' => "pipe", _ => "text" };
-    static string[] SplitRow(string line, char d) => line.Split(d).Select(f => f.Trim().Trim('"')).ToArray();
+    // RFC-4180-aware field split: quoted fields may contain the delimiter, and "" is an escaped quote.
+    static string[] SplitRow(string line, char d)
+    {
+        if (line.IndexOf('"') < 0) return line.Split(d).Select(f => f.Trim()).ToArray();   // fast path: no quotes
+        var fields = new List<string>();
+        var sb = new StringBuilder();
+        bool inQ = false, started = false;
+        for (var i = 0; i < line.Length; i++)
+        {
+            var c = line[i];
+            if (inQ)
+            {
+                if (c == '"') { if (i + 1 < line.Length && line[i + 1] == '"') { sb.Append('"'); i++; } else inQ = false; }
+                else sb.Append(c);
+            }
+            else if (c == d) { fields.Add(sb.ToString().Trim()); sb.Clear(); started = false; }
+            else if (c == '"' && !started) { inQ = true; started = true; }
+            else { if (!char.IsWhiteSpace(c)) started = true; sb.Append(c); }
+        }
+        fields.Add(sb.ToString().Trim());
+        return fields.ToArray();
+    }
 
     static FieldType InferType(string[][] cells, int c, long rows)
     {
