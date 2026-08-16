@@ -94,7 +94,23 @@
                 Open your network tab &mdash; nothing left your device.</p>
         </div>
 
-        @if (_flags.Count > 0)
+        <div class="drillbar">
+            @if (_filters.Count > 0)
+            {
+                <span class="drill-count"><strong>@_filteredRows.ToString("N0")</strong> of @_rows.ToString("N0") rows</span>
+                @foreach (var f in _filters)
+                {
+                    <button class="filter-chip" type="button" @onclick="() => RemoveFilter(f)">@f.Col = @(string.IsNullOrEmpty(f.Val) ? "(empty)" : f.Val) <span class="x">✕</span></button>
+                }
+                <button class="drill-clear" type="button" @onclick="ClearFilters">clear</button>
+            }
+            else
+            {
+                <span class="drill-hint">Click any value below — a category bar or a field's top value — to filter, and the whole page hones down to that subset.</span>
+            }
+        </div>
+
+        @if (_flags.Count > 0 && _filters.Count == 0)
         {
             <h2>What stands out</h2>
             <ul class="flags">
@@ -109,8 +125,26 @@
                 @foreach (var ch in _charts)
                 {
                     <figure class="chart-card">
-                        <figcaption>@ch.Title</figcaption>
-                        @RenderChart(ch)
+                        <figcaption>@ch.Title @if (ch.Kind == "bars" && ch.DimCol is not null) { <span class="click-note">click to filter</span> }</figcaption>
+                        @if (ch.Kind == "bars" && ch.DimCol is not null)
+                        {
+                            var mx = ch.Data.Count > 0 ? ch.Data.Max(d => Math.Abs(d.Value)) : 1.0;
+                            if (mx <= 0) { mx = 1; }
+                            <div class="hbars">
+                                @foreach (var pt in ch.Data.Take(14))
+                                {
+                                    <button class="hbar" type="button" disabled="@_busy" @onclick="() => ApplyFilter(ch.DimCol!, pt.Label)" title="filter to @pt.Label">
+                                        <span class="hbar-lbl">@(string.IsNullOrEmpty(pt.Label) ? "(empty)" : pt.Label)</span>
+                                        <span class="hbar-track"><span class="hbar-fill" style="width:@((Math.Abs(pt.Value) / mx * 100).ToString("F1", System.Globalization.CultureInfo.InvariantCulture))%"></span></span>
+                                        <span class="hbar-n">@Fmt(pt.Value)</span>
+                                    </button>
+                                }
+                            </div>
+                        }
+                        else
+                        {
+                            @RenderChart(ch)
+                        }
                     </figure>
                 }
             </div>
@@ -156,7 +190,7 @@
             <div class="cb-sql"><code>@_cbSql</code><button class="export" @onclick="ExportCb" type="button">↓ CSV</button></div>
         }
 
-        @if (_entities.Count > 0)
+        @if (_entities.Count > 0 && _filters.Count == 0)
         {
             <h2>Found inside</h2>
             <div class="chips">
@@ -194,11 +228,11 @@
                         <div class="col-bars">
                             @foreach (var (v, n) in c.Top)
                             {
-                                <div class="mini-row">
+                                <button class="mini-row" type="button" disabled="@_busy" @onclick="() => ApplyFilter(c.Name, v)" title="filter to @v">
                                     <span class="mini-val">@(string.IsNullOrEmpty(v) ? "(empty)" : v)</span>
                                     <div class="mini-bar"><div class="mini-fill" style="width:@ColFill(c, n)"></div></div>
                                     <span class="mini-n">@n.ToString("N0")</span>
-                                </div>
+                                </button>
                             }
                         </div>
                     }
@@ -290,7 +324,7 @@
     }
     record Entity(string Kind, long Count, List<string> Examples);
     record Flag(string Level, string Text);
-    record Chart(string Title, string Kind, List<(string Label, double Value)> Data);
+    record Chart(string Title, string Kind, List<(string Label, double Value)> Data, string? DimCol = null);
     record Feed(string Emoji, string Name, string Source, string Task, string Url);
 
     // Live public feeds that send CORS headers, so the browser can fetch them straight into the in-browser database.
@@ -323,6 +357,12 @@
     List<Flag> _flags = new();
     List<Chart> _charts = new();
 
+    // drill-down: click an auto-detected value to filter; the middle re-profiles against the subset
+    readonly List<(string Col, string Val)> _filters = new();
+    long _filteredRows;
+    List<string> _sqlNames = new();
+    FieldType[] _types = Array.Empty<FieldType>();
+
     // live SQL prompt over the profiled data
     Database? _db;
     string _sql = "";
@@ -345,7 +385,7 @@
     static string Secs(double ms) => ms < 1000 ? ms.ToString("F0") + " ms" : (ms / 1000).ToString("F2") + " s";
     static string ShortRate(double r) => r >= 1_000_000 ? (r / 1_000_000).ToString("F1") + "M" : r >= 1000 ? (r / 1000).ToString("F0") + "k" : r.ToString("F0");
     static string Num(double v) => Math.Abs(v) >= 1000 || v == Math.Floor(v) ? v.ToString("N0") : v.ToString("N2");
-    string MissPct(Col c) => (_rows > 0 ? c.Missing * 100.0 / _rows : 0).ToString("F0") + "%";
+    string MissPct(Col c) => (c.Count > 0 ? c.Missing * 100.0 / c.Count : 0).ToString("F0") + "%";
     static string ColFill(Col c, long n) { long m = c.Top.Count > 0 ? c.Top[0].N : 1; return (m > 0 ? n * 100.0 / m : 0).ToString("F1") + "%"; }
 
     void LoadSample() { Text = SampleCsv; _fileName = null; _done = false; _error = null; }
@@ -466,46 +506,19 @@
             swLoad.Stop();
             _loadRate = swLoad.Elapsed.TotalSeconds > 0 ? n / swLoad.Elapsed.TotalSeconds : n;
 
-            // ---- profile each column via HoloDb aggregates ----
+            // ---- profile each column via HoloDb aggregates (re-runnable against a drill-down filter) ----
             _phase = "Profiling…"; _progress = 0.9; StateHasChanged(); await Task.Delay(1);
+            _sqlNames = sqlNames; _types = types; _filters.Clear();
             var swQ = Stopwatch.StartNew();
-            for (int c = 0; c < names.Count; c++)
-            {
-                var col = new Col(sqlNames[c], types[c]);
-                string q = sqlNames[c];
-                var groups = db.Execute($"SELECT {q}, COUNT(*) FROM data GROUP BY {q}").Rows;
-                col.Distinct = groups.Count;
-                col.Count = _rows;
-                col.Top = groups.Select(r => (Cell(r[q]), (long)r["count(*)"]))
-                                .OrderByDescending(x => x.Item2).ThenBy(x => x.Item1).Take(6).ToList();
-                col.Missing = groups.Where(r => string.IsNullOrEmpty(Cell(r[q]))).Sum(r => (long)r["count(*)"]);
-                if (types[c] is FieldType.Integer or FieldType.Decimal)
-                {
-                    col.Min = ToD(db.Execute($"SELECT MIN({q}) FROM data").Rows[0].Values.First());
-                    col.Max = ToD(db.Execute($"SELECT MAX({q}) FROM data").Rows[0].Values.First());
-                    double sum = ToD(db.Execute($"SELECT SUM({q}) FROM data").Rows[0].Values.First());
-                    col.Mean = _rows > 0 ? sum / _rows : 0;
-                    (col.Outliers, col.Hist) = NumericScan(cells, c, col.Mean, col.Min, col.Max);
-                    col.Top = new();   // numeric columns show stats + a histogram chart, not a top-values bar
-                }
-                _cols.Add(col);
-            }
+            RunProfile();
             swQ.Stop();
             _queryMs = swQ.Elapsed.TotalMilliseconds;
 
-            // ---- entities from the raw text ----
+            // ---- entities from the raw text, headline flags ----
             _entities = ExtractEntities(_text.Length > EntityScanChars ? _text[..EntityScanChars] : _text);
-
-            // ---- headline flags ----
             _flags = BuildFlags(malformed);
 
-            // ---- auto-charts drawn from the profile ----
-            _charts = BuildCharts(db);
-
-            // ---- chart-builder options: sensible breakdown columns + numeric measures ----
-            _dimCols = _cols.Where(c => c.Type is FieldType.Category or FieldType.Boolean or FieldType.Date or FieldType.Integer).ToList();
-            if (_dimCols.Count == 0) _dimCols = _cols.ToList();
-            _numCols = _cols.Where(c => c.Type is FieldType.Integer or FieldType.Decimal).ToList();
+            // ---- chart-builder default selections ----
             _cbDim = _dimCols.FirstOrDefault()?.Name ?? "";
             _cbMeasure = _numCols.FirstOrDefault()?.Name ?? "";
             _cbAgg = _numCols.Count > 0 ? "sum" : "count"; _cbType = "auto"; _cbChart = null; _cbError = null;
@@ -606,41 +619,6 @@
         var s = new string[m]; for (int j = 0; j < m; j++) s[j] = c < cells[start + j].Length ? cells[start + j][c] : ""; return s;
     }
 
-    // one pass over a numeric column: 3-sigma outlier count + an equal-width histogram (up to 12 buckets)
-    static (long outliers, List<(double, double, long)> hist) NumericScan(string[][] cells, int c, double mean, double min, double max)
-    {
-        double sumsq = 0; long cnt = 0;
-        foreach (var row in cells)
-        {
-            if (c >= row.Length || string.IsNullOrEmpty(row[c])) continue;
-            if (!double.TryParse(row[c], NumberStyles.Any, CultureInfo.InvariantCulture, out var v)) continue;
-            sumsq += (v - mean) * (v - mean); cnt++;
-        }
-        double std = cnt > 0 ? Math.Sqrt(sumsq / cnt) : 0;
-        int buckets = 12; double span = max - min;
-        double width = span > 0 ? span / buckets : 1;
-        var counts = new long[buckets];
-        long outliers = 0;
-        foreach (var row in cells)
-        {
-            if (c >= row.Length || string.IsNullOrEmpty(row[c])) continue;
-            if (!double.TryParse(row[c], NumberStyles.Any, CultureInfo.InvariantCulture, out var v)) continue;
-            if (std > 0 && Math.Abs(v - mean) > 3 * std) outliers++;
-            int b = span > 0 ? (int)((v - min) / width) : 0;
-            if (b < 0) b = 0; if (b >= buckets) b = buckets - 1;
-            counts[b]++;
-        }
-        var hist = new List<(double, double, long)>();
-        for (int b = 0; b < buckets; b++)
-        {
-            double lo = min + b * width, hi = min + (b + 1) * width;
-            hist.Add((lo, hi, counts[b]));
-        }
-        // trim empty tail buckets so the chart isn't mostly blank
-        while (hist.Count > 1 && hist[^1].Item3 == 0) hist.RemoveAt(hist.Count - 1);
-        return (outliers, hist);
-    }
-
     static List<Entity> ExtractEntities(string t)
     {
         var patterns = new (string Kind, string Re)[]
@@ -697,8 +675,8 @@
         return outp;
     }
 
-    // Up to three charts inferred from the profile: a category breakdown, a numeric distribution, a time series.
-    List<Chart> BuildCharts(Database db)
+    // Up to three charts inferred from the profile: a category breakdown (its bars filter), a numeric distribution, a time series.
+    List<Chart> BuildCharts(Database db, string where)
     {
         var charts = new List<Chart>();
 
@@ -706,7 +684,7 @@
                        .OrderByDescending(c => c.Top.Count).FirstOrDefault();
         if (cat is not null)
             charts.Add(new Chart($"Records by {cat.Name}", "bars",
-                cat.Top.Select(t => (t.Val.Length == 0 ? "(empty)" : t.Val, (double)t.N)).ToList()));
+                cat.Top.Select(t => (t.Val, (double)t.N)).ToList(), cat.Name));
 
         var num = _cols.Where(c => c.Type is FieldType.Integer or FieldType.Decimal && c.Hist.Count > 1 && c.Max > c.Min)
                        .OrderByDescending(c => c.Distinct).FirstOrDefault();
@@ -722,7 +700,7 @@
             string title = nm is not null ? $"Total {nm.Name} over {dcol.Name}" : $"Records over {dcol.Name}";
             try
             {
-                var rs = db.Execute($"SELECT {dcol.Name}, {agg} FROM data GROUP BY {dcol.Name} ORDER BY {dcol.Name} LIMIT 400").Rows;
+                var rs = db.Execute($"SELECT {dcol.Name}, {agg} FROM data {where} GROUP BY {dcol.Name} ORDER BY {dcol.Name} LIMIT 400").Rows;
                 if (rs.Count > 2)
                     charts.Add(new Chart(title, "line", rs.Select(r => (Cell(r[dcol.Name]), ToD(r.Values.Last()))).ToList()));
             }
@@ -730,6 +708,85 @@
         }
         return charts;
     }
+
+    // Re-profile the loaded table against the current drill-down filter: rebuilds field stats, charts, and the filtered count.
+    void RunProfile()
+    {
+        if (_db is null) return;
+        string where = BuildWhere();
+        _filteredRows = ToLong(_db.Execute($"SELECT COUNT(*) FROM data {where}").Rows[0].Values.First());
+        var cols = new List<Col>(_sqlNames.Count);
+        for (int c = 0; c < _sqlNames.Count; c++)
+        {
+            var col = new Col(_sqlNames[c], _types[c]);
+            string q = _sqlNames[c];
+            var groups = _db.Execute($"SELECT {q}, COUNT(*) FROM data {where} GROUP BY {q}").Rows;
+            col.Distinct = groups.Count;
+            col.Count = _filteredRows;
+            col.Top = groups.Select(r => (Cell(r[q]), (long)r["count(*)"]))
+                            .OrderByDescending(x => x.Item2).ThenBy(x => x.Item1).Take(6).ToList();
+            col.Missing = groups.Where(r => string.IsNullOrEmpty(Cell(r[q]))).Sum(r => (long)r["count(*)"]);
+            if (_types[c] is FieldType.Integer or FieldType.Decimal)
+            {
+                (col.Min, col.Max, col.Mean, col.Outliers, col.Hist) = NumericStatsDb(q, where);
+                col.Top = new();   // numeric columns show stats + a histogram chart, not a top-values bar
+            }
+            cols.Add(col);
+        }
+        _cols = cols;
+        _charts = BuildCharts(_db, where);
+        _dimCols = _cols.Where(c => c.Type is FieldType.Category or FieldType.Boolean or FieldType.Date or FieldType.Integer).ToList();
+        if (_dimCols.Count == 0) _dimCols = _cols.ToList();
+        _numCols = _cols.Where(c => c.Type is FieldType.Integer or FieldType.Decimal).ToList();
+    }
+
+    // Numeric stats (min/max/mean/outliers/histogram) over the filtered rows — one column scan, filter-aware.
+    (double, double, double, long, List<(double, double, long)>) NumericStatsDb(string col, string where)
+    {
+        var res = _db!.Execute($"SELECT {col} FROM data {where}");
+        var vals = new List<double>(res.Rows.Count);
+        foreach (var r in res.Rows) { var v = r.Values.First(); if (v is null) continue; vals.Add(ToD(v)); }
+        if (vals.Count == 0) return (0, 0, 0, 0, new());
+        double min = vals[0], max = vals[0], sum = 0;
+        foreach (var v in vals) { if (v < min) min = v; if (v > max) max = v; sum += v; }
+        double mean = sum / vals.Count, sq = 0;
+        foreach (var v in vals) sq += (v - mean) * (v - mean);
+        double std = Math.Sqrt(sq / vals.Count);
+        long outliers = std > 0 ? vals.Count(v => Math.Abs(v - mean) > 3 * std) : 0;
+        int buckets = 12; double span = max - min, width = span > 0 ? span / buckets : 1;
+        var counts = new long[buckets];
+        foreach (var v in vals) { int b = span > 0 ? (int)((v - min) / width) : 0; if (b < 0) b = 0; if (b >= buckets) b = buckets - 1; counts[b]++; }
+        var hist = new List<(double, double, long)>();
+        for (int b = 0; b < buckets; b++) hist.Add((min + b * width, min + (b + 1) * width, counts[b]));
+        while (hist.Count > 1 && hist[^1].Item3 == 0) hist.RemoveAt(hist.Count - 1);
+        return (min, max, mean, outliers, hist);
+    }
+
+    static long ToLong(object? o) => o is null ? 0 : Convert.ToInt64(o, CultureInfo.InvariantCulture);
+
+    string BuildWhere()
+    {
+        if (_filters.Count == 0) return "";
+        var parts = _filters.Select(f =>
+        {
+            int ti = _sqlNames.IndexOf(f.Col);
+            bool isInt = ti >= 0 && _types[ti] == FieldType.Integer;
+            return isInt ? $"{f.Col} = {f.Val}" : $"{f.Col} = '{f.Val.Replace("'", "''")}'";
+        });
+        return "WHERE " + string.Join(" AND ", parts);
+    }
+
+    void ApplyFilter(string col, string val)
+    {
+        if (_db is null || _busy) return;
+        if (_filters.Any(f => f.Col == col && f.Val == val)) return;
+        _filters.RemoveAll(f => f.Col == col);   // one filter per column; drilling replaces it
+        _filters.Add((col, val));
+        try { RunProfile(); } catch (Exception ex) { _error = "Filter failed: " + ex.Message; }
+    }
+
+    void RemoveFilter((string Col, string Val) f) { _filters.Remove(f); RunProfile(); }
+    void ClearFilters() { _filters.Clear(); RunProfile(); }
 
     static string HistLabel(double lo, double hi) => $"{Num(lo)}–{Num(hi)}";
 

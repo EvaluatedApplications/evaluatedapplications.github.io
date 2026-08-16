@@ -58,7 +58,9 @@ h2 { font-size: 1.15rem; font-weight: 650; margin: 2.2rem 0 0.85rem; letter-spac
 .col-facts .warn { color: var(--bad); font-weight: 600; }
 
 .col-bars { display: flex; flex-direction: column; gap: 0.28rem; }
-.mini-row { display: grid; grid-template-columns: 1fr 3.5rem 2.5rem; align-items: center; gap: 0.4rem; }
+.mini-row { display: grid; grid-template-columns: 1fr 3.5rem 2.5rem; align-items: center; gap: 0.4rem; width: 100%; background: transparent; border: none; border-radius: 6px; padding: 0.15rem 0.3rem; cursor: pointer; text-align: left; font: inherit; }
+.mini-row:hover:not(:disabled) { background: color-mix(in srgb, var(--accent) 9%, transparent); }
+.mini-row:disabled { cursor: default; }
 .mini-val { font-size: 0.8rem; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mini-bar { background: var(--surface-2); border: 1px solid var(--border); border-radius: 5px; height: 0.7rem; overflow: hidden; }
 .mini-fill { height: 100%; background: var(--accent); border-radius: 5px; }
@@ -136,6 +138,27 @@ table.result tbody tr:hover td { color: var(--ink); }
 .outro { margin-top: 2.6rem; padding-top: 1.2rem; border-top: 1px solid var(--border); }
 .outro p { color: var(--ink-soft); font-size: 0.92rem; line-height: 1.55; }
 .outro code { font-family: var(--mono); font-size: 0.85rem; color: var(--accent-ink); background: var(--bg-2); padding: 0.1rem 0.4rem; border-radius: 5px; }
+
+/* ---- drill-down filter bar + clickable category bars ---- */
+.drillbar { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; margin: 1rem 0 0; min-height: 1.6rem; }
+.drill-hint { color: var(--ink-faint); font-size: 0.88rem; line-height: 1.4; }
+.drill-count { font-size: 0.95rem; color: var(--ink); font-variant-numeric: tabular-nums; margin-right: 0.2rem; }
+.drill-count strong { color: var(--accent-ink); }
+.filter-chip { background: color-mix(in srgb, var(--accent) 12%, var(--surface)); color: var(--ink); border: 1px solid var(--accent); border-radius: 999px; padding: 0.3rem 0.75rem; font-size: 0.84rem; font-family: var(--mono); cursor: pointer; }
+.filter-chip .x { color: var(--ink-faint); margin-left: 0.35rem; }
+.filter-chip:hover .x { color: var(--bad); }
+.drill-clear { background: transparent; border: 1px solid var(--border-2); color: var(--ink-soft); border-radius: 999px; padding: 0.3rem 0.75rem; font-size: 0.82rem; cursor: pointer; }
+.drill-clear:hover { border-color: var(--accent); color: var(--ink); }
+.click-note { font-size: 0.68rem; font-weight: 500; color: var(--ink-faint); font-family: var(--mono); margin-left: 0.4rem; text-transform: uppercase; letter-spacing: 0.05em; }
+
+.hbars { display: flex; flex-direction: column; gap: 0.25rem; padding: 0.2rem 0; }
+.hbar { display: grid; grid-template-columns: minmax(0, 1fr) 2.4fr auto; align-items: center; gap: 0.55rem; background: transparent; border: none; border-radius: 7px; padding: 0.3rem 0.4rem; cursor: pointer; text-align: left; font: inherit; }
+.hbar:hover:not(:disabled) { background: color-mix(in srgb, var(--accent) 9%, transparent); }
+.hbar:disabled { cursor: default; }
+.hbar-lbl { font-size: 0.86rem; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hbar-track { background: var(--surface-2); border: 1px solid var(--border); border-radius: 6px; height: 0.85rem; overflow: hidden; }
+.hbar-fill { display: block; height: 100%; background: var(--accent); border-radius: 6px; }
+.hbar-n { font-size: 0.82rem; color: var(--ink-soft); text-align: right; font-variant-numeric: tabular-nums; min-width: 3rem; }
 
 /* ---- live public data feeds ---- */
 .feeds-lead { margin: 1rem 0 0.6rem; color: var(--ink-faint); font-size: 0.9rem; }
