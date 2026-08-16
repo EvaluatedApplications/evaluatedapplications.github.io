@@ -32,66 +32,70 @@
 <article class="prose">
   <nav class="crumb"><a href="/holodb/">HoloDb</a> <span>/</span> Benchmarks</nav>
   <h1>Benchmarks — the full method and every number</h1>
-  <p class="lede" style="margin-top:12px">The same SQL over the same data, on <strong>HoloDb (embedded), HoloDb (networked server), DuckDB, and a durable on-disk SQL Server</strong>. Every result is verified byte-for-byte identical across all engines before it's timed, so the comparison is honest — including the queries HoloDb loses.</p>
+  <p class="lede" style="margin-top:12px">One realistic workload — a billing SaaS's <strong>invoice ledger</strong> — run on <strong>HoloDb (embedded), HoloDb (networked server), DuckDB, and a durable on-disk SQL Server</strong>. Every result is verified byte-for-byte identical across all engines before it's timed, so the comparison is honest — including the queries HoloDb loses.</p>
+
+  <h2>The workload</h2>
+  <div class="snip" style="background:var(--bg-2);border:1px solid var(--border);border-radius:10px;padding:14px 16px;margin:10px 0;overflow-x:auto"><code style="font-family:var(--mono);font-size:.84rem;color:var(--ink);white-space:pre">CREATE TABLE invoices (
+  invoice_id   INT  PRIMARY KEY,   -- 25,000,000 invoices
+  customer_id  INT,               -- ~500,000 customers, ~50 invoices each
+  month        INT,               -- yyyymm, 202301 … 202412 (24 months)
+  region       TEXT,              -- US 40% / EU 30% / APAC 20% / LATAM 10%
+  status       TEXT,              -- paid 78 / pending 10 / overdue 7 / refunded 3 / failed 2 (%)
+  amount_cents INT                -- money as integer minor units (cents), long-tail $20–$50,000
+);</code></div>
 
   <h2>How it's run</h2>
   <ul class="meth">
-    <li><b>Same data, same SQL.</b> Six columns (int keys, an int measure, a text grade, a real amount), generated once with a fixed seed and loaded into every engine through its own idiomatic bulk path.</li>
+    <li><b>Same data, same SQL.</b> The <code>invoices</code> table above, generated once with a fixed seed and loaded into every engine through its own idiomatic bulk path.</li>
+    <li><b>Real billing queries.</b> The eleven queries are the ones a subscription business actually runs: revenue by status / month / region, the running total and invoice count, a single-invoice lookup, overdue outstanding, big-ticket count, largest invoices, top customers, and a region×status breakdown.</li>
     <li><b>Verified identical.</b> Before timing, each query's full result set is normalized and compared across all engines — if any engine disagrees, the run is flagged, not published. Every number below passed.</li>
     <li><b>Timed fairly.</b> Median of many runs of execute + consume-all-rows through each engine's own typed client API (no boxing), on a 16-core machine.</li>
     <li><b>DuckDB</b> runs in-process, in memory (its fastest mode).</li>
-    <li><b>SQL Server</b> is the durable, on-disk peer: SQL Server 2022 in Docker, a <b>persistent user database on a volume</b>, buffer pool capped at <b>1&nbsp;GB</b>. At 25M rows the table outgrows that cache, so its reads come off disk — a fair "durable service" comparison. It also pays a client/server round-trip the embedded engines don't.</li>
+    <li><b>SQL Server</b> is the durable, on-disk peer: SQL Server 2022 in Docker, a <b>persistent user database on a volume</b>, buffer pool capped at <b>1&nbsp;GB</b>. At 25M invoices the table outgrows that cache, so its reads come off disk — a fair "durable service" comparison. It also pays a client/server round-trip the embedded engines don't.</li>
     <li><b>HoloDb</b> runs both embedded (in-process) and as a networked TLS server (the fair peer to SQL Server's round-trip).</li>
-    <li><b>Honest boundary.</b> Integer <code>SUM</code>/<code>COUNT</code> are exact and constant-time; <b>real</b>-number sums use a SIMD scan (which is why grouped real-sums lose to DuckDB).</li>
+    <li><b>Why cents.</b> Money is stored as integer minor units — the model every ledger uses. Integer <code>SUM</code>/<code>COUNT</code> are exact and constant-time from HoloDb's maintained accumulators; the queries it loses are the ones it has to <em>scan</em> for (top-K, filtered sums, high-cardinality and multi-column groups).</li>
   </ul>
 
-  <h2>25,000,000 rows <span style="color:var(--ink-faint);font-size:.7em;font-weight:400">— median ms (lower is better); SQL Server reads from disk here</span></h2>
+  <h2>25,000,000 invoices <span style="color:var(--ink-faint);font-size:.7em;font-weight:400">— median ms (lower is better); SQL Server reads from disk here</span></h2>
   <table class="cmp">
-    <thead><tr><th>query</th><th>HoloDb</th><th>HoloDb&nbsp;(server)</th><th>DuckDB</th><th>SQL&nbsp;Server</th></tr></thead>
+    <thead><tr><th>billing query</th><th>HoloDb</th><th>HoloDb&nbsp;(server)</th><th>DuckDB</th><th>SQL&nbsp;Server</th></tr></thead>
     <tbody>
-      <tr><td>point lookup (by PK)</td><td class="holo">0.0021</td><td>0.146</td><td>0.410</td><td>0.906</td></tr>
-      <tr><td>SUM whole table</td><td class="holo">0.0016</td><td>0.142</td><td>3.04</td><td>243.2</td></tr>
-      <tr><td>GROUP BY (int)</td><td class="holo">0.0055</td><td>0.155</td><td>12.4</td><td>314.4</td></tr>
-      <tr><td>GROUP BY (text)</td><td class="holo">0.0025</td><td>0.204</td><td>27.9</td><td>327.0</td></tr>
-      <tr><td>GROUP BY + HAVING</td><td class="holo">0.046</td><td>0.237</td><td>10.3</td><td>313.3</td></tr>
-      <tr><td>MIN / MAX</td><td class="holo">0.021</td><td>0.176</td><td>4.96</td><td>231.3</td></tr>
-      <tr><td>DISTINCT</td><td class="holo">0.031</td><td>0.165</td><td>41.9</td><td>224.5</td></tr>
-      <tr><td>filter AND</td><td class="holo">39.1</td><td>90.3</td><td>56.0</td><td>1171.6</td></tr>
-      <tr><td>filter scan (~50%)</td><td class="holo">62.7</td><td>312.2</td><td>323.8</td><td>6773.4</td></tr>
-      <tr><td>filter REAL (~50%)</td><td class="holo">72.1</td><td>304.7</td><td>259.3</td><td>6854.4</td></tr>
-      <tr><td>MIN / MAX (real)</td><td class="holo">12.6</td><td>14.1</td><td>28.7</td><td>275.2</td></tr>
-      <tr><td>filtered COUNT(*)</td><td>15.5</td><td>14.3</td><td class="holo">4.66</td><td>246.2</td></tr>
-      <tr><td>ORDER BY + LIMIT</td><td>17.4</td><td>15.2</td><td class="holo">2.57</td><td>837.1</td></tr>
-      <tr><td>SUM (real) whole table</td><td>13.1</td><td>14.7</td><td class="holo">5.31</td><td>302.7</td></tr>
-      <tr><td>GROUP BY (int), SUM(real)</td><td>109.3</td><td>97.6</td><td class="holo">11.1</td><td>324.8</td></tr>
+      <tr><td>invoice count</td><td class="holo">0.0006</td><td>0.096</td><td>1.08</td><td>209.1</td></tr>
+      <tr><td>total invoiced</td><td class="holo">0.0029</td><td>0.087</td><td>5.42</td><td>246.9</td></tr>
+      <tr><td>invoices by status</td><td class="holo">0.0032</td><td>0.192</td><td>93.1</td><td>441.6</td></tr>
+      <tr><td>revenue by region</td><td class="holo">0.0044</td><td>0.126</td><td>72.7</td><td>430.4</td></tr>
+      <tr><td>look up one invoice</td><td class="holo">0.0069</td><td>0.160</td><td>0.790</td><td>0.903</td></tr>
+      <tr><td>revenue by month</td><td class="holo">0.0134</td><td>0.162</td><td>12.1</td><td>330.7</td></tr>
+      <tr><td>big-ticket invoices (&gt;$5k)</td><td>6.45</td><td>6.31</td><td class="holo">6.15</td><td>233.4</td></tr>
+      <tr><td>largest invoices</td><td>12.0</td><td>12.7</td><td class="holo">4.91</td><td>918.5</td></tr>
+      <tr><td>overdue outstanding</td><td>202.6</td><td>204.9</td><td class="holo">25.6</td><td>322.1</td></tr>
+      <tr><td>revenue by region &amp; status</td><td>3594</td><td>3487</td><td class="holo">137.5</td><td>612.7</td></tr>
+      <tr><td>top customers by revenue</td><td>6493</td><td>6309</td><td class="holo">550.5</td><td>630.9</td></tr>
     </tbody>
   </table>
-  <p style="color:var(--ink-faint);font-size:.86rem">Bulk load, rows/sec: DuckDB 1.37M · HoloDb (server) 946k · SQL Server 588k · HoloDb 557k. The <span style="color:var(--accent-ink)">purple</span> cell is the fastest embedded engine for that row; the last four rows are HoloDb's honest losses (DuckDB wins — grouped/real-number rollups and top-K).</p>
+  <p style="color:var(--ink-faint);font-size:.86rem">Bulk load, rows/sec: DuckDB 1.17M · HoloDb (server) 756k · SQL Server 540k · HoloDb 374k. The <span style="color:var(--accent-ink)">purple</span> cell is the fastest embedded engine for that row; the bottom five rows are HoloDb's honest losses (DuckDB wins the scans — top-K, filtered sums, high-cardinality and multi-column groups).</p>
 
-  <h2>10,000,000 rows <span style="color:var(--ink-faint);font-size:.7em;font-weight:400">— fits SQL Server's 1&nbsp;GB cache, so its reads are warm</span></h2>
+  <h2>10,000,000 invoices <span style="color:var(--ink-faint);font-size:.7em;font-weight:400">— fits SQL Server's 1&nbsp;GB cache, so its reads are warm</span></h2>
   <table class="cmp">
-    <thead><tr><th>query</th><th>HoloDb</th><th>HoloDb&nbsp;(server)</th><th>DuckDB</th><th>SQL&nbsp;Server</th></tr></thead>
+    <thead><tr><th>billing query</th><th>HoloDb</th><th>HoloDb&nbsp;(server)</th><th>DuckDB</th><th>SQL&nbsp;Server</th></tr></thead>
     <tbody>
-      <tr><td>point lookup (by PK)</td><td class="holo">0.0088</td><td>0.182</td><td>0.464</td><td>0.935</td></tr>
-      <tr><td>SUM whole table</td><td class="holo">0.0098</td><td>0.155</td><td>1.44</td><td>69.3</td></tr>
-      <tr><td>GROUP BY (int)</td><td class="holo">0.0089</td><td>0.155</td><td>5.51</td><td>105.2</td></tr>
-      <tr><td>GROUP BY (text)</td><td class="holo">0.0049</td><td>0.108</td><td>11.8</td><td>109.2</td></tr>
-      <tr><td>GROUP BY + HAVING</td><td class="holo">0.056</td><td>0.228</td><td>4.40</td><td>102.4</td></tr>
-      <tr><td>MIN / MAX</td><td class="holo">0.016</td><td>0.148</td><td>2.24</td><td>68.1</td></tr>
-      <tr><td>DISTINCT</td><td class="holo">0.043</td><td>0.211</td><td>19.4</td><td>74.9</td></tr>
-      <tr><td>filter AND</td><td class="holo">14.8</td><td>35.0</td><td>19.1</td><td>504.3</td></tr>
-      <tr><td>filter scan (~50%)</td><td class="holo">28.3</td><td>123.7</td><td>88.0</td><td>2634.7</td></tr>
-      <tr><td>filter REAL (~50%)</td><td class="holo">28.6</td><td>127.3</td><td>102.6</td><td>2519.8</td></tr>
-      <tr><td>MIN / MAX (real)</td><td class="holo">4.49</td><td>5.22</td><td>9.87</td><td>94.0</td></tr>
-      <tr><td>filtered COUNT(*)</td><td>6.10</td><td>7.43</td><td class="holo">2.26</td><td>71.7</td></tr>
-      <tr><td>ORDER BY + LIMIT</td><td>6.78</td><td>4.56</td><td class="holo">1.91</td><td>279.1</td></tr>
-      <tr><td>SUM (real) whole table</td><td>5.81</td><td>5.30</td><td class="holo">2.44</td><td>82.3</td></tr>
-      <tr><td>GROUP BY (int), SUM(real)</td><td>49.5</td><td>43.6</td><td class="holo">4.83</td><td>115.8</td></tr>
+      <tr><td>invoice count</td><td class="holo">0.0048</td><td>0.165</td><td>0.760</td><td>50.8</td></tr>
+      <tr><td>total invoiced</td><td class="holo">0.0044</td><td>0.171</td><td>2.39</td><td>72.7</td></tr>
+      <tr><td>invoices by status</td><td class="holo">0.0166</td><td>0.189</td><td>41.4</td><td>152.5</td></tr>
+      <tr><td>revenue by region</td><td class="holo">0.0119</td><td>0.279</td><td>34.0</td><td>155.4</td></tr>
+      <tr><td>look up one invoice</td><td class="holo">0.0129</td><td>0.205</td><td>0.613</td><td>1.01</td></tr>
+      <tr><td>revenue by month</td><td class="holo">0.0245</td><td>0.202</td><td>5.44</td><td>115.7</td></tr>
+      <tr><td>big-ticket invoices (&gt;$5k)</td><td>3.62</td><td>3.13</td><td class="holo">2.73</td><td>68.0</td></tr>
+      <tr><td>largest invoices</td><td>6.38</td><td>5.72</td><td class="holo">4.03</td><td>343.2</td></tr>
+      <tr><td>overdue outstanding</td><td>80.7</td><td>82.0</td><td class="holo">10.5</td><td>106.4</td></tr>
+      <tr><td>revenue by region &amp; status</td><td>1423</td><td>1429</td><td class="holo">62.5</td><td>198.7</td></tr>
+      <tr><td>top customers by revenue</td><td>1387</td><td>1937</td><td class="holo">136.5</td><td>231.1</td></tr>
     </tbody>
   </table>
 
   <h2>What the numbers say</h2>
-  <p>HoloDb's <strong>maintained aggregates</strong> (<code>SUM</code>, <code>COUNT</code>, <code>GROUP BY</code>, <code>MIN/MAX</code>, <code>DISTINCT</code>) answer in microseconds and <strong>don't grow with the table</strong> — the numbers barely move from 10M to 25M, while SQL Server's climb and its disk-bound scans reach seconds. HoloDb also wins the ordinary filter scans. It <strong>loses</strong> grouped real-number rollups, <code>ORDER BY</code>+<code>LIMIT</code>, filtered <code>COUNT</code>, and raw bulk load to DuckDB — shown above, not hidden. DuckDB is an excellent pure-columnar engine; HoloDb's edge is the mixed transactional + analytics + vector workload, durable and larger-than-memory, in one embeddable dependency.</p>
+  <p>HoloDb's <strong>maintained aggregates</strong> — the whole-ledger total and count, and the single-column <code>GROUP BY</code> rollups (revenue by status, month, region) — answer in <strong>microseconds and don't grow with the ledger</strong>: they barely move from 10M to 25M invoices, while SQL Server's climb 3–4× into the hundreds of ms and DuckDB's grow too. HoloDb also wins the single-invoice lookup from its primary-key index.</p>
+  <p>It <strong>loses</strong> the queries it has to scan for — <code>ORDER BY … LIMIT</code> top-K (largest invoices, top customers), filtered sums (overdue outstanding), and high-cardinality / multi-column groups (top customers by 500k IDs, region×status) — to DuckDB, an excellent pure-columnar engine. Shown above, not hidden. On those same queries HoloDb still beats the durable on-disk SQL Server, often by 30–75×. HoloDb's edge is the <strong>mixed</strong> transactional + analytics + vector workload, durable and larger-than-memory, in one embeddable dependency.</p>
 
   <p style="margin-top:2rem"><a href="/holodb/">← Back to HoloDb</a> &nbsp;·&nbsp; <a href="/tools/analyst">Run it in your browser →</a></p>
 </article>

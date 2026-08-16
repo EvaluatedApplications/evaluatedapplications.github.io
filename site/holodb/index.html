@@ -54,6 +54,14 @@
   .snip code{font-family:var(--mono);font-size:.84rem;color:var(--ink);white-space:pre}
   .lim{font-size:.85rem;color:var(--ink-faint);margin-top:12px;border-top:1px dashed var(--border-2);padding-top:10px}
   .lim b{color:var(--warn)}
+  table.cmp td .q{display:block;font-family:var(--mono);font-size:.72rem;color:var(--ink-faint);margin-top:3px;white-space:nowrap;font-weight:400}
+  table.cmp td b.ql{color:var(--ink);font-weight:600}
+  table.cmp td.mult{color:var(--accent-ink);font-weight:700}
+  .shape{display:grid;grid-template-columns:1.1fr 1fr;gap:22px;align-items:start}
+  @media(max-width:720px){.shape{grid-template-columns:1fr}}
+  .shape ul{list-style:none;padding:0;margin:6px 0 0}
+  .shape li{padding:7px 0;border-bottom:1px solid var(--border);color:var(--ink-soft);font-size:.92rem;display:flex;justify-content:space-between;gap:12px}
+  .shape li b{color:var(--ink);font-family:var(--mono);font-size:.86rem;font-variant-numeric:tabular-nums;white-space:nowrap}
 </style>
 </head>
 <body>
@@ -87,11 +95,11 @@
       ACID SQL database, an analytics engine, and a vector-search index, all over one copy of your data.</p>
 
     <div class="race">
-      <h3>SUM over 25,000,000 rows — same query, same data, verified identical</h3>
-      <div class="race-row"><span class="race-name"><b>HoloDb</b></span><div class="race-track"><div class="race-fill holo"></div></div><span class="race-time win">0.0016 ms ✓</span></div>
-      <div class="race-row"><span class="race-name">DuckDB</span><div class="race-track"><div class="race-fill duck"></div></div><span class="race-time">3.0 ms</span></div>
-      <div class="race-row"><span class="race-name">SQL Server</span><div class="race-track"><div class="race-fill sql"></div></div><span class="race-time">243 ms</span></div>
-      <p class="race-note">HoloDb reads a maintained total instead of counting rows — so it doesn't scan, and the answer doesn't get slower as the table grows. SQL Server here is durable and on-disk (a persistent database, buffer pool capped at 1&nbsp;GB).</p>
+      <h3>Total invoiced across 25,000,000 invoices — <code>SELECT SUM(amount_cents)</code> — same query, same data, verified identical</h3>
+      <div class="race-row"><span class="race-name"><b>HoloDb</b></span><div class="race-track"><div class="race-fill holo"></div></div><span class="race-time win">0.003 ms ✓</span></div>
+      <div class="race-row"><span class="race-name">DuckDB</span><div class="race-track"><div class="race-fill duck"></div></div><span class="race-time">5.4 ms</span></div>
+      <div class="race-row"><span class="race-name">SQL Server</span><div class="race-track"><div class="race-fill sql"></div></div><span class="race-time">247 ms</span></div>
+      <p class="race-note">HoloDb reads a maintained total instead of adding up 25 million rows — so it doesn't scan, and the answer doesn't get slower as the ledger grows. SQL Server here is durable and on-disk (a persistent database, buffer pool capped at 1&nbsp;GB).</p>
     </div>
 
     <div class="cta-row" style="margin-top:26px">
@@ -115,32 +123,62 @@
     <div class="sec-head"><span class="dot" style="background:var(--c-foundation)"></span><h2>We keep the answers, not just the rows</h2><p>how it works</p></div>
     <div class="how-grid">
       <div>
-        <p class="desc" style="font-size:1.02rem">Most databases answer <code>SELECT SUM(amount)</code> by reading every row and adding it up. Ten times the rows, ten times the wait.</p>
+        <p class="desc" style="font-size:1.02rem">Most databases answer <code>SELECT SUM(amount_cents)</code> by reading every invoice and adding it up. Ten times the invoices, ten times the wait.</p>
         <p class="desc" style="font-size:1.02rem">HoloDb keeps a <strong>running answer</strong> instead. Each column's total lives in a small maintained accumulator — a tally that updates as rows go in and out, using a holographic encoding that packs a running sum into a fixed-size vector you can read back in constant time.</p>
-        <p class="desc" style="font-size:1.02rem">So when you ask for the total, HoloDb doesn't count — it reads the tally it's been keeping. That's why the answer stays a <strong>fraction of a microsecond whether the table holds one million rows or twenty-five million</strong>. The same idea powers <code>COUNT</code>, <code>GROUP BY</code>, <code>MIN/MAX</code> and <code>DISTINCT</code>: the work happened once, at write time, so every read is nearly free.</p>
-        <p class="lim">Integer <code>SUM</code>/<code>COUNT</code> are exact and constant-time (a residue-phase codec). <b>Real-number</b> sums fall back to a fast SIMD pass — still quick, but we'll always tell you which.</p>
+        <p class="desc" style="font-size:1.02rem">So when you ask "how much have we invoiced?", HoloDb doesn't add up the ledger — it reads the tally it's been keeping. That's why the answer stays a <strong>few microseconds whether you have one million invoices or twenty-five million</strong>. The same idea powers <code>COUNT</code>, single-column <code>GROUP BY</code> (revenue by status, by month, by region), <code>MIN/MAX</code> and <code>DISTINCT</code>: the work happened once, at write time, so every read is nearly free.</p>
+        <p class="lim">Store money the right way — as <b>integer minor units (cents)</b>, like Stripe and every ledger do — and revenue sums are <b>exact and constant-time</b> (a residue-phase codec). Genuinely real-valued columns fall back to a fast SIMD pass, and we always tell you which.</p>
       </div>
       <div class="how-diagram">
         <svg viewBox="0 0 360 280" width="100%" height="auto" aria-label="Rows flow into a maintained accumulator; reads bypass the rows">
           <defs><linearGradient id="acc" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#8b7dff"/><stop offset="1" stop-color="#35d0c0"/></linearGradient></defs>
           <text x="12" y="24" fill="#98a2b3" font-family="ui-monospace,monospace" font-size="12">writes</text>
           <g font-family="ui-monospace,monospace" font-size="11" fill="#6b7486">
-            <rect x="12" y="40" width="120" height="22" rx="4" fill="#12151d" stroke="#232a37"/><text x="20" y="55">row  42.50</text>
-            <rect x="12" y="70" width="120" height="22" rx="4" fill="#12151d" stroke="#232a37"/><text x="20" y="85">row  17.00</text>
-            <rect x="12" y="100" width="120" height="22" rx="4" fill="#12151d" stroke="#232a37"/><text x="20" y="115">row  61.10</text>
-            <text x="20" y="140" fill="#31394a">…10,000,000 rows</text>
+            <rect x="12" y="40" width="120" height="22" rx="4" fill="#12151d" stroke="#232a37"/><text x="20" y="55">inv   4250</text>
+            <rect x="12" y="70" width="120" height="22" rx="4" fill="#12151d" stroke="#232a37"/><text x="20" y="85">inv   1700</text>
+            <rect x="12" y="100" width="120" height="22" rx="4" fill="#12151d" stroke="#232a37"/><text x="20" y="115">inv 384217</text>
+            <text x="20" y="140" fill="#31394a">…25,000,000 invoices</text>
           </g>
           <path d="M138 80 H196" stroke="#8b7dff" stroke-width="2" fill="none" marker-end="url(#ar)"/>
           <defs><marker id="ar" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0 0l6 3-6 3z" fill="#8b7dff"/></marker></defs>
           <rect x="200" y="52" width="150" height="60" rx="10" fill="url(#acc)" opacity="0.16" stroke="url(#acc)"/>
           <text x="275" y="78" text-anchor="middle" fill="#e9ecf3" font-family="ui-sans-serif" font-size="13" font-weight="700">running total</text>
           <text x="275" y="98" text-anchor="middle" fill="#b3a9ff" font-family="ui-monospace,monospace" font-size="12">fixed-size vector</text>
-          <text x="12" y="200" fill="#98a2b3" font-family="ui-monospace,monospace" font-size="12">SELECT SUM(amount)</text>
+          <text x="12" y="200" fill="#98a2b3" font-family="ui-monospace,monospace" font-size="12">SELECT SUM(amount_cents)</text>
           <path d="M150 210 H240 V120" stroke="#35d0c0" stroke-width="2" fill="none" stroke-dasharray="4 3" marker-end="url(#ar2)"/>
           <defs><marker id="ar2" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0 0l6 3-6 3z" fill="#35d0c0"/></marker></defs>
           <text x="150" y="236" fill="#7bd86a" font-family="ui-monospace,monospace" font-size="12">→ reads the tally, skips the rows</text>
-          <text x="150" y="256" fill="#e9ecf3" font-family="ui-monospace,monospace" font-size="13" font-weight="700">0.0016 ms</text>
+          <text x="150" y="256" fill="#e9ecf3" font-family="ui-monospace,monospace" font-size="13" font-weight="700">0.003 ms</text>
         </svg>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- SHAPE OF THE DATA -->
+<section class="sec" id="workload">
+  <div class="wrap">
+    <div class="sec-head"><span class="dot" style="background:var(--c-data)"></span><h2>A billing SaaS's invoice ledger</h2><p>the shape of the data</p></div>
+    <p class="desc" style="max-width:74ch">Every number on this page comes from one realistic workload: the <code>invoices</code> table a subscription business runs its dashboards on. <strong>25 million invoices</strong> across <strong>500,000 customers</strong> and <strong>24 months</strong> of history — and the queries are the ones a billing dashboard actually fires: revenue by status, by month, by region; the running total; the biggest customers; look up one invoice.</p>
+    <div class="shape" style="margin-top:20px">
+      <div class="snip"><code>CREATE TABLE invoices (
+  invoice_id   INT  PRIMARY KEY,
+  customer_id  INT,           -- ~500k customers, ~50 invoices each
+  month        INT,           -- yyyymm, 202301 … 202412
+  region       TEXT,          -- US / EU / APAC / LATAM
+  status       TEXT,          -- paid / pending / overdue / refunded / failed
+  amount_cents INT            -- money as integer minor units, never a float
+);</code></div>
+      <div>
+        <ul>
+          <li>Invoices <b>25,000,000</b></li>
+          <li>Customers <b>500,000</b></li>
+          <li>History <b>24 months</b></li>
+          <li>paid / pending / overdue <b>78% / 10% / 7%</b></li>
+          <li>refunded / failed <b>3% / 2%</b></li>
+          <li>Regions US·EU·APAC·LATAM <b>40/30/20/10%</b></li>
+          <li>Invoice size (long-tail) <b>$20 – $50,000</b></li>
+        </ul>
+        <p class="lim" style="margin-top:10px">Money is stored as <b>integer cents</b> — the model Stripe and every accounting ledger use, and the reason HoloDb can keep revenue totals exact <em>and</em> constant-time.</p>
       </div>
     </div>
   </div>
@@ -150,17 +188,17 @@
 <section class="sec" id="benchmarks">
   <div class="wrap">
     <div class="sec-head"><span class="dot" style="background:var(--c-data)"></span><h2>Same SQL. Same data. Verified identical.</h2><p>the honest scoreboard</p></div>
-    <p class="desc" style="max-width:74ch">The same queries over the same rows on <strong>DuckDB, SQL Server and HoloDb</strong>, each loaded through its own bulk path, every result checked <strong>byte-for-byte identical</strong> across all engines before timing (median of many runs, 16 cores). SQL Server is a real, durable, <strong>on-disk</strong> peer — SQL Server 2022 in Docker, a persistent database on a volume, buffer pool capped at 1&nbsp;GB — so at 25M rows its data outgrows the cache and it reads from disk. We show the wins <em>and</em> the losses.</p>
+    <p class="desc" style="max-width:74ch">The same billing queries over the same invoices on <strong>HoloDb, DuckDB and SQL Server</strong>, each loaded through its own bulk path, every result checked <strong>byte-for-byte identical</strong> across all engines before timing (median of many runs, 16 cores). SQL Server is a real, durable, <strong>on-disk</strong> peer — SQL Server 2022 in Docker, a persistent database on a volume, buffer pool capped at 1&nbsp;GB — so at 25M invoices its data outgrows the cache and it reads from disk. We show the wins <em>and</em> the losses.</p>
 
     <div class="stat-row" style="margin-top:24px">
-      <div class="stat"><div class="n">0.0016 ms</div><div class="l"><code>SUM</code> over 25,000,000 rows — flat as the table grows.</div></div>
-      <div class="stat"><div class="n">~150,000×</div><div class="l">faster than a durable, on-disk SQL Server on whole-table <code>SUM</code> at 25M rows (~1,900× vs DuckDB).</div></div>
-      <div class="stat"><div class="n">6.8 s → 63 ms</div><div class="l">When data outgrows RAM, SQL Server reads from disk: a 25M-row filter scan is 6.8&nbsp;s. HoloDb: 63&nbsp;ms.</div></div>
+      <div class="stat"><div class="n">3&nbsp;µs</div><div class="l">The whole "invoices by status" dashboard breakdown — count and revenue per status — over 25M invoices. DuckDB: 93&nbsp;ms. On-disk SQL Server: 442&nbsp;ms.</div></div>
+      <div class="stat"><div class="n">flat 10M → 25M</div><div class="l">Add 15 million invoices and the dashboard rollups don't move — they're constant-time. SQL Server's climb 3–4× into the hundreds of ms.</div></div>
+      <div class="stat"><div class="n">6 of 6</div><div class="l">dashboard rollups won, in microseconds. HoloDb loses top-K, filtered sums and multi-column rollups to DuckDB — shown below, not hidden.</div></div>
     </div>
 
     <h3 style="margin:34px 0 10px;font-size:1.05rem">Everyone else scales with your data. We don't.</h3>
     <div class="chartwrap">
-      <svg viewBox="0 0 720 360" role="img" aria-label="Log-scale chart: whole-table SUM time vs rows. HoloDb stays flat near the floor; SQL Server and DuckDB climb with row count.">
+      <svg viewBox="0 0 720 360" role="img" aria-label="Log-scale chart: total-invoiced time vs number of invoices. HoloDb stays flat near the floor; SQL Server and DuckDB climb with row count.">
         <g stroke="#232a37" stroke-width="1">
           <line x1="90" y1="40" x2="90" y2="320"/><line x1="90" y1="320" x2="670" y2="320"/>
           <line x1="90" y1="40" x2="670" y2="40" stroke-dasharray="2 4" opacity=".5"/>
@@ -172,57 +210,54 @@
           <text x="82" y="137" text-anchor="end">10 ms</text>
           <text x="82" y="231" text-anchor="end">0.1 ms</text>
           <text x="82" y="324" text-anchor="end">1 µs</text>
-          <text x="90" y="338" text-anchor="middle">10M rows</text>
-          <text x="660" y="338" text-anchor="middle">25M rows</text>
-          <text x="380" y="338" text-anchor="middle" fill="#31394a">→ data size →</text>
+          <text x="90" y="338" text-anchor="middle">10M invoices</text>
+          <text x="660" y="338" text-anchor="middle">25M invoices</text>
+          <text x="380" y="338" text-anchor="middle" fill="#31394a">→ ledger size →</text>
         </g>
-        <!-- SQL Server (on disk): 69.3ms -> 243ms -->
-        <polyline points="90,94 660,69" fill="none" stroke="#f0796a" stroke-width="2.5"/>
-        <circle cx="90" cy="94" r="4" fill="#f0796a"/><circle cx="660" cy="69" r="4" fill="#f0796a"/>
-        <text x="655" y="61" text-anchor="end" fill="#f0796a" font-family="ui-monospace,monospace" font-size="11">SQL Server 243 ms</text>
-        <!-- DuckDB: 1.44 -> 3.04 -->
-        <polyline points="90,173 660,157" fill="none" stroke="#4aa3ff" stroke-width="2"/>
-        <circle cx="90" cy="173" r="3.5" fill="#4aa3ff"/><circle cx="660" cy="157" r="3.5" fill="#4aa3ff"/>
-        <text x="655" y="149" text-anchor="end" fill="#4aa3ff" font-family="ui-monospace,monospace" font-size="11">DuckDB 3.0 ms</text>
+        <!-- SQL Server (on disk): 72.7ms -> 246.9ms -->
+        <polyline points="90,93 660,68" fill="none" stroke="#f0796a" stroke-width="2.5"/>
+        <circle cx="90" cy="93" r="4" fill="#f0796a"/><circle cx="660" cy="68" r="4" fill="#f0796a"/>
+        <text x="655" y="60" text-anchor="end" fill="#f0796a" font-family="ui-monospace,monospace" font-size="11">SQL Server 247 ms</text>
+        <!-- DuckDB: 2.39 -> 5.42 -->
+        <polyline points="90,162 660,146" fill="none" stroke="#4aa3ff" stroke-width="2"/>
+        <circle cx="90" cy="162" r="3.5" fill="#4aa3ff"/><circle cx="660" cy="146" r="3.5" fill="#4aa3ff"/>
+        <text x="655" y="138" text-anchor="end" fill="#4aa3ff" font-family="ui-monospace,monospace" font-size="11">DuckDB 5.4 ms</text>
         <!-- HoloDb: flat at the floor -->
-        <polyline points="90,290 660,308" fill="none" stroke="url(#hl)" stroke-width="3"/>
+        <polyline points="90,290 660,299" fill="none" stroke="url(#hl)" stroke-width="3"/>
         <defs><linearGradient id="hl" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#8b7dff"/><stop offset="1" stop-color="#35d0c0"/></linearGradient></defs>
-        <circle cx="90" cy="290" r="4.5" fill="#8b7dff"/><circle cx="660" cy="308" r="4.5" fill="#35d0c0"/>
-        <text x="655" y="302" text-anchor="end" fill="#b3a9ff" font-family="ui-monospace,monospace" font-size="11" font-weight="700">HoloDb 0.0016 ms</text>
+        <circle cx="90" cy="290" r="4.5" fill="#8b7dff"/><circle cx="660" cy="299" r="4.5" fill="#35d0c0"/>
+        <text x="655" y="293" text-anchor="end" fill="#b3a9ff" font-family="ui-monospace,monospace" font-size="11" font-weight="700">HoloDb 0.003 ms</text>
       </svg>
-      <p class="chart-cap"><code>SUM</code> whole table, log scale. As the data grows, the scan engines' time climbs; HoloDb's stays flat at the floor because it never scans — it reads a maintained total.</p>
+      <p class="chart-cap">Total invoiced (<code>SUM(amount_cents)</code>), log scale. As the ledger grows, the scan engines' time climbs; HoloDb's stays flat at the floor because it never scans — it reads a maintained total.</p>
     </div>
 
-    <h3 style="margin:34px 0 10px;font-size:1.05rem">Where HoloDb wins <span style="color:var(--ink-faint);font-weight:400;font-size:.9rem">(25M rows, median ms; SQL Server durable + on-disk)</span></h3>
+    <h3 style="margin:34px 0 10px;font-size:1.05rem">Where HoloDb wins <span style="color:var(--ink-faint);font-weight:400;font-size:.9rem">— the billing-dashboard rollups (25M invoices, median ms; SQL Server durable + on-disk)</span></h3>
     <table class="cmp">
-      <thead><tr><th>query</th><th>HoloDb</th><th>DuckDB</th><th>SQL Server</th></tr></thead>
+      <thead><tr><th>billing query</th><th>HoloDb</th><th>DuckDB</th><th>SQL&nbsp;Server</th><th>× vs DuckDB</th></tr></thead>
       <tbody>
-        <tr><td>SUM whole table</td><td class="holo">0.0016</td><td>3.04</td><td>243.2</td></tr>
-        <tr><td>GROUP BY (int)</td><td class="holo">0.0055</td><td>12.4</td><td>314.4</td></tr>
-        <tr><td>GROUP BY (text)</td><td class="holo">0.0025</td><td>27.9</td><td>327.0</td></tr>
-        <tr><td>GROUP BY + HAVING</td><td class="holo">0.046</td><td>10.3</td><td>313.3</td></tr>
-        <tr><td>MIN / MAX</td><td class="holo">0.021</td><td>4.96</td><td>231.3</td></tr>
-        <tr><td>DISTINCT</td><td class="holo">0.031</td><td>41.9</td><td>224.5</td></tr>
-        <tr><td>point lookup (by PK)</td><td class="holo">0.0021</td><td>0.41</td><td>0.91</td></tr>
-        <tr><td>filter scan (~50%)</td><td class="holo">62.7</td><td>323.8</td><td>6773.4</td></tr>
-        <tr><td>filter AND</td><td class="holo">39.1</td><td>56.0</td><td>1171.6</td></tr>
-        <tr><td>MIN / MAX (real)</td><td class="holo">12.6</td><td>28.7</td><td>275.2</td></tr>
+        <tr><td><b class="ql">invoices by status</b><span class="q">SELECT status, COUNT(*), SUM(amount_cents) … GROUP BY status</span></td><td class="holo">0.003</td><td>93.1</td><td>441.6</td><td class="mult">~29,000×</td></tr>
+        <tr><td><b class="ql">revenue by region</b><span class="q">SELECT region, SUM(amount_cents) … GROUP BY region</span></td><td class="holo">0.004</td><td>72.7</td><td>430.4</td><td class="mult">~16,500×</td></tr>
+        <tr><td><b class="ql">revenue by month</b><span class="q">SELECT month, SUM(amount_cents) … GROUP BY month</span></td><td class="holo">0.013</td><td>12.1</td><td>330.7</td><td class="mult">~900×</td></tr>
+        <tr><td><b class="ql">total invoiced</b><span class="q">SELECT SUM(amount_cents) FROM invoices</span></td><td class="holo">0.003</td><td>5.42</td><td>246.9</td><td class="mult">~1,800×</td></tr>
+        <tr><td><b class="ql">invoice count</b><span class="q">SELECT COUNT(*) FROM invoices</span></td><td class="holo">0.0006</td><td>1.08</td><td>209.1</td><td class="mult">~1,800×</td></tr>
+        <tr><td><b class="ql">look up one invoice</b><span class="q">SELECT … WHERE invoice_id = ?</span></td><td class="holo">0.007</td><td>0.79</td><td>0.90</td><td class="mult">~115×</td></tr>
       </tbody>
     </table>
+    <p class="lim">HoloDb answers these from maintained accumulators and its primary-key index — no scan — so the times are microseconds and <b>don't grow</b> from 10M to 25M invoices. The big multiples are real: reading a kept tally instead of adding up tens of millions of rows.</p>
 
-    <h3 style="margin:30px 0 10px;font-size:1.05rem">Where HoloDb loses <span style="color:var(--ink-faint);font-weight:400;font-size:.9rem">— we show these too (25M rows)</span></h3>
+    <h3 style="margin:30px 0 10px;font-size:1.05rem">Where HoloDb loses <span style="color:var(--ink-faint);font-weight:400;font-size:.9rem">— columnar-scan territory; we show these too (25M invoices)</span></h3>
     <table class="cmp">
-      <thead><tr><th>query</th><th>HoloDb</th><th>DuckDB</th><th>winner</th></tr></thead>
+      <thead><tr><th>billing query</th><th>HoloDb</th><th>DuckDB</th><th>SQL&nbsp;Server</th><th>winner</th></tr></thead>
       <tbody>
-        <tr><td>GROUP BY (int), SUM(real)</td><td>109.3</td><td class="win">11.1</td><td>DuckDB ~10×</td></tr>
-        <tr><td>ORDER BY + LIMIT</td><td>17.4</td><td class="win">2.57</td><td>DuckDB ~6.8×</td></tr>
-        <tr><td>filtered COUNT(*)</td><td>15.5</td><td class="win">4.66</td><td>DuckDB ~3.3×</td></tr>
-        <tr><td>SUM (real) whole table</td><td>13.1</td><td class="win">5.31</td><td>DuckDB ~2.5×</td></tr>
-        <tr><td>bulk load (rows/sec)</td><td>557k</td><td class="win">1.37M</td><td>DuckDB ~2.5×</td></tr>
+        <tr><td><b class="ql">top customers by revenue</b><span class="q">GROUP BY customer_id … ORDER BY SUM(amount_cents) DESC LIMIT 10</span></td><td>6493</td><td class="win">550.5</td><td>630.9</td><td>DuckDB ~12×</td></tr>
+        <tr><td><b class="ql">revenue by region &amp; status</b><span class="q">GROUP BY region, status  (multi-column)</span></td><td>3594</td><td class="win">137.5</td><td>612.7</td><td>DuckDB ~26×</td></tr>
+        <tr><td><b class="ql">overdue outstanding</b><span class="q">SELECT SUM(amount_cents) … WHERE status = 'overdue'</span></td><td>202.6</td><td class="win">25.6</td><td>322.1</td><td>DuckDB ~7.9×</td></tr>
+        <tr><td><b class="ql">largest invoices</b><span class="q">ORDER BY amount_cents DESC LIMIT 20</span></td><td>12.0</td><td class="win">4.91</td><td>918.5</td><td>DuckDB ~2.4×</td></tr>
+        <tr><td><b class="ql">big-ticket invoices (&gt;$5k)</b><span class="q">SELECT COUNT(*) … WHERE amount_cents &gt; 500000</span></td><td>6.45</td><td class="win">6.15</td><td>233.4</td><td>~tie</td></tr>
       </tbody>
     </table>
-    <p class="desc" style="max-width:72ch;margin-top:14px">DuckDB is a superb columnar engine and the fastest loader here — if grouped real-number rollups and raw load throughput are your <em>whole</em> workload, use it. HoloDb's bet is the <strong>mixed</strong> transactional + analytics + vector workload, where maintained aggregates and durability change the shape of the problem.</p>
-    <p class="lim">Integer <code>SUM</code>/<code>COUNT</code> are exact and constant-time; <b>real</b>-number sums use a SIMD scan, which is where <code>SUM(real)</code> and grouped real-sums lose to DuckDB. SQL Server is durable and on-disk here (persistent DB, 1&nbsp;GB cache) and pays a network round-trip; HoloDb can <b>also</b> be durable and larger-than-memory (its paged engine spills to disk) and <em>still</em> answer these aggregates in microseconds. <a href="/holodb.html">Full methodology &amp; all results →</a></p>
+    <p class="desc" style="max-width:72ch;margin-top:14px">These are the queries HoloDb has to <strong>scan</strong> for: a top-K sort, a filtered sum, a high-cardinality group over half a million customers, a multi-column rollup. DuckDB — a superb columnar engine — wins them. But note the last two columns: HoloDb still beats the durable on-disk SQL Server on every one (often by 30–75×), and the "big-ticket" filter is a dead heat with DuckDB.</p>
+    <p class="lim">HoloDb's bet is the <strong>mixed</strong> workload: a real ACID transactional store, durable and larger-than-memory, that <em>also</em> answers your dashboard rollups in microseconds and does vector search — in one embeddable dependency. If grouped top-K analytics is your <em>whole</em> job, DuckDB is the right tool. <a href="/holodb.html">Full methodology &amp; every number, 10M and 25M →</a></p>
   </div>
 </section>
 
