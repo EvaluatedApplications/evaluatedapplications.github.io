@@ -1,26 +1,53 @@
 @page "/analyst"
+@inject IJSRuntime JS
 @using System.Diagnostics
 @using System.Globalization
 @using System.Text
 @using System.Text.RegularExpressions
 @using HoloDb
 
-<PageTitle>The Analyst</PageTitle>
+<PageTitle>The Analyst — free in-browser data analytics</PageTitle>
 
 <div class="room">
     <header class="room-head">
-        <nav class="crumb"><a href="/holodb/">HoloDb</a> <span>/</span> Demonstration</nav>
+        <nav class="crumb"><a href="/holodb/">HoloDb</a> <span>/</span> The Analyst</nav>
         <h1>The Analyst</h1>
-        <p class="lede">Paste <em>any</em> data &mdash; a CSV, a log, JSON lines, a spreadsheet dump, or plain text.
-            It profiles the whole thing with a real SQL database <strong>running in your browser</strong>: what it is,
-            what's typical, what's weird, and what's hidden inside. Nothing leaves this page.</p>
+        <p class="lede">Your data analyst — <strong>free</strong>, and it never uploads a thing. Drop a CSV and it
+            profiles the whole file with a real SQL database <strong>running inside your browser tab</strong>: what it is,
+            what's typical, what's weird. Then it charts it, and answers any question you can put in SQL.</p>
+        <div class="badges">
+            <span>Free, no sign-up</span><span>Private — runs on your device</span><span>Real SQL, not a mock</span><span>Works offline</span>
+        </div>
     </header>
 
-    <textarea class="paste" @bind="Text" @bind:event="oninput" rows="7" disabled="@_busy"
-              placeholder="Paste a CSV, a log file, JSON lines, transactions, anything…"></textarea>
+    <ol class="steps">
+        <li><b>1</b> Drop your data</li>
+        <li><b>2</b> Read the profile</li>
+        <li><b>3</b> Chart &amp; query it</li>
+        <li><b>4</b> Export the answer</li>
+    </ol>
+
+    <div class="dropzone @(_busy ? "busy" : "")">
+        <InputFile OnChange="OnFile" class="file-input" accept=".csv,.tsv,.tab,.txt,.log,.json" disabled="@_busy" />
+        <div class="dz-inner">
+            <svg viewBox="0 0 24 24" width="34" height="34" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M12 16V4" /><path d="M7 9l5-5 5 5" /><path d="M4 16v3a1 1 0 001 1h14a1 1 0 001-1v-3" />
+            </svg>
+            <strong>Drop a CSV, TSV, or log file</strong>
+            <span>or click to browse — up to ~50&nbsp;MB, and it stays on your device</span>
+            @if (_fileName is not null) { <span class="dz-file">@_fileName · @_charCount.ToString("N0") chars</span> }
+        </div>
+    </div>
+
+    <details class="paste-wrap">
+        <summary>…or paste data instead</summary>
+        <textarea class="paste" @bind="Text" @bind:event="oninput" rows="7" disabled="@_busy"
+                  placeholder="Paste a CSV, a log file, JSON lines, transactions, anything…"></textarea>
+    </details>
 
     <div class="controls">
         <button class="go" @onclick="Analyze" disabled="@_busy">@(_busy ? "Working…" : "Profile it")</button>
+        <button class="ghost" @onclick="LoadSample" disabled="@_busy" type="button">Load sample</button>
         <span class="hint">@_charCount.ToString("N0") characters ready</span>
     </div>
 
@@ -57,6 +84,20 @@
             <ul class="flags">
                 @foreach (var f in _flags) { <li class="flag @f.Level">@((MarkupString)f.Text)</li> }
             </ul>
+        }
+
+        @if (_charts.Count > 0)
+        {
+            <h2>The picture</h2>
+            <div class="charts">
+                @foreach (var ch in _charts)
+                {
+                    <figure class="chart-card">
+                        <figcaption>@ch.Title</figcaption>
+                        @RenderChart(ch)
+                    </figure>
+                }
+            </div>
         }
 
         @if (_entities.Count > 0)
@@ -111,7 +152,8 @@
 
         <h2>Ask it anything</h2>
         <p class="repl-intro">A live SQL prompt against your data, answered by the same in-browser database. Try a
-            suggestion or write your own &mdash; the fields are named just as they read above.</p>
+            suggestion or write your own &mdash; the fields are named just as they read above. Results come back as a
+            <strong>chart</strong> when they can, and you can download any answer as CSV.</p>
         <div class="suggests">
             @foreach (var sug in _suggestions)
             {
@@ -136,26 +178,51 @@
             }
             else
             {
-                <div class="table-scroll">
-                    <table class="result">
-                        <thead><tr>@foreach (var col in _replCols) { <th>@col</th> }</tr></thead>
-                        <tbody>
-                            @foreach (var row in _replRows)
-                            {
-                                <tr>@foreach (var col in _replCols) { <td>@(row.TryGetValue(col, out var v) ? v?.ToString() : "")</td> }</tr>
-                            }
-                        </tbody>
-                    </table>
+                <div class="result-head">
+                    <div class="view-toggle">
+                        <button class="@(_replView == "table" ? "on" : "")" @onclick='() => _replView = "table"' type="button">Table</button>
+                        @if (_replChart is not null)
+                        {
+                            <button class="@(_replView == "chart" ? "on" : "")" @onclick='() => _replView = "chart"' type="button">Chart</button>
+                        }
+                    </div>
+                    <button class="export" @onclick="ExportCsv" type="button">↓ Download CSV</button>
                 </div>
-                @if (_replTotal > _replRows.Count) { <p class="hint">Showing the first @_replRows.Count.ToString("N0") of @_replTotal.ToString("N0") rows.</p> }
+
+                @if (_replView == "chart" && _replChart is not null)
+                {
+                    <figure class="chart-card result-chart"><figcaption>@_replChart.Title</figcaption>@RenderChart(_replChart)</figure>
+                }
+                else
+                {
+                    <div class="table-scroll">
+                        <table class="result">
+                            <thead><tr>@foreach (var col in _replCols) { <th>@col</th> }</tr></thead>
+                            <tbody>
+                                @foreach (var row in _replRows)
+                                {
+                                    <tr>@foreach (var col in _replCols) { <td>@(row.TryGetValue(col, out var v) ? v?.ToString() : "")</td> }</tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                    @if (_replTotal > _replRows.Count) { <p class="hint">Showing the first @_replRows.Count.ToString("N0") of @_replTotal.ToString("N0") rows &mdash; download the CSV for all of them.</p> }
+                }
             }
         }
+
+        <div class="outro">
+            <p>The Analyst runs on <a href="/holodb/">HoloDb</a> — the same embeddable .NET SQL engine, compiled to
+                WebAssembly. Want it in your own app? <code>dotnet add package EvaluatedApplications.HoloDb</code></p>
+        </div>
     }
 </div>
 
 @code {
     const int RowCap = 500_000;
     const int EntityScanChars = 2_000_000;
+    const long MaxUpload = 64L * 1024 * 1024;
+    static readonly CultureInfo Inv = CultureInfo.InvariantCulture;
 
     enum FieldType { Integer, Decimal, Date, Boolean, Category, Text }
     record Col(string Name, FieldType Type)
@@ -163,13 +230,16 @@
         public long Count, Missing, Distinct, Outliers;
         public double Min, Max, Mean;
         public List<(string Val, long N)> Top = new();
+        public List<(double Lo, double Hi, long N)> Hist = new();
     }
     record Entity(string Kind, long Count, List<string> Examples);
     record Flag(string Level, string Text);
+    record Chart(string Title, string Kind, List<(string Label, double Value)> Data);
 
     string _text = SampleCsv;
     string Text { get => _text; set { _text = value; _charCount = value.Length; } }
     int _charCount = SampleCsv.Length;
+    string? _fileName;
 
     bool _busy, _done;
     string? _error;
@@ -180,6 +250,7 @@
     List<Col> _cols = new();
     List<Entity> _entities = new();
     List<Flag> _flags = new();
+    List<Chart> _charts = new();
 
     // live SQL prompt over the profiled data
     Database? _db;
@@ -190,6 +261,8 @@
     double _replMs; int _replTotal;
     string[] _replCols = Array.Empty<string>();
     List<Dictionary<string, object>> _replRows = new();
+    Chart? _replChart;
+    string _replView = "table";
     const int ReplRowCap = 200;
 
     static string Pct(double f) => (f * 100).ToString("F0") + "%";
@@ -199,11 +272,34 @@
     string MissPct(Col c) => (_rows > 0 ? c.Missing * 100.0 / _rows : 0).ToString("F0") + "%";
     static string ColFill(Col c, long n) { long m = c.Top.Count > 0 ? c.Top[0].N : 1; return (m > 0 ? n * 100.0 / m : 0).ToString("F1") + "%"; }
 
+    void LoadSample() { Text = SampleCsv; _fileName = null; _done = false; _error = null; }
+
+    async Task OnFile(InputFileChangeEventArgs e)
+    {
+        var file = e.File;
+        if (file is null) return;
+        _busy = true; _error = null; _done = false; _phase = "Reading file…"; _progress = 0; StateHasChanged(); await Task.Delay(1);
+        try
+        {
+            using var stream = file.OpenReadStream(MaxUpload);
+            using var reader = new StreamReader(stream);
+            Text = await reader.ReadToEndAsync();
+            _fileName = file.Name;
+        }
+        catch (Exception ex)
+        {
+            _error = "Couldn't read that file: " + ex.Message;
+            _busy = false; StateHasChanged();
+            return;
+        }
+        await Analyze();
+    }
+
     async Task Analyze()
     {
         _busy = true; _error = null; _done = false; _progress = 0; _phase = "Reading…";
-        _cols = new(); _entities = new(); _flags = new();
-        _suggestions = new(); _replRan = false; _replError = null; _replRows = new(); _replCols = Array.Empty<string>();
+        _cols = new(); _entities = new(); _flags = new(); _charts = new();
+        _suggestions = new(); _replRan = false; _replError = null; _replRows = new(); _replCols = Array.Empty<string>(); _replChart = null; _replView = "table";
         StateHasChanged(); await Task.Delay(1);
 
         try
@@ -296,7 +392,8 @@
                     col.Max = ToD(db.Execute($"SELECT MAX({q}) FROM data").Rows[0].Values.First());
                     double sum = ToD(db.Execute($"SELECT SUM({q}) FROM data").Rows[0].Values.First());
                     col.Mean = _rows > 0 ? sum / _rows : 0;
-                    (col.Outliers, col.Top) = NumericExtras(cells, c, col.Mean);
+                    (col.Outliers, col.Hist) = NumericScan(cells, c, col.Mean, col.Min, col.Max);
+                    col.Top = new();   // numeric columns show stats + a histogram chart, not a top-values bar
                 }
                 _cols.Add(col);
             }
@@ -308,6 +405,9 @@
 
             // ---- headline flags ----
             _flags = BuildFlags(malformed);
+
+            // ---- auto-charts drawn from the profile ----
+            _charts = BuildCharts(db);
 
             // ---- query suggestions drawn from the profile ----
             _suggestions = BuildSuggestions();
@@ -384,9 +484,10 @@
         var s = new string[m]; for (int j = 0; j < m; j++) s[j] = c < cells[start + j].Length ? cells[start + j][c] : ""; return s;
     }
 
-    static (long outliers, List<(string, long)> top) NumericExtras(string[][] cells, int c, double mean)
+    // one pass over a numeric column: 3-sigma outlier count + an equal-width histogram (up to 12 buckets)
+    static (long outliers, List<(double, double, long)> hist) NumericScan(string[][] cells, int c, double mean, double min, double max)
     {
-        double sumsq = 0; long cnt = 0; var buckets = new Dictionary<double, long>();
+        double sumsq = 0; long cnt = 0;
         foreach (var row in cells)
         {
             if (c >= row.Length || string.IsNullOrEmpty(row[c])) continue;
@@ -394,14 +495,28 @@
             sumsq += (v - mean) * (v - mean); cnt++;
         }
         double std = cnt > 0 ? Math.Sqrt(sumsq / cnt) : 0;
+        int buckets = 12; double span = max - min;
+        double width = span > 0 ? span / buckets : 1;
+        var counts = new long[buckets];
         long outliers = 0;
-        if (std > 0)
-            foreach (var row in cells)
-            {
-                if (c >= row.Length || string.IsNullOrEmpty(row[c])) continue;
-                if (double.TryParse(row[c], NumberStyles.Any, CultureInfo.InvariantCulture, out var v) && Math.Abs(v - mean) > 3 * std) outliers++;
-            }
-        return (outliers, new());   // numeric columns show stats, not a top-values bar
+        foreach (var row in cells)
+        {
+            if (c >= row.Length || string.IsNullOrEmpty(row[c])) continue;
+            if (!double.TryParse(row[c], NumberStyles.Any, CultureInfo.InvariantCulture, out var v)) continue;
+            if (std > 0 && Math.Abs(v - mean) > 3 * std) outliers++;
+            int b = span > 0 ? (int)((v - min) / width) : 0;
+            if (b < 0) b = 0; if (b >= buckets) b = buckets - 1;
+            counts[b]++;
+        }
+        var hist = new List<(double, double, long)>();
+        for (int b = 0; b < buckets; b++)
+        {
+            double lo = min + b * width, hi = min + (b + 1) * width;
+            hist.Add((lo, hi, counts[b]));
+        }
+        // trim empty tail buckets so the chart isn't mostly blank
+        while (hist.Count > 1 && hist[^1].Item3 == 0) hist.RemoveAt(hist.Count - 1);
+        return (outliers, hist);
     }
 
     static List<Entity> ExtractEntities(string t)
@@ -460,6 +575,42 @@
         return outp;
     }
 
+    // Up to three charts inferred from the profile: a category breakdown, a numeric distribution, a time series.
+    List<Chart> BuildCharts(Database db)
+    {
+        var charts = new List<Chart>();
+
+        var cat = _cols.Where(c => c.Type is FieldType.Category or FieldType.Boolean && c.Distinct is > 1 and <= 24 && c.Top.Count > 1)
+                       .OrderByDescending(c => c.Top.Count).FirstOrDefault();
+        if (cat is not null)
+            charts.Add(new Chart($"Records by {cat.Name}", "bars",
+                cat.Top.Select(t => (t.Val.Length == 0 ? "(empty)" : t.Val, (double)t.N)).ToList()));
+
+        var num = _cols.Where(c => c.Type is FieldType.Integer or FieldType.Decimal && c.Hist.Count > 1 && c.Max > c.Min)
+                       .OrderByDescending(c => c.Distinct).FirstOrDefault();
+        if (num is not null)
+            charts.Add(new Chart($"Distribution of {num.Name}", "bars",
+                num.Hist.Select(h => (HistLabel(h.Lo, h.Hi), (double)h.N)).ToList()));
+
+        var dcol = _cols.FirstOrDefault(c => c.Type == FieldType.Date && c.Distinct is > 1 and <= 400);
+        if (dcol is not null)
+        {
+            var nm = _cols.FirstOrDefault(c => c.Type is FieldType.Integer or FieldType.Decimal);
+            string agg = nm is not null ? $"SUM({nm.Name})" : "COUNT(*)";
+            string title = nm is not null ? $"Total {nm.Name} over {dcol.Name}" : $"Records over {dcol.Name}";
+            try
+            {
+                var rs = db.Execute($"SELECT {dcol.Name}, {agg} FROM data GROUP BY {dcol.Name} ORDER BY {dcol.Name} LIMIT 400").Rows;
+                if (rs.Count > 2)
+                    charts.Add(new Chart(title, "line", rs.Select(r => (Cell(r[dcol.Name]), ToD(r.Values.Last()))).ToList()));
+            }
+            catch { }
+        }
+        return charts;
+    }
+
+    static string HistLabel(double lo, double hi) => $"{Num(lo)}–{Num(hi)}";
+
     // Queries worth trying, inferred from what the profile found in the data.
     List<(string Label, string Sql)> BuildSuggestions()
     {
@@ -499,9 +650,132 @@
             _replTotal = rows.Count;
             _replCols = res.Columns.ToArray();
             _replRows = rows.Take(ReplRowCap).ToList();
+            _replChart = BuildReplChart(_replCols, _replRows);
+            _replView = _replChart is not null ? "chart" : "table";
         }
-        catch (Exception ex) { _replError = ex.Message; _replRows = new(); _replCols = Array.Empty<string>(); _replTotal = 0; }
+        catch (Exception ex) { _replError = ex.Message; _replRows = new(); _replCols = Array.Empty<string>(); _replTotal = 0; _replChart = null; }
         finally { _replRan = true; _replBusy = false; StateHasChanged(); }
+    }
+
+    // Chart a query result when it has a label column and a numeric column and isn't too big.
+    static Chart? BuildReplChart(string[] cols, List<Dictionary<string, object>> rows)
+    {
+        if (cols.Length < 2 || rows.Count < 2 || rows.Count > 60) return null;
+        int valIdx = -1;
+        for (int i = 1; i < cols.Length; i++) { if (rows.All(r => IsNumeric(r, cols[i]))) { valIdx = i; break; } }
+        if (valIdx < 0 && IsColNumeric(rows, cols[0])) valIdx = 0;
+        if (valIdx < 0) return null;
+        int labIdx = -1;
+        for (int i = 0; i < cols.Length; i++) { if (i != valIdx && !IsColNumeric(rows, cols[i])) { labIdx = i; break; } }
+        if (labIdx < 0) labIdx = valIdx == 0 ? (cols.Length > 1 ? 1 : 0) : 0;
+        if (labIdx == valIdx) return null;
+        var data = rows.Take(40).Select(r => (Cell(r.GetValueOrDefault(cols[labIdx]) ?? ""), ToD(r.GetValueOrDefault(cols[valIdx]) ?? 0d))).ToList();
+        bool dateish = cols[labIdx].ToLowerInvariant().Contains("date")
+                       || (data.Count > 0 && Regex.IsMatch(data[0].Item1, @"^\d{4}[-/]\d{2}"));
+        return new Chart($"{cols[valIdx]} by {cols[labIdx]}", dateish && data.Count > 2 ? "line" : "bars", data);
+    }
+
+    static bool IsColNumeric(List<Dictionary<string, object>> rows, string col) => rows.All(r => IsNumeric(r, col));
+    static bool IsNumeric(Dictionary<string, object> r, string col)
+    {
+        var v = r.GetValueOrDefault(col);
+        if (v is long or int or double or float or decimal) return true;
+        var s = v?.ToString();
+        return !string.IsNullOrEmpty(s) && double.TryParse(s, NumberStyles.Any, CultureInfo.InvariantCulture, out _);
+    }
+
+    async Task ExportCsv()
+    {
+        if (_db is null || string.IsNullOrWhiteSpace(_sql)) return;
+        try
+        {
+            var res = _db.Execute(_sql);
+            var cols = res.Columns.ToArray();
+            var sb = new StringBuilder();
+            sb.Append(string.Join(",", cols.Select(CsvEsc))).Append('\n');
+            foreach (var r in res.Rows)
+                sb.Append(string.Join(",", cols.Select(c => CsvEsc(r.TryGetValue(c, out var v) ? v?.ToString() ?? "" : "")))).Append('\n');
+            await JS.InvokeVoidAsync("analystDownload", "analyst-results.csv", sb.ToString(), "text/csv;charset=utf-8");
+        }
+        catch (Exception ex) { _replError = "Export failed: " + ex.Message; StateHasChanged(); }
+    }
+
+    static string CsvEsc(string s)
+    {
+        if (s.IndexOfAny(new[] { ',', '"', '\n', '\r' }) < 0) return s;
+        return "\"" + s.Replace("\"", "\"\"") + "\"";
+    }
+
+    // ---- SVG chart builders (rendered in C#, styled by the .razor.css) ----
+    MarkupString RenderChart(Chart ch) => ch.Kind == "line" ? LineChart(ch.Data) : HBars(ch.Data);
+
+    static string F(double v) => v.ToString("0.##", Inv);
+    static string Fmt(double v)
+    {
+        double a = Math.Abs(v);
+        if (a >= 1_000_000) return (v / 1_000_000).ToString("0.##", Inv) + "M";
+        if (a >= 1_000) return (v / 1_000).ToString("0.##", Inv) + "k";
+        return a == Math.Floor(a) ? v.ToString("0", Inv) : v.ToString("0.##", Inv);
+    }
+    static string Esc(string s) => s.Replace("&", "&amp;").Replace("<", "&lt;").Replace(">", "&gt;");
+    static string Trunc(string s, int max) => s.Length <= max ? s : s[..(max - 1)] + "…";
+
+    static MarkupString HBars(List<(string Label, double Value)> data)
+    {
+        if (data is null || data.Count == 0) return (MarkupString)"<p class=\"hint\">Nothing to chart.</p>";
+        var d = data.Take(12).ToList(); int n = d.Count;
+        double max = d.Max(x => Math.Abs(x.Value)); if (max <= 0) max = 1;
+        int W = 720, rowH = 30, top = 8, labelW = 158, valW = 74, barX = labelW + 10;
+        int barMax = W - barX - valW - 8, H = top + n * rowH + 8;
+        var sb = new StringBuilder();
+        sb.Append($"<svg class=\"chart-svg\" viewBox=\"0 0 {W} {H}\" role=\"img\" preserveAspectRatio=\"xMidYMid meet\">");
+        for (int i = 0; i < n; i++)
+        {
+            int y = top + i * rowH, cy = y + rowH / 2;
+            double w = barMax * Math.Abs(d[i].Value) / max; if (w < 2 && d[i].Value != 0) w = 2;
+            sb.Append($"<text class=\"c-lbl\" x=\"{labelW}\" y=\"{cy + 4}\" text-anchor=\"end\">{Esc(Trunc(d[i].Label, 24))}</text>");
+            sb.Append($"<rect class=\"c-bar\" x=\"{barX}\" y=\"{y + 7}\" width=\"{F(w)}\" height=\"{rowH - 14}\" rx=\"3\"/>");
+            sb.Append($"<text class=\"c-val\" x=\"{F(barX + w + 7)}\" y=\"{cy + 4}\">{Esc(Fmt(d[i].Value))}</text>");
+        }
+        sb.Append("</svg>");
+        return (MarkupString)sb.ToString();
+    }
+
+    static MarkupString LineChart(List<(string Label, double Value)> data)
+    {
+        if (data is null || data.Count < 2) return HBars(data ?? new());
+        var d = data.Count > 120 ? Downsample(data, 120) : data;
+        int n = d.Count;
+        double max = d.Max(x => x.Value), min = d.Min(x => x.Value);
+        if (min > 0) min = 0; if (max <= min) max = min + 1;
+        int W = 720, H = 250, padL = 60, padR = 16, padT = 14, padB = 34;
+        double plotW = W - padL - padR, plotH = H - padT - padB;
+        double X(int i) => padL + (n == 1 ? plotW / 2 : plotW * i / (n - 1));
+        double Y(double v) => padT + plotH * (1 - (v - min) / (max - min));
+        var line = string.Join(" ", Enumerable.Range(0, n).Select(i => $"{F(X(i))},{F(Y(d[i].Value))}"));
+        var area = $"M {F(X(0))},{F(Y(min))} L {line} L {F(X(n - 1))},{F(Y(min))} Z";
+        var sb = new StringBuilder();
+        sb.Append($"<svg class=\"chart-svg\" viewBox=\"0 0 {W} {H}\" role=\"img\" preserveAspectRatio=\"xMidYMid meet\">");
+        // y grid + labels (min / max)
+        sb.Append($"<line class=\"c-axis\" x1=\"{padL}\" y1=\"{F(Y(min))}\" x2=\"{W - padR}\" y2=\"{F(Y(min))}\"/>");
+        sb.Append($"<line class=\"c-grid\" x1=\"{padL}\" y1=\"{F(Y(max))}\" x2=\"{W - padR}\" y2=\"{F(Y(max))}\"/>");
+        sb.Append($"<text class=\"c-tick\" x=\"{padL - 8}\" y=\"{F(Y(max) + 4)}\" text-anchor=\"end\">{Esc(Fmt(max))}</text>");
+        sb.Append($"<text class=\"c-tick\" x=\"{padL - 8}\" y=\"{F(Y(min) + 4)}\" text-anchor=\"end\">{Esc(Fmt(min))}</text>");
+        sb.Append($"<path class=\"c-area\" d=\"{area}\"/>");
+        sb.Append($"<polyline class=\"c-line\" points=\"{line}\"/>");
+        // x labels: first, middle, last
+        foreach (int i in new[] { 0, n / 2, n - 1 }.Distinct())
+            sb.Append($"<text class=\"c-tick\" x=\"{F(X(i))}\" y=\"{H - 12}\" text-anchor=\"middle\">{Esc(Trunc(d[i].Label, 12))}</text>");
+        sb.Append("</svg>");
+        return (MarkupString)sb.ToString();
+    }
+
+    static List<T> Downsample<T>(List<T> d, int target)
+    {
+        if (d.Count <= target) return d;
+        var r = new List<T>(target); double step = (double)d.Count / target;
+        for (int i = 0; i < target; i++) r.Add(d[(int)(i * step)]);
+        return r;
     }
 
     const string SampleCsv = @"date,user,region,amount,status,email

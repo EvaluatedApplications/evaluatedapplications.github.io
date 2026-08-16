@@ -36,6 +36,16 @@
         <a href="." class="reload">Reload</a>
         <span class="dismiss">🗙</span>
     </div>
+    <script>
+      // client-side file download for The Analyst's CSV export — nothing leaves the device
+      window.analystDownload = function (name, text, mime) {
+        var blob = new Blob([text], { type: mime || 'text/csv;charset=utf-8' });
+        var url = URL.createObjectURL(blob);
+        var a = document.createElement('a');
+        a.href = url; a.download = name; document.body.appendChild(a); a.click();
+        document.body.removeChild(a); setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+      };
+    </script>
     <script src="_framework/blazor.webassembly#[.{fingerprint}].js"></script>
 </body>
 

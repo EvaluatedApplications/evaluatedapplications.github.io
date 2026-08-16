@@ -81,4 +81,60 @@ table.result td { padding: 0.45rem 0.75rem; border-bottom: 1px solid var(--borde
 table.result tbody tr:hover { background: var(--surface); }
 table.result tbody tr:hover td { color: var(--ink); }
 
-@media (max-width: 560px) { .cols { grid-template-columns: 1fr; } }
+/* ---- product framing: badges + steps ---- */
+.badges { display: flex; flex-wrap: wrap; gap: 0.5rem; margin: 0 0 1.4rem; }
+.badges span { font-family: var(--mono); font-size: 0.78rem; color: var(--ink-soft); border: 1px solid var(--border-2); border-radius: 999px; padding: 0.3rem 0.75rem; background: var(--surface); }
+.steps { list-style: none; display: flex; flex-wrap: wrap; gap: 0.5rem; padding: 0; margin: 0 0 1.2rem; }
+.steps li { flex: 1 1 140px; display: flex; align-items: center; gap: 0.5rem; font-size: 0.9rem; color: var(--ink-soft); background: var(--bg-2); border: 1px solid var(--border); border-radius: 10px; padding: 0.6rem 0.8rem; }
+.steps b { display: inline-flex; align-items: center; justify-content: center; width: 1.4rem; height: 1.4rem; border-radius: 50%; background: var(--accent); color: #fff; font-size: 0.8rem; font-weight: 700; flex-shrink: 0; }
+
+/* ---- dropzone (file upload + drag/drop) ---- */
+.dropzone { position: relative; border: 1.5px dashed var(--border-2); border-radius: 14px; background: var(--bg-2); padding: 1.6rem 1rem; text-align: center; transition: border-color 0.15s, background 0.15s; }
+.dropzone:hover { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 6%, var(--bg-2)); }
+.dropzone.busy { opacity: 0.6; pointer-events: none; }
+.dropzone ::deep .file-input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
+.dz-inner { display: flex; flex-direction: column; align-items: center; gap: 0.35rem; color: var(--ink-soft); pointer-events: none; }
+.dz-inner svg { color: var(--accent); margin-bottom: 0.2rem; }
+.dz-inner strong { color: var(--ink); font-size: 1rem; }
+.dz-inner span { font-size: 0.86rem; color: var(--ink-faint); }
+.dz-file { font-family: var(--mono); font-size: 0.8rem !important; color: var(--accent-ink) !important; margin-top: 0.3rem; }
+
+.paste-wrap { margin: 0.8rem 0 0; }
+.paste-wrap summary { cursor: pointer; color: var(--ink-faint); font-size: 0.88rem; padding: 0.3rem 0; user-select: none; }
+.paste-wrap summary:hover { color: var(--ink-soft); }
+.paste-wrap .paste { margin-top: 0.6rem; }
+
+.ghost { background: transparent; color: var(--ink-soft); border: 1px solid var(--border-2); border-radius: 10px; padding: 0.6rem 1.1rem; font-size: 0.95rem; font-weight: 600; cursor: pointer; transition: border-color 0.15s, color 0.15s; }
+.ghost:hover:not(:disabled) { border-color: var(--accent); color: var(--ink); }
+.ghost:disabled { opacity: 0.5; cursor: default; }
+
+/* ---- charts (SVG generated in C#, injected as markup -> styled via ::deep) ---- */
+.charts { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 1rem; }
+.chart-card { margin: 0; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1rem 0.6rem; overflow: hidden; }
+.chart-card figcaption { font-size: 0.9rem; font-weight: 650; color: var(--ink); margin-bottom: 0.5rem; }
+.chart-card.result-chart { margin-top: 0.9rem; }
+.chart-card ::deep .chart-svg { display: block; width: 100%; height: auto; overflow: visible; }
+.chart-card ::deep .c-bar { fill: var(--accent); }
+.chart-card ::deep .c-lbl { fill: var(--ink-soft); font-family: var(--mono); font-size: 12px; }
+.chart-card ::deep .c-val { fill: var(--ink); font-family: var(--mono); font-size: 12px; font-weight: 600; }
+.chart-card ::deep .c-line { fill: none; stroke: var(--accent); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.chart-card ::deep .c-area { fill: color-mix(in srgb, var(--accent) 16%, transparent); stroke: none; }
+.chart-card ::deep .c-axis { stroke: var(--border-2); stroke-width: 1; }
+.chart-card ::deep .c-grid { stroke: var(--border); stroke-width: 1; stroke-dasharray: 2 4; }
+.chart-card ::deep .c-tick { fill: var(--ink-faint); font-family: var(--mono); font-size: 11px; }
+
+/* ---- result header: view toggle + export ---- */
+.result-head { display: flex; justify-content: space-between; align-items: center; gap: 0.75rem; margin: 0.9rem 0 0; flex-wrap: wrap; }
+.view-toggle { display: inline-flex; border: 1px solid var(--border-2); border-radius: 9px; overflow: hidden; }
+.view-toggle button { background: transparent; color: var(--ink-soft); border: none; padding: 0.4rem 0.9rem; font-size: 0.86rem; font-weight: 600; cursor: pointer; }
+.view-toggle button.on { background: var(--accent); color: #fff; }
+.view-toggle button:not(.on):hover { color: var(--ink); background: var(--surface-2); }
+.export { background: var(--surface); color: var(--accent-ink); border: 1px solid var(--border-2); border-radius: 9px; padding: 0.4rem 0.9rem; font-size: 0.86rem; font-weight: 600; cursor: pointer; }
+.export:hover { border-color: var(--accent); color: var(--ink); }
+.result-head + .table-scroll { margin-top: 0.6rem; }
+
+.outro { margin-top: 2.6rem; padding-top: 1.2rem; border-top: 1px solid var(--border); }
+.outro p { color: var(--ink-soft); font-size: 0.92rem; line-height: 1.55; }
+.outro code { font-family: var(--mono); font-size: 0.85rem; color: var(--accent-ink); background: var(--bg-2); padding: 0.1rem 0.4rem; border-radius: 5px; }
+
+@media (max-width: 560px) { .cols { grid-template-columns: 1fr; } .charts { grid-template-columns: 1fr; } }
