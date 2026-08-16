@@ -89,8 +89,14 @@ foreach (var row in result.Rows)
 
   <h2 id="durability">In-memory or durable</h2>
   <p>By default the database lives in memory and is gone when the process ends. To make writes durable, give it a
-    write-ahead log path — on restart it replays the log to recover state:</p>
+    write-ahead log path:</p>
   <pre><code>var db = new HoloDbService(new HoloDbOptions { WalPath = "app.wal" });</code></pre>
+  <p>Durable state is a compact <strong>snapshot of the current data</strong> plus a short log of the writes since the last
+    checkpoint. Recovery is bounded by how much data you hold, not by how long the database has been running — reopening a
+    long-lived database stays fast because it loads a snapshot and replays only the recent tail, never the entire history.</p>
+  <p>The log is folded into a fresh snapshot automatically once it passes a threshold (<code>CheckpointThresholdBytes</code>,
+    default 8&nbsp;MB), and you can force one — for example before a clean shutdown:</p>
+  <pre><code>db.Checkpoint();   // fold the log into a snapshot and truncate it</code></pre>
   <blockquote>In WebAssembly (a browser tab) there is no file system, so leave <code>WalPath</code> null and use the
     in-memory engine — which is exactly what the <a href="/tools/analyst">Analyst demo</a> does.</blockquote>
   <p>If you want the raw engine directly (no async wrapper, no licensing surface), open it yourself:</p>
@@ -190,7 +196,8 @@ catch
     db.Execute("ROLLBACK");
     throw;
 }</code></pre>
-  <p>With a <code>WalPath</code> set, a committed transaction is durable — it survives a crash and is replayed on restart.</p>
+  <p>With a <code>WalPath</code> set, a committed transaction is durable — it survives a crash. On restart the engine loads
+    the last snapshot and replays only the committed writes logged since it, so recovery cost tracks live data, not history.</p>
 
   <h2 id="similarity">Similarity search</h2>
   <p>Because rows are stored holographically, HoloDb can do content-addressable retrieval: rank rows by similarity to a
