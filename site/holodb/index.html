@@ -113,7 +113,6 @@
       <span><b>SQL</b> · real ACID</span>
       <span><b>Vector</b> · NEAREST in SQL</span>
       <span><b>Analytics</b> · maintained, not scanned</span>
-      <span><b>Metered</b> · billing spine</span>
     </div>
   </div>
 </header>
@@ -273,8 +272,6 @@
         <p class="lim">The primary-key index stays in RAM (~16&nbsp;B/row) — the limit for tables far bigger than memory.</p></article>
       <article class="card" style="--cat:var(--c-foundation)"><div class="card-top"><h3>Live metrics under ingest</h3></div>
         <p class="desc">Whole-table and grouped counts/sums are served from an immutable snapshot republished after every write — <strong>without taking the engine lock</strong> — so a continuous streaming ingest never stalls a dashboard read.</p></article>
-      <article class="card" style="--cat:var(--c-ml)"><div class="card-top"><h3>Metered billing spine</h3></div>
-        <p class="desc">Every query reports the bytes it <em>actually</em> read versus the bytes a scan-priced warehouse would <strong>bill</strong> — the exact metric BigQuery and Athena charge on. Constant-time aggregates read ~0 bytes yet bill as a scan, enabling a metered analytics API that undercuts the warehouse.</p></article>
     </div>
   </div>
 </section>
