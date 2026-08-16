@@ -3,18 +3,18 @@
 @using PrismFormer
 @using Tracer.Helpers
 
-<PageTitle>The Creature — a brain that learns to navigate</PageTitle>
+<PageTitle>The Creature — a brain that learns to forage</PageTitle>
 
 <div class="room">
     <header class="room-head">
         <nav class="crumb"><a href="/holodb/">Evaluated Applications</a> <span>/</span> The Creature</nav>
         <h1>The Creature</h1>
-        <p class="lede">Draw a world, drop some food, and watch a small creature learn its way there — <strong>in your
-            browser, on your machine</strong>. Its brain is a <strong>holographic transformer</strong> (AlgFormer) that
-            starts clueless and reinforces the routes that work; its feet are our pathfinder (Tracer), which lets it see
-            and pounce. Redraw the walls or move the food and it re-learns.</p>
+        <p class="lede">Scatter some apples, then watch a small creature learn to forage — <strong>in your browser, on
+            your machine</strong>. Its brain is a <strong>holographic transformer</strong> (AlgFormer); its sense of where
+            food is comes from our pathfinder (Tracer), which measures how far each cell is from the nearest apple. Every
+            step that gets it <em>closer</em> is reinforced — it isn't told the way, it learns which moves pay off.</p>
         <div class="badges">
-            <span>Holographic-transformer brain</span><span>Tracer navigation</span><span>Learns live, on your device</span>
+            <span>Holographic-transformer brain</span><span>Tracer distance field</span><span>Learns live, on your device</span>
         </div>
     </header>
 
@@ -23,13 +23,13 @@
             <span class="tool-lbl">draw</span>
             <button class="tool @(_tool == "wall" ? "on" : "")" @onclick='() => _tool = "wall"' type="button">🧱 wall</button>
             <button class="tool @(_tool == "erase" ? "on" : "")" @onclick='() => _tool = "erase"' type="button">⌫ erase</button>
-            <button class="tool @(_tool == "start" ? "on" : "")" @onclick='() => _tool = "start"' type="button">🐣 start</button>
-            <button class="tool @(_tool == "food" ? "on" : "")" @onclick='() => _tool = "food"' type="button">🍎 food</button>
+            <button class="tool @(_tool == "start" ? "on" : "")" @onclick='() => _tool = "start"' type="button">🥚 start</button>
+            <button class="tool @(_tool == "apple" ? "on" : "")" @onclick='() => _tool = "apple"' type="button">🍎 apple</button>
         </div>
         <div class="tool-group">
             <button class="tool ghost" @onclick="ClearWalls" type="button">clear walls</button>
-            <button class="tool ghost" @onclick="Maze" type="button">random maze</button>
-            <button class="tool ghost @(_showIdeal ? "on" : "")" @onclick="ToggleIdeal" type="button">ideal path</button>
+            <button class="tool ghost" @onclick="Scatter" type="button">scatter apples</button>
+            <button class="tool ghost @(_showScent ? "on" : "")" @onclick="ToggleScent" type="button">show scent</button>
         </div>
     </div>
 
@@ -42,11 +42,8 @@
                     int gx = x, gy = y;
                     <rect class="cell @(_wall[gy * W + gx] ? "wall" : "")" x="@(gx * CS)" y="@(gy * CS)" width="@CS" height="@CS"
                           @onmousedown="() => Paint(gx, gy, true)" @onmouseenter="() => Paint(gx, gy, false)" />
+                    @if (_showScent && !_wall[gy * W + gx]) { @ScentTint(gx, gy) }
                 }
-            }
-            @if (_showIdeal && _idealPath.Count > 1)
-            {
-                <polyline class="ideal" points="@PathPoints(_idealPath)" />
             }
             @if (_trail.Count > 1)
             {
@@ -56,9 +53,9 @@
             {
                 <rect class="startmark" x="@(_startX * CS + 3)" y="@(_startY * CS + 3)" width="@(CS - 6)" height="@(CS - 6)" rx="3" />
             }
-            @if (_hasFood)
+            @foreach (var ap in _apples)
             {
-                @Glyph(_foodX, _foodY, "food", "🍎")
+                @Glyph(ap % W, ap / W, "food", "🍎")
             }
             @Glyph(_cx, _cy, "critter", _running ? "🐛" : "🥚")
         </svg>
@@ -67,24 +64,24 @@
     @if (_error is not null) { <p class="err">@_error</p> }
 
     <div class="cr-controls">
-        <button class="go" @onclick="ToggleRun" disabled="@(!CanRun)">@(_running ? "Pause" : "Let it learn")</button>
+        <button class="go" @onclick="ToggleRun" disabled="@(!CanRun)">@(_running ? "Pause" : "Let it forage")</button>
         <button class="ghost" @onclick="ResetBrain" type="button">Reset brain</button>
         <label class="speed">speed
             <input type="range" min="1" max="10" @bind="_speed" @bind:event="oninput" />
         </label>
-        @if (!CanRun) { <span class="hint">Place a 🐣 start and a 🍎 food (pick the tool, click a cell).</span> }
+        @if (!CanRun) { <span class="hint">Place a 🥚 start and at least one 🍎 apple (or hit “scatter apples”).</span> }
     </div>
 
     @if (_episode > 0 || _running)
     {
         <div class="cr-stats">
             <div class="stat"><div class="n">@_episode</div><div class="l">episodes</div></div>
-            <div class="stat"><div class="n">@(_lastSteps > 0 ? _lastSteps.ToString() : "—")</div><div class="l">steps last run</div></div>
-            <div class="stat"><div class="n">@(_bestLen < int.MaxValue ? _bestLen.ToString() : "—")</div><div class="l">best route</div></div>
+            <div class="stat"><div class="n">@_lastEaten / @_applesInit.Count</div><div class="l">apples last run</div></div>
+            <div class="stat"><div class="n">@(_bestEaten > 0 ? _bestEaten.ToString() : "—")</div><div class="l">best haul</div></div>
             <div class="stat"><div class="n">@((_eps * 100).ToString("F0"))%</div><div class="l">still exploring</div></div>
         </div>
         <figure class="cr-curve">
-            <figcaption>steps to the food, per episode — it should fall as the brain learns</figcaption>
+            <figcaption>apples eaten per episode — it should rise as the brain learns the scent</figcaption>
             @if (_curve.Count > 1) { @((MarkupString)CurveSvg()) }
         </figure>
     }
@@ -101,8 +98,8 @@
 
     <div class="outro">
         <p>The brain is <code>AlgFormer</code>'s holographic transformer — one layer applied twice weight-tied, learning
-            online through the recurrence; the feet are <code>Tracer</code>. Both are pure managed .NET running client-side.
-            <code>dotnet add package EvaluatedApplications.AlgFormer</code></p>
+            online through the recurrence; the distance field is <code>Tracer</code>. Both are pure managed .NET running
+            client-side. <code>dotnet add package EvaluatedApplications.AlgFormer</code></p>
     </div>
 </div>
 
@@ -112,23 +109,29 @@
     const int MaxCtx = 128;   // big context capacity — the full trajectory is fed, up to this; shifts align to it
     const int KPass = 2;      // 1 layer applied K times, weight-tied (the "extra k-layer pass")
     const int DModel = 256;   // PhasorLayout.Dim
+    const int NApples = 8;    // how many apples "scatter" drops
+    const int StepBudget = 150;   // steps per foraging episode
+    const int EatReward = 3;      // extra advantage for landing on an apple (on top of the +1 for getting closer)
     static readonly int[] DX = { 0, 1, 1, 1, 0, -1, -1, -1 };
     static readonly int[] DY = { -1, -1, 0, 1, 1, 1, 0, -1 };
 
     bool[] _wall = new bool[W * H];
-    int _startX = 2, _startY = H / 2, _foodX = W - 3, _foodY = H / 2;
-    bool _hasStart = true, _hasFood = true;
-    string _tool = "wall";
+    int _startX = W / 2, _startY = H / 2;
+    bool _hasStart = true;
+    readonly HashSet<int> _applesInit = new();   // the placed apples (respawned each episode)
+    readonly HashSet<int> _apples = new();        // the live apples this episode
+    int[] _dist = new int[W * H];                 // Tracer BFS distance to the nearest live apple (int.MaxValue = unreachable)
+    string _tool = "apple";
     bool _painting;
 
     // creature + episode state
-    int _cx, _cy, _steps, _stepCap = W * H * 2;
-    int _episode, _lastSteps, _bestLen = int.MaxValue;
-    double _eps = 0.6;
-    readonly List<int> _ctxWin = new();                      // the trajectory this episode (fed as context)
-    readonly List<(int[] ctx, int act)> _epExp = new();       // (context, action) experiences to replay on success
+    int _cx, _cy, _steps, _eaten, _lastEaten, _bestEaten;
+    int _episode;
+    double _eps = 0.7;
+    readonly List<int> _ctxWin = new();                 // the trajectory this episode (fed as context)
+    readonly List<(int[] ctx, int act)> _epExp = new(); // (context, action) for moves that got closer / ate — reinforced on episode end
     readonly List<(int x, int y)> _trail = new();
-    readonly List<int> _curve = new();
+    readonly List<int> _curve = new();                  // apples eaten per episode
     readonly List<string> _log = new();
     void Log(string s) { _log.Insert(0, s); if (_log.Count > 250) _log.RemoveAt(_log.Count - 1); }
 
@@ -139,16 +142,15 @@
 
     bool _running;
     int _speed = 5;
-    bool _showIdeal;
-    List<(int x, int y)> _idealPath = new();
+    bool _showScent;
     string? _error;
 
-    bool CanRun => _hasStart && _hasFood;
+    bool CanRun => _hasStart && _applesInit.Count > 0;
 
     protected override void OnInitialized()
     {
         _cx = _startX; _cy = _startY;
-        Maze();   // start with something to look at
+        Scatter();   // start with something to forage
     }
 
     // ---- world editing ----
@@ -160,46 +162,60 @@
         int i = y * W + x;
         switch (_tool)
         {
-            case "wall": _wall[i] = true; break;
+            case "wall": if (i != _startY * W + _startX) { _wall[i] = true; _applesInit.Remove(i); } break;
             case "erase": _wall[i] = false; break;
-            case "start": if (!_wall[i]) { _startX = x; _startY = y; _hasStart = true; _cx = x; _cy = y; } break;
-            case "food": if (!_wall[i]) { _foodX = x; _foodY = y; _hasFood = true; } break;
+            case "start": if (!_wall[i]) { _startX = x; _startY = y; _hasStart = true; _cx = x; _cy = y; _applesInit.Remove(i); } break;
+            case "apple": if (!_wall[i]) { if (!_applesInit.Add(i)) _applesInit.Remove(i); } break;   // toggle
         }
-        if (_tool is "start" or "food") _painting = false;
-        _idealPath.Clear();
+        if (_tool == "start") _painting = false;
         InvalidateOnEdit();
     }
     void StopPaint() => _painting = false;
 
-    void ClearWalls() { if (_running) return; Array.Clear(_wall); _idealPath.Clear(); InvalidateOnEdit(); }
+    void ClearWalls() { if (_running) return; Array.Clear(_wall); InvalidateOnEdit(); }
 
-    void Maze()
+    void Scatter()
     {
         if (_running) return;
-        Array.Clear(_wall);
-        for (int k = 0; k < W * H / 6; k++)
+        _applesInit.Clear();
+        int guard = 0;
+        while (_applesInit.Count < NApples && guard++ < 4000)
         {
-            int x = _rng.Next(W), y = _rng.Next(H);
-            if ((x == _startX && y == _startY) || (x == _foodX && y == _foodY)) continue;
-            _wall[y * W + x] = true;
+            int x = _rng.Next(W), y = _rng.Next(H), i = y * W + x;
+            if (_wall[i] || (x == _startX && y == _startY)) continue;
+            _applesInit.Add(i);
         }
-        _idealPath.Clear();
         InvalidateOnEdit();
     }
 
     void InvalidateOnEdit()
     {
-        // a changed world invalidates what the brain learned; reset the run stats so improvement is honest
-        _episode = 0; _lastSteps = 0; _bestLen = int.MaxValue; _eps = 0.6; _curve.Clear(); _trail.Clear();
+        // a changed world resets the run stats so improvement stays honest (the brain carries over; ε re-opens)
+        _episode = 0; _lastEaten = 0; _bestEaten = 0; _eps = 0.7; _curve.Clear(); _trail.Clear();
         _epExp.Clear(); _ctxWin.Clear();
-        _cx = _startX; _cy = _startY;
-        if (_showIdeal) ComputeIdeal();
+        _apples.Clear(); foreach (var a in _applesInit) _apples.Add(a);
+        _cx = _startX; _cy = _startY; _eaten = 0;
+        ComputeDist();
         StateHasChanged();
     }
 
-    // ---- passability / sight (Tracer) ----
+    // ---- passability + the Tracer distance field ----
     bool Passable(int x, int y) => x >= 0 && y >= 0 && x < W && y < H && !_wall[y * W + x];
-    bool Blocks(int x, int y) => !Passable(x, y);
+
+    void ComputeDist()
+    {
+        for (int i = 0; i < W * H; i++) _dist[i] = int.MaxValue;
+        foreach (var ap in _apples)
+        {
+            int ax = ap % W, ay = ap / W;
+            foreach (var kv in GridTactics.Reachable(ax, ay, W * H, Passable, diagonals: true))   // Tracer BFS from this apple
+            {
+                int c = kv.Key.Y * W + kv.Key.X;
+                if (kv.Value < _dist[c]) _dist[c] = kv.Value;
+            }
+            _dist[ap] = 0;
+        }
+    }
 
     // ---- the loop ----
     bool CanMove(int act)
@@ -208,13 +224,6 @@
         if (!Passable(nx, ny)) return false;
         if (DX[act] != 0 && DY[act] != 0 && (!Passable(_cx + DX[act], _cy) || !Passable(_cx, _cy + DY[act]))) return false;   // no corner cutting
         return true;
-    }
-
-    int HeadingTo(int tx, int ty)
-    {
-        int ddx = Math.Sign(tx - _cx), ddy = Math.Sign(ty - _cy);
-        for (int a = 0; a < 8; a++) if (DX[a] == ddx && DY[a] == ddy) return a;
-        return 2;
     }
 
     int PickAction(int[] ctx)
@@ -228,37 +237,53 @@
 
     void Step()
     {
-        _ctxWin.Add(_cy * W + _cx); if (_ctxWin.Count > MaxCtx) _ctxWin.RemoveAt(0);
-        int[] ctx = _ctxWin.ToArray();             // the full trajectory so far (capped at the model's maxContext), ending at the current cell
-        int act = GridTactics.LineOfSight(_cx, _cy, _foodX, _foodY, Blocks) ? HeadingTo(_foodX, _foodY) : PickAction(ctx);
-        _epExp.Add((ctx, act));
+        int cell = _cy * W + _cx;
+        _ctxWin.Add(cell); if (_ctxWin.Count > MaxCtx) _ctxWin.RemoveAt(0);
+        int[] ctx = _ctxWin.ToArray();             // the full trajectory so far (capped at the model's maxContext)
+        int act = PickAction(ctx);                 // the BRAIN decides every move — no hard-coded hunting
+
+        int prevDist = _dist[cell];
         if (CanMove(act)) { _cx += DX[act]; _cy += DY[act]; }
+        int curCell = _cy * W + _cx;
+        bool ate = _apples.Remove(curCell);
+        int curDist = ate ? 0 : _dist[curCell];
+
+        // dense signal: how much closer this move got to the nearest apple (+ a bonus for eating one)
+        int adv = 0;
+        if (prevDist != int.MaxValue && curDist != int.MaxValue) adv = prevDist - curDist;
+        if (ate) adv += EatReward;
+        if (adv > 0) _epExp.Add((ctx, act));       // reinforce moves that paid off
+
+        if (ate) { _eaten++; ComputeDist(); }      // apples changed → refresh the field
         _steps++;
         _trail.Add((_cx, _cy)); if (_trail.Count > 400) _trail.RemoveAt(0);
-        if (_cx == _foodX && _cy == _foodY) EndEpisode(true);
-        else if (_steps >= _stepCap) EndEpisode(false);
+
+        if (_apples.Count == 0 || _steps >= StepBudget) EndEpisode();
     }
 
-    void EndEpisode(bool success)
+    void EndEpisode()
     {
-        _lastSteps = _steps;
-        _curve.Add(_steps); if (_curve.Count > 60) _curve.RemoveAt(0);
-        if (success && _brain is not null)
+        _lastEaten = _eaten;
+        _curve.Add(_eaten); if (_curve.Count > 60) _curve.RemoveAt(0);
+        if (_brain is not null && _epExp.Count > 0)
         {
-            bool newBest = _steps < _bestLen;
-            if (newBest) _bestLen = _steps;
-            double lr = newBest ? 4e-3 : 1.2e-3;   // imitate the best route hardest
+            bool best = _eaten > _bestEaten;
+            if (best) _bestEaten = _eaten;
+            double lr = best ? 4e-3 : 2.5e-3;
             double sum = 0; int n = 0;
             foreach (var (ctx, act) in _epExp) { sum += KTrain(ctx, _actionBase + act, lr); n++; }
-            Log($"ep {_episode + 1,3}  reached food in {_steps,3} steps   best {_bestLen,3}   loss {(n > 0 ? sum / n : 0):F3}   lr {lr:F4}   trained {n,3}   ε {_eps * 100:F0}%{(newBest ? "   ★ new best" : "")}");
+            Log($"ep {_episode + 1,3}   ate {_eaten,2}/{_applesInit.Count,-2}   reinforced {n,3} good moves   loss {(n > 0 ? sum / n : 0):F3}   lr {lr:F4}   ε {_eps * 100:F0}%{(best ? "   ★ best haul" : "")}");
         }
-        else
+        else if (_brain is not null)
         {
-            Log($"ep {_episode + 1,3}  gave up at {_steps} steps{new string(' ', 34)}ε {_eps * 100:F0}%");
+            Log($"ep {_episode + 1,3}   ate {_eaten,2}/{_applesInit.Count,-2}   no closer moves to learn from      ε {_eps * 100:F0}%");
         }
         _episode++;
-        _eps = Math.Max(0.05, _eps * 0.93);
-        _cx = _startX; _cy = _startY; _steps = 0; _epExp.Clear(); _trail.Clear(); _ctxWin.Clear();
+        _eps = Math.Max(0.05, _eps * 0.95);
+        // respawn apples + reset the creature
+        _apples.Clear(); foreach (var a in _applesInit) _apples.Add(a);
+        ComputeDist();
+        _cx = _startX; _cy = _startY; _steps = 0; _eaten = 0; _epExp.Clear(); _trail.Clear(); _ctxWin.Clear();
     }
 
     // one online gradient step, backpropagated through the K weight-tied passes (α=1 = the extra pass fully on); returns the loss
@@ -285,12 +310,12 @@
             Log($"brain ready · L=1 · K={KPass} weight-tied passes · ctx={MaxCtx} · shifts={shifts} (pegged) · d={DModel} · vocab={W * H + 8} · {_brain.ParamCount:N0} params");
         }
         _running = true;
-        _cx = _startX; _cy = _startY; _steps = 0; _epExp.Clear(); _ctxWin.Clear(); _trail.Clear();
+        _apples.Clear(); foreach (var a in _applesInit) _apples.Add(a); ComputeDist();
+        _cx = _startX; _cy = _startY; _steps = 0; _eaten = 0; _epExp.Clear(); _ctxWin.Clear(); _trail.Clear();
         try
         {
             while (_running)
             {
-                // several sim steps per frame at higher speeds; render once
                 int burst = _speed;
                 for (int b = 0; b < burst && _running; b++) Step();
                 StateHasChanged();
@@ -306,35 +331,21 @@
         InvalidateOnEdit();
     }
 
-    void ToggleIdeal() { _showIdeal = !_showIdeal; if (_showIdeal) ComputeIdeal(); StateHasChanged(); }
-
-    // Tracer's BFS distance field from the food -> descend it from the start to trace the ideal route.
-    void ComputeIdeal()
-    {
-        _idealPath = new();
-        if (!CanRun) return;
-        var dist = GridTactics.Reachable(_foodX, _foodY, W * H, Passable, diagonals: true);
-        if (!dist.ContainsKey((_startX, _startY))) return;   // unreachable
-        int x = _startX, y = _startY, guard = 0;
-        _idealPath.Add((x, y));
-        while ((x != _foodX || y != _foodY) && guard++ < W * H)
-        {
-            int bx = x, by = y, bd = dist.TryGetValue((x, y), out var cur) ? cur : int.MaxValue;
-            for (int a = 0; a < 8; a++)
-            {
-                int nx = x + DX[a], ny = y + DY[a];
-                if (!Passable(nx, ny)) continue;
-                if (DX[a] != 0 && DY[a] != 0 && (!Passable(x + DX[a], y) || !Passable(x, y + DY[a]))) continue;
-                if (dist.TryGetValue((nx, ny), out var d) && d < bd) { bd = d; bx = nx; by = ny; }
-            }
-            if (bx == x && by == y) break;
-            x = bx; y = by; _idealPath.Add((x, y));
-        }
-    }
+    void ToggleScent() { _showScent = !_showScent; StateHasChanged(); }
 
     // ---- rendering helpers ----
     MarkupString Glyph(int cx, int cy, string cls, string ch)
         => (MarkupString)$"<text class=\"{cls}\" x=\"{cx * CS + CS / 2}\" y=\"{cy * CS + CS - 4}\" text-anchor=\"middle\">{ch}</text>";
+
+    // a faint tint per cell showing the Tracer distance field (brighter = closer to an apple) — what the creature learns toward
+    MarkupString ScentTint(int x, int y)
+    {
+        int d = _dist[y * W + x];
+        if (d == int.MaxValue) return (MarkupString)"";
+        double closeness = 1.0 / (1.0 + d);   // 1 at an apple, fading with distance
+        double op = 0.05 + 0.55 * closeness;
+        return (MarkupString)$"<rect class=\"scent\" x=\"{x * CS}\" y=\"{y * CS}\" width=\"{CS}\" height=\"{CS}\" opacity=\"{op.ToString("F2", System.Globalization.CultureInfo.InvariantCulture)}\"/>";
+    }
 
     string PathPoints(List<(int x, int y)> p)
     {
