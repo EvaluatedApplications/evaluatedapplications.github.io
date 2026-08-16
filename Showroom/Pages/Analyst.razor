@@ -100,6 +100,46 @@
             </div>
         }
 
+        <h2>Build a chart</h2>
+        <p class="repl-intro">Pick a breakdown and a measure — The Analyst writes the SQL, runs it in your browser, and draws it. No SQL required.</p>
+        <div class="cb-controls">
+            <label>break down by
+                <select @bind="_cbDim">@foreach (var c in _dimCols) { <option value="@c.Name">@c.Name</option> }</select>
+            </label>
+            <label>measure
+                <select @bind="_cbAgg">
+                    <option value="count">count of rows</option>
+                    <option value="sum">sum</option>
+                    <option value="avg">average</option>
+                    <option value="min">min</option>
+                    <option value="max">max</option>
+                </select>
+            </label>
+            @if (_cbAgg != "count" && _numCols.Count > 0)
+            {
+                <label>of
+                    <select @bind="_cbMeasure">@foreach (var c in _numCols) { <option value="@c.Name">@c.Name</option> }</select>
+                </label>
+            }
+            <label>as
+                <select @bind="_cbType">
+                    <option value="auto">auto</option>
+                    <option value="bars">bars</option>
+                    <option value="line">line</option>
+                </select>
+            </label>
+            <button class="go" @onclick="BuildChart" disabled="@_cbBusy">@(_cbBusy ? "…" : "Draw it")</button>
+        </div>
+        @if (_cbError is not null)
+        {
+            <p class="err">@_cbError</p>
+        }
+        else if (_cbChart is not null)
+        {
+            <figure class="chart-card result-chart"><figcaption>@_cbChart.Title</figcaption>@RenderChart(_cbChart)</figure>
+            <div class="cb-sql"><code>@_cbSql</code><button class="export" @onclick="ExportCb" type="button">↓ CSV</button></div>
+        }
+
         @if (_entities.Count > 0)
         {
             <h2>Found inside</h2>
@@ -265,6 +305,11 @@
     string _replView = "table";
     const int ReplRowCap = 200;
 
+    // no-SQL chart builder
+    List<Col> _dimCols = new(); List<Col> _numCols = new();
+    string _cbDim = "", _cbMeasure = "", _cbAgg = "count", _cbType = "auto", _cbSql = "";
+    Chart? _cbChart; string? _cbError; bool _cbBusy;
+
     static string Pct(double f) => (f * 100).ToString("F0") + "%";
     static string Secs(double ms) => ms < 1000 ? ms.ToString("F0") + " ms" : (ms / 1000).ToString("F2") + " s";
     static string ShortRate(double r) => r >= 1_000_000 ? (r / 1_000_000).ToString("F1") + "M" : r >= 1000 ? (r / 1000).ToString("F0") + "k" : r.ToString("F0");
@@ -408,6 +453,14 @@
 
             // ---- auto-charts drawn from the profile ----
             _charts = BuildCharts(db);
+
+            // ---- chart-builder options: sensible breakdown columns + numeric measures ----
+            _dimCols = _cols.Where(c => c.Type is FieldType.Category or FieldType.Boolean or FieldType.Date or FieldType.Integer).ToList();
+            if (_dimCols.Count == 0) _dimCols = _cols.ToList();
+            _numCols = _cols.Where(c => c.Type is FieldType.Integer or FieldType.Decimal).ToList();
+            _cbDim = _dimCols.FirstOrDefault()?.Name ?? "";
+            _cbMeasure = _numCols.FirstOrDefault()?.Name ?? "";
+            _cbAgg = _numCols.Count > 0 ? "sum" : "count"; _cbType = "auto"; _cbChart = null; _cbError = null;
 
             // ---- query suggestions drawn from the profile ----
             _suggestions = BuildSuggestions();
@@ -684,20 +737,54 @@
         return !string.IsNullOrEmpty(s) && double.TryParse(s, NumberStyles.Any, CultureInfo.InvariantCulture, out _);
     }
 
-    async Task ExportCsv()
+    async Task ExportCsv() => await ExportSqlCsv(_sql, "analyst-results.csv");
+    async Task ExportCb() => await ExportSqlCsv(_cbSql, "chart-data.csv");
+
+    async Task ExportSqlCsv(string sql, string name)
     {
-        if (_db is null || string.IsNullOrWhiteSpace(_sql)) return;
+        if (_db is null || string.IsNullOrWhiteSpace(sql)) return;
         try
         {
-            var res = _db.Execute(_sql);
+            var res = _db.Execute(sql);
             var cols = res.Columns.ToArray();
             var sb = new StringBuilder();
             sb.Append(string.Join(",", cols.Select(CsvEsc))).Append('\n');
             foreach (var r in res.Rows)
                 sb.Append(string.Join(",", cols.Select(c => CsvEsc(r.TryGetValue(c, out var v) ? v?.ToString() ?? "" : "")))).Append('\n');
-            await JS.InvokeVoidAsync("analystDownload", "analyst-results.csv", sb.ToString(), "text/csv;charset=utf-8");
+            await JS.InvokeVoidAsync("analystDownload", name, sb.ToString(), "text/csv;charset=utf-8");
         }
         catch (Exception ex) { _replError = "Export failed: " + ex.Message; StateHasChanged(); }
+    }
+
+    // no-SQL chart builder: pick a breakdown + measure, we write the GROUP BY, run it in-browser, and draw it
+    async Task BuildChart()
+    {
+        if (_db is null || string.IsNullOrEmpty(_cbDim)) { _cbError = "Pick a field to break down by."; return; }
+        _cbBusy = true; _cbError = null; StateHasChanged(); await Task.Delay(1);
+        try
+        {
+            bool isDate = _cols.FirstOrDefault(c => c.Name == _cbDim)?.Type == FieldType.Date;
+            string sql, measureLabel;
+            if (_cbAgg == "count")
+            {
+                sql = $"SELECT {_cbDim}, COUNT(*) FROM data GROUP BY {_cbDim} ORDER BY {(isDate ? _cbDim : "count(*) DESC")} LIMIT 40";
+                measureLabel = "count";
+            }
+            else
+            {
+                if (string.IsNullOrEmpty(_cbMeasure)) { _cbError = "Pick a numeric measure."; _cbBusy = false; return; }
+                sql = $"SELECT {_cbDim}, {_cbAgg}({_cbMeasure}) FROM data GROUP BY {_cbDim} ORDER BY {(isDate ? _cbDim : $"{_cbAgg}({_cbMeasure}) DESC")} LIMIT 40";
+                measureLabel = $"{_cbAgg} of {_cbMeasure}";
+            }
+            _cbSql = sql;
+            var res = _db.Execute(sql);
+            var cols = res.Columns.ToArray();
+            var data = res.Rows.Take(40).Select(r => (Cell(r.GetValueOrDefault(cols[0]) ?? ""), ToD(r.GetValueOrDefault(cols[^1]) ?? 0d))).ToList();
+            string kind = _cbType == "auto" ? (isDate ? "line" : "bars") : _cbType;
+            _cbChart = new Chart($"{measureLabel} by {_cbDim}", kind, data);
+        }
+        catch (Exception ex) { _cbError = ex.Message; _cbChart = null; }
+        finally { _cbBusy = false; StateHasChanged(); }
     }
 
     static string CsvEsc(string s)
@@ -734,7 +821,7 @@
             int y = top + i * rowH, cy = y + rowH / 2;
             double w = barMax * Math.Abs(d[i].Value) / max; if (w < 2 && d[i].Value != 0) w = 2;
             sb.Append($"<text class=\"c-lbl\" x=\"{labelW}\" y=\"{cy + 4}\" text-anchor=\"end\">{Esc(Trunc(d[i].Label, 24))}</text>");
-            sb.Append($"<rect class=\"c-bar\" x=\"{barX}\" y=\"{y + 7}\" width=\"{F(w)}\" height=\"{rowH - 14}\" rx=\"3\"/>");
+            sb.Append($"<rect class=\"c-bar\" x=\"{barX}\" y=\"{y + 7}\" width=\"{F(w)}\" height=\"{rowH - 14}\" rx=\"3\"><title>{Esc(d[i].Label)}: {Esc(Fmt(d[i].Value))}</title></rect>");
             sb.Append($"<text class=\"c-val\" x=\"{F(barX + w + 7)}\" y=\"{cy + 4}\">{Esc(Fmt(d[i].Value))}</text>");
         }
         sb.Append("</svg>");
