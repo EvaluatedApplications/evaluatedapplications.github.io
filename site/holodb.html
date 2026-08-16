@@ -32,7 +32,7 @@
 <article class="prose">
   <nav class="crumb"><a href="/holodb/">HoloDb</a> <span>/</span> Benchmarks</nav>
   <h1>Benchmarks — the full method and every number</h1>
-  <p class="lede" style="margin-top:12px">One realistic workload — a billing SaaS's <strong>invoice ledger</strong> — run as <strong>two apples-to-apples comparisons we keep separate</strong>: the in-process, in-memory engines against each other (HoloDb embedded vs DuckDB), and the networked services against each other (HoloDb server vs a durable on-disk SQL&nbsp;Server). Every result is verified byte-for-byte identical across all four engines before it's timed, so the comparison is honest — including the queries HoloDb loses.</p>
+  <p class="lede" style="margin-top:12px">One realistic workload — a billing SaaS's <strong>invoice ledger</strong> — run as <strong>two separate apples-to-apples comparisons</strong>: the in-process, in-memory engines (HoloDb embedded and DuckDB), and the networked services (HoloDb server and a durable on-disk SQL&nbsp;Server). Every result is verified byte-for-byte identical across all four engines before it is timed, including the queries where HoloDb trails.</p>
 
   <h2>The workload</h2>
   <div class="snip" style="background:var(--bg-2);border:1px solid var(--border);border-radius:10px;padding:14px 16px;margin:10px 0;overflow-x:auto"><code style="font-family:var(--mono);font-size:.84rem;color:var(--ink);white-space:pre">CREATE TABLE invoices (
@@ -73,7 +73,7 @@
       <tr><td>overdue outstanding</td><td>182.5</td><td class="holo">26.9</td><td>DuckDB ~6.8×</td></tr>
     </tbody>
   </table>
-  <p style="color:var(--ink-faint);font-size:.86rem">The <span style="color:var(--accent-ink)">purple</span> cell is the faster engine. Bulk load, rows/sec: DuckDB 1.32M · HoloDb 426k. HoloDb answers the top six from maintained accumulators and its PK index (no scan), and <code>top customers</code> (500k-key group + top-K) is now a dead heat; DuckDB's columnar engine still wins the other scans.</p>
+  <p style="color:var(--ink-faint);font-size:.86rem">The <span style="color:var(--accent-ink)">purple</span> cell is the faster engine. Bulk load, rows/sec: DuckDB 1.32M · HoloDb 426k. The top six resolve from maintained accumulators and the PK index (no scan); <code>top customers</code> lands in a dead heat; DuckDB's columnar engine leads on the other scans.</p>
 
   <h2>Networked service, persistent storage <span style="color:var(--ink-faint);font-size:.7em;font-weight:400">— HoloDb server vs SQL&nbsp;Server 2022 (on disk), 25M invoices, median ms</span></h2>
   <table class="cmp">
@@ -95,10 +95,10 @@
   <p style="color:var(--ink-faint);font-size:.86rem">Both are networked services paying a client/server round-trip. SQL Server reads from disk at 25M (1&nbsp;GB cache); HoloDb serves the working set from RAM with the same maintained accumulators. Bulk load, rows/sec: HoloDb server 698k · SQL&nbsp;Server 532k. HoloDb wins <strong>all eleven</strong>.</p>
 
   <h2>What the numbers say</h2>
-  <p>HoloDb's <strong>maintained aggregates</strong> — the whole-ledger total and count, and the single-column <code>GROUP BY</code> rollups (revenue by status, month, region) — answer in <strong>microseconds and are constant-time</strong>: they read a kept tally instead of scanning, so they don't grow as the ledger does. HoloDb also wins the single-invoice lookup from its primary-key index. In-process it wins six of eleven outright (and ties <code>top customers</code>); as a networked service against a disk-bound SQL&nbsp;Server it wins all eleven.</p>
-  <p>In-process, DuckDB — an excellent pure-columnar engine — still wins the queries HoloDb has to scan for: a filtered sum (overdue outstanding), a top-K (largest invoices), and a multi-column group (region×status). Shown above, not hidden. The half-million-key <code>top customers</code> group used to be a heavy loss; HoloDb now direct-indexes dense id keys and does a partial top-K, so it's a dead heat. HoloDb's edge is the <strong>mixed</strong> transactional + analytics + vector workload, durable and larger-than-memory, in one embeddable dependency.</p>
+  <p>The <strong>maintained aggregates</strong> — the whole-ledger total and count, and the single-column <code>GROUP BY</code> rollups (revenue by status, month, region) — resolve in <strong>microseconds and are constant-time</strong>: a kept tally is read instead of scanning, so response holds as the ledger grows. The single-invoice lookup resolves from the primary-key index. In-process, HoloDb leads on six of eleven queries and ties <code>top customers</code>; as a networked service against a disk-bound SQL&nbsp;Server it leads on all eleven.</p>
+  <p>In-process, DuckDB's pure-columnar engine leads on the scanned queries: a filtered sum (overdue outstanding), a top-K (largest invoices), and a multi-column group (region×status). HoloDb targets the <strong>mixed</strong> transactional, analytics and vector workload, durable and larger-than-memory, in a single embeddable dependency.</p>
 
-  <p style="margin-top:2rem"><a href="/holodb/">← Back to HoloDb</a> &nbsp;·&nbsp; <a href="/tools/analyst">Run it in your browser →</a></p>
+  <p style="margin-top:2rem"><a href="/holodb/">← Back to HoloDb</a> &nbsp;·&nbsp; <a href="/tools/analyst">Run it in the browser →</a></p>
 </article>
 </main>
 
