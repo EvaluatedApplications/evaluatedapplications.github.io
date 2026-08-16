@@ -1,0 +1,518 @@
+@page "/holodb/analyst"
+@using System.Diagnostics
+@using System.Globalization
+@using System.Text
+@using System.Text.RegularExpressions
+@using HoloDb
+
+<PageTitle>The Analyst</PageTitle>
+
+<div class="room">
+    <header class="room-head">
+        <nav class="crumb"><a href="holodb">HoloDb</a> <span>/</span> Demonstration</nav>
+        <h1>The Analyst</h1>
+        <p class="lede">Paste <em>any</em> data &mdash; a CSV, a log, JSON lines, a spreadsheet dump, or plain text.
+            It profiles the whole thing with a real SQL database <strong>running in your browser</strong>: what it is,
+            what's typical, what's weird, and what's hidden inside. Nothing leaves this page.</p>
+    </header>
+
+    <textarea class="paste" @bind="Text" @bind:event="oninput" rows="7" disabled="@_busy"
+              placeholder="Paste a CSV, a log file, JSON lines, transactions, anything…"></textarea>
+
+    <div class="controls">
+        <button class="go" @onclick="Analyze" disabled="@_busy">@(_busy ? "Working…" : "Profile it")</button>
+        <span class="hint">@_charCount.ToString("N0") characters ready</span>
+    </div>
+
+    @if (_busy)
+    {
+        <div class="progress-wrap">
+            <div class="progress-track"><div class="progress-fill" style="width:@Pct(_progress)"></div></div>
+            <span class="progress-label">@_phase</span>
+        </div>
+    }
+
+    @if (_error is not null)
+    {
+        <p class="err">@_error</p>
+    }
+    else if (_done)
+    {
+        <div class="speed">
+            Detected <strong>@_format</strong>. Profiled <strong>@_rows.ToString("N0")</strong> records &times;
+            <strong>@_cols.Count</strong> fields at <strong>@ShortRate(_loadRate)/sec</strong> into HoloDb,
+            every aggregate answered in <strong>@_queryMs.ToString("F1") ms</strong>. Total <strong>@Secs(_ms)</strong>.
+        </div>
+
+        <div class="cost">
+            <div class="cost-line"><span>A cloud warehouse to profile this</span><span class="them">~$@_bqCost.ToString("F4")</span></div>
+            <div class="cost-line"><span>Here, in your browser</span><span class="us">$0.0000</span></div>
+            <p class="privacy">A real SQL database compiled to your browser did every count, distinct, min/max and group-by.
+                Open your network tab &mdash; nothing left your device.</p>
+        </div>
+
+        @if (_flags.Count > 0)
+        {
+            <h2>What stands out</h2>
+            <ul class="flags">
+                @foreach (var f in _flags) { <li class="flag @f.Level">@((MarkupString)f.Text)</li> }
+            </ul>
+        }
+
+        @if (_entities.Count > 0)
+        {
+            <h2>Found inside</h2>
+            <div class="chips">
+                @foreach (var e in _entities)
+                {
+                    <div class="chip">
+                        <span class="chip-kind">@e.Kind</span>
+                        <span class="chip-count">@e.Count.ToString("N0")</span>
+                        <span class="chip-eg">@string.Join("  ·  ", e.Examples)</span>
+                    </div>
+                }
+            </div>
+        }
+
+        <h2>The fields</h2>
+        <div class="cols">
+            @foreach (var c in _cols)
+            {
+                <div class="col-card">
+                    <div class="col-head">
+                        <span class="col-name">@c.Name</span>
+                        <span class="col-type type-@c.Type.ToString().ToLowerInvariant()">@c.Type</span>
+                    </div>
+                    <div class="col-facts">
+                        <span>@c.Distinct.ToString("N0") distinct</span>
+                        @if (c.Missing > 0) { <span class="warn">@MissPct(c) missing</span> }
+                        @if (c.Type is FieldType.Integer or FieldType.Decimal)
+                        {
+                            <span>min @Num(c.Min)</span><span>avg @Num(c.Mean)</span><span>max @Num(c.Max)</span>
+                            @if (c.Outliers > 0) { <span class="warn">@c.Outliers.ToString("N0") outliers</span> }
+                        }
+                    </div>
+                    @if (c.Top.Count > 0)
+                    {
+                        <div class="col-bars">
+                            @foreach (var (v, n) in c.Top)
+                            {
+                                <div class="mini-row">
+                                    <span class="mini-val">@(string.IsNullOrEmpty(v) ? "(empty)" : v)</span>
+                                    <div class="mini-bar"><div class="mini-fill" style="width:@ColFill(c, n)"></div></div>
+                                    <span class="mini-n">@n.ToString("N0")</span>
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+
+        <h2>Ask it anything</h2>
+        <p class="repl-intro">A live SQL prompt against your data, answered by the same in-browser database. Try a
+            suggestion or write your own &mdash; the fields are named just as they read above.</p>
+        <div class="suggests">
+            @foreach (var sug in _suggestions)
+            {
+                <button class="suggest" @onclick="() => RunSql(sug.Sql)" disabled="@_replBusy">@sug.Label</button>
+            }
+        </div>
+        <textarea class="sql" @bind="_sql" @bind:event="oninput" rows="3" spellcheck="false" disabled="@_replBusy"></textarea>
+        <div class="controls">
+            <button class="go" @onclick="() => RunSql()" disabled="@_replBusy">@(_replBusy ? "Running…" : "Run query")</button>
+            @if (_replRan && _replError is null) { <span class="hint">@_replTotal.ToString("N0") rows in @_replMs.ToString("F2") ms</span> }
+        </div>
+
+        @if (_replError is not null)
+        {
+            <p class="err">@_replError</p>
+        }
+        else if (_replRan)
+        {
+            @if (_replRows.Count == 0)
+            {
+                <p class="hint">No rows.</p>
+            }
+            else
+            {
+                <div class="table-scroll">
+                    <table class="result">
+                        <thead><tr>@foreach (var col in _replCols) { <th>@col</th> }</tr></thead>
+                        <tbody>
+                            @foreach (var row in _replRows)
+                            {
+                                <tr>@foreach (var col in _replCols) { <td>@(row.TryGetValue(col, out var v) ? v?.ToString() : "")</td> }</tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+                @if (_replTotal > _replRows.Count) { <p class="hint">Showing the first @_replRows.Count.ToString("N0") of @_replTotal.ToString("N0") rows.</p> }
+            }
+        }
+    }
+</div>
+
+@code {
+    const int RowCap = 500_000;
+    const int EntityScanChars = 2_000_000;
+
+    enum FieldType { Integer, Decimal, Date, Boolean, Category, Text }
+    record Col(string Name, FieldType Type)
+    {
+        public long Count, Missing, Distinct, Outliers;
+        public double Min, Max, Mean;
+        public List<(string Val, long N)> Top = new();
+    }
+    record Entity(string Kind, long Count, List<string> Examples);
+    record Flag(string Level, string Text);
+
+    string _text = SampleCsv;
+    string Text { get => _text; set { _text = value; _charCount = value.Length; } }
+    int _charCount = SampleCsv.Length;
+
+    bool _busy, _done;
+    string? _error;
+    double _progress; string _phase = "";
+    string _format = "";
+    long _rows;
+    double _ms, _queryMs, _loadRate, _bqCost;
+    List<Col> _cols = new();
+    List<Entity> _entities = new();
+    List<Flag> _flags = new();
+
+    // live SQL prompt over the profiled data
+    Database? _db;
+    string _sql = "";
+    List<(string Label, string Sql)> _suggestions = new();
+    bool _replBusy, _replRan;
+    string? _replError;
+    double _replMs; int _replTotal;
+    string[] _replCols = Array.Empty<string>();
+    List<Dictionary<string, object>> _replRows = new();
+    const int ReplRowCap = 200;
+
+    static string Pct(double f) => (f * 100).ToString("F0") + "%";
+    static string Secs(double ms) => ms < 1000 ? ms.ToString("F0") + " ms" : (ms / 1000).ToString("F2") + " s";
+    static string ShortRate(double r) => r >= 1_000_000 ? (r / 1_000_000).ToString("F1") + "M" : r >= 1000 ? (r / 1000).ToString("F0") + "k" : r.ToString("F0");
+    static string Num(double v) => Math.Abs(v) >= 1000 || v == Math.Floor(v) ? v.ToString("N0") : v.ToString("N2");
+    string MissPct(Col c) => (_rows > 0 ? c.Missing * 100.0 / _rows : 0).ToString("F0") + "%";
+    static string ColFill(Col c, long n) { long m = c.Top.Count > 0 ? c.Top[0].N : 1; return (m > 0 ? n * 100.0 / m : 0).ToString("F1") + "%"; }
+
+    async Task Analyze()
+    {
+        _busy = true; _error = null; _done = false; _progress = 0; _phase = "Reading…";
+        _cols = new(); _entities = new(); _flags = new();
+        _suggestions = new(); _replRan = false; _replError = null; _replRows = new(); _replCols = Array.Empty<string>();
+        StateHasChanged(); await Task.Delay(1);
+
+        try
+        {
+            var swAll = Stopwatch.StartNew();
+
+            // ---- sniff + parse into columns ----
+            var lines = SplitLines(_text, RowCap + 1);
+            if (lines.Count == 0) { _error = "Nothing to profile."; return; }
+            char delim = SniffDelimiter(lines);
+            bool tabular = delim != '\0';
+            _format = tabular ? $"{DelimName(delim)}-separated, {lines.Count:N0} rows" : "plain text";
+
+            List<string> names;
+            string[][] cells;
+            int malformed = 0;
+            if (tabular)
+            {
+                var header = SplitRow(lines[0], delim);
+                bool hasHeader = header.All(h => !IsNumber(h)) && header.Distinct().Count() == header.Length;
+                names = hasHeader ? header.Select((h, i) => string.IsNullOrWhiteSpace(h) ? $"col{i + 1}" : h.Trim()).ToList()
+                                  : Enumerable.Range(1, header.Length).Select(i => $"col{i}").ToList();
+                int ncol = names.Count;
+                int startRow = hasHeader ? 1 : 0;
+                var rows = new List<string[]>(lines.Count);
+                for (int i = startRow; i < lines.Count; i++)
+                {
+                    var r = SplitRow(lines[i], delim);
+                    if (r.Length != ncol) { malformed++; if (r.Length < ncol) r = r.Concat(Enumerable.Repeat("", ncol - r.Length)).ToArray(); else r = r.Take(ncol).ToArray(); }
+                    rows.Add(r);
+                    if ((i & 0x1FFFF) == 0) { _progress = 0.35 * i / lines.Count; _phase = $"Parsing… {rows.Count:N0} rows"; StateHasChanged(); await Task.Delay(1); }
+                }
+                cells = rows.ToArray();
+            }
+            else
+            {
+                names = new() { "line" };
+                cells = lines.Select(l => new[] { l }).ToArray();
+            }
+            _rows = cells.Length;
+            if (_rows == 0) { _error = "No records found."; return; }
+
+            // real, typeable SQL identifiers so the REPL reads naturally (region, amount) not c0/c1
+            var sqlNames = MakeSqlNames(names);
+
+            // ---- infer a type per column ----
+            var types = new FieldType[names.Count];
+            for (int c = 0; c < names.Count; c++) types[c] = InferType(cells, c, _rows);
+
+            // ---- load into a real in-memory HoloDb ----
+            _phase = "Loading into HoloDb…"; _progress = 0.4; StateHasChanged(); await Task.Delay(1);
+            var db = Database.Open(null); _db = db;
+            var defs = new StringBuilder("CREATE TABLE data (rowid INT PRIMARY KEY");
+            for (int c = 0; c < names.Count; c++) defs.Append($", {sqlNames[c]} {SqlType(types[c])}");
+            defs.Append(')');
+            db.Execute(defs.ToString());
+
+            int n = (int)_rows; const int chunk = 100_000;
+            var colNames = new string[names.Count + 1]; colNames[0] = "rowid";
+            for (int c = 0; c < names.Count; c++) colNames[c + 1] = sqlNames[c];
+            var swLoad = Stopwatch.StartNew();
+            for (int start = 0; start < n; start += chunk)
+            {
+                int m = Math.Min(chunk, n - start);
+                var data = new Array[names.Count + 1];
+                var idc = new long[m]; for (int j = 0; j < m; j++) idc[j] = start + j; data[0] = idc;
+                for (int c = 0; c < names.Count; c++) data[c + 1] = BuildColumn(cells, c, start, m, types[c]);
+                db.BulkLoad("data", colNames, data, m);
+                _progress = 0.4 + 0.45 * (start + m) / n; _phase = $"Loading into HoloDb… {(start + m):N0} / {n:N0}"; StateHasChanged(); await Task.Delay(1);
+            }
+            swLoad.Stop();
+            _loadRate = swLoad.Elapsed.TotalSeconds > 0 ? n / swLoad.Elapsed.TotalSeconds : n;
+
+            // ---- profile each column via HoloDb aggregates ----
+            _phase = "Profiling…"; _progress = 0.9; StateHasChanged(); await Task.Delay(1);
+            var swQ = Stopwatch.StartNew();
+            for (int c = 0; c < names.Count; c++)
+            {
+                var col = new Col(sqlNames[c], types[c]);
+                string q = sqlNames[c];
+                var groups = db.Execute($"SELECT {q}, COUNT(*) FROM data GROUP BY {q}").Rows;
+                col.Distinct = groups.Count;
+                col.Count = _rows;
+                col.Top = groups.Select(r => (Cell(r[q]), (long)r["count(*)"]))
+                                .OrderByDescending(x => x.Item2).ThenBy(x => x.Item1).Take(6).ToList();
+                col.Missing = groups.Where(r => string.IsNullOrEmpty(Cell(r[q]))).Sum(r => (long)r["count(*)"]);
+                if (types[c] is FieldType.Integer or FieldType.Decimal)
+                {
+                    col.Min = ToD(db.Execute($"SELECT MIN({q}) FROM data").Rows[0].Values.First());
+                    col.Max = ToD(db.Execute($"SELECT MAX({q}) FROM data").Rows[0].Values.First());
+                    double sum = ToD(db.Execute($"SELECT SUM({q}) FROM data").Rows[0].Values.First());
+                    col.Mean = _rows > 0 ? sum / _rows : 0;
+                    (col.Outliers, col.Top) = NumericExtras(cells, c, col.Mean);
+                }
+                _cols.Add(col);
+            }
+            swQ.Stop();
+            _queryMs = swQ.Elapsed.TotalMilliseconds;
+
+            // ---- entities from the raw text ----
+            _entities = ExtractEntities(_text.Length > EntityScanChars ? _text[..EntityScanChars] : _text);
+
+            // ---- headline flags ----
+            _flags = BuildFlags(malformed);
+
+            // ---- query suggestions drawn from the profile ----
+            _suggestions = BuildSuggestions();
+            _sql = _suggestions.Count > 0 ? _suggestions[0].Sql : "SELECT * FROM data LIMIT 20";
+
+            swAll.Stop();
+            _ms = swAll.Elapsed.TotalMilliseconds;
+            long bytes = (long)_rows * names.Count * 12 * 4;
+            _bqCost = bytes / (double)(1L << 40) * 6.25;
+            _progress = 1; _done = true;
+        }
+        catch (Exception ex) { _error = "Something went wrong: " + ex.Message; }
+        finally { _busy = false; StateHasChanged(); }
+    }
+
+    // ---- parsing / inference helpers ----
+    static List<string> SplitLines(string t, int cap)
+    {
+        var res = new List<string>(); int i = 0, n = t.Length;
+        while (i < n && res.Count < cap)
+        {
+            int j = t.IndexOf('\n', i); if (j < 0) j = n;
+            var line = t[i..j].TrimEnd('\r');
+            if (line.Length > 0) res.Add(line);
+            i = j + 1;
+        }
+        return res;
+    }
+    static char SniffDelimiter(List<string> lines)
+    {
+        foreach (char d in new[] { '\t', ',', ';', '|' })
+        {
+            int probe = Math.Min(lines.Count, 30);
+            var counts = new Dictionary<int, int>();
+            for (int i = 0; i < probe; i++) { int c = lines[i].Count(ch => ch == d); counts[c] = counts.GetValueOrDefault(c) + 1; }
+            var best = counts.OrderByDescending(kv => kv.Value).First();
+            if (best.Key >= 1 && best.Value >= probe * 0.7) return d;
+        }
+        return '\0';
+    }
+    static string DelimName(char d) => d switch { '\t' => "tab", ',' => "comma", ';' => "semicolon", '|' => "pipe", _ => "text" };
+    static string[] SplitRow(string line, char d) => line.Split(d).Select(f => f.Trim().Trim('"')).ToArray();
+
+    static FieldType InferType(string[][] cells, int c, long rows)
+    {
+        int seen = 0, ints = 0, dec = 0, dates = 0, bools = 0; var distinct = new HashSet<string>();
+        for (int i = 0; i < cells.Length && seen < 400; i++)
+        {
+            if (c >= cells[i].Length) continue; var v = cells[i][c];
+            if (string.IsNullOrEmpty(v)) continue; seen++;
+            if (distinct.Count < 60) distinct.Add(v);
+            if (long.TryParse(v, out _)) ints++;
+            else if (double.TryParse(v, NumberStyles.Any, CultureInfo.InvariantCulture, out _)) dec++;
+            if (DateTime.TryParse(v, CultureInfo.InvariantCulture, DateTimeStyles.None, out _)) dates++;
+            if (v is "true" or "false" or "yes" or "no" or "0" or "1" or "True" or "False") bools++;
+        }
+        if (seen == 0) return FieldType.Text;
+        if (ints == seen) return FieldType.Integer;
+        if (ints + dec == seen) return FieldType.Decimal;
+        if (dates == seen) return FieldType.Date;
+        if (bools == seen && distinct.Count <= 3) return FieldType.Boolean;
+        double ratio = seen > 0 ? distinct.Count / (double)Math.Min(seen, 60) : 1;
+        return distinct.Count <= 40 && ratio < 0.9 ? FieldType.Category : FieldType.Text;
+    }
+    static bool IsNumber(string v) => double.TryParse(v, NumberStyles.Any, CultureInfo.InvariantCulture, out _);
+    static string SqlType(FieldType t) => t == FieldType.Integer ? "INT" : t == FieldType.Decimal ? "REAL" : "TEXT";
+    static string Cell(object o) => o?.ToString() ?? "";
+    static double ToD(object o) => o is null ? 0 : Convert.ToDouble(o, CultureInfo.InvariantCulture);
+
+    static Array BuildColumn(string[][] cells, int c, int start, int m, FieldType t)
+    {
+        if (t == FieldType.Integer) { var a = new long[m]; for (int j = 0; j < m; j++) a[j] = c < cells[start + j].Length && long.TryParse(cells[start + j][c], out var v) ? v : 0; return a; }
+        if (t == FieldType.Decimal) { var a = new double[m]; for (int j = 0; j < m; j++) a[j] = c < cells[start + j].Length && double.TryParse(cells[start + j][c], NumberStyles.Any, CultureInfo.InvariantCulture, out var v) ? v : 0; return a; }
+        var s = new string[m]; for (int j = 0; j < m; j++) s[j] = c < cells[start + j].Length ? cells[start + j][c] : ""; return s;
+    }
+
+    static (long outliers, List<(string, long)> top) NumericExtras(string[][] cells, int c, double mean)
+    {
+        double sumsq = 0; long cnt = 0; var buckets = new Dictionary<double, long>();
+        foreach (var row in cells)
+        {
+            if (c >= row.Length || string.IsNullOrEmpty(row[c])) continue;
+            if (!double.TryParse(row[c], NumberStyles.Any, CultureInfo.InvariantCulture, out var v)) continue;
+            sumsq += (v - mean) * (v - mean); cnt++;
+        }
+        double std = cnt > 0 ? Math.Sqrt(sumsq / cnt) : 0;
+        long outliers = 0;
+        if (std > 0)
+            foreach (var row in cells)
+            {
+                if (c >= row.Length || string.IsNullOrEmpty(row[c])) continue;
+                if (double.TryParse(row[c], NumberStyles.Any, CultureInfo.InvariantCulture, out var v) && Math.Abs(v - mean) > 3 * std) outliers++;
+            }
+        return (outliers, new());   // numeric columns show stats, not a top-values bar
+    }
+
+    static List<Entity> ExtractEntities(string t)
+    {
+        var patterns = new (string Kind, string Re)[]
+        {
+            ("emails", @"[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}"),
+            ("URLs", @"https?://[^\s""'<>]+"),
+            ("IP addresses", @"\b(?:\d{1,3}\.){3}\d{1,3}\b"),
+            ("dates", @"\b\d{4}-\d{2}-\d{2}\b|\b\d{1,2}/\d{1,2}/\d{2,4}\b"),
+            ("money", @"[$£€]\s?\d[\d,]*(?:\.\d+)?"),
+            ("@mentions", @"(?<=\s|^)@[A-Za-z0-9_]{2,}"),
+            ("#tags", @"(?<=\s|^)#[A-Za-z0-9_]{2,}"),
+        };
+        var res = new List<Entity>();
+        foreach (var (kind, re) in patterns)
+        {
+            var ms = Regex.Matches(t, re);
+            if (ms.Count == 0) continue;
+            var examples = ms.Select(m => m.Value).Distinct().Take(3).ToList();
+            res.Add(new Entity(kind, ms.Count, examples));
+        }
+        return res.OrderByDescending(e => e.Count).ToList();
+    }
+
+    List<Flag> BuildFlags(int malformed)
+    {
+        var f = new List<Flag>();
+        foreach (var c in _cols.Where(c => c.Outliers > 0))
+            f.Add(new Flag("warn", $"<b>{c.Name}</b> has <b>{c.Outliers:N0}</b> outliers (past 3&sigma; from the mean of {Num(c.Mean)})."));
+        foreach (var c in _cols.Where(c => c.Distinct == _rows && _rows > 1))
+            f.Add(new Flag("info", $"<b>{c.Name}</b> is unique on every row &mdash; looks like an ID or key."));
+        foreach (var c in _cols.Where(c => c.Missing > _rows * 0.2))
+            f.Add(new Flag("warn", $"<b>{c.Name}</b> is <b>{MissPct(c)}</b> empty."));
+        foreach (var c in _cols.Where(c => c.Type == FieldType.Category && c.Distinct == 1 && _rows > 1))
+            f.Add(new Flag("info", $"<b>{c.Name}</b> is constant &mdash; the same value on every row."));
+        if (malformed > 0) f.Add(new Flag("warn", $"<b>{malformed:N0}</b> rows didn't match the column count (padded or trimmed to fit)."));
+        return f.Take(8).ToList();
+    }
+
+    // Header text -> valid, unique SQL identifiers (unquoted idents only; typical CSV headers pass through unchanged).
+    static List<string> MakeSqlNames(List<string> raw)
+    {
+        var used = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "rowid" };
+        var outp = new List<string>(raw.Count);
+        for (int i = 0; i < raw.Count; i++)
+        {
+            var sb = new StringBuilder();
+            foreach (var ch in raw[i]) sb.Append(char.IsLetterOrDigit(ch) ? ch : '_');
+            var s = sb.ToString().Trim('_');
+            if (s.Length == 0 || char.IsDigit(s[0])) s = "c" + (i + 1);
+            var baseName = s; int k = 2;
+            while (!used.Add(s)) s = baseName + "_" + k++;
+            outp.Add(s);
+        }
+        return outp;
+    }
+
+    // Queries worth trying, inferred from what the profile found in the data.
+    List<(string Label, string Sql)> BuildSuggestions()
+    {
+        var s = new List<(string, string)> { ("Peek at the first rows", "SELECT * FROM data LIMIT 20") };
+        var cats = _cols.Where(c => c.Type is FieldType.Category or FieldType.Boolean && c.Distinct is > 1 and <= 50).ToList();
+        var nums = _cols.Where(c => c.Type is FieldType.Integer or FieldType.Decimal).ToList();
+        var dates = _cols.Where(c => c.Type == FieldType.Date).ToList();
+
+        foreach (var c in cats.Take(2))
+            s.Add(($"Count rows per {c.Name}", $"SELECT {c.Name}, COUNT(*) FROM data GROUP BY {c.Name} ORDER BY count(*) DESC LIMIT 10"));
+        foreach (var c in nums.Take(2))
+            s.Add(($"Summarise {c.Name}", $"SELECT MIN({c.Name}), AVG({c.Name}), MAX({c.Name}), SUM({c.Name}) FROM data"));
+        if (cats.Count > 0 && nums.Count > 0)
+            s.Add(($"Total {nums[0].Name} by {cats[0].Name}",
+                   $"SELECT {cats[0].Name}, SUM({nums[0].Name}), AVG({nums[0].Name}) FROM data GROUP BY {cats[0].Name} ORDER BY sum({nums[0].Name}) DESC LIMIT 10"));
+        var outlier = _cols.FirstOrDefault(c => c.Outliers > 0);
+        if (outlier is not null)
+            s.Add(($"Biggest {outlier.Name} first", $"SELECT * FROM data ORDER BY {outlier.Name} DESC LIMIT 10"));
+        if (dates.Count > 0 && nums.Count > 0)
+            s.Add(($"{nums[0].Name} over {dates[0].Name}",
+                   $"SELECT {dates[0].Name}, SUM({nums[0].Name}) FROM data GROUP BY {dates[0].Name} ORDER BY {dates[0].Name} LIMIT 30"));
+        return s.Take(7).ToList();
+    }
+
+    async Task RunSql(string? sql = null)
+    {
+        if (sql is not null) _sql = sql;
+        if (_db is null || string.IsNullOrWhiteSpace(_sql)) return;
+        _replBusy = true; _replError = null; StateHasChanged(); await Task.Delay(1);
+        try
+        {
+            var sw = Stopwatch.StartNew();
+            var res = _db.Execute(_sql);
+            sw.Stop();
+            _replMs = sw.Elapsed.TotalMilliseconds;
+            var rows = res.Rows;
+            _replTotal = rows.Count;
+            _replCols = res.Columns.ToArray();
+            _replRows = rows.Take(ReplRowCap).ToList();
+        }
+        catch (Exception ex) { _replError = ex.Message; _replRows = new(); _replCols = Array.Empty<string>(); _replTotal = 0; }
+        finally { _replRan = true; _replBusy = false; StateHasChanged(); }
+    }
+
+    const string SampleCsv = @"date,user,region,amount,status,email
+2026-01-03,alice,EU,42.50,paid,alice@example.com
+2026-01-03,bob,US,17.00,paid,bob@example.com
+2026-01-04,carol,EU,9999.00,refunded,carol@example.com
+2026-01-04,alice,EU,38.20,paid,alice@example.com
+2026-01-05,dave,APAC,55.75,paid,dave@sample.org
+2026-01-05,bob,US,,failed,bob@example.com
+2026-01-06,eve,EU,61.10,paid,eve@example.com
+2026-01-06,alice,EU,44.00,paid,alice@example.com
+2026-01-07,frank,US,28.90,paid,frank@sample.org
+2026-01-07,carol,EU,33.30,paid,carol@example.com";
+}

@@ -1,0 +1,162 @@
+@page "/"
+@inject IJSRuntime JS
+
+<PageTitle>Evaluated Applications — software you can touch</PageTitle>
+
+<header class="hero">
+    <div class="wrap">
+        <span class="eyebrow">.NET libraries · running in your browser</span>
+        <h1>The software we've shipped, running right here.</h1>
+        <p class="lede">Evaluated Applications builds high-performance .NET libraries. Most share one idea:
+            computing with holographic vectors, over a runtime that tunes itself to your hardware. The tools below
+            run those libraries <strong>entirely in your browser</strong> — no server, no upload, nothing leaves your device.
+            Everything is on NuGet today.</p>
+        <div class="facts">
+            <span class="fact"><b>9</b> packages</span>
+            <span class="fact">all on <b>NuGet</b></span>
+            <span class="fact">net<b>8.0</b></span>
+            <span class="fact">free to use</span>
+            <span class="fact">one shared foundation</span>
+        </div>
+    </div>
+</header>
+
+<section class="sec" id="tools">
+    <div class="wrap">
+        <div class="sec-head">
+            <span class="dot" style="background:var(--c-data)"></span>
+            <h2>Tools you can touch</h2>
+            <p>the libraries, live</p>
+        </div>
+        <div class="grid">
+            <a class="card tool" href="holodb/analyst" style="--cat:var(--c-data)">
+                <div class="card-top"><h3>The Analyst</h3><span class="tag live">live</span><span class="ver">HoloDb</span></div>
+                <p class="desc">Paste any data — a CSV, a log, JSON lines, a spreadsheet dump — and it profiles the whole
+                    thing with a real SQL database running in your browser: what it is, what's typical, what's weird, and
+                    what's hidden inside. Then query it yourself at a live SQL prompt.</p>
+                <div class="go-in">Open The Analyst →</div>
+            </a>
+
+            <div class="card tool" style="--cat:var(--c-ml)">
+                <div class="card-top"><h3>The Creature</h3><span class="tag soon">soon</span></div>
+                <p class="desc">Raise a small creature that learns to navigate a world you draw. A holographic transformer
+                    for its brain, our pathfinder for its feet — it starts clueless and gets better as you watch, all on
+                    your machine.</p>
+                <div class="go-in" style="color:var(--ink-faint)">In the workshop</div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<section class="sec" id="packages">
+    <div class="wrap">
+        @foreach (var g in Groups)
+        {
+            <div class="sec-head">
+                <span class="dot" style="background:@g.Color"></span>
+                <h2>@g.Title</h2>
+                <p>@g.Sub</p>
+            </div>
+            <div class="grid">
+                @foreach (var p in g.Packages)
+                {
+                    <article class="card" style="--cat:@g.Color">
+                        <div class="card-top"><h3>@p.Name</h3><span class="ver">v@p.Ver</span></div>
+                        <div class="pkgid">@p.Id</div>
+                        <p class="desc">@p.Desc</p>
+                        @if (p.Note is not null)
+                        {
+                            <p class="note">@((MarkupString)p.Note)</p>
+                        }
+                        <div class="install">
+                            <code>dotnet add package @p.Id</code>
+                            <button class="copy" @onclick="() => Copy(p.Id)">@(_copied == p.Id ? "copied" : "copy")</button>
+                        </div>
+                        <div class="links">
+                            @if (p.Page is not null)
+                            {
+                                <a href="@p.Page">Explore →</a>
+                            }
+                            @if (p.BenchHref is not null)
+                            {
+                                <a href="@p.BenchHref">Benchmark →</a>
+                            }
+                            <a href="https://www.nuget.org/packages/@p.Id" target="_blank" rel="noopener">NuGet</a>
+                        </div>
+                    </article>
+                }
+            </div>
+        }
+    </div>
+</section>
+
+<section class="sec">
+    <div class="wrap">
+        <div class="stack">
+            <h2>How it fits together</h2>
+            <p>These aren't nine unrelated packages. <b>Phasor</b> is the vector-symbolic core — the holographic math.
+                <b>EvalApp</b> is the runtime that schedules and self-tunes the heavy work. HoloDb, AlgFormer, Tracer, and
+                HoloVoxel are what you get when you build a database, a neural network, a game-AI SDK, and a spatial engine
+                on top of that same foundation.</p>
+            <div class="flow">
+                <span>Phasor</span><em>+</em><span>EvalApp</span><em>→</em><span>HoloDb</span><span>AlgFormer</span><span>Tracer</span><span>HoloVoxel</span>
+            </div>
+        </div>
+    </div>
+</section>
+
+@code {
+    string? _copied;
+    async Task Copy(string id)
+    {
+        try { await JS.InvokeVoidAsync("navigator.clipboard.writeText", $"dotnet add package {id}"); _copied = id; }
+        catch { /* clipboard blocked; ignore */ }
+    }
+
+    record Pkg(string Name, string Ver, string Short, string Desc, string? Note = null, string? BenchHref = null, string? Page = null)
+    {
+        public string Id => "EvaluatedApplications." + Short;
+    }
+    record Group(string Title, string Sub, string Color, Pkg[] Packages);
+
+    static Pkg P(string name, string ver, string shortId, string desc, string? note = null, string? bench = null, string? page = null)
+        => new(name, ver, shortId, desc, note, bench, page);
+
+    static readonly Group[] Groups =
+    {
+        new("Foundation", "the base everything shares", "var(--c-foundation)", new[]
+        {
+            P("Phasor", "1.0.1", "Phasor",
+              "Vector-symbolic computing for .NET. Bind, bundle, and unbind hyperdimensional / phasor (HRR) vectors with a SIMD codec — the holographic primitive the rest of these libraries are built on."),
+            P("EvalApp", "1.5.0", "EvalApp",
+              "An async pipeline runtime: resource-gated concurrency with adaptive self-tuning, sagas with compensation, middleware, and a fluent builder. The shared execution engine underneath the other libraries.",
+              "Does the work of a MediatR + Polly + Dataflow stack — <b>one dependency, ⅓ the allocation, zero dropped requests</b>. <a href=\"evalapp.html\">See the benchmark →</a>",
+              "evalapp.html"),
+        }),
+        new("Data", "a holographic SQL database, embedded or networked", "var(--c-data)", new[]
+        {
+            P("HoloDb", "1.3.0", "HoloDb",
+              "An embeddable holographic SQL database. ACID with a write-ahead log, columnar storage with compiled predicates, constant-time integer aggregates, hash joins, similarity search, and an optional larger-than-memory tier. Concurrent reads.",
+              "Benchmarked vs DuckDB &amp; SQLite to 10M rows — <b>up to 766× faster</b> on aggregates. <a href=\"holodb.html\">See the numbers →</a>",
+              "holodb.html", "holodb"),
+            P("HoloDb.Client", "1.0.0", "HoloDb.Client",
+              "The .NET client for a remote HoloDb server. Connect over TLS with a token, then run SQL and bulk-load with the same surface as the in-process engine. Columnar results stay columnar on the wire."),
+            P("HoloDb.Protocol", "1.0.0", "HoloDb.Protocol",
+              "The HoloDb wire contract: length-prefixed TCP framing and a columnar-preserving codec. Normally pulled in transitively by the client — you rarely reference it directly."),
+        }),
+        new("Machine learning", "a holographic transformer", "var(--c-ml)", new[]
+        {
+            P("AlgFormer", "1.2.0", "AlgFormer",
+              "A holographic transformer for .NET: HoloFormer attention with training and inference, built on the Phasor codec. Dependency-free and AOT / trim-safe, so it drops into any .NET app without native baggage."),
+            P("AlgFormer.Gpu", "1.1.0", "AlgFormer.Gpu",
+              "Optional ILGPU / CUDA acceleration for AlgFormer: batched GPU forward + backward training and GPU inference, with automatic CPU fallback when no CUDA device is present. The core stays dependency-free."),
+        }),
+        new("Spatial & games", "movement, tactics, and voxels", "var(--c-spatial)", new[]
+        {
+            P("Tracer", "1.1.0", "Tracer",
+              "A pathfinding and game-AI SDK: navmesh pathfinding, multi-agent scheduling, dynamic obstacles, line-of-sight, fog-of-war, influence maps, and grid tactics. Headless, and parallel on the EvalApp runtime."),
+            P("HoloVoxel", "1.2.0", "HoloVoxel",
+              "A holographic voxel engine: level-of-detail-native spatial storage on the Phasor codec, SIMD throughout, with procedural generation. Near data stays crisp, far data degrades gracefully — the resolution is built into the representation."),
+        }),
+    };
+}
