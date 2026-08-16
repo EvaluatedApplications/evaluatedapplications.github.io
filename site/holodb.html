@@ -3,425 +3,104 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>HoloDb — benchmarks</title>
-<meta name="description" content="HoloDb vs DuckDB, SQLite and SQL Server: the same SQL over the same data, results verified identical, up to 10 million rows, embedded and as a server. A holographic SQL database whose aggregates run in constant time.">
+<title>HoloDb benchmarks — full methodology &amp; results</title>
+<meta name="description" content="HoloDb vs DuckDB and a durable, on-disk SQL Server: the same SQL over the same data, results verified byte-for-byte identical, at 10M and 25M rows, embedded and networked. Full method and every number, wins and losses.">
+<link rel="canonical" href="https://evaluatedapplications.github.io/holodb.html">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%238b7dff'/%3E%3Cstop offset='.5' stop-color='%2335d0c0'/%3E%3Cstop offset='1' stop-color='%23e6b450'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='32' height='32' rx='7' fill='%230a0c11'/%3E%3Cpath d='M16 5l9.5 5.5v11L16 27l-9.5-5.5v-11z' fill='none' stroke='url(%23g)' stroke-width='2'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="/assets/site.css">
 <style>
-  :root{
-    --bg:#0a0c11; --bg-2:#0d1017; --surface:#12151d; --surface-2:#171b25;
-    --border:#232a37; --border-2:#31394a;
-    --ink:#e9ecf3; --ink-soft:#98a2b3; --ink-faint:#6b7486;
-    --accent:#8b7dff; --accent-ink:#b3a9ff;
-    --spectrum:linear-gradient(90deg,#8b7dff,#4aa3ff,#35d0c0,#7bd86a,#e6b450,#f0796a);
-    --e-holo:#8b7dff; --e-duck:#c2862c; --e-sqlite:#3f8fe6;
-    --grid:#212734; --win:#7bd86a;
-    --radius:14px; --wrap:1080px;
-    --font:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
-    --mono:ui-monospace,"Cascadia Code","SF Mono","JetBrains Mono",Menlo,Consolas,monospace;
-  }
-  @media (prefers-color-scheme:light){
-    :root{
-      --bg:#f6f7fb; --bg-2:#ffffff; --surface:#ffffff; --surface-2:#f1f3f9;
-      --border:#e4e8f0; --border-2:#d3d9e6;
-      --ink:#121620; --ink-soft:#59647a; --ink-faint:#8a94a8;
-      --accent:#5b4fe0; --accent-ink:#4c40d6;
-      --e-holo:#7b5cf0; --e-duck:#b5791f; --e-sqlite:#2f7fd6;
-      --grid:#e7ebf2; --win:#3f9d54;
-    }
-  }
-  *{box-sizing:border-box}
-  html{scroll-behavior:smooth}
-  body{margin:0; background:var(--bg); color:var(--ink); font-family:var(--font); font-size:17px; line-height:1.65; -webkit-font-smoothing:antialiased}
-  .wrap{max-width:var(--wrap); margin:0 auto; padding:0 24px}
-  a{color:var(--accent-ink); text-decoration:none} a:hover{text-decoration:underline}
-  h1,h2,h3{margin:0; line-height:1.15; letter-spacing:-.02em; font-weight:650}
-  .beam{height:3px; background:var(--spectrum); opacity:.9}
-  .mono{font-family:var(--mono)}
-
-  nav{position:sticky; top:0; z-index:20; background:color-mix(in srgb,var(--bg-2) 88%,transparent); backdrop-filter:blur(10px); border-bottom:1px solid var(--border)}
-  nav .wrap{display:flex; align-items:center; justify-content:space-between; height:62px}
-  .brand{display:flex; align-items:center; gap:11px; color:var(--ink); font-weight:650}
-  .brand:hover{text-decoration:none}
-  .mark{width:22px; height:22px; flex:none}
-  .nav-links{display:flex; gap:22px; align-items:center}
-  .nav-links a{color:var(--ink-soft); font-size:.94rem} .nav-links a:hover{color:var(--ink); text-decoration:none}
-
-  header{padding:76px 0 26px}
-  .eyebrow{font-family:var(--mono); font-size:.8rem; letter-spacing:.08em; text-transform:uppercase; color:var(--ink-faint)}
-  h1{font-size:clamp(2.3rem,5.6vw,3.6rem); margin:16px 0 0; max-width:15ch; text-wrap:balance}
-  .lede{font-size:clamp(1.05rem,2vw,1.25rem); color:var(--ink-soft); max-width:62ch; margin:22px 0 0}
-  .facts{display:flex; flex-wrap:wrap; gap:10px; margin-top:26px}
-  .fact{font-family:var(--mono); font-size:.82rem; color:var(--ink-soft); border:1px solid var(--border); border-radius:999px; padding:6px 13px; background:var(--surface)}
-  .fact b{color:var(--ink); font-weight:600}
-
-  section{padding:26px 0}
-  .sec-head{padding-top:24px; border-top:1px solid var(--border); margin-bottom:18px}
-  .sec-head h2{font-size:1.3rem}
-  .sec-head p{margin:8px 0 0; color:var(--ink-soft); max-width:70ch; font-size:.96rem}
-
-  /* stat tiles */
-  .tiles{display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:14px}
-  .tile{background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:20px; position:relative; overflow:hidden}
-  .tile::before{content:""; position:absolute; left:0; top:0; bottom:0; width:3px; background:var(--e-holo)}
-  .tile .big{font-size:2.1rem; font-weight:680; letter-spacing:-.03em; font-variant-numeric:tabular-nums; line-height:1}
-  .tile .big small{font-size:1rem; font-weight:500; color:var(--ink-soft); letter-spacing:0}
-  .tile .cap{margin-top:9px; font-size:.9rem; color:var(--ink-soft); line-height:1.45}
-  .tile .cap b{color:var(--ink)}
-
-  /* scale selector */
-  .controls{display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin:2px 0 18px}
-  .controls .lbl{font-family:var(--mono); font-size:.8rem; color:var(--ink-faint); text-transform:uppercase; letter-spacing:.06em}
-  .seg{display:inline-flex; border:1px solid var(--border-2); border-radius:9px; overflow:hidden}
-  .seg button{font-family:var(--mono); font-size:.86rem; color:var(--ink-soft); background:transparent; border:0; padding:7px 14px; cursor:pointer; border-right:1px solid var(--border-2)}
-  .seg button:last-child{border-right:0}
-  .seg button.on{background:var(--e-holo); color:#0a0c11}
-  @media (prefers-color-scheme:light){ .seg button.on{color:#fff} }
-
-  .panel{background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:20px 20px 12px}
-  .legend{display:flex; gap:18px; flex-wrap:wrap; margin:2px 0 10px; font-family:var(--mono); font-size:.82rem; color:var(--ink-soft)}
-  .legend span{display:inline-flex; align-items:center; gap:7px}
-  .legend i{width:11px; height:11px; border-radius:3px; display:inline-block}
-  .cap-note{color:var(--ink-faint); font-size:.85rem; margin:8px 2px 0}
-  svg{display:block; width:100%; height:auto; overflow:visible}
-  svg text{font-family:var(--font)} svg .mn{font-family:var(--mono)}
-  .scaling-grid{display:grid; grid-template-columns:1fr 1fr; gap:16px}
-  @media (max-width:720px){ .scaling-grid{grid-template-columns:1fr} }
-
-  /* table */
-  .tbl-wrap{overflow-x:auto; border:1px solid var(--border); border-radius:var(--radius)}
-  table{border-collapse:collapse; width:100%; font-size:.92rem; min-width:560px}
-  th,td{text-align:right; padding:9px 14px; border-bottom:1px solid var(--border); font-variant-numeric:tabular-nums}
-  th:first-child,td:first-child{text-align:left}
-  thead th{font-family:var(--mono); font-size:.76rem; text-transform:uppercase; letter-spacing:.05em; color:var(--ink-faint); font-weight:500}
-  tbody tr:last-child td{border-bottom:0}
-  td.q{color:var(--ink)}
-  .ms{font-family:var(--mono)}
-  .best{color:var(--ink); font-weight:600}
-  .w-holo{color:var(--e-holo); font-weight:600}
-  .w-duck{color:var(--e-duck); font-weight:600}
-  .chk{color:var(--win)}
-  tr.loadrow td{color:var(--ink-soft); font-style:italic; border-top:2px solid var(--border-2)}
-
-  .cols2{display:grid; grid-template-columns:1fr 1fr; gap:18px}
-  @media (max-width:720px){ .cols2{grid-template-columns:1fr} }
-  .note-card{background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:20px 22px}
-  .note-card h3{font-size:1.05rem; margin-bottom:9px}
-  .note-card p, .note-card li{color:var(--ink-soft); font-size:.95rem}
-  .note-card ul{margin:6px 0 0; padding-left:18px} .note-card li{margin:4px 0}
-  code.inl{font-family:var(--mono); font-size:.86em; color:var(--accent-ink); background:color-mix(in srgb,var(--accent) 12%,transparent); padding:1px 6px; border-radius:5px}
-  pre{margin:10px 0 0; background:var(--bg-2); border:1px solid var(--border); border-radius:9px; padding:12px 14px; overflow-x:auto}
-  pre code{font-family:var(--mono); font-size:.84rem; color:var(--ink)}
-
-  /* tooltip */
-  #tip{position:fixed; z-index:50; pointer-events:none; opacity:0; transition:opacity .1s; background:var(--bg-2); border:1px solid var(--border-2); border-radius:9px; padding:9px 11px; font-family:var(--mono); font-size:.78rem; color:var(--ink); box-shadow:0 8px 24px rgba(0,0,0,.35); max-width:240px}
-  #tip b{color:var(--ink)} #tip .r{display:flex; justify-content:space-between; gap:14px} #tip .r span:first-child{color:var(--ink-soft)}
-
-  footer{border-top:1px solid var(--border); margin-top:34px; padding:30px 0 50px; color:var(--ink-faint)}
-  footer .wrap{display:flex; flex-wrap:wrap; gap:14px; justify-content:space-between; align-items:center}
-  footer a{color:var(--ink-soft)}
-  @media (prefers-reduced-motion:reduce){*{transition:none!important; scroll-behavior:auto}}
+  table.cmp{width:100%;border-collapse:collapse;font-size:.88rem;margin:8px 0 4px;display:block;overflow-x:auto}
+  table.cmp th{text-align:right;color:var(--ink);border-bottom:1px solid var(--border-2);padding:8px 11px;font-family:var(--mono);font-size:.76rem;text-transform:uppercase;letter-spacing:.03em;white-space:nowrap}
+  table.cmp th:first-child,table.cmp td:first-child{text-align:left}
+  table.cmp td{border-bottom:1px solid var(--border);padding:8px 11px;color:var(--ink-soft);font-variant-numeric:tabular-nums;white-space:nowrap}
+  table.cmp td.holo{color:var(--accent-ink);font-weight:700}
+  table.cmp tr:hover td{color:var(--ink)}
+  .meth{list-style:none;padding:0;margin:0;display:grid;gap:10px}
+  .meth li{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px 16px;color:var(--ink-soft);font-size:.94rem;line-height:1.5}
+  .meth b{color:var(--ink)}
 </style>
 </head>
 <body>
 <div class="beam"></div>
+<nav class="site-nav"><div class="wrap">
+  <a class="brand" href="/"><svg class="mark" viewBox="0 0 32 32" aria-hidden="true"><defs><linearGradient id="m" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#8b7dff"/><stop offset=".5" stop-color="#35d0c0"/><stop offset="1" stop-color="#e6b450"/></linearGradient></defs><path d="M16 4l10.4 6v12L16 28 5.6 22V10z" fill="none" stroke="url(#m)" stroke-width="2"/></svg> Evaluated Applications</a>
+  <input type="checkbox" id="navtoggle" class="nav-toggle"><label for="navtoggle" class="nav-burger" aria-label="Menu"><span></span><span></span><span></span></label>
+  <div class="nav-links"><a href="/holodb/">HoloDb</a><a href="/holodb/manual/">Docs</a><a href="/tools/analyst">Try it live</a><a href="https://www.nuget.org/packages/EvaluatedApplications.HoloDb" target="_blank" rel="noopener">NuGet</a></div>
+</div></nav>
 
-<nav>
-  <div class="wrap">
-    <a class="brand" href="index.html">
-      <svg class="mark" viewBox="0 0 32 32" aria-hidden="true"><defs><linearGradient id="m" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#8b7dff"/><stop offset=".5" stop-color="#35d0c0"/><stop offset="1" stop-color="#e6b450"/></linearGradient></defs><path d="M16 4l10.4 6v12L16 28 5.6 22V10z" fill="none" stroke="url(#m)" stroke-width="2"/></svg>
-      Evaluated Applications
-    </a>
-    <div class="nav-links">
-      <a href="index.html">All packages</a>
-      <a href="https://www.nuget.org/packages/EvaluatedApplications.HoloDb" target="_blank" rel="noopener">NuGet</a>
-    </div>
-  </div>
-</nav>
+<main class="wrap">
+<article class="prose">
+  <nav class="crumb"><a href="/holodb/">HoloDb</a> <span>/</span> Benchmarks</nav>
+  <h1>Benchmarks — the full method and every number</h1>
+  <p class="lede" style="margin-top:12px">The same SQL over the same data, on <strong>HoloDb (embedded), HoloDb (networked server), DuckDB, and a durable on-disk SQL Server</strong>. Every result is verified byte-for-byte identical across all engines before it's timed, so the comparison is honest — including the queries HoloDb loses.</p>
 
-<header>
-  <div class="wrap">
-    <span class="eyebrow">HoloDb · holographic SQL database</span>
-    <h1>A database that doesn&#39;t scan.</h1>
-    <p class="lede">Same SQL, same data, results verified identical to the row — HoloDb against DuckDB, SQLite and SQL Server, up to 10&nbsp;million rows, embedded and as a server. HoloDb keeps its aggregates as maintained holographic accumulators, so <b>SUM</b>, <b>COUNT</b>, <b>GROUP&nbsp;BY</b>, <b>MIN/MAX</b> and <b>DISTINCT</b> answer in constant time instead of reading the table. Here is what that does to the clock.</p>
-    <div class="facts">
-      <span class="fact">up to <b>10M</b> rows</span>
-      <span class="fact"><b>15</b> queries</span>
-      <span class="fact">results <b>identical</b> across all five</span>
-      <span class="fact">embedded <b>+</b> server</span>
-      <span class="fact">i9-11950H laptop</span>
-    </div>
-  </div>
-</header>
+  <h2>How it's run</h2>
+  <ul class="meth">
+    <li><b>Same data, same SQL.</b> Six columns (int keys, an int measure, a text grade, a real amount), generated once with a fixed seed and loaded into every engine through its own idiomatic bulk path.</li>
+    <li><b>Verified identical.</b> Before timing, each query's full result set is normalized and compared across all engines — if any engine disagrees, the run is flagged, not published. Every number below passed.</li>
+    <li><b>Timed fairly.</b> Median of many runs of execute + consume-all-rows through each engine's own typed client API (no boxing), on a 16-core machine.</li>
+    <li><b>DuckDB</b> runs in-process, in memory (its fastest mode).</li>
+    <li><b>SQL Server</b> is the durable, on-disk peer: SQL Server 2022 in Docker, a <b>persistent user database on a volume</b>, buffer pool capped at <b>1&nbsp;GB</b>. At 25M rows the table outgrows that cache, so its reads come off disk — a fair "durable service" comparison. It also pays a client/server round-trip the embedded engines don't.</li>
+    <li><b>HoloDb</b> runs both embedded (in-process) and as a networked TLS server (the fair peer to SQL Server's round-trip).</li>
+    <li><b>Honest boundary.</b> Integer <code>SUM</code>/<code>COUNT</code> are exact and constant-time; <b>real</b>-number sums use a SIMD scan (which is why grouped real-sums lose to DuckDB).</li>
+  </ul>
 
-<section>
-  <div class="wrap">
-    <div class="tiles" id="tiles"></div>
-  </div>
-</section>
+  <h2>25,000,000 rows <span style="color:var(--ink-faint);font-size:.7em;font-weight:400">— median ms (lower is better); SQL Server reads from disk here</span></h2>
+  <table class="cmp">
+    <thead><tr><th>query</th><th>HoloDb</th><th>HoloDb&nbsp;(server)</th><th>DuckDB</th><th>SQL&nbsp;Server</th></tr></thead>
+    <tbody>
+      <tr><td>point lookup (by PK)</td><td class="holo">0.0021</td><td>0.146</td><td>0.410</td><td>0.906</td></tr>
+      <tr><td>SUM whole table</td><td class="holo">0.0016</td><td>0.142</td><td>3.04</td><td>243.2</td></tr>
+      <tr><td>GROUP BY (int)</td><td class="holo">0.0055</td><td>0.155</td><td>12.4</td><td>314.4</td></tr>
+      <tr><td>GROUP BY (text)</td><td class="holo">0.0025</td><td>0.204</td><td>27.9</td><td>327.0</td></tr>
+      <tr><td>GROUP BY + HAVING</td><td class="holo">0.046</td><td>0.237</td><td>10.3</td><td>313.3</td></tr>
+      <tr><td>MIN / MAX</td><td class="holo">0.021</td><td>0.176</td><td>4.96</td><td>231.3</td></tr>
+      <tr><td>DISTINCT</td><td class="holo">0.031</td><td>0.165</td><td>41.9</td><td>224.5</td></tr>
+      <tr><td>filter AND</td><td class="holo">39.1</td><td>90.3</td><td>56.0</td><td>1171.6</td></tr>
+      <tr><td>filter scan (~50%)</td><td class="holo">62.7</td><td>312.2</td><td>323.8</td><td>6773.4</td></tr>
+      <tr><td>filter REAL (~50%)</td><td class="holo">72.1</td><td>304.7</td><td>259.3</td><td>6854.4</td></tr>
+      <tr><td>MIN / MAX (real)</td><td class="holo">12.6</td><td>14.1</td><td>28.7</td><td>275.2</td></tr>
+      <tr><td>filtered COUNT(*)</td><td>15.5</td><td>14.3</td><td class="holo">4.66</td><td>246.2</td></tr>
+      <tr><td>ORDER BY + LIMIT</td><td>17.4</td><td>15.2</td><td class="holo">2.57</td><td>837.1</td></tr>
+      <tr><td>SUM (real) whole table</td><td>13.1</td><td>14.7</td><td class="holo">5.31</td><td>302.7</td></tr>
+      <tr><td>GROUP BY (int), SUM(real)</td><td>109.3</td><td>97.6</td><td class="holo">11.1</td><td>324.8</td></tr>
+    </tbody>
+  </table>
+  <p style="color:var(--ink-faint);font-size:.86rem">Bulk load, rows/sec: DuckDB 1.37M · HoloDb (server) 946k · SQL Server 588k · HoloDb 557k. The <span style="color:var(--accent-ink)">purple</span> cell is the fastest embedded engine for that row; the last four rows are HoloDb's honest losses (DuckDB wins — grouped/real-number rollups and top-K).</p>
 
-<section>
-  <div class="wrap">
-    <div class="sec-head">
-      <h2>Every query vs DuckDB — the one worth beating</h2>
-      <p>Among the embedded engines DuckDB is the fastest thing there is, so it&#39;s the bar that matters — SQLite sits an order of magnitude further back (see the table). How many times faster, or slower, HoloDb is than DuckDB, per query. Bars to the right are HoloDb wins; to the left, the few DuckDB still takes. Log scale; the labels carry the exact multiple.</p>
-    </div>
-    <div class="controls">
-      <span class="lbl">rows</span>
-      <div class="seg" id="scale-seg">
-        <button data-n="100000">100K</button>
-        <button data-n="1000000">1M</button>
-        <button data-n="10000000" class="on">10M</button>
-      </div>
-    </div>
-    <div class="panel">
-      <div class="legend">
-        <span><i style="background:var(--e-holo)"></i> HoloDb faster →</span>
-        <span><i style="background:var(--e-duck)"></i> ← DuckDB faster</span>
-      </div>
-      <div id="barchart"></div>
-    </div>
-    <p class="cap-note">Speedup = DuckDB time ÷ HoloDb time on the same query. Hover any bar for the raw milliseconds.</p>
-  </div>
-</section>
+  <h2>10,000,000 rows <span style="color:var(--ink-faint);font-size:.7em;font-weight:400">— fits SQL Server's 1&nbsp;GB cache, so its reads are warm</span></h2>
+  <table class="cmp">
+    <thead><tr><th>query</th><th>HoloDb</th><th>HoloDb&nbsp;(server)</th><th>DuckDB</th><th>SQL&nbsp;Server</th></tr></thead>
+    <tbody>
+      <tr><td>point lookup (by PK)</td><td class="holo">0.0088</td><td>0.182</td><td>0.464</td><td>0.935</td></tr>
+      <tr><td>SUM whole table</td><td class="holo">0.0098</td><td>0.155</td><td>1.44</td><td>69.3</td></tr>
+      <tr><td>GROUP BY (int)</td><td class="holo">0.0089</td><td>0.155</td><td>5.51</td><td>105.2</td></tr>
+      <tr><td>GROUP BY (text)</td><td class="holo">0.0049</td><td>0.108</td><td>11.8</td><td>109.2</td></tr>
+      <tr><td>GROUP BY + HAVING</td><td class="holo">0.056</td><td>0.228</td><td>4.40</td><td>102.4</td></tr>
+      <tr><td>MIN / MAX</td><td class="holo">0.016</td><td>0.148</td><td>2.24</td><td>68.1</td></tr>
+      <tr><td>DISTINCT</td><td class="holo">0.043</td><td>0.211</td><td>19.4</td><td>74.9</td></tr>
+      <tr><td>filter AND</td><td class="holo">14.8</td><td>35.0</td><td>19.1</td><td>504.3</td></tr>
+      <tr><td>filter scan (~50%)</td><td class="holo">28.3</td><td>123.7</td><td>88.0</td><td>2634.7</td></tr>
+      <tr><td>filter REAL (~50%)</td><td class="holo">28.6</td><td>127.3</td><td>102.6</td><td>2519.8</td></tr>
+      <tr><td>MIN / MAX (real)</td><td class="holo">4.49</td><td>5.22</td><td>9.87</td><td>94.0</td></tr>
+      <tr><td>filtered COUNT(*)</td><td>6.10</td><td>7.43</td><td class="holo">2.26</td><td>71.7</td></tr>
+      <tr><td>ORDER BY + LIMIT</td><td>6.78</td><td>4.56</td><td class="holo">1.91</td><td>279.1</td></tr>
+      <tr><td>SUM (real) whole table</td><td>5.81</td><td>5.30</td><td class="holo">2.44</td><td>82.3</td></tr>
+      <tr><td>GROUP BY (int), SUM(real)</td><td>49.5</td><td>43.6</td><td class="holo">4.83</td><td>115.8</td></tr>
+    </tbody>
+  </table>
 
-<section>
-  <div class="wrap">
-    <div class="sec-head">
-      <h2>Aggregates don&#39;t grow with the table</h2>
-      <p>The whole story in one shape. As the table grows 100× — from 100K to 10M rows — DuckDB and SQLite have more rows to read, so their times climb. HoloDb reads a fixed-size accumulator, so its line stays flat on the floor. Both axes are logarithmic.</p>
-    </div>
-    <div class="legend" style="margin-bottom:14px">
-      <span><i style="background:var(--e-holo)"></i> HoloDb</span>
-      <span><i style="background:var(--e-duck)"></i> DuckDB</span>
-      <span><i style="background:var(--e-sqlite)"></i> SQLite</span>
-    </div>
-    <div class="scaling-grid">
-      <div class="panel"><div id="scale-sum"></div></div>
-      <div class="panel"><div id="scale-grp"></div></div>
-    </div>
-  </div>
-</section>
+  <h2>What the numbers say</h2>
+  <p>HoloDb's <strong>maintained aggregates</strong> (<code>SUM</code>, <code>COUNT</code>, <code>GROUP BY</code>, <code>MIN/MAX</code>, <code>DISTINCT</code>) answer in microseconds and <strong>don't grow with the table</strong> — the numbers barely move from 10M to 25M, while SQL Server's climb and its disk-bound scans reach seconds. HoloDb also wins the ordinary filter scans. It <strong>loses</strong> grouped real-number rollups, <code>ORDER BY</code>+<code>LIMIT</code>, filtered <code>COUNT</code>, and raw bulk load to DuckDB — shown above, not hidden. DuckDB is an excellent pure-columnar engine; HoloDb's edge is the mixed transactional + analytics + vector workload, durable and larger-than-memory, in one embeddable dependency.</p>
 
-<section>
-  <div class="wrap">
-    <div class="sec-head">
-      <h2>The full results — serverless (in-process)</h2>
-      <p>All fifteen queries, milliseconds, median of repeated runs, for the three embedded engines. Every row was checked identical across all five engines before timing — the <span class="chk">✓</span> is not decoration. Use the selector above to switch scale.</p>
-    </div>
-    <div class="tbl-wrap"><table id="results"></table></div>
-    <p class="cap-note">Consumption is like-for-like: every value read TYPED (no boxing) through each engine&#39;s fast accessor. Bulk-load rows/sec is at the bottom; DuckDB&#39;s appender is the fastest loader of the three embedded engines.</p>
-  </div>
-</section>
+  <p style="margin-top:2rem"><a href="/holodb/">← Back to HoloDb</a> &nbsp;·&nbsp; <a href="/tools/analyst">Run it in your browser →</a></p>
+</article>
+</main>
 
-<section>
-  <div class="wrap">
-    <div class="sec-head">
-      <h2>The other way you deploy it — server vs server</h2>
-      <p>The three above run in-process. HoloDb also runs as a <b>server</b> — so here is the fair fight against one: HoloDb server mode against <b>SQL Server</b>, each hit over a socket with one client/server round-trip per query, the tax the embedded engines don&#39;t pay. Same SQL, same data, results verified identical. The constant-time aggregates survive the wire: at 10M rows HoloDb answers <b>SUM ~5,600× faster</b> and <b>GROUP&nbsp;BY ~6,300× faster</b>, wins all <b id="srv-wins">15</b> of 15, and loads faster too.</p>
-    </div>
-    <div class="tbl-wrap"><table id="results-srv"></table></div>
-    <p class="cap-note">HoloDb server mode is an in-process <code class="inl">HoloServer</code> over real TLS driven by <code class="inl">HoloDbClient</code>; SQL Server is Microsoft.Data.SqlClient to LocalDB. Both pay the round-trip and consume every row typed. Same scale selector as above.</p>
-  </div>
-</section>
-
-<section>
-  <div class="wrap">
-    <div class="sec-head"><h2>Where DuckDB wins, and why HoloDb wins</h2></div>
-    <div class="cols2">
-      <div class="note-card">
-        <h3>DuckDB is still ahead on four</h3>
-        <p>An honest benchmark shows the losses. At 10M rows DuckDB beats HoloDb on:</p>
-        <ul>
-          <li><b>GROUP BY int, SUM of a real column</b> — ~9× slower. Real-valued group sums are HoloDb&#39;s weakest path (the constant-time trick is exact-integer only).</li>
-          <li><b>filtered COUNT(*)</b> and <b>SUM of a real column</b> — DuckDB&#39;s vectorized scan is ~2× quicker.</li>
-          <li><b>ORDER BY … LIMIT 20</b> — top-K isn&#39;t specialised in HoloDb yet.</li>
-        </ul>
-        <p>DuckDB is a mature, world-class analytics engine and these four losses are real. HoloDb still takes 11 of the 15 against it — and against <b>SQL Server</b>, server to server, there are no losses at all: it wins every one.</p>
-      </div>
-      <div class="note-card">
-        <h3>Why the wins are so large</h3>
-        <p>HoloDb doesn&#39;t compute aggregates by reading rows. Integer columns feed <b>CRT bind-accumulators</b> — a holographic running SUM/COUNT per group, maintained on write — so a whole-table <code class="inl">SUM</code> or a <code class="inl">GROUP BY</code> is a fixed-size vector read, independent of row count. Scans use a columnar store with compiled predicates and per-block zone-maps that skip blocks that can&#39;t match. The aggregates are exact, not sampled.</p>
-      </div>
-    </div>
-  </div>
-</section>
-
-<section>
-  <div class="wrap">
-    <div class="sec-head"><h2>How it was measured</h2>
-      <p>Nothing here is cherry-picked from a lucky run. The harness loads the same rows into all five engines via each one&#39;s idiomatic bulk path, verifies every result is identical to the row, then times the median of repeated runs. Consumption is like-for-like: every value is read typed — no boxing — through each engine&#39;s fast accessor, so what&#39;s timed is the engines, not the client glue. The two brackets keep it fair: embedded is compared to embedded, and the two servers (both over a socket) to each other.</p>
-    </div>
-    <p class="cap-note">Measured on an Intel Core i9-11950H (8 cores / 16 threads), 32&nbsp;GB, .NET 8, in-memory tables, ServerGC. SQLite via Microsoft.Data.Sqlite, DuckDB via DuckDB.NET, SQL Server via Microsoft.Data.SqlClient (LocalDB), HoloDb server mode over TLS via HoloDbClient. Your numbers will vary with hardware; the shape won&#39;t.</p>
-  </div>
-</section>
-
-<section>
-  <div class="wrap">
-    <div class="note-card" style="display:flex; flex-wrap:wrap; gap:18px; align-items:center; justify-content:space-between">
-      <div>
-        <h3 style="font-size:1.15rem">It&#39;s on NuGet. Embedded or as a server.</h3>
-        <p style="margin-top:6px">Add the package, or pull the container and connect over the network.</p>
-      </div>
-      <div class="mono" style="font-size:.85rem; color:var(--ink-soft)">
-        <div>dotnet add package <b style="color:var(--ink)">EvaluatedApplications.HoloDb</b></div>
-        <div style="margin-top:6px">docker pull <b style="color:var(--ink)">ghcr.io/evaluatedapplications/holodb</b></div>
-      </div>
-    </div>
-  </div>
-</section>
-
-<footer>
-  <div class="wrap">
-    <span>HoloDb — a holographic SQL database. Evaluated Applications, England.</span>
-    <span class="mono" style="font-size:.82rem">© <span id="yr"></span> · <a href="index.html">all packages</a> · <a href="https://www.nuget.org/packages/EvaluatedApplications.HoloDb" target="_blank" rel="noopener">NuGet</a></span>
-  </div>
-</footer>
-
-<div id="tip"></div>
-
-<script>
-document.getElementById('yr').textContent = new Date().getFullYear();
-
-// ---- the measured data (median ms; s=SQLite d=DuckDB h=HoloDb). All results verified identical across engines. ----
-const Q = ["point lookup","filter scan (~50%)","filtered COUNT(*)","SUM whole table","filter AND","GROUP BY int","GROUP BY text","GROUP BY + HAVING","ORDER BY + LIMIT","MIN / MAX","DISTINCT","filter REAL (~50%)","SUM real","MIN / MAX real","GROUP BY int SUM real"];
-const DATA = {
-  100000:  { load:{s:436674,d:1279049,h:484986}, q:[[0.0057,0.2019,0.0026],[13.8818,2.6173,0.9616],[2.6523,0.3931,0.5906],[2.6246,0.3982,0.0034],[5.7677,1.1298,1.8894],[22.4934,0.6803,0.0705],[19.6506,1.0897,0.0166],[22.8433,0.9688,0.0342],[4.1884,0.6702,1.0501],[3.9324,0.3859,0.0024],[4.9691,1.9550,0.0246],[13.2425,1.5474,0.9666],[3.0141,0.3350,0.0515],[4.4951,0.9620,0.0446],[23.1068,0.5863,1.0572]] },
-  1000000: { load:{s:710419,d:1497988,h:770072}, q:[[0.0052,0.4072,0.0010],[124.8898,9.1856,3.2895],[31.7888,0.7387,1.0282],[31.1261,0.5098,0.0013],[58.2354,2.5169,2.5460],[224.2835,1.1406,0.0257],[202.9699,1.9051,0.0130],[224.8389,1.0633,0.0485],[44.5739,1.5534,1.1012],[45.8796,0.7023,0.0056],[57.1530,3.9018,0.0265],[133.4678,9.5916,2.7571],[36.5057,0.5798,0.4242],[53.1250,1.8665,0.2255],[244.1251,1.1542,4.8360]] },
-  10000000:{ load:{s:788060,d:1457839,h:613105}, q:[[0.0041,0.4188,0.0027],[1308.6868,103.7192,24.2720],[343.5277,2.3290,5.6330],[343.2446,1.5328,0.0020],[623.0543,21.9395,13.4837],[2786.7272,4.7922,0.0276],[2474.5082,8.9852,0.0132],[2722.7310,4.1295,0.0442],[490.0431,1.9481,4.3412],[475.6130,2.2634,0.0157],[587.1259,16.4477,0.0292],[1362.0594,95.2663,22.1560],[378.1055,2.4832,4.2743],[555.5999,8.9240,4.5988],[2978.2842,4.3841,39.9369]] }
-};
-const NKEYS = [100000,1000000,10000000];
-let scale = 10000000;
-
-// ---- server bracket: SQL Server (LocalDB) vs HoloDb in server mode. Both pay a client/server round-trip. q=[SQLServer, HoloDb-server] ms ----
-const SRV = {
-  100000:  { load:{srv:422808,hs:394992},   q:[[0.108,0.138],[20.730,2.465],[5.132,0.818],[8.678,0.085],[5.646,1.419],[14.391,0.171],[17.260,0.131],[13.791,0.164],[11.580,0.499],[9.923,0.085],[10.826,0.114],[7.865,1.881],[10.079,0.129],[10.289,0.169],[14.346,4.121]] },
-  1000000: { load:{srv:769493,hs:686995},   q:[[0.074,0.141],[79.281,11.594],[50.493,1.122],[91.047,0.124],[55.583,3.977],[143.624,0.177],[172.032,0.141],[141.205,0.172],[118.372,1.057],[105.569,0.152],[107.238,0.165],[78.813,11.253],[97.303,0.349],[106.466,0.364],[146.226,4.721]] },
-  10000000:{ load:{srv:802383,hs:1091636},  q:[[0.157,0.156],[802.329,121.189],[513.464,5.651],[942.138,0.168],[554.013,33.416],[1472.433,0.234],[1723.877,0.165],[1425.813,0.220],[1191.885,5.963],[1087.565,0.214],[1088.091,0.163],[831.117,118.757],[940.361,5.397],[1105.172,5.992],[1467.844,44.591]] }
-};
-
-const css = v => getComputedStyle(document.body).getPropertyValue(v).trim();
-function eColors(){ return { h:css('--e-holo'), d:css('--e-duck'), s:css('--e-sqlite'), grid:css('--grid'), ink:css('--ink-soft'), faint:css('--ink-faint') }; }
-const fmtMs = x => x>=100? x.toFixed(0) : x>=10? x.toFixed(1) : x>=1? x.toFixed(2) : x.toFixed(3);
-const fmtX  = x => x>=100? Math.round(x)+'×' : x>=10? x.toFixed(0)+'×' : x.toFixed(1)+'×';
-const SVGNS='http://www.w3.org/2000/svg';
-function el(n,a){ const e=document.createElementNS(SVGNS,n); for(const k in a) e.setAttribute(k,a[k]); return e; }
-
-// ---- tooltip ----
-const tip=document.getElementById('tip');
-function showTip(html,ev){ tip.innerHTML=html; tip.style.opacity=1; moveTip(ev); }
-function moveTip(ev){ const p=12; let x=ev.clientX+p, y=ev.clientY+p; const r=tip.getBoundingClientRect(); if(x+r.width>innerWidth-8)x=ev.clientX-r.width-p; if(y+r.height>innerHeight-8)y=ev.clientY-r.height-p; tip.style.left=x+'px'; tip.style.top=y+'px'; }
-function hideTip(){ tip.style.opacity=0; }
-function rowTip(i){ const r=DATA[scale].q[i]; const c=eColors(); return `<b>${Q[i]}</b><div class="r"><span><i style="color:${c.h}">■</i> HoloDb</span><span>${fmtMs(r[2])} ms</span></div><div class="r"><span><i style="color:${c.d}">■</i> DuckDB</span><span>${fmtMs(r[1])} ms</span></div><div class="r"><span><i style="color:${c.s}">■</i> SQLite</span><span>${fmtMs(r[0])} ms</span></div>`; }
-
-// ---- stat tiles (fixed at 10M) ----
-function tiles(){
-  const q=DATA[10000000].q, host=document.getElementById('tiles');
-  const grpX=q[6][1]/q[6][2];
-  let wins=0; q.forEach(r=>{ if(r[2]<=r[1]&&r[2]<=r[0]) wins++; });
-  const srv=SRV[10000000].q, srvSumX=srv[3][0]/srv[3][1];
-  let srvWins=0; srv.forEach(r=>{ if(r[1]<=r[0]) srvWins++; });
-  const T=[
-    {big:`0.002<small> ms</small>`, cap:`<b>SUM</b> over 10M rows — constant time. DuckDB takes ${fmtMs(q[3][1])} ms, SQLite ${fmtMs(q[3][0])} ms. It doesn&#39;t read the table.`},
-    {big:`${fmtX(grpX)}<small> faster</small>`, cap:`than <b>DuckDB</b> on <b>GROUP&nbsp;BY</b> at 10M — the toughest embedded engine there is. Per-group accumulators, not a scan.`},
-    {big:`${wins}<small> / 15</small>`, cap:`queries where HoloDb is the <b>fastest embedded engine</b> at 10M. The few it loses are shown in full below.`},
-    {big:`${fmtX(srvSumX)}<small> faster</small>`, cap:`than <b>SQL&nbsp;Server</b> on SUM at 10M, <b>server to server</b> — both over a socket. HoloDb wins all <b>${srvWins} of 15</b> that way.`}
-  ];
-  host.innerHTML = T.map(t=>`<div class="tile"><div class="big">${t.big}</div><div class="cap">${t.cap}</div></div>`).join('');
-}
-
-// ---- diverging log bar chart: speedup vs DuckDB ----
-function bars(){
-  const host=document.getElementById('barchart'); host.innerHTML='';
-  const c=eColors(), rows=DATA[scale].q.map((r,i)=>({i,sp:r[1]/r[2]}));
-  const W=760, Lg=150, PX0=Lg+8, PX1=W-40, plotW=PX1-PX0, TP=34, rowH=30, H=TP+rows.length*rowH+10;
-  const minD=-1, maxD=3, x=sp=>PX0+(Math.log10(sp)-minD)/(maxD-minD)*plotW;
-  const svg=el('svg',{viewBox:`0 0 ${W} ${H}`,role:'img'});
-  // gridlines + top labels
-  [0.1,1,10,100,1000].forEach(t=>{ const gx=x(t); svg.appendChild(el('line',{x1:gx,y1:TP-6,x2:gx,y2:H-6,stroke:t===1?c.faint:c.grid,'stroke-width':t===1?1.4:1})); const lb=el('text',{x:gx,y:TP-12,fill:c.faint,'font-size':11,'text-anchor':'middle','font-family':'var(--mono)'}); lb.textContent=(t<1?'0.1':t)+'×'; svg.appendChild(lb); });
-  rows.forEach(({i,sp})=>{
-    const cy=TP+i*rowH+rowH/2, x1=x(1), x2=x(sp), win=sp>=1, col=win?c.h:c.d;
-    const bx=Math.min(x1,x2), bw=Math.max(2,Math.abs(x2-x1));
-    const rect=el('rect',{x:bx,y:cy-7,width:bw,height:14,rx:4,fill:col,opacity:.92});
-    rect.style.cursor='pointer';
-    rect.addEventListener('mousemove',ev=>showTip(rowTip(i)+`<div class="r" style="margin-top:5px"><span>speedup</span><span>${fmtX(sp)}</span></div>`,ev));
-    rect.addEventListener('mouseleave',hideTip);
-    svg.appendChild(rect);
-    const ql=el('text',{x:PX0-10,y:cy+4,fill:c.ink,'font-size':12.5,'text-anchor':'end'}); ql.textContent=Q[i]; svg.appendChild(ql);
-    const vl=el('text',{y:cy+4,'font-size':12,'font-weight':600,fill:col});
-    if(win){ vl.setAttribute('x',x2+7); vl.setAttribute('text-anchor','start'); }
-    else { vl.setAttribute('x',x1+8); vl.setAttribute('text-anchor','start'); }   // losses: label the open space right of parity, never into the query gutter
-    vl.textContent=fmtX(win?sp:1/sp); svg.appendChild(vl);
-  });
-  host.appendChild(svg);
-}
-
-// ---- log-log scaling line chart ----
-function lineChart(hostId, qi, title){
-  const host=document.getElementById(hostId); host.innerHTML='';
-  const c=eColors();
-  const W=500, H=300, ml=52, mr=16, mt=34, mb=34, pw=W-ml-mr, ph=H-mt-mb;
-  const xs=NKEYS, xmin=5, xmax=7; // log10
-  const series=[['h',2],['d',1],['s',0]].map(([key,idx])=>({key, col:key==='h'?c.h:key==='d'?c.d:c.s, pts:xs.map(n=>DATA[n].q[qi][idx])}));
-  const ymin=-3.2, ymax=3.7; // log10 ms domain (0.0006 .. ~5000)
-  const X=n=>ml+(Math.log10(n)-xmin)/(xmax-xmin)*pw, Y=v=>mt+(1-(Math.log10(Math.max(v,0.0006))-ymin)/(ymax-ymin))*ph;
-  const svg=el('svg',{viewBox:`0 0 ${W} ${H}`,role:'img'});
-  const tt=el('text',{x:ml,y:16,fill:c.ink,'font-size':13,'font-weight':600}); tt.textContent=title; svg.appendChild(tt);
-  // y gridlines at decades
-  for(let d=-3; d<=3; d++){ const gy=Y(Math.pow(10,d)); svg.appendChild(el('line',{x1:ml,y1:gy,x2:W-mr,y2:gy,stroke:c.grid,'stroke-width':1})); const lb=el('text',{x:ml-8,y:gy+3.5,fill:c.faint,'font-size':10,'text-anchor':'end','font-family':'var(--mono)'}); lb.textContent=d<0?('0.'+ '0'.repeat(-d-1)+'1'):(d===0?'1':d===1?'10':d===2?'100':'1000'); if(d>=-3) svg.appendChild(lb); }
-  // x labels
-  [[100000,'100K'],[1000000,'1M'],[10000000,'10M']].forEach(([n,l])=>{ const gx=X(n); const lb=el('text',{x:gx,y:H-12,fill:c.faint,'font-size':10.5,'text-anchor':'middle','font-family':'var(--mono)'}); lb.textContent=l; svg.appendChild(lb); });
-  const yl=el('text',{x:ml-38,y:mt-10,fill:c.faint,'font-size':10,'font-family':'var(--mono)'}); yl.textContent='ms'; svg.appendChild(yl);
-  series.forEach(se=>{
-    let d=''; se.pts.forEach((v,k)=>{ d+=(k?'L':'M')+X(xs[k])+' '+Y(v); });
-    svg.appendChild(el('path',{d,fill:'none',stroke:se.col,'stroke-width':2.4,'stroke-linejoin':'round','stroke-linecap':'round'}));
-    se.pts.forEach((v,k)=>{ const cx=X(xs[k]),cy=Y(v); const dot=el('circle',{cx,cy,r:4.5,fill:se.col,stroke:css('--surface'),'stroke-width':2}); dot.style.cursor='pointer'; const nm=se.key==='h'?'HoloDb':se.key==='d'?'DuckDB':'SQLite'; dot.addEventListener('mousemove',ev=>showTip(`<b>${nm}</b> · ${title}<div class="r"><span>${(xs[k]/1e6>=1?xs[k]/1e6+'M':xs[k]/1e3+'K')} rows</span><span>${fmtMs(v)} ms</span></div>`,ev)); dot.addEventListener('mouseleave',hideTip); svg.appendChild(dot); });
-  });
-  host.appendChild(svg);
-}
-
-// ---- results table ----
-function table(){
-  const t=document.getElementById('results'), d=DATA[scale];
-  let h=`<thead><tr><th>query</th><th>SQLite</th><th>DuckDB</th><th>HoloDb</th><th>winner</th><th>=</th></tr></thead><tbody>`;
-  d.q.forEach((r,i)=>{
-    const best=Math.min(r[0],r[1],r[2]);
-    const cell=(v,idx)=>`<td class="ms ${v===best?'best':''}">${fmtMs(v)}</td>`;
-    const win = r[2]===best?'<span class="w-holo">HoloDb</span>' : r[1]===best?'<span class="w-duck">DuckDB</span>' : 'SQLite';
-    h+=`<tr><td class="q">${Q[i]}</td>${cell(r[0])}${cell(r[1])}${cell(r[2])}<td>${win}</td><td class="chk">✓</td></tr>`;
-  });
-  const L=d.load;
-  h+=`<tr class="loadrow"><td>bulk load (rows/sec)</td><td class="ms">${L.s.toLocaleString()}</td><td class="ms">${L.d.toLocaleString()}</td><td class="ms">${L.h.toLocaleString()}</td><td>DuckDB</td><td></td></tr>`;
-  t.innerHTML=h+'</tbody>';
-}
-
-// ---- server bracket table: SQL Server vs HoloDb (server) ----
-function serverTable(){
-  const t=document.getElementById('results-srv'); if(!t) return; const d=SRV[scale];
-  let h=`<thead><tr><th>query</th><th>SQL&nbsp;Server</th><th>HoloDb (server)</th><th>HoloDb faster</th><th>=</th></tr></thead><tbody>`;
-  d.q.forEach((r,i)=>{
-    const best=Math.min(r[0],r[1]);
-    const cell=v=>`<td class="ms ${v===best?'best':''}">${fmtMs(v)}</td>`;
-    const x=r[0]/r[1];
-    const xcell = x>=1 ? `<span class="w-holo">${fmtX(x)}</span>` : `<span class="w-duck">${fmtX(1/x)} slower</span>`;
-    h+=`<tr><td class="q">${Q[i]}</td>${cell(r[0])}${cell(r[1])}<td>${xcell}</td><td class="chk">✓</td></tr>`;
-  });
-  const L=d.load;
-  h+=`<tr class="loadrow"><td>bulk load (rows/sec)</td><td class="ms">${L.srv.toLocaleString()}</td><td class="ms">${L.hs.toLocaleString()}</td><td>${L.hs>=L.srv?`<span class="w-holo">${fmtX(L.hs/L.srv)}</span>`:'—'}</td><td></td></tr>`;
-  t.innerHTML=h+'</tbody>';
-}
-
-function renderScaleDependent(){ bars(); table(); serverTable(); }
-function renderAll(){ tiles(); renderScaleDependent(); lineChart('scale-sum',3,'SUM whole table'); lineChart('scale-grp',5,'GROUP BY int'); }
-
-document.getElementById('scale-seg').addEventListener('click',e=>{
-  const b=e.target.closest('button'); if(!b) return;
-  document.querySelectorAll('#scale-seg button').forEach(x=>x.classList.remove('on')); b.classList.add('on');
-  scale=+b.dataset.n; renderScaleDependent();
-});
-window.addEventListener('scroll',hideTip,{passive:true});
-matchMedia('(prefers-color-scheme:dark)').addEventListener('change',renderAll);
-addEventListener('resize',()=>{ clearTimeout(window._rt); window._rt=setTimeout(renderAll,150); });
-renderAll();
-</script>
+<footer class="site"><div class="wrap">
+  <span>Evaluated Applications — .NET libraries, England.</span>
+  <span class="mono">© <span id="yr"></span> · <a href="/holodb/">HoloDb</a> · <a href="https://www.nuget.org/packages/EvaluatedApplications.HoloDb" target="_blank" rel="noopener">NuGet</a></span>
+</div></footer>
+<script>document.getElementById('yr').textContent=new Date().getFullYear();</script>
 </body>
 </html>

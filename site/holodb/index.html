@@ -3,16 +3,58 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>HoloDb — holographic SQL database</title>
-<meta name="description" content="HoloDb: an embeddable holographic SQL database for .NET. ACID with a write-ahead log, constant-time aggregates, hash joins, similarity search, a larger-than-memory tier — and small enough to run in a browser tab.">
+<title>HoloDb — the database that already knows the answer</title>
+<meta name="description" content="HoloDb is an embeddable .NET database that keeps your aggregates maintained, not scanned — so SUM, COUNT and GROUP BY answer in microseconds at any scale. A real ACID SQL store, an analytics engine, and a vector search index over one copy of your data.">
 <link rel="canonical" href="https://evaluatedapplications.github.io/holodb/">
 <meta property="og:type" content="website">
-<meta property="og:title" content="HoloDb — holographic SQL database">
-<meta property="og:description" content="An embeddable holographic SQL database for .NET. ACID, constant-time aggregates, similarity search, up to 766× faster than per-scan engines — and it runs in the browser.">
+<meta property="og:title" content="HoloDb — the database that already knows the answer">
+<meta property="og:description" content="Microsecond whole-table analytics at any scale, in one embeddable .NET dependency. SQL + analytics + vector search over one copy of your data. Honest, reproducible benchmarks vs DuckDB and SQL Server.">
 <meta property="og:url" content="https://evaluatedapplications.github.io/holodb/">
-<meta name="twitter:card" content="summary">
+<meta name="twitter:card" content="summary_large_image">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%238b7dff'/%3E%3Cstop offset='.5' stop-color='%2335d0c0'/%3E%3Cstop offset='1' stop-color='%23e6b450'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='32' height='32' rx='7' fill='%230a0c11'/%3E%3Cpath d='M16 5l9.5 5.5v11L16 27l-9.5-5.5v-11z' fill='none' stroke='url(%23g)' stroke-width='2'/%3E%3C/svg%3E">
 <link rel="stylesheet" href="/assets/site.css">
+<style>
+  .hd-hero{padding:72px 0 24px}
+  .hd-hero h1{font-size:clamp(2.4rem,6vw,4rem);max-width:15ch}
+  .hd-kicker{color:var(--accent-ink)}
+  /* the race: HoloDb resolved vs SQL Server still filling */
+  .race{margin:34px 0 0;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:22px 24px;max-width:760px}
+  .race h3{font-size:.82rem;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-faint);font-family:var(--mono);margin:0 0 16px;font-weight:600}
+  .race-row{display:grid;grid-template-columns:120px 1fr auto;align-items:center;gap:14px;margin:10px 0}
+  .race-name{font-family:var(--mono);font-size:.9rem;color:var(--ink-soft)}
+  .race-name b{color:var(--ink)}
+  .race-track{height:22px;background:var(--bg-2);border:1px solid var(--border);border-radius:6px;overflow:hidden;position:relative}
+  .race-fill{height:100%;border-radius:5px}
+  .race-fill.holo{width:0.5%;background:var(--spectrum)}
+  .race-fill.sql{width:100%;background:linear-gradient(90deg,color-mix(in srgb,var(--bad) 55%,transparent),var(--bad))}
+  .race-fill.duck{width:2%;background:color-mix(in srgb,var(--c-data) 60%,transparent)}
+  .race-time{font-family:var(--mono);font-size:.9rem;font-variant-numeric:tabular-nums;white-space:nowrap;min-width:96px;text-align:right}
+  .race-time.win{color:var(--ok);font-weight:700}
+  .race-note{margin:14px 0 0;font-size:.82rem;color:var(--ink-faint)}
+  .fourstrip{display:flex;flex-wrap:wrap;gap:10px;margin-top:28px}
+  .fourstrip span{font-family:var(--mono);font-size:.84rem;color:var(--ink);border:1px solid var(--border-2);border-radius:999px;padding:7px 15px;background:var(--surface)}
+  .fourstrip b{color:var(--accent-ink)}
+  .stat-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;margin:8px 0}
+  .stat{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:22px;border-left:3px solid var(--accent)}
+  .stat .n{font-size:2.2rem;font-weight:800;letter-spacing:-.03em;color:var(--ink);font-variant-numeric:tabular-nums}
+  .stat .l{color:var(--ink-soft);font-size:.92rem;margin-top:6px;line-height:1.45}
+  .chartwrap{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:22px 22px 12px;overflow-x:auto}
+  .chartwrap svg{display:block;min-width:640px;width:100%;height:auto}
+  .chart-cap{color:var(--ink-soft);font-size:.9rem;margin:6px 0 0}
+  table.cmp{width:100%;border-collapse:collapse;font-size:.9rem;margin-top:6px;display:block;overflow-x:auto}
+  table.cmp th{text-align:right;color:var(--ink);border-bottom:1px solid var(--border-2);padding:9px 12px;font-family:var(--mono);font-size:.78rem;text-transform:uppercase;letter-spacing:.03em;white-space:nowrap}
+  table.cmp th:first-child,table.cmp td:first-child{text-align:left}
+  table.cmp td{border-bottom:1px solid var(--border);padding:9px 12px;color:var(--ink-soft);font-variant-numeric:tabular-nums;white-space:nowrap}
+  table.cmp td.win{color:var(--ok);font-weight:700}
+  table.cmp td.holo{color:var(--accent-ink);font-weight:700}
+  .how-grid{display:grid;grid-template-columns:1fr 1fr;gap:22px;align-items:center}
+  @media(max-width:720px){.how-grid{grid-template-columns:1fr}.race-row{grid-template-columns:88px 1fr auto}}
+  .how-diagram{background:var(--bg-2);border:1px solid var(--border);border-radius:var(--radius);padding:24px}
+  .snip{background:var(--bg-2);border:1px solid var(--border);border-radius:10px;padding:14px 16px;margin:10px 0;overflow-x:auto}
+  .snip code{font-family:var(--mono);font-size:.84rem;color:var(--ink);white-space:pre}
+  .lim{font-size:.85rem;color:var(--ink-faint);margin-top:12px;border-top:1px dashed var(--border-2);padding-top:10px}
+  .lim b{color:var(--warn)}
+</style>
 </head>
 <body>
 <div class="beam"></div>
@@ -26,75 +68,235 @@
     <input type="checkbox" id="navtoggle" class="nav-toggle">
     <label for="navtoggle" class="nav-burger" aria-label="Toggle menu"><span></span><span></span><span></span></label>
     <div class="nav-links">
-      <a href="/">Home</a>
-      <a href="/holodb/" class="active">HoloDb</a>
-      <a href="/holodb/manual/">Manual</a>
+      <a href="#how">How it works</a>
+      <a href="#benchmarks">Benchmarks</a>
+      <a href="/tools/analyst">Try it live</a>
+      <a href="/holodb/manual/">Docs</a>
       <a href="https://www.nuget.org/packages/EvaluatedApplications.HoloDb" target="_blank" rel="noopener">NuGet</a>
     </div>
   </div>
 </nav>
 
-<header class="hero">
+<!-- HERO -->
+<header class="hero hd-hero">
   <div class="wrap">
-    <span class="eyebrow">Data · EvaluatedApplications.HoloDb</span>
-    <h1>HoloDb</h1>
-    <p class="lede">An embeddable holographic SQL database for .NET. ACID with a write-ahead log, columnar storage with
-      compiled predicates, constant-time integer aggregates, hash joins, similarity search, and an optional
-      larger-than-memory tier — and small enough to compile to WebAssembly and run in a browser tab.</p>
-    <div class="facts">
-      <span class="fact">v<b>1.5.1</b></span>
-      <span class="fact"><b>ACID</b> + WAL</span>
-      <span class="fact">up to <b>766×</b> faster aggregates</span>
-      <span class="fact">runs in the <b>browser</b></span>
+    <span class="eyebrow">HoloDb · v1.7.0 · embeddable .NET · <span class="hd-kicker">holographic SQL</span></span>
+    <h1>The database that already knows the answer.</h1>
+    <p class="lede">HoloDb keeps your aggregates <em>maintained, not scanned</em> — so <code>SUM</code>, <code>COUNT</code> and
+      <code>GROUP BY</code> answer in <strong>microseconds whether you have one million rows or ten</strong>. It's a real
+      ACID SQL database, an analytics engine, and a vector-search index, all over one copy of your data.</p>
+
+    <div class="race">
+      <h3>SUM over 25,000,000 rows — same query, same data, verified identical</h3>
+      <div class="race-row"><span class="race-name"><b>HoloDb</b></span><div class="race-track"><div class="race-fill holo"></div></div><span class="race-time win">0.0016 ms ✓</span></div>
+      <div class="race-row"><span class="race-name">DuckDB</span><div class="race-track"><div class="race-fill duck"></div></div><span class="race-time">3.0 ms</span></div>
+      <div class="race-row"><span class="race-name">SQL Server</span><div class="race-track"><div class="race-fill sql"></div></div><span class="race-time">243 ms</span></div>
+      <p class="race-note">HoloDb reads a maintained total instead of counting rows — so it doesn't scan, and the answer doesn't get slower as the table grows. SQL Server here is durable and on-disk (a persistent database, buffer pool capped at 1&nbsp;GB).</p>
     </div>
-    <div class="hero-cta">
-      <div class="install"><code>dotnet add package EvaluatedApplications.HoloDb</code><button class="copy" type="button">copy</button></div>
-      <div class="cta-row">
-        <a class="btn btn-primary" href="/holodb/manual/">Read the manual →</a>
-        <a class="btn btn-ghost" href="/holodb.html">Benchmarks</a>
-        <a class="btn btn-ghost" href="https://www.nuget.org/packages/EvaluatedApplications.HoloDb" target="_blank" rel="noopener">NuGet</a>
-      </div>
+
+    <div class="cta-row" style="margin-top:26px">
+      <a class="btn btn-primary" href="/tools/analyst">Run a query in your browser →</a>
+      <a class="btn btn-ghost" href="#benchmarks">See the benchmarks</a>
+    </div>
+    <div class="install" style="max-width:520px;margin-top:16px"><code>dotnet add package EvaluatedApplications.HoloDb</code><button class="copy" type="button">copy</button></div>
+
+    <div class="fourstrip">
+      <span><b>SQL</b> · real ACID</span>
+      <span><b>Analytics</b> · size-independent</span>
+      <span><b>Vector</b> · NEAREST search</span>
+      <span><b>Metered</b> · billing spine</span>
     </div>
   </div>
 </header>
 
-<section class="sec">
+<!-- HOW IT WORKS -->
+<section class="sec" id="how">
   <div class="wrap">
-    <div class="sec-head"><span class="dot" style="background:var(--c-data)"></span><h2>Demonstrations</h2><p>the engine, live in your browser</p></div>
-    <div class="grid">
-      <a class="card tool" href="/tools/analyst" style="--cat:var(--c-data)">
-        <div class="card-top"><h3>The Analyst</h3><span class="tag live">live</span></div>
-        <p class="desc">Paste any data — a CSV, a log, JSON lines, a spreadsheet dump — and HoloDb profiles the whole thing
-          in your browser: types, distributions, anomalies, hidden entities. Then query it yourself at a live SQL prompt.
-          Nothing leaves your device.</p>
-        <div class="go-in">Open The Analyst →</div>
-      </a>
-      <div class="card tool" style="--cat:var(--c-data)">
-        <div class="card-top"><h3>Similarity search</h3><span class="tag soon">soon</span></div>
-        <p class="desc">Load rows, then find the nearest ones by content with HoloDb's holographic <code>NEAREST</code>
-          operator — content-addressable retrieval, no vector index to build.</p>
-        <div class="go-in" style="color:var(--ink-faint)">In the workshop</div>
+    <div class="sec-head"><span class="dot" style="background:var(--c-foundation)"></span><h2>We keep the answers, not just the rows</h2><p>how it works</p></div>
+    <div class="how-grid">
+      <div>
+        <p class="desc" style="font-size:1.02rem">Most databases answer <code>SELECT SUM(amount)</code> by reading every row and adding it up. Ten times the rows, ten times the wait.</p>
+        <p class="desc" style="font-size:1.02rem">HoloDb keeps a <strong>running answer</strong> instead. Each column's total lives in a small maintained accumulator — a tally that updates as rows go in and out, using a holographic encoding that packs a running sum into a fixed-size vector you can read back in constant time.</p>
+        <p class="desc" style="font-size:1.02rem">So when you ask for the total, HoloDb doesn't count — it reads the tally it's been keeping. That's why the answer stays a <strong>fraction of a microsecond whether the table holds one million rows or twenty-five million</strong>. The same idea powers <code>COUNT</code>, <code>GROUP BY</code>, <code>MIN/MAX</code> and <code>DISTINCT</code>: the work happened once, at write time, so every read is nearly free.</p>
+        <p class="lim">Integer <code>SUM</code>/<code>COUNT</code> are exact and constant-time (a residue-phase codec). <b>Real-number</b> sums fall back to a fast SIMD pass — still quick, but we'll always tell you which.</p>
+      </div>
+      <div class="how-diagram">
+        <svg viewBox="0 0 360 280" width="100%" height="auto" aria-label="Rows flow into a maintained accumulator; reads bypass the rows">
+          <defs><linearGradient id="acc" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#8b7dff"/><stop offset="1" stop-color="#35d0c0"/></linearGradient></defs>
+          <text x="12" y="24" fill="#98a2b3" font-family="ui-monospace,monospace" font-size="12">writes</text>
+          <g font-family="ui-monospace,monospace" font-size="11" fill="#6b7486">
+            <rect x="12" y="40" width="120" height="22" rx="4" fill="#12151d" stroke="#232a37"/><text x="20" y="55">row  42.50</text>
+            <rect x="12" y="70" width="120" height="22" rx="4" fill="#12151d" stroke="#232a37"/><text x="20" y="85">row  17.00</text>
+            <rect x="12" y="100" width="120" height="22" rx="4" fill="#12151d" stroke="#232a37"/><text x="20" y="115">row  61.10</text>
+            <text x="20" y="140" fill="#31394a">…10,000,000 rows</text>
+          </g>
+          <path d="M138 80 H196" stroke="#8b7dff" stroke-width="2" fill="none" marker-end="url(#ar)"/>
+          <defs><marker id="ar" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0 0l6 3-6 3z" fill="#8b7dff"/></marker></defs>
+          <rect x="200" y="52" width="150" height="60" rx="10" fill="url(#acc)" opacity="0.16" stroke="url(#acc)"/>
+          <text x="275" y="78" text-anchor="middle" fill="#e9ecf3" font-family="ui-sans-serif" font-size="13" font-weight="700">running total</text>
+          <text x="275" y="98" text-anchor="middle" fill="#b3a9ff" font-family="ui-monospace,monospace" font-size="12">fixed-size vector</text>
+          <text x="12" y="200" fill="#98a2b3" font-family="ui-monospace,monospace" font-size="12">SELECT SUM(amount)</text>
+          <path d="M150 210 H240 V120" stroke="#35d0c0" stroke-width="2" fill="none" stroke-dasharray="4 3" marker-end="url(#ar2)"/>
+          <defs><marker id="ar2" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0 0l6 3-6 3z" fill="#35d0c0"/></marker></defs>
+          <text x="150" y="236" fill="#7bd86a" font-family="ui-monospace,monospace" font-size="12">→ reads the tally, skips the rows</text>
+          <text x="150" y="256" fill="#e9ecf3" font-family="ui-monospace,monospace" font-size="13" font-weight="700">0.0016 ms</text>
+        </svg>
       </div>
     </div>
   </div>
 </section>
 
+<!-- BENCHMARKS -->
+<section class="sec" id="benchmarks">
+  <div class="wrap">
+    <div class="sec-head"><span class="dot" style="background:var(--c-data)"></span><h2>Same SQL. Same data. Verified identical.</h2><p>the honest scoreboard</p></div>
+    <p class="desc" style="max-width:74ch">The same queries over the same rows on <strong>DuckDB, SQL Server and HoloDb</strong>, each loaded through its own bulk path, every result checked <strong>byte-for-byte identical</strong> across all engines before timing (median of many runs, 16 cores). SQL Server is a real, durable, <strong>on-disk</strong> peer — SQL Server 2022 in Docker, a persistent database on a volume, buffer pool capped at 1&nbsp;GB — so at 25M rows its data outgrows the cache and it reads from disk. We show the wins <em>and</em> the losses.</p>
+
+    <div class="stat-row" style="margin-top:24px">
+      <div class="stat"><div class="n">0.0016 ms</div><div class="l"><code>SUM</code> over 25,000,000 rows — flat as the table grows.</div></div>
+      <div class="stat"><div class="n">~150,000×</div><div class="l">faster than a durable, on-disk SQL Server on whole-table <code>SUM</code> at 25M rows (~1,900× vs DuckDB).</div></div>
+      <div class="stat"><div class="n">6.8 s → 63 ms</div><div class="l">When data outgrows RAM, SQL Server reads from disk: a 25M-row filter scan is 6.8&nbsp;s. HoloDb: 63&nbsp;ms.</div></div>
+    </div>
+
+    <h3 style="margin:34px 0 10px;font-size:1.05rem">Everyone else scales with your data. We don't.</h3>
+    <div class="chartwrap">
+      <svg viewBox="0 0 720 360" role="img" aria-label="Log-scale chart: whole-table SUM time vs rows. HoloDb stays flat near the floor; SQL Server and DuckDB climb with row count.">
+        <g stroke="#232a37" stroke-width="1">
+          <line x1="90" y1="40" x2="90" y2="320"/><line x1="90" y1="320" x2="670" y2="320"/>
+          <line x1="90" y1="40" x2="670" y2="40" stroke-dasharray="2 4" opacity=".5"/>
+          <line x1="90" y1="133" x2="670" y2="133" stroke-dasharray="2 4" opacity=".5"/>
+          <line x1="90" y1="227" x2="670" y2="227" stroke-dasharray="2 4" opacity=".5"/>
+        </g>
+        <g fill="#6b7486" font-family="ui-monospace,monospace" font-size="11">
+          <text x="82" y="44" text-anchor="end">1 s</text>
+          <text x="82" y="137" text-anchor="end">10 ms</text>
+          <text x="82" y="231" text-anchor="end">0.1 ms</text>
+          <text x="82" y="324" text-anchor="end">1 µs</text>
+          <text x="90" y="338" text-anchor="middle">10M rows</text>
+          <text x="660" y="338" text-anchor="middle">25M rows</text>
+          <text x="380" y="338" text-anchor="middle" fill="#31394a">→ data size →</text>
+        </g>
+        <!-- SQL Server (on disk): 69.3ms -> 243ms -->
+        <polyline points="90,94 660,69" fill="none" stroke="#f0796a" stroke-width="2.5"/>
+        <circle cx="90" cy="94" r="4" fill="#f0796a"/><circle cx="660" cy="69" r="4" fill="#f0796a"/>
+        <text x="655" y="61" text-anchor="end" fill="#f0796a" font-family="ui-monospace,monospace" font-size="11">SQL Server 243 ms</text>
+        <!-- DuckDB: 1.44 -> 3.04 -->
+        <polyline points="90,173 660,157" fill="none" stroke="#4aa3ff" stroke-width="2"/>
+        <circle cx="90" cy="173" r="3.5" fill="#4aa3ff"/><circle cx="660" cy="157" r="3.5" fill="#4aa3ff"/>
+        <text x="655" y="149" text-anchor="end" fill="#4aa3ff" font-family="ui-monospace,monospace" font-size="11">DuckDB 3.0 ms</text>
+        <!-- HoloDb: flat at the floor -->
+        <polyline points="90,290 660,308" fill="none" stroke="url(#hl)" stroke-width="3"/>
+        <defs><linearGradient id="hl" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#8b7dff"/><stop offset="1" stop-color="#35d0c0"/></linearGradient></defs>
+        <circle cx="90" cy="290" r="4.5" fill="#8b7dff"/><circle cx="660" cy="308" r="4.5" fill="#35d0c0"/>
+        <text x="655" y="302" text-anchor="end" fill="#b3a9ff" font-family="ui-monospace,monospace" font-size="11" font-weight="700">HoloDb 0.0016 ms</text>
+      </svg>
+      <p class="chart-cap"><code>SUM</code> whole table, log scale. As the data grows, the scan engines' time climbs; HoloDb's stays flat at the floor because it never scans — it reads a maintained total.</p>
+    </div>
+
+    <h3 style="margin:34px 0 10px;font-size:1.05rem">Where HoloDb wins <span style="color:var(--ink-faint);font-weight:400;font-size:.9rem">(25M rows, median ms; SQL Server durable + on-disk)</span></h3>
+    <table class="cmp">
+      <thead><tr><th>query</th><th>HoloDb</th><th>DuckDB</th><th>SQL Server</th></tr></thead>
+      <tbody>
+        <tr><td>SUM whole table</td><td class="holo">0.0016</td><td>3.04</td><td>243.2</td></tr>
+        <tr><td>GROUP BY (int)</td><td class="holo">0.0055</td><td>12.4</td><td>314.4</td></tr>
+        <tr><td>GROUP BY (text)</td><td class="holo">0.0025</td><td>27.9</td><td>327.0</td></tr>
+        <tr><td>GROUP BY + HAVING</td><td class="holo">0.046</td><td>10.3</td><td>313.3</td></tr>
+        <tr><td>MIN / MAX</td><td class="holo">0.021</td><td>4.96</td><td>231.3</td></tr>
+        <tr><td>DISTINCT</td><td class="holo">0.031</td><td>41.9</td><td>224.5</td></tr>
+        <tr><td>point lookup (by PK)</td><td class="holo">0.0021</td><td>0.41</td><td>0.91</td></tr>
+        <tr><td>filter scan (~50%)</td><td class="holo">62.7</td><td>323.8</td><td>6773.4</td></tr>
+        <tr><td>filter AND</td><td class="holo">39.1</td><td>56.0</td><td>1171.6</td></tr>
+        <tr><td>MIN / MAX (real)</td><td class="holo">12.6</td><td>28.7</td><td>275.2</td></tr>
+      </tbody>
+    </table>
+
+    <h3 style="margin:30px 0 10px;font-size:1.05rem">Where HoloDb loses <span style="color:var(--ink-faint);font-weight:400;font-size:.9rem">— we show these too (25M rows)</span></h3>
+    <table class="cmp">
+      <thead><tr><th>query</th><th>HoloDb</th><th>DuckDB</th><th>winner</th></tr></thead>
+      <tbody>
+        <tr><td>GROUP BY (int), SUM(real)</td><td>109.3</td><td class="win">11.1</td><td>DuckDB ~10×</td></tr>
+        <tr><td>ORDER BY + LIMIT</td><td>17.4</td><td class="win">2.57</td><td>DuckDB ~6.8×</td></tr>
+        <tr><td>filtered COUNT(*)</td><td>15.5</td><td class="win">4.66</td><td>DuckDB ~3.3×</td></tr>
+        <tr><td>SUM (real) whole table</td><td>13.1</td><td class="win">5.31</td><td>DuckDB ~2.5×</td></tr>
+        <tr><td>bulk load (rows/sec)</td><td>557k</td><td class="win">1.37M</td><td>DuckDB ~2.5×</td></tr>
+      </tbody>
+    </table>
+    <p class="desc" style="max-width:72ch;margin-top:14px">DuckDB is a superb columnar engine and the fastest loader here — if grouped real-number rollups and raw load throughput are your <em>whole</em> workload, use it. HoloDb's bet is the <strong>mixed</strong> transactional + analytics + vector workload, where maintained aggregates and durability change the shape of the problem.</p>
+    <p class="lim">Integer <code>SUM</code>/<code>COUNT</code> are exact and constant-time; <b>real</b>-number sums use a SIMD scan, which is where <code>SUM(real)</code> and grouped real-sums lose to DuckDB. SQL Server is durable and on-disk here (persistent DB, 1&nbsp;GB cache) and pays a network round-trip; HoloDb can <b>also</b> be durable and larger-than-memory (its paged engine spills to disk) and <em>still</em> answer these aggregates in microseconds. <a href="/holodb.html">Full methodology &amp; all results →</a></p>
+  </div>
+</section>
+
+<!-- TRY IT LIVE -->
 <section class="sec">
   <div class="wrap">
-    <div class="sec-head"><span class="dot" style="background:var(--c-data)"></span><h2>What's inside</h2><p>the engine</p></div>
+    <div class="sec-head"><span class="dot" style="background:var(--c-spatial)"></span><h2>Don't take our word for it — run it in your browser</h2><p>the Analyst</p></div>
+    <a class="card tool" href="/tools/analyst" style="--cat:var(--c-spatial)">
+      <div class="card-top"><h3>The Analyst</h3><span class="tag live">live</span></div>
+      <p class="desc">Paste any data — a CSV, a log, JSON lines — and it loads into a <strong>real HoloDb running entirely in your browser tab</strong> (compiled to WebAssembly, nothing leaves your device), profiles it, and hands you a live SQL prompt. It's the speed claims above, running on your machine, on your data.</p>
+      <div class="go-in">Open The Analyst →</div>
+    </a>
+  </div>
+</section>
+
+<!-- FEATURES -->
+<section class="sec" id="features">
+  <div class="wrap">
+    <div class="sec-head"><span class="dot" style="background:var(--c-ml)"></span><h2>Four databases, one <code>dotnet add package</code></h2><p>capabilities</p></div>
     <div class="grid">
-      <article class="card" style="--cat:var(--c-data)"><div class="card-top"><h3>Real ACID</h3></div>
-        <p class="desc">Transactions with a write-ahead log and crash recovery. Concurrent readers never block, and commits
-          are durable — not an in-memory toy.</p></article>
-      <article class="card" style="--cat:var(--c-data)"><div class="card-top"><h3>Constant-time aggregates</h3></div>
-        <p class="desc">COUNT and SUM over integer columns are answered from maintained accumulators, independent of row
-          count — the source of the 766× benchmark wins over per-scan engines.</p></article>
-      <article class="card" style="--cat:var(--c-data)"><div class="card-top"><h3>Joins &amp; similarity</h3></div>
-        <p class="desc">Hash joins, a full boolean WHERE with compiled predicates, and holographic <code>NEAREST</code>
-          similarity search over the same rows — SQL and vector retrieval in one engine.</p></article>
-      <article class="card" style="--cat:var(--c-data)"><div class="card-top"><h3>Bigger than memory</h3></div>
-        <p class="desc">An optional memory-mapped tier spills to disk when a table outgrows RAM, so the same API scales past
-          what fits in memory.</p></article>
+      <article class="card" style="--cat:var(--c-foundation)"><div class="card-top"><h3>Transactional SQL</h3></div>
+        <p class="desc">Real ACID: a reader/writer lock, pre-transaction snapshot rolled back on any error, fsync write-ahead log, and crash recovery bounded by <em>live data, not write history</em>. A substantial SQL dialect — joins, subqueries in <code>IN</code>, <code>LIKE</code>, <code>BETWEEN</code>, <code>GROUP BY</code>/<code>HAVING</code>, transactions.</p>
+        <p class="lim">One <code>PRIMARY KEY</code> per table (INT or TEXT). <b>No</b> OUTER joins or <code>ALTER TABLE</code> yet.</p></article>
+      <article class="card" style="--cat:var(--c-data)"><div class="card-top"><h3>Size-independent analytics</h3></div>
+        <p class="desc">Whole-table <code>COUNT</code>/<code>SUM</code>/<code>MIN</code>/<code>MAX</code> and single-column <code>GROUP BY</code> answer from maintained holographic accumulators and per-block zone maps — <strong>O(1)</strong>, no scan, flat as the table grows. Compiled predicates and a columnar path keep ordinary filters fast too.</p>
+        <p class="lim">Integer aggregates are exact + constant-time; <b>real</b>-number sums use a SIMD scan.</p></article>
+      <article class="card" style="--cat:var(--c-spatial)"><div class="card-top"><h3>Vector search (NEAREST)</h3></div>
+        <p class="desc">Holographic similarity search <em>in SQL</em>: <code>SELECT … FROM t NEAREST (col=val,…) LIMIT k</code> ranks rows by similarity to a partial key — a vector-DB query over the <strong>same rows</strong>, with no separate vector index to build or keep in sync. Sublinear LSH index above ~8,000 rows.</p>
+        <p class="lim">In-RAM engine has the LSH index; <code>NEAREST</code> can't yet combine with <code>WHERE</code>/<code>GROUP</code>.</p></article>
+      <article class="card" style="--cat:var(--c-data)"><div class="card-top"><h3>Durable, larger-than-memory</h3></div>
+        <p class="desc">The paged engine stores tables on an 8&nbsp;KB buffer-pool page store with a redo-only WAL: cold pages spill to disk, so a table can <strong>exceed RAM</strong>, with bounded crash recovery — and the size-independent aggregates are maintained <em>on disk</em>.</p>
+        <p class="lim">The primary-key index stays in RAM (~16&nbsp;B/row) — the limit for tables far bigger than memory.</p></article>
+      <article class="card" style="--cat:var(--c-foundation)"><div class="card-top"><h3>Live metrics under ingest</h3></div>
+        <p class="desc">Whole-table and grouped counts/sums are served from an immutable snapshot republished after every write — <strong>without taking the engine lock</strong> — so a continuous streaming ingest never stalls a dashboard read.</p></article>
+      <article class="card" style="--cat:var(--c-ml)"><div class="card-top"><h3>Metered billing spine</h3></div>
+        <p class="desc">Every query reports the bytes it <em>actually</em> read versus the bytes a scan-priced warehouse would <strong>bill</strong> — the exact metric BigQuery and Athena charge on. Constant-time aggregates read ~0 bytes yet bill as a scan, so you can run a metered analytics API that undercuts the warehouse.</p></article>
+    </div>
+  </div>
+</section>
+
+<!-- DEPLOY -->
+<section class="sec" id="deploy">
+  <div class="wrap">
+    <div class="sec-head"><span class="dot" style="background:var(--c-foundation)"></span><h2>Runs everywhere .NET runs. Including this tab.</h2><p>deploy</p></div>
+    <div class="grid">
+      <article class="card"><div class="card-top"><h3>Embedded, in-process</h3></div>
+        <div class="snip"><code>var db = new HoloDbService(new HoloDbOptions { WalPath = "app.wal" });
+db.Execute("CREATE TABLE t (id INT PRIMARY KEY, region TEXT, amount REAL)");
+var r = await db.ExecuteAsync("SELECT region, SUM(amount) FROM t GROUP BY region");</code></div>
+        <p class="desc">Sync or async, plus a column-native <code>BulkLoad</code>. Register with DI via <code>AddHoloDb()</code>, or attach to an EvalApp pipeline.</p></article>
+      <article class="card"><div class="card-top"><h3>Networked server + typed client</h3></div>
+        <div class="snip"><code>docker run -p 5432:5432 -v holodb-data:/data \
+  ghcr.io/evaluatedapplications/holodb:latest --token s3cret</code></div>
+        <p class="desc">A self-hosted TLS server; the .NET client mirrors the embedded surface, so you go from in-process to networked by changing only how you get the handle. Columnar results stay columnar on the wire.</p></article>
+      <article class="card"><div class="card-top"><h3>In the browser (WebAssembly)</h3></div>
+        <p class="desc">The in-memory engine is pure managed .NET, so it compiles to WebAssembly and runs client-side — the <a href="/tools/analyst">Analyst tool</a> is a real HoloDb in a browser tab, nothing leaving the device. Ideal for local/offline analytics and "your data stays with you" apps.</p></article>
+    </div>
+    <p class="lim" style="margin-top:16px">The Docker image is rebuilt from source and published as <code>:latest</code> (and <code>:&lt;version&gt;</code>) on every release, so <code>:latest</code> is always the current engine.</p>
+  </div>
+</section>
+
+<!-- GET STARTED -->
+<section class="sec">
+  <div class="wrap">
+    <div class="stack">
+      <h2>Get started</h2>
+      <p>Add the package and go — every capability is free to use.</p>
+      <div class="install" style="margin-top:14px"><code>dotnet add package EvaluatedApplications.HoloDb</code><button class="copy" type="button">copy</button></div>
+      <div class="cta-row" style="margin-top:16px">
+        <a class="btn btn-primary" href="/tools/analyst">Try it live</a>
+        <a class="btn btn-ghost" href="/holodb/manual/">Read the manual</a>
+        <a class="btn btn-ghost" href="/holodb.html">Full benchmark methodology</a>
+        <a class="btn btn-ghost" href="https://www.nuget.org/packages/EvaluatedApplications.HoloDb" target="_blank" rel="noopener">NuGet</a>
+      </div>
     </div>
   </div>
 </section>
@@ -102,7 +304,7 @@
 <footer class="site">
   <div class="wrap">
     <span>Evaluated Applications — .NET libraries, England.</span>
-    <span class="mono">© <span id="yr"></span> · <a href="/">Home</a> · <a href="/holodb/manual/">Manual</a></span>
+    <span class="mono">© <span id="yr"></span> · <a href="/">Home</a> · <a href="/holodb/manual/">Docs</a> · <a href="https://www.nuget.org/packages/EvaluatedApplications.HoloDb" target="_blank" rel="noopener">NuGet</a></span>
   </div>
 </footer>
 
@@ -111,10 +313,7 @@
   document.querySelectorAll('.copy').forEach(function(btn){
     btn.addEventListener('click', function(){
       var code = btn.parentElement.querySelector('code').textContent;
-      navigator.clipboard.writeText(code).then(function(){
-        var old = btn.textContent; btn.textContent = 'copied'; btn.classList.add('done');
-        setTimeout(function(){ btn.textContent = old; btn.classList.remove('done'); }, 1400);
-      });
+      navigator.clipboard.writeText(code).then(function(){ var o=btn.textContent; btn.textContent='copied'; btn.classList.add('done'); setTimeout(function(){btn.textContent=o;btn.classList.remove('done');},1400); });
     });
   });
 </script>
