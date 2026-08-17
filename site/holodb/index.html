@@ -246,7 +246,7 @@ CREATE TABLE invoices (
         <tr><td><b class="ql">revenue by segment (JOIN)</b><span class="q">invoices ⋈ customers GROUP BY customers.segment</span></td><td class="holo">57.5</td><td>2,946</td><td class="mult">HoloDb ~51×</td></tr>
         <tr><td><b class="ql">revenue by signup cohort (JOIN)</b><span class="q">⋈ customers GROUP BY customers.signup_month</span></td><td class="holo">67.6</td><td>2,853</td><td class="mult">HoloDb ~42×</td></tr>
         <tr><td><b class="ql">top named customers (JOIN)</b><span class="q">⋈ customers GROUP BY customers.name … LIMIT 10</span></td><td class="holo">806</td><td>4,173</td><td class="mult">HoloDb ~5.2×</td></tr>
-        <tr><td><b class="ql">look up one invoice</b><span class="q">SELECT … WHERE invoice_id = ?</span></td><td>0.132</td><td class="win">0.20</td><td>SQL&nbsp;Server ~1.5×</td></tr>
+        <tr><td><b class="ql">look up one invoice</b><span class="q">SELECT … WHERE invoice_id = ?</span></td><td>0.20</td><td>0.20</td><td>tie (~0.2 ms)</td></tr>
       </tbody>
     </table>
     <p class="lim">Both are networked services paying a client/server round-trip. HoloDb's server holds the working set in memory with the same maintained accumulators; SQL&nbsp;Server 2022 (LocalDB) reads its on-disk table. HoloDb leads on <b>15 of the 16</b> — every rollup and scan by 11× to 32,000×, and <b>all five JOINs by 5× to 51×</b> now that they fan out in parallel across all cores (the heaviest, the name-grouped join, lands at 806&nbsp;ms against SQL&nbsp;Server's 4,173&nbsp;ms) — conceding only the sub-millisecond point lookup. Bulk load, rows/sec: HoloDb server 697k · SQL&nbsp;Server 349k.</p>
