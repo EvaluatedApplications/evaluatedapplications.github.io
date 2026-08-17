@@ -78,14 +78,14 @@ CREATE TABLE invoices (
       <tr><td>top customers by revenue</td><td>321.7</td><td class="holo">162.0</td><td>DuckDB ~2.0×</td></tr>
       <tr><td>largest invoices</td><td>11.8</td><td class="holo">4.48</td><td>DuckDB ~2.6×</td></tr>
       <tr><td>overdue outstanding</td><td>82.7</td><td class="holo">14.1</td><td>DuckDB ~5.8×</td></tr>
-      <tr><td>top named customers (JOIN)</td><td>5,743</td><td class="holo">380</td><td>DuckDB ~15×</td></tr>
-      <tr><td>revenue by segment (JOIN)</td><td>1,086</td><td class="holo">65.4</td><td>DuckDB ~17×</td></tr>
-      <tr><td>revenue by segment &amp; status (JOIN)</td><td>1,873</td><td class="holo">102</td><td>DuckDB ~18×</td></tr>
-      <tr><td>enterprise revenue (JOIN)</td><td>327</td><td class="holo">10.5</td><td>DuckDB ~31×</td></tr>
-      <tr><td>revenue by signup cohort (JOIN)</td><td>1,415</td><td class="holo">15.3</td><td>DuckDB ~92×</td></tr>
+      <tr><td>top named customers (JOIN)</td><td>2,713</td><td class="holo">335</td><td>DuckDB ~8×</td></tr>
+      <tr><td>revenue by segment (JOIN)</td><td>534</td><td class="holo">65.0</td><td>DuckDB ~8×</td></tr>
+      <tr><td>revenue by segment &amp; status (JOIN)</td><td>1,565</td><td class="holo">102</td><td>DuckDB ~15×</td></tr>
+      <tr><td>enterprise revenue (JOIN)</td><td>292</td><td class="holo">12.3</td><td>DuckDB ~24×</td></tr>
+      <tr><td>revenue by signup cohort (JOIN)</td><td>572</td><td class="holo">16.4</td><td>DuckDB ~35×</td></tr>
     </tbody>
   </table>
-  <p style="color:var(--ink-faint);font-size:.86rem">The <span style="color:var(--accent-ink)">purple</span> cell is the faster engine. Bulk load, rows/sec: DuckDB 655k · HoloDb 326k. The six rollups and the lookup resolve from maintained accumulators and the PK index (no scan, hence microseconds); DuckDB's columnar engine leads on the scans and the five cross-table JOINs. HoloDb's joins are verified identical and run in the hundreds of ms to ~2 s — they beat SQLite and (as a server) SQL&nbsp;Server, but a specialised OLAP engine wins them.</p>
+  <p style="color:var(--ink-faint);font-size:.86rem">The <span style="color:var(--accent-ink)">purple</span> cell is the faster engine. Bulk load, rows/sec: DuckDB 845k · HoloDb 310k. The six rollups and the lookup resolve from maintained accumulators and the PK index (no scan, hence microseconds); DuckDB's columnar engine leads on the scans and the five cross-table JOINs. HoloDb's joins are verified identical and run in the hundreds of ms to ~2.7 s — they beat SQLite and SQL&nbsp;Server outright, but a specialised OLAP engine still wins them.</p>
 
   <h2>Networked service <span style="color:var(--ink-faint);font-size:.7em;font-weight:400">— HoloDb server vs SQL&nbsp;Server 2022 (LocalDB), 10M invoices ⋈ 200k customers, median ms</span></h2>
   <table class="cmp">
@@ -101,18 +101,18 @@ CREATE TABLE invoices (
       <tr><td>revenue by region &amp; status</td><td class="holo">131.7</td><td>3,260</td><td>HoloDb ~25×</td></tr>
       <tr><td>overdue outstanding</td><td class="holo">83.2</td><td>1,004</td><td>HoloDb ~12×</td></tr>
       <tr><td>top customers by revenue</td><td class="holo">285.8</td><td>3,277</td><td>HoloDb ~11×</td></tr>
-      <tr><td>enterprise revenue (JOIN)</td><td class="holo">332</td><td>1,792</td><td>HoloDb ~5.4×</td></tr>
-      <tr><td>revenue by segment &amp; status (JOIN)</td><td class="holo">1,661</td><td>6,556</td><td>HoloDb ~3.9×</td></tr>
-      <tr><td>revenue by segment (JOIN)</td><td class="holo">1,027</td><td>2,946</td><td>HoloDb ~2.9×</td></tr>
-      <tr><td>revenue by signup cohort (JOIN)</td><td class="holo">1,490</td><td>2,853</td><td>HoloDb ~1.9×</td></tr>
-      <tr><td>top named customers (JOIN)</td><td>5,746</td><td class="holo">4,173</td><td>SQL&nbsp;Server ~1.4×</td></tr>
-      <tr><td>look up one invoice</td><td>0.132</td><td class="holo">0.20</td><td>SQL&nbsp;Server ~1.5×</td></tr>
+      <tr><td>enterprise revenue (JOIN)</td><td class="holo">311</td><td>1,792</td><td>HoloDb ~5.8×</td></tr>
+      <tr><td>revenue by segment &amp; status (JOIN)</td><td class="holo">1,477</td><td>6,556</td><td>HoloDb ~4.4×</td></tr>
+      <tr><td>revenue by segment (JOIN)</td><td class="holo">563</td><td>2,946</td><td>HoloDb ~5.2×</td></tr>
+      <tr><td>revenue by signup cohort (JOIN)</td><td class="holo">564</td><td>2,853</td><td>HoloDb ~5.1×</td></tr>
+      <tr><td>top named customers (JOIN)</td><td class="holo">2,674</td><td>4,173</td><td>HoloDb ~1.6×</td></tr>
+      <tr><td>look up one invoice</td><td>0.20</td><td>0.20</td><td>tie (~0.2 ms)</td></tr>
     </tbody>
   </table>
-  <p style="color:var(--ink-faint);font-size:.86rem">Both are networked services paying a client/server round-trip. HoloDb serves the working set from RAM with the same maintained accumulators; SQL&nbsp;Server 2022 (LocalDB) reads its on-disk table. Bulk load, rows/sec: HoloDb server 612k · SQL&nbsp;Server 349k. HoloDb wins <strong>14 of the 16</strong> — conceding only the point lookup and the high-cardinality name-grouped join.</p>
+  <p style="color:var(--ink-faint);font-size:.86rem">Both are networked services paying a client/server round-trip. HoloDb serves the working set from RAM with the same maintained accumulators; SQL&nbsp;Server 2022 (LocalDB) reads its on-disk table. Bulk load, rows/sec: HoloDb server 660k · SQL&nbsp;Server 349k. HoloDb wins <strong>15 of the 16</strong>, including <strong>all five JOINs</strong> — the high-cardinality name-grouped join now lands at 2,674&nbsp;ms (after the group-by was integer-encoded) versus SQL&nbsp;Server's 4,173&nbsp;ms — with the 16th, a sub-millisecond point lookup, a tie.</p>
 
   <h2>What the numbers say</h2>
-  <p>The <strong>maintained aggregates</strong> — the whole-ledger total and count, and the single-column <code>GROUP BY</code> rollups (revenue by status, month, region) — resolve in <strong>microseconds and are constant-time</strong>: a kept tally is read instead of scanning, so response holds as the ledger grows. The single-invoice lookup resolves from the primary-key index. In-process, HoloDb leads on the six rollups and the lookup; as a networked service against SQL&nbsp;Server it leads on <strong>14 of the 16</strong>, including four of the five joins.</p>
+  <p>The <strong>maintained aggregates</strong> — the whole-ledger total and count, and the single-column <code>GROUP BY</code> rollups (revenue by status, month, region) — resolve in <strong>microseconds and are constant-time</strong>: a kept tally is read instead of scanning, so response holds as the ledger grows. The single-invoice lookup resolves from the primary-key index. In-process, HoloDb leads on the six rollups and the lookup; as a networked service against SQL&nbsp;Server it leads on <strong>15 of the 16</strong>, including all five joins (the name-grouped join finishes in 2.7&nbsp;s, under SQL&nbsp;Server's 4.2&nbsp;s, once the group-by is dictionary-encoded to integer codes).</p>
   <p>In-process, DuckDB's pure-columnar engine leads on the scanned queries — a filtered sum (overdue outstanding), a top-K (largest invoices), a multi-column group (region×status) — and on the five cross-table <strong>JOINs</strong>, where HoloDb's results are verified identical and beat SQLite and SQL&nbsp;Server but trail a specialised OLAP engine. HoloDb targets the <strong>mixed</strong> transactional, analytics and vector workload, durable and larger-than-memory, in a single embeddable dependency.</p>
 
   <p style="margin-top:2rem"><a href="/holodb/">← Back to HoloDb</a> &nbsp;·&nbsp; <a href="/tools/analyst">Run it in the browser →</a></p>

@@ -199,7 +199,7 @@ CREATE TABLE invoices (
 
     <div class="stat-row" style="margin-top:24px">
       <div class="stat"><div class="n">6 rollups in µs</div><div class="l">The billing dashboard — revenue by status, month and region, plus totals, counts and lookups — resolves in <strong>microseconds</strong> from maintained accumulators. Response time holds constant as the ledger grows.</div></div>
-      <div class="stat"><div class="n">14 of 16</div><div class="l">As a networked service, HoloDb outperforms SQL&nbsp;Server on <strong>14 of the 16</strong> billing queries — every rollup and scan (by up to ~32,000×) and four of the five cross-table joins.</div></div>
+      <div class="stat"><div class="n">15 of 16</div><div class="l">As a networked service, HoloDb outperforms SQL&nbsp;Server on <strong>15 of the 16</strong> billing queries — every rollup and scan (by up to ~32,000×) and <strong>all five</strong> cross-table joins.</div></div>
       <div class="stat"><div class="n">columnar edge</div><div class="l">In-process, DuckDB's purpose-built columnar engine leads on the heavy scans and the five JOINs; HoloDb's joins are verified identical and beat SQLite and SQL&nbsp;Server.</div></div>
     </div>
 
@@ -218,11 +218,11 @@ CREATE TABLE invoices (
         <tr><td><b class="ql">top customers by revenue</b><span class="q">GROUP BY customer_id … ORDER BY SUM(amount_cents) DESC LIMIT 10</span></td><td>321.7</td><td class="win">162.0</td><td>DuckDB ~2.0×</td></tr>
         <tr><td><b class="ql">largest invoices</b><span class="q">ORDER BY amount_cents DESC LIMIT 20</span></td><td>11.8</td><td class="win">4.48</td><td>DuckDB ~2.6×</td></tr>
         <tr><td><b class="ql">overdue outstanding</b><span class="q">SELECT SUM(amount_cents) … WHERE status = 'overdue'</span></td><td>82.7</td><td class="win">14.1</td><td>DuckDB ~5.8×</td></tr>
-        <tr><td><b class="ql">top named customers (JOIN)</b><span class="q">invoices ⋈ customers … GROUP BY customers.name … LIMIT 10</span></td><td>5,743</td><td class="win">380</td><td>DuckDB ~15×</td></tr>
-        <tr><td><b class="ql">revenue by segment (JOIN)</b><span class="q">invoices ⋈ customers GROUP BY customers.segment</span></td><td>1,086</td><td class="win">65.4</td><td>DuckDB ~17×</td></tr>
-        <tr><td><b class="ql">revenue by segment &amp; status (JOIN)</b><span class="q">⋈ customers GROUP BY customers.segment, invoices.status</span></td><td>1,873</td><td class="win">102</td><td>DuckDB ~18×</td></tr>
-        <tr><td><b class="ql">enterprise revenue (JOIN)</b><span class="q">invoices ⋈ customers WHERE customers.segment = 'enterprise'</span></td><td>327</td><td class="win">10.5</td><td>DuckDB ~31×</td></tr>
-        <tr><td><b class="ql">revenue by signup cohort (JOIN)</b><span class="q">⋈ customers GROUP BY customers.signup_month</span></td><td>1,415</td><td class="win">15.3</td><td>DuckDB ~92×</td></tr>
+        <tr><td><b class="ql">top named customers (JOIN)</b><span class="q">invoices ⋈ customers … GROUP BY customers.name … LIMIT 10</span></td><td>2,713</td><td class="win">335</td><td>DuckDB ~8×</td></tr>
+        <tr><td><b class="ql">revenue by segment (JOIN)</b><span class="q">invoices ⋈ customers GROUP BY customers.segment</span></td><td>534</td><td class="win">65.0</td><td>DuckDB ~8×</td></tr>
+        <tr><td><b class="ql">revenue by segment &amp; status (JOIN)</b><span class="q">⋈ customers GROUP BY customers.segment, invoices.status</span></td><td>1,565</td><td class="win">102</td><td>DuckDB ~15×</td></tr>
+        <tr><td><b class="ql">enterprise revenue (JOIN)</b><span class="q">invoices ⋈ customers WHERE customers.segment = 'enterprise'</span></td><td>292</td><td class="win">12.3</td><td>DuckDB ~24×</td></tr>
+        <tr><td><b class="ql">revenue by signup cohort (JOIN)</b><span class="q">⋈ customers GROUP BY customers.signup_month</span></td><td>572</td><td class="win">16.4</td><td>DuckDB ~35×</td></tr>
       </tbody>
     </table>
     <p class="lim">The six rollups and the point lookup resolve from maintained accumulators and the primary-key index — no scan, hence microseconds, thousands of times faster, and flat as the ledger grows. On the scans (a filtered sum, a top-K, high-cardinality and multi-column groups) and the five cross-table <strong>JOINs</strong>, DuckDB's purpose-built columnar engine leads. HoloDb's joins are verified identical and run in the hundreds of ms to ~2 s — they beat SQLite and, as a server, beat SQL&nbsp;Server (below) — but a specialised OLAP engine wins them. Bulk load, rows/sec: DuckDB 655k · HoloDb 326k.</p>
@@ -241,15 +241,15 @@ CREATE TABLE invoices (
         <tr><td><b class="ql">revenue by region &amp; status</b><span class="q">GROUP BY region, status  (multi-column)</span></td><td class="holo">131.7</td><td>3,260</td><td class="mult">HoloDb ~25×</td></tr>
         <tr><td><b class="ql">overdue outstanding</b><span class="q">SELECT SUM(amount_cents) … WHERE status = 'overdue'</span></td><td class="holo">83.2</td><td>1,004</td><td class="mult">HoloDb ~12×</td></tr>
         <tr><td><b class="ql">top customers by revenue</b><span class="q">GROUP BY customer_id … ORDER BY SUM(amount_cents) DESC LIMIT 10</span></td><td class="holo">285.8</td><td>3,277</td><td class="mult">HoloDb ~11×</td></tr>
-        <tr><td><b class="ql">enterprise revenue (JOIN)</b><span class="q">invoices ⋈ customers WHERE customers.segment = 'enterprise'</span></td><td class="holo">332</td><td>1,792</td><td class="mult">HoloDb ~5.4×</td></tr>
-        <tr><td><b class="ql">revenue by segment &amp; status (JOIN)</b><span class="q">⋈ customers GROUP BY customers.segment, invoices.status</span></td><td class="holo">1,661</td><td>6,556</td><td class="mult">HoloDb ~3.9×</td></tr>
-        <tr><td><b class="ql">revenue by segment (JOIN)</b><span class="q">invoices ⋈ customers GROUP BY customers.segment</span></td><td class="holo">1,027</td><td>2,946</td><td class="mult">HoloDb ~2.9×</td></tr>
-        <tr><td><b class="ql">revenue by signup cohort (JOIN)</b><span class="q">⋈ customers GROUP BY customers.signup_month</span></td><td class="holo">1,490</td><td>2,853</td><td class="mult">HoloDb ~1.9×</td></tr>
-        <tr><td><b class="ql">top named customers (JOIN)</b><span class="q">⋈ customers GROUP BY customers.name … LIMIT 10</span></td><td>5,746</td><td class="win">4,173</td><td>SQL&nbsp;Server ~1.4×</td></tr>
+        <tr><td><b class="ql">enterprise revenue (JOIN)</b><span class="q">invoices ⋈ customers WHERE customers.segment = 'enterprise'</span></td><td class="holo">311</td><td>1,792</td><td class="mult">HoloDb ~5.8×</td></tr>
+        <tr><td><b class="ql">revenue by segment &amp; status (JOIN)</b><span class="q">⋈ customers GROUP BY customers.segment, invoices.status</span></td><td class="holo">1,477</td><td>6,556</td><td class="mult">HoloDb ~4.4×</td></tr>
+        <tr><td><b class="ql">revenue by segment (JOIN)</b><span class="q">invoices ⋈ customers GROUP BY customers.segment</span></td><td class="holo">563</td><td>2,946</td><td class="mult">HoloDb ~5.2×</td></tr>
+        <tr><td><b class="ql">revenue by signup cohort (JOIN)</b><span class="q">⋈ customers GROUP BY customers.signup_month</span></td><td class="holo">564</td><td>2,853</td><td class="mult">HoloDb ~5.1×</td></tr>
+        <tr><td><b class="ql">top named customers (JOIN)</b><span class="q">⋈ customers GROUP BY customers.name … LIMIT 10</span></td><td class="holo">2,674</td><td>4,173</td><td class="mult">HoloDb ~1.6×</td></tr>
         <tr><td><b class="ql">look up one invoice</b><span class="q">SELECT … WHERE invoice_id = ?</span></td><td>0.132</td><td class="win">0.20</td><td>SQL&nbsp;Server ~1.5×</td></tr>
       </tbody>
     </table>
-    <p class="lim">Both are networked services paying a client/server round-trip. HoloDb's server holds the working set in memory with the same maintained accumulators; SQL&nbsp;Server 2022 (LocalDB) reads its on-disk table. HoloDb leads on <b>14 of the 16</b> — every rollup and scan by 11× to 32,000×, and four of the five JOINs — conceding only the point lookup and the high-cardinality name-grouped join. Bulk load, rows/sec: HoloDb server 612k · SQL&nbsp;Server 349k.</p>
+    <p class="lim">Both are networked services paying a client/server round-trip. HoloDb's server holds the working set in memory with the same maintained accumulators; SQL&nbsp;Server 2022 (LocalDB) reads its on-disk table. HoloDb leads on <b>15 of the 16</b> — every rollup and scan by 11× to 32,000×, and <b>all five JOINs</b> (the name-grouped join now lands at 2,674&nbsp;ms after the group-by was integer-encoded, under SQL&nbsp;Server's 4,173&nbsp;ms) — conceding only the sub-millisecond point lookup. Bulk load, rows/sec: HoloDb server 660k · SQL&nbsp;Server 349k.</p>
 
     <p class="lim">HoloDb is built for the <strong>mixed</strong> workload: a transactional ACID store, durable and larger-than-memory, that also resolves dashboard rollups in microseconds and runs vector search — in a single embeddable dependency. <a href="/holodb.html">Full methodology &amp; every number →</a></p>
   </div>
