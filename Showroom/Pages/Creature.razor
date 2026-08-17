@@ -114,8 +114,12 @@
 
 @code {
     const int W = 20, H = 20, CS = 26;
-    // brain shape: L=1 with a weight-tied extra pass (Iters=K), a big context, and shifts pegged to it (HoloShape).
-    const int MaxCtx = 128;   // big context capacity — the full trajectory is fed, up to this; shifts align to it
+    // brain shape: L=1 with a weight-tied extra pass (Iters=K), a focused recent-trajectory window, and shifts pegged to it (HoloShape).
+    // MaxCtx 128->32 (measured headless in CreatureLab over many worlds): a long window DILUTES the decisive signal — the current
+    // cell (the last token) — across scores of stale positions, so the brain learns the scent slower AND pays ~4x the compute per
+    // step. A 32-cell window keeps enough recent history to disambiguate which apples remain, without the dilution: it reaches a
+    // full 8/8 haul in every test world (last-20 avg ~5.9 -> ~7.6 apples) and converges by ~episode 40 instead of still climbing.
+    const int MaxCtx = 32;   // focused recent-trajectory window — fed up to this; shifts align to it (bindRank = shifts·d/2)
     const int KPass = 2;      // 1 layer applied K times, weight-tied (the "extra k-layer pass")
     const int DModel = 256;   // PhasorLayout.Dim
     const int NApples = 8;    // how many apples "scatter" drops
