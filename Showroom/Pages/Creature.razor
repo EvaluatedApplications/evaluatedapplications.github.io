@@ -11,8 +11,9 @@
         <h1>The Creature</h1>
         <p class="lede">Scatter some apples, then watch a small creature learn to forage — <strong>in your browser, on
             your machine</strong>. Its brain is a <strong>holographic transformer</strong> (AlgFormer); its sense of where
-            food is comes from our pathfinder (Tracer), which measures how far each cell is from the nearest apple. Every
-            step that gets it <em>closer</em> is reinforced — it isn't told the way, it learns which moves pay off.</p>
+            food is comes from our pathfinder (Tracer), which measures how far each cell is from the nearest apple. At every
+            step it learns the <em>decisive</em> move toward food — weighted by how much it beats just drifting — so it
+            commits to eating instead of lingering where the scent is strong.</p>
         <div class="badges">
             <span>Holographic-transformer brain</span><span>Tracer distance field</span><span>Learns live, on your device</span>
         </div>
@@ -129,7 +130,8 @@
     int _episode;
     double _eps = 0.7;
     readonly List<int> _ctxWin = new();                 // the trajectory this episode (fed as context)
-    readonly List<(int[] ctx, int act)> _epExp = new(); // (context, action) for moves that got closer / ate — reinforced on episode end
+    // (context, target action, advantage weight) — an advantage-weighted training target per informative step
+    readonly List<(int[] ctx, int target, double weight)> _epExp = new();
     readonly List<(int x, int y)> _trail = new();
     readonly List<int> _curve = new();                  // apples eaten per episode
     readonly List<string> _log = new();
@@ -218,12 +220,33 @@
     }
 
     // ---- the loop ----
-    bool CanMove(int act)
+    bool CanMove(int act) => CanMoveFrom(_cx, _cy, act);
+    bool CanMoveFrom(int x, int y, int act)
     {
-        int nx = _cx + DX[act], ny = _cy + DY[act];
+        int nx = x + DX[act], ny = y + DY[act];
         if (!Passable(nx, ny)) return false;
-        if (DX[act] != 0 && DY[act] != 0 && (!Passable(_cx + DX[act], _cy) || !Passable(_cx, _cy + DY[act]))) return false;   // no corner cutting
+        if (DX[act] != 0 && DY[act] != 0 && (!Passable(x + DX[act], y) || !Passable(x, y + DY[act]))) return false;   // no corner cutting
         return true;
+    }
+
+    // The dense oracle from the Tracer field: the advantage of every legal move at (x,y) — how much
+    // closer to an apple it gets (+ a bonus for eating one). Returns the best move, its advantage, the
+    // mean over legal moves (the baseline), and the per-action advantages. Illegal moves = -inf.
+    (int bestAct, double bestAdv, double meanAdv, double[] adv) Advantages(int x, int y, int prevDist)
+    {
+        var adv = new double[8];
+        double sum = 0; int nLegal = 0, bestAct = -1; double bestAdv = double.NegativeInfinity;
+        for (int a = 0; a < 8; a++)
+        {
+            if (!CanMoveFrom(x, y, a)) { adv[a] = double.NegativeInfinity; continue; }
+            int nc = (y + DY[a]) * W + (x + DX[a]);
+            bool apple = _apples.Contains(nc);
+            int nd = apple ? 0 : _dist[nc];
+            double av = (prevDist == int.MaxValue || nd == int.MaxValue) ? 0 : (prevDist - nd) + (apple ? EatReward : 0);
+            adv[a] = av; sum += av; nLegal++;
+            if (av > bestAdv) { bestAdv = av; bestAct = a; }
+        }
+        return (bestAct, bestAdv, nLegal > 0 ? sum / nLegal : 0, adv);
     }
 
     int PickAction(int[] ctx)
@@ -240,20 +263,19 @@
         int cell = _cy * W + _cx;
         _ctxWin.Add(cell); if (_ctxWin.Count > MaxCtx) _ctxWin.RemoveAt(0);
         int[] ctx = _ctxWin.ToArray();             // the full trajectory so far (capped at the model's maxContext)
-        int act = PickAction(ctx);                 // the BRAIN decides every move — no hard-coded hunting
 
         int prevDist = _dist[cell];
+        var (bestAct, bestAdv, meanAdv, _) = Advantages(_cx, _cy, prevDist);
+        int act = PickAction(ctx);                 // the BRAIN decides every move (ε-greedy exploration)
+
+        // Advantage-weighted target: train toward the DECISIVE move — the best apple-ward step here
+        // (the Tracer oracle), weighted by how much it beats the average move. This is what stops the
+        // creature lingering in the scent: it's taught to commit to eating, not to hover where food is.
+        if (bestAct >= 0 && bestAdv > meanAdv + 1e-6)
+            _epExp.Add((ctx, bestAct, bestAdv - meanAdv));
+
         if (CanMove(act)) { _cx += DX[act]; _cy += DY[act]; }
-        int curCell = _cy * W + _cx;
-        bool ate = _apples.Remove(curCell);
-        int curDist = ate ? 0 : _dist[curCell];
-
-        // dense signal: how much closer this move got to the nearest apple (+ a bonus for eating one)
-        int adv = 0;
-        if (prevDist != int.MaxValue && curDist != int.MaxValue) adv = prevDist - curDist;
-        if (ate) adv += EatReward;
-        if (adv > 0) _epExp.Add((ctx, act));       // reinforce moves that paid off
-
+        bool ate = _apples.Remove(_cy * W + _cx);
         if (ate) { _eaten++; ComputeDist(); }      // apples changed → refresh the field
         _steps++;
         _trail.Add((_cx, _cy)); if (_trail.Count > 400) _trail.RemoveAt(0);
@@ -269,14 +291,19 @@
         {
             bool best = _eaten > _bestEaten;
             if (best) _bestEaten = _eaten;
-            double lr = best ? 4e-3 : 2.5e-3;
+            double baseLr = best ? 4e-3 : 2.5e-3;
+            double maxW = 1e-9; foreach (var e in _epExp) if (e.weight > maxW) maxW = e.weight;
             double sum = 0; int n = 0;
-            foreach (var (ctx, act) in _epExp) { sum += KTrain(ctx, _actionBase + act, lr); n++; }
-            Log($"ep {_episode + 1,3}   ate {_eaten,2}/{_applesInit.Count,-2}   reinforced {n,3} good moves   loss {(n > 0 ? sum / n : 0):F3}   lr {lr:F4}   ε {_eps * 100:F0}%{(best ? "   ★ best haul" : "")}");
+            foreach (var (ctx, target, weight) in _epExp)
+            {
+                double w = Math.Clamp(weight / maxW, 0.2, 1.0);   // advantage-normalized learning rate per step
+                sum += KTrain(ctx, _actionBase + target, baseLr * w); n++;
+            }
+            Log($"ep {_episode + 1,3}   ate {_eaten,2}/{_applesInit.Count,-2}   advantage-trained {n,3} steps   loss {(n > 0 ? sum / n : 0):F3}   lr {baseLr:F4}   ε {_eps * 100:F0}%{(best ? "   ★ best haul" : "")}");
         }
         else if (_brain is not null)
         {
-            Log($"ep {_episode + 1,3}   ate {_eaten,2}/{_applesInit.Count,-2}   no closer moves to learn from      ε {_eps * 100:F0}%");
+            Log($"ep {_episode + 1,3}   ate {_eaten,2}/{_applesInit.Count,-2}   no scent to learn from      ε {_eps * 100:F0}%");
         }
         _episode++;
         _eps = Math.Max(0.05, _eps * 0.95);
