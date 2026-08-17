@@ -125,6 +125,14 @@
             </ul>
         }
 
+        @if (_insights.Count > 0 && _filters.Count == 0)
+        {
+            <h2>What the data says</h2>
+            <ul class="flags insights">
+                @foreach (var f in _insights) { <li class="flag @f.Level">@((MarkupString)f.Text)</li> }
+            </ul>
+        }
+
         @if (_charts.Count > 0)
         {
             <h2>The picture</h2>
@@ -383,6 +391,7 @@
     List<Col> _cols = new();
     List<Entity> _entities = new();
     List<Flag> _flags = new();
+    List<Flag> _insights = new();   // computed "what the data says" — correlations, drivers, trend, concentration
     List<Chart> _charts = new();
 
     // drill-down: click an auto-detected value to filter; the middle re-profiles against the subset
@@ -482,7 +491,7 @@
     async Task Analyze()
     {
         _busy = true; _error = null; _done = false; _progress = 0; _phase = "Reading…";
-        _cols = new(); _entities = new(); _flags = new(); _charts = new();
+        _cols = new(); _entities = new(); _flags = new(); _insights = new(); _charts = new();
         _suggestions = new(); _replRan = false; _replError = null; _replRows = new(); _replCols = Array.Empty<string>(); _replChart = null; _replView = "table";
         StateHasChanged(); await Task.Delay(1);
 
@@ -845,6 +854,124 @@
         _dimCols = _cols.Where(c => c.Type is FieldType.Category or FieldType.Boolean or FieldType.Date or FieldType.Integer).ToList();
         if (_dimCols.Count == 0) _dimCols = _cols.ToList();
         _numCols = _cols.Where(c => c.Type is FieldType.Integer or FieldType.Decimal).ToList();
+        _insights = _filters.Count == 0 ? BuildInsights(_db, where) : new();   // deeper analysis only at the top level
+    }
+
+    // "What the data says": computed insights beyond the per-field profile — correlations between numeric fields,
+    // which category best explains a measure, a trend over time, and concentration. Each is a small SQL aggregate
+    // (HoloDb's strength) plus a little C# math; every step is guarded so a quirky column can never break the page.
+    List<Flag> BuildInsights(Database db, string where)
+    {
+        var ins = new List<Flag>();
+        var nums = _cols.Where(c => c.Type is FieldType.Integer or FieldType.Decimal && c.Max > c.Min).ToList();
+        var cats = _cols.Where(c => c.Type is FieldType.Category or FieldType.Boolean && c.Distinct is > 1 and <= 30).ToList();
+        var dates = _cols.Where(c => c.Type == FieldType.Date && c.Distinct > 2).ToList();
+
+        // 1. strongest correlation between numeric fields (Pearson over an aligned sample)
+        if (nums.Count >= 2)
+        {
+            var use = nums.Take(4).ToList();
+            try
+            {
+                var rs = db.Execute($"SELECT {string.Join(", ", use.Select(c => c.Name))} FROM data {where} LIMIT 50000").Rows;
+                var vals = new List<double[]>(rs.Count);
+                foreach (var r in rs)
+                {
+                    var a = new double[use.Count]; bool ok = true;
+                    for (int j = 0; j < use.Count; j++) { var v = r[use[j].Name]; if (v is null) { ok = false; break; } a[j] = ToD(v); }
+                    if (ok) vals.Add(a);
+                }
+                if (vals.Count >= 8)
+                {
+                    int ba = -1, bb = -1; double br = 0;
+                    for (int a = 0; a < use.Count; a++)
+                        for (int b = a + 1; b < use.Count; b++)
+                        {
+                            double r = Pearson(vals, a, b);
+                            if (Math.Abs(r) > Math.Abs(br)) { br = r; ba = a; bb = b; }
+                        }
+                    if (ba >= 0 && Math.Abs(br) >= 0.5)
+                    {
+                        string dir = br > 0 ? "rise and fall together" : "move in opposite directions";
+                        ins.Add(new Flag("info", $"<b>{use[ba].Name}</b> and <b>{use[bb].Name}</b> {dir} &mdash; correlation <b>{br.ToString("F2", Inv)}</b>."));
+                    }
+                }
+            }
+            catch { }
+        }
+
+        // 2. which category best separates a numeric measure (biggest hi/lo group-average gap)
+        if (nums.Count > 0 && cats.Count > 0)
+        {
+            var m = nums[0];
+            Col? bestCat = null; string hiN = "", loN = ""; double hiV = 0, loV = 0, bestSpread = 0, ratio = 0;
+            foreach (var cat in cats)
+            {
+                try
+                {
+                    var rs = db.Execute($"SELECT {cat.Name}, AVG({m.Name}), COUNT(*) FROM data {where} GROUP BY {cat.Name}").Rows;
+                    var g = rs.Select(r => (name: Cell(r[cat.Name]), avg: ToD(r.Values.Skip(1).First()), n: (long)r["count(*)"]))
+                              .Where(x => x.n >= 3 && !string.IsNullOrEmpty(x.name)).ToList();
+                    if (g.Count < 2) continue;
+                    var hi = g.OrderByDescending(x => x.avg).First(); var lo = g.OrderBy(x => x.avg).First();
+                    double spread = Math.Abs(hi.avg - lo.avg) / (Math.Abs(m.Mean) + 1e-9);
+                    if (spread > bestSpread)
+                    { bestSpread = spread; bestCat = cat; hiN = hi.name; loN = lo.name; hiV = hi.avg; loV = lo.avg; ratio = lo.avg != 0 ? hi.avg / lo.avg : 0; }
+                }
+                catch { }
+            }
+            if (bestCat is not null && bestSpread >= 0.5)
+            {
+                string tail = ratio >= 1.5 ? $" (<b>{ratio.ToString("F1", Inv)}×</b>)" : "";
+                ins.Add(new Flag("info", $"<b>{m.Name}</b> varies most by <b>{bestCat.Name}</b>: <b>{hiN}</b> averages {Num(hiV)} vs <b>{loN}</b> at {Num(loV)}{tail}."));
+            }
+        }
+
+        // 3. trend over time (first third vs last third of the series)
+        if (dates.Count > 0)
+        {
+            var d = dates[0]; var m = nums.FirstOrDefault();
+            string agg = m is not null ? $"SUM({m.Name})" : "COUNT(*)";
+            string what = m is not null ? $"total {m.Name}" : "record volume";
+            try
+            {
+                var rs = db.Execute($"SELECT {d.Name}, {agg} FROM data {where} GROUP BY {d.Name} ORDER BY {d.Name}").Rows;
+                if (rs.Count >= 6)
+                {
+                    var series = rs.Select(r => ToD(r.Values.Last())).ToList();
+                    int third = Math.Max(1, series.Count / 3);
+                    double firstAvg = series.Take(third).Average(), lastAvg = series.Skip(series.Count - third).Average();
+                    if (firstAvg > 0)
+                    {
+                        double chg = (lastAvg - firstAvg) / firstAvg * 100;
+                        if (Math.Abs(chg) >= 20)
+                            ins.Add(new Flag("info", $"Over <b>{d.Name}</b>, {what} <b>{(chg > 0 ? "rose" : "fell")} {Math.Abs(chg).ToString("F0", Inv)}%</b> from the first stretch to the last."));
+                    }
+                }
+            }
+            catch { }
+        }
+
+        // 4. concentration: a single value dominating the busiest category
+        var topCat = cats.OrderByDescending(c => c.Top.Count > 0 ? c.Top[0].N : 0).FirstOrDefault();
+        if (topCat is not null && topCat.Top.Count > 0 && _filteredRows > 0)
+        {
+            var top = topCat.Top[0];
+            double share = top.N * 100.0 / _filteredRows;
+            if (share >= 40 && topCat.Distinct > 1)
+                ins.Add(new Flag("info", $"<b>{topCat.Name}</b> is dominated by <b>{(string.IsNullOrEmpty(top.Val) ? "(empty)" : top.Val)}</b> &mdash; <b>{share.ToString("F0", Inv)}%</b> of rows."));
+        }
+
+        return ins.Take(6).ToList();
+    }
+
+    static double Pearson(List<double[]> v, int a, int b)
+    {
+        int n = v.Count; double sa = 0, sb = 0;
+        for (int i = 0; i < n; i++) { sa += v[i][a]; sb += v[i][b]; }
+        double ma = sa / n, mb = sb / n, cov = 0, va = 0, vb = 0;
+        for (int i = 0; i < n; i++) { double da = v[i][a] - ma, db = v[i][b] - mb; cov += da * db; va += da * da; vb += db * db; }
+        return va <= 0 || vb <= 0 ? 0 : cov / Math.Sqrt(va * vb);
     }
 
     // Numeric stats (min/max/mean/outliers/histogram) over the filtered rows — one column scan, filter-aware.
