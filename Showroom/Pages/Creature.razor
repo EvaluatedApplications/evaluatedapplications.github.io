@@ -263,11 +263,26 @@
 
     int PickAction(int[] ctx)
     {
-        if (_brain is null || _rng.NextDouble() < _eps) return _rng.Next(8);
+        // Never CHOOSE to walk into a wall or off-grid: pick the best (or, when exploring, a random) move among the
+        // LEGAL ones. Before this, the brain took the global argmax and Step() silently refused an illegal move — so a
+        // wall the player just dropped in the path made the creature freeze and burn the turn. Masking routes it around
+        // the obstacle instead (the Tracer oracle already re-plans through the gap, and editing walls re-opens exploration).
+        if (_brain is null || _rng.NextDouble() < _eps) return RandomLegalMove();
         var lg = _brain.LogitsFor(ctx);            // LogitsFor honours Iters (the k-pass) at serve time
-        int best = 0; double bv = double.NegativeInfinity;
-        for (int a = 0; a < 8; a++) { double v = lg[_actionBase + a]; if (v > bv) { bv = v; best = a; } }
-        return best;
+        int best = -1; double bv = double.NegativeInfinity;
+        for (int a = 0; a < 8; a++)
+        {
+            if (!CanMove(a)) continue;
+            double v = lg[_actionBase + a]; if (v > bv) { bv = v; best = a; }
+        }
+        return best >= 0 ? best : RandomLegalMove();
+    }
+
+    int RandomLegalMove()
+    {
+        Span<int> legal = stackalloc int[8]; int n = 0;
+        for (int a = 0; a < 8; a++) if (CanMove(a)) legal[n++] = a;
+        return n > 0 ? legal[_rng.Next(n)] : _rng.Next(8);   // boxed in on all sides: any move (all no-ops) is equal
     }
 
     void Step()
