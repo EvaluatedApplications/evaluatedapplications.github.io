@@ -121,7 +121,8 @@
     // full 8/8 haul in every test world (last-20 avg ~5.9 -> ~7.6 apples) and converges by ~episode 40 instead of still climbing.
     const int MaxCtx = 32;   // focused recent-trajectory window — fed up to this; shifts align to it (bindRank = shifts·d/2)
     const int KPass = 2;      // 1 layer applied K times, weight-tied (the "extra k-layer pass")
-    const int DModel = 256;   // PhasorLayout.Dim
+    const int DModel = 384;   // width = composition capacity; wider than the 256 codec dim gives the brain more room to keep cells distinct
+    const int MinShifts = 8;  // ROUTING-RANK floor. The over-bundle law (ShiftsFor) pegs shifts to context and returns 1 at this ctx/d — and S=1 is a pure DIAGONAL: no learned cross-channel routing at all. Floor it so the banks can actually route (golden-spaced below so a few shifts span the whole width).
     const int NApples = 8;    // how many apples "scatter" drops
     const int StepBudget = 150;   // steps per foraging episode
     const int EatReward = 3;      // extra advantage for landing on an apple (on top of the +1 for getting closer)
@@ -355,13 +356,13 @@
         if (!CanRun) return;
         if (_brain is null)
         {
-            int shifts = HoloShape.ShiftsFor(MaxCtx, DModel);   // aligned: bindRank = shifts·d/2 keeps a full context in the clean window
-            _brain = new HoloFormer(W * H + 8, shifts: shifts, layers: 1, maxContext: MaxCtx, dModel: DModel, frozenPrefix: 64)
+            int shifts = Math.Max(HoloShape.ShiftsFor(MaxCtx, DModel), MinShifts);   // floor at MinShifts: the over-bundle sizing gives 1 here (a diagonal, no routing), so spend shifts on bank RANK instead
+            _brain = new HoloFormer(W * H + 8, shifts: shifts, layers: 1, maxContext: MaxCtx, dModel: DModel, frozenPrefix: 64, golden: true)
             {
                 Iters = KPass,          // apply the single layer K times, weight-tied
                 IterAlphaServe = 1      // extra pass fully on at serve (matches training α)
             };
-            Log($"brain ready · L=1 · K={KPass} weight-tied passes · ctx={MaxCtx} · shifts={shifts} (pegged) · d={DModel} · vocab={W * H + 8} · {_brain.ParamCount:N0} params");
+            Log($"brain ready · L=1 · K={KPass} weight-tied passes · ctx={MaxCtx} · shifts={shifts} golden · d={DModel} · vocab={W * H + 8} · {_brain.ParamCount:N0} params");
         }
         _running = true;
         _apples.Clear(); foreach (var a in _applesInit) _apples.Add(a); ComputeDist();
