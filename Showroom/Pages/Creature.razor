@@ -121,6 +121,7 @@
     // full 8/8 haul in every test world (last-20 avg ~5.9 -> ~7.6 apples) and converges by ~episode 40 instead of still climbing.
     const int MaxCtx = 32;   // focused recent-trajectory window — fed up to this; shifts align to it (bindRank = shifts·d/2)
     const int KPass = 2;      // 1 layer applied K times, weight-tied (the "extra k-layer pass")
+    const int IterWarm = 20;  // episodes over which the extra K-pass α ramps 0→1 (identity-init ease-in: the single-pass base learns FIRST, then the depth phases in — without this the cold second pass just doubles down on random transforms and it doesn't learn)
     const int DModel = 384;   // width = composition capacity; wider than the 256 codec dim gives the brain more room to keep cells distinct
     const int MinShifts = 8;  // ROUTING-RANK floor. The over-bundle law (ShiftsFor) pegs shifts to context and returns 1 at this ctx/d — and S=1 is a pure DIAGONAL: no learned cross-channel routing at all. Floor it so the banks can actually route (golden-spaced below so a few shifts span the whole width).
     const int NApples = 8;    // how many apples "scatter" drops
@@ -141,6 +142,8 @@
     // creature + episode state
     int _cx, _cy, _steps, _eaten, _lastEaten, _bestEaten;
     int _episode;
+    int _kTrainedEps;   // cumulative TRAINED episodes for the current brain — drives the α-ramp. Unlike _episode it never resets on a world edit, so an already-trained brain keeps its depth fully on.
+    double KAlpha => Math.Min(1.0, _kTrainedEps / (double)IterWarm);   // extra-K-pass strength: 0 = single-pass (identity), 1 = full depth
     double _eps = 0.7;
     readonly List<int> _ctxWin = new();                 // the trajectory this episode (fed as context)
     // (context, target action, advantage weight) — an advantage-weighted training target per informative step
@@ -327,7 +330,8 @@
                 double w = Math.Clamp(weight / maxW, 0.2, 1.0);   // advantage-normalized learning rate per step
                 sum += KTrain(ctx, _actionBase + target, baseLr * w); n++;
             }
-            Log($"ep {_episode + 1,3}   ate {_eaten,2}/{_applesInit.Count,-2}   advantage-trained {n,3} steps   loss {(n > 0 ? sum / n : 0):F3}   lr {baseLr:F4}   ε {_eps * 100:F0}%{(best ? "   ★ best haul" : "")}");
+            _kTrainedEps++; _brain.IterAlphaServe = KAlpha;   // advance the α-ramp and keep serve matched to train
+            Log($"ep {_episode + 1,3}   ate {_eaten,2}/{_applesInit.Count,-2}   advantage-trained {n,3} steps   loss {(n > 0 ? sum / n : 0):F3}   lr {baseLr:F4}   α {KAlpha * 100:F0}%   ε {_eps * 100:F0}%{(best ? "   ★ best haul" : "")}");
         }
         else if (_brain is not null)
         {
@@ -345,7 +349,7 @@
     double KTrain(int[] ctx, int target, double lr)
     {
         var g = _brain!.NewGrads();
-        double loss = _brain.IterAccumulate(ctx, target, g, KPass, 1.0);
+        double loss = _brain.IterAccumulate(ctx, target, g, KPass, KAlpha);   // train the extra pass at the CURRENT ramped α (matches serve)
         _brain.Step(g, lr);
         return loss;
     }
@@ -360,8 +364,9 @@
             _brain = new HoloFormer(W * H + 8, shifts: shifts, layers: 1, maxContext: MaxCtx, dModel: DModel, frozenPrefix: 64, golden: true)
             {
                 Iters = KPass,          // apply the single layer K times, weight-tied
-                IterAlphaServe = 1      // extra pass fully on at serve (matches training α)
+                IterAlphaServe = 0      // α ramps in (identity-init); re-matched to KAlpha at each EndEpisode so serve == train
             };
+            _kTrainedEps = 0;   // fresh brain → restart the α-ramp
             Log($"brain ready · L=1 · K={KPass} weight-tied passes · ctx={MaxCtx} · shifts={shifts} golden · d={DModel} · vocab={W * H + 8} · {_brain.ParamCount:N0} params");
         }
         _running = true;
