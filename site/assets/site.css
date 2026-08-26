@@ -63,6 +63,35 @@ h1,h2,h3{margin:0; line-height:1.15; letter-spacing:-.02em; font-weight:650}
   .nav-toggle:checked ~ .nav-burger span:nth-child(3){transform:translateY(-7px) rotate(-45deg)}
 }
 
+/* ---- "Packages" mega-menu: a native <details>/<summary> disclosure, so it opens/closes on
+   click or tap with no JS required; /assets/nav.js only adds outside-click/Escape-to-close. */
+.nav-drop{position:relative}
+.nav-drop > summary{display:flex; align-items:center; gap:5px; cursor:pointer;
+    color:var(--ink-soft); font-size:.94rem; list-style:none}
+.nav-drop > summary::-webkit-details-marker{display:none}
+.nav-drop > summary:hover{color:var(--ink)}
+.nav-drop[open] > summary{color:var(--ink)}
+.nav-drop .care{flex:none; transition:transform .15s ease}
+.nav-drop[open] .care{transform:rotate(180deg)}
+.nav-drop-menu{position:absolute; top:calc(100% + 14px); left:50%; transform:translateX(-50%);
+    width:max(560px,60vw); max-width:min(720px,92vw);
+    background:var(--surface); border:1px solid var(--border-2); border-radius:var(--radius);
+    padding:18px 20px; box-shadow:0 16px 40px rgba(0,0,0,.4);
+    display:grid; grid-template-columns:repeat(auto-fit,minmax(132px,1fr)); gap:18px 20px; z-index:30}
+.nav-drop-col{display:flex; flex-direction:column; gap:1px; min-width:0}
+.nav-drop-head{font-family:var(--mono); font-size:.7rem; text-transform:uppercase; letter-spacing:.06em;
+    color:var(--ink-faint); margin:0 0 7px}
+.nav-drop-col a{color:var(--ink-soft); font-size:.87rem; padding:5px 0}
+.nav-drop-col a:hover{color:var(--accent-ink); text-decoration:none}
+
+@media (max-width:640px){
+  .nav-drop-menu{position:static; transform:none; width:100%; max-width:none; box-shadow:none;
+      border:none; border-radius:0; margin:2px 0 4px; padding:2px 0 2px 14px;
+      grid-template-columns:1fr; gap:0; background:transparent; border-left:2px solid var(--border-2)}
+  .nav-drop > summary{padding:9px 4px; width:100%}
+  .nav-drop-head{margin-top:10px}
+}
+
 /* ---- hero ---- */
 .hero{padding:84px 0 34px}
 .eyebrow{font-family:var(--mono); font-size:.8rem; letter-spacing:.08em; text-transform:uppercase; color:var(--ink-faint)}
@@ -116,6 +145,15 @@ h1,h2,h3{margin:0; line-height:1.15; letter-spacing:-.02em; font-weight:650}
 a.tool{display:block; color:inherit}
 a.tool:hover{text-decoration:none}
 a.tool .go-in{margin-top:16px; font-family:var(--mono); font-size:.85rem; color:var(--accent-ink)}
+
+/* package cards stay <article> (they nest a second NuGet link, so the whole card can't itself be
+   an <a> — that would be invalid nested-anchor markup). Instead a full-bleed "stretched link"
+   covers the card; the real .links/.install controls sit above it at a higher z-index so the
+   NuGet link and copy button stay independently clickable. .card already has position:relative
+   (card grid, above) which is what anchors this overlay. */
+.card-link{position:absolute; inset:0; z-index:1; border-radius:inherit}
+.card-link:hover{text-decoration:none}
+.card .install, .card .links, .card .note{position:relative; z-index:2}
 
 /* ---- foundation callout ---- */
 .stack{background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:24px 26px; margin-top:6px}

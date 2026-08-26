@@ -47,8 +47,10 @@ HoloVoxel, Prose, Tracer.
 `--c-data` (blue, HoloDb family) / `--c-ml` (pink, AlgFormer family/EvalApp.Neural/Prose) /
 `--c-spatial` (green, Tracer/HoloVoxel), `--ok/--warn/--bad`, `--radius`, `--wrap` (1080px),
 `--font`/`--mono`. Reusable components: `.site-nav` (sticky, CSS-only mobile burger via
-`.nav-toggle` checkbox hack), `.hero`/`.eyebrow`/`.lede`/`.facts`/`.fact`, `.sec`/`.sec-head`,
-`.grid`/`.card` (the package-card pattern, `--cat` custom prop sets the left accent bar),
+`.nav-toggle` checkbox hack) + `.nav-drop` (the Packages mega-menu, see Navigation below),
+`.hero`/`.eyebrow`/`.lede`/`.facts`/`.fact`, `.sec`/`.sec-head`,
+`.grid`/`.card` (the package-card pattern, `--cat` custom prop sets the left accent bar,
+`.card-link` stretched-link overlay makes the whole card clickable — see Navigation),
 `.install` (copy-button code chip), `.btn`/`.btn-primary`/`.btn-ghost`, `.crumb` (breadcrumb),
 `.stack` (callout box, `.flow` for pipeline diagrams), `.prose`/`.toc` (manual/docs pages),
 `.snip`/`.lim` (code-sample box / caveat note — added 2026-08-26 for the product-page rollout,
@@ -61,31 +63,25 @@ token in `site.css` ever changes, grep those two files' `<style>` blocks too.
 
 **The page template** (used verbatim by every one of the 10 plain product pages, and by
 `index.html`/`holoformer.html`'s nav/footer): `<div class="beam">` → `<nav class="site-nav">`
-(brand mark + Home/HoloDb/#packages/NuGet, identical on every page) → `<header class="hero">`
+(brand mark + Home/HoloDb/Packages mega-menu/NuGet, identical on every page, plus
+`<script src="/assets/nav.js" defer>` in `<head>`) → `<header class="hero">`
 (breadcrumb, eyebrow, h1, lede, `.facts` chips, `.install`, `.cta-row`) → a sequence of
 `<section class="sec">` (What it is / Why it's useful as a `.grid` of `.card`s / Key features /
 Get started with a `.snip` code sample / a `.lim` caveat note) → `footer.site` → the copy-button +
 year script (identical). New product pages should copy this shape exactly, not invent new layout —
 that IS the cohesion mechanism (§0 of the agent charter).
 
-**Footer link set (standardised 2026-08-26, every page)**: `footer.site .mono` carries `© <year>`
-plus 3-4 internal links so every page has a second, bottom-of-page path back into the site graph —
-not just the top nav. Plain product pages + `index.html` + `holoformer.html`: `Home · Packages
-(/#packages) · HoloDb · NuGet`. The three HoloDb pages use a page-appropriate subset (hub:
-`Home · Packages · Docs · Benchmarks · NuGet`; benchmarks: `Home · HoloDb · Manual · NuGet`;
-manual: `Home · HoloDb · Packages · NuGet`). Keep this pattern when adding a page.
+**Footer link set** (every page): `footer.site .mono` carries `© <year>` + 3-4 internal links, a
+second bottom-of-page path into the graph beyond the top nav. Plain product pages + `index.html` +
+`holoformer.html`: `Home · Packages(/#packages) · HoloDb · NuGet`. The 3 HoloDb pages use a
+page-appropriate subset (hub: `Home · Packages · Docs · Benchmarks · NuGet`; benchmarks: `Home ·
+HoloDb · Manual · NuGet`; manual: `Home · HoloDb · Packages · NuGet`).
 
-**SEO tags (every page)**: unique `<title>` + `<meta name="description">` + `<link rel="canonical">`
-+ `og:type`/`og:title`/`og:description`/`og:url` + `twitter:card`, all already present on every
-page (verified 2026-08-26; `holodb.html` was missing OG/Twitter until this pass — fixed). JSON-LD
-(`<script type="application/ld+json">`, plain object or `@graph`, placed just before `</head>`):
-`index.html` carries `Organization` + `WebSite`; each of the 11 package pages carries a
-`SoftwareApplication` (name/description/version/url/downloadUrl/offer price 0 — matches the
-nothing-license-gated stance, never invent a version or a claim not in the page's own content); the
-3 explainer/reference pages (`holoformer.html`, `holodb.html`, `holodb/manual/index.html`) carry a
-`TechArticle` with an `about` pointing at the relevant `SoftwareApplication`. Keep versions in sync
-with the `<Version>` ground truth (see below) when a package bumps — the JSON-LD `softwareVersion`
-will go stale exactly like the hero `.facts` chip does.
+**SEO tags** (every page): unique `<title>` + description + canonical + OG/Twitter tags, all present.
+JSON-LD before `</head>`: `Organization`+`WebSite` on the index, `SoftwareApplication`
+(version/url/downloadUrl/offer price 0, matching the nothing-license-gated stance) on all 11 package
+pages, `TechArticle` on the 3 explainer/reference pages. Keep `softwareVersion` in sync with the
+`<Version>` ground truth below when a package bumps — it goes stale exactly like the hero chip does.
 
 ## Content-doc sources (per package, `MonoRepo/<Pkg>/docs/site.md`)
 
@@ -103,65 +99,78 @@ lag by a patch. As of 2026-08-26: Phasor 1.0.3, EvalApp 1.6.1, EvalApp.Neural 1.
 EvalApp's and AlgFormer.Gpu's CLAUDE.md one patch behind their csproj on this pass) — the csproj
 `<Version>` element is the only source that can't be stale.
 
-## Reconciliations done 2026-08-26 (first full 11-page render)
+## Reconciliations (2026-08-26 first full 11-page render) — open flags only
 
-- **`evalapp.html` fully rewritten.** The previous page carried an elaborate SVG-charted
-  benchmark suite (a "2.7× leaner than MediatR+Polly" claim, an 8,000-request soak scorecard,
-  per-architecture allocation/throughput tables) with **no provenance in any EvalApp-owned doc** —
-  `EvalApp/docs/about-us-evalapp.md` explicitly says *"I'm not going to quote a benchmark number
-  here that I can't currently stand behind."* Per the charter's honesty rule, ALL of those specific
-  figures were dropped, not caveated (there was nothing sourced to caveat against). The page was
-  rebuilt on the shared template from `docs/site.md` + `about-us-evalapp.md` (voice/origin story,
-  including the real "None of this is invented from nothing" lineage table, which IS the owner's
-  own content) + `PACKAGE.md`. It now also runs on `site.css` instead of a duplicated local
-  stylesheet, closing a cohesion gap. **Flagged for evalapp-owner**: if real, reproducible
-  benchmark numbers are ever derived and written into an owned doc, re-render this page to include
-  them — the shape (a "what you'd otherwise assemble" comparison) is ready for it.
-- **HoloDb version synced**: `holodb/index.html`'s hero eyebrow said v1.7.4; ground truth
-  (csproj) is v1.7.7. Fixed. Also added cross-links from the hub's "Networked server + typed
-  client" card to the new `holodb-client.html`/`holodb-protocol.html` pages.
-- **AlgFormer/HoloFormer positioning decided**: `AlgFormer/docs/site.md` now covers BOTH cores
-  (softmax `AlgFormer` + holographic `HoloFormer`), so `algformer.html` is the primary package
-  page (nav + index card both point here). The existing `holoformer.html` deep-dive article is
-  KEPT (it's good, specific, accurate content about the holographic core) but demoted to a linked
-  explainer off `algformer.html` — breadcrumb and closing CTA updated to point back to
-  `/algformer.html` instead of floating standalone off `/#packages`.
-  No redirect page was created; both URLs stay live and cross-link.
-- **Nothing license-gated, everywhere.** Every new/rewritten page states plainly that all
-  capabilities are free today and a license key (where one is mentioned at all) is reserved for a
-  possible future tier, gating nothing now — matching the intentional product stance. No page
-  implies a paid/Pro tier.
-- **`index.html`** package count/version numbers fixed (was "9 packages" / stale per-card
-  versions from an earlier snapshot), all 11 packages now in the gallery across 4 categories, and
-  the "how it fits together" flow diagram extended to name the 4 packages that build on the
-  original 6 (HoloDb.Client/Protocol, AlgFormer.Gpu, EvalApp.Neural, Prose).
-- **HoloVoxel imagery**: `MonoRepo/HoloVoxel/render-samples/before_dated.png` +
-  `after_holoform.png` (near-view shading before/after) were copied to
-  `site/assets/holovoxel/{before,after}.png` and used as a before/after comparison on
-  `holovoxel.html`, clearly captioned as a reference/proof-of-concept shading pass, NOT something
-  the package ships (matches `HoloVoxel/CLAUDE.md`'s own framing). The `far_before_pointsampled`/
-  `far_after_smoothed` pair was deliberately NOT used — visual inspection showed the "after" image
-  reading as more artifacted/checkered than the "before", the opposite of what the filenames claim
-  (likely a mislabeled or unrelated capture) — using it would have been a cohesion/honesty risk.
-  Flagged for holovoxel-owner if a correct far-LOD before/after pair is wanted later.
+Closed items from that pass (evalapp.html rewrite onto shared `site.css`, HoloDb version sync,
+AlgFormer/HoloFormer split, license-stance wording, index.html package count) are already reflected
+in the Site map / Design system sections above and not restated here. Still-open flags:
+- **evalapp-owner**: `evalapp.html` dropped an old, unsourced benchmark suite (no provenance in any
+  EvalApp-owned doc, and `about-us-evalapp.md` itself says not to quote unverified numbers) rather
+  than caveat it. If real, reproducible benchmark numbers ever land in an owned doc, re-render the
+  page to include them — the shape (a "what you'd otherwise assemble" comparison) is ready for it.
+- **holovoxel-owner**: only the near-view `before_dated.png`/`after_holoform.png` pair is used on
+  `holovoxel.html`. The `far_before_pointsampled`/`far_after_smoothed` pair was deliberately skipped
+  — visual inspection showed "after" reading MORE artifacted than "before", the opposite of the
+  filenames' claim (likely mislabeled/unrelated capture). Flag if a correct far-LOD pair turns up.
 
-## SEO + navigation pass (2026-08-26)
+## Navigation — the reachability contract (owned by this agent, not the coordinator)
 
-Holistic audit of all 16 live pages: no orphans found (every page reachable from `index.html`'s
-gallery or a cross-link within 2 clicks; `sitemap.xml` already listed all 16 + the 2 live tool
-routes). Fixes made: `holodb.html` was missing all `og:*`/`twitter:card` tags — added. Standardised
-the footer link set site-wide (see Design system, above) so every page has a second internal-link
-path, not just the top nav. Added forward cross-links base→extension that only existed
-extension→base before: `algformer.html` → `algformer-gpu.html`, `evalapp.html` →
-`evalapp-neural.html`. Added JSON-LD to every page (`Organization`+`WebSite` on the index,
-`SoftwareApplication` on all 11 package pages, `TechArticle` on the 3 explainer/reference pages).
-Added `/tools/` (the Showroom root, not just `/tools/analyst`/`/tools/creature`) to `sitemap.xml`.
-**Flagged, not fixed (out of this agent's remit — Blazor app internals, not `site/` presentation):**
-`Showroom/Home.razor` still tags The Creature `soon`/"In the workshop" with no link, while
-`site/index.html` already lists it `live` linking to `/tools/creature` (and
-`Showroom/Pages/Creature.razor` exists) — one of the two is stale; resolve
-by whoever owns the Showroom tools app before the next deploy, so the site doesn't advertise a dead
-route or hide a live one.
+**The invariant**: every page must be reachable from the NAV MENU on every OTHER page, not just from
+an on-page anchor, a body cross-link, or a small "Explore →" text nested in a card. This is a
+standing design constraint, not a one-off fix — check it every time a page is added or a nav is
+touched.
+
+**How it's satisfied**: a "Packages" mega-menu, `<details class="nav-drop"><summary>Packages</summary>
+<div class="nav-drop-menu">...</div></details>`, in the `.nav-links` of every one of the 15 content
+pages (all except `404.html`, which is intentionally minimal). It's a native disclosure — opens/closes
+on click/tap with zero JS — styled by `.nav-drop*` in `site.css`; `/assets/nav.js` (referenced once per
+page, `<script src="/assets/nav.js" defer>`) only adds outside-click/Escape-to-close polish, and is a
+safe no-op on pages with no `.nav-drop`. Five columns, identical everywhere: **Foundation** (Phasor,
+EvalApp) · **Data** (HoloDb, HoloDb.Client, HoloDb.Protocol, Benchmarks → `holodb.html`, Manual →
+`holodb/manual/`) · **Machine learning** (AlgFormer, HoloFormer explained → `holoformer.html`,
+AlgFormer.Gpu, EvalApp.Neural, Prose) · **Spatial & games** (Tracer, HoloVoxel) · **Tools** (The
+Analyst, The Creature, "All packages, one page" → `/#packages`). On mobile (`max-width:640px`) the
+menu drops its absolute positioning and renders as an indented inline list inside the already-open
+burger column — no separate mobile design needed. Chose a mega-menu over a dedicated `/packages.html`
+because the index gallery already IS that full-list page (`/#packages`); the menu just needs to point
+at every entry point, not duplicate the gallery.
+
+**Site-wide rules that make it hold**:
+- `#packages` must NEVER be a bare same-page anchor except literally inside `index.html` — on any
+  other page it's a dead link (no `#packages` section exists there). Always write `/#packages`.
+  Audited 2026-08-26: zero bare `href="#packages"` left outside index.html.
+- A gallery/index card that links onward must be clickable across its WHOLE area, not just a small
+  "Explore →" text — humans don't perceive an `<article>` with one small link as clickable. Pattern:
+  keep the card as `<article class="card">` (it nests a second NuGet link, so the card itself can't
+  be an `<a>` — invalid nested-anchor markup), add a full-bleed `<a class="card-link" href="..."
+  aria-label="...">` as the FIRST child, `.card-link{position:absolute;inset:0;z-index:1}`, and lift
+  `.install`/`.links`/`.note` to `z-index:2` so their own inner links/copy-button stay independently
+  clickable above the overlay. Applied to all 11 gallery cards on `index.html` (tool cards were
+  already whole-card `<a class="card tool">`, unchanged).
+- The mobile CSS-only burger (`.nav-toggle` checkbox hack) must actually reveal `.nav-links`, and the
+  `.nav-drop` disclosure inside it must still work once the burger column is open — verified in the
+  CSS (`.nav-drop-menu` gets `position:static` etc. inside the `max-width:640px` block so it never
+  relies on the desktop absolute-positioning math that would misplace it in a column layout).
+
+**§5 VERIFICATION DISCIPLINE for this site — read before claiming "no orphans" again**: checking that
+every `href` resolves to a real file is NOT proof of reachability and must never be reported as such.
+The proof is a reachability WALK: starting from `index.html`'s nav AND from one deep page's nav
+(e.g. `phasor.html`), using ONLY the nav menu + visible on-page links (no address-bar typing), list the
+click-path to every other page, and confirm every page is ≤2 clicks away. Do this walk (and record it
+in the task's return message) any time the nav, a page set, or a card grid changes — that's what "done"
+means for navigation now, not an href-audit. The 2026-08-26 SEO pass reported "no orphans" from an
+href-audit alone; that was the wrong check and is the failure this section exists to prevent.
+
+**SEO/nav facts still true from the 2026-08-26 pass** (kept, the audit method above it was retired):
+`sitemap.xml` lists all 16 pages + the 2 live tool routes + `/tools/`. Every page's `footer.site`
+carries a second internal-link path (Home/Packages/HoloDb/NuGet or a page-appropriate subset) so
+there's a route back into the graph beyond the top nav. JSON-LD on every page (`Organization`+`WebSite`
+on the index, `SoftwareApplication` on all 11 package pages, `TechArticle` on the 3 explainer pages).
+Forward cross-links exist base→extension (`algformer.html`→`algformer-gpu.html`,
+`evalapp.html`→`evalapp-neural.html`) as well as extension→base.
+**Flagged, not fixed (Blazor app internals, not `site/` presentation)**: `Showroom/Home.razor` may
+still tag The Creature `soon` while `site/index.html` links it `live` at `/tools/creature` — re-check
+before the next deploy; whoever owns `Showroom/` should reconcile it.
 
 ## Deploy
 
@@ -185,6 +194,10 @@ coordinator batch-commits and the user pushes to publish.
   shared class into `site.css` first rather than copy-pasting the inline styles a third time.
 - New package coming: bootstrap its page the same way — read `MonoRepo/<Pkg>/docs/site.md` (+
   `PACKAGE.md`/`CLAUDE.md`/csproj `<Version>` for facts), copy the page template shape from any
-  existing plain product page (e.g. `phasor.html`), add it to `index.html`'s gallery (pick a
-  category colour), add the nav crumb pattern, add it to `sitemap.xml`, and update the package
-  count in `index.html`'s hero facts + this file's Site map section.
+  existing plain product page (e.g. `phasor.html`) INCLUDING its `.nav-drop` mega-menu block and
+  the `/assets/nav.js` script tag, add it to `index.html`'s gallery (pick a category colour, add
+  the `.card-link` overlay), add it as a new `<a>` inside the matching `.nav-drop-col` in the
+  mega-menu on ALL 15 content pages (not just index — this is the step that's easy to miss and
+  silently reopens the orphan bug), add the nav crumb pattern, add it to `sitemap.xml`, and update
+  the package count in `index.html`'s hero facts + this file's Site map section. Re-run the
+  reachability walk (Navigation section, above) before calling it done.
