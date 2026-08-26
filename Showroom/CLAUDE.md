@@ -8,9 +8,10 @@ that only ever *consumes* MonoRepo packages via published NuGet, never source.
 
 ## Purpose
 Each tool = a real, working demo of a published `EvaluatedApplications.*` package's actual
-capability, driven live by the visitor. No smoke and mirrors, no mocked output. Three tools today:
-**The Analyst** (HoloDb), **The Creature** (AlgFormer/HoloFormer + Tracer), **The Forecaster**
-(AlgFormer/HoloFormer). New tools follow the same shape.
+capability, driven live by the visitor. No smoke and mirrors, no mocked output. Three tools listed
+in the public gallery today: **The Analyst** (HoloDb), **The Creature** (AlgFormer/HoloFormer +
+Tracer), **The Forecaster** (AlgFormer/HoloFormer). New tools follow the same shape. Plus one
+**unlisted** page (see below) that's a client preview, not a package-capability demo.
 
 ## Site plumbing
 - `Program.cs`: standard Blazor WASM host; one scoped `HttpClient` with `BaseAddress =
@@ -129,6 +130,33 @@ picker UX once a real CORS-permitting quote source is confirmed browser-fetchabl
 picker if more than one bundled series is ever added; tuning `Lr`/`IterWarm` against an actual
 observed training run (nobody has watched this one train yet — build-verified only, per this
 agent's boundary on launching a browser).
+
+## Unlisted: RecycleDAO demo — `Pages/RecycleDaoDemo.razor` (route `/recycledao-demo`)
+NOT a package-capability demo and NOT part of the public gallery — a private, share-by-link-only
+preview for the RecycleDAO client PoC (`C:\Users\dongy\RecycleDAO`, a separate repo, owned by
+`recycledao-owner`). Deliberately absent from `Home.razor`'s gallery and `MainLayout.razor`'s nav
+(mirrors how `AboutUs\site\recycledao-preview.html` is kept off that site's nav/sitemap too — same
+pattern, two different pages for two different audiences) and carries `<meta name="robots"
+content="noindex,nofollow">` via `<HeadContent>`. A self-contained, in-browser (no server, no
+wallet, no live chain) simulation of RecycleDAO's core loop — Submit → Verify → Reward — built
+from `RecycleDAO/docs/demo-mechanics-spec.md`: only an Approve decision (structurally the one code
+path that can touch the mint log/balance) can mint, each submission is decided once (removed from
+the actionable queue on decision, not just disabled), reward is a fixed per-item-type tier table
+(`Paper/Cardboard=3, Plastic=5, Glass=5, Metal/Aluminum=8, Electronics/E-waste=15` RCYT), mint log
+entries carry a clearly-fake `SIM-000N` id. All state is in-memory component state, reset on
+reload (no persistence, matching the WASM-has-no-filesystem constraint below). UX pass 2026-08-26
+(user feedback: "no idea what I'm doing") added: a stats strip (total/pending/approved/
+rejected/balance), a numbered 1-2-3 walkthrough, a prominent up-front reward-tier chip strip (the
+Submit card also keeps its own inline tier table per the spec's "alongside the dropdown"
+requirement — the two aren't redundant, one's for orientation, one's for the live decision), flow
+arrows between the three cards, and a persistent "All submissions" master table below the cards
+(every submission's whole lifecycle, sourced from one `_allSubmissions` list that's appended once
+at submit time and never removed — `Submission` is a reference type so Approve/Reject mutating
+`.Status`/`.MintTxId` on the same object keeps this table's rows in sync for free) with
+click-through: a mint-log or decided-history row is a real `<a href="#sub-N">` anchor (native
+browser scroll, no JS interop) that also sets a highlight state on the matching master-table row.
+No mechanic changed in this pass — same mint gate, same no-double-mint enforcement, same tier
+amounts, same honesty framing, purely a discoverability/legibility layout pass.
 
 ## Dependencies (exact NuGet versions, `Showroom.csproj`)
 - `Microsoft.AspNetCore.Components.WebAssembly` 10.0.8 (+ `.DevServer` 10.0.8, dev-only)

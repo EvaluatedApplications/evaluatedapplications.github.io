@@ -17,11 +17,43 @@
 .dao-honesty li { color: var(--ink-soft); font-size: 0.92rem; line-height: 1.5; margin: 0.25rem 0; }
 .dao-honesty .hint { margin: 0; }
 
-/* the three cards */
-.dao-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; align-items: start; }
-@media (max-width: 900px) { .dao-cards { grid-template-columns: 1fr; } }
+/* dashboard stats strip */
+.dao-stats { display: flex; flex-wrap: wrap; gap: 0.7rem; margin: 0 0 1.4rem; }
+.stat { flex: 1 1 130px; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 0.7rem 0.9rem; text-align: center; }
+.stat.accent { border-left: 3px solid var(--accent); }
+.stat-n { font-size: 1.7rem; font-weight: 800; letter-spacing: -0.02em; color: var(--ink); font-variant-numeric: tabular-nums; }
+.stat-l { color: var(--ink-faint); font-size: 0.76rem; margin-top: 0.15rem; }
+
+/* numbered walkthrough */
+.dao-walkthrough { display: flex; align-items: stretch; gap: 0.6rem; flex-wrap: wrap; margin: 0 0 1.4rem; background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 1rem 1.1rem; }
+.wt-step { display: flex; align-items: flex-start; gap: 0.6rem; flex: 1 1 200px; min-width: 0; }
+.wt-step div { display: flex; flex-direction: column; gap: 0.15rem; min-width: 0; }
+.wt-step strong { font-size: 0.92rem; }
+.wt-step span { color: var(--ink-soft); font-size: 0.82rem; line-height: 1.4; }
+.wt-arrow { display: flex; align-items: center; color: var(--ink-faint); font-size: 1.3rem; flex: 0 0 auto; }
+.step-badge { display: inline-flex; align-items: center; justify-content: center; width: 1.55rem; height: 1.55rem; flex-shrink: 0; border-radius: 50%; background: var(--accent); color: #fff; font-size: 0.82rem; font-weight: 700; }
+@media (max-width: 700px) { .dao-walkthrough { flex-direction: column; } .wt-arrow { display: none; } }
+
+/* prominent reward-tier strip ("what's available", up front) */
+.dao-tiers-strip { margin: 0 0 1.6rem; background: var(--surface); border: 1px solid var(--border); border-left: 3px solid var(--accent); border-radius: 14px; padding: 1rem 1.1rem; }
+.tiers-strip-head { font-weight: 700; margin-bottom: 0.6rem; }
+.tiers-strip-head .hint { font-weight: 400; }
+.tier-chips { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.tier-chip { display: inline-flex; align-items: center; gap: 0.35rem; background: var(--bg-2); border: 1px solid var(--border-2); border-radius: 999px; padding: 0.35rem 0.8rem; font-size: 0.84rem; color: var(--ink-soft); }
+.tier-chip b { color: var(--ink); font-variant-numeric: tabular-nums; }
+
+/* the three cards, with flow arrows between them showing Submit -> Verify -> Reward */
+.dao-cards { display: grid; grid-template-columns: 1fr auto 1fr auto 1fr; gap: 1rem; align-items: start; }
+.dao-flow-arrow { display: flex; align-items: center; justify-content: center; color: var(--ink-faint); font-size: 1.6rem; padding-top: 2.6rem; }
+.dao-flow-arrow .v { display: none; }
+@media (max-width: 900px) {
+    .dao-cards { grid-template-columns: 1fr; }
+    .dao-flow-arrow { padding: 0.2rem 0; }
+    .dao-flow-arrow .h { display: none; }
+    .dao-flow-arrow .v { display: block; }
+}
 .dao-card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 1.2rem 1.2rem 1.4rem; display: flex; flex-direction: column; gap: 0.7rem; }
-.dao-card h2 { font-size: 1.15rem; font-weight: 700; margin: 0; }
+.dao-card h2 { display: flex; align-items: center; gap: 0.5rem; font-size: 1.15rem; font-weight: 700; margin: 0; }
 .card-sub { color: var(--ink-soft); font-size: 0.88rem; line-height: 1.45; margin: 0; }
 .dao-card code { font-family: var(--mono); font-size: 0.82rem; color: var(--accent-ink); background: var(--bg-2); padding: 0.05rem 0.35rem; border-radius: 5px; }
 
@@ -60,10 +92,26 @@
 .log-head { display: flex; justify-content: space-between; align-items: baseline; gap: 0.5rem; flex-wrap: wrap; padding: 0.5rem 0.9rem; border-bottom: 1px solid var(--border); font-family: var(--mono); font-size: 0.74rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--ink-faint); }
 .log-sub { text-transform: none; letter-spacing: 0; font-size: 0.7rem; }
 .log-body { max-height: 220px; overflow: auto; padding: 0.4rem 0.9rem; }
-.log-line { font-family: var(--mono); font-size: 0.76rem; color: var(--ink-soft); line-height: 1.6; }
+.log-line { display: block; font-family: var(--mono); font-size: 0.76rem; color: var(--ink-soft); line-height: 1.6; }
+.log-line-link { text-decoration: none; border-radius: 6px; margin: 0 -0.3rem; padding: 0.05rem 0.3rem; }
+.log-line-link:hover { background: var(--bg-2); color: var(--ink); cursor: pointer; }
 .tag { display: inline-block; font-family: var(--mono); font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.03em; border-radius: 999px; padding: 0.06rem 0.5rem; margin-right: 0.3rem; }
 .tag.ok { background: color-mix(in srgb, var(--ok) 20%, transparent); color: var(--ok); }
 .tag.bad { background: color-mix(in srgb, var(--bad) 20%, transparent); color: var(--bad); }
+.tag.pending { background: color-mix(in srgb, var(--ink-faint) 25%, transparent); color: var(--ink-soft); }
+
+/* "All submissions" master overview table — whole-lifecycle state at a glance, below the three cards */
+.dao-allsub { margin-top: 1.6rem; background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 1.2rem 1.2rem 1.4rem; }
+.allsub-head h2 { font-size: 1.1rem; font-weight: 700; margin: 0 0 0.7rem; display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.5rem; }
+.allsub-scroll { overflow-x: auto; }
+.allsub-table { width: 100%; border-collapse: collapse; font-size: 0.84rem; min-width: 640px; }
+.allsub-table th, .allsub-table td { text-align: left; padding: 0.45rem 0.6rem; border-bottom: 1px solid var(--border-2); white-space: nowrap; }
+.allsub-table td:nth-child(4) { white-space: normal; min-width: 14ch; }
+.allsub-table th { color: var(--ink-faint); font-weight: 600; font-size: 0.74rem; text-transform: uppercase; letter-spacing: 0.03em; }
+.allsub-table td:last-child, .allsub-table th:last-child, .allsub-table td:nth-child(6), .allsub-table th:nth-child(6) { font-variant-numeric: tabular-nums; }
+.allsub-table tbody tr { cursor: pointer; transition: background 0.12s; }
+.allsub-table tbody tr:hover { background: var(--bg-2); }
+.allsub-table tbody tr.selected { background: color-mix(in srgb, var(--accent) 14%, transparent); }
 
 /* reward balance */
 .dao-balance { background: var(--bg-2); border: 1px solid var(--border); border-left: 3px solid var(--accent); border-radius: 12px; padding: 0.9rem 1rem; }

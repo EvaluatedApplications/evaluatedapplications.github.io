@@ -10,9 +10,9 @@
         <nav class="crumb"><a href="/">Evaluated Applications</a> <span>/</span> RecycleDAO — mechanics demo</nav>
         <h1>RecycleDAO — mechanics demo</h1>
         <p class="lede">A private, share-by-link preview of RecycleDAO's core loop: submit a recycling activity,
-            have a verifier approve or reject it, watch an approved submission mint a reward token. Three cards,
-            one causal link between them — click <strong>Approve</strong> on the Verify card and watch the Reward
-            card change.</p>
+            have a verifier approve or reject it, watch an approved submission mint a reward token. Follow one
+            item through the three steps below — Submit → Verify → Reward — then find it again in the running
+            "All submissions" list further down, which shows every item's whole lifecycle at a glance.</p>
         <div class="badges">
             <span>Browser-only simulation</span><span>No wallet · no live chain</span><span>Resets on reload</span>
         </div>
@@ -32,9 +32,35 @@
             resets to empty and zero — that's expected, not a bug.</p>
     </div>
 
+    <div class="dao-stats">
+        <div class="stat"><div class="stat-n">@_allSubmissions.Count</div><div class="stat-l">Total submissions</div></div>
+        <div class="stat"><div class="stat-n">@_pending.Count</div><div class="stat-l">Pending review</div></div>
+        <div class="stat"><div class="stat-n">@_verifiedCount</div><div class="stat-l">Approved</div></div>
+        <div class="stat"><div class="stat-n">@_rejectedCount</div><div class="stat-l">Rejected</div></div>
+        <div class="stat accent"><div class="stat-n">@_balance</div><div class="stat-l">RCYT balance</div></div>
+    </div>
+
+    <div class="dao-walkthrough">
+        <div class="wt-step"><span class="step-badge">1</span><div><strong>Submit an item</strong><span>Pick a type, describe it, give a display name.</span></div></div>
+        <div class="wt-arrow" aria-hidden="true">→</div>
+        <div class="wt-step"><span class="step-badge">2</span><div><strong>It waits for verification</strong><span>A reviewer approves or rejects it on the Verify card.</span></div></div>
+        <div class="wt-arrow" aria-hidden="true">→</div>
+        <div class="wt-step"><span class="step-badge">3</span><div><strong>Approved items mint tokens</strong><span>Rejected ones don't. Either way, the decision is final.</span></div></div>
+    </div>
+
+    <div class="dao-tiers-strip">
+        <div class="tiers-strip-head">What's available <span class="hint">— reward per item type if a verifier approves it</span></div>
+        <div class="tier-chips">
+            @foreach (var kv in Tiers)
+            {
+                <span class="tier-chip">@kv.Key <b>@kv.Value RCYT</b></span>
+            }
+        </div>
+    </div>
+
     <div class="dao-cards">
         <section class="dao-card">
-            <h2>Submit</h2>
+            <h2><span class="step-badge">1</span> Submit</h2>
             <p class="card-sub">Log a recycling activity for review. Submitting alone can never mint a reward —
                 only an Approve decision on the Verify card can do that.</p>
 
@@ -74,8 +100,10 @@
             </div>
         </section>
 
+        <div class="dao-flow-arrow" aria-hidden="true"><span class="h">→</span><span class="v">↓</span></div>
+
         <section class="dao-card">
-            <h2>Verify</h2>
+            <h2><span class="step-badge">2</span> Verify</h2>
             <p class="card-sub">Verifier action — mirrors the <code>MINTER_ROLE</code>-gated step in the real
                 contract. Approve/Reject here is the <strong>only</strong> action anywhere in this demo that can
                 ever mint a token.</p>
@@ -107,19 +135,21 @@
             @if (_history.Count > 0)
             {
                 <div class="dao-history">
-                    <div class="log-head">recently decided <span class="log-sub">read-only · no further action · newest first</span></div>
+                    <div class="log-head">recently decided <span class="log-sub">read-only · no further action · newest first · click a row to find it in the full list below</span></div>
                     <div class="log-body">
                         @foreach (var s in _history)
                         {
-                            <div class="log-line"><span class="tag @(s.Status == "Verified" ? "ok" : "bad")">@s.Status</span> @s.ItemType — @Truncate(s.Description, 40) — @s.SubmitterName</div>
+                            <a href="#sub-@s.Id" class="log-line log-line-link" @onclick="() => _selectedId = s.Id"><span class="tag @(s.Status == "Verified" ? "ok" : "bad")">@s.Status</span> #@s.Id @s.ItemType — @Truncate(s.Description, 40) — @s.SubmitterName</a>
                         }
                     </div>
                 </div>
             }
         </section>
 
+        <div class="dao-flow-arrow" aria-hidden="true"><span class="h">→</span><span class="v">↓</span></div>
+
         <section class="dao-card">
-            <h2>Reward</h2>
+            <h2><span class="step-badge">3</span> Reward</h2>
             <div class="dao-balance">
                 <div class="n">@_balance</div>
                 <div class="l">RCYT balance (this session)</div>
@@ -136,17 +166,52 @@
             else
             {
                 <div class="cr-log">
-                    <div class="log-head">mint log <span class="log-sub">newest first · every id is a simulated tx, not a real chain hash</span></div>
+                    <div class="log-head">mint log <span class="log-sub">newest first · every id is a simulated tx, not a real chain hash · click a row to jump to the submission it came from</span></div>
                     <div class="log-body">
                         @foreach (var m in _mintLog)
                         {
-                            <div class="log-line">@m.Timestamp.ToString("HH:mm:ss")  <span class="tag ok">@m.TxId</span>  +@m.Reward RCYT  @m.ItemType — @Truncate(m.Description, 30) — @m.SubmitterName</div>
+                            <a href="#sub-@m.SubmissionId" class="log-line log-line-link" @onclick="() => _selectedId = m.SubmissionId">@m.Timestamp.ToString("HH:mm:ss")  <span class="tag ok">@m.TxId</span>  +@m.Reward RCYT  @m.ItemType — @Truncate(m.Description, 30) — @m.SubmitterName</a>
                         }
                     </div>
                 </div>
             }
         </section>
     </div>
+
+    <section class="dao-allsub">
+        <div class="allsub-head">
+            <h2>All submissions <span class="log-sub">this session · @_allSubmissions.Count total · every item's whole lifecycle, one row each</span></h2>
+        </div>
+        @if (_allSubmissions.Count == 0)
+        {
+            <p class="hint">Nothing submitted yet — use the Submit card above to add the first one and it will
+                appear here, whichever way it's later decided.</p>
+        }
+        else
+        {
+            <div class="allsub-scroll">
+                <table class="allsub-table">
+                    <thead>
+                        <tr><th>#</th><th>Status</th><th>Item type</th><th>Description</th><th>Submitter</th><th>Reward</th><th>Tx id</th></tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var s in _allSubmissions.OrderByDescending(x => x.Id))
+                        {
+                            <tr id="sub-@s.Id" class="@(_selectedId == s.Id ? "selected" : "")" @onclick="() => _selectedId = s.Id">
+                                <td>@s.Id</td>
+                                <td><span class="tag @StatusClass(s.Status)">@s.Status</span></td>
+                                <td>@s.ItemType</td>
+                                <td>@Truncate(s.Description, 60)</td>
+                                <td>@s.SubmitterName</td>
+                                <td>@(s.Status == "Verified" ? $"+{Tiers[s.ItemType]} RCYT" : "—")</td>
+                                <td>@(s.MintTxId ?? "—")</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </section>
 
     <div class="outro">
         <p><strong>About this simulation.</strong> RecycleDAO's real contract gates minting with an on-chain
@@ -179,12 +244,14 @@
         public string SubmitterName = "";
         public DateTime SubmittedAt;
         public string Status = "Pending"; // Pending | Verified | Rejected
+        public string? MintTxId; // set only on Verified, by ApproveSubmission — mirrors the mint log's own tx id
     }
 
     class MintEntry
     {
         public string TxId = "";
         public DateTime Timestamp;
+        public int SubmissionId;
         public string ItemType = "";
         public string Description = "";
         public string SubmitterName = "";
@@ -203,6 +270,15 @@
     readonly List<Submission> _pending = new();          // actionable queue — Verify card renders exactly this list
     readonly List<Submission> _history = new();           // decided (Verified or Rejected), read-only, newest first
     int _rejectedCount;
+    int _verifiedCount;
+
+    // Whole-lifecycle overview — every submission ever created this session, in one place, and never removed
+    // (unlike _pending/_history, which are per-card views of a subset). Feeds the "All submissions" table so a
+    // visitor can see the whole system state at a glance instead of piecing it together across three cards.
+    // Submission is a reference type, so ApproveSubmission/RejectSubmission mutating .Status/.MintTxId on the
+    // same object already keeps this list's rows in sync for free — no separate write path needed here.
+    readonly List<Submission> _allSubmissions = new();
+    int? _selectedId; // set by clicking a mint-log/history row's link — highlights the matching row below
 
     // Reward-card state. _balance and _mintLog are written from exactly one place: ApproveSubmission below.
     int _balance;
@@ -238,6 +314,7 @@
             Status = "Pending",
         };
         _pending.Add(sub); // Pending only — this method never touches _balance or _mintLog.
+        _allSubmissions.Add(sub); // whole-lifecycle overview list — added once here, never removed
 
         _submitError = null;
         _submitConfirmation = $"Submitted — “{Truncate(desc, 40)}” by {name} is awaiting review.";
@@ -255,13 +332,17 @@
         _pending.Remove(sub);    // gone from the actionable queue immediately: its buttons stop existing, not just disabled
 
         sub.Status = "Verified";
+        _verifiedCount++;
         int reward = Tiers[sub.ItemType];
 
         _mintCounter++;
+        var txId = $"SIM-{_mintCounter:D4}"; // clearly-labeled fake id — never a real tx hash
+        sub.MintTxId = txId; // so the "All submissions" row can show its own tx id without a lookup
         _mintLog.Insert(0, new MintEntry
         {
-            TxId = $"SIM-{_mintCounter:D4}", // clearly-labeled fake id — never a real tx hash
+            TxId = txId,
             Timestamp = DateTime.Now,
+            SubmissionId = sub.Id,
             ItemType = sub.ItemType,
             Description = sub.Description,
             SubmitterName = sub.SubmitterName,
@@ -285,4 +366,11 @@
     }
 
     static string Truncate(string s, int n) => s.Length <= n ? s : s.Substring(0, n - 1) + "…";
+
+    static string StatusClass(string status) => status switch
+    {
+        "Verified" => "ok",
+        "Rejected" => "bad",
+        _ => "pending",
+    };
 }
