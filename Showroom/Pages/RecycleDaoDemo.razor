@@ -6,13 +6,31 @@
 </HeadContent>
 
 <div class="room">
+
+    <!-- Decorative app shell — shows the SHAPE of a real product's chrome so the flow below reads
+         as screens of an app, not a bare set of demo cards. Every item in this bar is a disabled
+         <button> (not a link): no href to click, cursor:not-allowed, a tooltip on hover, and the
+         honesty callout below spells it out too. Nothing here can ever navigate anywhere. -->
+    <nav class="app-topnav" aria-label="Illustrative product navigation — not functional in this demo">
+        <div class="app-brand"><span class="brand-mark" aria-hidden="true">♻</span> RecycleDAO</div>
+        <ul class="app-menu">
+            <li><button type="button" class="app-menu-item" disabled title="Illustrative only — not part of this demo">Dashboard</button></li>
+            <li><button type="button" class="app-menu-item" disabled title="Illustrative only — not part of this demo">Submissions</button></li>
+            <li><button type="button" class="app-menu-item" disabled title="Illustrative only — not part of this demo">Rewards</button></li>
+            <li><button type="button" class="app-menu-item" disabled title="Illustrative only — not part of this demo">Wallet</button></li>
+        </ul>
+        <span class="app-topnav-tag">mockup nav</span>
+    </nav>
+
     <header class="room-head">
         <nav class="crumb"><a href="/">Evaluated Applications</a> <span>/</span> RecycleDAO — mechanics demo</nav>
         <h1>RecycleDAO — mechanics demo</h1>
         <p class="lede">A private, share-by-link preview of RecycleDAO's core loop: submit a recycling activity,
-            have a verifier approve or reject it, watch an approved submission mint a reward token. Follow one
-            item through the three steps below — Submit → Verify → Reward — then find it again in the running
-            "All submissions" list further down, which shows every item's whole lifecycle at a glance.</p>
+            have a verifier approve or reject it, watch an approved submission mint a reward token. The three
+            steps below — Submit → Verify → Reward — behave like three pages of one app: finishing an action on
+            one page carries you to the next, or jump between them yourself with the numbered tabs. Find any item
+            again afterwards in the running "All submissions" list further down, which shows every item's whole
+            lifecycle at a glance.</p>
         <div class="badges">
             <span>Browser-only simulation</span><span>No wallet · no live chain</span><span>Resets on reload</span>
         </div>
@@ -27,6 +45,10 @@
             <li>"Verification" here (and in the real system) is a manual human review step — this project does not
                 claim to have solved real-world recycling fraud detection.</li>
             <li>Reward amounts are a simple, fixed demo schedule (shown below), not a market-priced calculation.</li>
+            <li>The top navigation bar above (Dashboard / Submissions / Rewards / Wallet) is illustrative product
+                chrome only — every item there is disabled and does nothing. The real navigation between Submit,
+                Verify and Reward below is driven entirely by your own actions (submitting, approving, rejecting)
+                or by clicking the numbered step tabs — never by that bar.</li>
         </ul>
         <p class="hint">All state lives in this browser tab for this session only. Reload the page and everything
             resets to empty and zero — that's expected, not a bug.</p>
@@ -40,12 +62,27 @@
         <div class="stat accent"><div class="stat-n">@_balance</div><div class="stat-l">RCYT balance</div></div>
     </div>
 
-    <div class="dao-walkthrough">
-        <div class="wt-step"><span class="step-badge">1</span><div><strong>Submit an item</strong><span>Pick a type, describe it, give a display name.</span></div></div>
-        <div class="wt-arrow" aria-hidden="true">→</div>
-        <div class="wt-step"><span class="step-badge">2</span><div><strong>It waits for verification</strong><span>A reviewer approves or rejects it on the Verify card.</span></div></div>
-        <div class="wt-arrow" aria-hidden="true">→</div>
-        <div class="wt-step"><span class="step-badge">3</span><div><strong>Approved items mint tokens</strong><span>Rejected ones don't. Either way, the decision is final.</span></div></div>
+    <!-- Functional page tabs — this IS the real navigation. Clicking a tab, or finishing an action
+         on the current page (submit / approve / reject), is what actually changes which page below
+         is shown. Unlike the app-topnav above, every control here is live. -->
+    <div class="dao-pagenav" role="tablist" aria-label="Demo flow — Submit, Verify, Reward">
+        <button type="button" role="tab" aria-selected="@(_focus == Stage.Submit ? "true" : "false")"
+                class="pt @(_focus == Stage.Submit ? "active" : "")" @onclick="() => _focus = Stage.Submit">
+            <span class="step-badge">1</span>
+            <span class="pt-label">Submit<small>add an item</small></span>
+        </button>
+        <span class="pt-sep" aria-hidden="true">→</span>
+        <button type="button" role="tab" aria-selected="@(_focus == Stage.Verify ? "true" : "false")"
+                class="pt @(_focus == Stage.Verify ? "active" : "")" @onclick="() => _focus = Stage.Verify">
+            <span class="step-badge">2</span>
+            <span class="pt-label">Verify<small>@_pending.Count pending</small></span>
+        </button>
+        <span class="pt-sep" aria-hidden="true">→</span>
+        <button type="button" role="tab" aria-selected="@(_focus == Stage.Reward ? "true" : "false")"
+                class="pt @(_focus == Stage.Reward ? "active" : "")" @onclick="() => _focus = Stage.Reward">
+            <span class="step-badge">3</span>
+            <span class="pt-label">Reward<small>@_mintLog.Count minted</small></span>
+        </button>
     </div>
 
     <div class="dao-tiers-strip">
@@ -58,125 +95,144 @@
         </div>
     </div>
 
-    <div class="dao-cards">
-        <section class="dao-card">
-            <h2><span class="step-badge">1</span> Submit</h2>
-            <p class="card-sub">Log a recycling activity for review. Submitting alone can never mint a reward —
-                only an Approve decision on the Verify card can do that.</p>
+    <section class="app-page">
+        @if (_focus == Stage.Submit)
+        {
+            <div class="app-page-head">
+                <span class="app-route" title="Illustrative only — this demo is a single page">app.recycledao.xyz › submissions › new</span>
+                <h2><span class="step-badge">1</span> Submit</h2>
+                <p class="card-sub">Log a recycling activity for review. Submitting alone can never mint a reward —
+                    only an Approve decision on the Verify page can do that.</p>
+            </div>
 
-            <table class="tier-table">
-                <thead><tr><th>Item type</th><th>Reward if approved</th></tr></thead>
-                <tbody>
-                    @foreach (var kv in Tiers)
-                    {
-                        <tr><td>@kv.Key</td><td>@kv.Value RCYT</td></tr>
-                    }
-                </tbody>
-            </table>
-
-            <div class="dao-form">
-                <label>Item type
-                    <select @bind="_formItemType">
+            <div class="app-panel">
+                <table class="tier-table">
+                    <thead><tr><th>Item type</th><th>Reward if approved</th></tr></thead>
+                    <tbody>
                         @foreach (var kv in Tiers)
                         {
-                            <option value="@kv.Key">@kv.Key — @kv.Value RCYT</option>
+                            <tr><td>@kv.Key</td><td>@kv.Value RCYT</td></tr>
                         }
-                    </select>
-                </label>
-                <label>Description
-                    <textarea @bind="_formDescription" maxlength="200"
-                              placeholder="What did you recycle? (3-200 characters)"></textarea>
-                </label>
-                <label>Submitter name / ID
-                    <input @bind="_formSubmitterName" maxlength="60" placeholder="e.g. Alex, or Demo-User-1" />
-                </label>
-                <p class="hint">A display label only — <strong>not</strong> a wallet address. The real system would
-                    use a wallet address here; this demo has no wallets.</p>
+                    </tbody>
+                </table>
 
-                @if (_submitError is not null) { <p class="err">@_submitError</p> }
-                @if (_submitConfirmation is not null) { <p class="ok-msg">@_submitConfirmation</p> }
+                <div class="dao-form">
+                    <label>Item type
+                        <select @bind="_formItemType">
+                            @foreach (var kv in Tiers)
+                            {
+                                <option value="@kv.Key">@kv.Key — @kv.Value RCYT</option>
+                            }
+                        </select>
+                    </label>
+                    <label>Description
+                        <textarea @bind="_formDescription" maxlength="200"
+                                  placeholder="What did you recycle? (3-200 characters)"></textarea>
+                    </label>
+                    <label>Submitter name / ID
+                        <input @bind="_formSubmitterName" maxlength="60" placeholder="e.g. Alex, or Demo-User-1" />
+                    </label>
+                    <p class="hint">A display label only — <strong>not</strong> a wallet address. The real system would
+                        use a wallet address here; this demo has no wallets.</p>
 
-                <button class="go" @onclick="SubmitItem" type="button">Submit for review</button>
+                    @if (_submitError is not null) { <p class="err">@_submitError</p> }
+
+                    <button class="go" @onclick="SubmitItem" type="button">Submit for review</button>
+                </div>
             </div>
-        </section>
+        }
+        else if (_focus == Stage.Verify)
+        {
+            <div class="app-page-head">
+                <span class="app-route" title="Illustrative only — this demo is a single page">app.recycledao.xyz › submissions › review</span>
+                <h2><span class="step-badge">2</span> Verify</h2>
+                <p class="card-sub">Verifier action — mirrors the <code>MINTER_ROLE</code>-gated step in the real
+                    contract. Approve/Reject here is the <strong>only</strong> action anywhere in this demo that can
+                    ever mint a token.</p>
+            </div>
 
-        <div class="dao-flow-arrow" aria-hidden="true"><span class="h">→</span><span class="v">↓</span></div>
+            <div class="app-panel">
+                @if (_submitConfirmation is not null)
+                {
+                    <p class="ok-msg banner">@_submitConfirmation</p>
+                }
 
-        <section class="dao-card">
-            <h2><span class="step-badge">2</span> Verify</h2>
-            <p class="card-sub">Verifier action — mirrors the <code>MINTER_ROLE</code>-gated step in the real
-                contract. Approve/Reject here is the <strong>only</strong> action anywhere in this demo that can
-                ever mint a token.</p>
-
-            @if (_pending.Count == 0)
-            {
-                <p class="hint">No submissions pending review.</p>
-            }
-            else
-            {
-                <div class="dao-queue">
-                    @foreach (var s in _pending)
-                    {
-                        <div class="dao-row">
-                            <div class="row-main">
-                                <div class="row-top"><strong>@s.ItemType</strong><span class="row-when">@s.SubmittedAt.ToString("HH:mm:ss")</span></div>
-                                <div class="row-desc">@s.Description</div>
-                                <div class="row-sub">by @s.SubmitterName · preview reward if approved: <strong>@Tiers[s.ItemType] RCYT</strong></div>
+                @if (_pending.Count == 0)
+                {
+                    <p class="hint">No submissions pending review. Switch to the Submit page to add one.</p>
+                }
+                else
+                {
+                    <div class="dao-queue">
+                        @foreach (var s in _pending)
+                        {
+                            <div class="dao-row">
+                                <div class="row-main">
+                                    <div class="row-top"><strong>@s.ItemType</strong><span class="row-when">@s.SubmittedAt.ToString("HH:mm:ss")</span></div>
+                                    <div class="row-desc">@s.Description</div>
+                                    <div class="row-sub">by @s.SubmitterName · preview reward if approved: <strong>@Tiers[s.ItemType] RCYT</strong></div>
+                                </div>
+                                <div class="row-actions">
+                                    <button class="go small" @onclick="() => ApproveSubmission(s.Id)" type="button">Approve</button>
+                                    <button class="ghost small" @onclick="() => RejectSubmission(s.Id)" type="button">Reject</button>
+                                </div>
                             </div>
-                            <div class="row-actions">
-                                <button class="go small" @onclick="() => ApproveSubmission(s.Id)" type="button">Approve</button>
-                                <button class="ghost small" @onclick="() => RejectSubmission(s.Id)" type="button">Reject</button>
-                            </div>
+                        }
+                    </div>
+                }
+
+                @if (_history.Count > 0)
+                {
+                    <div class="dao-history">
+                        <div class="log-head">recently decided <span class="log-sub">read-only · no further action · newest first · click a row to find it in the full list below</span></div>
+                        <div class="log-body">
+                            @foreach (var s in _history)
+                            {
+                                <a href="#sub-@s.Id" class="log-line log-line-link" @onclick="() => _selectedId = s.Id"><span class="tag @(s.Status == "Verified" ? "ok" : "bad")">@s.Status</span> #@s.Id @s.ItemType — @Truncate(s.Description, 40) — @s.SubmitterName</a>
+                            }
                         </div>
-                    }
-                </div>
-            }
-
-            @if (_history.Count > 0)
-            {
-                <div class="dao-history">
-                    <div class="log-head">recently decided <span class="log-sub">read-only · no further action · newest first · click a row to find it in the full list below</span></div>
-                    <div class="log-body">
-                        @foreach (var s in _history)
-                        {
-                            <a href="#sub-@s.Id" class="log-line log-line-link" @onclick="() => _selectedId = s.Id"><span class="tag @(s.Status == "Verified" ? "ok" : "bad")">@s.Status</span> #@s.Id @s.ItemType — @Truncate(s.Description, 40) — @s.SubmitterName</a>
-                        }
                     </div>
-                </div>
-            }
-        </section>
-
-        <div class="dao-flow-arrow" aria-hidden="true"><span class="h">→</span><span class="v">↓</span></div>
-
-        <section class="dao-card">
-            <h2><span class="step-badge">3</span> Reward</h2>
-            <div class="dao-balance">
-                <div class="n">@_balance</div>
-                <div class="l">RCYT balance (this session)</div>
+                }
             </div>
-            @if (_rejectedCount > 0)
-            {
-                <p class="hint">@_rejectedCount submission@(_rejectedCount == 1 ? "" : "s") rejected this session — no reward, no mint-log entry.</p>
-            }
+        }
+        else
+        {
+            <div class="app-page-head">
+                <span class="app-route" title="Illustrative only — this demo is a single page">app.recycledao.xyz › wallet › activity</span>
+                <h2><span class="step-badge">3</span> Reward</h2>
+                <p class="card-sub">The balance and mint log below only ever change from one place: an Approve
+                    decision on the Verify page. Nothing else in this demo can touch them.</p>
+            </div>
 
-            @if (_mintLog.Count == 0)
-            {
-                <p class="hint">No mints yet — approve a pending submission on the Verify card to see one land here.</p>
-            }
-            else
-            {
-                <div class="cr-log">
-                    <div class="log-head">mint log <span class="log-sub">newest first · every id is a simulated tx, not a real chain hash · click a row to jump to the submission it came from</span></div>
-                    <div class="log-body">
-                        @foreach (var m in _mintLog)
-                        {
-                            <a href="#sub-@m.SubmissionId" class="log-line log-line-link" @onclick="() => _selectedId = m.SubmissionId">@m.Timestamp.ToString("HH:mm:ss")  <span class="tag ok">@m.TxId</span>  +@m.Reward RCYT  @m.ItemType — @Truncate(m.Description, 30) — @m.SubmitterName</a>
-                        }
-                    </div>
+            <div class="app-panel">
+                <div class="dao-balance">
+                    <div class="n">@_balance</div>
+                    <div class="l">RCYT balance (this session)</div>
                 </div>
-            }
-        </section>
-    </div>
+                @if (_rejectedCount > 0)
+                {
+                    <p class="hint">@_rejectedCount submission@(_rejectedCount == 1 ? "" : "s") rejected this session — no reward, no mint-log entry.</p>
+                }
+
+                @if (_mintLog.Count == 0)
+                {
+                    <p class="hint">No mints yet — approve a pending submission on the Verify page to see one land here.</p>
+                }
+                else
+                {
+                    <div class="cr-log">
+                        <div class="log-head">mint log <span class="log-sub">newest first · every id is a simulated tx, not a real chain hash · click a row to jump to the submission it came from</span></div>
+                        <div class="log-body">
+                            @foreach (var m in _mintLog)
+                            {
+                                <a href="#sub-@m.SubmissionId" class="log-line log-line-link" @onclick="() => _selectedId = m.SubmissionId">@m.Timestamp.ToString("HH:mm:ss")  <span class="tag ok">@m.TxId</span>  +@m.Reward RCYT  @m.ItemType — @Truncate(m.Description, 30) — @m.SubmitterName</a>
+                            }
+                        </div>
+                    </div>
+                }
+            </div>
+        }
+    </section>
 
     <section class="dao-allsub">
         <div class="allsub-head">
@@ -184,7 +240,7 @@
         </div>
         @if (_allSubmissions.Count == 0)
         {
-            <p class="hint">Nothing submitted yet — use the Submit card above to add the first one and it will
+            <p class="hint">Nothing submitted yet — use the Submit page above to add the first one and it will
                 appear here, whichever way it's later decided.</p>
         }
         else
@@ -217,14 +273,20 @@
         <p><strong>About this simulation.</strong> RecycleDAO's real contract gates minting with an on-chain
             <code>onlyRole(MINTER_ROLE)</code> check — only a designated verifier address can call
             <code>RecycleToken.mint()</code>; a submitter has no path to mint tokens themselves. This demo has no
-            wallets and no live chain, so it enforces the same shape a different way: the Verify card's Approve
+            wallets and no live chain, so it enforces the same shape a different way: the Verify page's Approve
             action is the only code path in this page that can append to the mint log or change the balance, and
             once a submission is decided its Approve/Reject controls are removed from the UI for good — there is
-            no way to trigger a second decision on it. Reload this page at any time to reset the session to zero.</p>
+            no way to trigger a second decision on it. The top nav bar and page-route labels dotted through this
+            demo are cosmetic — dressing to show the shape of a real app's chrome — and carry no logic; the "1 / 2
+            / 3" tabs above and the actions on each page are the only things that ever change what's on screen.
+            Reload this page at any time to reset the session to zero.</p>
     </div>
 </div>
 
 @code {
+    enum Stage { Submit, Verify, Reward }
+    Stage _focus = Stage.Submit;
+
     // Fixed, transparent reward schedule (RCYT per verified submission) — a simple demo convenience, not a
     // market-priced or weight-based calculation. Shown to the visitor before they submit.
     static readonly Dictionary<string, int> Tiers = new()
@@ -258,7 +320,7 @@
         public int Reward;
     }
 
-    // Submit-card form state — this is the whole surface the Submit card can touch. None of it reaches
+    // Submit-page form state — this is the whole surface the Submit page can touch. None of it reaches
     // _mintLog or _balance, directly or indirectly.
     string _formItemType = Tiers.Keys.First();
     string _formDescription = "";
@@ -267,20 +329,20 @@
     string? _submitConfirmation;
 
     int _nextId = 1;
-    readonly List<Submission> _pending = new();          // actionable queue — Verify card renders exactly this list
+    readonly List<Submission> _pending = new();          // actionable queue — Verify page renders exactly this list
     readonly List<Submission> _history = new();           // decided (Verified or Rejected), read-only, newest first
     int _rejectedCount;
     int _verifiedCount;
 
     // Whole-lifecycle overview — every submission ever created this session, in one place, and never removed
-    // (unlike _pending/_history, which are per-card views of a subset). Feeds the "All submissions" table so a
-    // visitor can see the whole system state at a glance instead of piecing it together across three cards.
+    // (unlike _pending/_history, which are per-page views of a subset). Feeds the "All submissions" table so a
+    // visitor can see the whole system state at a glance instead of piecing it together across three pages.
     // Submission is a reference type, so ApproveSubmission/RejectSubmission mutating .Status/.MintTxId on the
     // same object already keeps this list's rows in sync for free — no separate write path needed here.
     readonly List<Submission> _allSubmissions = new();
     int? _selectedId; // set by clicking a mint-log/history row's link — highlights the matching row below
 
-    // Reward-card state. _balance and _mintLog are written from exactly one place: ApproveSubmission below.
+    // Reward-page state. _balance and _mintLog are written from exactly one place: ApproveSubmission below.
     int _balance;
     int _mintCounter;
     readonly List<MintEntry> _mintLog = new();             // newest first
@@ -321,6 +383,10 @@
         _formDescription = "";
         _formSubmitterName = "";
         _formItemType = Tiers.Keys.First();
+
+        // The submit action itself is what carries the visitor from the Submit page to the Verify page —
+        // this is the "cards drive navigation" behaviour: no nav-bar click involved, just the real action.
+        _focus = Stage.Verify;
     }
 
     // The ONE handler in this page that can increase the balance or append to the mint log. No other method
@@ -351,6 +417,8 @@
         _balance += reward;
 
         _history.Insert(0, sub);
+        _submitConfirmation = null;
+        _focus = Stage.Reward; // the decision itself carries the visitor to the Reward page
     }
 
     void RejectSubmission(int id)
@@ -363,6 +431,8 @@
         _rejectedCount++;
         _history.Insert(0, sub);
         // Deliberately no touch to _balance or _mintLog here.
+        _submitConfirmation = null;
+        _focus = Stage.Reward; // still carries the visitor forward, even though nothing minted this time
     }
 
     static string Truncate(string s, int n) => s.Length <= n ? s : s.Substring(0, n - 1) + "…";

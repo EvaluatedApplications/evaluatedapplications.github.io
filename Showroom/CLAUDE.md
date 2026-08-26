@@ -158,6 +158,18 @@ browser scroll, no JS interop) that also sets a highlight state on the matching 
 No mechanic changed in this pass — same mint gate, same no-double-mint enforcement, same tier
 amounts, same honesty framing, purely a discoverability/legibility layout pass.
 
+App-shell pass 2026-08-26 (user feedback: "let the cards simulate what the website might look
+like... let the cards do the navigation"). Two deliberately-separate nav layers: (1) `.app-topnav`
+— decorative top bar, disabled `<button>` items (Dashboard/Submissions/Rewards/Wallet,
+`cursor:not-allowed`, reduced opacity, hover tooltip) that show the SHAPE of a real app's chrome
+but are inert. (2) `.dao-pagenav` — real numbered step-tabs (1 Submit/2 Verify/3 Reward, live
+counts) that ARE the actual router: a `Stage _focus` field picks which single `<section
+class="app-page">` renders (route-chip breadcrumb + h2 + blurb + one `.app-panel`), replacing the
+old three-cards-in-a-row grid. `SubmitItem()` sets `_focus=Verify` on success;
+`Approve`/`RejectSubmission` both set `_focus=Reward` — mechanics actions drive the page changes,
+not `.app-topnav` clicks. Honesty list gained a 5th bullet naming the top nav as inert; no mechanic
+changed, purely presentation.
+
 ## Dependencies (exact NuGet versions, `Showroom.csproj`)
 - `Microsoft.AspNetCore.Components.WebAssembly` 10.0.8 (+ `.DevServer` 10.0.8, dev-only)
 - `EvaluatedApplications.HoloDb` 1.4.0 — The Analyst
