@@ -1,0 +1,288 @@
+@page "/recycledao-demo"
+
+<PageTitle>RecycleDAO — mechanics demo (simulation)</PageTitle>
+<HeadContent>
+    <meta name="robots" content="noindex,nofollow" />
+</HeadContent>
+
+<div class="room">
+    <header class="room-head">
+        <nav class="crumb"><a href="/">Evaluated Applications</a> <span>/</span> RecycleDAO — mechanics demo</nav>
+        <h1>RecycleDAO — mechanics demo</h1>
+        <p class="lede">A private, share-by-link preview of RecycleDAO's core loop: submit a recycling activity,
+            have a verifier approve or reject it, watch an approved submission mint a reward token. Three cards,
+            one causal link between them — click <strong>Approve</strong> on the Verify card and watch the Reward
+            card change.</p>
+        <div class="badges">
+            <span>Browser-only simulation</span><span>No wallet · no live chain</span><span>Resets on reload</span>
+        </div>
+    </header>
+
+    <div class="dao-honesty">
+        <strong>What this is (and isn't)</strong>
+        <ul>
+            <li>This is a self-contained browser simulation — no live blockchain, no wallet, no real tokens.</li>
+            <li>It mirrors the real rules already built and tested in this project: only a verifier's approval
+                can mint (never the submitter alone), and each submission is decided once.</li>
+            <li>"Verification" here (and in the real system) is a manual human review step — this project does not
+                claim to have solved real-world recycling fraud detection.</li>
+            <li>Reward amounts are a simple, fixed demo schedule (shown below), not a market-priced calculation.</li>
+        </ul>
+        <p class="hint">All state lives in this browser tab for this session only. Reload the page and everything
+            resets to empty and zero — that's expected, not a bug.</p>
+    </div>
+
+    <div class="dao-cards">
+        <section class="dao-card">
+            <h2>Submit</h2>
+            <p class="card-sub">Log a recycling activity for review. Submitting alone can never mint a reward —
+                only an Approve decision on the Verify card can do that.</p>
+
+            <table class="tier-table">
+                <thead><tr><th>Item type</th><th>Reward if approved</th></tr></thead>
+                <tbody>
+                    @foreach (var kv in Tiers)
+                    {
+                        <tr><td>@kv.Key</td><td>@kv.Value RCYT</td></tr>
+                    }
+                </tbody>
+            </table>
+
+            <div class="dao-form">
+                <label>Item type
+                    <select @bind="_formItemType">
+                        @foreach (var kv in Tiers)
+                        {
+                            <option value="@kv.Key">@kv.Key — @kv.Value RCYT</option>
+                        }
+                    </select>
+                </label>
+                <label>Description
+                    <textarea @bind="_formDescription" maxlength="200"
+                              placeholder="What did you recycle? (3-200 characters)"></textarea>
+                </label>
+                <label>Submitter name / ID
+                    <input @bind="_formSubmitterName" maxlength="60" placeholder="e.g. Alex, or Demo-User-1" />
+                </label>
+                <p class="hint">A display label only — <strong>not</strong> a wallet address. The real system would
+                    use a wallet address here; this demo has no wallets.</p>
+
+                @if (_submitError is not null) { <p class="err">@_submitError</p> }
+                @if (_submitConfirmation is not null) { <p class="ok-msg">@_submitConfirmation</p> }
+
+                <button class="go" @onclick="SubmitItem" type="button">Submit for review</button>
+            </div>
+        </section>
+
+        <section class="dao-card">
+            <h2>Verify</h2>
+            <p class="card-sub">Verifier action — mirrors the <code>MINTER_ROLE</code>-gated step in the real
+                contract. Approve/Reject here is the <strong>only</strong> action anywhere in this demo that can
+                ever mint a token.</p>
+
+            @if (_pending.Count == 0)
+            {
+                <p class="hint">No submissions pending review.</p>
+            }
+            else
+            {
+                <div class="dao-queue">
+                    @foreach (var s in _pending)
+                    {
+                        <div class="dao-row">
+                            <div class="row-main">
+                                <div class="row-top"><strong>@s.ItemType</strong><span class="row-when">@s.SubmittedAt.ToString("HH:mm:ss")</span></div>
+                                <div class="row-desc">@s.Description</div>
+                                <div class="row-sub">by @s.SubmitterName · preview reward if approved: <strong>@Tiers[s.ItemType] RCYT</strong></div>
+                            </div>
+                            <div class="row-actions">
+                                <button class="go small" @onclick="() => ApproveSubmission(s.Id)" type="button">Approve</button>
+                                <button class="ghost small" @onclick="() => RejectSubmission(s.Id)" type="button">Reject</button>
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+
+            @if (_history.Count > 0)
+            {
+                <div class="dao-history">
+                    <div class="log-head">recently decided <span class="log-sub">read-only · no further action · newest first</span></div>
+                    <div class="log-body">
+                        @foreach (var s in _history)
+                        {
+                            <div class="log-line"><span class="tag @(s.Status == "Verified" ? "ok" : "bad")">@s.Status</span> @s.ItemType — @Truncate(s.Description, 40) — @s.SubmitterName</div>
+                        }
+                    </div>
+                </div>
+            }
+        </section>
+
+        <section class="dao-card">
+            <h2>Reward</h2>
+            <div class="dao-balance">
+                <div class="n">@_balance</div>
+                <div class="l">RCYT balance (this session)</div>
+            </div>
+            @if (_rejectedCount > 0)
+            {
+                <p class="hint">@_rejectedCount submission@(_rejectedCount == 1 ? "" : "s") rejected this session — no reward, no mint-log entry.</p>
+            }
+
+            @if (_mintLog.Count == 0)
+            {
+                <p class="hint">No mints yet — approve a pending submission on the Verify card to see one land here.</p>
+            }
+            else
+            {
+                <div class="cr-log">
+                    <div class="log-head">mint log <span class="log-sub">newest first · every id is a simulated tx, not a real chain hash</span></div>
+                    <div class="log-body">
+                        @foreach (var m in _mintLog)
+                        {
+                            <div class="log-line">@m.Timestamp.ToString("HH:mm:ss")  <span class="tag ok">@m.TxId</span>  +@m.Reward RCYT  @m.ItemType — @Truncate(m.Description, 30) — @m.SubmitterName</div>
+                        }
+                    </div>
+                </div>
+            }
+        </section>
+    </div>
+
+    <div class="outro">
+        <p><strong>About this simulation.</strong> RecycleDAO's real contract gates minting with an on-chain
+            <code>onlyRole(MINTER_ROLE)</code> check — only a designated verifier address can call
+            <code>RecycleToken.mint()</code>; a submitter has no path to mint tokens themselves. This demo has no
+            wallets and no live chain, so it enforces the same shape a different way: the Verify card's Approve
+            action is the only code path in this page that can append to the mint log or change the balance, and
+            once a submission is decided its Approve/Reject controls are removed from the UI for good — there is
+            no way to trigger a second decision on it. Reload this page at any time to reset the session to zero.</p>
+    </div>
+</div>
+
+@code {
+    // Fixed, transparent reward schedule (RCYT per verified submission) — a simple demo convenience, not a
+    // market-priced or weight-based calculation. Shown to the visitor before they submit.
+    static readonly Dictionary<string, int> Tiers = new()
+    {
+        ["Paper / Cardboard"] = 3,
+        ["Plastic"] = 5,
+        ["Glass"] = 5,
+        ["Metal / Aluminum"] = 8,
+        ["Electronics / E-waste"] = 15,
+    };
+
+    class Submission
+    {
+        public int Id;
+        public string ItemType = "";
+        public string Description = "";
+        public string SubmitterName = "";
+        public DateTime SubmittedAt;
+        public string Status = "Pending"; // Pending | Verified | Rejected
+    }
+
+    class MintEntry
+    {
+        public string TxId = "";
+        public DateTime Timestamp;
+        public string ItemType = "";
+        public string Description = "";
+        public string SubmitterName = "";
+        public int Reward;
+    }
+
+    // Submit-card form state — this is the whole surface the Submit card can touch. None of it reaches
+    // _mintLog or _balance, directly or indirectly.
+    string _formItemType = Tiers.Keys.First();
+    string _formDescription = "";
+    string _formSubmitterName = "";
+    string? _submitError;
+    string? _submitConfirmation;
+
+    int _nextId = 1;
+    readonly List<Submission> _pending = new();          // actionable queue — Verify card renders exactly this list
+    readonly List<Submission> _history = new();           // decided (Verified or Rejected), read-only, newest first
+    int _rejectedCount;
+
+    // Reward-card state. _balance and _mintLog are written from exactly one place: ApproveSubmission below.
+    int _balance;
+    int _mintCounter;
+    readonly List<MintEntry> _mintLog = new();             // newest first
+
+    void SubmitItem()
+    {
+        _submitConfirmation = null;
+        var desc = (_formDescription ?? "").Trim();
+        var name = (_formSubmitterName ?? "").Trim();
+
+        if (string.IsNullOrEmpty(_formItemType) || !Tiers.ContainsKey(_formItemType))
+        {
+            _submitError = "Pick an item type."; return;
+        }
+        if (desc.Length < 3 || desc.Length > 200)
+        {
+            _submitError = "Description must be 3-200 characters."; return;
+        }
+        if (string.IsNullOrEmpty(name) || name.Length > 60)
+        {
+            _submitError = "Enter a display name (not a wallet address)."; return;
+        }
+
+        var sub = new Submission
+        {
+            Id = _nextId++,
+            ItemType = _formItemType,
+            Description = desc,
+            SubmitterName = name,
+            SubmittedAt = DateTime.Now,
+            Status = "Pending",
+        };
+        _pending.Add(sub); // Pending only — this method never touches _balance or _mintLog.
+
+        _submitError = null;
+        _submitConfirmation = $"Submitted — “{Truncate(desc, 40)}” by {name} is awaiting review.";
+        _formDescription = "";
+        _formSubmitterName = "";
+        _formItemType = Tiers.Keys.First();
+    }
+
+    // The ONE handler in this page that can increase the balance or append to the mint log. No other method
+    // touches _balance or _mintLog — that is the whole enforcement of "submit alone never mints."
+    void ApproveSubmission(int id)
+    {
+        var sub = _pending.FirstOrDefault(s => s.Id == id);
+        if (sub is null) return; // already decided (or never existed) — structurally cannot double-mint
+        _pending.Remove(sub);    // gone from the actionable queue immediately: its buttons stop existing, not just disabled
+
+        sub.Status = "Verified";
+        int reward = Tiers[sub.ItemType];
+
+        _mintCounter++;
+        _mintLog.Insert(0, new MintEntry
+        {
+            TxId = $"SIM-{_mintCounter:D4}", // clearly-labeled fake id — never a real tx hash
+            Timestamp = DateTime.Now,
+            ItemType = sub.ItemType,
+            Description = sub.Description,
+            SubmitterName = sub.SubmitterName,
+            Reward = reward,
+        });
+        _balance += reward;
+
+        _history.Insert(0, sub);
+    }
+
+    void RejectSubmission(int id)
+    {
+        var sub = _pending.FirstOrDefault(s => s.Id == id);
+        if (sub is null) return; // already decided — nothing to do
+        _pending.Remove(sub);
+
+        sub.Status = "Rejected";
+        _rejectedCount++;
+        _history.Insert(0, sub);
+        // Deliberately no touch to _balance or _mintLog here.
+    }
+
+    static string Truncate(string s, int n) => s.Length <= n ? s : s.Substring(0, n - 1) + "…";
+}
