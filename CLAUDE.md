@@ -9,7 +9,7 @@ content to the owner instead. You never commit/push (coordinator commits, user p
 ## Site map (what exists, 2026-08-26)
 
 Root static pages (`site/*.html`), all built on the shared design system:
-- `index.html` — landing page: company pitch, tool gallery (Analyst/Creature), then the full
+- `index.html` — landing page: company pitch, tool gallery (Analyst/Creature/Forecaster), then the full
   package gallery in 4 categories (Foundation / Data / Machine learning / Spatial & games), then
   a "how it fits together" flow diagram.
 - `holodb/index.html` — HoloDb HUB page (lean bespoke nav: Home / Benchmarks / Docs / Packages /
@@ -165,16 +165,20 @@ check the nav is compact on a narrow (≤640px) viewport — that was the failin
 got re-litigated. Do this walk any time the nav, page set, or card grid changes; record it in the
 task's return message. An href-audit alone is not this check (that was the 2026-08-26 mistake).
 
-**SEO/nav facts still true**: `sitemap.xml` lists all 16 pages + the 2 live tool routes + `/tools/`.
+**SEO/nav facts still true**: `sitemap.xml` lists all 16 pages + the 3 live tool routes + `/tools/`.
 Every page's `footer.site` carries a second internal-link path beyond the top nav. JSON-LD on every
 page (`Organization`+`WebSite` on the index, `SoftwareApplication` on all 11 package pages,
 `TechArticle` on the 3 explainer pages). Forward cross-links exist base→extension
 (`algformer.html`→`algformer-gpu.html`, `evalapp.html`→`evalapp-neural.html`) as well as
 extension→base. `site/assets/nav.js` is a retired stub (was the mega-menu's outside-click-close
 helper, nothing references it now — safe to delete outright, kept only so no stray reference 404s).
-**Flagged, not fixed (Blazor app internals, not `site/` presentation)**: `Showroom/Home.razor` may
-still tag The Creature `soon` while `site/index.html` links it `live` at `/tools/creature` — re-check
-before the next deploy; whoever owns `Showroom/` should reconcile it.
+**2026-08-26 housekeeping pass**: showroom-owner shipped a third tool, The Forecaster
+(`/tools/forecaster`, AlgFormer/HoloFormer on a real hourly AAPL tape) — found it live in
+`Showroom/Home.razor` but MISSING from `index.html`'s `#tools` gallery and `sitemap.xml`; added
+both (card mirrors Analyst's shape with a `.ver` package-tag pill, `--c-ml` accent matching
+Creature/AlgFormer's category colour) and re-ran the reachability walk (still 1 click from Home).
+The earlier flag about `Home.razor` tagging Creature `soon` vs the site's `live` was checked by
+showroom-owner this pass and is stale/not reproduced (both tools show `live` there).
 
 ## Deploy
 
