@@ -1,294 +1,1675 @@
 @page "/recycledao-demo"
 
-<PageTitle>RecycleDAO — mechanics demo (simulation)</PageTitle>
+<PageTitle>RecycleDAO — marketplace prototype (simulation)</PageTitle>
 <HeadContent>
     <meta name="robots" content="noindex,nofollow" />
 </HeadContent>
 
 <div class="room">
 
-    <!-- Decorative app shell — shows the SHAPE of a real product's chrome so the flow below reads
-         as screens of an app, not a bare set of demo cards. Every item in this bar is a disabled
-         <button> (not a link): no href to click, cursor:not-allowed, a tooltip on hover, and the
-         honesty callout below spells it out too. Nothing here can ever navigate anywhere. -->
-    <nav class="app-topnav" aria-label="Illustrative product navigation — not functional in this demo">
-        <div class="app-brand"><span class="brand-mark" aria-hidden="true">♻</span> RecycleDAO</div>
-        <ul class="app-menu">
-            <li><button type="button" class="app-menu-item" disabled title="Illustrative only — not part of this demo">Dashboard</button></li>
-            <li><button type="button" class="app-menu-item" disabled title="Illustrative only — not part of this demo">Submissions</button></li>
-            <li><button type="button" class="app-menu-item" disabled title="Illustrative only — not part of this demo">Rewards</button></li>
-            <li><button type="button" class="app-menu-item" disabled title="Illustrative only — not part of this demo">Wallet</button></li>
-        </ul>
-        <span class="app-topnav-tag">mockup nav</span>
-    </nav>
-
     <header class="room-head">
-        <nav class="crumb"><a href="/">Evaluated Applications</a> <span>/</span> RecycleDAO — mechanics demo</nav>
-        <h1>RecycleDAO — mechanics demo</h1>
-        <p class="lede">A private, share-by-link preview of RecycleDAO's core loop: submit a recycling activity,
-            have a verifier approve or reject it, watch an approved submission mint a reward token. The three
-            steps below — Submit → Verify → Reward — behave like three pages of one app: finishing an action on
-            one page carries you to the next, or jump between them yourself with the numbered tabs. Find any item
-            again afterwards in the running "All submissions" list further down, which shows every item's whole
-            lifecycle at a glance.</p>
+        <nav class="crumb"><a href="/">Evaluated Applications</a> <span>/</span> RecycleDAO — marketplace prototype</nav>
+        <h1>RecycleDAO — marketplace prototype</h1>
+        <p class="lede">A private, share-by-link preview of RecycleDAO as a working product: a browsable
+            classifieds-style marketplace for material rescued from the waste stream, running on the RCYT reward
+            token. Recycling activity you submit is reviewed by a verifier and mints RCYT; RCYT is what you spend
+            to claim someone else's listing. Everything below is one live, interlinked simulation running in this
+            browser tab — browse, filter, open a listing, claim it, post your own, review the moderation queue,
+            watch the wallet ledger move.</p>
         <div class="badges">
-            <span>Browser-only simulation</span><span>No wallet · no live chain</span><span>Resets on reload</span>
+            <span>Browser-only simulation</span><span>No wallet · no live chain</span><span>Sample marketplace data</span><span>Resets on reload</span>
         </div>
     </header>
+
+    <div class="testnet" role="note">
+        <strong>Testnet only — no real money, ever.</strong>
+        <span>RecycleDAO's real contracts are deployed to a public <em>test</em> network only. RCYT is a test token
+            with <strong>no monetary value</strong>: it cannot be bought, sold, or exchanged for money, and this
+            prototype contains no payment, top-up, or cash-out path of any kind. Every price, balance and
+            transaction on this page is simulated in your browser.</span>
+    </div>
 
     <div class="dao-honesty">
         <strong>What this is (and isn't)</strong>
         <ul>
-            <li>This is a self-contained browser simulation — no live blockchain, no wallet, no real tokens.</li>
-            <li>It mirrors the real rules already built and tested in this project: only a verifier's approval
-                can mint (never the submitter alone), and each submission is decided once.</li>
+            <li>A self-contained browser simulation — no live blockchain, no wallet connection, no real tokens.</li>
+            <li>It mirrors the rules already built and tested in this project: only a verifier's approval can mint
+                RCYT (never a submitter alone), and each submission is decided exactly once.</li>
             <li>"Verification" here (and in the real system) is a manual human review step — this project does not
                 claim to have solved real-world recycling fraud detection.</li>
-            <li>Reward amounts are a simple, fixed demo schedule (shown below), not a market-priced calculation.</li>
-            <li>The top navigation bar above (Dashboard / Submissions / Rewards / Wallet) is illustrative product
-                chrome only — every item there is disabled and does nothing. The real navigation between Submit,
-                Verify and Reward below is driven entirely by your own actions (submitting, approving, rejecting)
-                or by clicking the numbered step tabs — never by that bar.</li>
+            <li>Reward amounts are a simple, fixed demo schedule (the reward-rate table), not a market-priced
+                calculation. Marketplace prices are asking prices set by whoever posted the listing.</li>
+            <li>The other participants, their listings, messages and reviews are <strong>seeded sample data</strong>
+                so the marketplace isn't empty on first load. You are the only real user here; anything a
+                "counterparty" does is either seeded or triggered by a clearly-labelled demo control.</li>
+            <li>The header, search box, category bar, filters and every card below are <strong>live</strong> — they
+                really drive this prototype. Only the small greyed items tagged <em>mockup</em> (the top utility
+                strip and the footer link columns) are inert dressing that shows the shape of a finished product.</li>
+            <li>There are no referral, invite, or share-to-earn mechanics anywhere in this prototype, by design.</li>
         </ul>
         <p class="hint">All state lives in this browser tab for this session only. Reload the page and everything
-            resets to empty and zero — that's expected, not a bug.</p>
+            resets to the seeded starting point — that's expected, not a bug.</p>
     </div>
 
-    <div class="dao-stats">
-        <div class="stat"><div class="stat-n">@_allSubmissions.Count</div><div class="stat-l">Total submissions</div></div>
-        <div class="stat"><div class="stat-n">@_pending.Count</div><div class="stat-l">Pending review</div></div>
-        <div class="stat"><div class="stat-n">@_verifiedCount</div><div class="stat-l">Approved</div></div>
-        <div class="stat"><div class="stat-n">@_rejectedCount</div><div class="stat-l">Rejected</div></div>
-        <div class="stat accent"><div class="stat-n">@_balance</div><div class="stat-l">RCYT balance</div></div>
-    </div>
+    <!-- ===================== THE PRODUCT MOCKUP STARTS HERE ===================== -->
+    <div class="mk-shell">
 
-    <!-- Functional page tabs — this IS the real navigation. Clicking a tab, or finishing an action
-         on the current page (submit / approve / reject), is what actually changes which page below
-         is shown. Unlike the app-topnav above, every control here is live. -->
-    <div class="dao-pagenav" role="tablist" aria-label="Demo flow — Submit, Verify, Reward">
-        <button type="button" role="tab" aria-selected="@(_focus == Stage.Submit ? "true" : "false")"
-                class="pt @(_focus == Stage.Submit ? "active" : "")" @onclick="() => _focus = Stage.Submit">
-            <span class="step-badge">1</span>
-            <span class="pt-label">Submit<small>add an item</small></span>
-        </button>
-        <span class="pt-sep" aria-hidden="true">→</span>
-        <button type="button" role="tab" aria-selected="@(_focus == Stage.Verify ? "true" : "false")"
-                class="pt @(_focus == Stage.Verify ? "active" : "")" @onclick="() => _focus = Stage.Verify">
-            <span class="step-badge">2</span>
-            <span class="pt-label">Verify<small>@_pending.Count pending</small></span>
-        </button>
-        <span class="pt-sep" aria-hidden="true">→</span>
-        <button type="button" role="tab" aria-selected="@(_focus == Stage.Reward ? "true" : "false")"
-                class="pt @(_focus == Stage.Reward ? "active" : "")" @onclick="() => _focus = Stage.Reward">
-            <span class="step-badge">3</span>
-            <span class="pt-label">Reward<small>@_mintLog.Count minted</small></span>
-        </button>
-    </div>
-
-    <div class="dao-tiers-strip">
-        <div class="tiers-strip-head">What's available <span class="hint">— reward per item type if a verifier approves it</span></div>
-        <div class="tier-chips">
-            @foreach (var kv in Tiers)
-            {
-                <span class="tier-chip">@kv.Key <b>@kv.Value RCYT</b></span>
-            }
+        <!-- Inert utility strip: the ONLY decorative chrome left in the shell's top half. Every item is a
+             disabled <button> (no href, cursor:not-allowed, tooltip). Tagged "mockup" so it reads honestly. -->
+        <div class="mk-util" aria-label="Illustrative utility strip — not functional in this prototype">
+            <span class="mk-util-hi">Hi, @You.Name!</span>
+            <button type="button" disabled title="Illustrative only — not part of this prototype">Daily deals</button>
+            <button type="button" disabled title="Illustrative only — not part of this prototype">Collection points</button>
+            <button type="button" disabled title="Illustrative only — not part of this prototype">Ship to: United Kingdom</button>
+            <button type="button" disabled title="Illustrative only — not part of this prototype">Sign out</button>
+            <span class="mk-tag">mockup</span>
         </div>
-    </div>
 
-    <section class="app-page">
-        @if (_focus == Stage.Submit)
-        {
-            <div class="app-page-head">
-                <span class="app-route" title="Illustrative only — this demo is a single page">app.recycledao.xyz › submissions › new</span>
-                <h2><span class="step-badge">1</span> Submit</h2>
-                <p class="card-sub">Log a recycling activity for review. Submitting alone can never mint a reward —
-                    only an Approve decision on the Verify page can do that.</p>
+        <!-- Functional header: brand, search, account actions. All live. -->
+        <header class="mk-head">
+            <button type="button" class="mk-brand" @onclick="GoHome" title="Back to the marketplace home">
+                <span class="brand-mark" aria-hidden="true">♻</span> RecycleDAO <small>market</small>
+            </button>
+
+            <div class="mk-search">
+                <input placeholder="Search listings — try &quot;glass&quot;, &quot;laptop&quot;, &quot;pallet&quot;"
+                       @bind="_qDraft" aria-label="Search listings" />
+                <select value="@_fCat" @onchange="SetCat" aria-label="Search within category">
+                    <option value="">All categories</option>
+                    @foreach (var c in Cats) { <option value="@c.Name">@c.Name</option> }
+                </select>
+                <button type="button" class="go small" @onclick="RunSearch">Search</button>
             </div>
 
-            <div class="app-panel">
-                <table class="tier-table">
-                    <thead><tr><th>Item type</th><th>Reward if approved</th></tr></thead>
-                    <tbody>
-                        @foreach (var kv in Tiers)
-                        {
-                            <tr><td>@kv.Key</td><td>@kv.Value RCYT</td></tr>
-                        }
-                    </tbody>
-                </table>
+            <div class="mk-actions">
+                <button type="button" class="mk-act" @onclick="() => Go(Screen.Watchlist)" title="Watchlist">
+                    <span class="mk-act-i">♡</span><span class="mk-act-l">Watch</span>
+                    @if (_watch.Count > 0) { <span class="pip">@_watch.Count</span> }
+                </button>
+                <button type="button" class="mk-act" @onclick="() => Go(Screen.Messages)" title="Messages">
+                    <span class="mk-act-i">✉</span><span class="mk-act-l">Inbox</span>
+                    @if (UnreadMsgs > 0) { <span class="pip">@UnreadMsgs</span> }
+                </button>
+                <button type="button" class="mk-act" @onclick="() => Go(Screen.Notifications)" title="Notifications">
+                    <span class="mk-act-i">◔</span><span class="mk-act-l">Alerts</span>
+                    @if (UnreadNotifs > 0) { <span class="pip">@UnreadNotifs</span> }
+                </button>
+                <button type="button" class="mk-bal" @onclick="() => Go(Screen.Wallet)" title="Open your wallet">
+                    <b>@_balance</b> RCYT
+                    @if (_escrow > 0) { <small>+@_escrow held</small> }
+                </button>
+                <button type="button" class="mk-act" @onclick="() => Go(Screen.Dashboard)" title="Your dashboard">
+                    <span class="mk-avatar">@Initials(You.Name)</span><span class="mk-act-l">You</span>
+                </button>
+                <button type="button" class="go small mk-sell" @onclick="StartNewListing">+ Post a listing</button>
+            </div>
+        </header>
 
-                <div class="dao-form">
-                    <label>Item type
-                        <select @bind="_formItemType">
-                            @foreach (var kv in Tiers)
-                            {
-                                <option value="@kv.Key">@kv.Key — @kv.Value RCYT</option>
-                            }
-                        </select>
-                    </label>
-                    <label>Description
-                        <textarea @bind="_formDescription" maxlength="200"
-                                  placeholder="What did you recycle? (3-200 characters)"></textarea>
-                    </label>
-                    <label>Submitter name / ID
-                        <input @bind="_formSubmitterName" maxlength="60" placeholder="e.g. Alex, or Demo-User-1" />
-                    </label>
-                    <p class="hint">A display label only — <strong>not</strong> a wallet address. The real system would
-                        use a wallet address here; this demo has no wallets.</p>
+        <!-- Functional category bar -->
+        <nav class="mk-cats" aria-label="Browse by category">
+            <button type="button" class="mk-cat @(_fCat.Length == 0 && Cur == Screen.Browse ? "on" : "")" @onclick="GoHome">All</button>
+            @foreach (var c in Cats)
+            {
+                <button type="button" class="mk-cat @(_fCat == c.Name ? "on" : "")" @onclick="() => BrowseCat(c.Name)">
+                    <span aria-hidden="true">@c.Glyph</span> @c.Name
+                </button>
+            }
+            <span class="mk-cat-sep" aria-hidden="true"></span>
+            <button type="button" class="mk-cat" @onclick="() => Go(Screen.Recycle)">♻ Recycle &amp; earn</button>
+            <button type="button" class="mk-cat" @onclick="() => Go(Screen.Admin)">⚑ Verifier queue @(PendingCount > 0 ? $"({PendingCount})" : "")</button>
+            <button type="button" class="mk-cat" @onclick="() => Go(Screen.Impact)">↑ Impact</button>
+            <button type="button" class="mk-cat" @onclick="() => Go(Screen.Help)">? How it works</button>
+        </nav>
 
-                    @if (_submitError is not null) { <p class="err">@_submitError</p> }
+        <section class="app-page">
 
-                    <button class="go" @onclick="SubmitItem" type="button">Submit for review</button>
+            @if (_back.Count > 0)
+            {
+                <button type="button" class="mk-back" @onclick="Back">← Back</button>
+            }
+            <span class="app-route" title="Illustrative address bar — this prototype is a single page">@RouteChip()</span>
+
+            @if (_flash is not null) { <p class="ok-msg banner">@_flash</p> }
+            @if (_err is not null) { <p class="err banner-bad">@_err</p> }
+
+            @* ============================ BROWSE / SEARCH RESULTS ============================ *@
+            @if (Cur == Screen.Browse)
+            {
+                var items = Filtered().ToList();
+                var pages = Math.Max(1, (int)Math.Ceiling(items.Count / (double)PerPage));
+                if (_page > pages) { _page = pages; }
+                var shown = items.Skip((_page - 1) * PerPage).Take(PerPage).ToList();
+
+                <div class="app-page-head">
+                    <h2>@(string.IsNullOrEmpty(_q) ? (string.IsNullOrEmpty(_fCat) ? "All listings" : _fCat) : $"Results for “{_q}”")</h2>
+                    <p class="card-sub">@items.Count listing@(items.Count == 1 ? "" : "s") available to claim with RCYT.
+                        Material rescued from the waste stream, listed by other participants for collection.</p>
                 </div>
-            </div>
-        }
-        else if (_focus == Stage.Verify)
-        {
-            <div class="app-page-head">
-                <span class="app-route" title="Illustrative only — this demo is a single page">app.recycledao.xyz › submissions › review</span>
-                <h2><span class="step-badge">2</span> Verify</h2>
-                <p class="card-sub">Verifier action — mirrors the <code>MINTER_ROLE</code>-gated step in the real
-                    contract. Approve/Reject here is the <strong>only</strong> action anywhere in this demo that can
-                    ever mint a token.</p>
-            </div>
 
-            <div class="app-panel">
-                @if (_submitConfirmation is not null)
+                @if (ActiveFilterChips().Any())
                 {
-                    <p class="ok-msg banner">@_submitConfirmation</p>
-                }
-
-                @if (_pending.Count == 0)
-                {
-                    <p class="hint">No submissions pending review. Switch to the Submit page to add one.</p>
-                }
-                else
-                {
-                    <div class="dao-queue">
-                        @foreach (var s in _pending)
+                    <div class="chips">
+                        <span class="chips-l">Filters:</span>
+                        @foreach (var (label, clear) in ActiveFilterChips())
                         {
-                            <div class="dao-row">
-                                <div class="row-main">
-                                    <div class="row-top"><strong>@s.ItemType</strong><span class="row-when">@s.SubmittedAt.ToString("HH:mm:ss")</span></div>
-                                    <div class="row-desc">@s.Description</div>
-                                    <div class="row-sub">by @s.SubmitterName · preview reward if approved: <strong>@Tiers[s.ItemType] RCYT</strong></div>
-                                </div>
-                                <div class="row-actions">
-                                    <button class="go small" @onclick="() => ApproveSubmission(s.Id)" type="button">Approve</button>
-                                    <button class="ghost small" @onclick="() => RejectSubmission(s.Id)" type="button">Reject</button>
-                                </div>
+                            <button type="button" class="chip on" @onclick="clear">@label <span aria-hidden="true">×</span></button>
+                        }
+                        <button type="button" class="chip" @onclick="ClearFilters">Clear all</button>
+                        <button type="button" class="chip" @onclick="SaveSearch">☆ Save this search</button>
+                    </div>
+                }
+
+                <div class="mk-body">
+                    <aside class="mk-filters">
+                        <div class="flt">
+                            <h3>Category</h3>
+                            <select value="@_fCat" @onchange="SetCat">
+                                <option value="">Any</option>
+                                @foreach (var c in Cats) { <option value="@c.Name">@c.Name (@CountIn(c.Name))</option> }
+                            </select>
+                        </div>
+                        <div class="flt">
+                            <h3>Listing type</h3>
+                            <select value="@_fKind" @onchange="SetKind">
+                                <option value="">Any</option>
+                                <option value="Offer">Available to claim</option>
+                                <option value="Wanted">Wanted by someone</option>
+                            </select>
+                        </div>
+                        <div class="flt">
+                            <h3>Condition</h3>
+                            <select value="@_fCond" @onchange="SetCond">
+                                <option value="">Any</option>
+                                @foreach (var c in Conditions) { <option value="@c">@c</option> }
+                            </select>
+                        </div>
+                        <div class="flt">
+                            <h3>Location</h3>
+                            <select value="@_fLoc" @onchange="SetLoc">
+                                <option value="">Anywhere</option>
+                                @foreach (var l in Locations) { <option value="@l">@l</option> }
+                            </select>
+                        </div>
+                        <div class="flt">
+                            <h3>Max price (RCYT)</h3>
+                            <input type="number" min="0" placeholder="no limit" value="@_fMaxText" @onchange="SetMax" />
+                            <label class="cbx"><input type="checkbox" checked="@_fFree" @onchange="ToggleFree" /> Free to collect only</label>
+                            <label class="cbx"><input type="checkbox" checked="@_fAfford" @onchange="ToggleAfford" /> Within my balance (@_balance RCYT)</label>
+                        </div>
+                        <div class="flt">
+                            <h3>Your balance</h3>
+                            <p class="hint">@_balance RCYT spendable@(_escrow > 0 ? $", {_escrow} held in escrow" : "").
+                                <button type="button" class="linky" @onclick="() => Go(Screen.Recycle)">Earn more →</button></p>
+                        </div>
+                    </aside>
+
+                    <div class="mk-main">
+                        <div class="sortbar">
+                            <label>Sort
+                                <select value="@_sort" @onchange="SetSort">
+                                    <option value="new">Newest first</option>
+                                    <option value="lo">Price: low to high</option>
+                                    <option value="hi">Price: high to low</option>
+                                    <option value="watch">Most watched</option>
+                                </select>
+                            </label>
+                            <div class="viewtog">
+                                <button type="button" class="@(_view == "grid" ? "on" : "")" @onclick='() => _view = "grid"'>▦ Grid</button>
+                                <button type="button" class="@(_view == "list" ? "on" : "")" @onclick='() => _view = "list"'>☰ List</button>
+                            </div>
+                        </div>
+
+                        @if (shown.Count == 0)
+                        {
+                            <div class="empty">
+                                <p><strong>Nothing matches those filters.</strong></p>
+                                <p class="hint">Try clearing a filter, or
+                                    <button type="button" class="linky" @onclick="ClearFilters">reset the search</button>.</p>
+                            </div>
+                        }
+                        else if (_view == "grid")
+                        {
+                            <div class="lgrid">
+                                @foreach (var l in shown) { @ListingCard(l) }
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="llist">
+                                @foreach (var l in shown) { @ListingRow(l) }
+                            </div>
+                        }
+
+                        @if (pages > 1)
+                        {
+                            <div class="pager">
+                                <button type="button" class="chip" disabled="@(_page == 1)" @onclick="() => _page--">← Prev</button>
+                                @for (var p = 1; p <= pages; p++)
+                                {
+                                    var pp = p;
+                                    <button type="button" class="chip @(_page == pp ? "on" : "")" @onclick="() => _page = pp">@pp</button>
+                                }
+                                <button type="button" class="chip" disabled="@(_page == pages)" @onclick="() => _page++">Next →</button>
                             </div>
                         }
                     </div>
-                }
-
-                @if (_history.Count > 0)
-                {
-                    <div class="dao-history">
-                        <div class="log-head">recently decided <span class="log-sub">read-only · no further action · newest first · click a row to find it in the full list below</span></div>
-                        <div class="log-body">
-                            @foreach (var s in _history)
-                            {
-                                <a href="#sub-@s.Id" class="log-line log-line-link" @onclick="() => _selectedId = s.Id"><span class="tag @(s.Status == "Verified" ? "ok" : "bad")">@s.Status</span> #@s.Id @s.ItemType — @Truncate(s.Description, 40) — @s.SubmitterName</a>
-                            }
-                        </div>
-                    </div>
-                }
-            </div>
-        }
-        else
-        {
-            <div class="app-page-head">
-                <span class="app-route" title="Illustrative only — this demo is a single page">app.recycledao.xyz › wallet › activity</span>
-                <h2><span class="step-badge">3</span> Reward</h2>
-                <p class="card-sub">The balance and mint log below only ever change from one place: an Approve
-                    decision on the Verify page. Nothing else in this demo can touch them.</p>
-            </div>
-
-            <div class="app-panel">
-                <div class="dao-balance">
-                    <div class="n">@_balance</div>
-                    <div class="l">RCYT balance (this session)</div>
                 </div>
-                @if (_rejectedCount > 0)
-                {
-                    <p class="hint">@_rejectedCount submission@(_rejectedCount == 1 ? "" : "s") rejected this session — no reward, no mint-log entry.</p>
-                }
+            }
 
-                @if (_mintLog.Count == 0)
+            @* ============================ CATEGORIES INDEX ============================ *@
+            else if (Cur == Screen.Categories)
+            {
+                <div class="app-page-head">
+                    <h2>Browse by category</h2>
+                    <p class="card-sub">Every material stream carried on the marketplace. Reward rates (what a
+                        verified recycling submission mints) apply to the first five only — the rest are
+                        reuse/repair categories that trade for RCYT but don't mint it.</p>
+                </div>
+                <div class="catgrid">
+                    @foreach (var c in Cats)
+                    {
+                        <button type="button" class="cattile" style="--tile:@c.Color" @onclick="() => BrowseCat(c.Name)">
+                            <span class="cattile-g" aria-hidden="true">@c.Glyph</span>
+                            <span class="cattile-n">@c.Name</span>
+                            <span class="cattile-c">@CountIn(c.Name) listing@(CountIn(c.Name) == 1 ? "" : "s")</span>
+                            <span class="cattile-r">@(Tiers.ContainsKey(c.Name) ? $"mints {Tiers[c.Name]} RCYT / verified submission" : "reuse category — no mint rate")</span>
+                        </button>
+                    }
+                </div>
+            }
+
+            @* ============================ LISTING DETAIL ============================ *@
+            else if (Cur == Screen.Listing)
+            {
+                var l = L(Arg);
+                if (l is null)
                 {
-                    <p class="hint">No mints yet — approve a pending submission on the Verify page to see one land here.</p>
+                    <div class="empty"><p><strong>That listing no longer exists.</strong></p>
+                        <p class="hint"><button type="button" class="linky" @onclick="GoHome">Back to the marketplace →</button></p></div>
                 }
                 else
                 {
-                    <div class="cr-log">
-                        <div class="log-head">mint log <span class="log-sub">newest first · every id is a simulated tx, not a real chain hash · click a row to jump to the submission it came from</span></div>
-                        <div class="log-body">
-                            @foreach (var m in _mintLog)
+                    var seller = P(l.SellerId);
+                    var cat = CatOf(l.Cat);
+                    <div class="det-crumb">
+                        <button type="button" class="linky" @onclick="GoHome">All listings</button> ›
+                        <button type="button" class="linky" @onclick="() => BrowseCat(l.Cat)">@l.Cat</button> ›
+                        <span>@Truncate(l.Title, 42)</span>
+                    </div>
+
+                    <div class="det">
+                        <div class="gal">
+                            <div class="gal-main" style="--tile:@cat.Color">
+                                <span class="gal-g" aria-hidden="true">@(l.Glyph ?? cat.Glyph)</span>
+                                <span class="gal-note">illustrative placeholder — this prototype has no photo upload</span>
+                            </div>
+                            <div class="gal-thumbs">
+                                @for (var i = 0; i < 4; i++)
+                                {
+                                    <span class="gal-th" style="--tile:@cat.Color" aria-hidden="true">@(l.Glyph ?? cat.Glyph)</span>
+                                }
+                            </div>
+                        </div>
+
+                        <div class="det-info">
+                            <div class="det-badges">
+                                <span class="tag @(l.Kind == "Wanted" ? "want" : "ok")">@(l.Kind == "Wanted" ? "Wanted" : "Available")</span>
+                                <span class="tag pending">@l.Condition</span>
+                                @if (l.Status != "Active") { <span class="tag bad">@l.Status</span> }
+                            </div>
+                            <h2 class="det-title">@l.Title</h2>
+                            <div class="det-price">
+                                @if (l.Price == 0)
+                                {
+                                    <b>Free to collect</b>
+                                }
+                                else
+                                {
+                                    <b>@l.Price RCYT</b>
+                                }
+                                <small>@(l.Kind == "Wanted" ? "offered by the requester" : "asking price, set by the seller")
+                                    · test tokens, no monetary value</small>
+                            </div>
+                            <ul class="det-facts">
+                                <li><span>Category</span><b>@l.Cat</b></li>
+                                <li><span>Quantity</span><b>@l.Qty</b></li>
+                                <li><span>Location</span><b>@l.Location</b></li>
+                                <li><span>Collection</span><b>@l.Collection</b></li>
+                                <li><span>Posted</span><b>@Ago(l.PostedAt)</b></li>
+                                <li><span>Watching</span><b>@l.Watchers</b></li>
+                            </ul>
+
+                            @if (l.SellerId == 0)
                             {
-                                <a href="#sub-@m.SubmissionId" class="log-line log-line-link" @onclick="() => _selectedId = m.SubmissionId">@m.Timestamp.ToString("HH:mm:ss")  <span class="tag ok">@m.TxId</span>  +@m.Reward RCYT  @m.ItemType — @Truncate(m.Description, 30) — @m.SubmitterName</a>
+                                <div class="det-cta">
+                                    <p class="hint">This is your own listing — you can't claim it yourself.</p>
+                                    <div class="btnrow">
+                                        <button type="button" class="go" @onclick="() => EditListing(l.Id)">Edit listing</button>
+                                        <button type="button" class="ghost" @onclick="() => Go(Screen.MyListings)">My listings</button>
+                                    </div>
+                                </div>
                             }
+                            else if (l.Status != "Active")
+                            {
+                                <div class="det-cta">
+                                    <p class="hint">This listing is @l.Status.ToLowerInvariant() and can no longer be claimed.</p>
+                                </div>
+                            }
+                            else if (l.Kind == "Wanted")
+                            {
+                                <div class="det-cta">
+                                    <p class="hint">This is a <strong>wanted</strong> ad — @seller.Name is looking for this and
+                                        is offering @l.Price RCYT. Message them to offer what you have; no RCYT moves until
+                                        they post a matching listing you can claim.</p>
+                                    <div class="btnrow">
+                                        <button type="button" class="go" @onclick="() => OpenThread(l.Id, l.SellerId)">Offer this item</button>
+                                        <button type="button" class="ghost" @onclick="() => ToggleWatch(l.Id)">@(_watch.Contains(l.Id) ? "♥ Watching" : "♡ Watch")</button>
+                                    </div>
+                                </div>
+                            }
+                            else
+                            {
+                                <div class="det-cta">
+                                    <div class="btnrow">
+                                        <button type="button" class="go" @onclick="() => StartCheckout(l.Id)">
+                                            @(l.Price == 0 ? "Claim — free to collect" : $"Claim for {l.Price} RCYT")
+                                        </button>
+                                        <button type="button" class="ghost" @onclick="() => ToggleWatch(l.Id)">@(_watch.Contains(l.Id) ? "♥ Watching" : "♡ Watch")</button>
+                                        <button type="button" class="ghost" @onclick="() => OpenThread(l.Id, l.SellerId)">Message @FirstName(seller.Name)</button>
+                                    </div>
+                                    @if (l.Price > _balance)
+                                    {
+                                        <p class="hint warn">You have @_balance RCYT — @(l.Price - _balance) short. RCYT can't be
+                                            bought; you earn it by having a recycling submission verified.
+                                            <button type="button" class="linky" @onclick="() => Go(Screen.Recycle)">Recycle &amp; earn →</button></p>
+                                    }
+                                </div>
+                            }
+
+                            <button type="button" class="sellerbox" @onclick="() => Go(Screen.Profile, seller.Id)">
+                                <span class="mk-avatar big">@Initials(seller.Name)</span>
+                                <span class="sb-main">
+                                    <b>@seller.Name</b> <span class="sb-handle">@seller.Handle</span>
+                                    <span class="sb-meta">@Rating(seller.Id).ToString("0.0") ★ · @ReviewCount(seller.Id) reviews · @seller.Location
+                                        · member since @seller.Since.Year</span>
+                                    <span class="sb-meta">@CountBySeller(seller.Id) active listing@(CountBySeller(seller.Id) == 1 ? "" : "s") · view profile →</span>
+                                </span>
+                            </button>
                         </div>
                     </div>
-                }
-            </div>
-        }
-    </section>
 
-    <section class="dao-allsub">
-        <div class="allsub-head">
-            <h2>All submissions <span class="log-sub">this session · @_allSubmissions.Count total · every item's whole lifecycle, one row each</span></h2>
-        </div>
-        @if (_allSubmissions.Count == 0)
-        {
-            <p class="hint">Nothing submitted yet — use the Submit page above to add the first one and it will
-                appear here, whichever way it's later decided.</p>
-        }
-        else
-        {
-            <div class="allsub-scroll">
-                <table class="allsub-table">
-                    <thead>
-                        <tr><th>#</th><th>Status</th><th>Item type</th><th>Description</th><th>Submitter</th><th>Reward</th><th>Tx id</th></tr>
-                    </thead>
-                    <tbody>
-                        @foreach (var s in _allSubmissions.OrderByDescending(x => x.Id))
+                    <div class="app-panel">
+                        <h3 class="pan-h">Description</h3>
+                        <p class="det-desc">@l.Description</p>
+
+                        <h3 class="pan-h">Item specifics</h3>
+                        <table class="tier-table spec">
+                            <tbody>
+                                @foreach (var (k, v) in l.Specifics)
+                                {
+                                    <tr><td>@k</td><td>@v</td></tr>
+                                }
+                            </tbody>
+                        </table>
+
+                        @if (l.FromSubmissionId is int sid && S(sid) is Submission ps)
                         {
-                            <tr id="sub-@s.Id" class="@(_selectedId == s.Id ? "selected" : "")" @onclick="() => _selectedId = s.Id">
-                                <td>@s.Id</td>
-                                <td><span class="tag @StatusClass(s.Status)">@s.Status</span></td>
-                                <td>@s.ItemType</td>
-                                <td>@Truncate(s.Description, 60)</td>
-                                <td>@s.SubmitterName</td>
-                                <td>@(s.Status == "Verified" ? $"+{Tiers[s.ItemType]} RCYT" : "—")</td>
-                                <td>@(s.MintTxId ?? "—")</td>
-                            </tr>
+                            <h3 class="pan-h">Provenance</h3>
+                            <p class="det-desc">Linked to verified recycling submission <b>#@ps.Id</b> —
+                                “@Truncate(ps.Description, 70)”, approved by a verifier and minted
+                                @ps.Reward RCYT to @P(ps.SubmitterId).Name. In the real system this is where a
+                                chain-of-custody record would hang; here it's a local link between two rows.</p>
                         }
-                    </tbody>
-                </table>
+
+                        <h3 class="pan-h">Something wrong with this listing?</h3>
+                        <div class="reportrow">
+                            <select @bind="_reportReason">
+                                <option>Miscategorised material</option>
+                                <option>Not actually recyclable / reusable</option>
+                                <option>Suspected duplicate submission</option>
+                                <option>Misleading description</option>
+                            </select>
+                            <button type="button" class="ghost small" @onclick="() => ReportListing(l.Id)">Report to a moderator</button>
+                        </div>
+                        <p class="hint">Reports land in the verifier/moderator queue on this same prototype — open
+                            <button type="button" class="linky" @onclick="() => Go(Screen.Admin)">the queue</button> to action your own report.</p>
+                    </div>
+
+                    var rel = Related(l).ToList();
+                    @if (rel.Count > 0)
+                    {
+                        <h3 class="strip-h">Similar listings in @l.Cat</h3>
+                        <div class="lgrid">
+                            @foreach (var r in rel) { @ListingCard(r) }
+                        </div>
+                    }
+                }
+            }
+
+            @* ============================ CHECKOUT ============================ *@
+            else if (Cur == Screen.Checkout)
+            {
+                var l = L(Arg);
+                if (l is null || l.Status != "Active")
+                {
+                    <div class="empty"><p><strong>That listing isn't available any more.</strong></p>
+                        <p class="hint"><button type="button" class="linky" @onclick="GoHome">Back to the marketplace →</button></p></div>
+                }
+                else
+                {
+                    var seller = P(l.SellerId);
+                    <div class="app-page-head">
+                        <h2>Claim this listing</h2>
+                        <p class="card-sub">Two steps: confirm how you'll collect it, then confirm the RCYT.
+                            Nothing here mints tokens — claiming <em>moves</em> RCYT you already hold.</p>
+                    </div>
+
+                    <div class="testnet slim">
+                        <strong>Simulated.</strong>
+                        <span>No payment is taken and no chain transaction is sent. RCYT is a valueless test token
+                            and there is no way to add funds with money in this prototype.</span>
+                    </div>
+
+                    <div class="cofl">
+                        <div class="app-panel">
+                            <h3 class="pan-h">1 · What you're claiming</h3>
+                            <div class="co-item">
+                                <span class="co-tile" style="--tile:@CatOf(l.Cat).Color" aria-hidden="true">@(l.Glyph ?? CatOf(l.Cat).Glyph)</span>
+                                <span class="co-main">
+                                    <b>@l.Title</b>
+                                    <span class="hint">@l.Cat · @l.Condition · @l.Qty · @l.Location</span>
+                                    <span class="hint">Listed by @seller.Name (@Rating(seller.Id).ToString("0.0") ★)</span>
+                                </span>
+                                <span class="co-price">@(l.Price == 0 ? "Free" : $"{l.Price} RCYT")</span>
+                            </div>
+
+                            <h3 class="pan-h">2 · How you'll collect it</h3>
+                            <div class="radios">
+                                @foreach (var m in CollectionMethods)
+                                {
+                                    var mm = m;
+                                    <label class="rad @(_coMethod == mm ? "on" : "")">
+                                        <input type="radio" name="method" checked="@(_coMethod == mm)" @onchange="() => _coMethod = mm" />
+                                        <span><b>@mm</b><small>@MethodBlurb(mm)</small></span>
+                                    </label>
+                                }
+                            </div>
+                            <label class="fld">Note for the seller (optional)
+                                <textarea maxlength="200" @bind="_coNote" placeholder="e.g. Could I collect Saturday morning?"></textarea>
+                            </label>
+                        </div>
+
+                        <aside class="co-side">
+                            <h3 class="pan-h">Summary</h3>
+                            <div class="co-line"><span>Item</span><b>@(l.Price == 0 ? "Free" : $"{l.Price} RCYT")</b></div>
+                            <div class="co-line"><span>Collection</span><b>0 RCYT</b></div>
+                            <div class="co-line total"><span>Total</span><b>@l.Price RCYT</b></div>
+                            <hr />
+                            <div class="co-line"><span>Balance now</span><b>@_balance RCYT</b></div>
+                            <div class="co-line"><span>After claiming</span><b class="@(l.Price > _balance ? "bad" : "")">@(_balance - l.Price) RCYT</b></div>
+                            <p class="hint">The RCYT is held in escrow when you claim, and released to the seller only
+                                when you confirm you've collected the item. Cancel before collection and it comes back.</p>
+                            @if (l.Price > _balance)
+                            {
+                                <p class="err">Not enough RCYT — you're @(l.Price - _balance) short. There is no way to buy
+                                    RCYT; approve one of your recycling submissions to mint more.</p>
+                                <button type="button" class="ghost" @onclick="() => Go(Screen.Recycle)">Recycle &amp; earn →</button>
+                            }
+                            else
+                            {
+                                <button type="button" class="go wide" @onclick="() => PlaceOrder(l.Id)">Confirm claim</button>
+                                <button type="button" class="ghost wide" @onclick="() => Go(Screen.Listing, l.Id)">Cancel</button>
+                            }
+                        </aside>
+                    </div>
+                }
+            }
+
+            @* ============================ ORDER PLACED ============================ *@
+            else if (Cur == Screen.OrderPlaced)
+            {
+                var o = O(Arg);
+                <div class="okpanel">
+                    <div class="ok-big" aria-hidden="true">✓</div>
+                    <h2>Claim confirmed</h2>
+                    @if (o is not null)
+                    {
+                        var l = L(o.ListingId);
+                        <p class="card-sub">Order <b>#@o.Id</b> — @(l?.Title ?? "listing") is reserved for you.
+                            @(o.Price == 0 ? "Nothing was charged (free to collect)." : $"{o.Price} RCYT moved from your balance into escrow.")</p>
+                        <div class="btnrow center">
+                            <button type="button" class="go" @onclick="() => Go(Screen.OrderDetail, o.Id)">View order</button>
+                            <button type="button" class="ghost" @onclick="() => OpenThread(o.ListingId, o.SellerId)">Message the seller</button>
+                            <button type="button" class="ghost" @onclick="GoHome">Keep browsing</button>
+                        </div>
+                        <p class="hint">Next: arrange collection, then confirm collection on the order page — that's what
+                            releases the escrowed RCYT to the seller.</p>
+                    }
+                </div>
+            }
+
+            @* ============================ ORDERS ============================ *@
+            else if (Cur == Screen.Orders)
+            {
+                <div class="app-page-head">
+                    <h2>Orders</h2>
+                    <p class="card-sub">Everything you've claimed, and everything of yours that's been claimed.</p>
+                </div>
+                <div class="app-panel">
+                    <h3 class="pan-h">Things you claimed (@_orders.Count(o => o.BuyerId == 0))</h3>
+                    @if (!_orders.Any(o => o.BuyerId == 0))
+                    {
+                        <p class="hint">Nothing yet — <button type="button" class="linky" @onclick="GoHome">browse the marketplace</button> and claim a listing.</p>
+                    }
+                    else
+                    {
+                        <div class="allsub-scroll">
+                            <table class="allsub-table">
+                                <thead><tr><th>#</th><th>Status</th><th>Item</th><th>Seller</th><th>RCYT</th><th>Placed</th></tr></thead>
+                                <tbody>
+                                    @foreach (var o in _orders.Where(o => o.BuyerId == 0).OrderByDescending(o => o.Id))
+                                    {
+                                        <tr @onclick="() => Go(Screen.OrderDetail, o.Id)">
+                                            <td>@o.Id</td>
+                                            <td><span class="tag @OrderClass(o.Status)">@o.Status</span></td>
+                                            <td>@Truncate(L(o.ListingId)?.Title ?? "—", 46)</td>
+                                            <td>@P(o.SellerId).Name</td>
+                                            <td>@(o.Price == 0 ? "Free" : $"-{o.Price}")</td>
+                                            <td>@Ago(o.PlacedAt)</td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    }
+
+                    <h3 class="pan-h">Your sales (@_orders.Count(o => o.SellerId == 0))</h3>
+                    @if (!_orders.Any(o => o.SellerId == 0))
+                    {
+                        <p class="hint">Nothing sold yet. Post a listing, then use the clearly-marked demo control on
+                            <button type="button" class="linky" @onclick="() => Go(Screen.MyListings)">My listings</button>
+                            to simulate a buyer claiming it (this prototype has no other real users).</p>
+                    }
+                    else
+                    {
+                        <div class="allsub-scroll">
+                            <table class="allsub-table">
+                                <thead><tr><th>#</th><th>Status</th><th>Item</th><th>Buyer</th><th>RCYT</th><th>Placed</th></tr></thead>
+                                <tbody>
+                                    @foreach (var o in _orders.Where(o => o.SellerId == 0).OrderByDescending(o => o.Id))
+                                    {
+                                        <tr @onclick="() => Go(Screen.OrderDetail, o.Id)">
+                                            <td>@o.Id</td>
+                                            <td><span class="tag @OrderClass(o.Status)">@o.Status</span></td>
+                                            <td>@Truncate(L(o.ListingId)?.Title ?? "—", 46)</td>
+                                            <td>@P(o.BuyerId).Name</td>
+                                            <td>@(o.Price == 0 ? "Free" : $"+{o.Price}")</td>
+                                            <td>@Ago(o.PlacedAt)</td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    }
+                </div>
+            }
+
+            @* ============================ ORDER DETAIL ============================ *@
+            else if (Cur == Screen.OrderDetail)
+            {
+                var o = O(Arg);
+                if (o is null)
+                {
+                    <div class="empty"><p><strong>No such order.</strong></p></div>
+                }
+                else
+                {
+                    var l = L(o.ListingId);
+                    var iAmBuyer = o.BuyerId == 0;
+                    var other = P(iAmBuyer ? o.SellerId : o.BuyerId);
+                    <div class="app-page-head">
+                        <h2>Order #@o.Id <span class="tag @OrderClass(o.Status)">@o.Status</span></h2>
+                        <p class="card-sub">@(iAmBuyer ? "You claimed this listing." : "Someone claimed your listing.")
+                            @(o.Price == 0 ? "Free to collect — no RCYT involved." : $"{o.Price} RCYT.")</p>
+                    </div>
+
+                    <div class="cofl">
+                        <div class="app-panel">
+                            <h3 class="pan-h">Item</h3>
+                            <div class="co-item">
+                                <span class="co-tile" style="--tile:@(l is null ? "#666" : CatOf(l.Cat).Color)" aria-hidden="true">@(l?.Glyph ?? (l is null ? "?" : CatOf(l.Cat).Glyph))</span>
+                                <span class="co-main">
+                                    <b>@(l?.Title ?? "listing removed")</b>
+                                    <span class="hint">@(l?.Cat) · @(l?.Qty) · @(l?.Location)</span>
+                                    @if (l is not null)
+                                    {
+                                        <button type="button" class="linky" @onclick="() => Go(Screen.Listing, l.Id)">Open listing →</button>
+                                    }
+                                </span>
+                                <span class="co-price">@(o.Price == 0 ? "Free" : $"{o.Price} RCYT")</span>
+                            </div>
+
+                            <h3 class="pan-h">Progress</h3>
+                            <ol class="timeline">
+                                @foreach (var st in o.Steps)
+                                {
+                                    <li><span class="tl-dot" aria-hidden="true"></span>
+                                        <span class="tl-when">@st.At.ToString("HH:mm:ss")</span>
+                                        <span class="tl-txt">@st.Text</span></li>
+                                }
+                            </ol>
+
+                            @if (o.Status == "Reserved")
+                            {
+                                <div class="btnrow">
+                                    @if (iAmBuyer)
+                                    {
+                                        <button type="button" class="go" @onclick="() => ConfirmCollected(o.Id)">I've collected it — release @(o.Price == 0 ? "" : $"{o.Price} RCYT")</button>
+                                        <button type="button" class="ghost" @onclick="() => CancelOrder(o.Id)">Cancel claim</button>
+                                    }
+                                    else
+                                    {
+                                        <button type="button" class="go" @onclick="() => ConfirmCollected(o.Id)">Mark as collected — receive @(o.Price == 0 ? "nothing (free)" : $"{o.Price} RCYT")</button>
+                                        <button type="button" class="ghost" @onclick="() => CancelOrder(o.Id)">Cancel this order</button>
+                                    }
+                                </div>
+                            }
+
+                            @if (o.Status == "Collected" && iAmBuyer && !o.Reviewed)
+                            {
+                                <h3 class="pan-h">Leave a review for @FirstName(other.Name)</h3>
+                                <div class="revform">
+                                    <select @bind="_revStars">
+                                        <option value="5">5 ★ — perfect</option>
+                                        <option value="4">4 ★ — good</option>
+                                        <option value="3">3 ★ — ok</option>
+                                        <option value="2">2 ★ — poor</option>
+                                        <option value="1">1 ★ — bad</option>
+                                    </select>
+                                    <input maxlength="140" @bind="_revText" placeholder="How did the collection go?" />
+                                    <button type="button" class="go small" @onclick="() => LeaveReview(o.Id)">Post review</button>
+                                </div>
+                            }
+                        </div>
+
+                        <aside class="co-side">
+                            <h3 class="pan-h">@(iAmBuyer ? "Seller" : "Buyer")</h3>
+                            <button type="button" class="sellerbox slim" @onclick="() => Go(Screen.Profile, other.Id)">
+                                <span class="mk-avatar big">@Initials(other.Name)</span>
+                                <span class="sb-main"><b>@other.Name</b>
+                                    <span class="sb-meta">@Rating(other.Id).ToString("0.0") ★ · @other.Location</span></span>
+                            </button>
+                            <button type="button" class="ghost wide" @onclick="() => OpenThread(o.ListingId, other.Id)">Message @FirstName(other.Name)</button>
+                            <h3 class="pan-h">Collection</h3>
+                            <p class="hint"><b>@o.Method</b></p>
+                            @if (!string.IsNullOrWhiteSpace(o.Note)) { <p class="hint">“@o.Note”</p> }
+                            <h3 class="pan-h">RCYT</h3>
+                            <p class="hint">@OrderMoneyBlurb(o)</p>
+                        </aside>
+                    </div>
+                }
+            }
+
+            @* ============================ DASHBOARD ============================ *@
+            else if (Cur == Screen.Dashboard)
+            {
+                <div class="app-page-head">
+                    <h2>Your dashboard</h2>
+                    <p class="card-sub">Everything about your account in one place — balance, level, what you've
+                        recycled, what you've listed, what you've claimed.</p>
+                </div>
+
+                <div class="dash">
+                    <button type="button" class="dtile accent" @onclick="() => Go(Screen.Wallet)">
+                        <span class="dt-n">@_balance</span><span class="dt-l">RCYT spendable</span>
+                        <span class="dt-x">@(_escrow > 0 ? $"{_escrow} held in escrow" : "nothing held") · open wallet →</span>
+                    </button>
+                    <button type="button" class="dtile" @onclick="() => Go(Screen.Recycle)">
+                        <span class="dt-n">@_lifetimeMinted</span><span class="dt-l">RCYT earned by recycling</span>
+                        <span class="dt-x">across @MySubs("Verified").Count() verified submissions →</span>
+                    </button>
+                    <button type="button" class="dtile" @onclick="() => Go(Screen.MyListings)">
+                        <span class="dt-n">@_listings.Count(x => x.SellerId == 0 && x.Status == "Active")</span><span class="dt-l">Active listings</span>
+                        <span class="dt-x">@_listings.Count(x => x.SellerId == 0) posted in total →</span>
+                    </button>
+                    <button type="button" class="dtile" @onclick="() => Go(Screen.Orders)">
+                        <span class="dt-n">@_orders.Count(o => o.BuyerId == 0)</span><span class="dt-l">Items claimed</span>
+                        <span class="dt-x">@_orders.Count(o => o.SellerId == 0) sales of your own →</span>
+                    </button>
+                    <button type="button" class="dtile" @onclick="() => Go(Screen.Watchlist)">
+                        <span class="dt-n">@_watch.Count</span><span class="dt-l">On your watchlist</span>
+                        <span class="dt-x">@_saved.Count saved search@(_saved.Count == 1 ? "" : "es") →</span>
+                    </button>
+                    <button type="button" class="dtile" @onclick="() => Go(Screen.Admin)">
+                        <span class="dt-n">@PendingCount</span><span class="dt-l">Awaiting verification</span>
+                        <span class="dt-x">you also hold the verifier role here →</span>
+                    </button>
+                </div>
+
+                <div class="app-panel">
+                    <h3 class="pan-h">Recycler level</h3>
+                    <div class="lvl">
+                        <div class="lvl-top">
+                            <b>@LevelName(_lifetimeMinted)</b>
+                            <span class="hint">@_lifetimeMinted RCYT minted from your verified submissions@(NextLevelAt(_lifetimeMinted) is int nx ? $" · {nx - _lifetimeMinted} more to {NextLevelName(_lifetimeMinted)}" : " · top level")</span>
+                        </div>
+                        <div class="tierbar"><span style="width:@LevelPct(_lifetimeMinted)%"></span></div>
+                        <div class="lvl-scale">
+                            @foreach (var lv in Levels) { <span class="@(LevelName(_lifetimeMinted) == lv.Name ? "on" : "")">@lv.Name<small>@lv.At+</small></span> }
+                        </div>
+                        <p class="hint">Levels are a status label only — they don't unlock anything, change any reward
+                            rate, or carry any value in this prototype or the real system.</p>
+                    </div>
+
+                    <h3 class="pan-h">Recent activity</h3>
+                    @if (_notifs.Count == 0)
+                    {
+                        <p class="hint">Nothing yet.</p>
+                    }
+                    else
+                    {
+                        <div class="log-body">
+                            @foreach (var n in _notifs.Take(8))
+                            {
+                                <button type="button" class="log-line log-line-link" @onclick="() => OpenNotif(n)">
+                                    <span class="n-i" aria-hidden="true">@n.Icon</span> @n.At.ToString("HH:mm:ss") — @n.Text
+                                </button>
+                            }
+                        </div>
+                    }
+
+                    <h3 class="pan-h">Quick actions</h3>
+                    <div class="btnrow">
+                        <button type="button" class="go small" @onclick="() => Go(Screen.Recycle)">Submit recycling</button>
+                        <button type="button" class="ghost small" @onclick="StartNewListing">Post a listing</button>
+                        <button type="button" class="ghost small" @onclick="GoHome">Browse marketplace</button>
+                        <button type="button" class="ghost small" @onclick="() => Go(Screen.Settings)">Account settings</button>
+                    </div>
+                </div>
+            }
+
+            @* ============================ SELL / POST A LISTING ============================ *@
+            else if (Cur == Screen.Sell)
+            {
+                <div class="app-page-head">
+                    <h2>@(_sellEditId is null ? "Post a listing" : $"Edit listing #{_sellEditId}")</h2>
+                    <p class="card-sub">List material you've rescued from the waste stream for someone else to
+                        collect, or post a wanted ad. Posting a listing never mints RCYT — only a verified
+                        recycling submission can do that.</p>
+                </div>
+
+                <div class="cofl">
+                    <div class="app-panel">
+                        <div class="dao-form">
+                            <label>Listing type
+                                <select @bind="_sellKind">
+                                    <option value="Offer">I have this — someone can collect it</option>
+                                    <option value="Wanted">I want this — I'm looking for it</option>
+                                </select>
+                            </label>
+                            <label>Title
+                                <input maxlength="80" @bind="_sellTitle" placeholder="e.g. Clear glass jars with lids — 60 assorted" />
+                            </label>
+                            <label>Category
+                                <select @bind="_sellCat">
+                                    @foreach (var c in Cats) { <option value="@c.Name">@c.Glyph @c.Name</option> }
+                                </select>
+                            </label>
+                            <label>Condition
+                                <select @bind="_sellCond">
+                                    @foreach (var c in Conditions) { <option value="@c">@c</option> }
+                                </select>
+                            </label>
+                            <label>Quantity / amount
+                                <input maxlength="40" @bind="_sellQty" placeholder="e.g. 8 kg, 60 items, 3 crates" />
+                            </label>
+                            <label>Asking price in RCYT — enter 0 for free to collect
+                                <input type="number" min="0" max="9999" @bind="_sellPrice" />
+                            </label>
+                            <label>Location
+                                <select @bind="_sellLoc">
+                                    @foreach (var l in Locations) { <option value="@l">@l</option> }
+                                </select>
+                            </label>
+                            <label>Collection method
+                                <select @bind="_sellCollect">
+                                    @foreach (var m in CollectionMethods) { <option value="@m">@m</option> }
+                                </select>
+                            </label>
+                            <label>Description
+                                <textarea maxlength="600" @bind="_sellDesc"
+                                          placeholder="Condition, how it's packed, when it can be collected, anything a collector needs to know (10-600 characters)"></textarea>
+                            </label>
+                            <label>Link a verified recycling submission (optional provenance)
+                                <select @bind="_sellFromSub">
+                                    <option value="0">— none —</option>
+                                    @foreach (var s in MySubs("Verified"))
+                                    {
+                                        <option value="@s.Id">#@s.Id @s.ItemType — @Truncate(s.Description, 40)</option>
+                                    }
+                                </select>
+                            </label>
+
+                            <div class="photobox">
+                                <span class="pb-i" aria-hidden="true">▣</span>
+                                <span><b>Photos</b><small>A finished product would upload photos here. This prototype has
+                                    no file upload and no server to store one — listings render an illustrative
+                                    category tile instead.</small></span>
+                                <span class="mk-tag">mockup</span>
+                            </div>
+
+                            <div class="btnrow">
+                                <button type="button" class="go" @onclick="PostListing">@(_sellEditId is null ? "Publish listing" : "Save changes")</button>
+                                <button type="button" class="ghost" @onclick="() => Go(Screen.MyListings)">Cancel</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <aside class="co-side">
+                        <h3 class="pan-h">Live preview</h3>
+                        <div class="lst preview" style="--tile:@CatOf(_sellCat).Color">
+                            <span class="lst-photo" style="--tile:@CatOf(_sellCat).Color"><span aria-hidden="true">@CatOf(_sellCat).Glyph</span></span>
+                            <span class="lst-body">
+                                <b class="lst-t">@(string.IsNullOrWhiteSpace(_sellTitle) ? "Your listing title" : _sellTitle)</b>
+                                <span class="lst-p">@(_sellPrice == 0 ? "Free to collect" : $"{_sellPrice} RCYT")</span>
+                                <span class="lst-m">@_sellCond · @(string.IsNullOrWhiteSpace(_sellQty) ? "quantity" : _sellQty)</span>
+                                <span class="lst-m">@_sellLoc · just now</span>
+                            </span>
+                        </div>
+                        <p class="hint">Listings are free to post. Nothing is deducted, and nothing is minted — RCYT
+                            only ever comes into existence through a verifier approving a recycling submission.</p>
+                    </aside>
+                </div>
+            }
+
+            @* ============================ MY LISTINGS ============================ *@
+            else if (Cur == Screen.MyListings)
+            {
+                <div class="app-page-head">
+                    <h2>My listings</h2>
+                    <p class="card-sub">Everything you've posted, and what's happened to it.</p>
+                </div>
+                <div class="app-panel">
+                    <div class="btnrow">
+                        <button type="button" class="go small" @onclick="StartNewListing">+ Post a listing</button>
+                    </div>
+                    @if (!_listings.Any(x => x.SellerId == 0))
+                    {
+                        <p class="hint">You haven't posted anything yet.</p>
+                    }
+                    else
+                    {
+                        <div class="allsub-scroll">
+                            <table class="allsub-table">
+                                <thead><tr><th>#</th><th>Status</th><th>Title</th><th>Category</th><th>Price</th><th>Views</th><th>Watchers</th><th>Actions</th></tr></thead>
+                                <tbody>
+                                    @foreach (var l in _listings.Where(x => x.SellerId == 0).OrderByDescending(x => x.Id))
+                                    {
+                                        var ll = l;
+                                        <tr>
+                                            <td>@ll.Id</td>
+                                            <td><span class="tag @ListingClass(ll.Status)">@ll.Status</span></td>
+                                            <td><button type="button" class="linky" @onclick="() => Go(Screen.Listing, ll.Id)">@Truncate(ll.Title, 40)</button></td>
+                                            <td>@ll.Cat</td>
+                                            <td>@(ll.Price == 0 ? "Free" : $"{ll.Price} RCYT")</td>
+                                            <td>@ll.Views</td>
+                                            <td>@ll.Watchers</td>
+                                            <td class="rowacts">
+                                                @if (ll.Status == "Active")
+                                                {
+                                                    <button type="button" class="ghost small" @onclick="() => EditListing(ll.Id)">Edit</button>
+                                                    <button type="button" class="ghost small" @onclick="() => EndListing(ll.Id)">End</button>
+                                                    <button type="button" class="ghost small demo" @onclick="() => SimulateBuyer(ll.Id)" title="Clearly-labelled demo control — this prototype has no other real users">⚙ Simulate a claim</button>
+                                                }
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                        <p class="hint"><span class="mk-tag">demo control</span> "Simulate a claim" invents a
+                            counterparty so you can see the seller side of the flow. It transfers RCYT to you from a
+                            simulated buyer — it never mints, so total supply is unchanged.</p>
+                    }
+                </div>
+            }
+
+            @* ============================ RECYCLE & EARN (SUBMIT) ============================ *@
+            else if (Cur == Screen.Recycle)
+            {
+                <div class="app-page-head">
+                    <h2>Recycle &amp; earn</h2>
+                    <p class="card-sub">Log a recycling activity for review. This is the <strong>only</strong> way
+                        RCYT comes into existence — and submitting alone can never mint it. A verifier has to
+                        approve it first.</p>
+                </div>
+
+                <div class="cofl">
+                    <div class="app-panel">
+                        <h3 class="pan-h">Reward rates</h3>
+                        <table class="tier-table">
+                            <thead><tr><th>Item type</th><th>Mints if approved</th></tr></thead>
+                            <tbody>
+                                @foreach (var kv in Tiers) { <tr><td>@kv.Key</td><td>@kv.Value RCYT</td></tr> }
+                            </tbody>
+                        </table>
+                        <p class="hint">A simple, explainable proxy for recycling complexity — not a market-priced or
+                            weight-based calculation, and not a claim about real-world recycling economics.</p>
+
+                        <h3 class="pan-h">New submission</h3>
+                        <div class="dao-form">
+                            <label>Item type
+                                <select @bind="_formItemType">
+                                    @foreach (var kv in Tiers) { <option value="@kv.Key">@kv.Key — @kv.Value RCYT</option> }
+                                </select>
+                            </label>
+                            <label>Description
+                                <textarea @bind="_formDescription" maxlength="200"
+                                          placeholder="What did you recycle, and where? (3-200 characters)"></textarea>
+                            </label>
+                            <div class="asrow">
+                                <span class="mk-avatar">@Initials(You.Name)</span>
+                                <span>Submitting as <b>@You.Name</b><small>A display label only — <strong>not</strong> a wallet
+                                    address. The real system mints to a wallet address here; this prototype has no wallets.
+                                    <button type="button" class="linky" @onclick="() => Go(Screen.Settings)">Change name →</button></small></span>
+                            </div>
+                            <button class="go" @onclick="SubmitItem" type="button">Submit for review</button>
+                        </div>
+                    </div>
+
+                    <aside class="co-side">
+                        <h3 class="pan-h">Your submissions</h3>
+                        @if (!MySubs(null).Any())
+                        {
+                            <p class="hint">Nothing submitted yet.</p>
+                        }
+                        else
+                        {
+                            <div class="log-body tall">
+                                @foreach (var s in MySubs(null).OrderByDescending(x => x.Id))
+                                {
+                                    <span class="log-line"><span class="tag @StatusClass(s.Status)">@s.Status</span> #@s.Id
+                                        @s.ItemType — @Truncate(s.Description, 30)@(s.Status == "Verified" ? $" · +{s.Reward}" : "")</span>
+                                }
+                            </div>
+                        }
+                        <p class="hint">Pending submissions sit in the verifier queue. In this prototype you hold the
+                            verifier role too, so you can go and decide your own —
+                            <button type="button" class="linky" @onclick="() => Go(Screen.Admin)">open the queue →</button></p>
+                    </aside>
+                </div>
+            }
+
+            @* ============================ ADMIN / VERIFIER QUEUE ============================ *@
+            else if (Cur == Screen.Admin)
+            {
+                <div class="app-page-head">
+                    <h2>Verifier &amp; moderator queue</h2>
+                    <p class="card-sub">The gated back office. Approving a submission here is the one and only action
+                        in this entire prototype that can mint RCYT.</p>
+                </div>
+
+                <div class="rolebar">
+                    <span class="mk-tag role">verifier role</span>
+                    <span>Mirrors the real contract's <code>onlyRole(MINTER_ROLE)</code> gate: only a designated
+                        verifier address can call <code>RecycleToken.mint()</code>. There are no accounts in this
+                        prototype, so the gate is enforced structurally instead — this screen's Approve handler is
+                        the only code path anywhere on the page that can touch the mint log or the token supply.
+                        Verification is a <strong>manual human review</strong>, not automated fraud detection.</span>
+                </div>
+
+                <div class="app-panel">
+                    <h3 class="pan-h">Submissions awaiting review (@_pending.Count)</h3>
+                    @if (_pending.Count == 0)
+                    {
+                        <p class="hint">Queue empty. <button type="button" class="linky" @onclick="() => Go(Screen.Recycle)">Submit a recycling activity</button> to add one.</p>
+                    }
+                    else
+                    {
+                        <div class="dao-queue">
+                            @foreach (var s in _pending)
+                            {
+                                var ss = s;
+                                <div class="dao-row">
+                                    <div class="row-main">
+                                        <div class="row-top"><strong>@ss.ItemType</strong><span class="row-when">@ss.SubmittedAt.ToString("HH:mm:ss")</span></div>
+                                        <div class="row-desc">@ss.Description</div>
+                                        <div class="row-sub">by
+                                            <button type="button" class="linky" @onclick="() => Go(Screen.Profile, ss.SubmitterId)">@P(ss.SubmitterId).Name</button>
+                                            @(ss.SubmitterId == 0 ? " (you)" : "") · mints
+                                            <strong>@Tiers[ss.ItemType] RCYT</strong> to them if approved</div>
+                                    </div>
+                                    <div class="row-actions">
+                                        <button class="go small" @onclick="() => ApproveSubmission(ss.Id)" type="button">Approve &amp; mint</button>
+                                        <button class="ghost small" @onclick="() => RejectSubmission(ss.Id)" type="button">Reject</button>
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    }
+
+                    <h3 class="pan-h">Reported listings (@_reports.Count(r => r.Status == "Open"))</h3>
+                    @if (!_reports.Any(r => r.Status == "Open"))
+                    {
+                        <p class="hint">No open reports. Reporting a listing from its detail page files one here.</p>
+                    }
+                    else
+                    {
+                        <div class="dao-queue">
+                            @foreach (var r in _reports.Where(x => x.Status == "Open").ToList())
+                            {
+                                var rr = r;
+                                var rl = L(rr.ListingId);
+                                <div class="dao-row">
+                                    <div class="row-main">
+                                        <div class="row-top"><strong>@rr.Reason</strong><span class="row-when">@rr.At.ToString("HH:mm:ss")</span></div>
+                                        <div class="row-desc">@(rl?.Title ?? "listing removed")</div>
+                                        <div class="row-sub">reported by @P(rr.ByPersonId).Name</div>
+                                    </div>
+                                    <div class="row-actions">
+                                        <button class="ghost small" @onclick="() => ResolveReport(rr.Id, false)" type="button">Dismiss</button>
+                                        <button class="ghost small" @onclick="() => ResolveReport(rr.Id, true)" type="button">Remove listing</button>
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    }
+
+                    <h3 class="pan-h">Every submission this session (@_allSubmissions.Count)</h3>
+                    @if (_allSubmissions.Count == 0)
+                    {
+                        <p class="hint">Nothing submitted yet.</p>
+                    }
+                    else
+                    {
+                        <div class="allsub-scroll">
+                            <table class="allsub-table">
+                                <thead>
+                                    <tr><th>#</th><th>Status</th><th>Item type</th><th>Description</th><th>Submitter</th><th>Minted</th><th>Tx id</th></tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var s in _allSubmissions.OrderByDescending(x => x.Id))
+                                    {
+                                        <tr>
+                                            <td>@s.Id</td>
+                                            <td><span class="tag @StatusClass(s.Status)">@s.Status</span></td>
+                                            <td>@s.ItemType</td>
+                                            <td>@Truncate(s.Description, 54)</td>
+                                            <td>@P(s.SubmitterId).Name@(s.SubmitterId == 0 ? " (you)" : "")</td>
+                                            <td>@(s.Status == "Verified" ? $"+{s.Reward} RCYT" : "—")</td>
+                                            <td>@(s.MintTxId ?? "—")</td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    }
+                    <p class="hint">Decided rows lose their Approve/Reject buttons entirely — they are removed from the
+                        actionable queue, not merely disabled — so a submission can never be minted twice.</p>
+                </div>
+            }
+
+            @* ============================ WALLET ============================ *@
+            else if (Cur == Screen.Wallet)
+            {
+                <div class="app-page-head">
+                    <h2>Wallet</h2>
+                    <p class="card-sub">Your RCYT, and every movement of it this session.</p>
+                </div>
+
+                <div class="testnet slim">
+                    <strong>Test token.</strong>
+                    <span>RCYT exists on a test network only and has no monetary value. There is no deposit,
+                        withdrawal, purchase or cash-out path in this prototype or in the project it previews.</span>
+                </div>
+
+                <div class="walgrid">
+                    <div class="dao-balance">
+                        <div class="n">@_balance</div>
+                        <div class="l">RCYT spendable (this session)</div>
+                    </div>
+                    <div class="dao-balance sub">
+                        <div class="n">@_escrow</div>
+                        <div class="l">held in escrow for reserved orders</div>
+                    </div>
+                    <div class="dao-balance sub">
+                        <div class="n">@_lifetimeMinted</div>
+                        <div class="l">minted to you by verified recycling</div>
+                    </div>
+                    <div class="dao-balance sub">
+                        <div class="n">@_totalMinted</div>
+                        <div class="l">total RCYT minted to everyone</div>
+                    </div>
+                </div>
+
+                <div class="app-panel">
+                    <h3 class="pan-h">Your ledger</h3>
+                    @if (_ledger.Count == 0)
+                    {
+                        <p class="hint">No movements yet.</p>
+                    }
+                    else
+                    {
+                        <div class="allsub-scroll">
+                            <table class="allsub-table">
+                                <thead><tr><th>Time</th><th>Type</th><th>Detail</th><th>Amount</th><th>Ref</th></tr></thead>
+                                <tbody>
+                                    @foreach (var e in _ledger)
+                                    {
+                                        <tr>
+                                            <td>@e.At.ToString("HH:mm:ss")</td>
+                                            <td><span class="tag @LedClass(e.Kind)">@e.Kind</span></td>
+                                            <td>@e.Text</td>
+                                            <td>@(e.Delta == 0 ? "—" : (e.Delta > 0 ? $"+{e.Delta}" : e.Delta.ToString()))</td>
+                                            <td>@e.Ref</td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    }
+
+                    <h3 class="pan-h">Mint log — every RCYT ever created this session</h3>
+                    <p class="hint">Newest first. Every id is a clearly-simulated tx label, never a real chain hash.
+                        Mints to other participants appear here but not in your ledger, because they don't touch
+                        your balance.</p>
+                    @if (_mintLog.Count == 0)
+                    {
+                        <p class="hint">Nothing minted yet.</p>
+                    }
+                    else
+                    {
+                        <div class="log-body tall">
+                            @foreach (var m in _mintLog)
+                            {
+                                <span class="log-line">@m.Timestamp.ToString("HH:mm:ss") <span class="tag ok">@m.TxId</span>
+                                    +@m.Reward RCYT → @P(m.SubmitterId).Name@(m.SubmitterId == 0 ? " (you)" : "") · @m.ItemType — @Truncate(m.Description, 34)</span>
+                            }
+                        </div>
+                    }
+                </div>
+            }
+
+            @* ============================ PROFILE ============================ *@
+            else if (Cur == Screen.Profile)
+            {
+                var p = P(Arg);
+                var theirs = _listings.Where(x => x.SellerId == p.Id && x.Status == "Active").ToList();
+                <div class="prof">
+                    <span class="mk-avatar huge">@Initials(p.Name)</span>
+                    <div class="prof-main">
+                        <h2>@p.Name @if (p.Id == 0) { <span class="tag pending">you</span> }</h2>
+                        <p class="prof-h">@p.Handle · @p.Location · member since @p.Since.ToString("MMMM yyyy")</p>
+                        <p class="prof-h"><b>@Rating(p.Id).ToString("0.0") ★</b> from @ReviewCount(p.Id) reviews ·
+                            @LevelName(MintedTo(p.Id)) · @MintedTo(p.Id) RCYT earned by recycling</p>
+                        <p class="det-desc">@p.Bio</p>
+                        @if (p.Id != 0)
+                        {
+                            <div class="btnrow">
+                                <button type="button" class="ghost small" @onclick="() => OpenThread(theirs.FirstOrDefault()?.Id ?? 0, p.Id)">Message @FirstName(p.Name)</button>
+                            </div>
+                        }
+                    </div>
+                    <div class="prof-stats">
+                        <div><b>@theirs.Count</b><span>active listings</span></div>
+                        <div><b>@_allSubmissions.Count(s => s.SubmitterId == p.Id && s.Status == "Verified")</b><span>verified submissions</span></div>
+                        <div><b>@_orders.Count(o => o.SellerId == p.Id && o.Status == "Collected")</b><span>items rehomed</span></div>
+                    </div>
+                </div>
+
+                <h3 class="strip-h">@(p.Id == 0 ? "Your active listings" : $"{FirstName(p.Name)}'s active listings") (@theirs.Count)</h3>
+                @if (theirs.Count == 0)
+                {
+                    <p class="hint">Nothing listed right now.</p>
+                }
+                else
+                {
+                    <div class="lgrid">
+                        @foreach (var l in theirs) { @ListingCard(l) }
+                    </div>
+                }
+
+                <h3 class="strip-h">Reviews (@ReviewCount(p.Id))</h3>
+                <div class="app-panel">
+                    @if (!_reviews.Any(r => r.AboutId == p.Id))
+                    {
+                        <p class="hint">@p.SeedReviews earlier reviews averaging @p.SeedRating.ToString("0.0") ★ are
+                            summarised above; individual review text isn't seeded for this participant.</p>
+                    }
+                    else
+                    {
+                        @foreach (var r in _reviews.Where(x => x.AboutId == p.Id).OrderByDescending(x => x.At))
+                        {
+                            <div class="rev">
+                                <span class="rev-s">@(new string('★', r.Stars))<span class="dim">@(new string('★', 5 - r.Stars))</span></span>
+                                <span class="rev-t">“@r.Text”</span>
+                                <span class="rev-b">— @P(r.ByPersonId).Name, @Ago(r.At)</span>
+                            </div>
+                        }
+                        <p class="hint">Plus @p.SeedReviews earlier seeded reviews averaging @p.SeedRating.ToString("0.0") ★.</p>
+                    }
+                </div>
+            }
+
+            @* ============================ WATCHLIST ============================ *@
+            else if (Cur == Screen.Watchlist)
+            {
+                var watched = _listings.Where(l => _watch.Contains(l.Id)).ToList();
+                <div class="app-page-head">
+                    <h2>Watchlist &amp; saved searches</h2>
+                    <p class="card-sub">Listings you're keeping an eye on, and searches you can re-run in one click.</p>
+                </div>
+                <h3 class="strip-h">Watching (@watched.Count)</h3>
+                @if (watched.Count == 0)
+                {
+                    <p class="hint">Nothing watched yet — open a listing and hit ♡ Watch.
+                        <button type="button" class="linky" @onclick="GoHome">Browse →</button></p>
+                }
+                else
+                {
+                    <div class="lgrid">
+                        @foreach (var l in watched) { @ListingCard(l) }
+                    </div>
+                }
+
+                <h3 class="strip-h">Saved searches (@_saved.Count)</h3>
+                <div class="app-panel">
+                    @if (_saved.Count == 0)
+                    {
+                        <p class="hint">Run a search with a filter or two, then hit "☆ Save this search" on the results
+                            page and it'll appear here.</p>
+                    }
+                    else
+                    {
+                        @foreach (var s in _saved)
+                        {
+                            var ss = s;
+                            <div class="savedrow">
+                                <button type="button" class="linky" @onclick="() => RunSaved(ss)">@ss.Label</button>
+                                <span class="hint">@MatchCount(ss) match@(MatchCount(ss) == 1 ? "" : "es") right now</span>
+                                <button type="button" class="ghost small" @onclick="() => _saved.Remove(ss)">Remove</button>
+                            </div>
+                        }
+                    }
+                </div>
+            }
+
+            @* ============================ MESSAGES ============================ *@
+            else if (Cur == Screen.Messages)
+            {
+                <div class="app-page-head">
+                    <h2>Inbox</h2>
+                    <p class="card-sub">One thread per listing conversation. Replies from other participants are
+                        simulated and labelled as such — this prototype has no other real users.</p>
+                </div>
+                <div class="app-panel">
+                    @if (_threads.Count == 0)
+                    {
+                        <p class="hint">No conversations yet — open a listing and hit "Message".</p>
+                    }
+                    else
+                    {
+                        @foreach (var t in _threads.OrderByDescending(x => x.Msgs.Last().At))
+                        {
+                            var tt = t;
+                            var last = tt.Msgs.Last();
+                            <button type="button" class="threadrow @(tt.Unread ? "unread" : "")" @onclick="() => Go(Screen.Thread, tt.Id)">
+                                <span class="mk-avatar">@Initials(P(tt.WithId).Name)</span>
+                                <span class="tr-main">
+                                    <b>@P(tt.WithId).Name</b>
+                                    <span class="hint">@Truncate(L(tt.ListingId)?.Title ?? "general enquiry", 52)</span>
+                                    <span class="tr-last">@Truncate(last.Body, 70)</span>
+                                </span>
+                                <span class="tr-when">@Ago(last.At)@(tt.Unread ? " · new" : "")</span>
+                            </button>
+                        }
+                    }
+                </div>
+            }
+
+            @* ============================ THREAD ============================ *@
+            else if (Cur == Screen.Thread)
+            {
+                var t = _threads.FirstOrDefault(x => x.Id == Arg);
+                if (t is null)
+                {
+                    <div class="empty"><p><strong>No such conversation.</strong></p></div>
+                }
+                else
+                {
+                    var who = P(t.WithId);
+                    var tl = L(t.ListingId);
+                    <div class="app-page-head">
+                        <h2>@who.Name</h2>
+                        <p class="card-sub">
+                            @if (tl is not null)
+                            {
+                                <button type="button" class="linky" @onclick="() => Go(Screen.Listing, tl.Id)">About: @tl.Title →</button>
+                            }
+                            else
+                            {
+                                <span>General enquiry</span>
+                            }
+                        </p>
+                    </div>
+                    <div class="app-panel">
+                        <div class="thread">
+                            @foreach (var m in t.Msgs)
+                            {
+                                <div class="bubble @(m.FromYou ? "me" : "them")">
+                                    <span class="b-body">@m.Body</span>
+                                    <span class="b-meta">@(m.FromYou ? "you" : who.Name) · @Ago(m.At)@(m.Sim ? " · simulated reply" : "")</span>
+                                </div>
+                            }
+                        </div>
+                        <div class="composer">
+                            <input maxlength="240" @bind="_msgDraft" placeholder="Write a message…" />
+                            <button type="button" class="go small" @onclick="() => SendMsg(t.Id)">Send</button>
+                        </div>
+                        <p class="hint">Replies are canned and clearly marked — nobody is on the other end.</p>
+                    </div>
+                }
+            }
+
+            @* ============================ NOTIFICATIONS ============================ *@
+            else if (Cur == Screen.Notifications)
+            {
+                <div class="app-page-head">
+                    <h2>Alerts</h2>
+                    <p class="card-sub">Every one of these is generated by something that actually happened in this
+                        session's state — nothing is on a timer.</p>
+                </div>
+                <div class="app-panel">
+                    @if (_notifs.Count == 0)
+                    {
+                        <p class="hint">Nothing yet.</p>
+                    }
+                    else
+                    {
+                        <div class="btnrow">
+                            <button type="button" class="ghost small" @onclick="MarkAllRead">Mark all read</button>
+                        </div>
+                        @foreach (var n in _notifs)
+                        {
+                            var nn = n;
+                            <button type="button" class="notif @(nn.Read ? "" : "unread")" @onclick="() => OpenNotif(nn)">
+                                <span class="n-i" aria-hidden="true">@nn.Icon</span>
+                                <span class="n-t">@nn.Text</span>
+                                <span class="n-w">@Ago(nn.At)</span>
+                            </button>
+                        }
+                    }
+                </div>
+            }
+
+            @* ============================ IMPACT ============================ *@
+            else if (Cur == Screen.Impact)
+            {
+                var verified = _allSubmissions.Where(s => s.Status == "Verified").ToList();
+                <div class="app-page-head">
+                    <h2>Community impact</h2>
+                    <p class="card-sub">Everything on this screen is computed from this session's own state — the
+                        seeded starting data plus whatever you've done since. Nothing is a projection or an estimate.</p>
+                </div>
+                <div class="dash">
+                    <div class="dtile flat"><span class="dt-n">@verified.Count</span><span class="dt-l">verified submissions</span></div>
+                    <div class="dtile flat"><span class="dt-n">@_totalMinted</span><span class="dt-l">RCYT minted in total</span></div>
+                    <div class="dtile flat"><span class="dt-n">@_orders.Count(o => o.Status == "Collected")</span><span class="dt-l">items rehomed via the market</span></div>
+                    <div class="dtile flat"><span class="dt-n">@_listings.Count(l => l.Status == "Active")</span><span class="dt-l">listings live right now</span></div>
+                </div>
+                <div class="app-panel">
+                    <h3 class="pan-h">Verified submissions by material</h3>
+                    @foreach (var kv in Tiers)
+                    {
+                        var n = verified.Count(s => s.ItemType == kv.Key);
+                        var pct = verified.Count == 0 ? 0 : (int)Math.Round(100.0 * n / verified.Count);
+                        <div class="bar">
+                            <span class="bar-l">@kv.Key</span>
+                            <span class="bar-t"><span style="width:@pct%"></span></span>
+                            <span class="bar-n">@n · @(n * kv.Value) RCYT</span>
+                        </div>
+                    }
+                    <h3 class="pan-h">Marketplace by category</h3>
+                    @foreach (var c in Cats)
+                    {
+                        var n = _listings.Count(l => l.Cat == c.Name && l.Status == "Active");
+                        var pct = _listings.Count(l => l.Status == "Active") == 0 ? 0 : (int)Math.Round(100.0 * n / _listings.Count(l => l.Status == "Active"));
+                        <div class="bar">
+                            <span class="bar-l">@c.Glyph @c.Name</span>
+                            <span class="bar-t"><span style="width:@pct%"></span></span>
+                            <span class="bar-n">@n</span>
+                        </div>
+                    }
+                    <p class="hint">A finished product would report diverted weight here. This prototype deliberately
+                        doesn't — nothing in the flow measures or verifies weight, so any kilogram figure would be
+                        invented.</p>
+                </div>
+            }
+
+            @* ============================ HELP ============================ *@
+            else if (Cur == Screen.Help)
+            {
+                <div class="app-page-head">
+                    <h2>How RecycleDAO works</h2>
+                    <p class="card-sub">The whole loop in four steps, plus the honest limits.</p>
+                </div>
+                <div class="howgrid">
+                    <div class="how"><span class="how-n">1</span><b>Recycle something</b>
+                        <p>Log the activity with a photo and description. Nothing is minted yet — a submission on its
+                            own is just a record.</p>
+                        <button type="button" class="linky" @onclick="() => Go(Screen.Recycle)">Submit →</button></div>
+                    <div class="how"><span class="how-n">2</span><b>A verifier reviews it</b>
+                        <p>A human reviewer approves or rejects. Approval is the only action that mints RCYT, and
+                            each submission is decided exactly once.</p>
+                        <button type="button" class="linky" @onclick="() => Go(Screen.Admin)">Verifier queue →</button></div>
+                    <div class="how"><span class="how-n">3</span><b>RCYT lands in your wallet</b>
+                        <p>Fixed rate per item type. RCYT is a test token — it has no monetary value and can't be
+                            bought or sold for money.</p>
+                        <button type="button" class="linky" @onclick="() => Go(Screen.Wallet)">Wallet →</button></div>
+                    <div class="how"><span class="how-n">4</span><b>Spend it in the marketplace</b>
+                        <p>Claim material other people have rescued. RCYT is held in escrow until you confirm
+                            collection, then released to them.</p>
+                        <button type="button" class="linky" @onclick="GoHome">Browse →</button></div>
+                </div>
+                <div class="app-panel">
+                    <h3 class="pan-h">Frequently asked</h3>
+                    <div class="faq"><b>Can I buy RCYT?</b><p>No — and there's deliberately no way to try. RCYT only
+                        comes into existence when a verifier approves a recycling submission. The real contracts are
+                        deployed to a public test network only and the token carries no monetary value.</p></div>
+                    <div class="faq"><b>How is verification done?</b><p>By a person, looking at the submission. This
+                        project does not claim to have solved chain-of-custody or fraud-proofing for physical
+                        recycled material — that is a genuinely hard open problem, and the token mechanics sit
+                        downstream of whatever verification process is eventually used.</p></div>
+                    <div class="faq"><b>What do levels unlock?</b><p>Nothing. They're a status label computed from how
+                        much RCYT your verified submissions have minted. No perks, no multipliers, no discounts.</p></div>
+                    <div class="faq"><b>Is there a referral or invite scheme?</b><p>No. There are deliberately no
+                        referral chains, invite rewards, or share-to-earn mechanics anywhere in this project.</p></div>
+                    <div class="faq"><b>Where do the other users come from?</b><p>They're seeded sample data so the
+                        marketplace isn't empty. You're the only real user; anything a counterparty "does" is either
+                        seeded or triggered by a demo control that says so.</p></div>
+                    <div class="faq"><b>Is my data saved?</b><p>Nothing leaves your browser and nothing is stored.
+                        Reload the page and the whole session resets to the seeded starting point.</p></div>
+                </div>
+            }
+
+            @* ============================ SETTINGS ============================ *@
+            else if (Cur == Screen.Settings)
+            {
+                <div class="app-page-head">
+                    <h2>Account settings</h2>
+                    <p class="card-sub">Your display name and default location are live — change them and they update
+                        everywhere on this page at once.</p>
+                </div>
+                <div class="app-panel">
+                    <div class="dao-form">
+                        <label>Display name
+                            <input maxlength="60" @bind="_setName" />
+                        </label>
+                        <p class="hint">A display label only — <strong>not</strong> a wallet address. The real system
+                            mints to a wallet address; this prototype has no wallets.</p>
+                        <label>Default location
+                            <select @bind="_setLoc">
+                                @foreach (var l in Locations) { <option value="@l">@l</option> }
+                            </select>
+                        </label>
+                        <label>Short bio
+                            <textarea maxlength="200" @bind="_setBio"></textarea>
+                        </label>
+                        <button type="button" class="go" @onclick="SaveSettings">Save changes</button>
+                    </div>
+
+                    <h3 class="pan-h">Notifications <span class="mk-tag">mockup</span></h3>
+                    <div class="togs">
+                        <label class="cbx"><input type="checkbox" disabled checked /> Email me when a listing I watch is claimed</label>
+                        <label class="cbx"><input type="checkbox" disabled checked /> Email me when a submission is decided</label>
+                        <label class="cbx"><input type="checkbox" disabled /> Weekly digest of new listings nearby</label>
+                    </div>
+                    <p class="hint">These three toggles are inert — there is no server, no account, and no email in
+                        this prototype. They're here to show the shape of a finished settings screen.</p>
+
+                    <h3 class="pan-h">Wallet <span class="mk-tag">mockup</span></h3>
+                    <div class="togs">
+                        <label class="cbx"><input type="checkbox" disabled /> Connect a wallet address for on-chain minting</label>
+                    </div>
+                    <p class="hint">Deliberately inert. A real wallet-connect button would misrepresent this prototype
+                        as a live system — it isn't one, and the spec for this demo rules wallet connection out.</p>
+                </div>
+            }
+
+        </section>
+
+        <!-- Inert footer columns: the second and last piece of decorative chrome, tagged as such. -->
+        <footer class="mk-foot">
+            <div class="mk-foot-cols">
+                <div><b>Marketplace</b>
+                    <button type="button" disabled>Selling guidelines</button>
+                    <button type="button" disabled>Collection points</button>
+                    <button type="button" disabled>Bulk material</button></div>
+                <div><b>Token</b>
+                    <button type="button" disabled>RCYT contract</button>
+                    <button type="button" disabled>Reward schedule history</button>
+                    <button type="button" disabled>Supply report</button></div>
+                <div><b>Community</b>
+                    <button type="button" disabled>Local chapters</button>
+                    <button type="button" disabled>Repair cafés</button>
+                    <button type="button" disabled>Verifier applications</button></div>
+                <div><b>Legal</b>
+                    <button type="button" disabled>Terms</button>
+                    <button type="button" disabled>Privacy</button>
+                    <button type="button" disabled>Testnet disclaimer</button></div>
             </div>
-        }
-    </section>
+            <div class="mk-foot-bar">
+                <span class="mk-tag">mockup — every link in this footer is inert</span>
+                <span>RecycleDAO prototype · testnet only · RCYT has no monetary value</span>
+            </div>
+        </footer>
+    </div>
+    <!-- ===================== END OF THE PRODUCT MOCKUP ===================== -->
 
     <div class="outro">
-        <p><strong>About this simulation.</strong> RecycleDAO's real contract gates minting with an on-chain
+        <p><strong>About this prototype.</strong> RecycleDAO's real contract gates minting with an on-chain
             <code>onlyRole(MINTER_ROLE)</code> check — only a designated verifier address can call
-            <code>RecycleToken.mint()</code>; a submitter has no path to mint tokens themselves. This demo has no
-            wallets and no live chain, so it enforces the same shape a different way: the Verify page's Approve
-            action is the only code path in this page that can append to the mint log or change the balance, and
-            once a submission is decided its Approve/Reject controls are removed from the UI for good — there is
-            no way to trigger a second decision on it. The top nav bar and page-route labels dotted through this
-            demo are cosmetic — dressing to show the shape of a real app's chrome — and carry no logic; the "1 / 2
-            / 3" tabs above and the actions on each page are the only things that ever change what's on screen.
-            Reload this page at any time to reset the session to zero.</p>
+            <code>RecycleToken.mint()</code>; a submitter has no path to mint tokens themselves. This prototype has
+            no wallets and no live chain, so it enforces the same shape a different way: <code>MintForApproval</code>
+            is the only method on the page that can append to the mint log or increase the token supply, and it is
+            reachable from exactly one place — the verifier queue's Approve action. Marketplace activity moves RCYT
+            between balances but can never create it: claiming an item deducts and escrows, confirming collection
+            releases, cancelling refunds, and a sale credits — no path adds to supply. Once a submission is decided
+            its Approve/Reject controls are removed from the UI for good, so nothing can be minted twice. The
+            greyed <span class="mk-tag">mockup</span> items — the top utility strip, the footer columns, the photo
+            upload box and the notification toggles — carry no logic and say so; everything else on the page is
+            live and interlinked, which is why an action on one screen shows up on four others. Reload the page at
+            any time to reset the session to its seeded starting point.</p>
     </div>
 </div>
 
 @code {
-    enum Stage { Submit, Verify, Reward }
-    Stage _focus = Stage.Submit;
+    // ─────────────────────────────────────────────────────────────────────────────────────────────
+    // NAVIGATION — one screen renders at a time. Every navigation in this prototype is driven by a
+    // card, row, tile, action button or category chip; the only chrome that CAN'T navigate is the
+    // deliberately-inert utility strip and footer (both tagged "mockup" in the UI).
+    // ─────────────────────────────────────────────────────────────────────────────────────────────
+    enum Screen
+    {
+        Browse, Categories, Listing, Checkout, OrderPlaced, Orders, OrderDetail, Dashboard, Sell,
+        MyListings, Recycle, Admin, Wallet, Profile, Watchlist, Messages, Thread, Notifications,
+        Impact, Help, Settings
+    }
 
-    // Fixed, transparent reward schedule (RCYT per verified submission) — a simple demo convenience, not a
-    // market-priced or weight-based calculation. Shown to the visitor before they submit.
+    readonly record struct Nav(Screen S, int Arg);
+    Nav _nav = new(Screen.Browse, 0);
+    readonly Stack<Nav> _back = new();
+    Screen Cur => _nav.S;
+    int Arg => _nav.Arg;
+
+    string? _flash;
+    string? _err;
+
+    void Go(Screen s, int arg = 0)
+    {
+        if (_nav.S != s || _nav.Arg != arg) _back.Push(_nav);
+        _nav = new Nav(s, arg);
+        _flash = null; _err = null;
+    }
+    void Back()
+    {
+        if (_back.Count > 0) _nav = _back.Pop();
+        _flash = null; _err = null;
+    }
+    void GoHome()
+    {
+        ClearFilters();
+        Go(Screen.Browse);
+    }
+    void BrowseCat(string cat)
+    {
+        _fCat = cat; _page = 1;
+        Go(Screen.Browse);
+    }
+    void OpenListing(int id)
+    {
+        var l = L(id);
+        if (l is not null) l.Views++;
+        Go(Screen.Listing, id);
+    }
+
+    string RouteChip() => Cur switch
+    {
+        Screen.Browse => string.IsNullOrEmpty(_q)
+            ? (string.IsNullOrEmpty(_fCat) ? "market.recycledao.xyz › browse" : $"market.recycledao.xyz › c › {Slug(_fCat)}")
+            : $"market.recycledao.xyz › search?q={Slug(_q)}",
+        Screen.Categories => "market.recycledao.xyz › categories",
+        Screen.Listing => $"market.recycledao.xyz › listing › {Arg}",
+        Screen.Checkout => $"market.recycledao.xyz › claim › {Arg}",
+        Screen.OrderPlaced => $"market.recycledao.xyz › orders › {Arg} › confirmed",
+        Screen.Orders => "market.recycledao.xyz › account › orders",
+        Screen.OrderDetail => $"market.recycledao.xyz › orders › {Arg}",
+        Screen.Dashboard => "market.recycledao.xyz › account",
+        Screen.Sell => _sellEditId is null ? "market.recycledao.xyz › sell › new" : $"market.recycledao.xyz › sell › {_sellEditId} › edit",
+        Screen.MyListings => "market.recycledao.xyz › account › listings",
+        Screen.Recycle => "market.recycledao.xyz › recycle › submit",
+        Screen.Admin => "market.recycledao.xyz › admin › queue",
+        Screen.Wallet => "market.recycledao.xyz › account › wallet",
+        Screen.Profile => $"market.recycledao.xyz › u › {Slug(P(Arg).Handle.TrimStart('@'))}",
+        Screen.Watchlist => "market.recycledao.xyz › account › watchlist",
+        Screen.Messages => "market.recycledao.xyz › account › messages",
+        Screen.Thread => $"market.recycledao.xyz › account › messages › {Arg}",
+        Screen.Notifications => "market.recycledao.xyz › account › alerts",
+        Screen.Impact => "market.recycledao.xyz › impact",
+        Screen.Help => "market.recycledao.xyz › help",
+        Screen.Settings => "market.recycledao.xyz › account › settings",
+        _ => "market.recycledao.xyz",
+    };
+
+    static string Slug(string s) => s.ToLowerInvariant().Replace(" / ", "-").Replace(' ', '-');
+
+    // ─────────────────────────────────────────────────────────────────────────────────────────────
+    // REFERENCE DATA
+    // ─────────────────────────────────────────────────────────────────────────────────────────────
+
+    // Fixed, transparent reward schedule (RCYT per verified submission) — straight from
+    // RecycleDAO/docs/demo-mechanics-spec.md §2. A simple demo convenience, not a market-priced or
+    // weight-based calculation. Shown to the visitor before they submit.
     static readonly Dictionary<string, int> Tiers = new()
     {
         ["Paper / Cardboard"] = 3,
@@ -298,15 +1679,87 @@
         ["Electronics / E-waste"] = 15,
     };
 
+    record Cat(string Name, string Glyph, string Color);
+
+    // Marketplace categories are a SUPERSET of the five reward-rate item types: the last three are
+    // reuse/repair streams that trade for RCYT but have no mint rate (nothing mints outside Tiers).
+    static readonly Cat[] Cats =
+    {
+        new("Paper / Cardboard", "📦", "#c9a227"),
+        new("Plastic", "🧴", "#3aa0d8"),
+        new("Glass", "🍾", "#35d0c0"),
+        new("Metal / Aluminum", "🔩", "#9aa4b2"),
+        new("Electronics / E-waste", "📱", "#8b7dff"),
+        new("Wood / Furniture", "🪵", "#b5763f"),
+        new("Textiles", "🧵", "#d86fa6"),
+        new("Garden / Compost", "🌱", "#5fae5f"),
+    };
+
+    static readonly string[] Conditions = { "Like new", "Good", "Used", "For parts / repair", "Bulk material" };
+    static readonly string[] Locations = { "Bristol", "Bath", "Cardiff", "Exeter", "Newport", "Gloucester", "Taunton", "Swindon" };
+    static readonly string[] CollectionMethods = { "Collect in person", "Drop-off point", "Local delivery" };
+
+    static string MethodBlurb(string m) => m switch
+    {
+        "Collect in person" => "Arrange a time and pick it up from the lister.",
+        "Drop-off point" => "The lister leaves it at a community collection point.",
+        _ => "The lister brings it to you if you're close enough.",
+    };
+
+    record Level(string Name, int At);
+    static readonly Level[] Levels =
+    {
+        new("Sprout", 0), new("Sorter", 25), new("Recycler", 100), new("Steward", 250),
+    };
+
+    // ─────────────────────────────────────────────────────────────────────────────────────────────
+    // MODEL — one in-memory object graph shared by every screen. Nothing is duplicated per screen:
+    // a change made on one screen is visible on every other because they all read these lists.
+    // ─────────────────────────────────────────────────────────────────────────────────────────────
+    class Person
+    {
+        public int Id;
+        public string Name = "";
+        public string Handle = "";
+        public string Location = "";
+        public DateTime Since;
+        public double SeedRating;
+        public int SeedReviews;
+        public string Bio = "";
+    }
+
+    class Listing
+    {
+        public int Id;
+        public string Title = "";
+        public string Cat = "";
+        public string Condition = "";
+        public int Price;                 // whole RCYT; 0 == free to collect
+        public string Kind = "Offer";     // Offer | Wanted
+        public string Qty = "";
+        public string Location = "";
+        public string Collection = "";
+        public string Description = "";
+        public int SellerId;
+        public DateTime PostedAt;
+        public int Views;
+        public int Watchers;
+        public string Status = "Active";  // Active | Reserved | Collected | Ended | Removed
+        public int? FromSubmissionId;
+        public string? Glyph;             // optional per-listing override of the category glyph
+        public List<(string K, string V)> Specifics = new();
+    }
+
     class Submission
     {
         public int Id;
         public string ItemType = "";
         public string Description = "";
-        public string SubmitterName = "";
+        public int SubmitterId;
         public DateTime SubmittedAt;
         public string Status = "Pending"; // Pending | Verified | Rejected
-        public string? MintTxId; // set only on Verified, by ApproveSubmission — mirrors the mint log's own tx id
+        public string? MintTxId;          // set only on Verified, by MintForApproval
+        public int Reward;                // set only on Verified, from Tiers
     }
 
     class MintEntry
@@ -316,126 +1769,759 @@
         public int SubmissionId;
         public string ItemType = "";
         public string Description = "";
-        public string SubmitterName = "";
+        public int SubmitterId;
         public int Reward;
     }
 
-    // Submit-page form state — this is the whole surface the Submit page can touch. None of it reaches
-    // _mintLog or _balance, directly or indirectly.
+    class Order
+    {
+        public int Id;
+        public int ListingId;
+        public int BuyerId;
+        public int SellerId;
+        public int Price;
+        public DateTime PlacedAt;
+        public string Status = "Reserved"; // Reserved | Collected | Cancelled
+        public string Method = "";
+        public string Note = "";
+        public bool Reviewed;
+        public List<(DateTime At, string Text)> Steps = new();
+    }
+
+    class Led
+    {
+        public DateTime At;
+        public string Kind = "";  // Mint | Hold | Release | Refund | Sale
+        public int Delta;         // effect on the SPENDABLE balance (0 for escrow→seller release)
+        public string Text = "";
+        public string Ref = "";
+    }
+
+    class Msg
+    {
+        public bool FromYou;
+        public bool Sim;
+        public string Body = "";
+        public DateTime At;
+    }
+
+    class MsgThread
+    {
+        public int Id;
+        public int ListingId;
+        public int WithId;
+        public bool Unread;
+        public List<Msg> Msgs = new();
+    }
+
+    class Notif
+    {
+        public DateTime At;
+        public string Icon = "•";
+        public string Text = "";
+        public Screen Target;
+        public int Arg;
+        public bool Read;
+    }
+
+    class Review
+    {
+        public int AboutId;
+        public int ByPersonId;
+        public int Stars;
+        public string Text = "";
+        public DateTime At;
+    }
+
+    class Report
+    {
+        public int Id;
+        public int ListingId;
+        public int ByPersonId;
+        public string Reason = "";
+        public DateTime At;
+        public string Status = "Open"; // Open | Dismissed | Actioned
+    }
+
+    class SavedSearch
+    {
+        public string Label = "";
+        public string Q = "";
+        public string Cat = "";
+        public string Kind = "";
+        public string Cond = "";
+        public string Loc = "";
+        public int? Max;
+        public bool Free;
+    }
+
+    readonly List<Person> _people = new();
+    readonly List<Listing> _listings = new();
+    readonly List<Submission> _allSubmissions = new();   // whole-lifecycle overview, never removed from
+    readonly List<Submission> _pending = new();          // actionable queue — the verifier screen renders exactly this
+    readonly List<MintEntry> _mintLog = new();           // newest first — every mint to anyone
+    readonly List<Order> _orders = new();
+    readonly List<Led> _ledger = new();                  // newest first — YOUR balance movements only
+    readonly List<MsgThread> _threads = new();
+    readonly List<Notif> _notifs = new();                // newest first
+    readonly List<Review> _reviews = new();
+    readonly List<Report> _reports = new();
+    readonly List<SavedSearch> _saved = new();
+    readonly HashSet<int> _watch = new();
+
+    int _nextListingId = 1, _nextSubId = 1, _nextOrderId = 1, _nextThreadId = 1, _nextReportId = 1, _mintCounter;
+
+    // Wallet. _totalMinted and _mintLog are written from EXACTLY ONE method: MintForApproval.
+    int _balance;         // spendable
+    int _escrow;          // held against reserved orders
+    int _lifetimeMinted;  // RCYT minted to YOU (drives the level label)
+    int _totalMinted;     // RCYT minted to everyone (total supply this session)
+
+    Person You => _people[0];
+
+    Person P(int id) => _people.FirstOrDefault(p => p.Id == id) ?? _people[0];
+    Listing? L(int id) => _listings.FirstOrDefault(l => l.Id == id);
+    Order? O(int id) => _orders.FirstOrDefault(o => o.Id == id);
+    Submission? S(int id) => _allSubmissions.FirstOrDefault(s => s.Id == id);
+    static Cat CatOf(string name) => Cats.FirstOrDefault(c => c.Name == name) ?? Cats[0];
+
+    int PendingCount => _pending.Count;
+    int UnreadMsgs => _threads.Count(t => t.Unread);
+    int UnreadNotifs => _notifs.Count(n => !n.Read);
+    int CountIn(string cat) => _listings.Count(l => l.Cat == cat && l.Status == "Active");
+    int CountBySeller(int id) => _listings.Count(l => l.SellerId == id && l.Status == "Active");
+    IEnumerable<Submission> MySubs(string? status) =>
+        _allSubmissions.Where(s => s.SubmitterId == 0 && (status is null || s.Status == status));
+    int MintedTo(int personId) => _allSubmissions.Where(s => s.SubmitterId == personId && s.Status == "Verified").Sum(s => s.Reward);
+
+    double Rating(int id)
+    {
+        var p = P(id);
+        var mine = _reviews.Where(r => r.AboutId == id).ToList();
+        if (mine.Count == 0) return p.SeedRating;
+        var total = p.SeedRating * p.SeedReviews + mine.Sum(r => r.Stars);
+        return total / (p.SeedReviews + mine.Count);
+    }
+    int ReviewCount(int id) => P(id).SeedReviews + _reviews.Count(r => r.AboutId == id);
+
+    // ─────────────────────────────────────────────────────────────────────────────────────────────
+    // SHARED MARKUP — one listing card / one listing row, reused by Browse, Watchlist, Profile and
+    // the "similar listings" strip, so all four stay identical by construction.
+    // ─────────────────────────────────────────────────────────────────────────────────────────────
+    RenderFragment<Listing> ListingCard => l =>
+        @<article class="lst" role="button" tabindex="0" @onclick="() => OpenListing(l.Id)">
+            <span class="lst-photo" style="--tile:@CatOf(l.Cat).Color">
+                <span class="lst-g" aria-hidden="true">@(l.Glyph ?? CatOf(l.Cat).Glyph)</span>
+                @if (l.Kind == "Wanted") { <span class="lst-flag want">Wanted</span> }
+                else if (l.Price == 0) { <span class="lst-flag free">Free</span> }
+                @if (l.Status != "Active") { <span class="lst-flag off">@l.Status</span> }
+            </span>
+            <span class="lst-body">
+                <b class="lst-t">@l.Title</b>
+                <span class="lst-p">@(l.Price == 0 ? "Free to collect" : $"{l.Price} RCYT")</span>
+                <span class="lst-m">@l.Condition · @l.Qty</span>
+                <span class="lst-m">@l.Location · @Ago(l.PostedAt)</span>
+                <span class="lst-s">@P(l.SellerId).Name · @Rating(l.SellerId).ToString("0.0") ★</span>
+            </span>
+            <button type="button" class="lst-watch @(_watch.Contains(l.Id) ? "on" : "")"
+                    title="@(_watch.Contains(l.Id) ? "Remove from watchlist" : "Add to watchlist")"
+                    @onclick:stopPropagation="true" @onclick="() => ToggleWatch(l.Id)">@(_watch.Contains(l.Id) ? "♥" : "♡")</button>
+        </article>;
+
+    RenderFragment<Listing> ListingRow => l =>
+        @<div class="lrow" role="button" tabindex="0" @onclick="() => OpenListing(l.Id)">
+            <span class="lrow-photo" style="--tile:@CatOf(l.Cat).Color" aria-hidden="true">@(l.Glyph ?? CatOf(l.Cat).Glyph)</span>
+            <span class="lrow-main">
+                <b>@l.Title</b>
+                <span class="lst-m">@l.Cat · @l.Condition · @l.Qty · @l.Location · @Ago(l.PostedAt)</span>
+                <span class="lst-m">@Truncate(l.Description, 110)</span>
+            </span>
+            <span class="lrow-right">
+                <b class="lst-p">@(l.Price == 0 ? "Free" : $"{l.Price} RCYT")</b>
+                <span class="lst-s">@P(l.SellerId).Name</span>
+            </span>
+        </div>;
+
+    // ─────────────────────────────────────────────────────────────────────────────────────────────
+    // SEARCH / FILTER STATE
+    // ─────────────────────────────────────────────────────────────────────────────────────────────
+    const int PerPage = 12;
+    string _q = "", _qDraft = "", _fCat = "", _fKind = "", _fCond = "", _fLoc = "", _fMaxText = "", _sort = "new", _view = "grid";
+    bool _fFree, _fAfford;
+    int _page = 1;
+
+    void RunSearch() { _q = (_qDraft ?? "").Trim(); _page = 1; Go(Screen.Browse); }
+    void SetCat(ChangeEventArgs e) { _fCat = e.Value?.ToString() ?? ""; _page = 1; if (Cur != Screen.Browse) Go(Screen.Browse); }
+    void SetKind(ChangeEventArgs e) { _fKind = e.Value?.ToString() ?? ""; _page = 1; }
+    void SetCond(ChangeEventArgs e) { _fCond = e.Value?.ToString() ?? ""; _page = 1; }
+    void SetLoc(ChangeEventArgs e) { _fLoc = e.Value?.ToString() ?? ""; _page = 1; }
+    void SetSort(ChangeEventArgs e) { _sort = e.Value?.ToString() ?? "new"; _page = 1; }
+    void SetMax(ChangeEventArgs e) { _fMaxText = e.Value?.ToString() ?? ""; _page = 1; }
+    void ToggleFree(ChangeEventArgs e) { _fFree = e.Value is bool b && b; _page = 1; }
+    void ToggleAfford(ChangeEventArgs e) { _fAfford = e.Value is bool b && b; _page = 1; }
+
+    int? MaxPrice => int.TryParse(_fMaxText, out var v) ? v : null;
+
+    void ClearFilters()
+    {
+        _q = ""; _qDraft = ""; _fCat = ""; _fKind = ""; _fCond = ""; _fLoc = ""; _fMaxText = "";
+        _fFree = false; _fAfford = false; _page = 1;
+    }
+
+    IEnumerable<Listing> Filtered()
+    {
+        var q = (_q ?? "").Trim();
+        var res = _listings.Where(l => l.Status == "Active" || l.Status == "Reserved");
+        if (q.Length > 0)
+        {
+            res = res.Where(l =>
+                l.Title.Contains(q, StringComparison.OrdinalIgnoreCase) ||
+                l.Description.Contains(q, StringComparison.OrdinalIgnoreCase) ||
+                l.Cat.Contains(q, StringComparison.OrdinalIgnoreCase) ||
+                P(l.SellerId).Name.Contains(q, StringComparison.OrdinalIgnoreCase));
+        }
+        if (_fCat.Length > 0) res = res.Where(l => l.Cat == _fCat);
+        if (_fKind.Length > 0) res = res.Where(l => l.Kind == _fKind);
+        if (_fCond.Length > 0) res = res.Where(l => l.Condition == _fCond);
+        if (_fLoc.Length > 0) res = res.Where(l => l.Location == _fLoc);
+        if (MaxPrice is int mx) res = res.Where(l => l.Price <= mx);
+        if (_fFree) res = res.Where(l => l.Price == 0);
+        if (_fAfford) res = res.Where(l => l.Price <= _balance);
+        return _sort switch
+        {
+            "lo" => res.OrderBy(l => l.Price).ThenByDescending(l => l.PostedAt),
+            "hi" => res.OrderByDescending(l => l.Price).ThenByDescending(l => l.PostedAt),
+            "watch" => res.OrderByDescending(l => l.Watchers).ThenByDescending(l => l.PostedAt),
+            _ => res.OrderByDescending(l => l.PostedAt),
+        };
+    }
+
+    IEnumerable<Listing> Related(Listing l) =>
+        _listings.Where(x => x.Id != l.Id && x.Cat == l.Cat && x.Status == "Active").Take(4);
+
+    IEnumerable<(string Label, Action Clear)> ActiveFilterChips()
+    {
+        if (!string.IsNullOrEmpty(_q)) yield return ($"“{_q}”", () => { _q = ""; _qDraft = ""; _page = 1; });
+        if (_fCat.Length > 0) yield return (_fCat, () => { _fCat = ""; _page = 1; });
+        if (_fKind.Length > 0) yield return (_fKind == "Wanted" ? "Wanted ads" : "Available to claim", () => { _fKind = ""; _page = 1; });
+        if (_fCond.Length > 0) yield return (_fCond, () => { _fCond = ""; _page = 1; });
+        if (_fLoc.Length > 0) yield return (_fLoc, () => { _fLoc = ""; _page = 1; });
+        if (MaxPrice is int mx) yield return ($"≤ {mx} RCYT", () => { _fMaxText = ""; _page = 1; });
+        if (_fFree) yield return ("Free only", () => { _fFree = false; _page = 1; });
+        if (_fAfford) yield return ("Within balance", () => { _fAfford = false; _page = 1; });
+    }
+
+    void SaveSearch()
+    {
+        var s = new SavedSearch
+        {
+            Q = _q, Cat = _fCat, Kind = _fKind, Cond = _fCond, Loc = _fLoc, Max = MaxPrice, Free = _fFree,
+        };
+        var bits = new List<string>();
+        if (!string.IsNullOrEmpty(s.Q)) bits.Add($"“{s.Q}”");
+        if (s.Cat.Length > 0) bits.Add(s.Cat);
+        if (s.Kind.Length > 0) bits.Add(s.Kind);
+        if (s.Cond.Length > 0) bits.Add(s.Cond);
+        if (s.Loc.Length > 0) bits.Add(s.Loc);
+        if (s.Max is int m) bits.Add($"≤{m} RCYT");
+        if (s.Free) bits.Add("free only");
+        s.Label = bits.Count == 0 ? "Everything" : string.Join(" · ", bits);
+        if (_saved.Any(x => x.Label == s.Label)) { _flash = "That search is already saved."; return; }
+        _saved.Add(s);
+        _flash = $"Saved “{s.Label}” — find it on your watchlist page.";
+    }
+
+    void RunSaved(SavedSearch s)
+    {
+        _q = s.Q; _qDraft = s.Q; _fCat = s.Cat; _fKind = s.Kind; _fCond = s.Cond; _fLoc = s.Loc;
+        _fMaxText = s.Max?.ToString() ?? ""; _fFree = s.Free; _fAfford = false; _page = 1;
+        Go(Screen.Browse);
+    }
+
+    int MatchCount(SavedSearch s)
+    {
+        var res = _listings.Where(l => l.Status == "Active");
+        if (!string.IsNullOrEmpty(s.Q)) res = res.Where(l => l.Title.Contains(s.Q, StringComparison.OrdinalIgnoreCase) || l.Description.Contains(s.Q, StringComparison.OrdinalIgnoreCase));
+        if (s.Cat.Length > 0) res = res.Where(l => l.Cat == s.Cat);
+        if (s.Kind.Length > 0) res = res.Where(l => l.Kind == s.Kind);
+        if (s.Cond.Length > 0) res = res.Where(l => l.Condition == s.Cond);
+        if (s.Loc.Length > 0) res = res.Where(l => l.Location == s.Loc);
+        if (s.Max is int m) res = res.Where(l => l.Price <= m);
+        if (s.Free) res = res.Where(l => l.Price == 0);
+        return res.Count();
+    }
+
+    void ToggleWatch(int id)
+    {
+        var l = L(id);
+        if (l is null) return;
+        if (_watch.Add(id)) { l.Watchers++; _flash = $"Added “{Truncate(l.Title, 40)}” to your watchlist."; }
+        else { _watch.Remove(id); l.Watchers = Math.Max(0, l.Watchers - 1); _flash = "Removed from your watchlist."; }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────────────────────────
+    // RECYCLING SUBMISSIONS — the ONLY source of new RCYT
+    // ─────────────────────────────────────────────────────────────────────────────────────────────
     string _formItemType = Tiers.Keys.First();
     string _formDescription = "";
-    string _formSubmitterName = "";
-    string? _submitError;
-    string? _submitConfirmation;
-
-    int _nextId = 1;
-    readonly List<Submission> _pending = new();          // actionable queue — Verify page renders exactly this list
-    readonly List<Submission> _history = new();           // decided (Verified or Rejected), read-only, newest first
-    int _rejectedCount;
-    int _verifiedCount;
-
-    // Whole-lifecycle overview — every submission ever created this session, in one place, and never removed
-    // (unlike _pending/_history, which are per-page views of a subset). Feeds the "All submissions" table so a
-    // visitor can see the whole system state at a glance instead of piecing it together across three pages.
-    // Submission is a reference type, so ApproveSubmission/RejectSubmission mutating .Status/.MintTxId on the
-    // same object already keeps this list's rows in sync for free — no separate write path needed here.
-    readonly List<Submission> _allSubmissions = new();
-    int? _selectedId; // set by clicking a mint-log/history row's link — highlights the matching row below
-
-    // Reward-page state. _balance and _mintLog are written from exactly one place: ApproveSubmission below.
-    int _balance;
-    int _mintCounter;
-    readonly List<MintEntry> _mintLog = new();             // newest first
 
     void SubmitItem()
     {
-        _submitConfirmation = null;
         var desc = (_formDescription ?? "").Trim();
-        var name = (_formSubmitterName ?? "").Trim();
-
-        if (string.IsNullOrEmpty(_formItemType) || !Tiers.ContainsKey(_formItemType))
-        {
-            _submitError = "Pick an item type."; return;
-        }
-        if (desc.Length < 3 || desc.Length > 200)
-        {
-            _submitError = "Description must be 3-200 characters."; return;
-        }
-        if (string.IsNullOrEmpty(name) || name.Length > 60)
-        {
-            _submitError = "Enter a display name (not a wallet address)."; return;
-        }
+        if (string.IsNullOrEmpty(_formItemType) || !Tiers.ContainsKey(_formItemType)) { _err = "Pick an item type."; return; }
+        if (desc.Length < 3 || desc.Length > 200) { _err = "Description must be 3-200 characters."; return; }
 
         var sub = new Submission
         {
-            Id = _nextId++,
+            Id = _nextSubId++,
             ItemType = _formItemType,
             Description = desc,
-            SubmitterName = name,
+            SubmitterId = 0,
             SubmittedAt = DateTime.Now,
             Status = "Pending",
         };
-        _pending.Add(sub); // Pending only — this method never touches _balance or _mintLog.
-        _allSubmissions.Add(sub); // whole-lifecycle overview list — added once here, never removed
+        _pending.Add(sub);          // Pending only — this method never touches _balance, _mintLog or _totalMinted.
+        _allSubmissions.Add(sub);   // whole-lifecycle list — added once here, never removed
 
-        _submitError = null;
-        _submitConfirmation = $"Submitted — “{Truncate(desc, 40)}” by {name} is awaiting review.";
+        _err = null;
         _formDescription = "";
-        _formSubmitterName = "";
         _formItemType = Tiers.Keys.First();
+        Notify("⚑", $"Submission #{sub.Id} is awaiting verification.", Screen.Admin, 0);
 
-        // The submit action itself is what carries the visitor from the Submit page to the Verify page —
-        // this is the "cards drive navigation" behaviour: no nav-bar click involved, just the real action.
-        _focus = Stage.Verify;
+        // The action itself carries you onward — no nav-bar click involved.
+        Go(Screen.Admin);
+        _flash = $"Submitted — awaiting a verifier's decision. Nothing has been minted yet.";
     }
 
-    // The ONE handler in this page that can increase the balance or append to the mint log. No other method
-    // touches _balance or _mintLog — that is the whole enforcement of "submit alone never mints."
-    void ApproveSubmission(int id)
+    // ══════════════════════════════════════════════════════════════════════════════════════════════
+    // THE MINT GATE. This is the ONLY method in the whole component that appends to _mintLog or
+    // increases _totalMinted / _lifetimeMinted. It is called from exactly two places: the verifier
+    // queue's ApproveSubmission handler, and the seeding routine (which deliberately runs through
+    // this same path so the starting balance is fully explained by the mint log, not conjured).
+    // Marketplace code — checkout, escrow, release, refund, sale — can move RCYT between balances
+    // but has no path to this method, so it can never create supply.
+    // ══════════════════════════════════════════════════════════════════════════════════════════════
+    void MintForApproval(Submission sub, DateTime when)
     {
-        var sub = _pending.FirstOrDefault(s => s.Id == id);
-        if (sub is null) return; // already decided (or never existed) — structurally cannot double-mint
-        _pending.Remove(sub);    // gone from the actionable queue immediately: its buttons stop existing, not just disabled
+        var reward = Tiers[sub.ItemType];
+        _mintCounter++;
+        var txId = $"SIM-{_mintCounter:D4}"; // clearly-labeled simulated id — never a real tx hash
 
         sub.Status = "Verified";
-        _verifiedCount++;
-        int reward = Tiers[sub.ItemType];
+        sub.Reward = reward;
+        sub.MintTxId = txId;
 
-        _mintCounter++;
-        var txId = $"SIM-{_mintCounter:D4}"; // clearly-labeled fake id — never a real tx hash
-        sub.MintTxId = txId; // so the "All submissions" row can show its own tx id without a lookup
         _mintLog.Insert(0, new MintEntry
         {
             TxId = txId,
-            Timestamp = DateTime.Now,
+            Timestamp = when,
             SubmissionId = sub.Id,
             ItemType = sub.ItemType,
             Description = sub.Description,
-            SubmitterName = sub.SubmitterName,
+            SubmitterId = sub.SubmitterId,
             Reward = reward,
         });
-        _balance += reward;
+        _totalMinted += reward;
 
-        _history.Insert(0, sub);
-        _submitConfirmation = null;
-        _focus = Stage.Reward; // the decision itself carries the visitor to the Reward page
+        if (sub.SubmitterId == 0) // minted to YOU — the only case that touches your wallet
+        {
+            _balance += reward;
+            _lifetimeMinted += reward;
+            _ledger.Insert(0, new Led
+            {
+                At = when, Kind = "Mint", Delta = reward,
+                Text = $"Verified submission #{sub.Id} — {sub.ItemType}", Ref = txId,
+            });
+        }
+    }
+
+    void ApproveSubmission(int id)
+    {
+        var sub = _pending.FirstOrDefault(s => s.Id == id);
+        if (sub is null) return;  // already decided (or never existed) — structurally cannot double-mint
+        _pending.Remove(sub);     // gone from the actionable queue: its buttons stop existing, not just disabled
+
+        MintForApproval(sub, DateTime.Now);
+
+        if (sub.SubmitterId == 0)
+        {
+            Notify("◆", $"Your submission #{sub.Id} was approved: +{sub.Reward} RCYT.", Screen.Wallet, 0);
+            // The approval itself carries you to the wallet — this is the one causal link the demo
+            // most wants a visitor to SEE: click Approve, watch the balance and mint log change.
+            Go(Screen.Wallet);
+            _flash = $"Approved — {sub.Reward} RCYT minted to you. Balance is now {_balance} RCYT. "
+                   + "This is the only action anywhere in the prototype that can create RCYT.";
+        }
+        else
+        {
+            _flash = $"Approved — {sub.Reward} RCYT minted to {P(sub.SubmitterId).Name}. Your own balance is unchanged, "
+                   + "because the mint goes to the submitter, not the verifier.";
+            Notify("◆", $"You approved submission #{sub.Id}: {sub.Reward} RCYT minted to {P(sub.SubmitterId).Name}.", Screen.Wallet, 0);
+        }
     }
 
     void RejectSubmission(int id)
     {
         var sub = _pending.FirstOrDefault(s => s.Id == id);
-        if (sub is null) return; // already decided — nothing to do
+        if (sub is null) return;  // already decided — nothing to do
         _pending.Remove(sub);
-
         sub.Status = "Rejected";
-        _rejectedCount++;
-        _history.Insert(0, sub);
-        // Deliberately no touch to _balance or _mintLog here.
-        _submitConfirmation = null;
-        _focus = Stage.Reward; // still carries the visitor forward, even though nothing minted this time
+        // Deliberately no touch to _balance, _mintLog or _totalMinted here.
+        _flash = $"Rejected submission #{sub.Id} — no reward, no mint-log entry, nothing added to supply.";
+        Notify("✕", $"Submission #{sub.Id} was rejected.", Screen.Admin, 0);
     }
 
-    static string Truncate(string s, int n) => s.Length <= n ? s : s.Substring(0, n - 1) + "…";
+    // ─────────────────────────────────────────────────────────────────────────────────────────────
+    // MARKETPLACE — moves RCYT between balances; never creates it
+    // ─────────────────────────────────────────────────────────────────────────────────────────────
+    string _coMethod = CollectionMethods[0];
+    string _coNote = "";
+
+    void StartCheckout(int listingId)
+    {
+        var l = L(listingId);
+        _coMethod = l?.Collection ?? CollectionMethods[0];
+        _coNote = "";
+        Go(Screen.Checkout, listingId);
+    }
+
+    void PlaceOrder(int listingId)
+    {
+        var l = L(listingId);
+        if (l is null || l.Status != "Active") { _err = "That listing isn't available any more."; return; }
+        if (l.SellerId == 0) { _err = "You can't claim your own listing."; return; }
+        if (l.Price > _balance) { _err = $"Not enough RCYT — you're {l.Price - _balance} short."; return; }
+
+        var now = DateTime.Now;
+        var o = new Order
+        {
+            Id = _nextOrderId++,
+            ListingId = l.Id,
+            BuyerId = 0,
+            SellerId = l.SellerId,
+            Price = l.Price,
+            PlacedAt = now,
+            Status = "Reserved",
+            Method = _coMethod,
+            Note = (_coNote ?? "").Trim(),
+        };
+        o.Steps.Add((now, $"Claim placed by you — listing reserved."));
+        if (l.Price > 0)
+        {
+            _balance -= l.Price;
+            _escrow += l.Price;
+            _ledger.Insert(0, new Led { At = now, Kind = "Hold", Delta = -l.Price, Text = $"Held in escrow for order #{o.Id} — {Truncate(l.Title, 34)}", Ref = $"ORD-{o.Id:D4}" });
+            o.Steps.Add((now, $"{l.Price} RCYT moved from your balance into escrow."));
+        }
+        else
+        {
+            o.Steps.Add((now, "Free to collect — no RCYT involved."));
+        }
+        l.Status = "Reserved";
+        _orders.Add(o);
+        _coNote = "";
+        Notify("▣", $"Order #{o.Id} placed — {Truncate(l.Title, 40)} is reserved for you.", Screen.OrderDetail, o.Id);
+        Go(Screen.OrderPlaced, o.Id);
+    }
+
+    void ConfirmCollected(int orderId)
+    {
+        var o = O(orderId);
+        if (o is null || o.Status != "Reserved") return;
+        var now = DateTime.Now;
+        var l = L(o.ListingId);
+        o.Status = "Collected";
+        if (l is not null) l.Status = "Collected";
+
+        if (o.BuyerId == 0 && o.Price > 0)
+        {
+            _escrow -= o.Price;
+            _ledger.Insert(0, new Led { At = now, Kind = "Release", Delta = 0, Text = $"Escrow released to {P(o.SellerId).Name} — order #{o.Id}", Ref = $"ORD-{o.Id:D4}" });
+            o.Steps.Add((now, $"Collection confirmed — {o.Price} RCYT released from escrow to {P(o.SellerId).Name}."));
+            _flash = $"Collection confirmed. {o.Price} RCYT released to {P(o.SellerId).Name}. No tokens were created or destroyed — they moved.";
+        }
+        else if (o.SellerId == 0 && o.Price > 0)
+        {
+            _balance += o.Price;
+            _ledger.Insert(0, new Led { At = now, Kind = "Sale", Delta = o.Price, Text = $"Sale of {Truncate(l?.Title ?? "listing", 34)} — order #{o.Id}", Ref = $"ORD-{o.Id:D4}" });
+            o.Steps.Add((now, $"Collection confirmed — you received {o.Price} RCYT from {P(o.BuyerId).Name}."));
+            _flash = $"Marked collected. You received {o.Price} RCYT — a transfer from the buyer, not a mint; total supply is unchanged.";
+        }
+        else
+        {
+            o.Steps.Add((now, "Collection confirmed — free item, no RCYT moved."));
+            _flash = "Marked collected. It was free, so no RCYT moved.";
+        }
+        Notify("✓", $"Order #{o.Id} completed.", Screen.OrderDetail, o.Id);
+    }
+
+    void CancelOrder(int orderId)
+    {
+        var o = O(orderId);
+        if (o is null || o.Status != "Reserved") return;
+        var now = DateTime.Now;
+        var l = L(o.ListingId);
+        o.Status = "Cancelled";
+        if (l is not null && l.Status == "Reserved") l.Status = "Active";
+
+        if (o.BuyerId == 0 && o.Price > 0)
+        {
+            _escrow -= o.Price;
+            _balance += o.Price;
+            _ledger.Insert(0, new Led { At = now, Kind = "Refund", Delta = o.Price, Text = $"Escrow returned — order #{o.Id} cancelled", Ref = $"ORD-{o.Id:D4}" });
+            o.Steps.Add((now, $"Cancelled — {o.Price} RCYT returned from escrow to your balance."));
+        }
+        else
+        {
+            o.Steps.Add((now, "Cancelled — the listing is available again."));
+        }
+        _flash = $"Order #{o.Id} cancelled.";
+        Notify("↺", $"Order #{o.Id} was cancelled.", Screen.OrderDetail, o.Id);
+    }
+
+    string OrderMoneyBlurb(Order o)
+    {
+        if (o.Price == 0) return "Free to collect — no RCYT moves at any point in this order.";
+        return o.Status switch
+        {
+            "Reserved" when o.BuyerId == 0 => $"{o.Price} RCYT is held in escrow. It goes to {P(o.SellerId).Name} when you confirm collection, or back to you if you cancel.",
+            "Reserved" => $"{o.Price} RCYT is held by the buyer's escrow. It reaches you when the collection is confirmed.",
+            "Collected" when o.BuyerId == 0 => $"{o.Price} RCYT was released from escrow to {P(o.SellerId).Name}.",
+            "Collected" => $"You received {o.Price} RCYT from {P(o.BuyerId).Name}. A transfer, not a mint.",
+            _ => o.BuyerId == 0 ? $"{o.Price} RCYT was returned to your balance." : "No RCYT changed hands.",
+        };
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────────────────────────
+    // SELLING
+    // ─────────────────────────────────────────────────────────────────────────────────────────────
+    int? _sellEditId;
+    string _sellKind = "Offer", _sellTitle = "", _sellCat = "Paper / Cardboard", _sellCond = "Good",
+           _sellQty = "", _sellLoc = "Bristol", _sellCollect = "Collect in person", _sellDesc = "";
+    int _sellPrice, _sellFromSub;
+
+    void StartNewListing()
+    {
+        _sellEditId = null;
+        _sellKind = "Offer"; _sellTitle = ""; _sellCat = Cats[0].Name; _sellCond = "Good";
+        _sellQty = ""; _sellPrice = 0; _sellLoc = You.Location; _sellCollect = CollectionMethods[0];
+        _sellDesc = ""; _sellFromSub = 0;
+        Go(Screen.Sell);
+    }
+
+    void EditListing(int id)
+    {
+        var l = L(id);
+        if (l is null || l.SellerId != 0) return;
+        _sellEditId = l.Id;
+        _sellKind = l.Kind; _sellTitle = l.Title; _sellCat = l.Cat; _sellCond = l.Condition;
+        _sellQty = l.Qty; _sellPrice = l.Price; _sellLoc = l.Location; _sellCollect = l.Collection;
+        _sellDesc = l.Description; _sellFromSub = l.FromSubmissionId ?? 0;
+        Go(Screen.Sell);
+    }
+
+    void PostListing()
+    {
+        var title = (_sellTitle ?? "").Trim();
+        var desc = (_sellDesc ?? "").Trim();
+        var qty = (_sellQty ?? "").Trim();
+        if (title.Length < 4 || title.Length > 80) { _err = "Title must be 4-80 characters."; return; }
+        if (qty.Length == 0) { _err = "Say how much there is (e.g. \"8 kg\" or \"60 items\")."; return; }
+        if (desc.Length < 10 || desc.Length > 600) { _err = "Description must be 10-600 characters."; return; }
+        if (_sellPrice < 0 || _sellPrice > 9999) { _err = "Price must be between 0 and 9999 RCYT."; return; }
+
+        var l = _sellEditId is int eid ? L(eid) : null;
+        var isNew = l is null;
+        if (isNew)
+        {
+            l = new Listing { Id = _nextListingId++, SellerId = 0, PostedAt = DateTime.Now, Status = "Active" };
+            _listings.Add(l);
+        }
+        l!.Kind = _sellKind;
+        l.Title = title;
+        l.Cat = _sellCat;
+        l.Condition = _sellCond;
+        l.Qty = qty;
+        l.Price = _sellPrice;
+        l.Location = _sellLoc;
+        l.Collection = _sellCollect;
+        l.Description = desc;
+        l.FromSubmissionId = _sellFromSub == 0 ? null : _sellFromSub;
+        l.Specifics = new List<(string, string)>
+        {
+            ("Material", _sellCat),
+            ("Condition", _sellCond),
+            ("Quantity", qty),
+            ("Collection", _sellCollect),
+            ("Listed by", You.Name),
+            ("Provenance", _sellFromSub == 0 ? "not linked to a verified submission" : $"verified submission #{_sellFromSub}"),
+        };
+
+        // Posting a listing does NOT touch the wallet in any way — no mint, no fee, no deduction.
+        _err = null;
+        _flash = isNew ? $"Published “{Truncate(title, 40)}” — it's live in {l.Cat} now." : "Listing updated.";
+        Notify("▤", isNew ? $"Your listing “{Truncate(title, 34)}” is live." : $"Listing #{l.Id} updated.", Screen.Listing, l.Id);
+        _sellEditId = null;
+        Go(Screen.Listing, l.Id);
+    }
+
+    void EndListing(int id)
+    {
+        var l = L(id);
+        if (l is null || l.SellerId != 0 || l.Status != "Active") return;
+        l.Status = "Ended";
+        _flash = $"Ended “{Truncate(l.Title, 40)}”. It no longer appears in search.";
+    }
+
+    // Clearly-labelled DEMO CONTROL (marked as such in the UI): invents a counterparty so the seller
+    // side of the flow can be walked. It creates an Order — the same Order type the buyer flow uses —
+    // and never touches the mint path, so total supply is unaffected.
+    readonly Random _rng = new(20260826);
+    void SimulateBuyer(int listingId)
+    {
+        var l = L(listingId);
+        if (l is null || l.SellerId != 0 || l.Status != "Active") return;
+        var candidates = _people.Where(p => p.Id != 0).ToList();
+        var buyer = candidates[_rng.Next(candidates.Count)];
+        var now = DateTime.Now;
+        var o = new Order
+        {
+            Id = _nextOrderId++,
+            ListingId = l.Id,
+            BuyerId = buyer.Id,
+            SellerId = 0,
+            Price = l.Price,
+            PlacedAt = now,
+            Status = "Reserved",
+            Method = l.Collection,
+            Note = "(simulated buyer — this prototype has no other real users)",
+        };
+        o.Steps.Add((now, $"{buyer.Name} claimed your listing (simulated demo action)."));
+        if (l.Price > 0) o.Steps.Add((now, $"{l.Price} RCYT held in their escrow, payable to you on collection."));
+        _orders.Add(o);
+        l.Status = "Reserved";
+        Notify("▣", $"{buyer.Name} claimed “{Truncate(l.Title, 34)}” (simulated).", Screen.OrderDetail, o.Id);
+        _flash = $"Simulated: {buyer.Name} claimed your listing. Mark it collected on the order page to receive the RCYT.";
+        Go(Screen.OrderDetail, o.Id);
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────────────────────────
+    // REPORTS · REVIEWS · MESSAGES · NOTIFICATIONS · SETTINGS
+    // ─────────────────────────────────────────────────────────────────────────────────────────────
+    string _reportReason = "Miscategorised material";
+
+    void ReportListing(int listingId)
+    {
+        var l = L(listingId);
+        if (l is null) return;
+        _reports.Add(new Report
+        {
+            Id = _nextReportId++, ListingId = l.Id, ByPersonId = 0,
+            Reason = _reportReason, At = DateTime.Now, Status = "Open",
+        });
+        _flash = "Report filed — it's in the moderator queue on this same prototype.";
+        Notify("⚑", $"Report filed against “{Truncate(l.Title, 34)}”.", Screen.Admin, 0);
+    }
+
+    void ResolveReport(int reportId, bool removeListing)
+    {
+        var r = _reports.FirstOrDefault(x => x.Id == reportId);
+        if (r is null || r.Status != "Open") return;
+        r.Status = removeListing ? "Actioned" : "Dismissed";
+        if (removeListing)
+        {
+            var l = L(r.ListingId);
+            if (l is not null) { l.Status = "Removed"; _watch.Remove(l.Id); }
+            _flash = "Listing removed from the marketplace. No RCYT was involved either way.";
+        }
+        else
+        {
+            _flash = "Report dismissed — the listing stays live.";
+        }
+    }
+
+    int _revStars = 5;
+    string _revText = "";
+
+    void LeaveReview(int orderId)
+    {
+        var o = O(orderId);
+        if (o is null || o.Status != "Collected" || o.Reviewed || o.BuyerId != 0) return;
+        var text = (_revText ?? "").Trim();
+        if (text.Length < 3) { _err = "Write a line or two for the review."; return; }
+        _reviews.Add(new Review { AboutId = o.SellerId, ByPersonId = 0, Stars = _revStars, Text = text, At = DateTime.Now });
+        o.Reviewed = true;
+        _revText = "";
+        _err = null;
+        _flash = $"Review posted to {P(o.SellerId).Name}'s profile.";
+    }
+
+    string _msgDraft = "";
+
+    void OpenThread(int listingId, int withId)
+    {
+        var t = _threads.FirstOrDefault(x => x.ListingId == listingId && x.WithId == withId);
+        if (t is null)
+        {
+            t = new MsgThread { Id = _nextThreadId++, ListingId = listingId, WithId = withId };
+            var l = L(listingId);
+            t.Msgs.Add(new Msg
+            {
+                FromYou = false, Sim = true, At = DateTime.Now,
+                Body = l is null
+                    ? "Hi — happy to talk about anything I've listed."
+                    : $"Hi! Yes, “{Truncate(l.Title, 40)}” is still available. Let me know when suits you for collection.",
+            });
+            _threads.Add(t);
+        }
+        t.Unread = false;
+        Go(Screen.Thread, t.Id);
+    }
+
+    void SendMsg(int threadId)
+    {
+        var t = _threads.FirstOrDefault(x => x.Id == threadId);
+        var body = (_msgDraft ?? "").Trim();
+        if (t is null || body.Length == 0) return;
+        var now = DateTime.Now;
+        t.Msgs.Add(new Msg { FromYou = true, Body = body, At = now });
+        t.Msgs.Add(new Msg
+        {
+            FromYou = false, Sim = true, At = now,
+            Body = "Thanks — noted. (This reply is generated by the prototype; there is no one on the other end.)",
+        });
+        _msgDraft = "";
+        t.Unread = false;
+    }
+
+    void Notify(string icon, string text, Screen target, int arg)
+        => _notifs.Insert(0, new Notif { At = DateTime.Now, Icon = icon, Text = text, Target = target, Arg = arg });
+
+    void OpenNotif(Notif n)
+    {
+        n.Read = true;
+        Go(n.Target, n.Arg);
+    }
+
+    void MarkAllRead() { foreach (var n in _notifs) n.Read = true; }
+
+    string _setName = "", _setLoc = "Bristol", _setBio = "";
+
+    void SaveSettings()
+    {
+        var name = (_setName ?? "").Trim();
+        if (name.Length < 2 || name.Length > 60) { _err = "Display name must be 2-60 characters."; return; }
+        You.Name = name;
+        You.Location = _setLoc;
+        You.Bio = (_setBio ?? "").Trim();
+        _err = null;
+        _flash = "Saved — your name and location now show everywhere on this page, including on listings you've posted.";
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────────────────────────
+    // SMALL HELPERS
+    // ─────────────────────────────────────────────────────────────────────────────────────────────
+    static string Truncate(string s, int n) => string.IsNullOrEmpty(s) ? "" : (s.Length <= n ? s : s.Substring(0, n - 1) + "…");
 
     static string StatusClass(string status) => status switch
     {
@@ -443,4 +2529,220 @@
         "Rejected" => "bad",
         _ => "pending",
     };
+
+    static string OrderClass(string status) => status switch
+    {
+        "Collected" => "ok",
+        "Cancelled" => "bad",
+        _ => "pending",
+    };
+
+    static string ListingClass(string status) => status switch
+    {
+        "Active" => "ok",
+        "Reserved" => "pending",
+        _ => "bad",
+    };
+
+    static string LedClass(string kind) => kind switch
+    {
+        "Mint" => "ok",
+        "Sale" => "ok",
+        "Refund" => "ok",
+        "Hold" => "pending",
+        _ => "pending",
+    };
+
+    static string Initials(string name)
+    {
+        var parts = (name ?? "").Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length == 0) return "?";
+        if (parts.Length == 1) return parts[0].Substring(0, 1).ToUpperInvariant();
+        return (parts[0].Substring(0, 1) + parts[^1].Substring(0, 1)).ToUpperInvariant();
+    }
+
+    static string FirstName(string name)
+    {
+        var parts = (name ?? "").Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        return parts.Length == 0 ? "them" : parts[0];
+    }
+
+    static string Ago(DateTime t)
+    {
+        var d = DateTime.Now - t;
+        if (d.TotalSeconds < 60) return "just now";
+        if (d.TotalMinutes < 60) return $"{(int)d.TotalMinutes} min ago";
+        if (d.TotalHours < 24) return $"{(int)d.TotalHours} h ago";
+        return $"{(int)d.TotalDays} d ago";
+    }
+
+    static string LevelName(int minted)
+    {
+        var name = Levels[0].Name;
+        foreach (var l in Levels) if (minted >= l.At) name = l.Name;
+        return name;
+    }
+
+    static int? NextLevelAt(int minted)
+    {
+        foreach (var l in Levels) if (minted < l.At) return l.At;
+        return null;
+    }
+
+    static string NextLevelName(int minted)
+    {
+        foreach (var l in Levels) if (minted < l.At) return l.Name;
+        return Levels[^1].Name;
+    }
+
+    static int LevelPct(int minted)
+    {
+        var next = NextLevelAt(minted);
+        if (next is null) return 100;
+        var prev = 0;
+        foreach (var l in Levels) if (minted >= l.At) prev = l.At;
+        var span = next.Value - prev;
+        return span <= 0 ? 100 : Math.Clamp((int)Math.Round(100.0 * (minted - prev) / span), 2, 100);
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────────────────────────
+    // SEEDING — sample participants, listings and history so the marketplace isn't empty on load.
+    // The starting balance is NOT conjured: it is produced by running seeded submissions through
+    // MintForApproval, the same single mint path the verifier queue uses, so every RCYT you start
+    // with has a matching row in the mint log and the wallet ledger.
+    // ─────────────────────────────────────────────────────────────────────────────────────────────
+    protected override void OnInitialized()
+    {
+        var now = DateTime.Now;
+
+        _people.Add(new Person { Id = 0, Name = "Alex Rivera", Handle = "@alex_r", Location = "Bristol", Since = now.AddYears(-2), SeedRating = 4.8, SeedReviews = 12, Bio = "Flat-dweller trying to bin less. Mostly packaging, jars and the odd bit of e-waste." });
+        _people.Add(new Person { Id = 1, Name = "Priya Nandi", Handle = "@priya_n", Location = "Bath", Since = now.AddYears(-3), SeedRating = 4.9, SeedReviews = 41, Bio = "Ceramics studio. Lists glaze jars, kraft paper and packing offcuts most weeks." });
+        _people.Add(new Person { Id = 2, Name = "Green Loop CIC", Handle = "@greenloop", Location = "Bristol", Since = now.AddYears(-4), SeedRating = 4.7, SeedReviews = 128, Bio = "Community interest company diverting commercial waste across the South West." });
+        _people.Add(new Person { Id = 3, Name = "Tomas Novak", Handle = "@tomas_n", Location = "Cardiff", Since = now.AddYears(-1), SeedRating = 4.6, SeedReviews = 23, Bio = "Metalwork and joinery. Offcuts, swarf and boards that deserve another life." });
+        _people.Add(new Person { Id = 4, Name = "Maya Bennett", Handle = "@maya_b", Location = "Exeter", Since = now.AddMonths(-8), SeedRating = 5.0, SeedReviews = 9, Bio = "Repairs old electronics for a local charity. Always after chargers and cables." });
+        _people.Add(new Person { Id = 5, Name = "Sam Okafor", Handle = "@sam_ok", Location = "Newport", Since = now.AddYears(-2), SeedRating = 4.4, SeedReviews = 57, Bio = "Bike builder. Steel frames, bottles, bubble wrap by the bag." });
+        _people.Add(new Person { Id = 6, Name = "Hilltop Repair Cafe", Handle = "@hilltop", Location = "Gloucester", Since = now.AddYears(-5), SeedRating = 4.9, SeedReviews = 76, Bio = "Monthly repair café. We take in broken things and put out compost and planters." });
+        _people.Add(new Person { Id = 7, Name = "Ellie Fraser", Handle = "@ellie_f", Location = "Taunton", Since = now.AddMonths(-4), SeedRating = 4.3, SeedReviews = 5, Bio = "Knitter and hoarder of wool. Clearing the spare room, slowly." });
+
+        _setName = You.Name; _setLoc = You.Location; _setBio = You.Bio;
+
+        void Seed(string title, string cat, string cond, int price, int seller, string qty, string loc,
+                  string collect, string desc, double hoursAgo, string kind = "Offer", string? glyph = null, int watchers = 0)
+        {
+            var l = new Listing
+            {
+                Id = _nextListingId++,
+                Title = title, Cat = cat, Condition = cond, Price = price, Kind = kind,
+                Qty = qty, Location = loc, Collection = collect, Description = desc,
+                SellerId = seller, PostedAt = now.AddHours(-hoursAgo),
+                Views = 3 + (int)(hoursAgo * 2), Watchers = watchers, Glyph = glyph,
+            };
+            l.Specifics = new List<(string, string)>
+            {
+                ("Material", cat), ("Condition", cond), ("Quantity", qty),
+                ("Collection", collect), ("Listed by", _people[seller].Name),
+                ("Provenance", "not linked to a verified submission"),
+            };
+            _listings.Add(l);
+        }
+
+        Seed("40 flat-packed cardboard boxes, clean and dry", "Paper / Cardboard", "Bulk material", 6, 2, "40 boxes", "Bristol", "Drop-off point",
+            "Double-walled, all flat-packed and dry, mostly 40×30×30cm. Came out of a single office move so they're all in one piece. Take the lot or take ten.", 2, watchers: 4);
+        Seed("Kraft packing paper, half a roll (~15 kg)", "Paper / Cardboard", "Good", 0, 1, "~15 kg", "Bath", "Collect in person",
+            "Left over from a studio order. Unbleached kraft, 600mm wide, no printing on it. Free to whoever can lift it into a car.", 5, watchers: 2);
+        Seed("Clear glass jars with lids — 60 assorted", "Glass", "Good", 12, 1, "60 jars", "Bath", "Collect in person",
+            "Washed, labels off, lids included and none of them rusty. Sizes from 100ml to 1 litre. Ideal for preserves, glazes or storage.", 9, watchers: 7);
+        Seed("Green wine bottles, 3 crates", "Glass", "Bulk material", 4, 5, "3 crates (~54)", "Newport", "Drop-off point",
+            "Punted bottles, rinsed, no chips. Crates included if you bring them back. Collecting from the pub yard.", 14);
+        Seed("Aluminium offcuts, 8 kg", "Metal / Aluminum", "Bulk material", 18, 3, "8 kg", "Cardiff", "Collect in person",
+            "Mixed 6082 offcuts from a workshop job — bar ends, plate scraps, nothing longer than 300mm. Clean, no paint or adhesive.", 20, watchers: 3);
+        Seed("Copper pipe offcuts, assorted lengths", "Metal / Aluminum", "Used", 34, 3, "~6 kg", "Cardiff", "Collect in person",
+            "15mm and 22mm, longest piece about 700mm. Some solder joints still attached. Sold as-is for reuse or re-melt.", 27);
+        Seed("ThinkPad T480 — working, battery tired", "Electronics / E-waste", "Used", 240, 2, "1 laptop", "Bristol", "Collect in person",
+            "Rescued from an office clear-out. i5, 8GB, 256GB SSD, wiped and reinstalled. Screen and keyboard fine; battery holds about 40 minutes. Charger included.", 30, watchers: 11);
+        Seed("Box of assorted USB, HDMI and power cables", "Electronics / E-waste", "Good", 9, 4, "1 box (~40 cables)", "Exeter", "Local delivery",
+            "All tested and coiled. Mostly USB-A to micro/C, a few HDMI, a couple of kettle leads. Whatever you don't want, pass on.", 33);
+        Seed("Dead laptop chargers — for parts", "Electronics / E-waste", "For parts / repair", 0, 7, "9 chargers", "Taunton", "Drop-off point",
+            "None of these work. Good for barrel tips, cable and the odd salvageable brick. Free — I'd rather they went to a repairer than the tip.", 40);
+        Seed("HDPE drums, food grade, 25L × 4", "Plastic", "Good", 22, 2, "4 drums", "Bristol", "Collect in person",
+            "Previously held food-grade syrup, rinsed three times. Screw lids intact and sealing. Good for water butts, brewing or storage.", 44, watchers: 5);
+        Seed("Bubble wrap, reclaimed, 2 large bags", "Plastic", "Used", 3, 5, "2 bin bags", "Newport", "Drop-off point",
+            "Pulled out of incoming deliveries over about two months. Some of it is a bit squashed but almost all of the bubbles are intact.", 50);
+        Seed("Scaffold boards × 6, sanded", "Wood / Furniture", "Good", 65, 3, "6 boards", "Cardiff", "Local delivery",
+            "3.9m boards, cut down to 2m each, sanded and de-nailed. Bands still on two of them. Make shelves out of them like everyone else does.", 55, watchers: 6);
+        Seed("Oak dining chairs × 4 — need re-gluing", "Wood / Furniture", "For parts / repair", 40, 4, "4 chairs", "Exeter", "Collect in person",
+            "Solid oak, 1970s, joints have gone loose. Nothing broken or missing — they need knocking apart, cleaning and re-gluing. Seats recover easily.", 61);
+        Seed("Cotton offcuts, 4 kg — dressmaking scraps", "Textiles", "Bulk material", 5, 1, "4 kg", "Bath", "Drop-off point",
+            "Mixed cotton and cotton-linen, pieces from a hand's width up to about a metre. Washed. Good for quilting or stuffing.", 66);
+        Seed("Wool jumpers × 7, for re-spinning", "Textiles", "Used", 14, 7, "7 jumpers", "Taunton", "Local delivery",
+            "Pure wool, moth holes in three of them, which is why they're here rather than in a charity shop. Unravel beautifully.", 70, watchers: 2);
+        Seed("Leaf mould compost, ready — bring bags", "Garden / Compost", "Bulk material", 0, 6, "~1 cubic metre", "Gloucester", "Collect in person",
+            "Two years old, sieved, smells like a wood. Bring your own bags and a spade. Free — we make more of it than we can use.", 74, watchers: 8);
+        Seed("Terracotta pots, 30 assorted", "Garden / Compost", "Good", 8, 6, "30 pots", "Gloucester", "Drop-off point",
+            "From 8cm to 30cm across. A few have chipped rims. All frost-survivors, all scrubbed.", 80);
+        Seed("Bike frame and wheels, 1990s steel tourer", "Metal / Aluminum", "For parts / repair", 120, 5, "1 frame + 2 wheels", "Newport", "Collect in person",
+            "Reynolds 501 frame, 56cm, surface rust but no dents and the threads are clean. 700c wheels run true. No groupset.", 88, glyph: "🚲", watchers: 9);
+        Seed("Wanted: clean pallet wood for planters", "Wood / Furniture", "Bulk material", 30, 6, "as much as you have", "Gloucester", "Local delivery",
+            "We build planters for the community garden every spring. After heat-treated (HT stamped) pallets only, no chemical treatment. Offering RCYT per load.", 12, kind: "Wanted");
+        Seed("Wanted: working 65W USB-C laptop chargers", "Electronics / E-waste", "Used", 25, 4, "any quantity", "Exeter", "Drop-off point",
+            "The repair bench keeps running out. Must actually work — I test everything on arrival. Happy to take one or twenty.", 18, kind: "Wanted");
+
+        // Seeded, already-approved history for you. Deliberately routed through MintForApproval so the
+        // opening balance is explained line-by-line in the mint log and ledger rather than assigned.
+        void SeedApproved(string type, string desc, double hoursAgo)
+        {
+            var s = new Submission
+            {
+                Id = _nextSubId++, ItemType = type, Description = desc, SubmitterId = 0,
+                SubmittedAt = now.AddHours(-hoursAgo), Status = "Pending",
+            };
+            _allSubmissions.Add(s);
+            MintForApproval(s, now.AddHours(-hoursAgo + 0.5));
+        }
+
+        SeedApproved("Electronics / E-waste", "Old router and two set-top boxes to the council WEEE point", 96);
+        SeedApproved("Electronics / E-waste", "Broken microwave, dropped at the recycling centre", 84);
+        SeedApproved("Metal / Aluminum", "Aluminium cans, about 3 kg, kerbside", 72);
+        SeedApproved("Metal / Aluminum", "Steel baking trays and an old saucepan set", 60);
+        SeedApproved("Glass", "Two crates of bottles to the bottle bank", 48);
+        SeedApproved("Plastic", "Bag of rinsed HDPE bottles, kerbside collection", 36);
+        SeedApproved("Plastic", "Soft plastics taken to the supermarket collection", 24);
+        SeedApproved("Paper / Cardboard", "Flattened delivery boxes, kerbside", 12);
+        SeedApproved("Paper / Cardboard", "Junk mail and paper bag of shredding", 6);
+
+        // Seeded submissions still awaiting a verifier, from other participants — so the queue isn't
+        // empty and the "approving someone else's submission mints to THEM, not you" point is live.
+        void SeedPending(string type, string desc, int who, double hoursAgo)
+        {
+            var s = new Submission
+            {
+                Id = _nextSubId++, ItemType = type, Description = desc, SubmitterId = who,
+                SubmittedAt = now.AddHours(-hoursAgo), Status = "Pending",
+            };
+            _allSubmissions.Add(s);
+            _pending.Add(s);
+        }
+
+        SeedPending("Glass", "Studio glaze jars, 4 kg, rinsed and de-labelled", 1, 3);
+        SeedPending("Metal / Aluminum", "Aluminium swarf from the workshop, 6 kg, degreased", 3, 2);
+        SeedPending("Paper / Cardboard", "Two sacks of shredded office paper", 7, 1);
+
+        // A seeded conversation so the inbox isn't empty.
+        var t0 = new MsgThread { Id = _nextThreadId++, ListingId = 3, WithId = 1, Unread = true };
+        t0.Msgs.Add(new Msg { FromYou = true, Body = "Hi Priya — are the jars still going? I'd take about twenty.", At = now.AddHours(-6) });
+        t0.Msgs.Add(new Msg { FromYou = false, Sim = true, Body = "They are! Twenty is no problem. I'm in the studio Thursday and Friday if either suits.", At = now.AddHours(-5) });
+        _threads.Add(t0);
+
+        _reviews.Add(new Review { AboutId = 2, ByPersonId = 4, Stars = 5, Text = "Boxes were exactly as described and already flat. Easy pickup.", At = now.AddDays(-6) });
+        _reviews.Add(new Review { AboutId = 1, ByPersonId = 5, Stars = 5, Text = "Jars were spotless. Priya even sorted them by size.", At = now.AddDays(-11) });
+        _reviews.Add(new Review { AboutId = 3, ByPersonId = 6, Stars = 4, Text = "Good offcuts, though heavier than I expected — bring a proper car.", At = now.AddDays(-3) });
+
+        _watch.Add(7);
+        var w = L(7); if (w is not null) w.Watchers++;
+
+        // newest first, matching the order every other code path inserts in
+        _notifs.Add(new Notif { At = now.AddHours(-2), Icon = "▤", Text = "New in Paper / Cardboard: 40 flat-packed boxes near you.", Target = Screen.Listing, Arg = 1 });
+        _notifs.Add(new Notif { At = now.AddHours(-3), Icon = "⚑", Text = "3 submissions are waiting in the verifier queue.", Target = Screen.Admin, Arg = 0 });
+        _notifs.Add(new Notif { At = now.AddHours(-5), Icon = "✉", Text = "Priya Nandi replied about “Clear glass jars with lids”.", Target = Screen.Messages, Arg = 0 });
+    }
 }

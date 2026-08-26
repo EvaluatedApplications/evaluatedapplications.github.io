@@ -84,11 +84,10 @@ lacks real per-candle timestamps; our bundled data has real ones, so we use them
 ported VERBATIM from `PriceForecaster.RetEdges`: `{-0.0020,-0.0009,-0.0004,-0.00003,0.00003,
 0.0004,0.0009,0.0020}` → 9 buckets, `FlatBucket=4`. Vocab = `TimeBuckets(8) + PriceBuckets(9) =
 17`. **Known skew**: these edges were tuned for MarketSim's small simulated poll-to-poll ticks; a
-real *hourly* AAPL move is usually bigger, so ~65% of the bundled sample's transitions land in the
-two outermost buckets (measured: bucket 0 = 138/449, bucket 8 = 155/449) rather than spreading
-evenly. Direction split (`Dir(bucket)`: <4 down, >4 up, =4 flat) stays close to balanced (~209
-down / 5 flat / 235 up) because that's what accuracy is actually scored on — magnitude
-granularity is the part that's compressed, not direction.
+real *hourly* AAPL move is bigger, so ~65% of the bundled sample's transitions land in the two
+outermost buckets (measured: bucket 0 = 138/449, bucket 8 = 155/449). Direction split (`Dir`: <4
+down, >4 up, =4 flat) stays near-balanced (~209/5/235) — and direction is what accuracy scores, so
+it's magnitude granularity that's compressed, not direction.
 
 **Model shape**: `Dim=128` (MarketSim's tuned width), `Layers=1`, `KPass(Iters)=2` weight-tied,
 α ramps 0→1 over `IterWarm=40` training clicks (Creature-style ease-in, roughly double Creature's
@@ -131,45 +130,50 @@ picker if more than one bundled series is ever added; tuning `Lr`/`IterWarm` aga
 observed training run (nobody has watched this one train yet — build-verified only, per this
 agent's boundary on launching a browser).
 
-## Unlisted: RecycleDAO demo — `Pages/RecycleDaoDemo.razor` (route `/recycledao-demo`)
-NOT a package-capability demo and NOT part of the public gallery — a private, share-by-link-only
-preview for the RecycleDAO client PoC (`C:\Users\dongy\RecycleDAO`, a separate repo, owned by
-`recycledao-owner`). Deliberately absent from `Home.razor`'s gallery and `MainLayout.razor`'s nav
-(mirrors how `AboutUs\site\recycledao-preview.html` is kept off that site's nav/sitemap too — same
-pattern, two different pages for two different audiences) and carries `<meta name="robots"
-content="noindex,nofollow">` via `<HeadContent>`. A self-contained, in-browser (no server, no
-wallet, no live chain) simulation of RecycleDAO's core loop — Submit → Verify → Reward — built
-from `RecycleDAO/docs/demo-mechanics-spec.md`: only an Approve decision (structurally the one code
-path that can touch the mint log/balance) can mint, each submission is decided once (removed from
-the actionable queue on decision, not just disabled), reward is a fixed per-item-type tier table
-(`Paper/Cardboard=3, Plastic=5, Glass=5, Metal/Aluminum=8, Electronics/E-waste=15` RCYT), mint log
-entries carry a clearly-fake `SIM-000N` id. All state is in-memory component state, reset on
-reload (no persistence, matching the WASM-has-no-filesystem constraint below). UX pass 2026-08-26
-(user feedback: "no idea what I'm doing") added: a stats strip (total/pending/approved/
-rejected/balance), a numbered 1-2-3 walkthrough, a prominent up-front reward-tier chip strip (the
-Submit card also keeps its own inline tier table per the spec's "alongside the dropdown"
-requirement — the two aren't redundant, one's for orientation, one's for the live decision), flow
-arrows between the three cards, and a persistent "All submissions" master table below the cards
-(every submission's whole lifecycle, sourced from one `_allSubmissions` list that's appended once
-at submit time and never removed — `Submission` is a reference type so Approve/Reject mutating
-`.Status`/`.MintTxId` on the same object keeps this table's rows in sync for free) with
-click-through: a mint-log or decided-history row is a real `<a href="#sub-N">` anchor (native
-browser scroll, no JS interop) that also sets a highlight state on the matching master-table row.
-No mechanic changed in this pass — same mint gate, same no-double-mint enforcement, same tier
-amounts, same honesty framing, purely a discoverability/legibility layout pass.
+## Unlisted: RecycleDAO marketplace prototype — `Pages/RecycleDaoDemo.razor` (`/recycledao-demo`)
+NOT a package-capability demo and NOT in the public gallery — a private, share-by-link-only client
+preview for the RecycleDAO PoC (`C:\Users\dongy\RecycleDAO`, separate repo, owned by
+`recycledao-owner`; NEVER edit that repo from here). Deliberately absent from `Home.razor`'s gallery
+and `MainLayout.razor`'s nav, and carries `<meta name="robots" content="noindex,nofollow">` via
+`<HeadContent>` (same pattern as `AboutUs\site\recycledao-preview.html`, which is website-owner's).
 
-App-shell pass 2026-08-26 (user feedback: "let the cards simulate what the website might look
-like... let the cards do the navigation"). Two deliberately-separate nav layers: (1) `.app-topnav`
-— decorative top bar, disabled `<button>` items (Dashboard/Submissions/Rewards/Wallet,
-`cursor:not-allowed`, reduced opacity, hover tooltip) that show the SHAPE of a real app's chrome
-but are inert. (2) `.dao-pagenav` — real numbered step-tabs (1 Submit/2 Verify/3 Reward, live
-counts) that ARE the actual router: a `Stage _focus` field picks which single `<section
-class="app-page">` renders (route-chip breadcrumb + h2 + blurb + one `.app-panel`), replacing the
-old three-cards-in-a-row grid. `SubmitItem()` sets `_focus=Verify` on success;
-`Approve`/`RejectSubmission` both set `_focus=Reward` — mechanics actions drive the page changes,
-not `.app-topnav` clicks. Honesty list gained a 5th bullet naming the top nav as inert; no mechanic
-changed, purely presentation.
+**Rebuilt 2026-08-26 as a full eBay-classifieds marketplace** (client steer via Antonio: "should
+feel like eBay classifieds… prototype all the screens a finished product needs"). Domain mapping
+chosen: RCYT is EARNED by verified recycling and SPENT claiming material other participants rescued
+from the waste stream — a circular-economy classifieds with a real token sink, not just a reward
+wallet. 21 screens off one `Screen` enum + `Nav` record-struct stack (real Back button); one
+`<section class="app-page">` renders at a time; every navigation is driven by a card/row/tile/action.
 
+**Mint invariant (must never regress)**: `MintForApproval` is the ONLY method that appends to
+`_mintLog` or increases `_totalMinted`/`_lifetimeMinted`, and it's reachable from exactly two call
+sites — the verifier queue's `ApproveSubmission`, and seeding. All marketplace money movement
+(`PlaceOrder` hold → `ConfirmCollected` release / `CancelOrder` refund / sale credit) only *moves*
+RCYT between balances; no path adds supply. Decided submissions are REMOVED from `_pending`, not
+disabled, so nothing double-mints. Tier table is verbatim from `RecycleDAO/docs/demo-mechanics-spec.md`
+§2 (`Paper/Cardboard=3, Plastic=5, Glass=5, Metal/Aluminum=8, Electronics/E-waste=15`).
+
+**Seeding**: 8 personas, 20 listings, 9 already-approved + 3 pending submissions, 1 thread, reviews,
+notifications. The 67 RCYT opening balance is NOT assigned — seeded submissions run through
+`MintForApproval` itself, so every starting token has a mint-log and ledger row. Marketplace
+categories are a SUPERSET of the 5 reward item types (3 reuse-only categories have no mint rate).
+
+**Chrome honesty**: the old "everything decorative" top nav is gone — header/search/category
+bar/filters are now genuinely live (a browsable marketplace can't be inert). Only two inert blocks
+remain, both tagged `.mk-tag` "mockup": the top utility strip and the footer link columns (plus the
+photo-upload box and notification toggles). The honesty callout enumerates exactly which is which.
+
+**Hard boundaries kept** (recycledao-owner's charter): testnet-only banners (`.testnet`) on the page
+head, checkout and wallet; verification framed as manual human review, never solved fraud-proofing;
+NO referral/invite/share-to-earn anywhere (stated explicitly in the FAQ); no fiat/top-up/cash-out
+path; no wallet-connect (the Settings toggle for it is deliberately disabled); NO governance/voting
+screen — spec §5 forbids previewing Governor/Timelock, which aren't built. Simulated counterparty
+actions only ever fire from a labelled demo control ("Simulate a claim"), never a timer.
+
+**Verified gotcha (don't re-derive)**: Blazor scoped CSS DOES apply the `b-*` scope attribute inside
+`RenderFragment<T>` templates declared in the same `.razor` file — confirmed by emitting the Razor
+source generator output (`/p:EmitCompilerGeneratedFiles=true`) and reading the generated
+`__builder2` calls. So the shared `ListingCard`/`ListingRow` templates style correctly; a
+templated-delegate helper is safe here and beats duplicating card markup across 4 screens.
 ## Dependencies (exact NuGet versions, `Showroom.csproj`)
 - `Microsoft.AspNetCore.Components.WebAssembly` 10.0.8 (+ `.DevServer` 10.0.8, dev-only)
 - `EvaluatedApplications.HoloDb` 1.4.0 — The Analyst
@@ -238,8 +242,5 @@ for Showroom — verification is build-green + code review; live behaviour is th
   `MainLayout.razor`'s nav hrefs are RELATIVE (`<slug>`, resolved against the current base href
   from wherever the visitor currently is). Both need a new tool added, in their own style — don't
   copy one pattern into the other spot.
-- A previous AboutUs reconciliation flagged `Home.razor` possibly tagging The Creature `soon` while
-  the static site linked it `live` — checked on this pass: `Home.razor` already tags both Analyst
-  and Creature `live` correctly; that flag is stale, not reproduced.
 - `EvaluatedApplications.AlgFormer`'s `PrismFormer` namespace (not `AlgFormer`) is where
   `HoloFormer`/`HoloShape` actually live — easy to reach for the wrong `@using`.
