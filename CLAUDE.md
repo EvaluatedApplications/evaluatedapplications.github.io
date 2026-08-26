@@ -39,6 +39,16 @@ static content pages; don't fold tool code into `site/`. `.github/workflows/depl
 (+HoloFormer deep-dive), AlgFormer.Gpu, HoloDb (+benchmarks), HoloDb.Protocol, HoloDb.Client,
 HoloVoxel, Prose, Tracer.
 
+**Unlisted client page (not part of the routable site — do not "fix" this by adding it anywhere)**:
+`site/recycledao-preview.html` — a private progress preview for the RecycleDAO client PoC
+(`C:\Users\dongy\RecycleDAO`, a separate repo outside AboutUs, owned by `recycledao-owner`), built for
+the user to share with the client (Antonio) by direct link only. Deliberately NOT in `index.html`'s
+gallery, NOT in `sitemap.xml`, NOT in any nav/footer, and carries `<meta name="robots"
+content="noindex,nofollow">`. Standalone minimal header (brand only, no nav-links) rather than the
+usual site nav, since it isn't an EA product page. Content sourced from RecycleDAO's `CLAUDE.md`
+(no `docs/status-brief.md` existed there yet at render time — re-render from that file instead if/when
+it appears). Re-render on request when the PoC's milestone status changes; never link it from anywhere.
+
 ## Design system
 
 **One stylesheet**: `site/assets/site.css`. Dark-first (`:root`), light palette under

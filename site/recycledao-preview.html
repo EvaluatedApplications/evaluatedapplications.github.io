@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RecycleDAO — progress preview · Evaluated Applications</title>
+<meta name="robots" content="noindex,nofollow">
+<meta name="description" content="A private progress preview of RecycleDAO, a testnet-only recycling-incentive DAO proof of concept built by Evaluated Applications.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%238b7dff'/%3E%3Cstop offset='.5' stop-color='%2335d0c0'/%3E%3Cstop offset='1' stop-color='%23e6b450'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='32' height='32' rx='7' fill='%230a0c11'/%3E%3Cpath d='M16 5l9.5 5.5v11L16 27l-9.5-5.5v-11z' fill='none' stroke='url(%23g)' stroke-width='2'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="/assets/site.css">
+</head>
+<body>
+<div class="beam"></div>
+
+<nav class="site-nav">
+  <div class="wrap">
+    <span class="brand" style="cursor:default">
+      <svg class="mark" viewBox="0 0 32 32" aria-hidden="true"><defs><linearGradient id="m" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#8b7dff"/><stop offset=".5" stop-color="#35d0c0"/><stop offset="1" stop-color="#e6b450"/></linearGradient></defs><path d="M16 4l10.4 6v12L16 28 5.6 22V10z" fill="none" stroke="url(#m)" stroke-width="2"/></svg>
+      Evaluated Applications
+    </span>
+  </div>
+</nav>
+
+<header class="hero">
+  <div class="wrap">
+    <span class="eyebrow">RecycleDAO · confidential progress preview</span>
+    <h1>RecycleDAO — a recycling-incentive DAO, in progress</h1>
+    <p class="lede">This page is a private preview prepared for Antonio to track progress on RecycleDAO: a
+      technical proof of concept for a token-and-governance layer over recycling activity, built by
+      Evaluated Applications. It is a testnet-only demonstration — <b>not live, not fundraising, and no
+      real monetary value changes hands anywhere in this build.</b></p>
+    <div class="facts">
+      <span class="fact"><b>Status:</b> token contract + minter service built, tested locally</span>
+      <span class="fact">Not yet deployed to any testnet</span>
+      <span class="fact">Not live · no real value</span>
+      <span class="fact">Prepared for Antonio</span>
+    </div>
+  </div>
+</header>
+
+<section class="sec">
+  <div class="wrap">
+    <div class="sec-head"><span class="dot" style="background:var(--accent)"></span><h2>What RecycleDAO is</h2><p>the concept, in plain language</p></div>
+    <p class="desc" style="max-width:74ch">RecycleDAO is a proof of concept for tying recycling activity to a
+      token-based reward and governance system. In the intended flow: a participant submits evidence of a
+      recycling activity, a reviewer approves it, and an approved submission mints a reward token to the
+      participant. Holding the reward token also carries voting weight in a DAO — token-weighted governance
+      over shared decisions. The goal of this build is to demonstrate that mechanism working end to end on a
+      public test network, cleanly and honestly, before any conversation about a real deployment.</p>
+  </div>
+</section>
+
+<section class="sec">
+  <div class="wrap">
+    <div class="sec-head"><span class="dot" style="background:var(--accent)"></span><h2>How it's built</h2><p>two halves, cleanly separated</p></div>
+    <div class="grid">
+      <article class="card" style="--cat:var(--accent)">
+        <div class="card-top"><h3>On-chain — the token &amp; governance</h3></div>
+        <p class="desc">Solidity contracts, built with Foundry on top of <b>OpenZeppelin</b>'s audited,
+          industry-standard building blocks rather than hand-rolled security logic: an ERC-20 reward token
+          with voting and permit extensions, a Governor contract for proposals and votes, and a Timelock
+          that adds a delay before anything governance approves actually executes. Minting the reward token
+          is gated to a single authorised address — never open or public.</p>
+      </article>
+      <article class="card" style="--cat:var(--accent)">
+        <div class="card-top"><h3>Off-chain — the service</h3></div>
+        <p class="desc">A .NET service that bridges a "this submission was approved" event to the chain: it
+          calls the token contract to mint the reward, then reads back the recipient's balance to confirm it
+          landed. A library called Nethereum is the only piece that touches the chain directly — it holds a
+          testnet-only signing key and submits the mint transaction — kept behind an interface so the rest of
+          the logic is fully testable without a real network. The full intake/verification pipeline is
+          planned to run on Evaluated Applications' own <b>EvalApp</b> (orchestration) and <b>HoloDb</b>
+          (storage for submissions, decisions, and the reward ledger) in a later milestone.</p>
+      </article>
+    </div>
+    <p class="lim">The "verification" step in this proof of concept is a manual reviewer action, not an
+      automated fraud-proofing system. Real-world chain-of-custody for physical recycled goods is a genuinely
+      hard, open problem — this build does not claim to solve it, only to demonstrate the token/governance
+      mechanism that would sit downstream of a real verification process.</p>
+  </div>
+</section>
+
+<section class="sec">
+  <div class="wrap">
+    <div class="sec-head"><span class="dot" style="background:var(--accent)"></span><h2>Current status</h2><p>honest, as of this preview</p></div>
+    <p class="desc" style="max-width:74ch">The first milestone's code is written and tested — but nothing has
+      touched a public network yet. The reward-token contract (<code>RecycleToken</code>, an ERC-20 with
+      voting and permit extensions on top of OpenZeppelin's audited building blocks) compiles and passes
+      15 out of 15 automated tests, run entirely on a local, throwaway test blockchain. A companion .NET
+      service that can mint the token and read back the resulting balance is built and passes 9 out of 9
+      automated tests of its own, using a stand-in for the real network connection. Both halves are proven
+      to work in isolation. What hasn't happened yet is putting either of them on a real (if free/test-only)
+      public network — that step needs an RPC endpoint and a funded test wallet that only Antonio can
+      supply (see the status brief for exactly what's needed). Once that's in hand, the remaining work is a
+      short live demo, not more engineering.</p>
+    <div class="grid">
+      <article class="card" style="--cat:var(--accent)">
+        <div class="card-top"><h3>Built and tested (locally)</h3></div>
+        <p class="desc">The reward-token contract with its mint gate (15/15 Foundry tests passing) and a
+          .NET service that can call it and read back a balance (9/9 xunit tests passing, mocked chain
+          client). Neither has touched a real or public test network — both are proven only in local,
+          throwaway test environments so far.</p>
+      </article>
+      <article class="card" style="--cat:var(--accent)">
+        <div class="card-top"><h3>Not built yet</h3></div>
+        <p class="desc">Deployment to a live public testnet (blocked on an RPC endpoint + funded test
+          wallet from Antonio — nothing we can fabricate), DAO governance contracts (Governor/Timelock),
+          the real submission and verification pipeline, any user-facing interface, and anything
+          resembling a multi-user flow.</p>
+      </article>
+    </div>
+  </div>
+</section>
+
+<section class="sec">
+  <div class="wrap">
+    <div class="stack">
+      <h2>Evaluated Applications' role</h2>
+      <p>Evaluated Applications is building RecycleDAO end to end: the on-chain contracts, the off-chain
+        service, and the bridge between them, using its own EvalApp and HoloDb libraries for the off-chain
+        half. This page will be updated as milestones complete — it is only reachable by this direct link
+        and is not linked from, or indexed alongside, the rest of the public Evaluated Applications site.</p>
+    </div>
+  </div>
+</section>
+
+<footer class="site">
+  <div class="wrap">
+    <span>Evaluated Applications — .NET libraries, England.</span>
+    <span class="mono">© <span id="yr"></span> · confidential preview, not part of the public site index</span>
+  </div>
+</footer>
+<script>
+  document.getElementById('yr').textContent = new Date().getFullYear();
+</script>
+</body>
+</html>
