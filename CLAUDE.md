@@ -12,9 +12,10 @@ Root static pages (`site/*.html`), all built on the shared design system:
 - `index.html` — landing page: company pitch, tool gallery (Analyst/Creature), then the full
   package gallery in 4 categories (Foundation / Data / Machine learning / Spatial & games), then
   a "how it fits together" flow diagram.
-- `holodb/index.html` — HoloDb HUB page (bespoke nav: How it works / Benchmarks / Try it live /
-  Docs / NuGet). The richest page on the site: race demo, benchmark tables, capability grid,
-  deploy options. Links out to `holodb.html`, `holodb-client.html`, `holodb-protocol.html`.
+- `holodb/index.html` — HoloDb HUB page (lean bespoke nav: Home / Benchmarks / Docs / Packages /
+  NuGet — "Try it live" and "How it works" live as hero CTAs/first section instead of nav items).
+  The richest page on the site: race demo, benchmark tables, capability grid, deploy options.
+  Links out to `holodb.html`, `holodb-client.html`, `holodb-protocol.html`.
 - `holodb.html` — HoloDb benchmark methodology sub-page (full method + every number, in/out of
   process vs DuckDB/SQL Server). Linked from the hub's `#benchmarks` section.
 - `holodb/manual/index.html` — HoloDb manual (prose docs, `.prose`/`.toc` template).
@@ -47,7 +48,8 @@ HoloVoxel, Prose, Tracer.
 `--c-data` (blue, HoloDb family) / `--c-ml` (pink, AlgFormer family/EvalApp.Neural/Prose) /
 `--c-spatial` (green, Tracer/HoloVoxel), `--ok/--warn/--bad`, `--radius`, `--wrap` (1080px),
 `--font`/`--mono`. Reusable components: `.site-nav` (sticky, CSS-only mobile burger via
-`.nav-toggle` checkbox hack) + `.nav-drop` (the Packages mega-menu, see Navigation below),
+`.nav-toggle` checkbox hack — lean, always a flat list of 4-6 plain links, see Navigation below)
++ `.related` (compact contextual cross-link pills in the hero, see Navigation),
 `.hero`/`.eyebrow`/`.lede`/`.facts`/`.fact`, `.sec`/`.sec-head`,
 `.grid`/`.card` (the package-card pattern, `--cat` custom prop sets the left accent bar,
 `.card-link` stretched-link overlay makes the whole card clickable — see Navigation),
@@ -63,9 +65,10 @@ token in `site.css` ever changes, grep those two files' `<style>` blocks too.
 
 **The page template** (used verbatim by every one of the 10 plain product pages, and by
 `index.html`/`holoformer.html`'s nav/footer): `<div class="beam">` → `<nav class="site-nav">`
-(brand mark + Home/HoloDb/Packages mega-menu/NuGet, identical on every page, plus
-`<script src="/assets/nav.js" defer>` in `<head>`) → `<header class="hero">`
-(breadcrumb, eyebrow, h1, lede, `.facts` chips, `.install`, `.cta-row`) → a sequence of
+(brand mark + Home/HoloDb/Packages(→`/#packages`)/NuGet, identical on every page — lean, no
+dropdown/JS) → `<header class="hero">`
+(breadcrumb, eyebrow, h1, lede, `.facts` chips, `.install`, `.cta-row`, then a `.related` pills row
+— see Navigation) → a sequence of
 `<section class="sec">` (What it is / Why it's useful as a `.grid` of `.card`s / Key features /
 Get started with a `.snip` code sample / a `.lim` caveat note) → `footer.site` → the copy-button +
 year script (identical). New product pages should copy this shape exactly, not invent new layout —
@@ -115,59 +118,60 @@ in the Site map / Design system sections above and not restated here. Still-open
 
 ## Navigation — the reachability contract (owned by this agent, not the coordinator)
 
-**The invariant**: every page must be reachable from the NAV MENU on every OTHER page, not just from
-an on-page anchor, a body cross-link, or a small "Explore →" text nested in a card. This is a
-standing design constraint, not a one-off fix — check it every time a page is added or a nav is
-touched.
+**The invariant**: every page reachable in ≤2 clicks from every OTHER page's nav, without a global
+mega-menu bloating every page (tried a 5-column/17-item `<details>` dropdown 2026-08-26, user
+feedback: too dense, too large on mobile, and it duplicated what the homepage already does — see
+below for the revised shape).
 
-**How it's satisfied**: a "Packages" mega-menu, `<details class="nav-drop"><summary>Packages</summary>
-<div class="nav-drop-menu">...</div></details>`, in the `.nav-links` of every one of the 15 content
-pages (all except `404.html`, which is intentionally minimal). It's a native disclosure — opens/closes
-on click/tap with zero JS — styled by `.nav-drop*` in `site.css`; `/assets/nav.js` (referenced once per
-page, `<script src="/assets/nav.js" defer>`) only adds outside-click/Escape-to-close polish, and is a
-safe no-op on pages with no `.nav-drop`. Five columns, identical everywhere: **Foundation** (Phasor,
-EvalApp) · **Data** (HoloDb, HoloDb.Client, HoloDb.Protocol, Benchmarks → `holodb.html`, Manual →
-`holodb/manual/`) · **Machine learning** (AlgFormer, HoloFormer explained → `holoformer.html`,
-AlgFormer.Gpu, EvalApp.Neural, Prose) · **Spatial & games** (Tracer, HoloVoxel) · **Tools** (The
-Analyst, The Creature, "All packages, one page" → `/#packages`). On mobile (`max-width:640px`) the
-menu drops its absolute positioning and renders as an indented inline list inside the already-open
-burger column — no separate mobile design needed. Chose a mega-menu over a dedicated `/packages.html`
-because the index gallery already IS that full-list page (`/#packages`); the menu just needs to point
-at every entry point, not duplicate the gallery.
+**The shape (revised 2026-08-26, second pass)**: three layers, each doing ONE job.
+1. **Lean top nav, identical shape everywhere**: `Home · HoloDb · Packages(→/#packages) · NuGet`,
+   plain text links, no dropdown, no JS. A few pages add 1-2 page-appropriate items (the HoloDb hub:
+   `Home · Benchmarks · Docs · Packages · NuGet`; the manual: adds `Manual`+`The Analyst`) but NEVER
+   more than ~6 items — that's the compactness bar, checked on a narrow viewport (mobile burger
+   reveals a short flat list, nothing nested/wide).
+2. **The homepage IS the routable index.** `index.html`'s `#packages` gallery already lists every
+   package with a fully clickable card (`.card-link` stretched-link overlay, not just a small
+   "Explore →" — see below); nav's "Packages" link just sends you there. This is why the nav doesn't
+   need to enumerate all 11+ pages itself: `Home`/`Packages` (1 click) → any card (1 click) = every
+   page ≤2 clicks from anywhere, guaranteed by this single path alone.
+3. **`.related` pills for contextual 1-click jumps.** A small pill row (2-4 sibling links + "All
+   packages →" to `/#packages`) in the hero of every product/reference page (15 of 16, all but
+   `index.html` itself — it doesn't need to link to itself). Curated per page by what's actually
+   relevant, e.g. `phasor.html` → EvalApp/AlgFormer/HoloDb/HoloVoxel; `holodb-protocol.html` →
+   HoloDb/HoloDb.Client; `holoformer.html` → AlgFormer/AlgFormer.Gpu/Phasor. This is what makes
+   closely-related pages 1 click apart instead of always routing back through the homepage.
+   CSS: `.related` in `site.css`, always paired with a `.related-label` and a `.related-all` pill.
 
 **Site-wide rules that make it hold**:
 - `#packages` must NEVER be a bare same-page anchor except literally inside `index.html` — on any
   other page it's a dead link (no `#packages` section exists there). Always write `/#packages`.
-  Audited 2026-08-26: zero bare `href="#packages"` left outside index.html.
 - A gallery/index card that links onward must be clickable across its WHOLE area, not just a small
-  "Explore →" text — humans don't perceive an `<article>` with one small link as clickable. Pattern:
-  keep the card as `<article class="card">` (it nests a second NuGet link, so the card itself can't
-  be an `<a>` — invalid nested-anchor markup), add a full-bleed `<a class="card-link" href="..."
-  aria-label="...">` as the FIRST child, `.card-link{position:absolute;inset:0;z-index:1}`, and lift
-  `.install`/`.links`/`.note` to `z-index:2` so their own inner links/copy-button stay independently
-  clickable above the overlay. Applied to all 11 gallery cards on `index.html` (tool cards were
-  already whole-card `<a class="card tool">`, unchanged).
-- The mobile CSS-only burger (`.nav-toggle` checkbox hack) must actually reveal `.nav-links`, and the
-  `.nav-drop` disclosure inside it must still work once the burger column is open — verified in the
-  CSS (`.nav-drop-menu` gets `position:static` etc. inside the `max-width:640px` block so it never
-  relies on the desktop absolute-positioning math that would misplace it in a column layout).
+  "Explore →" text. Pattern (all 11 cards on `index.html`): keep the card as `<article class="card">`
+  (it nests a second NuGet link, so the card itself can't be an `<a>` — invalid nested-anchor markup),
+  add a full-bleed `<a class="card-link" href="..." aria-label="...">` as the FIRST child,
+  `.card-link{position:absolute;inset:0;z-index:1}`, and lift `.install`/`.links`/`.note` to
+  `z-index:2` so their own inner links/copy-button stay independently clickable above the overlay.
+  Tool cards were already whole-card `<a class="card tool">`, unchanged.
+- Don't reach for a global mega-menu again for "make X reachable" — reach for (a) the homepage
+  card grid staying exhaustive and fully clickable, and (b) a `.related` pill on the relevant pages.
+  A dropdown only earns its keep for something genuinely global and rarely-changing (there wasn't
+  one here); it was cut once it turned out to duplicate the homepage and hurt mobile.
 
-**§5 VERIFICATION DISCIPLINE for this site — read before claiming "no orphans" again**: checking that
-every `href` resolves to a real file is NOT proof of reachability and must never be reported as such.
-The proof is a reachability WALK: starting from `index.html`'s nav AND from one deep page's nav
-(e.g. `phasor.html`), using ONLY the nav menu + visible on-page links (no address-bar typing), list the
-click-path to every other page, and confirm every page is ≤2 clicks away. Do this walk (and record it
-in the task's return message) any time the nav, a page set, or a card grid changes — that's what "done"
-means for navigation now, not an href-audit. The 2026-08-26 SEO pass reported "no orphans" from an
-href-audit alone; that was the wrong check and is the failure this section exists to prevent.
+**§5 VERIFICATION DISCIPLINE for this site**: checking that every `href` resolves to a real file is
+NOT proof of reachability. The proof is a reachability WALK: starting from `index.html`'s nav AND
+from one deep page's nav (e.g. `phasor.html`), using ONLY the nav + visible on-page links (no
+address-bar typing), list the click-path to every other page, confirm ≤2 clicks, AND separately
+check the nav is compact on a narrow (≤640px) viewport — that was the failing case both times this
+got re-litigated. Do this walk any time the nav, page set, or card grid changes; record it in the
+task's return message. An href-audit alone is not this check (that was the 2026-08-26 mistake).
 
-**SEO/nav facts still true from the 2026-08-26 pass** (kept, the audit method above it was retired):
-`sitemap.xml` lists all 16 pages + the 2 live tool routes + `/tools/`. Every page's `footer.site`
-carries a second internal-link path (Home/Packages/HoloDb/NuGet or a page-appropriate subset) so
-there's a route back into the graph beyond the top nav. JSON-LD on every page (`Organization`+`WebSite`
-on the index, `SoftwareApplication` on all 11 package pages, `TechArticle` on the 3 explainer pages).
-Forward cross-links exist base→extension (`algformer.html`→`algformer-gpu.html`,
-`evalapp.html`→`evalapp-neural.html`) as well as extension→base.
+**SEO/nav facts still true**: `sitemap.xml` lists all 16 pages + the 2 live tool routes + `/tools/`.
+Every page's `footer.site` carries a second internal-link path beyond the top nav. JSON-LD on every
+page (`Organization`+`WebSite` on the index, `SoftwareApplication` on all 11 package pages,
+`TechArticle` on the 3 explainer pages). Forward cross-links exist base→extension
+(`algformer.html`→`algformer-gpu.html`, `evalapp.html`→`evalapp-neural.html`) as well as
+extension→base. `site/assets/nav.js` is a retired stub (was the mega-menu's outside-click-close
+helper, nothing references it now — safe to delete outright, kept only so no stray reference 404s).
 **Flagged, not fixed (Blazor app internals, not `site/` presentation)**: `Showroom/Home.razor` may
 still tag The Creature `soon` while `site/index.html` links it `live` at `/tools/creature` — re-check
 before the next deploy; whoever owns `Showroom/` should reconcile it.
@@ -194,10 +198,11 @@ coordinator batch-commits and the user pushes to publish.
   shared class into `site.css` first rather than copy-pasting the inline styles a third time.
 - New package coming: bootstrap its page the same way — read `MonoRepo/<Pkg>/docs/site.md` (+
   `PACKAGE.md`/`CLAUDE.md`/csproj `<Version>` for facts), copy the page template shape from any
-  existing plain product page (e.g. `phasor.html`) INCLUDING its `.nav-drop` mega-menu block and
-  the `/assets/nav.js` script tag, add it to `index.html`'s gallery (pick a category colour, add
-  the `.card-link` overlay), add it as a new `<a>` inside the matching `.nav-drop-col` in the
-  mega-menu on ALL 15 content pages (not just index — this is the step that's easy to miss and
-  silently reopens the orphan bug), add the nav crumb pattern, add it to `sitemap.xml`, and update
-  the package count in `index.html`'s hero facts + this file's Site map section. Re-run the
-  reachability walk (Navigation section, above) before calling it done.
+  existing plain product page (e.g. `phasor.html`) INCLUDING its lean nav (`Home · HoloDb ·
+  Packages · NuGet`) and its `.related` pills row, add it to `index.html`'s gallery (pick a category
+  colour, add the `.card-link` overlay — this alone makes it reachable in ≤2 clicks from every page
+  via Home/Packages → the gallery, so it's the step that actually matters), then add it into the
+  `.related` pills of its closest 1-2 siblings (not every page — contextual, not exhaustive), add the
+  nav crumb pattern, add it to `sitemap.xml`, and update the package count in `index.html`'s hero
+  facts + this file's Site map section. Re-run the reachability walk (Navigation section, above)
+  before calling it done, and check the nav is still compact on a narrow viewport.

@@ -1,26 +1,4 @@
-// Shared nav behaviour: the "Packages" mega-menu is a native <details>/<summary> disclosure
-// (opens/closes with no JS at all), this just adds the polish of closing it when a link inside
-// is activated, when a click lands outside it, or on Escape. Safe no-op on pages with no .nav-drop
-// (e.g. 404.html).
-document.addEventListener('DOMContentLoaded', function () {
-  var drops = document.querySelectorAll('.nav-drop');
-  if (!drops.length) return;
-
-  drops.forEach(function (drop) {
-    drop.addEventListener('click', function (e) {
-      if (e.target.closest('a')) drop.removeAttribute('open');
-    });
-  });
-
-  document.addEventListener('click', function (e) {
-    drops.forEach(function (drop) {
-      if (drop.hasAttribute('open') && !drop.contains(e.target)) drop.removeAttribute('open');
-    });
-  });
-
-  document.addEventListener('keydown', function (e) {
-    if (e.key === 'Escape') {
-      drops.forEach(function (drop) { drop.removeAttribute('open'); });
-    }
-  });
-});
+// Retired 2026-08-26 (nav redesign): the earlier "Packages" mega-menu (<details class="nav-drop">)
+// this file supported was replaced by a lean top nav + homepage-as-hub + contextual .related pills
+// (see AboutUs/CLAUDE.md, Navigation section). No page references this file any more; kept only so
+// a stray external reference doesn't 404. Safe to delete outright once nothing links to it.
