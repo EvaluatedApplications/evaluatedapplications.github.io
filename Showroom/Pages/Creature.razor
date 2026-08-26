@@ -123,7 +123,19 @@
     const int KPass = 2;      // 1 layer applied K times, weight-tied (the "extra k-layer pass")
     const int IterWarm = 20;  // episodes over which the extra K-pass α ramps 0→1 (identity-init ease-in: the single-pass base learns FIRST, then the depth phases in — without this the cold second pass just doubles down on random transforms and it doesn't learn)
     const int DModel = 384;   // width = composition capacity; wider than the 256 codec dim gives the brain more room to keep cells distinct
-    const int MinShifts = 8;  // ROUTING-RANK floor. The over-bundle law (ShiftsFor) pegs shifts to context and returns 1 at this ctx/d — and S=1 is a pure DIAGONAL: no learned cross-channel routing at all. Floor it so the banks can actually route (golden-spaced below so a few shifts span the whole width).
+    // ROUTING-RANK floor, reasoned from bindRank = shifts*d/2 (HoloShape.cs), not an arbitrary round number. The over-bundle
+    // law (ShiftsFor) pegs shifts to ctx/d and returns EXACTLY 1 here -> S=1 is a pure DIAGONAL, zero cross-channel routing,
+    // so we floor it. bindRank/d = shifts/2 is d-INDEPENDENT, so PrismStudio's MinShifts=16 (its d=1536 production
+    // LM+reasoning model, bindRank=12288) does NOT mechanically scale down to this d=384 model just because d is 4x
+    // smaller: the floor should track TASK complexity, not d. At S=8, bindRank=8*384/2=1536: 4x the bare S=2 (the
+    // smallest S that isn't a diagonal) of headroom for real golden-spaced multi-channel coverage, and its clean
+    // readback capacity (~0.12*bindRank ~= 184 tokens, HoloShape.CleanFrac) dwarfs the 32-step trajectory window ->
+    // capacity was never the binding constraint here, routing rank is, and 8 golden-spaced channels comfortably cover
+    // an 8-way local move decision. Kept well below PrismStudio's 16 on purpose: that floor serves general language
+    // modeling + hard reasoning (columnar arithmetic); Creature's task (pick the best of 8 directions from a short
+    // scent trail) is far simpler, and shift-bank compute is linear in S, so half the per-step cost matters in a live,
+    // click-to-train browser demo. golden: true (below) is what makes 8 shifts span the width instead of clustering.
+    const int MinShifts = 8;
     const int NApples = 8;    // how many apples "scatter" drops
     const int StepBudget = 150;   // steps per foraging episode
     const int EatReward = 3;      // extra advantage for landing on an apple (on top of the +1 for getting closer)

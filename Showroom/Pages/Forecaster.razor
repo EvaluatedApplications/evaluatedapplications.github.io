@@ -1,0 +1,312 @@
+@page "/forecaster"
+@inject HttpClient Http
+@using System.Text
+@using System.Text.Json
+@using PrismFormer
+
+<PageTitle>The Forecaster — a price-direction brain that learns live in your browser</PageTitle>
+
+<div class="room">
+    <header class="room-head">
+        <nav class="crumb"><a href="/">Evaluated Applications</a> <span>/</span> The Forecaster</nav>
+        <h1>The Forecaster</h1>
+        <p class="lede">Give it real historical price ticks, then watch a small brain learn to call the <strong>next
+            move — in your browser, on your machine</strong>. Same holographic transformer as <a href="/creature">The
+            Creature</a> (AlgFormer), pointed at a different stream: instead of a foraging trail, it reads a
+            candle-by-candle price tape and learns to predict whether the next tick goes up, down, or stays flat.</p>
+        <div class="badges">
+            <span>Holographic-transformer brain</span><span>Real historical ticks</span><span>Learns live, on your device</span>
+        </div>
+    </header>
+
+    @if (_loadError is not null)
+    {
+        <p class="err">@_loadError</p>
+    }
+    else if (!_loaded)
+    {
+        <p class="hint">Loading the sample tape…</p>
+    }
+    else
+    {
+        <div class="fc-source">
+            <span class="fc-src-label">Sample tape</span>
+            <span class="fc-src-name">@SymbolName · hourly closes · @_candles.Count.ToString("N0") ticks</span>
+            <span class="fc-src-note">bundled real data, fetched once from Yahoo Finance — no server, replays locally</span>
+        </div>
+
+        <div class="fc-stage">
+            @((MarkupString)ChartSvg())
+        </div>
+
+        <div class="cr-controls">
+            <button class="go" @onclick="ToggleRun">@(_running ? "Pause" : (_brain is null ? "Start training" : "Resume training"))</button>
+            <button class="ghost" @onclick="TrainOnce" disabled="@_running" type="button">Train one tick</button>
+            <button class="ghost" @onclick="ResetBrain" type="button">Reset brain</button>
+            <label class="speed">speed
+                <input type="range" min="1" max="10" @bind="_speed" @bind:event="oninput" />
+            </label>
+        </div>
+
+        @if (_error is not null) { <p class="err">@_error</p> }
+
+        @if (_trained > 0)
+        {
+            <div class="cr-stats">
+                <div class="stat"><div class="n">@_trained.ToString("N0")</div><div class="l">ticks trained</div></div>
+                <div class="stat"><div class="n">@(_recentAcc.ToString("F0"))%</div><div class="l">accuracy, last @Math.Min(_recentWindow.Count, RecentCap)</div></div>
+                <div class="stat"><div class="n">@(_lifetimeAcc.ToString("F0"))%</div><div class="l">lifetime accuracy</div></div>
+                <div class="stat"><div class="n">@((KAlpha * 100).ToString("F0"))%</div><div class="l">K-pass depth (α ramp)</div></div>
+            </div>
+            <figure class="cr-curve">
+                <figcaption>rolling accuracy (last @RecentCap ticks) over training — it should climb above the 50/50 baseline as the brain learns</figcaption>
+                @if (_accCurve.Count > 1) { @((MarkupString)AccCurveSvg()) }
+            </figure>
+        }
+
+        @if (_log.Count > 0)
+        {
+            <div class="cr-log">
+                <div class="log-head">training log <span class="log-sub">newest first · loss backpropped through the @KPass weight-tied passes</span></div>
+                <div class="log-body">
+                    @foreach (var line in _log) { <div class="log-line">@line</div> }
+                </div>
+            </div>
+        }
+
+        <div class="outro">
+            <p><strong>What it's actually predicting.</strong> Every hourly tick becomes two tokens — an hour-of-day
+                bucket and a return bucket (how big the move was and which way) — read off the same tight-deadband
+                edges we tuned for our own market simulator, so a real move registers as up or down instead of
+                collapsing to "flat". The brain reads the recent tape and predicts the <em>next</em> return bucket;
+                we score it right when it calls the right <em>direction</em>. It is the exact same
+                <code>NewGrads → IterAccumulate → Step</code> live-training loop as <a href="/creature">The
+                Creature</a> — one holographic layer applied twice, weight-tied, with that second pass ramping in
+                over your first @IterWarm clicks instead of starting fully on.</p>
+            <p><strong>Being honest about it:</strong> this is a demo, not investment advice — a few hundred hourly
+                ticks of one stock is a tiny, noisy sample, and "right direction" is a coin-flip-adjacent bar. Watch
+                the accuracy curve rather than trusting any single prediction.</p>
+            <p>The brain is <code>AlgFormer</code>'s holographic transformer, the very same substrate that lets
+                <a href="/analyst">The Analyst</a>'s database hold a running total as one vector. Pure managed .NET,
+                running entirely client-side. <code>dotnet add package EvaluatedApplications.AlgFormer</code></p>
+        </div>
+    }
+</div>
+
+@code {
+    // ---- tokenisation (ported from MarketSim.PriceForecaster's proven scheme; STOCK_i token dropped — single symbol here) ----
+    const int TimeBuckets = 8;
+    // Tight-deadband return edges, ported VERBATIM from MarketSim.PriceForecaster.RetEdges — tuned so a small real
+    // price move registers as up/down instead of collapsing to "flat". Real hourly moves on this sample skew toward
+    // the outer buckets (the edges were tuned for MarketSim's simulated poll-to-poll ticks, which are smaller than a
+    // real hourly close-to-close move) — direction still splits close to 50/50, which is what accuracy is scored on.
+    static readonly double[] RetEdges = { -0.0020, -0.0009, -0.0004, -0.00003, 0.00003, 0.0004, 0.0009, 0.0020 };
+    const int PriceBuckets = 9, FlatBucket = 4;
+    const int Vocab = TimeBuckets + PriceBuckets;   // 17 — time tokens then price tokens
+    const int PriceBase = TimeBuckets;
+
+    // ---- model shape ----
+    const int Dim = 128;          // MarketSim's tuned width for this task class
+    const int Layers = 1;         // one layer, applied K times weight-tied (below)
+    const int KPass = 2;          // weight-tied extra pass (Iters)
+    const int IterWarm = 40;      // training CLICKS over which the extra pass's α ramps 0→1 (Creature-style ease-in;
+                                   // roughly double Creature's 20 episodes since a single supervised tick-step here is
+                                   // noisier signal than Creature's advantage-weighted per-episode update)
+    const int CandleContext = 128;              // ~128 candles of history
+    const int MaxContext = CandleContext * 2;   // 256 tokens — TIME+RETURN pair per candle
+
+    // ROUTING-RANK floor, reasoned the same way as Creature's MinShifts (bindRank = shifts*d/2, HoloShape.cs), not
+    // copied from it. Predicting 1-of-9 return buckets is the same order of task complexity as Creature's 1-of-8 move
+    // choice, so it earns the same bindRank/d = shifts/2 = 4 target ratio (shifts/d is what tracks task complexity,
+    // not d itself) -> MinShifts = 8. It does NOT bite here: HoloShape.ShiftsFor(256, 128) — called exactly like this,
+    // 2-arg, default ratio — returns 16 on its own (verified by reflecting the published EvaluatedApplications.AlgFormer
+    // 1.2.0 package: bindRank=1024, cleanCapacity=122). S=16 clears the S>1 floor with wide margin, so the explicit
+    // MinShifts is a defensive no-op here, not the active constraint — kept anyway so a future context/dim change
+    // can't silently regress to a diagonal. Honest caveat: cleanCapacity(16,128)=122 is under the 256-token window, so
+    // the older half of a full context can read back less cleanly than the recent half — not a v1 blocker (S>1 is the
+    // hard rule and recent tokens dominate the prediction anyway), but a real knob for a v2 tuning pass.
+    const int MinShifts = 8;
+    static readonly int Shifts = Math.Max(HoloShape.ShiftsFor(MaxContext, Dim), MinShifts);
+
+    const double Lr = 0.005;   // a reasoned starting point (between MarketSim's batched-epoch 0.02 and Creature's
+                                // per-step 0.0025-0.004), NOT yet measured live — flag for tuning once someone watches it train
+    const int RecentCap = 50;  // rolling-accuracy window
+    const string SymbolName = "AAPL";
+
+    sealed record RawCandle(long T, double C);
+    readonly List<(int TimeTok, int Bucket, double Close)> _candles = new();
+    bool _loaded; string? _loadError;
+
+    HoloFormer? _brain;
+    readonly List<int> _seq = new();   // the growing token tape the brain reads as context
+    int _pos = 1;                      // cursor into the bundled series (wraps — it's a finite real sample)
+    long _trained;
+    int _trainedForAlpha;
+    double KAlpha => Math.Min(1.0, _trainedForAlpha / (double)IterWarm);
+
+    readonly Queue<bool> _recentWindow = new();
+    long _correctLifetime, _totalLifetime;
+    double _recentAcc, _lifetimeAcc;
+    readonly List<double> _accCurve = new();
+
+    sealed record Point(double Close, int PredDir, int ActualDir, bool Correct);
+    readonly List<Point> _recent = new();
+    const int ChartWindow = 70;
+
+    readonly List<string> _log = new();
+    void Log(string s) { _log.Insert(0, s); if (_log.Count > 200) _log.RemoveAt(_log.Count - 1); }
+
+    bool _running; int _speed = 5; string? _error;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var opts = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+            var raw = await Http.GetFromJsonAsync<List<RawCandle>>("data/forecaster-sample.json", opts) ?? new();
+            for (int i = 1; i < raw.Count; i++)
+            {
+                double ret = (raw[i].C - raw[i - 1].C) / raw[i - 1].C;
+                int timeTok = (int)(DateTimeOffset.FromUnixTimeSeconds(raw[i].T).UtcDateTime.TimeOfDay.TotalHours) % TimeBuckets;
+                _candles.Add((timeTok, Bucket(ret), raw[i].C));
+            }
+            _loaded = true;
+        }
+        catch (Exception ex) { _loadError = "Couldn't load the sample tape: " + ex.Message; }
+    }
+
+    static int Bucket(double r) { int b = 0; while (b < RetEdges.Length && r >= RetEdges[b]) b++; return b; }
+    static int Dir(int bucket) => bucket < FlatBucket ? -1 : bucket > FlatBucket ? 1 : 0;
+    static string DirGlyph(int d) => d > 0 ? "▲" : d < 0 ? "▼" : "–";
+
+    int[] BuildCtx()
+    {
+        int take = Math.Min(_seq.Count, MaxContext);
+        var a = new int[take];
+        for (int j = 0; j < take; j++) a[j] = _seq[_seq.Count - take + j];
+        return a;
+    }
+
+    void EnsureBrain()
+    {
+        if (_brain is not null) return;
+        _brain = new HoloFormer(Vocab, shifts: Shifts, layers: Layers, maxContext: MaxContext, dModel: Dim, frozenPrefix: 0, golden: true)
+        {
+            Iters = KPass,
+            IterAlphaServe = 0
+        };
+        _trainedForAlpha = 0;
+        Log($"brain ready · L={Layers} · K={KPass} weight-tied passes · ctx={MaxContext} tokens (~{CandleContext} candles) · shifts={Shifts} golden · d={Dim} · vocab={Vocab} · {_brain.ParamCount:N0} params");
+    }
+
+    // one live-training step: predict the next return bucket, score it, then train toward the true label —
+    // the same NewGrads -> IterAccumulate -> Step loop The Creature uses, just on a price tape instead of a trail.
+    void TrainOnceStep()
+    {
+        if (_candles.Count == 0) return;
+        if (_pos >= _candles.Count) _pos = 1;   // wrap the finite real sample
+        var c = _candles[_pos];
+
+        _seq.Add(c.TimeTok);
+        var ctx = BuildCtx();
+
+        var logits = _brain!.LogitsFor(ctx);   // honours Iters (the K-pass) at serve time
+        int predBucket = 0; double best = double.NegativeInfinity;
+        for (int b = 0; b < PriceBuckets; b++) { double v = logits[PriceBase + b]; if (v > best) { best = v; predBucket = b; } }
+        int predDir = Dir(predBucket), actualDir = Dir(c.Bucket);
+        bool correct = predDir == actualDir;
+
+        var g = _brain.NewGrads();
+        _brain.IterAccumulate(ctx, PriceBase + c.Bucket, g, KPass, KAlpha);
+        _brain.Step(g, Lr);
+
+        _seq.Add(PriceBase + c.Bucket);
+        if (_seq.Count > MaxContext * 6) _seq.RemoveRange(0, _seq.Count - MaxContext * 6);
+
+        _trained++; _trainedForAlpha++; _pos++;
+        _brain.IterAlphaServe = KAlpha;
+
+        _totalLifetime++; if (correct) _correctLifetime++;
+        _lifetimeAcc = _totalLifetime > 0 ? 100.0 * _correctLifetime / _totalLifetime : 0;
+        _recentWindow.Enqueue(correct); if (_recentWindow.Count > RecentCap) _recentWindow.Dequeue();
+        _recentAcc = _recentWindow.Count > 0 ? 100.0 * _recentWindow.Count(x => x) / _recentWindow.Count : 0;
+        if (_trained % 5 == 0) { _accCurve.Add(_recentAcc); if (_accCurve.Count > 80) _accCurve.RemoveAt(0); }
+
+        _recent.Add(new Point(c.Close, predDir, actualDir, correct));
+        if (_recent.Count > ChartWindow) _recent.RemoveAt(0);
+
+        if (_trained <= 5 || _trained % 10 == 0)
+            Log($"tick {_trained,4}   pred {DirGlyph(predDir)}   actual {DirGlyph(actualDir)}   {(correct ? "hit" : "miss")}   recent {_recentAcc:F0}%   α {KAlpha * 100:F0}%");
+    }
+
+    void TrainOnce() { EnsureBrain(); TrainOnceStep(); }
+
+    async Task ToggleRun()
+    {
+        if (_running) { _running = false; return; }
+        if (_candles.Count == 0) return;
+        EnsureBrain();
+        _running = true;
+        try
+        {
+            while (_running)
+            {
+                int burst = _speed;
+                for (int b = 0; b < burst && _running; b++) TrainOnceStep();
+                StateHasChanged();
+                await Task.Delay(Math.Max(16, 120 - _speed * 10));
+            }
+        }
+        catch (Exception ex) { _error = "The forecaster stumbled: " + ex.Message; _running = false; StateHasChanged(); }
+    }
+
+    void ResetBrain()
+    {
+        _running = false; _brain = null; _seq.Clear(); _pos = 1; _trained = 0; _trainedForAlpha = 0;
+        _correctLifetime = 0; _totalLifetime = 0; _recentWindow.Clear(); _recentAcc = 0; _lifetimeAcc = 0;
+        _accCurve.Clear(); _recent.Clear(); _log.Clear();
+    }
+
+    // ---- rendering ----
+    string ChartSvg()
+    {
+        if (_recent.Count < 2) return "<p class=\"hint\">Click \"Start training\" — each tick trained shows up here as it's predicted.</p>";
+        int w = 720, h = 140;
+        double max = _recent.Max(p => p.Close), min = _recent.Min(p => p.Close); if (max <= min) max = min + 1;
+        int n = _recent.Count;
+        var pts = new StringBuilder();
+        var dots = new StringBuilder();
+        for (int i = 0; i < n; i++)
+        {
+            double px = n == 1 ? 0 : (double)i / (n - 1) * w;
+            double py = h - 10 - (_recent[i].Close - min) / (max - min) * (h - 20);
+            pts.Append(F(px)).Append(',').Append(F(py)).Append(' ');
+            string cls = _recent[i].Correct ? "hit" : "miss";
+            dots.Append($"<circle class=\"pt {cls}\" cx=\"{F(px)}\" cy=\"{F(py)}\" r=\"2.6\"/>");
+        }
+        return $"<svg viewBox=\"0 0 {w} {h}\" preserveAspectRatio=\"none\" class=\"fc-chart-svg\">" +
+               $"<polyline class=\"fc-line\" points=\"{pts}\"/>{dots}</svg>";
+    }
+
+    string AccCurveSvg()
+    {
+        if (_accCurve.Count < 2) return "";
+        int w = 640, h = 90, n = _accCurve.Count;
+        var sb = new StringBuilder();
+        sb.Append($"<svg viewBox=\"0 0 {w} {h}\" preserveAspectRatio=\"none\" class=\"curve-svg\">");
+        double midY = h - 10 - 0.5 * (h - 20);
+        sb.Append($"<line class=\"curve-base\" x1=\"0\" y1=\"{F(midY)}\" x2=\"{w}\" y2=\"{F(midY)}\"/>");
+        var pts = new StringBuilder();
+        for (int i = 0; i < n; i++)
+        {
+            double px = n == 1 ? 0 : (double)i / (n - 1) * w;
+            double py = h - 10 - (_accCurve[i] / 100.0) * (h - 20);
+            pts.Append(F(px)).Append(',').Append(F(py)).Append(' ');
+        }
+        sb.Append($"<polyline class=\"curve-line\" points=\"{pts}\"/>");
+        sb.Append("</svg>");
+        return sb.ToString();
+    }
+
+    static string F(double v) => v.ToString("F1", System.Globalization.CultureInfo.InvariantCulture);
+}
