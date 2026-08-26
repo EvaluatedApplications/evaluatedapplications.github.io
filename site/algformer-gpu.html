@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AlgFormer.Gpu — optional CUDA acceleration for HoloFormer</title>
+<meta name="description" content="AlgFormer.Gpu adds ILGPU/CUDA-backed training and inference for AlgFormer's HoloFormer engine: same model, same weights, just faster, with automatic CPU fallback when no GPU is present.">
+<link rel="canonical" href="https://evaluatedapplications.github.io/algformer-gpu.html">
+<meta property="og:type" content="website">
+<meta property="og:title" content="AlgFormer.Gpu — optional CUDA acceleration for HoloFormer">
+<meta property="og:description" content="Same model, same weights, just faster. GPU-batched training and inference for AlgFormer's HoloFormer engine, with automatic CPU fallback.">
+<meta property="og:url" content="https://evaluatedapplications.github.io/algformer-gpu.html">
+<meta name="twitter:card" content="summary">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%238b7dff'/%3E%3Cstop offset='.5' stop-color='%2335d0c0'/%3E%3Cstop offset='1' stop-color='%23e6b450'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='32' height='32' rx='7' fill='%230a0c11'/%3E%3Cpath d='M16 5l9.5 5.5v11L16 27l-9.5-5.5v-11z' fill='none' stroke='url(%23g)' stroke-width='2'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="/assets/site.css">
+</head>
+<body>
+<div class="beam"></div>
+
+<nav class="site-nav">
+  <div class="wrap">
+    <a class="brand" href="/">
+      <svg class="mark" viewBox="0 0 32 32" aria-hidden="true"><defs><linearGradient id="m" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#8b7dff"/><stop offset=".5" stop-color="#35d0c0"/><stop offset="1" stop-color="#e6b450"/></linearGradient></defs><path d="M16 4l10.4 6v12L16 28 5.6 22V10z" fill="none" stroke="url(#m)" stroke-width="2"/></svg>
+      Evaluated Applications
+    </a>
+    <input type="checkbox" id="navtoggle" class="nav-toggle">
+    <label for="navtoggle" class="nav-burger" aria-label="Toggle menu"><span></span><span></span><span></span></label>
+    <div class="nav-links">
+      <a href="/">Home</a>
+      <a href="/holodb/">HoloDb</a>
+      <a href="/#packages">Packages</a>
+      <a href="https://www.nuget.org/profiles/evaluatedapplications" target="_blank" rel="noopener">NuGet</a>
+    </div>
+  </div>
+</nav>
+
+<header class="hero">
+  <div class="wrap">
+    <p class="crumb"><a href="/">Home</a><span>/</span><a href="/#packages">Packages</a><span>/</span>AlgFormer.Gpu</p>
+    <span class="eyebrow">AlgFormer.Gpu · machine learning</span>
+    <h1>Same model, same weights. Just faster.</h1>
+    <p class="lede">AlgFormer.Gpu adds ILGPU/CUDA-backed training and inference for the HoloFormer (holographic
+      attention) engine from the core <a href="/algformer.html">AlgFormer</a> package. It builds GPU kernels
+      straight from a CPU HoloFormer's serialized weights — no separate model format, no retraining to switch
+      devices. Backward passes, a fused on-device Adam optimizer step, and batched forward inference all run on
+      the GPU when one is present, with the CPU engine automatically taking over when it isn't.</p>
+    <div class="facts">
+      <span class="fact"><b>v1.3.0</b></span>
+      <span class="fact">net<b>8.0</b>+</span>
+      <span class="fact">ILGPU / CUDA</span>
+      <span class="fact">automatic CPU fallback</span>
+      <span class="fact">free to use</span>
+    </div>
+    <div class="install" style="max-width:560px;margin-top:20px"><code>dotnet add package EvaluatedApplications.AlgFormer.Gpu</code><button class="copy" type="button">copy</button></div>
+    <div class="cta-row" style="margin-top:16px">
+      <a class="btn btn-ghost" href="https://www.nuget.org/packages/EvaluatedApplications.AlgFormer.Gpu" target="_blank" rel="noopener">NuGet →</a>
+      <a class="btn btn-ghost" href="/algformer.html">See AlgFormer →</a>
+    </div>
+  </div>
+</header>
+
+<section class="sec">
+  <div class="wrap">
+    <div class="sec-head"><span class="dot" style="background:var(--c-ml)"></span><h2>Why it's useful</h2><p>drop-in, not a rewrite</p></div>
+    <div class="grid">
+      <article class="card" style="--cat:var(--c-ml)"><div class="card-top"><h3>Drop-in, not a rewrite</h3></div>
+        <p class="desc">Point it at an existing CPU <code>HoloFormer</code>; it trains and serves against the same serialized weights.</p></article>
+      <article class="card" style="--cat:var(--c-ml)"><div class="card-top"><h3>Automatic fallback</h3></div>
+        <p class="desc">Runtime device detection means the same build works on a machine with a CUDA GPU and one without — no separate code paths for callers to maintain.</p></article>
+      <article class="card" style="--cat:var(--c-ml)"><div class="card-top"><h3>Correctness-checked against the CPU engine</h3></div>
+        <p class="desc">Every GPU kernel is gradient-checked against the CPU HoloFormer (which does the math in double precision) as the reference oracle. GPU runs in float32 for speed, so results are float-close to the CPU reference, not bit-identical.</p></article>
+      <article class="card" style="--cat:var(--c-ml)"><div class="card-top"><h3>Fused on-device Adam</h3></div>
+        <p class="desc">The optimizer step runs on the GPU too, alongside the forward/backward kernels, avoiding a round trip to the CPU on every training batch.</p></article>
+    </div>
+  </div>
+</section>
+
+<section class="sec">
+  <div class="wrap">
+    <div class="sec-head"><span class="dot" style="background:var(--c-ml)"></span><h2>Key features</h2><p>what you get</p></div>
+    <div class="grid">
+      <article class="card" style="--cat:var(--c-ml)"><div class="card-top"><h3>GPU-batched training</h3></div>
+        <p class="desc">Forward and backward for HoloFormer, including per-layer weight-tied iterative refinement ("StackIter") and all-positions loss.</p></article>
+      <article class="card" style="--cat:var(--c-ml)"><div class="card-top"><h3>Checkpoint/resume</h3></div>
+        <p class="desc">Fused on-device Adam optimizer state can be checkpointed and resumed alongside the GPU-resident training loop.</p></article>
+      <article class="card" style="--cat:var(--c-ml)"><div class="card-top"><h3>Device detection</h3></div>
+        <p class="desc"><code>GpuDevice.HasGpu</code> with silent, safe CPU fallback when no supported CUDA device is present.</p></article>
+      <article class="card" style="--cat:var(--c-ml)"><div class="card-top"><h3>Standalone kernel verification</h3></div>
+        <p class="desc">Utilities to confirm a given GPU matches the CPU reference before trusting it in production.</p></article>
+    </div>
+  </div>
+</section>
+
+<section class="sec">
+  <div class="wrap">
+    <div class="sec-head"><span class="dot" style="background:var(--c-ml)"></span><h2>Good to know</h2><p>honest limits</p></div>
+    <div class="grid">
+      <article class="card" style="--cat:var(--c-ml)"><div class="card-top"><h3>Requires a CUDA device to use the GPU path</h3></div>
+        <p class="desc">Without an ILGPU-supported CUDA device at runtime, the package falls back to the CPU <code>HoloFormer</code> engine automatically — the same build works either way.</p></article>
+      <article class="card" style="--cat:var(--c-ml)"><div class="card-top"><h3>Optional</h3></div>
+        <p class="desc">The core <code>AlgFormer</code> package has no GPU dependency at all and stays dependency-free and AOT/trim-safe. Add this package only if you want GPU-accelerated training or inference.</p></article>
+      <article class="card" style="--cat:var(--c-ml)"><div class="card-top"><h3>The older softmax path is deprecated</h3></div>
+        <p class="desc">The package also includes GPU support for AlgFormer's earlier (non-HoloFormer) softmax-attention model. That path still builds and runs, but all current development — including the fused Adam step — targets HoloFormer only. New projects should use the HoloFormer path.</p></article>
+    </div>
+    <p class="lim">Install from NuGet: <code>EvaluatedApplications.AlgFormer.Gpu</code>. Requires the core <code>EvaluatedApplications.AlgFormer</code> package alongside it. <b>License:</b> proprietary; every capability here is free to use today.</p>
+  </div>
+</section>
+
+<footer class="site">
+  <div class="wrap">
+    <span>Evaluated Applications — .NET libraries, England.</span>
+    <span class="mono">© <span id="yr"></span> · <a href="https://www.nuget.org/profiles/evaluatedapplications" target="_blank" rel="noopener">NuGet</a></span>
+  </div>
+</footer>
+<script>
+  document.getElementById('yr').textContent = new Date().getFullYear();
+  document.querySelectorAll('.copy').forEach(function(btn){
+    btn.addEventListener('click', function(){
+      var code = btn.parentElement.querySelector('code').textContent;
+      navigator.clipboard.writeText(code).then(function(){
+        var old = btn.textContent; btn.textContent = 'copied'; btn.classList.add('done');
+        setTimeout(function(){ btn.textContent = old; btn.classList.remove('done'); }, 1400);
+      });
+    });
+  });
+</script>
+</body>
+</html>

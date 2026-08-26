@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AlgFormer — a transformer engine with two attention cores, for .NET</title>
+<meta name="description" content="AlgFormer defines, trains, and runs transformer-style language models in pure managed .NET — no GPU, no Python, no native runtime required. Two interchangeable attention cores: classic softmax, and a holographic bind/bundle/unbind core that scales linearly instead of quadratically.">
+<link rel="canonical" href="https://evaluatedapplications.github.io/algformer.html">
+<meta property="og:type" content="website">
+<meta property="og:title" content="AlgFormer — a transformer engine with two attention cores, for .NET">
+<meta property="og:description" content="A real, gradient-trained transformer, written entirely in C#. Two param-for-param comparable attention cores: classic softmax, and a holographic core that plays context instead of scoring it.">
+<meta property="og:url" content="https://evaluatedapplications.github.io/algformer.html">
+<meta name="twitter:card" content="summary">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%238b7dff'/%3E%3Cstop offset='.5' stop-color='%2335d0c0'/%3E%3Cstop offset='1' stop-color='%23e6b450'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='32' height='32' rx='7' fill='%230a0c11'/%3E%3Cpath d='M16 5l9.5 5.5v11L16 27l-9.5-5.5v-11z' fill='none' stroke='url(%23g)' stroke-width='2'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="/assets/site.css">
+</head>
+<body>
+<div class="beam"></div>
+
+<nav class="site-nav">
+  <div class="wrap">
+    <a class="brand" href="/">
+      <svg class="mark" viewBox="0 0 32 32" aria-hidden="true"><defs><linearGradient id="m" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#8b7dff"/><stop offset=".5" stop-color="#35d0c0"/><stop offset="1" stop-color="#e6b450"/></linearGradient></defs><path d="M16 4l10.4 6v12L16 28 5.6 22V10z" fill="none" stroke="url(#m)" stroke-width="2"/></svg>
+      Evaluated Applications
+    </a>
+    <input type="checkbox" id="navtoggle" class="nav-toggle">
+    <label for="navtoggle" class="nav-burger" aria-label="Toggle menu"><span></span><span></span><span></span></label>
+    <div class="nav-links">
+      <a href="/">Home</a>
+      <a href="/holodb/">HoloDb</a>
+      <a href="/#packages">Packages</a>
+      <a href="https://www.nuget.org/profiles/evaluatedapplications" target="_blank" rel="noopener">NuGet</a>
+    </div>
+  </div>
+</nav>
+
+<header class="hero">
+  <div class="wrap">
+    <p class="crumb"><a href="/">Home</a><span>/</span><a href="/#packages">Packages</a><span>/</span>AlgFormer</p>
+    <span class="eyebrow">AlgFormer · machine learning</span>
+    <h1>A transformer engine with two attention cores. One classic, one holographic.</h1>
+    <p class="lede">AlgFormer defines, trains, and runs transformer-style language models in pure managed .NET —
+      <code>double[]</code> arrays with SIMD, no ONNX, no libtorch, no CUDA toolkit, no Python interop. Give it a
+      vocabulary and a shape, train it on your own token sequences through a data-parallel pipeline, and run
+      inference — single prediction, full logits, or streaming generation with a KV cache. It ships two
+      interchangeable attention cores so you can compare what "attention" costs.</p>
+    <div class="facts">
+      <span class="fact"><b>v1.5.0</b></span>
+      <span class="fact">net<b>8.0</b>+</span>
+      <span class="fact">no external ML runtime</span>
+      <span class="fact">no GPU required</span>
+      <span class="fact">free to use</span>
+    </div>
+    <div class="install" style="max-width:520px;margin-top:20px"><code>dotnet add package EvaluatedApplications.AlgFormer</code><button class="copy" type="button">copy</button></div>
+    <div class="cta-row" style="margin-top:16px">
+      <a class="btn btn-primary" href="/holoformer.html">How the holographic core works, in plain English →</a>
+      <a class="btn btn-ghost" href="https://www.nuget.org/packages/EvaluatedApplications.AlgFormer" target="_blank" rel="noopener">NuGet</a>
+    </div>
+  </div>
+</header>
+
+<section class="sec">
+  <div class="wrap">
+    <div class="sec-head"><span class="dot" style="background:var(--c-ml)"></span><h2>The problem it solves</h2><p>a real transformer, no native runtime</p></div>
+    <p class="desc" style="max-width:74ch">Most transformer tooling means either binding into a native runtime (ONNX, PyTorch/libtorch, CUDA) or
+      hand-rolling matrix code with no attention research behind it. AlgFormer sits in between: a real,
+      gradient-trained transformer architecture, written entirely in C#, that runs anywhere .NET runs.
+      It also lets you compare two different ideas of what attention should cost. Standard softmax attention
+      scores every token against every other token — quadratic in sequence length. AlgFormer ships a second,
+      holographic attention core alongside it that composes context through bind/bundle/unbind operations
+      instead of pairwise scoring — linear in sequence length, with constant-time-per-token serving. Both cores
+      are parameter-for-parameter comparable, so you can train the same shape on the same data with either and
+      see the difference directly.</p>
+  </div>
+</section>
+
+<section class="sec">
+  <div class="wrap">
+    <div class="sec-head"><span class="dot" style="background:var(--c-ml)"></span><h2>Two cores, same shape</h2><p>swap the core, not the workflow</p></div>
+    <div class="cmp" style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+      <article class="card" style="--cat:var(--c-data)">
+        <div class="card-top"><h3>AlgFormer (softmax)</h3></div>
+        <p class="desc">Classic dot-product attention — the well-understood baseline. Every dense map is an
+          algebraic relation-bank cell (<code>S·d</code> params, not <code>d²</code>), so it stays compact even
+          in pure managed code.</p>
+      </article>
+      <article class="card" style="--cat:var(--c-ml)">
+        <div class="card-top"><h3>HoloFormer (holographic)</h3></div>
+        <p class="desc">Attention is bind(k,v) → causal-bundle → unbind(q) — holographic resonance instead of
+          softmax·V. O(sequence length × model width) to train, effectively O(1) per token to serve via an
+          incremental KV cache, versus O(sequence length²) for standard attention.</p>
+      </article>
+    </div>
+    <p class="desc" style="max-width:74ch;margin-top:16px"><code>AlgFormer</code> and <code>HoloFormer</code> share the same model shape, training loop, checkpoint format,
+      and serving API — construct one instead of the other with matching dimensions, and train/serve it through
+      the same code.</p>
+  </div>
+</section>
+
+<section class="sec">
+  <div class="wrap">
+    <div class="sec-head"><span class="dot" style="background:var(--c-ml)"></span><h2>Why it's useful</h2><p>everything included to actually use it</p></div>
+    <div class="grid">
+      <article class="card" style="--cat:var(--c-ml)"><div class="card-top"><h3>No external ML runtime</h3></div>
+        <p class="desc">Everything is plain <code>double[]</code> math with SIMD, compiled straight into your app. No ONNX Runtime, no libtorch, no CUDA toolkit, no Python interop.</p></article>
+      <article class="card" style="--cat:var(--c-ml)"><div class="card-top"><h3>Attention that scales differently</h3></div>
+        <p class="desc">HoloFormer's holographic core is useful when context windows get long — training cost grows linearly, serving cost per token stays effectively constant.</p></article>
+      <article class="card" style="--cat:var(--c-ml)"><div class="card-top"><h3>Everything to actually use it</h3></div>
+        <p class="desc">A subword tokenizer, a data-parallel trainer, streaming generation with a KV cache, checkpoint save/load with format versioning, and helpers to grow a trained model to a longer context or bigger vocabulary without retraining from scratch.</p></article>
+      <article class="card" style="--cat:var(--c-ml)"><div class="card-top"><h3>Built for distributed and swarm training</h3></div>
+        <p class="desc">Relay components let multiple machines train a shared model cooperatively over MQTT, exchanging either full batches or lightweight position manifests.</p></article>
+    </div>
+  </div>
+</section>
+
+<section class="sec">
+  <div class="wrap">
+    <div class="sec-head"><span class="dot" style="background:var(--c-ml)"></span><h2>Key features</h2><p>what you get</p></div>
+    <div class="grid">
+      <article class="card" style="--cat:var(--c-ml)"><div class="card-top"><h3>Pure managed code</h3></div>
+        <p class="desc"><code>double[]</code> + SIMD — no external ML runtime, no native dependency, no GPU required.</p></article>
+      <article class="card" style="--cat:var(--c-ml)"><div class="card-top"><h3>Data-parallel training</h3></div>
+        <p class="desc">Resource-gated, adaptively tuned, for full epochs over your dataset.</p></article>
+      <article class="card" style="--cat:var(--c-ml)"><div class="card-top"><h3>Streaming inference</h3></div>
+        <p class="desc">An incremental KV cache for low-latency, constant-work-per-token generation.</p></article>
+      <article class="card" style="--cat:var(--c-ml)"><div class="card-top"><h3>Versioned checkpoints</h3></div>
+        <p class="desc">Backward-compatible format versioning, so old checkpoints keep loading as the format evolves.</p></article>
+      <article class="card" style="--cat:var(--c-ml)"><div class="card-top"><h3>In-place model growth</h3></div>
+        <p class="desc">Extend context length, attention shifts, or vocabulary on an already-trained model — <code>HoloShape</code> sizes it with measured, not guessed, tradeoffs.</p></article>
+      <article class="card" style="--cat:var(--c-ml)"><div class="card-top"><h3>Gradient-check oracles</h3></div>
+        <p class="desc">Built in, so the training math itself can be verified, not just assumed correct.</p></article>
+    </div>
+  </div>
+</section>
+
+<section class="sec">
+  <div class="wrap">
+    <div class="sec-head"><span class="dot" style="background:var(--c-ml)"></span><h2>Get started</h2><p>minimal example</p></div>
+    <div class="snip"><code>using PrismFormer;
+
+// Define a model (tokens are ints — bring your own tokenizer/encoding)
+var model = new AlgFormer(vocab: 16, shifts: 4, layers: 2, maxContext: 6, dModel: 32, frozenPrefix: 0);
+
+// Train — data is a list of (context tokens, target token) pairs
+var trainer = new PrismTrainer(model);                 // data-parallel via EvalApp
+double loss = trainer.TrainEpoch(data, batchSize: 64, lr: 5e-2, shuffleSeed: 1);
+
+// Run inference
+int next      = model.Predict(context);                 // argmax next token
+double[] lg   = model.LogitsFor(context);                // full logits
+int[] sample  = model.Generate(prompt, maxNewTokens: 20, temperature: 0.8);</code></div>
+    <p class="desc">Swapping in the holographic core is the same shape — construct a <code>HoloFormer</code> instead of an <code>AlgFormer</code> with matching dimensions, and train/serve it through the same API.</p>
+    <p class="lim"><b>Compatibility:</b> .NET 8.0+, pure managed code, runs anywhere .NET runs. Depends on the <a href="/phasor.html">Phasor</a> codec (model geometry defaults) and the <a href="/evalapp.html">EvalApp</a> pipeline runtime (data-parallel training); swarm relay components use MQTTnet. <b>License:</b> proprietary, compiled library only — every capability is free to use today.</p>
+  </div>
+</section>
+
+<footer class="site">
+  <div class="wrap">
+    <span>Evaluated Applications — .NET libraries, England.</span>
+    <span class="mono">© <span id="yr"></span> · <a href="https://www.nuget.org/profiles/evaluatedapplications" target="_blank" rel="noopener">NuGet</a></span>
+  </div>
+</footer>
+<script>
+  document.getElementById('yr').textContent = new Date().getFullYear();
+  document.querySelectorAll('.copy').forEach(function(btn){
+    btn.addEventListener('click', function(){
+      var code = btn.parentElement.querySelector('code').textContent;
+      navigator.clipboard.writeText(code).then(function(){
+        var old = btn.textContent; btn.textContent = 'copied'; btn.classList.add('done');
+        setTimeout(function(){ btn.textContent = old; btn.classList.remove('done'); }, 1400);
+      });
+    });
+  });
+</script>
+</body>
+</html>

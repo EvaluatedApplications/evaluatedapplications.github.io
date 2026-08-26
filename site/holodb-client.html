@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HoloDb.Client — the .NET client for a remote HoloDb server</title>
+<meta name="description" content="HoloDb.Client connects your .NET app to a HoloDb server over TLS. Same API as the embedded engine, columnar results stay columnar on the wire, and opt-in resilience: exponential backoff, a circuit breaker, and per-operation deadlines.">
+<link rel="canonical" href="https://evaluatedapplications.github.io/holodb-client.html">
+<meta property="og:type" content="website">
+<meta property="og:title" content="HoloDb.Client — the .NET client for a remote HoloDb server">
+<meta property="og:description" content="Connect to a HoloDb server over TLS with the same API as the embedded engine — swap embedded for networked by changing only how you get the handle.">
+<meta property="og:url" content="https://evaluatedapplications.github.io/holodb-client.html">
+<meta name="twitter:card" content="summary">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%238b7dff'/%3E%3Cstop offset='.5' stop-color='%2335d0c0'/%3E%3Cstop offset='1' stop-color='%23e6b450'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='32' height='32' rx='7' fill='%230a0c11'/%3E%3Cpath d='M16 5l9.5 5.5v11L16 27l-9.5-5.5v-11z' fill='none' stroke='url(%23g)' stroke-width='2'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="/assets/site.css">
+</head>
+<body>
+<div class="beam"></div>
+
+<nav class="site-nav">
+  <div class="wrap">
+    <a class="brand" href="/">
+      <svg class="mark" viewBox="0 0 32 32" aria-hidden="true"><defs><linearGradient id="m" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#8b7dff"/><stop offset=".5" stop-color="#35d0c0"/><stop offset="1" stop-color="#e6b450"/></linearGradient></defs><path d="M16 4l10.4 6v12L16 28 5.6 22V10z" fill="none" stroke="url(#m)" stroke-width="2"/></svg>
+      Evaluated Applications
+    </a>
+    <input type="checkbox" id="navtoggle" class="nav-toggle">
+    <label for="navtoggle" class="nav-burger" aria-label="Toggle menu"><span></span><span></span><span></span></label>
+    <div class="nav-links">
+      <a href="/">Home</a>
+      <a href="/holodb/">HoloDb</a>
+      <a href="/#packages">Packages</a>
+      <a href="https://www.nuget.org/profiles/evaluatedapplications" target="_blank" rel="noopener">NuGet</a>
+    </div>
+  </div>
+</nav>
+
+<header class="hero">
+  <div class="wrap">
+    <p class="crumb"><a href="/">Home</a><span>/</span><a href="/#packages">Packages</a><span>/</span>HoloDb.Client</p>
+    <span class="eyebrow">HoloDb.Client · data</span>
+    <h1>Embedded or networked. Same code either way.</h1>
+    <p class="lede">HoloDb.Client connects your .NET app to a <a href="/holodb/">HoloDb</a> server over TCP with
+      mandatory TLS encryption and token authentication. Run SQL queries and bulk-load data using the same API
+      as the embedded in-process <code>HoloDbService</code>, so you can swap from embedded to networked by
+      changing only how you create the handle. Columnar results stay columnar on the wire — no row buffering or
+      JSON serialization overhead.</p>
+    <div class="facts">
+      <span class="fact"><b>v1.4.0</b></span>
+      <span class="fact">net<b>8.0</b>+</span>
+      <span class="fact">TLS by default</span>
+      <span class="fact">opt-in resilience</span>
+    </div>
+    <div class="install" style="max-width:520px;margin-top:20px"><code>dotnet add package EvaluatedApplications.HoloDb.Client</code><button class="copy" type="button">copy</button></div>
+    <div class="cta-row" style="margin-top:16px">
+      <a class="btn btn-ghost" href="https://www.nuget.org/packages/EvaluatedApplications.HoloDb.Client" target="_blank" rel="noopener">NuGet →</a>
+      <a class="btn btn-ghost" href="/holodb/">See HoloDb →</a>
+    </div>
+  </div>
+</header>
+
+<section class="sec">
+  <div class="wrap">
+    <div class="sec-head"><span class="dot" style="background:var(--c-data)"></span><h2>The problem</h2><p>speed vs scalability, without two APIs</p></div>
+    <p class="desc" style="max-width:74ch">Building analytics or database-driven apps means choosing between speed (embed the database in-process)
+      and scalability (run it on its own server). Embedding locks you to one machine; networking usually means
+      two separate APIs that behave differently. HoloDb.Client lets you have both: one code path works with
+      either the embedded engine or a remote server.</p>
+  </div>
+</section>
+
+<section class="sec">
+  <div class="wrap">
+    <div class="sec-head"><span class="dot" style="background:var(--c-data)"></span><h2>Why HoloDb.Client</h2><p>what you get</p></div>
+    <div class="grid">
+      <article class="card" style="--cat:var(--c-data)"><div class="card-top"><h3>Same API, embedded or networked</h3></div>
+        <p class="desc"><code>Execute</code>, <code>ExecuteAsync</code>, <code>BulkLoadAsync</code>, <code>GetStatsAsync</code>, <code>PingAsync</code> — identical surface whether you talk to in-process <code>HoloDbService</code> or a remote server.</p></article>
+      <article class="card" style="--cat:var(--c-data)"><div class="card-top"><h3>Columnar over the wire</h3></div>
+        <p class="desc">Results are typed column arrays, matching the in-process engine's <code>QueryResult</code> structure — no serialization tax.</p></article>
+      <article class="card" style="--cat:var(--c-data)"><div class="card-top"><h3>Secure by default</h3></div>
+        <p class="desc">TLS is on. Trust a self-signed server with certificate pinning (thumbprint), or skip it in dev only.</p></article>
+      <article class="card" style="--cat:var(--c-data)"><div class="card-top"><h3>Built-in resilience</h3></div>
+        <p class="desc">Optional exponential backoff with full jitter, a circuit breaker, and a per-operation deadline budget — opt in where you need it, transparent where you don't.</p></article>
+      <article class="card" style="--cat:var(--c-data)"><div class="card-top"><h3>Designed for concurrency</h3></div>
+        <p class="desc">One client per concurrent worker, or pool clients upfront with <code>HoloDbClientPool</code>.</p></article>
+    </div>
+  </div>
+</section>
+
+<section class="sec">
+  <div class="wrap">
+    <div class="sec-head"><span class="dot" style="background:var(--c-data)"></span><h2>How to use it</h2><p>basic, resilient, pinned</p></div>
+    <div class="snip"><code>using HoloDb.Client;
+
+// Connect to server
+var client = await HoloDbClient.ConnectAsync("db.example.com", 5433);
+try {
+    var result = await client.ExecuteAsync("SELECT id, value FROM data LIMIT 10");
+    foreach (var row in result.Rows)
+        Console.WriteLine($"id={row[0]}, value={row[1]}");
+} finally {
+    await client.DisposeAsync();
+}</code></div>
+    <p class="desc">Resilient client with retry, backoff, and a circuit breaker:</p>
+    <div class="snip"><code>var resilient = await ResilientHoloDbClient.ConnectAsync(
+    "db.example.com", 5433,
+    retryDelay: TimeSpan.FromMilliseconds(200),
+    maxAttempts: 3,
+    breakerFailureThreshold: 5
+);
+
+// Automatically retries transient transport failures
+var result = await resilient.ExecuteAsync("SELECT COUNT(*) FROM data");</code></div>
+    <p class="desc">Pinned certificate (recommended for self-hosted):</p>
+    <div class="snip"><code>var options = new HoloDbClientOptions {
+    AuthToken = "your-token",
+    UseTls = true,
+    PinnedThumbprint = "ABC123DEF456..." // SHA-1 thumbprint
+};
+
+var client = await HoloDbClient.ConnectAsync("localhost", 5433, options);</code></div>
+  </div>
+</section>
+
+<section class="sec">
+  <div class="wrap">
+    <div class="sec-head"><span class="dot" style="background:var(--c-data)"></span><h2>Key notes</h2><p>good to know</p></div>
+    <div class="grid">
+      <article class="card" style="--cat:var(--c-data)"><div class="card-top"><h3>One client = one session</h3></div>
+        <p class="desc">Requests serialize through an internal queue; concurrent callers share the same TCP connection. Use one client per worker, or pool clients with <code>HoloDbClientPool</code>.</p></article>
+      <article class="card" style="--cat:var(--c-data)"><div class="card-top"><h3>No automatic reconnect</h3></div>
+        <p class="desc">A dropped socket raises an exception; reconnect explicitly, or opt into <code>ResilientHoloDbClient</code> which handles this transparently.</p></article>
+      <article class="card" style="--cat:var(--c-data)"><div class="card-top"><h3>Transient vs application errors</h3></div>
+        <p class="desc"><code>HoloRemoteException</code> (SQL errors, auth failures) is never retried; <code>ResilientHoloDbClient</code> retries only transport-level failures.</p></article>
+    </div>
+    <p class="lim"><b>Version history:</b> v1.2.0 added exponential backoff, v1.3.0 added the circuit breaker, v1.4.0 (current) adds operation deadline budgets across retries. <b>Requires:</b> .NET 8.0+, a HoloDb server v1.4.0+ (wire-protocol compatible), network connectivity with TLS support. <b>License:</b> proprietary, part of Evaluated Applications.</p>
+  </div>
+</section>
+
+<footer class="site">
+  <div class="wrap">
+    <span>Evaluated Applications — .NET libraries, England.</span>
+    <span class="mono">© <span id="yr"></span> · <a href="https://www.nuget.org/profiles/evaluatedapplications" target="_blank" rel="noopener">NuGet</a></span>
+  </div>
+</footer>
+<script>
+  document.getElementById('yr').textContent = new Date().getFullYear();
+  document.querySelectorAll('.copy').forEach(function(btn){
+    btn.addEventListener('click', function(){
+      var code = btn.parentElement.querySelector('code').textContent;
+      navigator.clipboard.writeText(code).then(function(){
+        var old = btn.textContent; btn.textContent = 'copied'; btn.classList.add('done');
+        setTimeout(function(){ btn.textContent = old; btn.classList.remove('done'); }, 1400);
+      });
+    });
+  });
+</script>
+</body>
+</html>

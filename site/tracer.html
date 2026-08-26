@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tracer — navmesh pathfinding and game AI for .NET</title>
+<meta name="description" content="Tracer is a pathfinding and game-AI SDK for .NET: navmesh baking, multi-agent pathfinding with goal-sharing, dynamic obstacles, line-of-sight, fog-of-war, influence maps, combat, and a bake-free grid-tactics lane — all self-tuning to your frame budget.">
+<link rel="canonical" href="https://evaluatedapplications.github.io/tracer.html">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Tracer — navmesh pathfinding and game AI for .NET">
+<meta property="og:description" content="Multi-agent path queries, dynamic obstacles, line-of-sight, and combat, all self-tuning to your frame budget.">
+<meta property="og:url" content="https://evaluatedapplications.github.io/tracer.html">
+<meta name="twitter:card" content="summary">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%238b7dff'/%3E%3Cstop offset='.5' stop-color='%2335d0c0'/%3E%3Cstop offset='1' stop-color='%23e6b450'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='32' height='32' rx='7' fill='%230a0c11'/%3E%3Cpath d='M16 5l9.5 5.5v11L16 27l-9.5-5.5v-11z' fill='none' stroke='url(%23g)' stroke-width='2'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="/assets/site.css">
+</head>
+<body>
+<div class="beam"></div>
+
+<nav class="site-nav">
+  <div class="wrap">
+    <a class="brand" href="/">
+      <svg class="mark" viewBox="0 0 32 32" aria-hidden="true"><defs><linearGradient id="m" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#8b7dff"/><stop offset=".5" stop-color="#35d0c0"/><stop offset="1" stop-color="#e6b450"/></linearGradient></defs><path d="M16 4l10.4 6v12L16 28 5.6 22V10z" fill="none" stroke="url(#m)" stroke-width="2"/></svg>
+      Evaluated Applications
+    </a>
+    <input type="checkbox" id="navtoggle" class="nav-toggle">
+    <label for="navtoggle" class="nav-burger" aria-label="Toggle menu"><span></span><span></span><span></span></label>
+    <div class="nav-links">
+      <a href="/">Home</a>
+      <a href="/holodb/">HoloDb</a>
+      <a href="/#packages">Packages</a>
+      <a href="https://www.nuget.org/profiles/evaluatedapplications" target="_blank" rel="noopener">NuGet</a>
+    </div>
+  </div>
+</nav>
+
+<header class="hero">
+  <div class="wrap">
+    <p class="crumb"><a href="/">Home</a><span>/</span><a href="/#packages">Packages</a><span>/</span>Tracer</p>
+    <span class="eyebrow">Tracer · spatial &amp; games</span>
+    <h1>Pathfinding is the easy 10%. Tracer does the rest.</h1>
+    <p class="lede">Tracer is a pathfinding and game-AI SDK for real-time simulations with many moving agents:
+      crowds, RTS-style unit groups, tactical squads. It bakes triangle-based navmeshes, routes single agents and
+      whole swarms across them, reacts to obstacles that appear or vanish mid-game, and layers the surrounding
+      game-AI toolkit — line-of-sight, fog-of-war, influence maps, combat engagement — on top. Every heavy
+      service runs on the <a href="/evalapp.html">EvalApp</a> pipeline, which tunes its own concurrency to the
+      workload instead of needing a hand-picked thread count.</p>
+    <div class="facts">
+      <span class="fact"><b>v1.1.2</b></span>
+      <span class="fact">net<b>8.0</b></span>
+      <span class="fact">triangle navmesh + grid-tactics lane</span>
+      <span class="fact">self-tuning concurrency</span>
+    </div>
+    <div class="install" style="max-width:520px;margin-top:20px"><code>dotnet add package EvaluatedApplications.Tracer</code><button class="copy" type="button">copy</button></div>
+    <div class="cta-row" style="margin-top:16px">
+      <a class="btn btn-ghost" href="https://www.nuget.org/packages/EvaluatedApplications.Tracer" target="_blank" rel="noopener">NuGet →</a>
+    </div>
+  </div>
+</header>
+
+<section class="sec">
+  <div class="wrap">
+    <div class="sec-head"><span class="dot" style="background:var(--c-spatial)"></span><h2>The problem it solves</h2><p>everything around "find me a path"</p></div>
+    <p class="desc" style="max-width:74ch">Most pathfinding libraries stop at "find me a path." Real games need a lot more around that: hundreds of
+      agents converging on the same goal without re-solving the same route hundreds of times; obstacles that
+      block and unblock at runtime without a full re-bake; visibility and cover queries for AI perception; a
+      frame-time budget the pathfinder has to live inside of, not blow through. Tracer builds all of that in as
+      one coherent SDK, running on a data-parallel pipeline that tunes its own concurrency to the workload.</p>
+  </div>
+</section>
+
+<section class="sec">
+  <div class="wrap">
+    <div class="sec-head"><span class="dot" style="background:var(--c-spatial)"></span><h2>What it does</h2><p>the whole nav problem</p></div>
+    <div class="grid">
+      <article class="card" style="--cat:var(--c-spatial)"><div class="card-top"><h3>Navmesh baking</h3></div>
+        <p class="desc">Turn raw triangle geometry into a queryable navmesh, with obstacle-polygon exclusion and an optional hierarchical (coarse + fine) bake for large levels.</p></article>
+      <article class="card" style="--cat:var(--c-spatial)"><div class="card-top"><h3>Single- and multi-agent pathfinding</h3></div>
+        <p class="desc">One-shot smoothed paths, or a full swarm tick where agents sharing a goal reuse the same solve instead of paying for it per agent.</p></article>
+      <article class="card" style="--cat:var(--c-spatial)"><div class="card-top"><h3>Dynamic obstacles</h3></div>
+        <p class="desc">Block and unblock regions of a baked mesh at runtime without a full re-bake.</p></article>
+      <article class="card" style="--cat:var(--c-spatial)"><div class="card-top"><h3>Line-of-sight, fog-of-war, influence maps</h3></div>
+        <p class="desc">Visibility and area-control queries for AI perception and decision-making.</p></article>
+      <article class="card" style="--cat:var(--c-spatial)"><div class="card-top"><h3>Combat engagement</h3></div>
+        <p class="desc">Spatial-hashed attacker/defender resolution with pluggable damage/dodge/block formulas.</p></article>
+      <article class="card" style="--cat:var(--c-spatial)"><div class="card-top"><h3>Grid tactics</h3></div>
+        <p class="desc">A separate, bake-free lane (line-of-sight, movement range, cover, target selection) for tile/square-grid tactics games that don't need a navmesh at all.</p></article>
+    </div>
+  </div>
+</section>
+
+<section class="sec">
+  <div class="wrap">
+    <div class="sec-head"><span class="dot" style="background:var(--c-spatial)"></span><h2>Why it's useful</h2><p>built for scale</p></div>
+    <div class="grid">
+      <article class="card" style="--cat:var(--c-spatial)"><div class="card-top"><h3>One SDK for the whole nav problem</h3></div>
+        <p class="desc">Not just A* — the layer of things games actually need around it ships with it.</p></article>
+      <article class="card" style="--cat:var(--c-spatial)"><div class="card-top"><h3>Built for scale</h3></div>
+        <p class="desc">Goal-sharing means many agents converging on one point solve close to the cost of one; adaptive path budgeting keeps large swarms inside a frame-time budget under pressure.</p></article>
+      <article class="card" style="--cat:var(--c-spatial)"><div class="card-top"><h3>Two lanes</h3></div>
+        <p class="desc">A full triangle navmesh for open/continuous worlds, plus a pure grid-tactics lane for tile games — pick the one that matches your level format, no forced conversion.</p></article>
+      <article class="card" style="--cat:var(--c-spatial)"><div class="card-top"><h3>Self-tuning</h3></div>
+        <p class="desc">Every stateful service runs on the EvalApp pipeline, which adapts its own concurrency live rather than needing a hand-picked thread pool per project.</p></article>
+    </div>
+  </div>
+</section>
+
+<section class="sec">
+  <div class="wrap">
+    <div class="sec-head"><span class="dot" style="background:var(--c-spatial)"></span><h2>Get started</h2><p>minimal example</p></div>
+    <div class="snip"><code>using Tracer;
+
+var world = new PathfindingWorld();
+
+// Bake a navmesh from triangle geometry
+var baker = world.CreateNavMeshBakerService();
+var mesh = await baker.BakeAsync(vertices, triangleIndices);
+
+// Query a single smoothed path
+var single = world.CreateSingleAgentService();
+var waypoints = await single.QueryPathAsync(mesh, start, goal);
+
+// Or tick a whole swarm of agents at once
+var multi = world.CreateMultiAgentService();
+var result = await multi.TickAsync(agents, mesh, tickNumber: 0);</code></div>
+  </div>
+</section>
+
+<section class="sec">
+  <div class="wrap">
+    <div class="sec-head"><span class="dot" style="background:var(--c-spatial)"></span><h2>What you need to know</h2><p>good to know</p></div>
+    <div class="grid">
+      <article class="card" style="--cat:var(--c-spatial)"><div class="card-top"><h3>Dependencies</h3></div>
+        <p class="desc"><a href="/evalapp.html">EvalApp</a> (the data-parallel pipeline runtime) and <code>Microsoft.Extensions.DependencyInjection.Abstractions</code>.</p></article>
+      <article class="card" style="--cat:var(--c-spatial)"><div class="card-top"><h3>Proven in use</h3></div>
+        <p class="desc">Built alongside the Eden game project, which uses Tracer for navmesh movement, perception/fog, combat resolution, and tactical squad control.</p></article>
+    </div>
+    <p class="lim"><b>Target:</b> .NET 8.0. <b>License:</b> proprietary. All capabilities are free to use today; a license key is reserved for possible future advanced features, none gated currently.</p>
+  </div>
+</section>
+
+<footer class="site">
+  <div class="wrap">
+    <span>Evaluated Applications — .NET libraries, England.</span>
+    <span class="mono">© <span id="yr"></span> · <a href="https://www.nuget.org/profiles/evaluatedapplications" target="_blank" rel="noopener">NuGet</a></span>
+  </div>
+</footer>
+<script>
+  document.getElementById('yr').textContent = new Date().getFullYear();
+  document.querySelectorAll('.copy').forEach(function(btn){
+    btn.addEventListener('click', function(){
+      var code = btn.parentElement.querySelector('code').textContent;
+      navigator.clipboard.writeText(code).then(function(){
+        var old = btn.textContent; btn.textContent = 'copied'; btn.classList.add('done');
+        setTimeout(function(){ btn.textContent = old; btn.classList.remove('done'); }, 1400);
+      });
+    });
+  });
+</script>
+</body>
+</html>

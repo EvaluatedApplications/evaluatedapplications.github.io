@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HoloVoxel — a holographic voxel engine for .NET</title>
+<meta name="description" content="HoloVoxel stores a chunk of the world as one holographic superposition, so level-of-detail falls out of the read instead of being a separate mesh system. Crisp near, dreamy far, engine-only, verified headless.">
+<link rel="canonical" href="https://evaluatedapplications.github.io/holovoxel.html">
+<meta property="og:type" content="website">
+<meta property="og:title" content="HoloVoxel — a holographic voxel engine for .NET">
+<meta property="og:description" content="Level-of-detail isn't a mesh trick, it's how reading the world works. A holographic voxel engine, engine-only, verified headless.">
+<meta property="og:url" content="https://evaluatedapplications.github.io/holovoxel.html">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%238b7dff'/%3E%3Cstop offset='.5' stop-color='%2335d0c0'/%3E%3Cstop offset='1' stop-color='%23e6b450'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='32' height='32' rx='7' fill='%230a0c11'/%3E%3Cpath d='M16 5l9.5 5.5v11L16 27l-9.5-5.5v-11z' fill='none' stroke='url(%23g)' stroke-width='2'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="/assets/site.css">
+<style>
+  .shots{display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-top:8px}
+  .shots figure{margin:0; background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:10px; overflow:hidden}
+  .shots img{display:block; width:100%; height:auto; border-radius:8px}
+  .shots figcaption{font-family:var(--mono); font-size:.76rem; color:var(--ink-faint); margin-top:8px; text-align:center}
+  @media (max-width:640px){ .shots{grid-template-columns:1fr} }
+</style>
+</head>
+<body>
+<div class="beam"></div>
+
+<nav class="site-nav">
+  <div class="wrap">
+    <a class="brand" href="/">
+      <svg class="mark" viewBox="0 0 32 32" aria-hidden="true"><defs><linearGradient id="m" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#8b7dff"/><stop offset=".5" stop-color="#35d0c0"/><stop offset="1" stop-color="#e6b450"/></linearGradient></defs><path d="M16 4l10.4 6v12L16 28 5.6 22V10z" fill="none" stroke="url(#m)" stroke-width="2"/></svg>
+      Evaluated Applications
+    </a>
+    <input type="checkbox" id="navtoggle" class="nav-toggle">
+    <label for="navtoggle" class="nav-burger" aria-label="Toggle menu"><span></span><span></span><span></span></label>
+    <div class="nav-links">
+      <a href="/">Home</a>
+      <a href="/holodb/">HoloDb</a>
+      <a href="/#packages">Packages</a>
+      <a href="https://www.nuget.org/profiles/evaluatedapplications" target="_blank" rel="noopener">NuGet</a>
+    </div>
+  </div>
+</nav>
+
+<header class="hero">
+  <div class="wrap">
+    <p class="crumb"><a href="/">Home</a><span>/</span><a href="/#packages">Packages</a><span>/</span>HoloVoxel</p>
+    <span class="eyebrow">HoloVoxel · spatial &amp; games</span>
+    <h1>Level-of-detail isn't a mesh trick. It's how reading the world works.</h1>
+    <p class="lede">Most voxel engines store a world as arrays of blocks and fake distant detail with mesh
+      simplification, mipmaps, or LOD popping. HoloVoxel stores a chunk of the world as <strong>one holographic
+      superposition</strong> instead: every voxel is bound (<code>position ⊗ content</code>) and summed into a
+      single vector, using the <a href="/phasor.html">Phasor</a> VSA codec. Reading a voxel back is a correlation
+      against that vector, and correlating with fewer components gives a cheaper, fuzzier answer — near stays
+      crisp, far goes soft, with no discrete LOD tiers and no popping between them.</p>
+    <div class="facts">
+      <span class="fact"><b>v1.3.0</b></span>
+      <span class="fact">net<b>8.0</b>+</span>
+      <span class="fact">engine only, no renderer</span>
+      <span class="fact">verified headless</span>
+      <span class="fact">free to use</span>
+    </div>
+    <div class="install" style="max-width:520px;margin-top:20px"><code>dotnet add package EvaluatedApplications.HoloVoxel</code><button class="copy" type="button">copy</button></div>
+    <div class="cta-row" style="margin-top:16px">
+      <a class="btn btn-ghost" href="https://www.nuget.org/packages/EvaluatedApplications.HoloVoxel" target="_blank" rel="noopener">NuGet →</a>
+    </div>
+  </div>
+</header>
+
+<section class="sec">
+  <div class="wrap">
+    <div class="sec-head"><span class="dot" style="background:var(--c-spatial)"></span><h2>Why it's different</h2><p>the same read, at whatever cost you choose</p></div>
+    <div class="grid">
+      <article class="card" style="--cat:var(--c-spatial)"><div class="card-top"><h3>LOD is free</h3></div>
+        <p class="desc">There's no separate simplified mesh to generate, store, or stitch — the same hologram answers a near read and a far read, at whatever cost you choose to pay for that read.</p></article>
+      <article class="card" style="--cat:var(--c-spatial)"><div class="card-top"><h3>Memory scales with perceived detail</h3></div>
+        <p class="desc">A chunk only stores as many components as its LOD will ever need to read back, losslessly — the first <em>k</em> components of a truncated hologram are bit-identical to reading the same chunk in full.</p></article>
+      <article class="card" style="--cat:var(--c-spatial)"><div class="card-top"><h3>The blur is honest, not aesthetic</h3></div>
+        <p class="desc">Distant terrain looks soft because the engine genuinely has less information at that budget, not because a texture got downsampled — the same signal that saves compute also drives the look.</p></article>
+      <article class="card" style="--cat:var(--c-spatial)"><div class="card-top"><h3>Engine only, plug into anything</h3></div>
+        <p class="desc">No rendering or graphics dependency, verified headless. You bring the renderer, block palette, and world source (or use the built-in procedural generator).</p></article>
+    </div>
+  </div>
+</section>
+
+<section class="sec">
+  <div class="wrap">
+    <div class="sec-head"><span class="dot" style="background:var(--c-spatial)"></span><h2>What the same engine output can look like</h2><p>a reference shading pass, not a shipped renderer</p></div>
+    <p class="desc" style="max-width:74ch">HoloVoxel hands you decoded colour fields, triangulated meshes with analytic per-vertex normals, and a
+      confidence signal for how unambiguous each decoded point is — drawing them is up to your own renderer. As
+      a proof of concept, the same mesh/confidence output was shaded with ordinary Lambertian lighting,
+      heightfield ambient occlusion, and confidence-driven haze at distance, against a naive flat-block bake of
+      the identical chunk data.</p>
+    <div class="shots">
+      <figure><img src="/assets/holovoxel/before.png" alt="A HoloVoxel chunk rendered as flat, unlit blocks — the naive baseline." loading="lazy"><figcaption>naive flat-block bake</figcaption></figure>
+      <figure><img src="/assets/holovoxel/after.png" alt="The same HoloVoxel chunk rendered with Lambertian lighting, ambient occlusion, and confidence-driven haze from DecodeMesh's real normals." loading="lazy"><figcaption>DecodeMesh + a reference shading pass</figcaption></figure>
+    </div>
+    <p class="lim">Same chunk, same engine data — <code>DecodeMesh</code>'s analytic normals and <code>FieldConfidence</code>'s ambiguity signal did the work; only the downstream shading changed. This shading recipe is a proof of concept, not something the package ships — HoloVoxel stays renderer-agnostic by design.</p>
+  </div>
+</section>
+
+<section class="sec">
+  <div class="wrap">
+    <div class="sec-head"><span class="dot" style="background:var(--c-spatial)"></span><h2>Key features</h2><p>what you get</p></div>
+    <div class="grid">
+      <article class="card" style="--cat:var(--c-spatial)"><div class="card-top"><h3>Holographic chunk storage</h3></div>
+        <p class="desc">Encode a chunk once, decode it at any component budget as a colour field or a triangulated surface mesh with analytic per-vertex normals.</p></article>
+      <article class="card" style="--cat:var(--c-spatial)"><div class="card-top"><h3>Continuous, meshless LOD</h3></div>
+        <p class="desc">The same stored hologram serves a crisp near view and a soft far view; a distance-to-budget curve is provided as a starting point.</p></article>
+      <article class="card" style="--cat:var(--c-spatial)"><div class="card-top"><h3>Field confidence for adaptive detail</h3></div>
+        <p class="desc">Exposes how unambiguous each decoded point is, turning that into a signal that spends more budget only where the world is genuinely ambiguous, instead of a flat distance curve everywhere.</p></article>
+      <article class="card" style="--cat:var(--c-spatial)"><div class="card-top"><h3>Spatial coarsening at distance</h3></div>
+        <p class="desc">Far reads average over a footprint of the underlying world data, for both terrain height and material, rather than sampling a single noisy point — smooth, coherent shapes instead of speckled noise, independent of the component-budget blur.</p></article>
+      <article class="card" style="--cat:var(--c-spatial)"><div class="card-top"><h3>Truncated holograms</h3></div>
+        <p class="desc">Storage cost tracks the LOD budget you actually plan to read at, not the size of the world.</p></article>
+      <article class="card" style="--cat:var(--c-spatial)"><div class="card-top"><h3>Entities too</h3></div>
+        <p class="desc"><code>HoloModel</code> stores a creature or prop the same holographic way, with the same LOD and confidence machinery, independent of the terrain grid.</p></article>
+      <article class="card" style="--cat:var(--c-spatial)"><div class="card-top"><h3>Built-in procedural generator</h3></div>
+        <p class="desc"><code>WorldGen</code> with biomes, height fields, and optional maze layout — or supply your own world source and skip it entirely.</p></article>
+      <article class="card" style="--cat:var(--c-spatial)"><div class="card-top"><h3>Ringworld warp</h3></div>
+        <p class="desc">A pure flat-to-cylinder coordinate transform for cylindrical/ringworld spaces, on top of the same flat chunk storage.</p></article>
+    </div>
+  </div>
+</section>
+
+<section class="sec">
+  <div class="wrap">
+    <div class="sec-head"><span class="dot" style="background:var(--c-spatial)"></span><h2>Good to know</h2><p>this is the engine, not the renderer</p></div>
+    <p class="desc" style="max-width:74ch">HoloVoxel has no graphics or engine dependency and is verified headless — it hands you decoded colour
+      fields, meshes, and confidence values; drawing them (shaders, GPU decode, a game engine binding) is up to
+      the consuming front end. It's built on Phasor: HoloVoxel's chunk hologram is a direct application of the
+      Phasor VSA codec, so if you're already using Phasor elsewhere, the same binding/correlation model is reused
+      here for space instead of arbitrary data.</p>
+    <p class="lim"><b>No license gate:</b> every capability in this package is free to use today; DLL-only distribution, proprietary license. <b>Get it:</b> <code>dotnet add package EvaluatedApplications.HoloVoxel</code>.</p>
+  </div>
+</section>
+
+<footer class="site">
+  <div class="wrap">
+    <span>Evaluated Applications — .NET libraries, England.</span>
+    <span class="mono">© <span id="yr"></span> · <a href="https://www.nuget.org/profiles/evaluatedapplications" target="_blank" rel="noopener">NuGet</a></span>
+  </div>
+</footer>
+<script>
+  document.getElementById('yr').textContent = new Date().getFullYear();
+  document.querySelectorAll('.copy').forEach(function(btn){
+    btn.addEventListener('click', function(){
+      var code = btn.parentElement.querySelector('code').textContent;
+      navigator.clipboard.writeText(code).then(function(){
+        var old = btn.textContent; btn.textContent = 'copied'; btn.classList.add('done');
+        setTimeout(function(){ btn.textContent = old; btn.classList.remove('done'); }, 1400);
+      });
+    });
+  });
+</script>
+</body>
+</html>

@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HoloDb.Protocol — the HoloDb wire contract</title>
+<meta name="description" content="HoloDb.Protocol defines how the HoloDb server and client communicate: length-prefixed TCP framing and a columnar-preserving binary codec, so columnar results stay columnar all the way to the client.">
+<link rel="canonical" href="https://evaluatedapplications.github.io/holodb-protocol.html">
+<meta property="og:type" content="website">
+<meta property="og:title" content="HoloDb.Protocol — the HoloDb wire contract">
+<meta property="og:description" content="Length-prefixed TCP framing and a columnar-preserving codec — the contract between HoloDb server and client.">
+<meta property="og:url" content="https://evaluatedapplications.github.io/holodb-protocol.html">
+<meta name="twitter:card" content="summary">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%238b7dff'/%3E%3Cstop offset='.5' stop-color='%2335d0c0'/%3E%3Cstop offset='1' stop-color='%23e6b450'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='32' height='32' rx='7' fill='%230a0c11'/%3E%3Cpath d='M16 5l9.5 5.5v11L16 27l-9.5-5.5v-11z' fill='none' stroke='url(%23g)' stroke-width='2'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="/assets/site.css">
+</head>
+<body>
+<div class="beam"></div>
+
+<nav class="site-nav">
+  <div class="wrap">
+    <a class="brand" href="/">
+      <svg class="mark" viewBox="0 0 32 32" aria-hidden="true"><defs><linearGradient id="m" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#8b7dff"/><stop offset=".5" stop-color="#35d0c0"/><stop offset="1" stop-color="#e6b450"/></linearGradient></defs><path d="M16 4l10.4 6v12L16 28 5.6 22V10z" fill="none" stroke="url(#m)" stroke-width="2"/></svg>
+      Evaluated Applications
+    </a>
+    <input type="checkbox" id="navtoggle" class="nav-toggle">
+    <label for="navtoggle" class="nav-burger" aria-label="Toggle menu"><span></span><span></span><span></span></label>
+    <div class="nav-links">
+      <a href="/">Home</a>
+      <a href="/holodb/">HoloDb</a>
+      <a href="/#packages">Packages</a>
+      <a href="https://www.nuget.org/profiles/evaluatedapplications" target="_blank" rel="noopener">NuGet</a>
+    </div>
+  </div>
+</nav>
+
+<header class="hero">
+  <div class="wrap">
+    <p class="crumb"><a href="/">Home</a><span>/</span><a href="/#packages">Packages</a><span>/</span>HoloDb.Protocol</p>
+    <span class="eyebrow">HoloDb.Protocol · data</span>
+    <h1>Columns stay columns, all the way to the client.</h1>
+    <p class="lede">HoloDb.Protocol defines how the HoloDb server and client communicate. Instead of sending
+      results as JSON or row-by-row data structures, it preserves the columnar shape: a <code>long[]</code>,
+      <code>double[]</code>, or <code>string[]</code> travels as a typed array over the wire, not as individual
+      objects — keeping <a href="/holodb/">HoloDb</a>'s columnar advantage intact when data moves between
+      processes.</p>
+    <div class="facts">
+      <span class="fact"><b>v1.0.2</b></span>
+      <span class="fact">net<b>8.0</b>+</span>
+      <span class="fact">length-prefixed TCP framing</span>
+      <span class="fact">transport-agnostic (TLS-ready)</span>
+    </div>
+    <div class="install" style="max-width:560px;margin-top:20px"><code>dotnet add package EvaluatedApplications.HoloDb.Protocol</code><button class="copy" type="button">copy</button></div>
+    <div class="cta-row" style="margin-top:16px">
+      <a class="btn btn-ghost" href="https://www.nuget.org/packages/EvaluatedApplications.HoloDb.Protocol" target="_blank" rel="noopener">NuGet →</a>
+      <a class="btn btn-ghost" href="/holodb-client.html">See HoloDb.Client →</a>
+    </div>
+    <p class="lim" style="margin-top:18px">Most consumers should depend on <a href="/holodb-client.html">HoloDb.Client</a> instead, which pulls this
+      package in transitively. Depend on it directly only if you're implementing a server.</p>
+  </div>
+</header>
+
+<section class="sec">
+  <div class="wrap">
+    <div class="sec-head"><span class="dot" style="background:var(--c-data)"></span><h2>Why it matters</h2><p>the win doesn't stop at the wire</p></div>
+    <p class="desc" style="max-width:74ch">Most database protocols trade columnar performance for JSON or ORM convenience. If you run a columnar
+      query — the common case — and the server has to serialize it back to rows, materialize it into objects,
+      and send JSON, you've lost the performance win that made the columnar query fast in the first place. This
+      protocol keeps that win alive. It also encodes the wire format explicitly — no framework assumptions about
+      object graphs or reflection — which makes it predictable (you know exactly what bytes cross the network),
+      versionable (clients and servers from different builds detect incompatibility and fail cleanly), and
+      testable (every message shape can be validated bit-for-bit).</p>
+  </div>
+</section>
+
+<section class="sec">
+  <div class="wrap">
+    <div class="sec-head"><span class="dot" style="background:var(--c-data)"></span><h2>What it does</h2><p>features</p></div>
+    <div class="grid">
+      <article class="card" style="--cat:var(--c-data)"><div class="card-top"><h3>Columnar results</h3></div>
+        <p class="desc"><code>long[]</code>, <code>double[]</code>, <code>string[]</code> delivered directly, not wrapped in row objects.</p></article>
+      <article class="card" style="--cat:var(--c-data)"><div class="card-top"><h3>Materialized rows</h3></div>
+        <p class="desc">For non-columnar queries (JOINs, GROUP BY), results are packed into a compact binary row format.</p></article>
+      <article class="card" style="--cat:var(--c-data)"><div class="card-top"><h3>Length-prefixed frames</h3></div>
+        <p class="desc">Message boundaries stay safe even over unreliable transports or when connection buffering breaks alignment.</p></article>
+      <article class="card" style="--cat:var(--c-data)"><div class="card-top"><h3>Transport-agnostic</h3></div>
+        <p class="desc">Works over TCP, TLS, or any duplex <code>Stream</code> — this package doesn't provide encryption; TLS is the transport layer's concern.</p></article>
+      <article class="card" style="--cat:var(--c-data)"><div class="card-top"><h3>Security hardening</h3></div>
+        <p class="desc">Frame size limits and count-bounds checks protect against hostile or malformed length prefixes forcing huge allocations.</p></article>
+      <article class="card" style="--cat:var(--c-data)"><div class="card-top"><h3>Version negotiation</h3></div>
+        <p class="desc">Client and server compatibility is checked before executing queries, and error semantics distinguish protocol errors from query errors so callers know whether to retry.</p></article>
+    </div>
+  </div>
+</section>
+
+<section class="sec">
+  <div class="wrap">
+    <div class="sec-head"><span class="dot" style="background:var(--c-data)"></span><h2>A minimal example</h2><p>client and server side</p></div>
+    <p class="desc">Client-side (using <a href="/holodb-client.html">HoloDb.Client</a>, which wraps this protocol):</p>
+    <div class="snip"><code>using var client = new HoloDbClient("localhost", 5433, token: "mytoken");
+await client.ConnectAsync();
+
+// Result comes back as a columnar QueryResult if the query was columnar.
+var result = await client.ExecuteAsync("SELECT * FROM prices WHERE date > ?", new[] { arg });
+
+if (result.IsColumnar &amp;&amp; result.Columns["price"] is double[] prices)
+{
+    foreach (var p in prices)
+        Console.WriteLine($"Price: {p}");
+}</code></div>
+    <p class="desc">Server-side (using this package to build a server):</p>
+    <div class="snip"><code>var payload = await Wire.ReadFrameAsync(networkStream);
+var request = HoloProtocol.DecodeRequest(payload);
+
+if (request.Op == WireOp.Exec)
+{
+    var result = await engine.ExecuteAsync(request.Sql);
+    var response = HoloProtocol.Result(result);
+    await Wire.WriteFrameAsync(networkStream, response);
+}</code></div>
+  </div>
+</section>
+
+<section class="sec">
+  <div class="wrap">
+    <div class="sec-head"><span class="dot" style="background:var(--c-data)"></span><h2>Compatibility &amp; wire stability</h2><p>frozen on purpose</p></div>
+    <p class="desc" style="max-width:74ch">The wire format is frozen: opcode byte values never change, and message field order and types are stable.
+      Old clients can talk to new servers (version negotiation detects incompatibility and fails cleanly), and
+      changes to the protocol are rare and coordinated — both client and server must be rebuilt together.</p>
+    <p class="lim"><b>Depends on:</b> <a href="/holodb/">HoloDb</a> (for the <code>QueryResult</code> type that crosses the wire in both directions). <b>Auth tokens</b> travel as plain UTF-8 in the <code>Hello</code> handshake — TLS is assumed by the deployment, not provided by this package. <b>License:</b> proprietary; every capability is free to use today.</p>
+  </div>
+</section>
+
+<footer class="site">
+  <div class="wrap">
+    <span>Evaluated Applications — .NET libraries, England.</span>
+    <span class="mono">© <span id="yr"></span> · <a href="https://www.nuget.org/profiles/evaluatedapplications" target="_blank" rel="noopener">NuGet</a></span>
+  </div>
+</footer>
+<script>
+  document.getElementById('yr').textContent = new Date().getFullYear();
+  document.querySelectorAll('.copy').forEach(function(btn){
+    btn.addEventListener('click', function(){
+      var code = btn.parentElement.querySelector('code').textContent;
+      navigator.clipboard.writeText(code).then(function(){
+        var old = btn.textContent; btn.textContent = 'copied'; btn.classList.add('done');
+        setTimeout(function(){ btn.textContent = old; btn.classList.remove('done'); }, 1400);
+      });
+    });
+  });
+</script>
+</body>
+</html>

@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Prose — a grammar-driven synthetic corpus generator for .NET</title>
+<meta name="description" content="Prose reads text through the rules of grammar, mines what it learns into a HoloDb database, and recombines that knowledge into new, grammatical, plausible sentences and Q&amp;A pairs — to grow a training corpus without a large model.">
+<link rel="canonical" href="https://evaluatedapplications.github.io/prose.html">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Prose — a grammar-driven synthetic corpus generator for .NET">
+<meta property="og:description" content="Rules-first parsing and mining, recombined into fresh grammatical sentences and Q&amp;A pairs — no training required.">
+<meta property="og:url" content="https://evaluatedapplications.github.io/prose.html">
+<meta name="twitter:card" content="summary">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%238b7dff'/%3E%3Cstop offset='.5' stop-color='%2335d0c0'/%3E%3Cstop offset='1' stop-color='%23e6b450'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='32' height='32' rx='7' fill='%230a0c11'/%3E%3Cpath d='M16 5l9.5 5.5v11L16 27l-9.5-5.5v-11z' fill='none' stroke='url(%23g)' stroke-width='2'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="/assets/site.css">
+</head>
+<body>
+<div class="beam"></div>
+
+<nav class="site-nav">
+  <div class="wrap">
+    <a class="brand" href="/">
+      <svg class="mark" viewBox="0 0 32 32" aria-hidden="true"><defs><linearGradient id="m" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#8b7dff"/><stop offset=".5" stop-color="#35d0c0"/><stop offset="1" stop-color="#e6b450"/></linearGradient></defs><path d="M16 4l10.4 6v12L16 28 5.6 22V10z" fill="none" stroke="url(#m)" stroke-width="2"/></svg>
+      Evaluated Applications
+    </a>
+    <input type="checkbox" id="navtoggle" class="nav-toggle">
+    <label for="navtoggle" class="nav-burger" aria-label="Toggle menu"><span></span><span></span><span></span></label>
+    <div class="nav-links">
+      <a href="/">Home</a>
+      <a href="/holodb/">HoloDb</a>
+      <a href="/#packages">Packages</a>
+      <a href="https://www.nuget.org/profiles/evaluatedapplications" target="_blank" rel="noopener">NuGet</a>
+    </div>
+  </div>
+</nav>
+
+<header class="hero">
+  <div class="wrap">
+    <p class="crumb"><a href="/">Home</a><span>/</span><a href="/#packages">Packages</a><span>/</span>Prose</p>
+    <span class="eyebrow">Prose · machine learning</span>
+    <h1>Grammar rules first. A model only if you want one.</h1>
+    <p class="lede">Prose reads plain text through the rules of grammar, keeps what it learns in a
+      <a href="/holodb/">HoloDb</a> database, and recombines that knowledge into new sentences that are
+      grammatical, use words suited to their slots, and read plausibly. It exists to grow a training corpus:
+      mine the grammatical knowledge already in your text — which nouns, verbs and adjectives go together, and
+      how — then generate more of it, along with question/answer pairs for reading-comprehension training data.</p>
+    <div class="facts">
+      <span class="fact"><b>v1.0.2</b></span>
+      <span class="fact">net<b>8.0</b>+</span>
+      <span class="fact">zero-training parser</span>
+      <span class="fact">optional plausibility model</span>
+      <span class="fact">free to use</span>
+    </div>
+    <div class="install" style="max-width:520px;margin-top:20px"><code>dotnet add package EvaluatedApplications.Prose</code><button class="copy" type="button">copy</button></div>
+    <div class="cta-row" style="margin-top:16px">
+      <a class="btn btn-ghost" href="https://www.nuget.org/packages/EvaluatedApplications.Prose" target="_blank" rel="noopener">NuGet →</a>
+    </div>
+  </div>
+</header>
+
+<section class="sec">
+  <div class="wrap">
+    <div class="sec-head"><span class="dot" style="background:var(--c-ml)"></span><h2>The problem it solves</h2><p>volume and variety, without a big model</p></div>
+    <p class="desc" style="max-width:74ch">Language models need volume and variety of grammatically correct text. Hand-writing or scraping more data
+      doesn't scale, and most "data augmentation" either pastes fragments together ungrammatically or needs its
+      own large model to run. Prose takes a different route: parse real text into its grammatical structure with
+      deterministic rules, store what nouns/verbs/adjectives actually co-occur with what, and recombine those
+      attested pieces into fresh sentences that are guaranteed to parse correctly before they're ever written out.</p>
+  </div>
+</section>
+
+<section class="sec">
+  <div class="wrap">
+    <div class="sec-head"><span class="dot" style="background:var(--c-ml)"></span><h2>Why it's different</h2><p>rules-first, nothing imaginary</p></div>
+    <div class="grid">
+      <article class="card" style="--cat:var(--c-ml)"><div class="card-top"><h3>Rules-first, not model-first</h3></div>
+        <p class="desc">Parsing, mining and generation all run on deterministic grammar rules with zero training required. An optional small language model can layer on to rank candidates by plausibility, but Prose degrades gracefully to pure rules with no model at all.</p></article>
+      <article class="card" style="--cat:var(--c-ml)"><div class="card-top"><h3>No word locked to one role</h3></div>
+        <p class="desc">The same surface form resolves to noun or verb by context, the way a person who has learned grammar reads it — not a fixed lookup table. The proof case is the classic <em>"Eats, Shoots &amp; Leaves"</em> sentence: <em>"the panda eats shoots and leaves"</em> (no comma) parses as one verb with two coordinate noun objects; <em>"the panda eats, shoots, and leaves"</em> (comma) parses as three coordinate finite verbs. Same words — the punctuation alone flips the reading, and Prose gets both right.</p></article>
+      <article class="card" style="--cat:var(--c-ml)"><div class="card-top"><h3>Nothing imaginary</h3></div>
+        <p class="desc">Every open-class word Prose emits is a form it actually observed in the source text — it never invents an inflection. Generated sentences are re-parsed and checked against a validity gate before they're kept, and generated Q&amp;A pairs are checked the same way on both question and answer.</p></article>
+      <article class="card" style="--cat:var(--c-ml)"><div class="card-top"><h3>Real grammatical structure</h3></div>
+        <p class="desc">Beyond simple subject-verb-object sentences, Prose mines and generates indirect objects ("gave him a book"), relative clauses ("the panda that eats bamboo"), and multi-sentence passages where later sentences refer back to earlier entities by name or pronoun.</p></article>
+    </div>
+  </div>
+</section>
+
+<section class="sec">
+  <div class="wrap">
+    <div class="sec-head"><span class="dot" style="background:var(--c-ml)"></span><h2>Key features</h2><p>parse, mine, generate</p></div>
+    <div class="grid">
+      <article class="card" style="--cat:var(--c-ml)"><div class="card-top"><h3>Parse</h3></div>
+        <p class="desc">Sentence splitting, part-of-speech tagging, phrase chunking and role assignment (subject, verb, objects, indirect object, predicate, relative clauses) — zero training, no external model.</p></article>
+      <article class="card" style="--cat:var(--c-ml)"><div class="card-top"><h3>Mine</h3></div>
+        <p class="desc">Scans a text corpus and builds a lexicon plus selectional tables (which subjects go with which verbs, which verbs take which objects, which adjectives modify which nouns), stored in HoloDb.</p></article>
+      <article class="card" style="--cat:var(--c-ml)"><div class="card-top"><h3>Generate</h3></div>
+        <p class="desc">Samples a sentence shape from the mined patterns, fills each slot with an attested, agreement-correct word, and keeps only sentences that re-parse validly.</p></article>
+      <article class="card" style="--cat:var(--c-ml)"><div class="card-top"><h3>Plausibility scoring (optional)</h3></div>
+        <p class="desc">A small language model ranks generated candidates so the output reads more sensibly, without weakening the grammatical guarantee.</p></article>
+      <article class="card" style="--cat:var(--c-ml)"><div class="card-top"><h3>Q&amp;A generation</h3></div>
+        <p class="desc">Turns generated sentences into context/question/answer triples, including multi-sentence passages with coreference and self-referential two-turn dialogues.</p></article>
+      <article class="card" style="--cat:var(--c-ml)"><div class="card-top"><h3>Corpus and TSV export</h3></div>
+        <p class="desc">Write generated sentences straight to <code>.txt</code> files or Q&amp;A pairs to a <code>prompt\ttarget</code> TSV, ready to feed into a language model's training data.</p></article>
+    </div>
+  </div>
+</section>
+
+<section class="sec">
+  <div class="wrap">
+    <div class="sec-head"><span class="dot" style="background:var(--c-ml)"></span><h2>Get started</h2><p>minimal example</p></div>
+    <div class="snip"><code>var prose = new ProseEngine();
+prose.Mine(@"C:\corpus\text");                  // parse every *.txt and mine it
+prose.Save(@"prose.wal");                        // persist the mined tables (optional)
+
+foreach (var sentence in prose.Generate(1000))   // new, grammatical, plausible sentences
+    Console.WriteLine(sentence);
+
+prose.WriteCorpus(@"C:\corpus\synthetic", 100_000);   // write sentences out as .txt for an LM
+prose.WriteQaPairs(@"C:\corpus\qa", 50_000);          // context+question -> answer TSV</code></div>
+    <p class="desc">Parse a single sentence directly, no mining or database required:</p>
+    <div class="snip"><code>var p = ProseEngine.ParseSentence("The panda eats, shoots, and leaves.");
+Console.WriteLine(ProseEngine.Explain(p));   // subject, verbs, objects, template</code></div>
+    <p class="lim"><b>Depends on:</b> <a href="/holodb/">HoloDb</a> (the storage engine that holds mined grammar knowledge) and <a href="/algformer.html">AlgFormer</a> (supplies the optional plausibility-scoring model) — installing the NuGet package pulls both in automatically. <b>License:</b> proprietary, compiled library only; every capability is free to use.</p>
+  </div>
+</section>
+
+<footer class="site">
+  <div class="wrap">
+    <span>Evaluated Applications — .NET libraries, England.</span>
+    <span class="mono">© <span id="yr"></span> · <a href="https://www.nuget.org/profiles/evaluatedapplications" target="_blank" rel="noopener">NuGet</a></span>
+  </div>
+</footer>
+<script>
+  document.getElementById('yr').textContent = new Date().getFullYear();
+  document.querySelectorAll('.copy').forEach(function(btn){
+    btn.addEventListener('click', function(){
+      var code = btn.parentElement.querySelector('code').textContent;
+      navigator.clipboard.writeText(code).then(function(){
+        var old = btn.textContent; btn.textContent = 'copied'; btn.classList.add('done');
+        setTimeout(function(){ btn.textContent = old; btn.classList.remove('done'); }, 1400);
+      });
+    });
+  });
+</script>
+</body>
+</html>

@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>EvalApp.Neural — real-time neural tuning for EvalApp</title>
+<meta name="description" content="EvalApp.Neural plugs a tiny, always-learning neural policy into EvalApp in place of the built-in heuristic tuner. Ships warm, keeps learning live, and adapts to workloads that shift or couple multiple resources — where a fixed heuristic falls flat.">
+<link rel="canonical" href="https://evaluatedapplications.github.io/evalapp-neural.html">
+<meta property="og:type" content="website">
+<meta property="og:title" content="EvalApp.Neural — real-time neural tuning for EvalApp">
+<meta property="og:description" content="A tiny, always-learning neural policy that plugs into EvalApp's concurrency tuner and keeps adapting live.">
+<meta property="og:url" content="https://evaluatedapplications.github.io/evalapp-neural.html">
+<meta name="twitter:card" content="summary">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%238b7dff'/%3E%3Cstop offset='.5' stop-color='%2335d0c0'/%3E%3Cstop offset='1' stop-color='%23e6b450'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='32' height='32' rx='7' fill='%230a0c11'/%3E%3Cpath d='M16 5l9.5 5.5v11L16 27l-9.5-5.5v-11z' fill='none' stroke='url(%23g)' stroke-width='2'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="/assets/site.css">
+</head>
+<body>
+<div class="beam"></div>
+
+<nav class="site-nav">
+  <div class="wrap">
+    <a class="brand" href="/">
+      <svg class="mark" viewBox="0 0 32 32" aria-hidden="true"><defs><linearGradient id="m" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#8b7dff"/><stop offset=".5" stop-color="#35d0c0"/><stop offset="1" stop-color="#e6b450"/></linearGradient></defs><path d="M16 4l10.4 6v12L16 28 5.6 22V10z" fill="none" stroke="url(#m)" stroke-width="2"/></svg>
+      Evaluated Applications
+    </a>
+    <input type="checkbox" id="navtoggle" class="nav-toggle">
+    <label for="navtoggle" class="nav-burger" aria-label="Toggle menu"><span></span><span></span><span></span></label>
+    <div class="nav-links">
+      <a href="/">Home</a>
+      <a href="/holodb/">HoloDb</a>
+      <a href="/#packages">Packages</a>
+      <a href="https://www.nuget.org/profiles/evaluatedapplications" target="_blank" rel="noopener">NuGet</a>
+    </div>
+  </div>
+</nav>
+
+<header class="hero">
+  <div class="wrap">
+    <p class="crumb"><a href="/">Home</a><span>/</span><a href="/#packages">Packages</a><span>/</span>EvalApp.Neural</p>
+    <span class="eyebrow">EvalApp.Neural · machine learning</span>
+    <h1>A tuner that keeps learning while your pipeline runs.</h1>
+    <p class="lede">EvalApp's built-in concurrency tuner works well on clean, predictable workloads but falls flat
+      when conditions shift or resources couple — a database racing CPU racing disk. EvalApp.Neural plugs a tiny,
+      always-learning neural policy into EvalApp in its place. It trains on a real workload's own experience, so
+      it adapts live as conditions change, ships warm (pre-trained on diverse scenarios), and keeps learning from
+      every decision.</p>
+    <div class="facts">
+      <span class="fact"><b>v1.0.1</b></span>
+      <span class="fact">net<b>8.0</b>+</span>
+      <span class="fact"><b>~0.4ms</b> per decision</span>
+      <span class="fact">d48/L1 holographic model</span>
+      <span class="fact">free to use</span>
+    </div>
+    <div class="install" style="max-width:520px;margin-top:20px"><code>dotnet add package EvaluatedApplications.EvalApp.Neural</code><button class="copy" type="button">copy</button></div>
+    <div class="cta-row" style="margin-top:16px">
+      <a class="btn btn-ghost" href="https://www.nuget.org/packages/EvaluatedApplications.EvalApp.Neural" target="_blank" rel="noopener">NuGet →</a>
+      <a class="btn btn-ghost" href="/evalapp.html">See EvalApp →</a>
+    </div>
+  </div>
+</header>
+
+<section class="sec">
+  <div class="wrap">
+    <div class="sec-head"><span class="dot" style="background:var(--c-ml)"></span><h2>Why it works</h2><p>online, not frozen</p></div>
+    <div class="grid">
+      <article class="card" style="--cat:var(--c-ml)"><div class="card-top"><h3>Online learning</h3></div>
+        <p class="desc">Unlike a frozen prior, it reacts to real-time shifts in contention, load, or workload shape.
+          The built-in heuristic, tuned on static assumptions, can't do this.</p></article>
+      <article class="card" style="--cat:var(--c-ml)"><div class="card-top"><h3>Proven on real workloads</h3></div>
+        <p class="desc">Matches the built-in heuristic on lean, single-gate pipelines (no edge there — the optimum
+          is obvious), but beats it by roughly <b>25%</b> on EvalApp.Neural.Train's Sisyphus benchmark, a coupled
+          DB + CPU + disk workload deliberately built to fight itself.</p></article>
+      <article class="card" style="--cat:var(--c-ml)"><div class="card-top"><h3>Opt-in, no refactor</h3></div>
+        <p class="desc">Add <code>.WithNeuralTuning()</code> to your app builder; nothing else about the pipeline changes.</p></article>
+    </div>
+  </div>
+</section>
+
+<section class="sec">
+  <div class="wrap">
+    <div class="sec-head"><span class="dot" style="background:var(--c-ml)"></span><h2>How to use it</h2><p>one line, or process-wide</p></div>
+    <div class="snip"><code>var app = Eval.App(...)
+    .WithResource(...)
+    .WithNeuralTuning()
+    .DefineDomain(...);</code></div>
+    <p class="desc">Install it globally for every pipeline in the process (useful if you're running multiple):</p>
+    <div class="snip"><code>using var _ = NeuralTuning.UseGlobally(NeuralTuning.NewModel());</code></div>
+    <p class="desc">Or train on your own workload by pointing a shared model file at every runner — the model grows as they train:</p>
+    <div class="snip"><code>using var _ = NeuralTuning.UseGloballyPersisted("model.bin");</code></div>
+  </div>
+</section>
+
+<section class="sec">
+  <div class="wrap">
+    <div class="sec-head"><span class="dot" style="background:var(--c-ml)"></span><h2>Key features</h2><p>what you get</p></div>
+    <div class="grid">
+      <article class="card" style="--cat:var(--c-ml)"><div class="card-top"><h3>Warm-start</h3></div>
+        <p class="desc">Ships pre-trained on diverse workloads; nothing to configure before it's useful.</p></article>
+      <article class="card" style="--cat:var(--c-ml)"><div class="card-top"><h3>Always learning</h3></div>
+        <p class="desc">Real-time adaptation to non-stationary conditions — no manual retuning needed.</p></article>
+      <article class="card" style="--cat:var(--c-ml)"><div class="card-top"><h3>Tiny footprint</h3></div>
+        <p class="desc">A d48/L1 holographic model (HoloFormer, via AlgFormer) at roughly 0.4ms per decision.</p></article>
+      <article class="card" style="--cat:var(--c-ml)"><div class="card-top"><h3>No license gate</h3></div>
+        <p class="desc">Runs at full effect regardless of license tier — free, period.</p></article>
+      <article class="card" style="--cat:var(--c-ml)"><div class="card-top"><h3>Production ready</h3></div>
+        <p class="desc">Coordinate descent handles multi-gate coupling cleanly; deterministic under a repeated seed.</p></article>
+    </div>
+  </div>
+</section>
+
+<section class="sec">
+  <div class="wrap">
+    <div class="sec-head"><span class="dot" style="background:var(--c-ml)"></span><h2>What you need to know</h2><p>good to know</p></div>
+    <div class="grid">
+      <article class="card" style="--cat:var(--c-ml)"><div class="card-top"><h3>Best on coupled, noisy workloads</h3></div>
+        <p class="desc">Clean single-gate CPU-bound pipelines won't see much gain — the optimum there is already obvious. Real multi-gate scenarios are where it shines.</p></article>
+      <article class="card" style="--cat:var(--c-ml)"><div class="card-top"><h3>Online by default</h3></div>
+        <p class="desc">Always learning from its own decisions. You can freeze it for reproducibility, but production paths always enable learning.</p></article>
+      <article class="card" style="--cat:var(--c-ml)"><div class="card-top"><h3>Dependencies</h3></div>
+        <p class="desc">Depends on <a href="/evalapp.html">EvalApp</a> and <a href="/algformer.html">AlgFormer</a> — AlgFormer ships built into the DLL, no separate install needed.</p></article>
+    </div>
+    <p class="lim"><b>Growing the warm-start:</b> the dogfood trainer (<code>EvalApp.Neural.Train</code>, not part of the NuGet package) lets you add your own workload's experience to the shipped model for future releases — <code>dotnet run --project EvalApp.Neural.Train -- sisyphus [args...]</code>, pointed at a shared model file via the <code>EVALAPP_NEURAL_MODEL</code> environment variable. <b>Compatible:</b> .NET 8.0+, Windows/Linux. <b>License:</b> proprietary, same terms as every EA product.</p>
+  </div>
+</section>
+
+<footer class="site">
+  <div class="wrap">
+    <span>Evaluated Applications — .NET libraries, England.</span>
+    <span class="mono">© <span id="yr"></span> · <a href="https://www.nuget.org/profiles/evaluatedapplications" target="_blank" rel="noopener">NuGet</a></span>
+  </div>
+</footer>
+<script>
+  document.getElementById('yr').textContent = new Date().getFullYear();
+  document.querySelectorAll('.copy').forEach(function(btn){
+    btn.addEventListener('click', function(){
+      var code = btn.parentElement.querySelector('code').textContent;
+      navigator.clipboard.writeText(code).then(function(){
+        var old = btn.textContent; btn.textContent = 'copied'; btn.classList.add('done');
+        setTimeout(function(){ btn.textContent = old; btn.classList.remove('done'); }, 1400);
+      });
+    });
+  });
+</script>
+</body>
+</html>

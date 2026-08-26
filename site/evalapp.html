@@ -1,570 +1,202 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
+<meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>EvalApp — async pipeline runtime for .NET</title>
-<meta name="description" content="EvalApp governs concurrency for async .NET work: fan a job out across far more operations than you have threads without running them all at once, and hold every backend at its real limit. One dependency in place of a MediatR + Polly + Dataflow stack.">
+<title>EvalApp — a self-tuning async pipeline runtime for .NET</title>
+<meta name="description" content="EvalApp is a resource-gated, self-tuning async pipeline runtime for .NET: describe a process as data and steps, and stop hand-writing concurrency coordination. One in-process dependency in place of a DI container plus MediatR plus Polly plus TPL Dataflow.">
+<link rel="canonical" href="https://evaluatedapplications.github.io/evalapp.html">
+<meta property="og:type" content="website">
+<meta property="og:title" content="EvalApp — a self-tuning async pipeline runtime for .NET">
+<meta property="og:description" content="Describe a process as data and steps; EvalApp compiles it into one pipeline, gates every resource it touches, and tunes its own concurrency to the hardware it's running on.">
+<meta property="og:url" content="https://evaluatedapplications.github.io/evalapp.html">
+<meta name="twitter:card" content="summary">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%238b7dff'/%3E%3Cstop offset='.5' stop-color='%2335d0c0'/%3E%3Cstop offset='1' stop-color='%23e6b450'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='32' height='32' rx='7' fill='%230a0c11'/%3E%3Cpath d='M16 5l9.5 5.5v11L16 27l-9.5-5.5v-11z' fill='none' stroke='url(%23g)' stroke-width='2'/%3E%3C/svg%3E">
-<style>
-  :root{
-    --bg:#0a0c11; --bg-2:#0d1017; --surface:#12151d; --surface-2:#171b25;
-    --border:#232a37; --border-2:#31394a;
-    --ink:#e9ecf3; --ink-soft:#98a2b3; --ink-faint:#6b7486;
-    --accent:#8b7dff; --accent-ink:#b3a9ff;
-    --spectrum:linear-gradient(90deg,#8b7dff,#4aa3ff,#35d0c0,#7bd86a,#e6b450,#f0796a);
-    --e-eval:#8b7dff; --e-stack:#c2862c; --e-drop:#e5595d; --e-lib:#6f7a90; --good:#7bd86a;
-    --grid:#212734;
-    --radius:14px; --wrap:1080px;
-    --font:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
-    --mono:ui-monospace,"Cascadia Code","SF Mono","JetBrains Mono",Menlo,Consolas,monospace;
-  }
-  @media (prefers-color-scheme:light){
-    :root{
-      --bg:#f6f7fb; --bg-2:#ffffff; --surface:#ffffff; --surface-2:#f1f3f9;
-      --border:#e4e8f0; --border-2:#d3d9e6;
-      --ink:#121620; --ink-soft:#59647a; --ink-faint:#8a94a8;
-      --accent:#5b4fe0; --accent-ink:#4c40d6;
-      --e-eval:#7b5cf0; --e-stack:#b5791f; --e-drop:#d1383d; --e-lib:#7b8698; --good:#3f9d54;
-      --grid:#e7ebf2;
-    }
-  }
-  *{box-sizing:border-box}
-  html{scroll-behavior:smooth}
-  body{margin:0; background:var(--bg); color:var(--ink); font-family:var(--font); font-size:17px; line-height:1.65; -webkit-font-smoothing:antialiased}
-  .wrap{max-width:var(--wrap); margin:0 auto; padding:0 24px}
-  a{color:var(--accent-ink); text-decoration:none} a:hover{text-decoration:underline}
-  h1,h2,h3{margin:0; line-height:1.15; letter-spacing:-.02em; font-weight:650}
-  .beam{height:3px; background:var(--spectrum); opacity:.9}
-  .mono{font-family:var(--mono)}
-
-  nav{position:sticky; top:0; z-index:20; background:color-mix(in srgb,var(--bg-2) 88%,transparent); backdrop-filter:blur(10px); border-bottom:1px solid var(--border)}
-  nav .wrap{display:flex; align-items:center; justify-content:space-between; height:62px}
-  .brand{display:flex; align-items:center; gap:11px; color:var(--ink); font-weight:650}
-  .brand:hover{text-decoration:none}
-  .mark{width:22px; height:22px; flex:none}
-  .nav-links{display:flex; gap:22px; align-items:center}
-  .nav-links a{color:var(--ink-soft); font-size:.94rem} .nav-links a:hover{color:var(--ink); text-decoration:none}
-
-  header{padding:76px 0 26px}
-  .eyebrow{font-family:var(--mono); font-size:.8rem; letter-spacing:.08em; text-transform:uppercase; color:var(--ink-faint)}
-  h1{font-size:clamp(2.2rem,5.2vw,3.4rem); margin:16px 0 0; max-width:17ch; text-wrap:balance}
-  .lede{font-size:clamp(1.05rem,2vw,1.25rem); color:var(--ink-soft); max-width:64ch; margin:22px 0 0}
-  .facts{display:flex; flex-wrap:wrap; gap:10px; margin-top:26px}
-  .fact{font-family:var(--mono); font-size:.82rem; color:var(--ink-soft); border:1px solid var(--border); border-radius:999px; padding:6px 13px; background:var(--surface)}
-  .fact b{color:var(--ink); font-weight:600}
-
-  section{padding:26px 0}
-  .sec-head{padding-top:24px; border-top:1px solid var(--border); margin-bottom:18px}
-  .sec-head h2{font-size:1.3rem}
-  .sec-head p{margin:8px 0 0; color:var(--ink-soft); max-width:72ch; font-size:.96rem}
-
-  .tiles{display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:14px}
-  .tile{background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:20px; position:relative; overflow:hidden}
-  .tile::before{content:""; position:absolute; left:0; top:0; bottom:0; width:3px; background:var(--e-eval)}
-  .tile .big{font-size:2.05rem; font-weight:680; letter-spacing:-.03em; font-variant-numeric:tabular-nums; line-height:1}
-  .tile .big small{font-size:1rem; font-weight:500; color:var(--ink-soft); letter-spacing:0}
-  .tile .cap{margin-top:9px; font-size:.9rem; color:var(--ink-soft); line-height:1.45}
-  .tile .cap b{color:var(--ink)}
-
-  .feats{display:grid; grid-template-columns:repeat(auto-fit,minmax(250px,1fr)); gap:14px}
-  .feat{background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:18px 20px}
-  .feat h3{font-size:1rem; margin:0 0 7px; display:flex; align-items:center; gap:9px; font-weight:640}
-  .feat h3 i{width:9px; height:9px; border-radius:2px; background:var(--e-eval); flex:none}
-  .feat p{margin:0; color:var(--ink-soft); font-size:.92rem; line-height:1.5}
-  .feat p b{color:var(--ink); font-weight:600}
-  .feat code{font-family:var(--mono); font-size:.85em; color:var(--accent-ink)}
-
-  .panel{background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:20px 20px 12px}
-  .legend{display:flex; gap:16px; flex-wrap:wrap; margin:2px 0 12px; font-family:var(--mono); font-size:.82rem; color:var(--ink-soft)}
-  .legend span{display:inline-flex; align-items:center; gap:7px}
-  .legend i{width:11px; height:11px; border-radius:3px; display:inline-block}
-  .cap-note{color:var(--ink-faint); font-size:.85rem; margin:8px 2px 0}
-  svg{display:block; width:100%; height:auto; overflow:visible}
-  svg text{font-family:var(--font)}
-
-  pre{margin:0; background:var(--bg-2); border:1px solid var(--border); border-radius:11px; padding:16px 18px; overflow-x:auto}
-  pre code{font-family:var(--mono); font-size:.85rem; line-height:1.7; color:var(--ink)}
-  .cmt{color:var(--ink-faint)} .kw{color:var(--accent-ink)} .bad-t{color:var(--e-drop)} .good-t{color:var(--e-eval); font-weight:600}
-  .codegrid{display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-top:6px}
-  @media (max-width:720px){ .codegrid{grid-template-columns:1fr} }
-
-  .tbl-wrap{overflow-x:auto; border:1px solid var(--border); border-radius:var(--radius)}
-  table{border-collapse:collapse; width:100%; font-size:.92rem; min-width:640px}
-  th,td{text-align:right; padding:9px 14px; border-bottom:1px solid var(--border); font-variant-numeric:tabular-nums}
-  th:first-child,td:first-child{text-align:left}
-  thead th{font-family:var(--mono); font-size:.76rem; text-transform:uppercase; letter-spacing:.05em; color:var(--ink-faint); font-weight:500}
-  tbody tr:last-child td{border-bottom:0}
-  td.a{color:var(--ink)}
-  .ms{font-family:var(--mono)}
-  .ok{color:var(--good); font-weight:600}
-  .bad{color:var(--e-drop); font-weight:600}
-  tr.eval td{background:color-mix(in srgb,var(--e-eval) 9%,transparent)}
-  tr.eval td.a{font-weight:650}
-
-  .cols2{display:grid; grid-template-columns:1fr 1fr; gap:18px}
-  @media (max-width:720px){ .cols2{grid-template-columns:1fr} }
-  .note-card{background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:20px 22px}
-  .note-card h3{font-size:1.05rem; margin-bottom:9px}
-  .note-card p, .note-card li{color:var(--ink-soft); font-size:.95rem}
-  .note-card ul{margin:6px 0 0; padding-left:18px} .note-card li{margin:5px 0}
-  .note-card b{color:var(--ink)}
-  code.inl{font-family:var(--mono); font-size:.86em; color:var(--accent-ink); background:color-mix(in srgb,var(--accent) 12%,transparent); padding:1px 6px; border-radius:5px}
-
-  .replace{display:grid; grid-template-columns:1fr auto 1fr; gap:16px; align-items:center}
-  @media (max-width:720px){ .replace{grid-template-columns:1fr} .replace .eq{transform:rotate(90deg)} }
-  .stackbox{background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:18px 20px}
-  .stackbox h3{font-size:.95rem; color:var(--ink-faint); font-family:var(--mono); text-transform:uppercase; letter-spacing:.05em; font-weight:500; margin-bottom:12px}
-  .dep{display:flex; align-items:center; gap:9px; padding:7px 0; font-size:.95rem}
-  .dep i{width:8px; height:8px; border-radius:2px; flex:none}
-  .dep small{color:var(--ink-faint); font-size:.82rem}
-  .eq{font-size:1.6rem; color:var(--ink-faint); text-align:center}
-  .stackbox.hero{border-color:color-mix(in srgb,var(--e-eval) 45%,var(--border))}
-  .stackbox.hero .dep{font-size:1.1rem; font-weight:600}
-
-  #tip{position:fixed; z-index:50; pointer-events:none; opacity:0; transition:opacity .1s; background:var(--bg-2); border:1px solid var(--border-2); border-radius:9px; padding:9px 11px; font-family:var(--mono); font-size:.78rem; color:var(--ink); box-shadow:0 8px 24px rgba(0,0,0,.35); max-width:250px}
-  #tip .r{display:flex; justify-content:space-between; gap:14px} #tip .r span:first-child{color:var(--ink-soft)}
-
-  footer{border-top:1px solid var(--border); margin-top:34px; padding:30px 0 50px; color:var(--ink-faint)}
-  footer .wrap{display:flex; flex-wrap:wrap; gap:14px; justify-content:space-between; align-items:center}
-  footer a{color:var(--ink-soft)}
-  @media (prefers-reduced-motion:reduce){*{transition:none!important; scroll-behavior:auto}}
-</style>
+<link rel="stylesheet" href="/assets/site.css">
 </head>
 <body>
 <div class="beam"></div>
 
-<nav>
+<nav class="site-nav">
   <div class="wrap">
-    <a class="brand" href="index.html">
+    <a class="brand" href="/">
       <svg class="mark" viewBox="0 0 32 32" aria-hidden="true"><defs><linearGradient id="m" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#8b7dff"/><stop offset=".5" stop-color="#35d0c0"/><stop offset="1" stop-color="#e6b450"/></linearGradient></defs><path d="M16 4l10.4 6v12L16 28 5.6 22V10z" fill="none" stroke="url(#m)" stroke-width="2"/></svg>
       Evaluated Applications
     </a>
+    <input type="checkbox" id="navtoggle" class="nav-toggle">
+    <label for="navtoggle" class="nav-burger" aria-label="Toggle menu"><span></span><span></span><span></span></label>
     <div class="nav-links">
-      <a href="index.html">All packages</a>
-      <a href="https://www.nuget.org/packages/EvaluatedApplications.EvalApp" target="_blank" rel="noopener">NuGet</a>
+      <a href="/">Home</a>
+      <a href="/holodb/">HoloDb</a>
+      <a href="/#packages">Packages</a>
+      <a href="https://www.nuget.org/profiles/evaluatedapplications" target="_blank" rel="noopener">NuGet</a>
     </div>
   </div>
 </nav>
 
-<header>
+<header class="hero">
   <div class="wrap">
-    <span class="eyebrow">EvalApp · async pipeline runtime</span>
-    <h1>Run more than your threads. Not more than your machine.</h1>
-    <p class="lede">EvalApp governs concurrency for async .NET work. It fans a job out across far more operations than you have threads without launching them all at once, holds every backend at its real limit, and retries and compensates when things fail — as one compiled pipeline, one dependency, in place of a MediatR + Polly + Dataflow + DI stack.</p>
+    <p class="crumb"><a href="/">Home</a><span>/</span><a href="/#packages">Packages</a><span>/</span>EvalApp</p>
+    <span class="eyebrow">EvalApp · foundation</span>
+    <h1>Describe a process as data and steps. Stop hand-writing the coordination.</h1>
+    <p class="lede">EvalApp replaces the plumbing every real async .NET codebase ends up writing by hand: a
+      <code>SemaphoreSlim</code> to stop a flood of requests hammering a database, a guessed constant for "how
+      many things run at once," a <code>Task.WhenAll</code> wrapped in <code>try/catch</code> to aggregate
+      failures, a rollback path bolted on after something breaks halfway through. You describe a process as a
+      plain data record and a sequence of steps; EvalApp compiles that into a single, reusable execution path,
+      gates every resource it touches at a real bound, and — when you turn tuning on — discovers the concurrency
+      that actually works on the hardware it's running on, instead of a number someone picked once and never
+      revisited.</p>
     <div class="facts">
-      <span class="fact">async fan-out</span>
-      <span class="fact">resource gates</span>
-      <span class="fact">auto-tuned in-flight</span>
-      <span class="fact">one NuGet dependency</span>
+      <span class="fact"><b>v1.6.1</b></span>
+      <span class="fact">net<b>8.0</b></span>
+      <span class="fact">zero dependencies</span>
+      <span class="fact">AOT &amp; trim-safe</span>
+      <span class="fact">free to use</span>
     </div>
+    <div class="install" style="max-width:520px;margin-top:20px"><code>dotnet add package EvaluatedApplications.EvalApp</code><button class="copy" type="button">copy</button></div>
+    <div class="cta-row" style="margin-top:16px">
+      <a class="btn btn-ghost" href="https://www.nuget.org/packages/EvaluatedApplications.EvalApp" target="_blank" rel="noopener">NuGet →</a>
+    </div>
+    <p class="lim" style="margin-top:18px">It's the shared runtime under every Evaluated Applications product, and it works standalone: no broker, no external service, no config store — add the package reference and it works from the first run.</p>
   </div>
 </header>
 
-<section>
-  <div class="wrap"><div class="tiles" id="tiles"></div></div>
+<section class="sec">
+  <div class="wrap">
+    <div class="sec-head"><span class="dot" style="background:var(--c-foundation)"></span><h2>Why it's useful</h2><p>one dependency instead of a stack</p></div>
+    <div class="grid">
+      <article class="card" style="--cat:var(--c-foundation)"><div class="card-top"><h3>One dependency instead of a stack</h3></div>
+        <p class="desc">Where you'd otherwise reach for a DI container plus MediatR plus Polly plus TPL Dataflow, EvalApp is a single compiled pipeline that covers fan-out, resource gating, retries, and compensation together.</p></article>
+      <article class="card" style="--cat:var(--c-foundation)"><div class="card-top"><h3>The tuner is proactive, not reactive</h3></div>
+        <p class="desc">A circuit breaker waits for something to break, then responds. EvalApp's adaptive tuner is continuously probing for the operating point that keeps things from breaking in the first place — independently, per instance, no coordination required. A Bayesian mode persists what it learned across restarts.</p></article>
+      <article class="card" style="--cat:var(--c-foundation)"><div class="card-top"><h3>Whole categories of bugs don't compile</h3></div>
+        <p class="desc">A saga you open has to be closed before the pipeline builds. A side-effecting step can't be added without declaring the resource it touches — there is no path to an ungated side effect.</p></article>
+      <article class="card" style="--cat:var(--c-foundation)"><div class="card-top"><h3>The builder chain is the architecture</h3></div>
+        <p class="desc">Reading the fluent declaration top to bottom reads like the process it describes, because it isn't documentation about the code — it is the code, so it can't drift out of sync the way a diagram does.</p></article>
+      <article class="card" style="--cat:var(--c-foundation)"><div class="card-top"><h3>Nothing to stand up first</h3></div>
+        <p class="desc">It's a project reference, not infrastructure. Most pipeline libraries want a broker or a database before you've processed your first item; EvalApp doesn't.</p></article>
+    </div>
+  </div>
 </section>
 
-<section>
+<section class="sec">
   <div class="wrap">
-    <div class="sec-head">
-      <h2>What it is</h2>
-      <p>A pipeline runtime for async .NET. You describe the work as a sequence of steps against a data type; EvalApp compiles that description into a single delegate and runs it — governing how much executes at once, holding every backend at its real limit, and recovering when a step fails. The fluent builder is the whole surface; everything below is opt-in and costs nothing on a pipeline that doesn&#39;t use it.</p>
-    </div>
-    <div class="feats">
-      <div class="feat">
-        <h3><i></i>Bounded async fan-out</h3>
-        <p><code>ForEach</code> streams a collection through a worker pool at a concurrency <code>Tunable.ForItems()</code> tunes to the data. You keep far more in flight than you have threads, but never all of it — a million-row job runs at a fixed memory ceiling instead of launching a million operations at once.</p>
-      </div>
-      <div class="feat">
-        <h3><i></i>Resource gates</h3>
-        <p>Declare a real limit for each backend — a DB pool, an API cap, a CPU budget — and every stage that touches it contends for the same gate. One shared ceiling across the whole pipeline, so a flood can&#39;t oversubscribe a downstream service.</p>
-      </div>
-      <div class="feat">
-        <h3><i></i>Adaptive tuner</h3>
-        <p>Nobody has to pick the in-flight number. A hill-climbing or Bayesian tuner watches wall-time across runs, finds the concurrency that maximises goodput, and holds it — persisted between runs.</p>
-      </div>
-      <div class="feat">
-        <h3><i></i>Sagas with compensation</h3>
-        <p>Chain steps that each have an undo. When a later step fails, EvalApp runs the compensations in reverse order — the payment is refunded, the reservation released — so a half-finished job doesn&#39;t leave torn state behind.</p>
-      </div>
-      <div class="feat">
-        <h3><i></i>Middleware</h3>
-        <p>Wrap every step with retry, timeout, circuit-breaker, validation, audit, timing, or mutation-tracking — built in and composable. The mutation tracker uses compiled expression trees, so it reads changed fields with zero runtime reflection.</p>
-      </div>
-      <div class="feat">
-        <h3><i></i>Compiled, near-zero overhead</h3>
-        <p>The fluent tree is compiled once into one delegate; the checks a run doesn&#39;t need are branched away at build time, not re-tested per step. A pipeline step is cheap enough to stand in for a plain function call.</p>
+    <div class="sec-head"><span class="dot" style="background:var(--c-foundation)"></span><h2>What you'd otherwise assemble</h2><p>the plumbing this replaces</p></div>
+    <div class="stack">
+      <p>A <code>SemaphoreSlim</code> to stop a flood hitting a resource; MediatR for dispatch and pipeline
+        behaviours; Polly for retry, timeout and circuit-breaking; TPL Dataflow for staged parallelism; a DI
+        container to wire it together; and a hand-rolled rollback path for when something fails halfway through.
+        Each is a solved problem in isolation — getting all of them right together, and keeping them right as a
+        codebase grows, is the part that never stays solved. EvalApp is one compiled pipeline that covers fan-out,
+        resource gating, retries, sagas with compensation, and adaptive tuning together.</p>
+      <div class="flow" style="margin-top:18px">
+        <span>SemaphoreSlim</span><em>+</em><span>MediatR</span><em>+</em><span>Polly</span><em>+</em><span>TPL Dataflow</span><em>+</em><span>DI container</span><em>=</em><span style="color:var(--accent-ink); font-weight:650">EvalApp</span>
       </div>
     </div>
   </div>
 </section>
 
-<section>
+<section class="sec">
   <div class="wrap">
-    <div class="sec-head">
-      <h2>Fan out a million operations — at a concurrency you don&#39;t have to guess</h2>
-      <p>The tempting way to run an async operation over a big list is <code class="inl">Task.WhenAll(list.Select(WorkAsync))</code>. It launches every operation at once — every buffer, every open connection, live together — and on a big enough list that is an <code class="inl">OutOfMemoryException</code> or an exhausted pool. Bounding it is the easy part. The hard part is the <em>number</em>: cap it too low and the machine idles, too high and the backend falls over — and the right value shifts with the data, the hardware, and every downstream limit, so a constant you hard-code is wrong the moment any of those change. EvalApp&#39;s <code class="inl">ForEach</code> takes <code class="inl">Tunable.ForItems()</code>: instead of a number you guessed, the adaptive tuner starts hot, measures goodput, and settles on the in-flight count that drains this dataset fastest — then holds it across runs.</p>
-    </div>
-    <div class="codegrid">
-      <pre><code><span class="cmt">// launches all 1,000,000 at once —</span>
-<span class="cmt">// you own the crash</span>
-<span class="kw">await</span> Task.<span class="bad-t">WhenAll</span>(
-    rows.Select(ProcessAsync));</code></pre>
-      <pre><code><span class="cmt">// concurrency the tuner finds, then holds</span>
-task.ForEach(ProcessAsync, <span class="good-t">Tunable.ForItems()</span>);
-<span class="kw">await</span> pipeline.<span class="good-t">RunAsync</span>(rows);</code></pre>
-    </div>
-    <div class="panel" style="margin-top:16px">
-      <div class="legend">
-        <span><i style="background:var(--e-drop)"></i> ran everything at once</span>
-        <span><i style="background:var(--e-eval)"></i> EvalApp — bounded</span>
-        <span><i style="background:var(--e-lib)"></i> other bounded approaches</span>
-      </div>
-      <div id="fanchart"></div>
-    </div>
-    <p class="cap-note">200,000 async operations, each holding an 8&nbsp;KB buffer across a 300&nbsp;ms wait. Every bounded approach here is pinned to the same 10,000 so the memory comparison is fair — peak in flight × buffer = live memory. The naive <code class="inl">WhenAll</code> is <em>fastest</em> precisely because it is reckless; at a few million rows or with real connections that speed is the crash. The difference shows in your own code: <code class="inl">Parallel.ForEachAsync</code>, a hand-rolled semaphore and TPL Dataflow all make you pick that 10,000 and live with it, while <code class="inl">Tunable.ForItems()</code> lets the tuner find it and keep it there (the twelve-drain proof is below) — inside the same governed pipeline that gates your backends and retries your failures.</p>
-  </div>
-</section>
-
-<section>
-  <div class="wrap">
-    <div class="sec-head">
-      <h2>The right in-flight number is the top of a curve — you can&#39;t guess it</h2>
-      <p>Bounding the fan-out still leaves the question of how many run at once, and that number isn&#39;t a preference — it&#39;s the peak of a goodput curve specific to this workload and this hardware. Below it the machine idles; above it the backends oversubscribe and shed. On the load below, the peak sits at <b>96 in flight</b> — 723 useful/sec, drained in 1.0&nbsp;s. Guess <b>8</b> and you get 82 useful/sec and an 8.6&nbsp;s drain. Guess <b>256</b> and it <b>collapses</b> to 234, requests timing out. The only way to find 96 by hand is to run exactly this sweep — and re-run it every time the load or a backend changes.</p>
-    </div>
-    <div class="panel">
-      <div class="legend">
-        <span><i style="background:var(--e-eval)"></i> useful throughput</span>
-        <span><i style="background:var(--e-drop)"></i> oversubscribed — dropping requests</span>
-      </div>
-      <div id="curve"></div>
-    </div>
-    <p class="cap-note">Goodput vs a fixed in-flight level, same 700-request backlog through backends that inflate latency and time out when oversubscribed. This is the hand sweep you&#39;d run to find the number — and past ~128 in flight, useful throughput falls off a cliff.</p>
-  </div>
-</section>
-
-<section>
-  <div class="wrap">
-    <div class="sec-head">
-      <h2>EvalApp runs that sweep for you — live — and settles on the peak</h2>
-      <p>Same workload, but nobody sets the number: <code class="inl">Tunable.ForItems()</code> and the adaptive tuner probe the in-flight level across drains. It starts cautious, explores, and locks onto <b>~690 useful/sec</b> — within a few percent of the 723 the hand sweep found — then holds it. The cost of not sweeping by hand is honest and on the chart: a couple of exploratory drains overshoot into the drop zone before it settles. You pay that once, you never pick the number, and it re-finds the peak when the load shifts.</p>
-    </div>
-    <div class="panel">
-      <div class="legend">
-        <span><i style="background:var(--e-eval)"></i> tuner goodput per drain</span>
-        <span><i style="background:var(--e-drop)"></i> exploratory overshoot</span>
-        <span><i style="background:var(--ink-faint)"></i> hand-swept peak</span>
-      </div>
-      <div id="tunerconv"></div>
-    </div>
-    <p class="cap-note">EvalApp&#39;s built-in tuner, 30 consecutive drains, in-flight range [4,&nbsp;512] starting at 32. The dashed line is the hand-swept peak (723 useful/sec). It converges by drain ~26 and holds there — nobody set the value.</p>
-  </div>
-</section>
-
-<section>
-  <div class="wrap">
-    <div class="sec-head">
-      <h2>Hold every backend at its limit under a flood</h2>
-      <p>Fan-out solves how much you run at once; the other half is what each stage is allowed to touch. Point a burst of 8,000 requests at a service whose five stages each sit behind a real limit — a DB pool, an API cap, a CPU budget. Fire it all with no governance and the raw throughput looks great, until you count what finished: the backends oversubscribe and time out. The bars below are total throughput; the coloured part completed, the red part was dropped.</p>
-    </div>
-    <div class="panel">
-      <div class="legend">
-        <span><i style="background:var(--good)"></i> completed (useful)</span>
-        <span><i style="background:var(--e-drop)"></i> dropped / timed out</span>
-      </div>
-      <div id="goodput"></div>
-    </div>
-    <p class="cap-note">Ungoverned code pushes ~5,000–6,000 req/s but times out ~97% of it (it drove the 28-connection DB pool to 7,800). Its useful throughput is ~175 req/s. EvalApp holds every resource at capacity and completes all 8,000 — same throughput as a hand-rolled SemaphoreSlim, Polly, or a MediatR+Polly stack, and zero drops.</p>
-  </div>
-</section>
-
-<section>
-  <div class="wrap">
-    <div class="sec-head">
-      <h2>The cost of assembling that from libraries</h2>
-      <p>Every governed approach lands the same ~1,100 req/s with zero drops. What differs is the allocation each carries per request — the framework overhead that compounds under load. Matching EvalApp&#39;s behaviour from libraries means composing MediatR (dispatch + behaviours) with Polly (concurrency + retry + timeout); that stack allocates 2.7× what EvalApp does in one compiled pass.</p>
-    </div>
-    <div class="panel"><div id="alloc"></div></div>
-    <p class="cap-note">Bytes allocated per request while draining the backlog. A hand-rolled SemaphoreSlim is leanest — it does one thing in five lines; EvalApp runs the whole service (five resources, retry/timeout/saga/middleware, and auto-tuning) and still comes in at a third of the composed stack.</p>
-  </div>
-</section>
-
-<section>
-  <div class="wrap">
-    <div class="sec-head">
-      <h2>When the ceiling is a known backend, it pegs there on the first drain</h2>
-      <p>Discovering a hidden optimum takes exploration (above). When the ceiling is instead a real backend cap — a DB pool, an API limit — there&#39;s nothing to hunt for: the same tuner behind <code class="inl">Tunable.ForItems()</code> fills straight to it and holds. Here the five gated backends bound the service; drain the same backlog twelve times and throughput stays pinned at <b>1,097–1,099 req/s</b> from the first run on, without anyone ever picking a value.</p>
-    </div>
-    <div class="panel">
-      <div class="legend">
-        <span><i style="background:var(--e-eval)"></i> auto-tuned in-flight — twelve consecutive drains, nobody set the number</span>
-      </div>
-      <div id="converge"></div>
+    <div class="sec-head"><span class="dot" style="background:var(--c-foundation)"></span><h2>Key features</h2><p>what you get</p></div>
+    <div class="grid">
+      <article class="card" style="--cat:var(--c-foundation)"><div class="card-top"><h3>Fluent pipeline builder</h3></div>
+        <p class="desc"><code>Eval.App(...)</code> → domains → tasks → steps, compiled once into an immutable, reusable <code>ICompiledPipeline&lt;T&gt;</code>.</p></article>
+      <article class="card" style="--cat:var(--c-foundation)"><div class="card-top"><h3>Resource-gated concurrency</h3></div>
+        <p class="desc">Declare <code>Network</code> / <code>DiskIO</code> / <code>Cpu</code> / <code>Database</code> (or a named custom pool) and every step that touches it contends for the same bound.</p></article>
+      <article class="card" style="--cat:var(--c-foundation)"><div class="card-top"><h3>Adaptive and Bayesian tuning</h3></div>
+        <p class="desc">A hill-climbing tuner that rediscovers the optimum each run, or a Bayesian tuner with a performance model that survives restarts. Both opt-in, both tune within the bounds you declare.</p></article>
+      <article class="card" style="--cat:var(--c-foundation)"><div class="card-top"><h3>Parallel ForEach and branches</h3></div>
+        <p class="desc">Bounded per-item fan-out over a collection (<code>Tunable.ForItems()</code> lets the tuner pick the count) and fixed concurrent branches with configurable merge strategies.</p></article>
+      <article class="card" style="--cat:var(--c-foundation)"><div class="card-top"><h3>Sagas with compensation</h3></div>
+        <p class="desc">Chain steps with an undo; when a later step fails, every prior step's compensation runs in reverse (LIFO) order.</p></article>
+      <article class="card" style="--cat:var(--c-foundation)"><div class="card-top"><h3>Middleware</h3></div>
+        <p class="desc">Retry, timeout, circuit breaker, timing, audit, and validation, composable around any step.</p></article>
+      <article class="card" style="--cat:var(--c-foundation)"><div class="card-top"><h3>Results as data, not exceptions</h3></div>
+        <p class="desc"><code>PipelineResult&lt;T&gt;</code> is <code>Success</code> / <code>Failure</code> / <code>Skipped</code>, pattern-matched instead of caught.</p></article>
+      <article class="card" style="--cat:var(--c-foundation)"><div class="card-top"><h3>Offline licensing facade</h3></div>
+        <p class="desc">The same cross-product license check every Evaluated Applications package embeds, entirely offline (ECDsa P-256, no network call, ever).</p></article>
     </div>
   </div>
 </section>
 
-<section>
+<section class="sec">
   <div class="wrap">
-    <div class="sec-head">
-      <h2>One dependency in place of the stack</h2>
-      <p>What resource-governed, resilient async handling costs you to assemble.</p>
-    </div>
-    <div class="replace">
-      <div class="stackbox">
-        <h3>The library stack</h3>
-        <div class="dep"><i style="background:var(--e-stack)"></i> MediatR <small>· dispatch + pipeline behaviours</small></div>
-        <div class="dep"><i style="background:var(--e-lib)"></i> Polly <small>· concurrency + retry + timeout</small></div>
-        <div class="dep"><i style="background:var(--e-lib)"></i> TPL Dataflow <small>· stage parallelism</small></div>
-        <div class="dep"><i style="background:var(--e-lib)"></i> DI container <small>· wiring it all together</small></div>
-      </div>
-      <div class="eq">=</div>
-      <div class="stackbox hero">
-        <h3>EvalApp</h3>
-        <div class="dep"><i style="background:var(--e-eval)"></i> EvalApp <small>· one integrated, compiled pass</small></div>
-        <p style="color:var(--ink-soft); font-size:.9rem; margin-top:12px">Bounded async fan-out, resource gates, sagas with compensation, middleware, and an adaptive tuner — in a single dependency, one compiled pipeline, ⅓ the allocation.</p>
-      </div>
-    </div>
-  </div>
-</section>
-
-<section>
-  <div class="wrap">
-    <div class="sec-head"><h2>The full scorecard</h2>
-      <p>Every architecture through the same 8,000-request backlog. "DB pool" is the peak concurrent connections it drove against a pool whose real limit is 28 — over that number means it oversubscribed the backend.</p>
-    </div>
-    <div class="tbl-wrap"><table id="scorecard"></table></div>
-    <p class="cap-note">Deterministic backlog, identical base latencies; only concurrency management differs. SemaphoreSlim, Polly, Dataflow, MediatR+Polly and EvalApp all hold every resource at capacity with zero errors — they differ in overhead and in how much has to be assembled by hand.</p>
-  </div>
-</section>
-
-<section>
-  <div class="wrap">
-    <div class="sec-head"><h2>Where a library is the better call</h2></div>
-    <div class="cols2">
-      <div class="note-card">
-        <h3>A five-line SemaphoreSlim is faster and leaner</h3>
-        <p>If the whole problem is "cap one resource at N," a hand-rolled <code class="inl">SemaphoreSlim</code> wins — 1,099 req/s, 3.0 KB/req, nothing to learn. And for a small list, <code class="inl">Task.WhenAll</code> is fine and fastest. EvalApp is not built to beat those on raw speed at small scale, and it doesn&#39;t.</p>
-      </div>
-      <div class="note-card">
-        <h3>EvalApp earns it when it&#39;s a whole service</h3>
-        <p>Many stages, many resources, retries, timeouts, compensation, and a fan-out too big to run all at once — that is where a stack of libraries becomes glue you own forever. EvalApp is <b>one dependency</b> that bounds the fan-out, holds every backend at its limit, drops nothing, allocates <b>2.7× less</b> than the composed stack, and <b>tunes and holds</b> the concurrency for you.</p>
-      </div>
+    <div class="sec-head"><span class="dot" style="background:var(--c-foundation)"></span><h2>None of this is invented from nothing</h2><p>where the ideas come from</p></div>
+    <div class="tbl-wrap" style="overflow-x:auto; border:1px solid var(--border); border-radius:var(--radius)">
+      <table style="border-collapse:collapse; width:100%; font-size:.92rem; min-width:560px">
+        <thead><tr>
+          <th style="text-align:left; padding:11px 16px; border-bottom:1px solid var(--border-2); font-family:var(--mono); font-size:.76rem; text-transform:uppercase; letter-spacing:.05em; color:var(--ink-faint); font-weight:500">What EvalApp does</th>
+          <th style="text-align:left; padding:11px 16px; border-bottom:1px solid var(--border-2); font-family:var(--mono); font-size:.76rem; text-transform:uppercase; letter-spacing:.05em; color:var(--ink-faint); font-weight:500">Where the idea comes from</th>
+        </tr></thead>
+        <tbody style="color:var(--ink-soft)">
+          <tr><td style="padding:10px 16px; border-bottom:1px solid var(--border)">All state is a plain typed record; steps transform it, never own it</td><td style="padding:10px 16px; border-bottom:1px solid var(--border)">Data-driven design, out of game and simulation architecture</td></tr>
+          <tr><td style="padding:10px 16px; border-bottom:1px solid var(--border)">A step returns success or failure and the pipeline short-circuits without throwing</td><td style="padding:10px 16px; border-bottom:1px solid var(--border)">Railway-Oriented Programming — Scott Wlaschin, the F# community</td></tr>
+          <tr><td style="padding:10px 16px; border-bottom:1px solid var(--border)">Compensating actions run in reverse when something fails partway through</td><td style="padding:10px 16px; border-bottom:1px solid var(--border)">The Saga pattern — Garcia-Molina &amp; Salem, 1987</td></tr>
+          <tr><td style="padding:10px 16px; border-bottom:1px solid var(--border)">The builder's return type changes with every call, so invalid orderings don't compile</td><td style="padding:10px 16px; border-bottom:1px solid var(--border)">The .NET fluent-builder convention plus the type-state pattern</td></tr>
+          <tr><td style="padding:10px 16px; border-bottom:1px solid var(--border)">Probe a neighbouring value, measure, keep it or revert</td><td style="padding:10px 16px; border-bottom:1px solid var(--border)">Hill-climbing / adaptive concurrency, out of the auto-tuning literature</td></tr>
+          <tr><td style="padding:10px 16px; border-bottom:1px solid var(--border)">A persistent belief about what works best, updated as evidence comes in, that survives a restart</td><td style="padding:10px 16px; border-bottom:1px solid var(--border)">Bayesian bandits / Thompson sampling, out of the multi-armed-bandit literature</td></tr>
+          <tr><td style="padding:10px 16px">Domains map to bounded contexts; naming follows how the business actually talks</td><td style="padding:10px 16px">Domain-Driven Design — Eric Evans, 2003</td></tr>
+        </tbody>
+      </table>
     </div>
   </div>
 </section>
 
-<section>
+<section class="sec">
   <div class="wrap">
-    <div class="sec-head"><h2>How it was measured</h2>
-      <p>Two load tests, not microbenchmarks. The fan-out runs one async operation (an 8&nbsp;KB buffer held across a 300&nbsp;ms wait) over 200,000 items, capping in-flight at 10,000, and records peak concurrent operations and their live memory. The soak drains a deterministic backlog of 8,000 requests through a five-stage service (Cache / DbRead / Cpu / Api / DbWrite) where each stage inflates latency and times out at 750&nbsp;ms once its concurrency limit is exceeded — so oversubscribing a backend costs you, as it does in production.</p>
-    </div>
-    <p class="cap-note">Measured on an Intel Core i9-11950H (8 cores / 16 threads), 32&nbsp;GB, .NET 8, ServerGC. Comparables: MediatR 12.4, Polly 8.4, TPL Dataflow 8.0. Hardware moves the numbers; the shape holds.</p>
-  </div>
-</section>
-
-<section>
-  <div class="wrap">
-    <div class="note-card" style="display:flex; flex-wrap:wrap; gap:18px; align-items:center; justify-content:space-between">
-      <div>
-        <h3 style="font-size:1.15rem">Add it and fan out.</h3>
-        <p style="margin-top:6px; color:var(--ink-soft)">The shared runtime under the Evaluated Applications libraries, and usable on its own.</p>
-      </div>
-      <div class="mono" style="font-size:.9rem; color:var(--ink-soft)">dotnet add package <b style="color:var(--ink)">EvaluatedApplications.EvalApp</b></div>
+    <div class="sec-head"><span class="dot" style="background:var(--c-foundation)"></span><h2>Where it fits, and where it doesn't</h2><p>honest scope</p></div>
+    <div class="grid">
+      <article class="card" style="--cat:var(--c-foundation)"><div class="card-top"><h3>Not a durable-execution system</h3></div>
+        <p class="desc">Long-running workflows that must survive a process restart over hours or days are Temporal's job, not EvalApp's.</p></article>
+      <article class="card" style="--cat:var(--c-foundation)"><div class="card-top"><h3>Not a reactive-resilience library</h3></div>
+        <p class="desc">Purely reactive resilience — detect a break, respond to it — is what Polly is for. EvalApp is proactive: it tunes toward the operating point that avoids the break.</p></article>
+      <article class="card" style="--cat:var(--c-foundation)"><div class="card-top"><h3>The case in between</h3></div>
+        <p class="desc">No infrastructure to stand up, throughput that matters, and concurrency that tunes itself instead of getting hand-picked once — that's what EvalApp is for.</p></article>
     </div>
   </div>
 </section>
 
-<footer>
+<section class="sec">
   <div class="wrap">
-    <span>EvalApp — an async pipeline runtime. Evaluated Applications, England.</span>
-    <span class="mono" style="font-size:.82rem">© <span id="yr"></span> · <a href="index.html">all packages</a> · <a href="https://www.nuget.org/packages/EvaluatedApplications.EvalApp" target="_blank" rel="noopener">NuGet</a></span>
+    <div class="sec-head"><span class="dot" style="background:var(--c-foundation)"></span><h2>Get started</h2><p>minimal example</p></div>
+    <div class="snip"><code>using EvalApp.Consumer;
+
+public sealed record OrderData(string CustomerName, decimal Total, string Status = "New");
+
+Eval.App("Orders")
+    .DefineDomain("Orders")
+        .DefineTask&lt;OrderData&gt;("ProcessOrder")
+            .AddStep("Validate", d =&gt; d with { Status = "Validated" })
+            .AddStep("ApplyDiscount", d =&gt; d with { Total = d.Total * 0.9m })
+            .AddStep("Complete", d =&gt; d with { Status = "Complete" })
+        .Run(out ICompiledPipeline&lt;OrderData&gt; pipeline)
+    .Build();   // no license key needed — nothing is license-gated today
+
+var result = await pipeline.RunAsync(new OrderData("Alice", 99.99m));</code></div>
+    <p class="desc">Build the pipeline once (e.g. at startup); call <code>RunAsync</code> many times.</p>
+    <p class="lim"><b>Everything in EvalApp is free to use today.</b> Nothing is license-gated; a license key changes no runtime behavior right now. The license system exists as shared, ready-to-use wiring for a possible future advanced tier, but it caps nothing today. <b>Where it doesn't fit:</b> long-running workflows that must survive a process restart over hours or days are Temporal's job, not EvalApp's; purely reactive resilience is what Polly is for.</p>
+  </div>
+</section>
+
+<footer class="site">
+  <div class="wrap">
+    <span>Evaluated Applications — .NET libraries, England.</span>
+    <span class="mono">© <span id="yr"></span> · <a href="https://www.nuget.org/profiles/evaluatedapplications" target="_blank" rel="noopener">NuGet</a></span>
   </div>
 </footer>
-
-<div id="tip"></div>
-
 <script>
-document.getElementById('yr').textContent = new Date().getFullYear();
-
-// ---- fan-out: 200,000 async ops, 8 KB each, cap 10,000 ----
-const BUFKB = 8;
-const FAN = [
-  {n:"Task.WhenAll (naive)",   fam:"none", inflight:135294, sec:0.85},
-  {n:"Parallel.ForEachAsync",  fam:"lib",  inflight:10000,  sec:6.25},
-  {n:"SemaphoreSlim throttle", fam:"lib",  inflight:10000,  sec:6.19},
-  {n:"TPL Dataflow",           fam:"lib",  inflight:10000,  sec:6.26},
-  {n:"EvalApp ForEach",        fam:"eval", inflight:10000,  sec:6.24},
-];
-FAN.forEach(f => f.mem = f.inflight * BUFKB / 1024);   // MB of live buffers
-
-// ---- soak: 8000-request backlog. rps = total/wall; completed = 8000 - errors ----
-const TOTAL = 8000, DBCAP = 28;
-const A = [
-  {n:"Naive (no gating)",  fam:"none",  rps:5930, err:7764, kb:1.9,  cpu:0.1, db:7790},
-  {n:"MediatR alone",      fam:"none",  rps:6186, err:7765, kb:2.2,  cpu:0.5, db:7802},
-  {n:"SemaphoreSlim",      fam:"lib",   rps:1099, err:0,    kb:3.0,  cpu:0.3, db:28},
-  {n:"TPL Dataflow",       fam:"lib",   rps:1098, err:0,    kb:3.5,  cpu:0.5, db:28},
-  {n:"Polly limiter",      fam:"lib",   rps:1097, err:0,    kb:5.5,  cpu:0.4, db:28},
-  {n:"MediatR + Polly",    fam:"stack", rps:1097, err:0,    kb:13.6, cpu:0.5, db:28},
-  {n:"EvalApp",            fam:"eval",  rps:1089, err:0,    kb:5.0,  cpu:0.8, db:28},
-];
-A.forEach(a => { a.done = TOTAL - a.err; a.good = a.rps * a.done / TOTAL; });
-const CONV_AFTER  = [1098,1098,1099,1097,1098,1099,1098,1097,1099,1098,1097,1098];
-
-// ---- goodput vs in-flight: the load's profile (ungated; backends degrade when oversubscribed) ----
-const CURVE = [
-  {p:8,gp:82},{p:16,gp:135},{p:24,gp:199},{p:32,gp:264},{p:48,gp:390},{p:64,gp:510},
-  {p:96,gp:723},{p:128,gp:612},{p:192,gp:350,err:5},{p:256,gp:234,err:223},{p:384,gp:162,err:437},{p:512,gp:174,err:466},
-];
-const PEAK = 723;
-// EvalApp's built-in tuner draining the SAME workload 30x; nobody set the number. err = drains that overshot into collapse.
-const TUNER = [420,438,435,433,429,436,433,431,435,434,442,441,433,432,435,433,433,429,214,432,208,619,695,359,623,690,693,691,691,690];
-const TUNER_ERR = {19:290, 21:298};
-
-const css = v => getComputedStyle(document.body).getPropertyValue(v).trim();
-const SVGNS='http://www.w3.org/2000/svg';
-const el=(n,a)=>{const e=document.createElementNS(SVGNS,n);for(const k in a)e.setAttribute(k,a[k]);return e;};
-const famColor = f => f==="eval"?css('--e-eval'):f==="stack"?css('--e-stack'):f==="none"?css('--e-drop'):css('--e-lib');
-
-const tip=document.getElementById('tip');
-function showTip(h,ev){tip.innerHTML=h;tip.style.opacity=1;moveTip(ev);}
-function moveTip(ev){const p=12;let x=ev.clientX+p,y=ev.clientY+p;const r=tip.getBoundingClientRect();if(x+r.width>innerWidth-8)x=ev.clientX-r.width-p;if(y+r.height>innerHeight-8)y=ev.clientY-r.height-p;tip.style.left=x+'px';tip.style.top=y+'px';}
-function hideTip(){tip.style.opacity=0;}
-addEventListener('scroll',hideTip,{passive:true});
-
-function tiles(){
-  const ev = A.find(a=>a.fam==="eval"), comp = A.find(a=>a.n==="MediatR + Polly"), naive=FAN[0], bounded=FAN.find(f=>f.fam==="eval");
-  const T=[
-    {big:`${bounded.mem.toFixed(0)}<small> MB</small>`, cap:`live memory for a fan-out <b>Tunable.ForItems()</b> keeps bounded — where a naive million-wide <b>WhenAll</b> held <b>${naive.inflight.toLocaleString()}</b> operations at once, <b>${naive.mem.toFixed(0)}&nbsp;MB</b> live.`},
-    {big:`0<small> dropped</small>`, cap:`Under an 8,000-request flood EvalApp completed <b>all</b> of them; fire-and-forget dropped <b>97%</b>.`},
-    {big:`2.7×<small> leaner</small>`, cap:`<b>${ev.kb} KB/req</b> vs the composed MediatR+Polly stack&#39;s <b>${comp.kb} KB/req</b> — same throughput, one dependency.`},
-    {big:`holds`, cap:`Auto-tunes the in-flight count and stays there: <b>1,097–1,099 req/s</b> across every drain.`},
-  ];
-  document.getElementById('tiles').innerHTML = T.map(t=>`<div class="tile"><div class="big">${t.big}</div><div class="cap">${t.cap}</div></div>`).join('');
-}
-
-// fan-out: peak in-flight, log scale, memory labels
-function fanchart(){
-  const host=document.getElementById('fanchart'); host.innerHTML='';
-  const W=760, Lg=170, PX0=Lg+8, PX1=W-96, plotW=PX1-PX0, TP=30, rowH=34, H=TP+FAN.length*rowH+14;
-  const lo=Math.log10(1000), hi=Math.log10(200000), x=v=>PX0+(Math.log10(Math.max(v,1000))-lo)/(hi-lo)*plotW;
-  const svg=el('svg',{viewBox:`0 0 ${W} ${H}`,role:'img'}), faint=css('--ink-faint'), ink=css('--ink-soft');
-  [1000,10000,100000].forEach(t=>{const gx=x(t);svg.appendChild(el('line',{x1:gx,y1:TP-6,x2:gx,y2:H-8,stroke:css('--grid'),'stroke-width':1}));const l=el('text',{x:gx,y:TP-12,fill:faint,'font-size':10.5,'text-anchor':'middle'});l.textContent=t>=1000?(t/1000+'k'):t;svg.appendChild(l);});
-  FAN.forEach((f,i)=>{
-    const cy=TP+i*rowH+rowH/2, col=famColor(f.fam);
-    const r=el('rect',{x:PX0,y:cy-9,width:Math.max(2,x(f.inflight)-PX0),height:18,rx:3,fill:col,opacity:f.fam==="lib"?.55:.95});
-    r.style.cursor='pointer';r.addEventListener('mousemove',e=>showTip(`<b>${f.n}</b><div class="r"><span>peak in flight</span><span>${f.inflight.toLocaleString()}</span></div><div class="r"><span>live memory</span><span>${f.mem.toFixed(0)} MB</span></div><div class="r"><span>time</span><span>${f.sec.toFixed(2)}s</span></div>`,e));r.addEventListener('mouseleave',hideTip);svg.appendChild(r);
-    const nm=el('text',{x:PX0-10,y:cy+4,fill:f.fam==="eval"?css('--e-eval'):ink,'font-size':12,'text-anchor':'end','font-weight':f.fam==="eval"?'650':'400'});nm.textContent=f.n;svg.appendChild(nm);
-    const vl=el('text',{x:x(f.inflight)+7,y:cy+4,fill:ink,'font-size':11.5,'text-anchor':'start'});vl.textContent=`${f.inflight.toLocaleString()} · ${f.mem.toFixed(0)}MB`;svg.appendChild(vl);
+  document.getElementById('yr').textContent = new Date().getFullYear();
+  document.querySelectorAll('.copy').forEach(function(btn){
+    btn.addEventListener('click', function(){
+      var code = btn.parentElement.querySelector('code').textContent;
+      navigator.clipboard.writeText(code).then(function(){
+        var old = btn.textContent; btn.textContent = 'copied'; btn.classList.add('done');
+        setTimeout(function(){ btn.textContent = old; btn.classList.remove('done'); }, 1400);
+      });
+    });
   });
-  const cap=el('text',{x:PX0,y:H-2,fill:faint,'font-size':10});cap.textContent='peak operations in flight (log scale)';svg.appendChild(cap);
-  host.appendChild(svg);
-}
-
-// soak goodput: total throughput split completed + dropped
-function goodput(){
-  const host=document.getElementById('goodput'); host.innerHTML='';
-  const W=760, Lg=150, PX0=Lg+8, PX1=W-70, plotW=PX1-PX0, TP=16, rowH=34, H=TP+A.length*rowH+22;
-  const max=Math.max(...A.map(a=>a.rps)), x=v=>PX0+v/max*plotW, drop=css('--e-drop'), good=css('--good'), faint=css('--ink-faint'), ink=css('--ink-soft');
-  const svg=el('svg',{viewBox:`0 0 ${W} ${H}`,role:'img'});
-  [0,2000,4000,6000].forEach(t=>{const gx=x(t);svg.appendChild(el('line',{x1:gx,y1:TP,x2:gx,y2:H-22,stroke:css('--grid'),'stroke-width':1}));const l=el('text',{x:gx,y:H-8,fill:faint,'font-size':10.5,'text-anchor':'middle'});l.textContent=t?(t/1000+'k'):'0';svg.appendChild(l);});
-  A.forEach((a,i)=>{
-    const cy=TP+i*rowH+rowH/2, gw=Math.max(1,x(a.good)-PX0), dw=x(a.rps)-x(a.good);
-    const g=el('rect',{x:PX0,y:cy-9,width:gw,height:18,rx:3,fill:a.fam==="eval"?css('--e-eval'):good,opacity:.95});
-    g.style.cursor='pointer'; g.addEventListener('mousemove',e=>showTip(bar(a),e)); g.addEventListener('mouseleave',hideTip); svg.appendChild(g);
-    if(dw>0.5){const d=el('rect',{x:PX0+gw+2,y:cy-9,width:Math.max(1,dw-2),height:18,rx:3,fill:drop,opacity:.9});d.style.cursor='pointer';d.addEventListener('mousemove',e=>showTip(bar(a),e));d.addEventListener('mouseleave',hideTip);svg.appendChild(d);}
-    const nm=el('text',{x:PX0-10,y:cy+4,fill:a.fam==="eval"?css('--e-eval'):ink,'font-size':12.5,'text-anchor':'end','font-weight':a.fam==="eval"?'650':'400'});nm.textContent=a.n;svg.appendChild(nm);
-    const vl=el('text',{x:x(a.rps)+7,y:cy+4,fill:ink,'font-size':11.5,'text-anchor':'start'});vl.textContent = a.err? `${Math.round(a.good)} useful` : `${a.rps}`; svg.appendChild(vl);
-  });
-  host.appendChild(svg);
-}
-const bar = a => `<b>${a.n}</b><div class="r"><span>completed</span><span>${Math.round(a.good)} req/s</span></div>`+(a.err?`<div class="r"><span>dropped</span><span>${a.err.toLocaleString()} (${Math.round(a.err/TOTAL*100)}%)</span></div>`:`<div class="r"><span>dropped</span><span>0</span></div>`)+`<div class="r"><span>raw throughput</span><span>${a.rps.toLocaleString()} req/s</span></div>`;
-
-function alloc(){
-  const host=document.getElementById('alloc'); host.innerHTML='';
-  const rows=[...A].filter(a=>a.err===0).sort((x,y)=>y.kb-x.kb);
-  const W=760, Lg=150, PX0=Lg+8, PX1=W-60, plotW=PX1-PX0, TP=16, rowH=34, H=TP+rows.length*rowH+22;
-  const max=Math.max(...rows.map(r=>r.kb)), x=v=>PX0+v/max*plotW, ink=css('--ink-soft'), faint=css('--ink-faint');
-  const svg=el('svg',{viewBox:`0 0 ${W} ${H}`,role:'img'});
-  [0,5,10].forEach(t=>{const gx=x(t);svg.appendChild(el('line',{x1:gx,y1:TP,x2:gx,y2:H-22,stroke:css('--grid'),'stroke-width':1}));const l=el('text',{x:gx,y:H-8,fill:faint,'font-size':10.5,'text-anchor':'middle'});l.textContent=t;svg.appendChild(l);});
-  rows.forEach((a,i)=>{
-    const cy=TP+i*rowH+rowH/2, col=famColor(a.fam);
-    const r=el('rect',{x:PX0,y:cy-9,width:Math.max(1,x(a.kb)-PX0),height:18,rx:3,fill:col,opacity:a.fam==="lib"?.6:.95});
-    r.style.cursor='pointer';r.addEventListener('mousemove',e=>showTip(`<b>${a.n}</b><div class="r"><span>allocation</span><span>${a.kb} KB/req</span></div>`,e));r.addEventListener('mouseleave',hideTip);svg.appendChild(r);
-    const nm=el('text',{x:PX0-10,y:cy+4,fill:a.fam==="eval"?css('--e-eval'):ink,'font-size':12.5,'text-anchor':'end','font-weight':a.fam==="eval"?'650':'400'});nm.textContent=a.n;svg.appendChild(nm);
-    const vl=el('text',{x:x(a.kb)+7,y:cy+4,fill:ink,'font-size':11.5,'font-weight':600});vl.textContent=`${a.kb} KB`;svg.appendChild(vl);
-  });
-  const lbl=el('text',{x:PX1,y:H-8,fill:faint,'font-size':10.5,'text-anchor':'end'});lbl.textContent='KB allocated / request';svg.appendChild(lbl);
-  host.appendChild(svg);
-}
-
-function converge(){
-  const host=document.getElementById('converge'); host.innerHTML='';
-  const W=760, H=280, ml=48, mr=16, mt=14, mb=30, pw=W-ml-mr, ph=H-mt-mb;
-  const n=12, ymax=1200, X=i=>ml+i/(n-1)*pw, Y=v=>mt+(1-v/ymax)*ph;
-  const svg=el('svg',{viewBox:`0 0 ${W} ${H}`,role:'img'}), faint=css('--ink-faint');
-  for(let g=0;g<=1200;g+=300){const gy=Y(g);svg.appendChild(el('line',{x1:ml,y1:gy,x2:W-mr,y2:gy,stroke:css('--grid'),'stroke-width':1}));const l=el('text',{x:ml-8,y:gy+3.5,fill:faint,'font-size':10,'text-anchor':'end'});l.textContent=g;svg.appendChild(l);}
-  for(let i=0;i<n;i+=1){const gx=X(i);const l=el('text',{x:gx,y:H-10,fill:faint,'font-size':9.5,'text-anchor':'middle'});l.textContent=i+1;svg.appendChild(l);}
-  const yl=el('text',{x:ml-34,y:mt-2,fill:faint,'font-size':10});yl.textContent='req/s';svg.appendChild(yl);
-  function line(data,color,w,op){let d='';data.forEach((v,i)=>d+=(i?'L':'M')+X(i)+' '+Y(v));svg.appendChild(el('path',{d,fill:'none',stroke:color,'stroke-width':w,'stroke-linejoin':'round',opacity:op}));data.forEach((v,i)=>{const c=el('circle',{cx:X(i),cy:Y(v),r:3.5,fill:color,opacity:op});c.style.cursor='pointer';c.addEventListener('mousemove',e=>showTip(`<div class="r"><span>drain ${i+1}</span><span>${v} req/s</span></div>`,e));c.addEventListener('mouseleave',hideTip);svg.appendChild(c);});}
-  line(CONV_AFTER, css('--e-eval'), 2.6, 1);
-  const xl=el('text',{x:X(11),y:H-10,fill:faint,'font-size':9.5,'text-anchor':'middle'});svg.appendChild(xl);
-  host.appendChild(svg);
-}
-
-function scorecard(){
-  let h=`<thead><tr><th>architecture</th><th>req/s</th><th>useful</th><th>dropped</th><th>KB/req</th><th>CPU(s)</th><th>DB pool</th></tr></thead><tbody>`;
-  A.forEach(a=>{
-    const over = a.db>DBCAP;
-    h+=`<tr class="${a.fam==="eval"?"eval":""}"><td class="a">${a.n}</td><td class="ms">${a.rps.toLocaleString()}</td><td class="ms">${Math.round(a.good).toLocaleString()}</td>`+
-       `<td class="ms ${a.err?'bad':'ok'}">${a.err?a.err.toLocaleString():'0'}</td><td class="ms">${a.kb.toFixed(1)}</td><td class="ms">${a.cpu.toFixed(1)}</td>`+
-       `<td class="ms ${over?'bad':'ok'}">${a.db}${over?' ⚠':' ✓'}</td></tr>`;
-  });
-  document.getElementById('scorecard').innerHTML=h+'</tbody>';
-}
-
-// goodput-vs-in-flight profile: the hump you'd have to sweep by hand
-function curveChart(){
-  const host=document.getElementById('curve'); if(!host) return; host.innerHTML='';
-  const W=760,H=300, ml=46,mr=64,mt=22,mb=42, pw=W-ml-mr, ph=H-mt-mb;
-  const lo=Math.log10(8), hi=Math.log10(512), X=p=>ml+(Math.log10(p)-lo)/(hi-lo)*pw, gmax=800, Y=v=>mt+(1-v/gmax)*ph;
-  const svg=el('svg',{viewBox:`0 0 ${W} ${H}`,role:'img'}), faint=css('--ink-faint'), ink=css('--ink-soft'), ev=css('--e-eval'), drop=css('--e-drop');
-  for(let g=0; g<=800; g+=200){const gy=Y(g);svg.appendChild(el('line',{x1:ml,y1:gy,x2:W-mr,y2:gy,stroke:css('--grid'),'stroke-width':1}));const l=el('text',{x:ml-8,y:gy+3.5,fill:faint,'font-size':10,'text-anchor':'end'});l.textContent=g;svg.appendChild(l);}
-  [8,32,96,256,512].forEach(p=>{const gx=X(p);const l=el('text',{x:gx,y:H-16,fill:faint,'font-size':10,'text-anchor':'middle'});l.textContent=p;svg.appendChild(l);});
-  const xl=el('text',{x:ml+pw/2,y:H-2,fill:faint,'font-size':10,'text-anchor':'middle'});xl.textContent='in-flight (log scale)';svg.appendChild(xl);
-  const yl=el('text',{x:ml-32,y:mt-7,fill:faint,'font-size':10});yl.textContent='useful/sec';svg.appendChild(yl);
-  let d=''; CURVE.forEach((c,i)=>d+=(i?'L':'M')+X(c.p)+' '+Y(c.gp));
-  svg.appendChild(el('path',{d,fill:'none',stroke:ev,'stroke-width':2.4,'stroke-linejoin':'round'}));
-  CURVE.forEach(c=>{const col=c.err?drop:ev, isPk=c.p===96; const dot=el('circle',{cx:X(c.p),cy:Y(c.gp),r:isPk?5.5:3.6,fill:col,stroke:isPk?css('--bg'):'none','stroke-width':isPk?1.5:0}); dot.style.cursor='pointer'; dot.addEventListener('mousemove',e=>showTip(`<b>${c.p} in flight</b><div class="r"><span>useful/sec</span><span>${c.gp}</span></div><div class="r"><span>dropped</span><span>${c.err||0}</span></div>`,e)); dot.addEventListener('mouseleave',hideTip); svg.appendChild(dot);});
-  const pk=el('text',{x:X(96),y:Y(723)-13,fill:ev,'font-size':11.5,'text-anchor':'middle','font-weight':650});pk.textContent='peak · 96 in flight';svg.appendChild(pk);
-  const a1=el('text',{x:X(8)+7,y:Y(82)-7,fill:ink,'font-size':10.5,'text-anchor':'start'});a1.textContent='guess low: idle';svg.appendChild(a1);
-  const a2=el('text',{x:X(256),y:Y(234)+19,fill:drop,'font-size':10.5,'text-anchor':'middle'});a2.textContent='guess high: collapse';svg.appendChild(a2);
-  host.appendChild(svg);
-}
-
-// EvalApp's built-in tuner draining the same load 30x — climbs to the peak, nobody set the number
-function tunerConverge(){
-  const host=document.getElementById('tunerconv'); if(!host) return; host.innerHTML='';
-  const W=760,H=260, ml=46,mr=16,mt=20,mb=34, pw=W-ml-mr, ph=H-mt-mb;
-  const n=TUNER.length, X=i=>ml+i/(n-1)*pw, gmax=800, Y=v=>mt+(1-v/gmax)*ph;
-  const svg=el('svg',{viewBox:`0 0 ${W} ${H}`,role:'img'}), faint=css('--ink-faint'), ev=css('--e-eval'), drop=css('--e-drop');
-  for(let g=0; g<=800; g+=200){const gy=Y(g);svg.appendChild(el('line',{x1:ml,y1:gy,x2:W-mr,y2:gy,stroke:css('--grid'),'stroke-width':1}));const l=el('text',{x:ml-8,y:gy+3.5,fill:faint,'font-size':10,'text-anchor':'end'});l.textContent=g;svg.appendChild(l);}
-  svg.appendChild(el('line',{x1:ml,y1:Y(PEAK),x2:W-mr,y2:Y(PEAK),stroke:faint,'stroke-width':1,'stroke-dasharray':'5 4',opacity:.85}));
-  const pl=el('text',{x:W-mr,y:Y(PEAK)-6,fill:faint,'font-size':10,'text-anchor':'end'});pl.textContent='hand-swept peak · 723';svg.appendChild(pl);
-  [1,5,10,15,20,25,30].forEach(i=>{const gx=X(i-1);const l=el('text',{x:gx,y:H-12,fill:faint,'font-size':9.5,'text-anchor':'middle'});l.textContent=i;svg.appendChild(l);});
-  const xl=el('text',{x:ml+pw/2,y:H-1,fill:faint,'font-size':10,'text-anchor':'middle'});xl.textContent='drain';svg.appendChild(xl);
-  let d=''; TUNER.forEach((v,i)=>d+=(i?'L':'M')+X(i)+' '+Y(v));
-  svg.appendChild(el('path',{d,fill:'none',stroke:ev,'stroke-width':2,'stroke-linejoin':'round',opacity:.9}));
-  TUNER.forEach((v,i)=>{const err=TUNER_ERR[i+1], col=err?drop:ev; const c=el('circle',{cx:X(i),cy:Y(v),r:err?4:2.8,fill:col}); c.style.cursor='pointer'; c.addEventListener('mousemove',e=>showTip(`<div class="r"><span>drain ${i+1}</span><span>${v} useful/sec</span></div>`+(err?`<div class="r"><span>dropped</span><span>${err}</span></div>`:''),e)); c.addEventListener('mouseleave',hideTip); svg.appendChild(c);});
-  host.appendChild(svg);
-}
-
-function renderAll(){ tiles(); fanchart(); curveChart(); tunerConverge(); goodput(); alloc(); converge(); scorecard(); }
-matchMedia('(prefers-color-scheme:dark)').addEventListener('change',renderAll);
-addEventListener('resize',()=>{clearTimeout(window._rt);window._rt=setTimeout(renderAll,150);});
-renderAll();
 </script>
 </body>
 </html>
