@@ -64,9 +64,28 @@ token in `site.css` ever changes, grep those two files' `<style>` blocks too.
 (brand mark + Home/HoloDb/#packages/NuGet, identical on every page) → `<header class="hero">`
 (breadcrumb, eyebrow, h1, lede, `.facts` chips, `.install`, `.cta-row`) → a sequence of
 `<section class="sec">` (What it is / Why it's useful as a `.grid` of `.card`s / Key features /
-Get started with a `.snip` code sample / a `.lim` caveat note) → `footer.site` (identical on every
-page) → the copy-button + year script (identical). New product pages should copy this shape
-exactly, not invent new layout — that IS the cohesion mechanism (§0 of the agent charter).
+Get started with a `.snip` code sample / a `.lim` caveat note) → `footer.site` → the copy-button +
+year script (identical). New product pages should copy this shape exactly, not invent new layout —
+that IS the cohesion mechanism (§0 of the agent charter).
+
+**Footer link set (standardised 2026-08-26, every page)**: `footer.site .mono` carries `© <year>`
+plus 3-4 internal links so every page has a second, bottom-of-page path back into the site graph —
+not just the top nav. Plain product pages + `index.html` + `holoformer.html`: `Home · Packages
+(/#packages) · HoloDb · NuGet`. The three HoloDb pages use a page-appropriate subset (hub:
+`Home · Packages · Docs · Benchmarks · NuGet`; benchmarks: `Home · HoloDb · Manual · NuGet`;
+manual: `Home · HoloDb · Packages · NuGet`). Keep this pattern when adding a page.
+
+**SEO tags (every page)**: unique `<title>` + `<meta name="description">` + `<link rel="canonical">`
++ `og:type`/`og:title`/`og:description`/`og:url` + `twitter:card`, all already present on every
+page (verified 2026-08-26; `holodb.html` was missing OG/Twitter until this pass — fixed). JSON-LD
+(`<script type="application/ld+json">`, plain object or `@graph`, placed just before `</head>`):
+`index.html` carries `Organization` + `WebSite`; each of the 11 package pages carries a
+`SoftwareApplication` (name/description/version/url/downloadUrl/offer price 0 — matches the
+nothing-license-gated stance, never invent a version or a claim not in the page's own content); the
+3 explainer/reference pages (`holoformer.html`, `holodb.html`, `holodb/manual/index.html`) carry a
+`TechArticle` with an `about` pointing at the relevant `SoftwareApplication`. Keep versions in sync
+with the `<Version>` ground truth (see below) when a package bumps — the JSON-LD `softwareVersion`
+will go stale exactly like the hero `.facts` chip does.
 
 ## Content-doc sources (per package, `MonoRepo/<Pkg>/docs/site.md`)
 
@@ -125,6 +144,24 @@ EvalApp's and AlgFormer.Gpu's CLAUDE.md one patch behind their csproj on this pa
   reading as more artifacted/checkered than the "before", the opposite of what the filenames claim
   (likely a mislabeled or unrelated capture) — using it would have been a cohesion/honesty risk.
   Flagged for holovoxel-owner if a correct far-LOD before/after pair is wanted later.
+
+## SEO + navigation pass (2026-08-26)
+
+Holistic audit of all 16 live pages: no orphans found (every page reachable from `index.html`'s
+gallery or a cross-link within 2 clicks; `sitemap.xml` already listed all 16 + the 2 live tool
+routes). Fixes made: `holodb.html` was missing all `og:*`/`twitter:card` tags — added. Standardised
+the footer link set site-wide (see Design system, above) so every page has a second internal-link
+path, not just the top nav. Added forward cross-links base→extension that only existed
+extension→base before: `algformer.html` → `algformer-gpu.html`, `evalapp.html` →
+`evalapp-neural.html`. Added JSON-LD to every page (`Organization`+`WebSite` on the index,
+`SoftwareApplication` on all 11 package pages, `TechArticle` on the 3 explainer/reference pages).
+Added `/tools/` (the Showroom root, not just `/tools/analyst`/`/tools/creature`) to `sitemap.xml`.
+**Flagged, not fixed (out of this agent's remit — Blazor app internals, not `site/` presentation):**
+`Showroom/Home.razor` still tags The Creature `soon`/"In the workshop" with no link, while
+`site/index.html` already lists it `live` linking to `/tools/creature` (and
+`Showroom/Pages/Creature.razor` exists) — one of the two is stale; resolve
+by whoever owns the Showroom tools app before the next deploy, so the site doesn't advertise a dead
+route or hide a live one.
 
 ## Deploy
 
