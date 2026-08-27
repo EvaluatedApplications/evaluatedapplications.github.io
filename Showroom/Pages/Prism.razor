@@ -42,10 +42,10 @@
         </div>
 
         <div class="or-kctl">
-            <label class="speed">K-pass depth (experimental, yours to try)
-                <input type="range" min="1" max="6" step="1" value="@_kUser" @oninput="OnKChanged" disabled="@_generating" />
+            <label class="speed">K-pass depth (defaults to the real trained value — move it to explore)
+                <input type="range" min="1" max="@KSliderMax" step="1" value="@_kUser" @oninput="OnKChanged" disabled="@_generating" />
             </label>
-            <span class="or-kval">K=@_kUser — @(_kUser == 1 ? "the checkpoint's own default (no extra resonance passes)" : $"reuses the same {_brain.Layers} layer(s) {_kUser}× — heavier, and this file was never trained at this depth")</span>
+            <span class="or-kval">K=@_kUser — @KDetail</span>
         </div>
 
         <div class="or-runs">
@@ -139,9 +139,10 @@
                 at the right moment reinforces its own overtones instead of damping them. It's a real nonlinear
                 dynamical system iterating on its own state, not a deeper stack of unique weights — which is exactly
                 why the parameter count above is worth reading twice: <code>@_brain.ParamCount.ToString("N0")</code>
-                real numbers, reused <code>@_kUser</code>× per layer, standing in for the
-                <code>@EquivCompute.ToString("N0")</code>-parameter dense transformer it would otherwise take to
-                build that same depth of transformation from scratch.</p>
+                real numbers, reused <code>@_kUser</code>× per layer, computing LIKE a real dense transformer would
+                need <code>@EquivCompute.ToString("N0")</code> parameters to match — a <strong>compute-equivalence</strong>
+                figure (12·d²·L·K, the exact same "compute-equiv" stat PrismStudio's own status bar shows for this
+                model), not a claim that this checkpoint secretly has that many real parameters stored anywhere.</p>
 
             <p><strong>Where this checkpoint stands, and where it's headed.</strong> Right now: @_brain.ParamCount.ToString("N0")
                 real stored parameters, a @_sym.Count-token subword vocabulary, and an @_brain.Context-token context
@@ -164,8 +165,12 @@
                 once the model has settled into a loop, a known, real behaviour this early in training (the Inspector
                 will show you exactly where it happened, rather than hiding it). It's a frozen copy from one point in
                 an active training run in PrismStudio, not a live link to it — the real model keeps training after
-                this snapshot was taken. The K-pass slider above lets you explore depths this exact checkpoint was
-                never actually trained at; treat anything above K=1 as "what if", not "what it does."</p>
+                this snapshot was taken. The K-pass slider above defaults to
+                @(_trainedStackK is not null ? $"K={_trainedStackK.Value}" : "the checkpoint file's own bare K=1") —
+                this checkpoint's own real trained depth, reconstructed together with its ramp alpha from the
+                rounds-trained count shipped alongside it, not a flat guess. Move the slider and you're exploring
+                depths this exact checkpoint was never actually trained at; treat anything away from that resting
+                value as "what if", not "what it does."</p>
 
             <p>The brain is <code>AlgFormer</code>'s holographic transformer — the same substrate behind
                 <a href="/creature">The Creature</a> and <a href="/forecaster">The Forecaster</a>, and the one that lets
@@ -190,6 +195,23 @@
     HoloFormer? _brain;
     bool _loaded; string? _loadError; string? _error;
     long? _rounds;   // optional: only shown if data/oracle-rounds.txt was published alongside the checkpoint
+
+    // ---- REAL trained depth, reconstructed rather than assumed (2026-08-28 fix — "keep K passes full, it's
+    // what it's trained on"). The .bin file itself doesn't persist Iters/IterAlphaServe (verified by round-
+    // tripping Serialize()/Deserialize() against the real checkpoint), so its own on-disk default reads back a
+    // meaningless K=1 — defaulting the UI to that was a demo showing a deliberately crippled version of the
+    // model, not what it actually does. `oracle-stackk.txt`/`oracle-iterwarm.txt` are small metadata sidecars
+    // (same hand-off pattern as `oracle-rounds.txt`) carrying PrismStudio's live `OneShotStackK`/`OneShotIterWarm`
+    // AT THE MOMENT this checkpoint snapshot was taken — never hardcoded here, since both are the user's own
+    // live-hand-edited training knobs and change between snapshots (verified live 2026-08-28: StackK=8,
+    // IterWarm=20000 — re-check `HoloEngine.cs` again before ever hand-editing these files).
+    int? _trainedStackK;
+    int? _trainedIterWarm;
+    double _trainedAlpha = 1.0;   // reconstructed below from (trainedRounds, addRound=0, iterWarm) via the same
+    // AlphaFor formula HoloEngine itself uses — a mid-ramp snapshot deserves a mid-ramp alpha, not a flat 1.0
+    // guess (that would ALSO misrepresent it, just in the opposite direction). Only valid for a single-layer
+    // checkpoint (layer 0's real add-round is 0 by construction — it's present from round 0); falls back to
+    // 1.0 (fully composed) if the checkpoint ever ships with >1 layer, or if either metadata file is missing.
 
     // ---- vocab: CharVocab.Lo..Hi (published PrismFormer.CharVocab) as the 95-char base + "\n" + merged subwords
     // loaded from the bundled vocab.txt — a from-scratch greedy-longest-match tokenizer built to match EXACTLY how
@@ -225,10 +247,18 @@
             BuildVocab(vocabText);
             var bytes = await Http.GetByteArrayAsync("data/oracle-brain.bin");
             _brain = HoloFormer.Deserialize(bytes);
-            _kUser = Math.Max(1, _brain.Iters);
-            _brain.Iters = _kUser;
-            _brain.IterAlphaServe = 1.0;   // the file doesn't carry the live app's K-pass ramp state — always serve fully composed
             try { _rounds = long.Parse((await Http.GetStringAsync("data/oracle-rounds.txt")).Trim()); } catch { _rounds = null; }
+            try { _trainedStackK = int.Parse((await Http.GetStringAsync("data/oracle-stackk.txt")).Trim()); } catch { _trainedStackK = null; }
+            try { _trainedIterWarm = int.Parse((await Http.GetStringAsync("data/oracle-iterwarm.txt")).Trim()); } catch { _trainedIterWarm = null; }
+
+            // default to the REAL trained depth (falls back to the file's bare K=1 only if the metadata sidecar
+            // is missing) — see the field comments above for why this can't just be "1" or a flat "always full".
+            _kUser = _trainedStackK ?? 1;
+            _brain.Iters = _kUser;
+            _trainedAlpha = (_brain.Layers == 1 && _rounds is not null && _trainedIterWarm is > 0)
+                ? Math.Clamp(_rounds.Value / (double)_trainedIterWarm.Value, 0.0, 1.0)
+                : 1.0;
+            _brain.IterAlphaServe = _trainedAlpha;
             _loaded = true;
         }
         catch (Exception ex) { _loadError = "Couldn't load the checkpoint: " + ex.Message; }
@@ -341,9 +371,37 @@
             .Select(j => new AttnItem(SymDisplay(ctx[j]), j, 100 * p[j] / s)).ToList();
     }
 
+    // headroom above the real trained value so exploring past it is still possible — always covers _trainedStackK
+    int KSliderMax => Math.Max(12, (_trainedStackK ?? 1) + 4);
+
+    string KDetail
+    {
+        get
+        {
+            if (_trainedStackK is null)
+                return "depth metadata wasn't shipped with this build — defaulting to the bare checkpoint file's own K=1 (no reconstructed ramp) until it is";
+            if (_kUser != _trainedStackK.Value)
+                return $"exploring {_kUser} pass(es) — the checkpoint's real trained depth is K={_trainedStackK.Value}; treat anything away from that as \"what if\", not \"what it does\"";
+            var ramp = _brain is not null && _brain.Layers == 1 && _trainedIterWarm is > 0 && _rounds is not null
+                ? (_rounds.Value >= _trainedIterWarm.Value
+                    ? $", ramp fully complete (finished {_trainedIterWarm:N0} rounds in)"
+                    : $", reconstructed from {_rounds:N0} of {_trainedIterWarm:N0} ramp rounds trained — still ramping in")
+                : ", fully composed";
+            return $"the model's real trained depth — this is what it actually runs at (α={_trainedAlpha:0.00}{ramp})";
+        }
+    }
+
     void OnKChanged(ChangeEventArgs e)
     {
-        if (int.TryParse(e.Value?.ToString(), out var k)) { _kUser = Math.Clamp(k, 1, 6); if (_brain is not null) _brain.Iters = _kUser; }
+        if (int.TryParse(e.Value?.ToString(), out var k) && _brain is not null)
+        {
+            _kUser = Math.Clamp(k, 1, KSliderMax);
+            _brain.Iters = _kUser;
+            // only the REAL trained K gets the reconstructed ramp alpha; any other explored K is explicit
+            // "what if" territory and serves fully composed rather than half-composed at an alpha that was
+            // never meant for a different depth.
+            _brain.IterAlphaServe = (_trainedStackK is not null && _kUser == _trainedStackK.Value) ? _trainedAlpha : 1.0;
+        }
     }
 
     async Task OnKeyDown(KeyboardEventArgs e) { if (e.Key == "Enter") await Ask(); }

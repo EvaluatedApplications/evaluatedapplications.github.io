@@ -105,27 +105,20 @@ own Inspect tab (`HoloEngine.InspectResponse`/`GateInfo`/`PickToken`, sibling `P
 `studio\PrismGym\HoloEngine.cs`, read as a REFERENCE for data/semantics only — nothing here
 `ProjectReference`s it; everything is published-NuGet API or a from-scratch reimplementation of
 small, verified algorithms, same pattern as the Forecaster's ported tokenization). Renamed from
-"The Oracle" 2026-08-28 to match the product line's naming (PrismFormer/PrismStudio/Prism library);
-route moved `/oracle`→`/prism`, files renamed `Oracle.razor`(`.css`)→`Prism.razor`(`.css`). The
-checkpoint asset filenames (`oracle-brain.bin`/`oracle-vocab.txt`/`oracle-rounds.txt`) were
-deliberately NOT renamed — internal asset names, no need to track the public tool name.
+"The Oracle" 2026-08-28 (route `/oracle`→`/prism`, files `Oracle.razor`(`.css`)→`Prism.razor`(`.css`))
+to match the product line's naming; checkpoint asset filenames (`oracle-brain.bin`/`-vocab.txt`/
+`-rounds.txt`) deliberately kept as-is — internal names, no need to track the public tool name.
+**Checkpoint asset status: SHIPPED** (`oracle-brain.bin` ~3.0MB, `-vocab.txt` 128B, `-rounds.txt` 5B
+all present; loads fail gracefully, `_loadError`, if any ever go missing in a future build).
 
-**Checkpoint asset status: SHIPPED** (verified on disk 2026-08-28, correcting an earlier "not yet
-shipped" note here — the `prismstudio-owner` hand-off already landed). `wwwroot/data/oracle-brain.bin`
-(~3.0MB), `oracle-vocab.txt` (128B), `oracle-rounds.txt` (5B, a plain-text round counter) all present;
-loading still fails gracefully (`_loadError`, no crash, page still builds/publishes) if any ever go
-missing in a future build.
-
-**Autocomplete, not chat (fixed 2026-08-28)**: the checkpoint was trained on raw text continuation
-only, no turn-taking/dialogue structure — but the UI used to present it as a two-party chat
-(`_transcript` of `(who,text)`, "you"/"prism" bubbles, "Ask" button). Verified the generation loop
-itself never leaked cross-run context (`Ask()` seeds `seq` fresh from `Encode(promptText)` every
-call, nothing prior folded in) — so it was a UI/copy bug, not a real turn-history leak. Reworked to
-`_history: List<RunEntry(Prompt, Continuation, TrailedOff)>`, one entry per independent submission,
-rendered as prompt-text immediately followed by continuation-text in one run (Copilot-suggestion
-style, no speaker labels/bubbles). Button now "Continue"/"continuing…"; CSS `.or-chat/-transcript/
--msg/-who/-text` → `.or-runs/-run-list/-run/-prompt/-cont/-note`. Lede/hint/outro copy states the
-per-run independence explicitly now, not just implies it. `Home.razor`'s card dropped "Chat with".
+**Autocomplete, not chat (fixed 2026-08-28)**: trained on raw text continuation only, no turn-taking —
+but the UI presented it as a two-party chat (`_transcript` of `(who,text)`, "you"/"prism" bubbles,
+"Ask" button). Verified the generation loop itself never leaked cross-run context (`Ask()` seeds `seq`
+fresh from `Encode(promptText)` every call) — a UI/copy bug, not a real turn-history leak. Reworked to
+`_history: List<RunEntry(Prompt, Continuation, TrailedOff)>`, prompt-text immediately followed by
+continuation-text in one run (Copilot-suggestion style, no speaker labels/bubbles), button "Continue"/
+"continuing…", CSS `.or-chat/-transcript/-msg/-who/-text` → `.or-runs/-run-list/-run/-prompt/-cont/
+-note`. Lede/hint/outro copy states per-run independence explicitly now. `Home.razor` dropped "Chat with".
 
 **Published API used** (verified against the real 1.5.0 DLL — this tool is WHY AlgFormer was bumped
 1.2.0→1.5.0): `HoloFormer.Deserialize(byte[])`, `.InspectStackIter(ctx,K,alpha)` (per-pass raw
@@ -138,10 +131,22 @@ called by the reference `InspectResponse`, left out rather than guessed at).
 
 **GOTCHA, verified by round-tripping the real checkpoint through `Serialize()`/`Deserialize()`**:
 `HoloFormer.Iters`/`.IterAlphaServe` (K-pass depth) are **NOT persisted** — always read back `1`/`1`.
-The live app's serving depth is a `HoloEngine.cs`-side runtime policy (`OneShotStackK` +
-round-tiering, itself the user's own live-hand-edited knob per `studio\CLAUDE.md`), not part of the
-`.bin` format. This tool defaults `K=1` (the file's own truth) and exposes K as a visitor-adjustable
-slider (1-6, capped for WASM responsiveness), explicitly framed "what if", not "what it does".
+
+**K-pass default fixed 2026-08-28 ("keep K passes full, it's what it's trained on")**: defaulting to
+the file's bare `K=1` showed a deliberately crippled model — and the old slider was hardcapped
+`max=6`, below the real trained depth, so it was structurally unreachable regardless of default. Both
+fixed: `_kUser` now defaults to the real trained `OneShotStackK`, `KSliderMax => Math.Max(12,
+trainedK+4)` derives its ceiling from that same live value (never hardcoded). Both sourced from new
+metadata sidecars (`oracle-stackk.txt`/`oracle-iterwarm.txt`, same hand-off pattern as
+`oracle-rounds.txt` — never hardcoded here, both are the user's own live-edited training knobs);
+verified live in `HoloEngine.cs` 2026-08-28: `OneShotStackK=8`, `OneShotIterWarm=20000` (`studio\
+CLAUDE.md`'s `3000` is stale — the live `const` line is the only reliable source). **Alpha
+reconstructed, not assumed 1.0**: `HoloEngine.AlphaFor`'s formula (`clamp((trainedRounds-addRound)/
+iterWarm,0,1)`) ported to `_trainedAlpha` using shipped `trainedRounds` + `addRound=0` (valid for a
+single-layer checkpoint only; falls back to 1.0 if `Layers>1` or metadata is missing). Only the exact
+real K gets `_trainedAlpha`; any other slider position serves fully composed (`alpha=1.0`), explicit
+"what if". Current snapshot (rounds=24,360 > iterWarm=20,000) reconstructs to exactly 1.0 (ramp
+already done) — coincidental for THIS snapshot, but the mechanism matters for a future mid-ramp one.
 
 **Tokenizer**: a from-scratch greedy-longest-match subword encoder/decoder against the published
 `CharVocab` statics + the bundled `oracle-vocab.txt` merges — reproduces `MintTokenizer` exactly,
@@ -155,15 +160,21 @@ verified to honour `Iters`, same caveat as `TrainStep`), so the Inspector trace 
 was generated. Confidence gate (`GateInfo`/`PickToken`, ported verbatim): greedy at top-1 ≥
 `DecodeConfident=0.60`, else sample at `DecodeTemp=0.80` over a `mean+DecodeFloorK(3.0)σ` resonance
 floor. A `DegenRepeat=4` guard (ported `ProbeDegenRepeat`) stops + labels a collapsed run rather than
-padding silently — **verified necessary**: dry-running this exact algorithm against the real live
-checkpoint (round ~21,720, `Iters=1`) produced a 100%-confidence GREEDY space-repeat on every short
-prompt tried — a real, current repetition-collapse, not a demo bug. Re-check whatever snapshot ships.
+padding silently — **verified necessary**: dry-running this exact algorithm against an earlier live
+checkpoint snapshot (round ~21,720, `Iters=1`) produced a 100%-confidence GREEDY space-repeat on every
+short prompt tried — a real repetition-collapse, not a demo bug. Re-check whatever snapshot ships
+(current shipped snapshot: round 24,360, deserialized+verified `Dim=1536,Layers=1,Shifts=16,
+ParamCount=381,056`, matches live `OneShot*` shape exactly — not stale).
 
-**Model stats / "how it works" copy**: real `ParamCount` vs `HoloShape.EquivCompute` framed as "N real
-parameters standing in for an M-parameter dense transformer" (computed live, never hardcoded), plus a
-capability-roadmap tier (current params/compute/context → next rung = GPT-2 small's published 124M
-params, a named real milestone marker → GPT-2 medium/large beyond) — a compute-scale roadmap, not a
-claim about matching GPT-2's output quality.
+**Model stats / "how it works" copy — labeling fixed 2026-08-28**: a user comparison against
+PrismStudio's own status bar caught real copy drift, not a formula/snapshot bug (verified both sides:
+`EquivCompute(1536,1,8)=226,492,416` matches exactly; checkpoint's real deserialized shape matches
+live `OneShot*` — stale-snapshot and formula-mismatch both ruled out). Framing-only bug:
+`MainForm.cs`'s status bar labels this "compute-equiv", never "parameters"
+(`≈{Big(_equivParams)} compute-equiv (12·d²·L·K)`), but this page's outro called the same number an
+"M-parameter dense transformer" — implying 226M real stored params vs the real `ParamCount`=381K.
+Reworded to match PrismStudio's "compute-equivalence" framing + a one-line disclaimer it isn't a real-
+param claim. The GPT-2-milestone roadmap paragraph already used compute-axis framing and needed no fix.
 
 ## Unlisted: RecycleDAO marketplace prototype — `Pages/RecycleDaoDemo.razor` (`/recycledao-demo`)
 NOT a package-capability demo and NOT in the public gallery — a private, share-by-link-only client
@@ -186,19 +197,17 @@ verifier queue's `ApproveSubmission`, and seeding). All other marketplace money 
 Metal/Aluminum=8, Electronics/E-waste=15`). Seeding (8 personas/20 listings/etc.) also runs through
 `MintForApproval`, so every starting token still has a mint-log/ledger row.
 
-**Chrome honesty**: header/search/category bar/filters are genuinely live; only the top utility
-strip + footer link columns (+ photo-upload box, notification toggles) stay inert, tagged
-`.mk-tag` "mockup", enumerated in the page's own honesty callout.
+**Chrome honesty**: header/search/category bar/filters genuinely live; only the top utility strip +
+footer link columns (+ photo-upload box, notification toggles) stay inert, tagged `.mk-tag` "mockup".
 
 **Hard boundaries kept** (recycledao-owner's charter): testnet-only banners on page head/checkout/
 wallet; verification = manual human review, not solved fraud-proofing; NO referral/invite/share-to-
-earn; no fiat/top-up/cash-out; no wallet-connect (disabled toggle); NO governance/voting screen
-(spec §5). Simulated counterparty actions only fire from a labelled demo control, never a timer.
+earn; no fiat/top-up/cash-out; no wallet-connect (disabled toggle); NO governance/voting screen. Sim
+counterparty actions only fire from a labelled demo control, never a timer.
 
 **Verified gotcha**: Blazor scoped CSS DOES apply the `b-*` scope attribute inside `RenderFragment<T>`
-templates declared in the same `.razor` file (confirmed via `/p:EmitCompilerGeneratedFiles=true`) —
-so a shared `ListingCard`/`ListingRow` templated-delegate helper styles correctly and beats
-duplicating card markup across screens.
+templates in the same `.razor` file — a shared `ListingCard`/`ListingRow` templated-delegate helper
+styles correctly and beats duplicating card markup across screens.
 ## Dependencies (exact NuGet versions, `Showroom.csproj`)
 - `Microsoft.AspNetCore.Components.WebAssembly` 10.0.8 (+ `.DevServer` 10.0.8, dev-only)
 - `EvaluatedApplications.HoloDb` 1.4.0 — The Analyst
