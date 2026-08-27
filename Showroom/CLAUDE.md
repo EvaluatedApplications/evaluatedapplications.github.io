@@ -132,21 +132,23 @@ called by the reference `InspectResponse`, left out rather than guessed at).
 **GOTCHA, verified by round-tripping the real checkpoint through `Serialize()`/`Deserialize()`**:
 `HoloFormer.Iters`/`.IterAlphaServe` (K-pass depth) are **NOT persisted** — always read back `1`/`1`.
 
-**K-pass default fixed 2026-08-28 ("keep K passes full, it's what it's trained on")**: defaulting to
-the file's bare `K=1` showed a deliberately crippled model — and the old slider was hardcapped
-`max=6`, below the real trained depth, so it was structurally unreachable regardless of default. Both
-fixed: `_kUser` now defaults to the real trained `OneShotStackK`, `KSliderMax => Math.Max(12,
-trainedK+4)` derives its ceiling from that same live value (never hardcoded). Both sourced from new
-metadata sidecars (`oracle-stackk.txt`/`oracle-iterwarm.txt`, same hand-off pattern as
-`oracle-rounds.txt` — never hardcoded here, both are the user's own live-edited training knobs);
-verified live in `HoloEngine.cs` 2026-08-28: `OneShotStackK=8`, `OneShotIterWarm=20000` (`studio\
-CLAUDE.md`'s `3000` is stale — the live `const` line is the only reliable source). **Alpha
-reconstructed, not assumed 1.0**: `HoloEngine.AlphaFor`'s formula (`clamp((trainedRounds-addRound)/
-iterWarm,0,1)`) ported to `_trainedAlpha` using shipped `trainedRounds` + `addRound=0` (valid for a
-single-layer checkpoint only; falls back to 1.0 if `Layers>1` or metadata is missing). Only the exact
-real K gets `_trainedAlpha`; any other slider position serves fully composed (`alpha=1.0`), explicit
-"what if". Current snapshot (rounds=24,360 > iterWarm=20,000) reconstructs to exactly 1.0 (ramp
-already done) — coincidental for THIS snapshot, but the mechanism matters for a future mid-ramp one.
+**K is FIXED, not a control (2026-08-28, two passes)**: pass 1 defaulted the slider to the real
+trained depth; the user then caught that a slider shouldn't exist AT ALL ("k is not a parameter, its
+fixed to the model count") — K is a structural fact about the trained checkpoint, not something a
+visitor explores. Slider UI removed entirely (`KSliderMax`/`OnKChanged` deleted); `_k` (renamed from
+`_kUser`) is set ONCE at load from the real trained `OneShotStackK` and never mutated again. Shown
+as a plain fact badge (`K=@_k pass(es)`, next to `d=`/layer(s)/shifts) and in the outro's "Being
+honest about it" paragraph, not a `<input type=range>`. Still sourced live from `oracle-stackk.txt`/
+`oracle-iterwarm.txt` (never hardcoded — same hand-off pattern as `oracle-rounds.txt`, both are the
+user's own live-edited training knobs); verified live in `HoloEngine.cs` 2026-08-28: `OneShotStackK
+=8`, `OneShotIterWarm=20000` (`studio\CLAUDE.md`'s `3000` is stale — the live `const` line is the
+only reliable source). **Alpha reconstructed, not assumed 1.0**: `HoloEngine.AlphaFor`'s formula
+(`clamp((trainedRounds-addRound)/iterWarm,0,1)`) ported to `_trainedAlpha` using shipped
+`trainedRounds` + `addRound=0` (valid for a single-layer checkpoint only; falls back to 1.0 if
+`Layers>1` or metadata is missing) — ALWAYS served now, no "what if" branch (there's nothing to
+branch on with K fixed). Current snapshot (rounds=24,360 > iterWarm=20,000) reconstructs to exactly
+1.0 (ramp already done) — coincidental for THIS snapshot, but the mechanism matters for a future
+mid-ramp one.
 
 **Tokenizer**: a from-scratch greedy-longest-match subword encoder/decoder against the published
 `CharVocab` statics + the bundled `oracle-vocab.txt` merges — reproduces `MintTokenizer` exactly,
