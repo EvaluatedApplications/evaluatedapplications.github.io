@@ -1,14 +1,14 @@
-@page "/oracle"
+@page "/prism"
 @inject HttpClient Http
 @using System.Text
 @using PrismFormer
 
-<PageTitle>The Oracle — talk to a live holographic-transformer checkpoint</PageTitle>
+<PageTitle>Prism — talk to a live holographic-transformer checkpoint</PageTitle>
 
 <div class="room">
     <header class="room-head">
-        <nav class="crumb"><a href="/">Evaluated Applications</a> <span>/</span> The Oracle</nav>
-        <h1>The Oracle</h1>
+        <nav class="crumb"><a href="/">Evaluated Applications</a> <span>/</span> Prism</nav>
+        <h1>Prism</h1>
         <p class="lede">Type something, get a reply — from a real, working copy of our own trained <strong>HoloFormer</strong>
             checkpoint, running entirely <strong>in your browser</strong>. Not a finished chatbot: a small, honest,
             still-learning research model, with its internals laid bare underneath every reply.</p>
@@ -56,9 +56,9 @@
                 }
                 @foreach (var (who, text) in _transcript)
                 {
-                    <div class="or-msg @who"><span class="or-who">@(who == "you" ? "you" : "oracle")</span><span class="or-text">@text</span></div>
+                    <div class="or-msg @who"><span class="or-who">@(who == "you" ? "you" : "prism")</span><span class="or-text">@text</span></div>
                 }
-                @if (_generating) { <div class="or-msg oracle pending"><span class="or-who">oracle</span><span class="or-text">…</span></div> }
+                @if (_generating) { <div class="or-msg prism pending"><span class="or-who">prism</span><span class="or-text">…</span></div> }
             </div>
             <div class="or-input-row">
                 <input class="or-input" @bind="_prompt" @bind:event="oninput" @onkeydown="OnKeyDown" disabled="@_generating"
@@ -397,10 +397,10 @@
             var shown = Decode(outIds).TrimEnd();
             var responseText = shown.Length > 0 ? shown : "(blank — this checkpoint is still very early in training)";
             if (trailedOff) responseText += "  ⋯ settled into a repeat loop (a known behaviour this early in training, not a bug)";
-            _transcript.Add(("oracle", responseText));
+            _transcript.Add(("prism", responseText));
             _lastTrace = trace;
         }
-        catch (Exception ex) { _error = "The oracle stumbled: " + ex.Message; }
+        catch (Exception ex) { _error = "Prism stumbled: " + ex.Message; }
         finally { _generating = false; StateHasChanged(); }
     }
 }

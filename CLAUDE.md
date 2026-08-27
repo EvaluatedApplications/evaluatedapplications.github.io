@@ -9,7 +9,7 @@ content to the owner instead. You never commit/push (coordinator commits, user p
 ## Site map (what exists, 2026-08-26)
 
 Root static pages (`site/*.html`), all built on the shared design system:
-- `index.html` — landing page: company pitch, tool gallery (Analyst/Creature/Forecaster), then the full
+- `index.html` — landing page: company pitch, tool gallery (Analyst/Creature/Forecaster/Prism), then the full
   package gallery in 4 categories (Foundation / Data / Machine learning / Spatial & games), then
   a "how it fits together" flow diagram.
 - `holodb/index.html` — HoloDb HUB page (lean bespoke nav: Home / Benchmarks / Docs / Packages /
@@ -175,7 +175,7 @@ check the nav is compact on a narrow (≤640px) viewport — that was the failin
 got re-litigated. Do this walk any time the nav, page set, or card grid changes; record it in the
 task's return message. An href-audit alone is not this check (that was the 2026-08-26 mistake).
 
-**SEO/nav facts still true**: `sitemap.xml` lists all 16 pages + the 3 live tool routes + `/tools/`.
+**SEO/nav facts still true**: `sitemap.xml` lists all 16 pages + the 4 live tool routes + `/tools/`.
 Every page's `footer.site` carries a second internal-link path beyond the top nav. JSON-LD on every
 page (`Organization`+`WebSite` on the index, `SoftwareApplication` on all 11 package pages,
 `TechArticle` on the 3 explainer pages). Forward cross-links exist base→extension
@@ -189,6 +189,23 @@ both (card mirrors Analyst's shape with a `.ver` package-tag pill, `--c-ml` acce
 Creature/AlgFormer's category colour) and re-ran the reachability walk (still 1 click from Home).
 The earlier flag about `Home.razor` tagging Creature `soon` vs the site's `live` was checked by
 showroom-owner this pass and is stale/not reproduced (both tools show `live` there).
+
+**2026-08-28 pass**: a fourth tool, "The Oracle" (checkpoint REPL + live per-pass Inspector), was
+built in `Showroom/` but never linked from this repo — same gap as the Forecaster's. Checked
+`Showroom/Pages/` mid-task and caught a concurrent rename landing live (Oracle.razor →
+`Prism.razor`, route `/oracle`→`/prism`, `MainLayout.razor` nav label/href and `Home.razor`'s card
+both updated in the other repo) — re-verified against the actual files before finishing rather than
+shipping the pre-rename name/route. Added: (1) a `Prism` card to `index.html`'s `#tools` gallery
+(mirrors the other three, `--c-ml` accent) (2) `/tools/prism` to `sitemap.xml` (3) on
+`algformer.html` — the natural home, since Prism/Creature/Forecaster are all direct AlgFormer/
+HoloFormer demos and NONE were linked from that page before this pass — a `.btn-ghost` hero CTA
+("Talk to a trained checkpoint, live →") plus a new "Try it live" section (`.grid` of all three
+`.card.tool`s, same component as `index.html`'s gallery) inserted right after the hero, before "The
+problem it solves". Reachability walk: Home → `#tools` → Prism = 1 click; `algformer.html` → hero
+CTA or "Try it live" card = 1 click. No nav items added (lean nav unchanged on every page), so
+mobile compactness is unaffected structurally. `holoformer.html` (the deep-dive page) was left
+without its own tool link — it's one crumb-click from `algformer.html`, which now carries the link,
+so it stays within budget without adding a fourth divergent cross-link spot.
 
 ## Deploy
 

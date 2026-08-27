@@ -10,7 +10,7 @@ that only ever *consumes* MonoRepo packages via published NuGet, never source.
 Each tool = a real, working demo of a published `EvaluatedApplications.*` package's actual
 capability, driven live by the visitor. No smoke and mirrors, no mocked output. Four tools listed
 in the public gallery today: **The Analyst** (HoloDb), **The Creature** (AlgFormer/HoloFormer +
-Tracer), **The Forecaster** (AlgFormer/HoloFormer), **The Oracle** (AlgFormer/HoloFormer, a real
+Tracer), **The Forecaster** (AlgFormer/HoloFormer), **Prism** (AlgFormer/HoloFormer, a real
 trained checkpoint + full per-pass inspector). New tools follow the same shape. Plus one
 **unlisted** page (see below) that's a client preview, not a package-capability demo.
 
@@ -19,7 +19,7 @@ trained checkpoint + full per-pass inspector). New tools follow the same shape. 
   HostEnvironment.BaseAddress` (so relative fetches like `data/foo.json` resolve under `/tools/`).
 - `App.razor` / `_Imports.razor` / `Layout/MainLayout.razor`: router + shared nav/footer chrome.
   `MainLayout.razor`'s `.nav-links` lists every tool by relative href (`analyst`, `creature`,
-  `forecaster`, `oracle`) — add a new tool here too, not just Home.razor's gallery.
+  `forecaster`, `prism`) — add a new tool here too, not just Home.razor's gallery.
 - `Home.razor` (`@page "/"`): the tool gallery. Each tool is a whole-card `<a class="card tool"
   href="/tools/<slug>">` (absolute path) with a `--cat` accent colour, a `live`/`soon` tag, a
   one-line desc, "Open X →". Mirror this shape for any new tool.
@@ -98,19 +98,23 @@ Yahoo's endpoint doesn't send CORS headers browser-side). Training cursor wraps 
 **Queued**: live CORS-open feed once one's confirmed browser-fetchable; a symbol picker; tuning
 `Lr`/`IterWarm` against an actual observed run (build-verified only so far).
 
-## The Oracle — `Pages/Oracle.razor` (route `/oracle`)
+## Prism — `Pages/Prism.razor` (route `/prism`)
 A REPL over a real, point-in-time COPY of the user's own live `prism-holo.bin` HoloFormer checkpoint
 from PrismStudio, with a full per-character Inspector trace underneath — same spirit as PrismStudio's
 own Inspect tab (`HoloEngine.InspectResponse`/`GateInfo`/`PickToken`, sibling `PrismFormer` repo,
 `studio\PrismGym\HoloEngine.cs`, read as a REFERENCE for data/semantics only — nothing here
 `ProjectReference`s it; everything is published-NuGet API or a from-scratch reimplementation of
-small, verified algorithms, same pattern as the Forecaster's ported tokenization).
+small, verified algorithms, same pattern as the Forecaster's ported tokenization). Renamed from
+"The Oracle" 2026-08-28 to match the product line's naming (PrismFormer/PrismStudio/Prism library);
+route moved `/oracle`→`/prism`, files renamed `Oracle.razor`(`.css`)→`Prism.razor`(`.css`). The
+checkpoint asset filenames (`oracle-brain.bin`/`oracle-vocab.txt`/`oracle-rounds.txt`) were
+deliberately NOT renamed — internal asset names, no need to track the public tool name.
 
-**Checkpoint asset status: NOT YET SHIPPED.** Fetches `wwwroot/data/oracle-brain.bin` +
-`oracle-vocab.txt` (+ optional `oracle-rounds.txt`, a plain-text round counter) — none exist in this
-repo yet; loading fails gracefully (`_loadError`, no crash, page still builds/publishes) until placed.
-Getting them here is a **`prismstudio-owner` hand-off**, not a direct reach into `PrismFormer\studio`
-— see Boundary for exactly what to ask for.
+**Checkpoint asset status: SHIPPED** (verified on disk 2026-08-28, correcting an earlier "not yet
+shipped" note here — the `prismstudio-owner` hand-off already landed). `wwwroot/data/oracle-brain.bin`
+(~3.0MB), `oracle-vocab.txt` (128B), `oracle-rounds.txt` (5B, a plain-text round counter) all present;
+loading still fails gracefully (`_loadError`, no crash, page still builds/publishes) if any ever go
+missing in a future build.
 
 **Published API used** (verified against the real 1.5.0 DLL — this tool is WHY AlgFormer was bumped
 1.2.0→1.5.0): `HoloFormer.Deserialize(byte[])`, `.InspectStackIter(ctx,K,alpha)` (per-pass raw
@@ -187,10 +191,10 @@ duplicating card markup across screens.
 ## Dependencies (exact NuGet versions, `Showroom.csproj`)
 - `Microsoft.AspNetCore.Components.WebAssembly` 10.0.8 (+ `.DevServer` 10.0.8, dev-only)
 - `EvaluatedApplications.HoloDb` 1.4.0 — The Analyst
-- `EvaluatedApplications.AlgFormer` **1.5.0** (bumped from 1.2.0 for The Oracle — needs
+- `EvaluatedApplications.AlgFormer` **1.5.0** (bumped from 1.2.0 for Prism — needs
   `InspectStackIter`/`InspectAttention`/`DecodeFace`/`HoloShape.EquivCompute`/`InvisibleMultiplier`/
   `CharVocab`, none published before 1.5.0; verified via reflection against the real 1.2.0 vs 1.5.0
-  DLLs, not assumed) — The Creature, The Forecaster, The Oracle (`PrismFormer` namespace:
+  DLLs, not assumed) — The Creature, The Forecaster, Prism (`PrismFormer` namespace:
   `HoloFormer`, `HoloShape`, `CharVocab`). The `HoloFormer`/`AlgFormer` public constructor and
   `Step`/`IterAccumulate` signatures are UNCHANGED 1.2.0→1.5.0 (checked before bumping) — Creature/
   Forecaster needed no code changes for this bump.
@@ -205,7 +209,7 @@ duplicating card markup across screens.
   coordinator (flag the exact gap), not a reach into MonoRepo source.
 
 ## Boundary (hard, from the agent charter)
-- **Checkpoint hand-off (The Oracle) is `prismstudio-owner`'s call, not this repo's.** What to ask
+- **Checkpoint hand-off (Prism) is `prismstudio-owner`'s call, not this repo's.** What to ask
   for: a copy of `%LOCALAPPDATA%\Prism\prism-holo.bin` + `-vocab.txt` (+ ideally `-iter.txt`, the
   round counter, for the "rounds trained" stat) at a snapshot THEY pick — checked 2026-08-27 that the
   live checkpoint at round ~21,720 currently produces a repetition-collapse (100%-confidence GREEDY
