@@ -25,14 +25,37 @@ trained checkpoint + full per-pass inspector). New tools follow the same shape. 
   one-line desc, "Open X →". Mirror this shape for any new tool.
 - `wwwroot/index.html`: `<base href="/tools/" />`, links the SHARED `/assets/site.css` (absolute
   path — the AboutUs static site's root, not `/tools/`, so Showroom borrows the one design system)
-  plus Blazor's own bundled `Showroom.styles.css`. Also carries the GitHub Pages SPA deep-link
-  restore script and `window.analystDownload` (Blob download helper for The Analyst's CSV export).
+  plus Showroom's OWN `wwwroot/css/boot.css` (see Boot screen below) and Blazor's bundled
+  `Showroom.styles.css`. Also carries the GitHub Pages SPA deep-link restore script and
+  `window.analystDownload` (Blob download helper for The Analyst's CSV export).
 - `Pages/NotFound.razor` (`@page "/not-found"`): router fallback.
 - **CSS pattern**: each tool has its own `Pages/<Tool>.razor.css`, Blazor-scoped to that component
   only. All four currently DUPLICATE the same base block (`.room`/`.crumb`/`.room-head
   h1`/`.lede`/`.badges`/`.err`/`.hint`/`.cr-controls`/`.cr-stats`/`.cr-curve`/`.cr-log`/`.outro`) —
   established house style (CSS isolation can't share a partial file across components without a
   real shared stylesheet import, nobody's introduced one). Reuse it verbatim for a new tool.
+
+## Boot screen — `wwwroot/index.html` + `wwwroot/css/boot.css` (2026-08-28)
+Every tool shares ONE app-shell boot (single WASM app, client-routed) — reworked from a generic
+spinner into a retro-terminal boot log that's authentically true, not decorative: real file names as
+the WASM host actually fetches them (`loadBootResource` hook — PURE OBSERVATION, always returns
+`undefined` so the framework's own fetch proceeds unmodified, zero added latency) plus the framework's
+own real cumulative-bytes progress (`--blazor-load-percentage`/`-text`, set on `document.
+documentElement` by the SDK's own boot script — verified straight from the published `dotnet.*.js`,
+not assumed). `autostart="false"` + a `Blazor.start({loadBootResource})` call in the NEXT script tag
+(synchronous order, no `load`-event wait) installs the hook before the real download starts.
+`boot.css` is Showroom's OWN file (`site.css` boundary stays hard) but reuses `site.css`'s already-
+global tokens (`--bg`/`--ok`/`--mono`/`--spectrum-*`) for on-brand styling for free. **Prism's
+checkpoint fetch gets its own step** (`Prism.razor`'s `!_loaded` branch): `LoadStep`/`Begin`/`Finish`
+narrate each real asset (`oracle-vocab.txt`/`-brain.bin`/`-rounds.txt`/`-stackk.txt`/`-iterwarm.txt`)
+with real byte counts off the actual response, reusing `boot.css`'s classes directly (global CSS
+applies fine to Blazor-scoped elements, no duplication) — pure narration, adds no fetch/latency.
+
+**Also fixed while in these files**: `MainLayout.razor`'s brand mark + `index.html`'s favicon still
+carried the RETIRED hexagon/3-stop gradient after the site-wide 2026-08-28 prism-triangle restyle
+(website-owner flagged this as "not fixable from here — coordinator hand-off"; fixed here since
+these are literally Showroom's own files) — now the same triangle path (`M16 5L27 26H5Z`) + 7-stop
+ROYGBIV gradient as all 17 static pages.
 
 ## The Analyst — `Pages/Analyst.razor` (route `/analyst`)
 In-browser data profiler + live SQL REPL over **HoloDb** (`Database.Open(null)`, in-memory). Sniffs
@@ -111,14 +134,12 @@ to match the product line's naming; checkpoint asset filenames (`oracle-brain.bi
 **Checkpoint asset status: SHIPPED** (`oracle-brain.bin` ~3.0MB, `-vocab.txt` 128B, `-rounds.txt` 5B
 all present; loads fail gracefully, `_loadError`, if any ever go missing in a future build).
 
-**Autocomplete, not chat (fixed 2026-08-28)**: trained on raw text continuation only, no turn-taking —
-but the UI presented it as a two-party chat (`_transcript` of `(who,text)`, "you"/"prism" bubbles,
-"Ask" button). Verified the generation loop itself never leaked cross-run context (`Ask()` seeds `seq`
-fresh from `Encode(promptText)` every call) — a UI/copy bug, not a real turn-history leak. Reworked to
-`_history: List<RunEntry(Prompt, Continuation, TrailedOff)>`, prompt-text immediately followed by
-continuation-text in one run (Copilot-suggestion style, no speaker labels/bubbles), button "Continue"/
-"continuing…", CSS `.or-chat/-transcript/-msg/-who/-text` → `.or-runs/-run-list/-run/-prompt/-cont/
--note`. Lede/hint/outro copy states per-run independence explicitly now. `Home.razor` dropped "Chat with".
+**Autocomplete, not chat**: trained on raw text continuation only, no turn-taking — a two-party-chat
+UI (`_transcript` "you"/"prism" bubbles, "Ask" button) misrepresented that even though the generation
+loop itself never leaked cross-run context (`Ask()` seeds `seq` fresh from `Encode(promptText)` every
+call — verified, so it was a UI/copy bug only). Now `_history: List<RunEntry(Prompt, Continuation,
+TrailedOff)>`, prompt-text immediately followed by continuation-text in one run (Copilot-suggestion
+style, no bubbles), button "Continue". `.or-chat/-msg/-who/-text` → `.or-runs/-run/-prompt/-cont`.
 
 **Published API used** (verified against the real 1.5.0 DLL — this tool is WHY AlgFormer was bumped
 1.2.0→1.5.0): `HoloFormer.Deserialize(byte[])`, `.InspectStackIter(ctx,K,alpha)` (per-pass raw
@@ -132,23 +153,18 @@ called by the reference `InspectResponse`, left out rather than guessed at).
 **GOTCHA, verified by round-tripping the real checkpoint through `Serialize()`/`Deserialize()`**:
 `HoloFormer.Iters`/`.IterAlphaServe` (K-pass depth) are **NOT persisted** — always read back `1`/`1`.
 
-**K is FIXED, not a control (2026-08-28, two passes)**: pass 1 defaulted the slider to the real
-trained depth; the user then caught that a slider shouldn't exist AT ALL ("k is not a parameter, its
-fixed to the model count") — K is a structural fact about the trained checkpoint, not something a
-visitor explores. Slider UI removed entirely (`KSliderMax`/`OnKChanged` deleted); `_k` (renamed from
-`_kUser`) is set ONCE at load from the real trained `OneShotStackK` and never mutated again. Shown
-as a plain fact badge (`K=@_k pass(es)`, next to `d=`/layer(s)/shifts) and in the outro's "Being
-honest about it" paragraph, not a `<input type=range>`. Still sourced live from `oracle-stackk.txt`/
-`oracle-iterwarm.txt` (never hardcoded — same hand-off pattern as `oracle-rounds.txt`, both are the
-user's own live-edited training knobs); verified live in `HoloEngine.cs` 2026-08-28: `OneShotStackK
-=8`, `OneShotIterWarm=20000` (`studio\CLAUDE.md`'s `3000` is stale — the live `const` line is the
-only reliable source). **Alpha reconstructed, not assumed 1.0**: `HoloEngine.AlphaFor`'s formula
-(`clamp((trainedRounds-addRound)/iterWarm,0,1)`) ported to `_trainedAlpha` using shipped
-`trainedRounds` + `addRound=0` (valid for a single-layer checkpoint only; falls back to 1.0 if
-`Layers>1` or metadata is missing) — ALWAYS served now, no "what if" branch (there's nothing to
-branch on with K fixed). Current snapshot (rounds=24,360 > iterWarm=20,000) reconstructs to exactly
-1.0 (ramp already done) — coincidental for THIS snapshot, but the mechanism matters for a future
-mid-ramp one.
+**K is FIXED, not a control**: K is a structural fact about the trained checkpoint ("k is not a
+parameter, its fixed to the model count" — user), not a visitor-exploreable knob; no slider exists.
+`_k` is set ONCE at load from the real trained `OneShotStackK`, never mutated, shown as a plain fact
+badge (`K=@_k pass(es)`) and in the outro copy. Sourced live from `oracle-stackk.txt`/
+`oracle-iterwarm.txt` (never hardcoded — same hand-off pattern as `oracle-rounds.txt`; verified live
+in `HoloEngine.cs` 2026-08-28: `OneShotStackK=8`, `OneShotIterWarm=20000` — `studio\CLAUDE.md`'s
+`3000` is stale, the live `const` line is the only reliable source). **Alpha reconstructed, not
+assumed 1.0**: `HoloEngine.AlphaFor`'s formula (`clamp((trainedRounds-addRound)/iterWarm,0,1)`)
+ported to `_trainedAlpha` from shipped `trainedRounds` + `addRound=0` (single-layer checkpoint only;
+falls back to 1.0 if `Layers>1` or metadata missing), always served (K fixed → nothing to branch on).
+Current snapshot (rounds=24,360 > iterWarm=20,000) reconstructs to 1.0 (ramp done) — coincidental for
+THIS snapshot, mechanism matters for a future mid-ramp one.
 
 **Tokenizer**: a from-scratch greedy-longest-match subword encoder/decoder against the published
 `CharVocab` statics + the bundled `oracle-vocab.txt` merges — reproduces `MintTokenizer` exactly,
@@ -168,15 +184,12 @@ short prompt tried — a real repetition-collapse, not a demo bug. Re-check what
 (current shipped snapshot: round 24,360, deserialized+verified `Dim=1536,Layers=1,Shifts=16,
 ParamCount=381,056`, matches live `OneShot*` shape exactly — not stale).
 
-**Model stats / "how it works" copy — labeling fixed 2026-08-28**: a user comparison against
-PrismStudio's own status bar caught real copy drift, not a formula/snapshot bug (verified both sides:
-`EquivCompute(1536,1,8)=226,492,416` matches exactly; checkpoint's real deserialized shape matches
-live `OneShot*` — stale-snapshot and formula-mismatch both ruled out). Framing-only bug:
-`MainForm.cs`'s status bar labels this "compute-equiv", never "parameters"
-(`≈{Big(_equivParams)} compute-equiv (12·d²·L·K)`), but this page's outro called the same number an
-"M-parameter dense transformer" — implying 226M real stored params vs the real `ParamCount`=381K.
-Reworded to match PrismStudio's "compute-equivalence" framing + a one-line disclaimer it isn't a real-
-param claim. The GPT-2-milestone roadmap paragraph already used compute-axis framing and needed no fix.
+**Model stats copy — labeling fixed**: a user comparison against PrismStudio's own status bar caught
+real copy drift, not a formula/snapshot bug (verified: `EquivCompute(1536,1,8)=226,492,416` matches
+exactly; checkpoint's real deserialized shape matches live `OneShot*`). Framing-only bug: `MainForm.
+cs` labels this "compute-equiv", never "parameters", but this page's outro called it an "M-parameter
+dense transformer" — implying 226M real stored params vs the real `ParamCount`=381K. Reworded to
+match PrismStudio's "compute-equivalence" framing + a disclaimer it isn't a real-param claim.
 
 ## Unlisted: RecycleDAO marketplace prototype — `Pages/RecycleDaoDemo.razor` (`/recycledao-demo`)
 NOT a package-capability demo and NOT in the public gallery — a private, share-by-link-only client
@@ -275,9 +288,10 @@ styles correctly and beats duplicating card markup across screens.
 ```
 dotnet build Showroom.csproj -c Release
 ```
-Green as of 2026-08-27 (0 warnings, 0 errors) with all four tools wired in. No test project exists
-for Showroom — verification is build-green + code review; live behaviour is the user's to check
-(dev server: `dotnet run` from this directory, or the deployed `/tools/` URL once pushed).
+Green as of 2026-08-28 (0 warnings, 0 errors) with all four tools + the boot screen wired in
+(`dotnet publish` also spot-checked once this pass, since deploy hard-couples to it — see AboutUs\
+CLAUDE.md). No test project exists — verification is build-green + code review; live behaviour is
+the user's to check (dev server: `dotnet run` here, or the deployed `/tools/` URL once pushed).
 
 ## Gotchas
 - Windows/PS 5.1: edit via Read/Edit/Write or UTF-8-safe .NET I/O, never `Get-Content`/

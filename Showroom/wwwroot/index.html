@@ -7,8 +7,9 @@
     <title>Tools — Evaluated Applications</title>
     <meta name="description" content="Interactive tools that run Evaluated Applications' .NET libraries entirely in your browser." />
     <base href="/tools/" />
-    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%238b7dff'/%3E%3Cstop offset='.5' stop-color='%2335d0c0'/%3E%3Cstop offset='1' stop-color='%23e6b450'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='32' height='32' rx='7' fill='%230a0c11'/%3E%3Cpath d='M16 5l9.5 5.5v11L16 27l-9.5-5.5v-11z' fill='none' stroke='url(%23g)' stroke-width='2'/%3E%3C/svg%3E" />
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%23f0796a'/%3E%3Cstop offset='.166' stop-color='%23f0a15a'/%3E%3Cstop offset='.333' stop-color='%23e6c450'/%3E%3Cstop offset='.5' stop-color='%237bd86a'/%3E%3Cstop offset='.666' stop-color='%234aa3ff'/%3E%3Cstop offset='.833' stop-color='%237d7dff'/%3E%3Cstop offset='1' stop-color='%23c07dff'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='32' height='32' rx='7' fill='%23050608'/%3E%3Cpath d='M16 5L27 26H5Z' fill='none' stroke='url(%23g)' stroke-width='2' stroke-linejoin='round'/%3E%3C/svg%3E" />
     <link rel="stylesheet" href="/assets/site.css" />
+    <link rel="stylesheet" href="css/boot.css" />
     <link href="Showroom.styles.css" rel="stylesheet" />
     <script type="importmap"></script>
     <!-- GitHub Pages SPA: restore the deep-link path that the root 404.html encoded, before Blazor boots. -->
@@ -24,11 +25,21 @@
 
 <body>
     <div id="app">
-        <svg class="loading-progress">
-            <circle r="40%" cx="50%" cy="50%" />
-            <circle r="40%" cx="50%" cy="50%" />
-        </svg>
-        <div class="loading-progress-text"></div>
+        <!-- Real boot sequence, not decoration: every line below is an actual resource this page is
+             actually fetching (WASM runtime, compiled DLLs) via Blazor's own loadBootResource hook, and
+             the progress bar/percentage are the framework's own real cumulative-bytes figure
+             (--blazor-load-percentage[-text], set by the WASM host as it downloads — see boot.css and
+             the script at the end of this file). Nothing here is fake flavor text: this genuinely is a
+             WebAssembly runtime + compiled binaries landing in your browser tab, not a normal page load. -->
+        <div class="boot">
+            <div class="boot-crt">
+                <div class="boot-head"><span class="boot-dot" aria-hidden="true"></span>EVALUATED APPLICATIONS <span class="boot-sep">/</span> CLIENT-SIDE RUNTIME</div>
+                <div class="boot-sub">no server round-trip from here on — everything below runs in this browser tab.</div>
+                <pre class="boot-log" id="boot-log" aria-live="polite"></pre>
+                <div class="boot-bar"><div class="boot-bar-fill"></div></div>
+                <div class="boot-pct"></div>
+            </div>
+        </div>
     </div>
 
     <div id="blazor-error-ui">
@@ -46,7 +57,46 @@
         document.body.removeChild(a); setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
       };
     </script>
-    <script src="_framework/blazor.webassembly#[.{fingerprint}].js"></script>
+    <script>
+      // Real boot-log narration: observes the ACTUAL resources Blazor's WASM host fetches (runtime,
+      // loader, compiled assemblies) via the documented loadBootResource hook, and just logs each one
+      // — it never intercepts or replaces the fetch (always returns undefined), so this adds no latency,
+      // it's a pure observer running alongside the real download that was going to happen anyway.
+      window.__bootLine = (function () {
+        var log = document.getElementById('boot-log');
+        var seen = 0, cap = 80;
+        return function line(cls, text) {
+          if (!log) return;
+          var el = document.createElement('span');
+          el.className = cls ? 'l ' + cls : 'l';
+          var p = document.createElement('span'); p.className = 'p'; p.textContent = '>';
+          el.appendChild(p);
+          el.appendChild(document.createTextNode(' ' + text));
+          log.appendChild(el);
+          if (++seen > cap) log.removeChild(log.firstChild);
+          log.scrollTop = log.scrollHeight;
+        };
+      })();
+      __bootLine('', 'target ' + (window.location.pathname || '/'));
+      __bootLine('', 'requesting WebAssembly runtime + compiled binaries…');
+    </script>
+    <!-- autostart=false so the loadBootResource hook below can be wired in BEFORE Blazor.start() kicks
+         off the real download — the very next script tag runs immediately after this one loads (classic
+         synchronous <script src>, no event-listener wait), so there's no added latency either way. -->
+    <script src="_framework/blazor.webassembly#[.{fingerprint}].js" autostart="false"></script>
+    <script>
+      Blazor.start({
+        loadBootResource: function (type, name) {
+          var label =
+            type === 'dotnetwasm' ? ['core', 'runtime ' + name] :
+            type === 'dotnetjs' ? ['core', 'loader ' + name] :
+            type === 'globalization' ? ['', 'locale data ' + name] :
+            type === 'assembly' ? ['', 'assembly ' + name] : null;
+          if (label) __bootLine(label[0], label[1]);
+          return undefined; // pure observation — Blazor still fetches this exact resource itself
+        }
+      }).then(function () { __bootLine('core', 'runtime ready — launching tool'); });
+    </script>
 </body>
 
 </html>

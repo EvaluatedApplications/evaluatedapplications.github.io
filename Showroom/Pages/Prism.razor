@@ -26,7 +26,16 @@
     }
     else if (!_loaded)
     {
-        <p class="hint">Loading the trained checkpoint (a few MB — cached by your browser after the first visit)…</p>
+        <div class="boot-crt ck-boot">
+            <div class="boot-head"><span class="boot-dot" aria-hidden="true"></span>fetching the trained checkpoint</div>
+            <div class="boot-sub">real files, straight from <code>wwwroot/data</code> — cached by your browser after the first visit.</div>
+            <div class="boot-log">
+                @foreach (var s in _loadSteps)
+                {
+                    <span class="l @s.Cls"><span class="p">&gt;</span> @s.Label <span class="boot-status">@s.Status</span></span>
+                }
+            </div>
+        </div>
     }
     else
     {
@@ -187,6 +196,16 @@
     bool _loaded; string? _loadError; string? _error;
     long? _rounds;   // optional: only shown if data/oracle-rounds.txt was published alongside the checkpoint
 
+    // ---- real per-file boot log for the checkpoint fetch (2026-08-28) — reuses the SAME .boot-crt/.boot-log/.l/.p
+    // classes as the app-shell's own boot screen (wwwroot/css/boot.css, linked globally in index.html, so a
+    // Razor component can use those classes directly without duplicating any CSS). Every line/status below is a
+    // REAL fetch of a REAL file that already had to happen — this narrates it, it doesn't add a single extra
+    // request or delay anything (Finish() only ever runs after the awaited fetch it's reporting on completes).
+    sealed class LoadStep { public string Label = ""; public string Status = "fetching…"; public string Cls = ""; }
+    readonly List<LoadStep> _loadSteps = new();
+    LoadStep Begin(string label) { var s = new LoadStep { Label = label }; _loadSteps.Add(s); StateHasChanged(); return s; }
+    void Finish(LoadStep s, string status, string cls = "core") { s.Status = status; s.Cls = cls; StateHasChanged(); }
+
     // ---- REAL trained depth — K is NOT a visitor-adjustable knob (fixed 2026-08-28, twice: first to default to
     // the real value, then the user caught that a slider shouldn't exist at all — "k is not a parameter, its
     // fixed to the model count"). The .bin file itself doesn't persist Iters/IterAlphaServe (verified by round-
@@ -236,13 +255,27 @@
     {
         try
         {
-            var vocabText = await Http.GetStringAsync("data/oracle-vocab.txt");
-            BuildVocab(vocabText);
+            var s = Begin("data/oracle-vocab.txt");
+            var vocabBytes = await Http.GetByteArrayAsync("data/oracle-vocab.txt");
+            BuildVocab(Encoding.UTF8.GetString(vocabBytes));
+            Finish(s, $"{vocabBytes.Length:N0} B");
+
+            s = Begin("data/oracle-brain.bin");
             var bytes = await Http.GetByteArrayAsync("data/oracle-brain.bin");
             _brain = HoloFormer.Deserialize(bytes);
-            try { _rounds = long.Parse((await Http.GetStringAsync("data/oracle-rounds.txt")).Trim()); } catch { _rounds = null; }
-            try { _trainedStackK = int.Parse((await Http.GetStringAsync("data/oracle-stackk.txt")).Trim()); } catch { _trainedStackK = null; }
-            try { _trainedIterWarm = int.Parse((await Http.GetStringAsync("data/oracle-iterwarm.txt")).Trim()); } catch { _trainedIterWarm = null; }
+            Finish(s, $"{bytes.Length:N0} B → {_brain.ParamCount:N0} params deserialized");
+
+            s = Begin("data/oracle-rounds.txt");
+            try { _rounds = long.Parse((await Http.GetStringAsync("data/oracle-rounds.txt")).Trim()); Finish(s, $"{_rounds:N0} rounds trained"); }
+            catch { Finish(s, "not shipped (optional)", "fail"); _rounds = null; }
+
+            s = Begin("data/oracle-stackk.txt");
+            try { _trainedStackK = int.Parse((await Http.GetStringAsync("data/oracle-stackk.txt")).Trim()); Finish(s, $"K={_trainedStackK}"); }
+            catch { Finish(s, "not shipped (optional)", "fail"); _trainedStackK = null; }
+
+            s = Begin("data/oracle-iterwarm.txt");
+            try { _trainedIterWarm = int.Parse((await Http.GetStringAsync("data/oracle-iterwarm.txt")).Trim()); Finish(s, $"{_trainedIterWarm:N0}-round ramp"); }
+            catch { Finish(s, "not shipped (optional)", "fail"); _trainedIterWarm = null; }
 
             // fixed to the REAL trained depth (falls back to the file's bare K=1 only if the metadata sidecar is
             // missing) — never adjusted after this; see the field comments above for why.
