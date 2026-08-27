@@ -3,15 +3,16 @@
 @using System.Text
 @using PrismFormer
 
-<PageTitle>Prism — talk to a live holographic-transformer checkpoint</PageTitle>
+<PageTitle>Prism — autocomplete with a live holographic-transformer checkpoint</PageTitle>
 
 <div class="room">
     <header class="room-head">
         <nav class="crumb"><a href="/">Evaluated Applications</a> <span>/</span> Prism</nav>
         <h1>Prism</h1>
-        <p class="lede">Type something, get a reply — from a real, working copy of our own trained <strong>HoloFormer</strong>
-            checkpoint, running entirely <strong>in your browser</strong>. Not a finished chatbot: a small, honest,
-            still-learning research model, with its internals laid bare underneath every reply.</p>
+        <p class="lede">Type the start of a sentence and watch a real, working copy of our own trained <strong>HoloFormer</strong>
+            checkpoint continue it, character by character, running entirely <strong>in your browser</strong>. This is
+            <strong>autocomplete, not a chatbot</strong>: the model has never seen a dialogue turn in its life, so every
+            submission is a fresh, independent continuation — it does not remember anything you typed before.</p>
         <div class="badges">
             <span>Real trained checkpoint</span><span>Holographic-transformer brain</span><span>Full per-pass trace</span>
         </div>
@@ -47,24 +48,29 @@
             <span class="or-kval">K=@_kUser — @(_kUser == 1 ? "the checkpoint's own default (no extra resonance passes)" : $"reuses the same {_brain.Layers} layer(s) {_kUser}× — heavier, and this file was never trained at this depth")</span>
         </div>
 
-        <div class="or-chat">
-            <div class="or-transcript">
-                @if (_transcript.Count == 0)
+        <div class="or-runs">
+            <div class="or-run-list">
+                @if (_history.Count == 0)
                 {
-                    <p class="hint">Try a short prompt — a word or two. The context window above is small on purpose;
-                        this checkpoint is early in training.</p>
+                    <p class="hint">Type the start of a sentence — a word or two — and hit Continue. Each run starts
+                        fresh from only what's in the box; the context window above is small on purpose, and this
+                        checkpoint is early in training. No chat memory: nothing you typed in a previous run carries
+                        into the next one.</p>
                 }
-                @foreach (var (who, text) in _transcript)
+                @foreach (var run in _history)
                 {
-                    <div class="or-msg @who"><span class="or-who">@(who == "you" ? "you" : "prism")</span><span class="or-text">@text</span></div>
+                    <div class="or-run">
+                        <span class="or-prompt">@run.Prompt</span><span class="or-cont">@run.Continuation</span>
+                        @if (run.TrailedOff) { <span class="or-note">⋯ settled into a repeat loop (a known behaviour this early in training, not a bug)</span> }
+                    </div>
                 }
-                @if (_generating) { <div class="or-msg prism pending"><span class="or-who">prism</span><span class="or-text">…</span></div> }
+                @if (_generating) { <div class="or-run pending"><span class="or-prompt">@_pendingPrompt</span><span class="or-cont">…</span></div> }
             </div>
             <div class="or-input-row">
                 <input class="or-input" @bind="_prompt" @bind:event="oninput" @onkeydown="OnKeyDown" disabled="@_generating"
-                       placeholder="say something short…" maxlength="60" />
+                       placeholder="start typing a sentence…" maxlength="60" />
                 <button class="go" @onclick="Ask" disabled="@(_generating || string.IsNullOrWhiteSpace(_prompt))">
-                    @(_generating ? "thinking…" : "Ask")
+                    @(_generating ? "continuing…" : "Continue")
                 </button>
             </div>
         </div>
@@ -75,7 +81,7 @@
         {
             <div class="or-inspector">
                 <div class="or-insp-head">
-                    <h2>Inside that last reply</h2>
+                    <h2>Inside that last continuation</h2>
                     <p class="hint">One card per emitted character. <strong>GREEDY</strong> = the top decoded token cleared the
                         @((DecodeConfident * 100).ToString("F0"))% confidence gate outright. <strong>SAMPLED</strong> = it didn't, so the
                         model drew from every token whose resonance cleared a floor of mean + @(DecodeFloorK.ToString("0.#"))σ
@@ -122,7 +128,7 @@
         }
 
         <div class="outro">
-            <p><strong>What's actually happening when you hit Ask.</strong> Every prompt becomes a handful of subword
+            <p><strong>What's actually happening when you hit Continue.</strong> Every prompt becomes a handful of subword
                 tokens, each bound into the model's holographic memory as a phase-and-magnitude pattern — a chord, not a
                 row in a lookup table. Reading a prediction back out is an act of <em>resonance</em>: which stored
                 pattern rings loudest against the current context. A conventional transformer buys depth by stacking
@@ -149,14 +155,17 @@
                 write like GPT-2 once the compute number clears a line — compute budget and capability are not the
                 same thing — it's just an honest way to watch a real number move over time.</p>
 
-            <p><strong>Being honest about it.</strong> This checkpoint's vocabulary and context window are both still
-                small — expect short, rough, sometimes broken output, not fluent conversation, and don't be surprised
-                if a reply trails into a repeated character: the confidence gate above can read GREEDY even once the
-                model has settled into a loop, a known, real behaviour this early in training (the Inspector will show
-                you exactly where it happened, rather than hiding it). It's a frozen copy from one point in an active
-                training run in PrismStudio, not a live link to it — the real model keeps training after this snapshot
-                was taken. The K-pass slider above lets you explore depths this exact checkpoint was never actually
-                trained at; treat anything above K=1 as "what if", not "what it does."</p>
+            <p><strong>Being honest about it.</strong> This is <strong>raw text continuation, not dialogue</strong> —
+                this checkpoint was trained on plain text, never on turns, roles or "who's speaking," so it has no
+                mechanism for understanding a conversation, and this REPL doesn't fake one: each run is one prompt in,
+                one continuation out, with nothing from an earlier run fed back in. This checkpoint's vocabulary and
+                context window are both still small — expect short, rough, sometimes broken continuations, and don't
+                be surprised if one trails into a repeated character: the confidence gate above can read GREEDY even
+                once the model has settled into a loop, a known, real behaviour this early in training (the Inspector
+                will show you exactly where it happened, rather than hiding it). It's a frozen copy from one point in
+                an active training run in PrismStudio, not a live link to it — the real model keeps training after
+                this snapshot was taken. The K-pass slider above lets you explore depths this exact checkpoint was
+                never actually trained at; treat anything above K=1 as "what if", not "what it does."</p>
 
             <p>The brain is <code>AlgFormer</code>'s holographic transformer — the same substrate behind
                 <a href="/creature">The Creature</a> and <a href="/forecaster">The Forecaster</a>, and the one that lets
@@ -175,7 +184,7 @@
     // signal stands out above it).
     const double DecodeConfident = 0.60, DecodeTemp = 0.80, DecodeFloorK = 3.0;
     const int InspectTopK = 3;      // top-K faces/attention entries shown per pass row
-    const int MaxReplyChars = 40;   // a runaway guard — this checkpoint's context is tiny, long replies aren't meaningful yet
+    const int MaxReplyChars = 40;   // a runaway guard — this checkpoint's context is tiny, long continuations aren't meaningful yet
     const int DegenRepeat = 4;      // ported from HoloEngine.cs's ProbeDegenRepeat — N identical tokens in a row = a collapsed run
 
     HoloFormer? _brain;
@@ -193,7 +202,11 @@
     int _kUser = 1;
     bool _generating;
     string _prompt = "";
-    readonly List<(string who, string text)> _transcript = new();
+    string _pendingPrompt = "";   // shown in the "in progress" run while _generating — the prompt is cleared from the input immediately
+    // one entry per submission. Each run is INDEPENDENT — no prior run's prompt/continuation is ever fed back into the
+    // next one's context, so there is no accumulated "chat history"; this is autocomplete, not dialogue memory.
+    sealed record RunEntry(string Prompt, string Continuation, bool TrailedOff);
+    readonly List<RunEntry> _history = new();
     List<CharTrace>? _lastTrace;
 
     long EquivCompute => HoloShape.EquivCompute(_brain!.Dim, _brain.Layers, Math.Max(1, _brain.Iters));
@@ -340,12 +353,15 @@
         if (_brain is null || string.IsNullOrWhiteSpace(_prompt) || _generating) return;
         var promptText = _prompt.Trim();
         _prompt = "";
+        _pendingPrompt = promptText;
         _generating = true; _error = null;
-        _transcript.Add(("you", promptText));
         StateHasChanged();
 
         try
         {
+            // fresh context every run: seeded ONLY from this submission's own tokens — nothing from a prior run's
+            // prompt or continuation ever gets folded in, so there is no cross-run "memory" to leak (autocomplete,
+            // not chat: each Continue click is one independent prompt-in/continuation-out pass).
             var seq = new List<int>(Encode(promptText));
             var outIds = new List<int>();
             var trace = new List<CharTrace>();
@@ -395,9 +411,8 @@
             }
 
             var shown = Decode(outIds).TrimEnd();
-            var responseText = shown.Length > 0 ? shown : "(blank — this checkpoint is still very early in training)";
-            if (trailedOff) responseText += "  ⋯ settled into a repeat loop (a known behaviour this early in training, not a bug)";
-            _transcript.Add(("prism", responseText));
+            var continuationText = shown.Length > 0 ? shown : "(blank — this checkpoint is still very early in training)";
+            _history.Add(new RunEntry(promptText, continuationText, trailedOff));
             _lastTrace = trace;
         }
         catch (Exception ex) { _error = "Prism stumbled: " + ex.Message; }

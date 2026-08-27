@@ -116,6 +116,17 @@ shipped" note here — the `prismstudio-owner` hand-off already landed). `wwwroo
 loading still fails gracefully (`_loadError`, no crash, page still builds/publishes) if any ever go
 missing in a future build.
 
+**Autocomplete, not chat (fixed 2026-08-28)**: the checkpoint was trained on raw text continuation
+only, no turn-taking/dialogue structure — but the UI used to present it as a two-party chat
+(`_transcript` of `(who,text)`, "you"/"prism" bubbles, "Ask" button). Verified the generation loop
+itself never leaked cross-run context (`Ask()` seeds `seq` fresh from `Encode(promptText)` every
+call, nothing prior folded in) — so it was a UI/copy bug, not a real turn-history leak. Reworked to
+`_history: List<RunEntry(Prompt, Continuation, TrailedOff)>`, one entry per independent submission,
+rendered as prompt-text immediately followed by continuation-text in one run (Copilot-suggestion
+style, no speaker labels/bubbles). Button now "Continue"/"continuing…"; CSS `.or-chat/-transcript/
+-msg/-who/-text` → `.or-runs/-run-list/-run/-prompt/-cont/-note`. Lede/hint/outro copy states the
+per-run independence explicitly now, not just implies it. `Home.razor`'s card dropped "Chat with".
+
 **Published API used** (verified against the real 1.5.0 DLL — this tool is WHY AlgFormer was bumped
 1.2.0→1.5.0): `HoloFormer.Deserialize(byte[])`, `.InspectStackIter(ctx,K,alpha)` (per-pass raw
 "faces"), `.InspectAttention(ctx,K,alpha)` (per-pass source-position resonance rows),
