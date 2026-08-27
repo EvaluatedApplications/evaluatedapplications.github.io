@@ -57,7 +57,10 @@ it appears). Re-render on request when the PoC's milestone status changes; never
 (brand gradient), 4 category colours `--c-foundation` (purple, Phasor/EvalApp) /
 `--c-data` (blue, HoloDb family) / `--c-ml` (pink, AlgFormer family/EvalApp.Neural/Prose) /
 `--c-spatial` (green, Tracer/HoloVoxel), `--ok/--warn/--bad`, `--radius`, `--wrap` (1080px),
-`--font`/`--mono`. Reusable components: `.site-nav` (sticky, CSS-only mobile burger via
+`--font`/`--mono`. This same file also styles the Blazor tools shell's loading/error UI
+(`#app:has(.loading-progress)`, `#blazor-error-ui`) via the shared tokens, but that's the ONLY
+reach into `Showroom/`'s presentation from here — its own component styles are `showroom-owner`'s
+territory (see "Prism motif" below for a live coordination flag on this boundary). Reusable components: `.site-nav` (sticky, CSS-only mobile burger via
 `.nav-toggle` checkbox hack — lean, always a flat list of 4-6 plain links, see Navigation below)
 + `.related` (compact contextual cross-link pills in the hero, see Navigation),
 `.hero`/`.eyebrow`/`.lede`/`.facts`/`.fact`, `.sec`/`.sec-head`,
@@ -72,6 +75,63 @@ reused by 9+ pages), `footer.site`. A handful of legacy pages (`evalapp.html` pr
 two HoloDb pages still carry a local `<style>` (bespoke charts/race-demo/table markup that isn't
 reused elsewhere) but declare the SAME token values, so they read as one brand, not a fork — if a
 token in `site.css` ever changes, grep those two files' `<style>` blocks too.
+
+**Prism motif (2026-08-28 restyle)** — direct user request, referencing Pink Floyd's *Dark Side of
+the Moon* cover: deep-black field + a precise geometric prism refracting a beam into a spectrum,
+read as "progress/refinement," explicitly NOT pride-flag styling. What changed, site-wide (all 17
+`site/**/*.html`, via the shared tokens/components, no per-page hand-tweaking):
+- **Deeper black**: `--bg #050608` (was `#0a0c11`), `--bg-2/--surface/--surface-2/--border/--border-2`
+  all stepped down to match. `--ink-faint` bumped `#6b7486`→`#7c869c` in the same pass — darkening the
+  bg alone only ever *helps* contrast for light-on-dark text (verified: body/soft text sit ~17:1/~7.9:1,
+  comfortably AAA), but `--ink-faint` was already borderline-sub-AA (~4.16:1) against the old bg for the
+  small mono labels it's used for (`.eyebrow`, `.related`, `.fact`, `.pkgid`), and darkening the bg
+  alone wouldn't have fixed that — so it got a deliberate lighten to ~5.55:1 (comfortably AA) in the
+  same pass rather than shipping a font-size class of text that stayed marginal. Light-mode palette
+  (`prefers-color-scheme:light`) already carried its own `--ink-faint:#8a94a8` override and was
+  untouched — checked, not a regression.
+- **`--spectrum` reordered to true ROYGBIV** (was an arbitrary 6-stop purple→blue→teal→green→gold→coral
+  run): `#f0796a`(R) `#f0a15a`(O) `#e6c450`(Y) `#7bd86a`(G) `#4aa3ff`(B) `#7d7dff`(I) `#c07dff`(V), also
+  exposed as flat `--spectrum-1..7` vars for use outside a `linear-gradient()` context (e.g. individual
+  SVG `stroke`s). Deliberately reuses existing brand hues where they already sat near a ROYGBIV slot
+  (G=`--c-spatial`/`--ok`, B=`--c-data`, R=`--bad`) rather than introducing a parallel palette — the
+  4 category dot colours (`--c-foundation/--c-data/--c-ml/--c-spatial`) were left alone (categorical,
+  not spectral; changing them would ripple into every card accent on every page for no requested
+  reason). This flows automatically into every page via `.beam` (the 3px top strip, already spanned
+  every page) and the brand mark/favicon — no page markup edit needed for that part.
+- **Brand mark + favicon → an actual prism triangle** (was a hexagon/lozenge outline): same viewBox,
+  same `.mark`/favicon `<link>` slots, path swapped to `M16 5L27 26H5Z` (a clean triangle), gradient
+  stops swapped to the 7-stop ROYGBIV above. Applied identically across **all 17** `site/**/*.html`
+  files via a scripted exact-string replace (mechanical, verified via a hit-count report per file —
+  every file hit exactly once for the mark, 16/17 for the favicon, `404.html` correctly has no
+  favicon link at all) — a brand identity glyph can't be half-migrated without being a cohesion
+  regression, so this one WAS swept everywhere in one pass, unlike the hero graphic below.
+- **`.prism-beam` (NEW component, hero graphic — NOT swept everywhere)**: a small decorative inline
+  SVG (white beam → triangle outline → 7-line ROYGBIV fan), CSS-positioned absolute behind the hero
+  text (`.hero` now `position:relative;overflow:hidden`, `.hero>.wrap` lifted to `z-index:1`),
+  right-aligned, capped `min(40vw,520px)` wide, `opacity:.65`, hidden below 900px so it can't collide
+  with hero copy once it wraps to fewer chars/line on tablet. Currently on exactly **2 pages**:
+  `index.html` (the flagship/DSOTM-analogue hero) and `algformer.html` (the literal "Prism" tool is
+  linked from that page's hero CTA + Try-it-live grid, so the visual motif and the product name
+  finally point at the same place). This was a deliberate scope call, not an oversight — the task
+  asked for a reviewable before/after on representative pages rather than a silent 16-page sweep;
+  extending `.prism-beam` to more hero pages is a fast follow (same markup block, paste into any
+  `<header class="hero">`) whenever that's wanted, see Queued/Flagged in the task return.
+- **Fixed a real staleness while in here**: `holodb/index.html`'s inline "writes → accumulator" SVG
+  diagram (its own bespoke graphic, not reusable) had 4 attribute values hardcoded to the OLD
+  `--ink-faint`/`--surface`/`--border`/`--border-2` hex literals instead of `var(...)` — those would
+  have gone visibly stale (lighter than the new page background) the moment the tokens changed. Fixed
+  to the new hex values in place. Swept the rest of `holodb.html`/`holodb/index.html`/`holoformer.html`'s
+  local `<style>` blocks for the same pattern first — everything else in all three already consumes
+  `var(--token)` rather than duplicating literals, so it inherited the restyle for free; this one inline
+  SVG was the only exception found. **Gotcha for next time a token value changes**: grep
+  `#[0-9a-fA-F]{6}` across `site/**/*.html` (not just the two `<style>`-block pages) — hardcoded hex can
+  hide in inline SVG attributes on ANY page, not only the two pages already known to carry local
+  `<style>` blocks.
+- **Coordination flag, not acted on**: Showroom (`Showroom/`, the Blazor tools app: The Analyst /
+  Creature / Forecaster / **Prism**) is `showroom-owner`'s territory per charter — did NOT touch
+  `Showroom/**`. The Prism tool sharing its name with this whole visual motif is an obvious, real
+  tie-in (matching triangle/spectrum treatment in Prism's own UI chrome) but is a call for the
+  coordinator to route to `showroom-owner`, not something to reach into from here.
 
 **The page template** (used verbatim by every one of the 10 plain product pages, and by
 `index.html`/`holoformer.html`'s nav/footer): `<div class="beam">` → `<nav class="site-nav">`
