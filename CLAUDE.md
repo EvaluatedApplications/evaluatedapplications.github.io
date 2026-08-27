@@ -275,6 +275,66 @@ Actions", one-time repo setting). Steps: `dotnet publish Showroom/Showroom.cspro
 (website-owner) never run this or commit/push — leave changes in the working tree; the
 coordinator batch-commits and the user pushes to publish.
 
+**HARD COUPLING (verified 2026-08-28, the hard way)**: `dotnet publish Showroom` is step 1 of the
+single `build` job. If Showroom fails to compile, the job aborts *before* `upload-pages-artifact`,
+so **nothing deploys — including all 17 purely-static content pages**, which have no dependency on
+Showroom whatsoever. A compile error in one tool page takes the whole public site's updates offline.
+Before assuming a content change is live, check Showroom actually builds
+(`dotnet build Showroom/Showroom.csproj -c Release`). Decoupling this is a design item in the
+platform initiative below.
+
+## Platform initiative (in flight, 2026-08-28) — verified facts
+
+A multi-cycle initiative is running to turn the site into a Blazor app platform with Prism (the
+in-browser HoloFormer) woven into the site rather than isolated at `/tools/prism`. Architecture is
+still being steered; these MEASURED facts hold whichever way it lands:
+
+- **Payload reality (measured, not estimated)**: publishing an equivalent net10.0 Blazor WASM app
+  with Showroom's exact package set (HoloDb 1.4.0 / AlgFormer 1.5.0 / Tracer 1.1.0,
+  `PublishTrimmed=false`) produces **28.0 MB raw / 10.8 MB gzip / 8.3 MB brotli** across 213 files.
+  The EA assemblies are a *rounding error* in that (AlgFormer 329 KB, EvalApp 297 KB, Tracer 298 KB,
+  HoloDb 175 KB, Phasor 12 KB ≈ 1.1 MB total) — the weight is untrimmed BCL
+  (`System.Private.CoreLib` 4.8 MB, `System.Private.Xml` 3.0 MB, `System.Data.Common` 1.0 MB).
+  Plus Prism's checkpoint `oracle-brain.bin` = **2.9 MB**. A static content page here is 12-36 KB
+  + 15 KB CSS. **That ~250x gap is the single number that decides the architecture**: content pages
+  must not be made to pay the app's boot cost.
+- **Server-free Razor→static-HTML works** (spiked + run on this exact SDK, 10.0.400):
+  `Microsoft.AspNetCore.Components.Web.HtmlRenderer` + a `ServiceCollection`/`ILoggerFactory` in a
+  plain console app (`Sdk="Microsoft.NET.Sdk.Razor"`, `OutputType=Exe`) renders a component to clean
+  static HTML — **no Kestrel, no server, no crawl step**. Output carries **no `<!--Blazor` markers**
+  and correctly escapes (`&amp;`, `&lt;script&gt;`); note it emits non-ASCII as numeric entities
+  (`&#x2014;` for an em dash), which is actually encoding-proof and sidesteps this repo's mojibake risk.
+- **Mounting a Blazor component into an arbitrary static page is first-party and present in 10.0.8**
+  (verified by reflection over the real DLLs, not from memory):
+  `RootComponentMappingCollection.Add(Type, selector[, ParameterView])` and `.JSComponents`, plus
+  `JSComponentConfigurationExtensions.RegisterForJavaScript<T>(identifier[, javaScriptInitializer])`
+  in `Microsoft.AspNetCore.Components.Web`. This is the mechanism for boot-on-demand Prism islands
+  inside otherwise-static pages.
+- **`PublishTrimmed=false` is worth ~7 MB of mobile download** and its stated justification is
+  contradicted by ground truth: `Showroom.csproj`'s comment blames "EvalApp step factory" reflection,
+  but `MonoRepo/EvalApp/docs/site.md` and EvalApp's `CLAUDE.md` both state EvalApp "ships trimmable
+  and AOT-compatible". One of the two is wrong — open question for `evalapp-owner`.
+- **The `site/` ↔ `Showroom/` ownership boundary is a live cohesion fault line.** The 2026-08-28
+  prism-triangle brand mark was swept across all 17 static pages but **not** into Showroom:
+  `Showroom/Layout/MainLayout.razor` still renders the retired hexagon path
+  (`M16 4l10.4 6v12L16 28 5.6 22V10z`) with the retired 3-stop purple/teal/gold gradient
+  (`#8b7dff`/`#35d0c0`/`#e6b450`), and `Showroom/wwwroot/index.html`'s favicon has the same stale
+  glyph. Showroom's nav is also 7 items vs. the static site's lean 4, already past the ~6-item
+  compactness bar. Not fixable from here (showroom-owner's territory) — coordinator hand-off.
+- **The design system is desktop-first**, contrary to the new mobile-first mandate: every layout
+  breakpoint in `site.css` is subtractive `@media (max-width: …)` (640px and 900px, only two), so
+  base styles target desktop and mobile is an override. A mobile-first rebase means `min-width`
+  breakpoints and auditing the 15 `:hover`/small-`font-size` occurrences for touch.
+- **Motion hooks already exist** in `site.css`: both `@media (prefers-reduced-motion:no-preference)`
+  and `@media (prefers-reduced-motion:reduce)` blocks are present, so the requested scroll-tied depth
+  system has a correct accessibility opt-out to hang off from day one — it must be gated there, and
+  the effect must be a pure function of scroll position (CSS `animation-timeline: view()`), never a
+  JS scroll handler, or it will fight the mobile performance budget.
+
+**Self-maintenance note**: this file is ~330 lines, well over the ~200-line guide. Deliberately not
+compacted yet — the initiative will obsolete large parts of the Site map / Design system sections, so
+the compaction pass should happen when the architecture lands, not before.
+
 ## Gotchas
 
 - Windows/PS 5.1: edit via the editor tools (Read/Edit/Write) or UTF-8-safe .NET I/O; never
