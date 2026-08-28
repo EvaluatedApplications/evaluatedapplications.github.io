@@ -1,5 +1,10 @@
 /* Evaluated Applications — one brand stylesheet, shared by the static content site and the Blazor tools app.
-   Dark-first, with a light palette under prefers-color-scheme:light. */
+   Dark, unconditionally — this is a branded visual identity (Dark Side of the Moon: deep black +
+   true ROYGBIV spectrum + prism triangle), not a neutral utility UI, so it does NOT defer to the
+   visitor's OS/browser colour-scheme preference. A `prefers-color-scheme:light` palette override
+   used to exist here; removed 2026-08-28 on direct user instruction ("get rid of light pallets
+   then dark always") after real-device testing showed it firing and washing out the brand on a
+   phone in light mode. Do not reintroduce a light palette without an explicit, separate request. */
 
 :root{
   /* Dark Side of the Moon: a genuinely deep-black field (not a grey "dark mode"), with the brand
@@ -17,15 +22,6 @@
   --radius:14px; --wrap:1080px;
   --font:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
   --mono:ui-monospace,"Cascadia Code","SF Mono","JetBrains Mono",Menlo,Consolas,monospace;
-}
-@media (prefers-color-scheme:light){
-  :root{
-    --bg:#f6f7fb; --bg-2:#ffffff; --surface:#ffffff; --surface-2:#f1f3f9;
-    --border:#e4e8f0; --border-2:#d3d9e6;
-    --ink:#121620; --ink-soft:#59647a; --ink-faint:#8a94a8;
-    --accent:#5b4fe0; --accent-ink:#4c40d6;
-    --ok:#1e9e5a; --warn:#c47a1a; --bad:#c0392b;
-  }
 }
 
 *{box-sizing:border-box}
@@ -93,7 +89,6 @@ h1,h2,h3{margin:0; line-height:1.15; letter-spacing:-.02em; font-weight:650}
     pointer-events:none; z-index:0; opacity:.65}
 .prism-beam svg{width:100%; height:100%; display:block}
 @media (max-width:900px){.prism-beam{display:none}}
-@media (prefers-color-scheme:light){.prism-beam{opacity:.4}}
 @media (prefers-reduced-motion:no-preference){.prism-beam{transition:opacity .3s ease}}
 .eyebrow{font-family:var(--mono); font-size:.8rem; letter-spacing:.08em; text-transform:uppercase; color:var(--ink-faint)}
 .hero h1{font-size:clamp(2.3rem,5.4vw,3.5rem); margin:16px 0 0; max-width:18ch; text-wrap:balance}
@@ -237,10 +232,16 @@ footer.site a{color:var(--ink-soft)}
    needed. See CLAUDE.md "OS chrome" for the page rollout list + the sweep recipe.
    ================================================================================ */
 
+/* Wallpaper: previously just two cool stops (accent-violet + data-blue) — on review this read as a
+   generic "purple-blue SaaS hero glow" (the single most common dark-dashboard cliche) rather than
+   the brand's full ROYGBIV spectrum, since it only ever showed the cool half. Added a third, warm
+   stop (spectrum-1, the coral/red end) low-centre so the ambient glow itself spans the spectrum,
+   not just its cool end — reads as refracted light bathing the desktop, not a tech-startup blob. */
 body.os-chrome{
   background:
     radial-gradient(1100px 560px at 12% -8%, color-mix(in srgb,var(--accent) 9%,transparent), transparent 60%),
     radial-gradient(900px 520px at 100% 0%, color-mix(in srgb,var(--c-data) 7%,transparent), transparent 55%),
+    radial-gradient(820px 480px at 46% 104%, color-mix(in srgb,var(--spectrum-1) 7%,transparent), transparent 55%),
     var(--bg);
 }
 
@@ -262,14 +263,25 @@ body.os-chrome .hero-bar{display:none}
 
 @media (min-width:901px){
   body.os-chrome .hero{padding:22px 0 10px}
+  /* "Glass" window, not an opaque grey card: translucent panel + blur so the void-black field and
+     its spectrum wallpaper glow bleed through behind the content, the same glass language the
+     taskbar below already uses. A flat opaque --surface fill here read as a generic light-toned
+     "OS chrome" panel sitting ON TOP of the black-field brand instead of continuing it — see
+     CLAUDE.md "OS chrome" for the full diagnosis. The ::before is a 2px spectrum edge (literally
+     the same gradient as the page-top .beam strip) so every window is visibly cut from the same
+     prism, not just bordered in plain grey. */
   body.os-chrome .hero > .wrap{
     max-width:calc(var(--wrap) + 60px); /* matches .sec:has(.sec-head)'s own max-width below, so
       window edges line up as you scroll from the hero into the first section, not two different
       panel widths stacked on top of each other */
-    position:relative; z-index:1; background:var(--surface); border:1px solid var(--border-2);
+    position:relative; z-index:1; background:color-mix(in srgb,var(--surface) 78%,transparent);
+    backdrop-filter:blur(28px) saturate(1.15); border:1px solid var(--border-2);
     border-radius:calc(var(--radius) + 2px); overflow:hidden;
     box-shadow:0 32px 64px -36px rgba(0,0,0,.65), inset 0 1px 0 rgba(255,255,255,.03),
                inset 0 0 0 1px color-mix(in srgb,var(--accent) 14%,transparent);
+  }
+  body.os-chrome .hero > .wrap::before{
+    content:""; position:absolute; inset:0 0 auto 0; height:2px; background:var(--spectrum); opacity:.85; z-index:2;
   }
   body.os-chrome .hero-bar{display:flex; align-items:center; gap:12px; padding:13px 22px;
       background:var(--surface-2); border-bottom:1px solid var(--border)}
@@ -282,10 +294,14 @@ body.os-chrome .hero-bar{display:none}
      bordered card, so wrapping it in a second frame would be a double border, not
      a widget — it reads fine floating on the desktop background as-is. */
   body.os-chrome .sec:has(.sec-head){
-    max-width:calc(var(--wrap) + 60px); margin:26px auto; padding:0;
-    background:var(--surface); border:1px solid var(--border); border-radius:var(--radius);
+    max-width:calc(var(--wrap) + 60px); margin:26px auto; padding:0; position:relative;
+    background:color-mix(in srgb,var(--surface) 76%,transparent); backdrop-filter:blur(24px) saturate(1.1);
+    border:1px solid var(--border); border-radius:var(--radius);
     box-shadow:0 26px 54px -32px rgba(0,0,0,.6), inset 0 1px 0 rgba(255,255,255,.02);
     overflow:hidden;
+  }
+  body.os-chrome .sec:has(.sec-head)::before{
+    content:""; position:absolute; inset:0 0 auto 0; height:2px; background:var(--spectrum); opacity:.85; z-index:2;
   }
   body.os-chrome .sec:has(.sec-head) > .wrap{max-width:none; margin:0; padding:0 30px 30px}
   body.os-chrome .sec-head{position:relative; margin:0 -30px 22px; padding:16px 30px;
@@ -331,6 +347,16 @@ body.os-chrome .nav-links a:nth-child(6)::before{background:linear-gradient(135d
      no burger / no slide-down list) instead of the CSS-only checkbox menu the plain
      site uses at this width. */
   body.os-chrome{padding-bottom:78px}
+  /* BUG FIX (found via real-device screenshot, 2026-08-28): .site-nav carries backdrop-filter
+     unconditionally (base rule, all pages/widths — the sticky top-bar blur). A backdrop-filter (like
+     transform/filter/perspective/contain) establishes a new containing block for `position:fixed`
+     DESCENDANTS. Since .nav-links below is fixed, it was pinning to the BOTTOM of .site-nav's own
+     ~52px box (which sits at the top of the page) instead of the viewport — collapsing the intended
+     bottom icon dock into a sliver overlapping the top bar/brand, so only the last, unobscured item
+     (NuGet) read as legible. Clearing backdrop-filter on .site-nav at this breakpoint restores the
+     viewport as the containing block; the dock keeps its OWN blur below, so the frosted look is
+     unaffected — only the (redundant, mostly invisible at 52px) top-bar blur is dropped on mobile. */
+  body.os-chrome .site-nav{backdrop-filter:none}
   body.os-chrome .site-nav .nav-toggle,
   body.os-chrome .site-nav .nav-burger{display:none}
   body.os-chrome .site-nav .wrap{min-height:52px}
@@ -363,9 +389,16 @@ body.os-chrome .nav-links a:nth-child(6)::before{background:linear-gradient(135d
   }
   body.os-chrome #packages .grid > .card:hover,
   body.os-chrome #tools .grid > .card:hover{transform:none; background:none; border-color:transparent}
+  /* Icon glyph, not a blank tinted square (2nd review flag): content:attr(data-initial) pulls a
+     1-2 letter mark from each .card/a.tool's own data-initial attribute (set once in the HTML,
+     see index.html) — no new DOM element, no image asset, no icon font. Falls back to an empty,
+     plain-tinted square if a future card is added without the attribute (graceful, not broken). */
   body.os-chrome #packages .grid > .card::before,
   body.os-chrome #tools .grid > .card::before{
-    content:""; position:static; display:block; width:56px; height:56px; border-radius:16px;
+    content:attr(data-initial); position:static; display:flex; align-items:center; justify-content:center;
+    width:56px; height:56px; border-radius:16px;
+    font-family:var(--font); font-weight:800; font-size:1.02rem; letter-spacing:-.02em;
+    color:rgba(255,255,255,.94); text-shadow:0 1px 3px rgba(0,0,0,.35);
     background:linear-gradient(155deg, var(--cat,var(--accent)), color-mix(in srgb,var(--cat,var(--accent)) 45%, var(--bg-2)));
     box-shadow:0 10px 18px -10px color-mix(in srgb,var(--cat,var(--accent)) 65%,transparent), inset 0 1px 0 rgba(255,255,255,.22);
   }

@@ -51,8 +51,14 @@ it appears). Re-render on request when the PoC's milestone status changes; never
 
 ## Design system
 
-**One stylesheet**: `site/assets/site.css`. Dark-first (`:root`), light palette under
-`prefers-color-scheme:light`. Design tokens: `--bg/--bg-2/--surface/--surface-2`,
+**One stylesheet**: `site/assets/site.css`. Dark, UNCONDITIONALLY — this is a branded visual
+identity (Dark Side of the Moon), not a neutral utility UI, so it never defers to the visitor's
+system/browser colour-scheme. **Changed 2026-08-28**: a `prefers-color-scheme:light` palette
+override used to exist (`:root` block + a `.prism-beam` opacity tweak) and was REMOVED, direct user
+instruction after real-phone testing showed it firing and washing the brand out to white/pastel on
+a phone in light mode ("get rid of light pallets then dark always"). Don't reintroduce a light
+palette without an explicit, separate request — and if one's ever wanted, gate it behind an opt-in
+control, not automatic OS detection. Design tokens: `--bg/--bg-2/--surface/--surface-2`,
 `--border/--border-2`, `--ink/--ink-soft/--ink-faint`, `--accent/--accent-ink`, `--spectrum`
 (brand gradient), 4 category colours `--c-foundation` (purple, Phasor/EvalApp) /
 `--c-data` (blue, HoloDb family) / `--c-ml` (pink, AlgFormer family/EvalApp.Neural/Prose) /
@@ -91,7 +97,10 @@ read as "progress/refinement," explicitly NOT pride-flag styling. What changed, 
   alone wouldn't have fixed that — so it got a deliberate lighten to ~5.55:1 (comfortably AA) in the
   same pass rather than shipping a font-size class of text that stayed marginal. Light-mode palette
   (`prefers-color-scheme:light`) already carried its own `--ink-faint:#8a94a8` override and was
-  untouched — checked, not a regression.
+  untouched at the time — checked, not a regression. **Since removed entirely (2026-08-28, see
+  Design system above)**: the whole light palette was later found to defeat this same brand identity
+  on a real phone in light mode and was deleted outright, so this paragraph is now historical record
+  of that pass's reasoning, not a description of current CSS.
 - **`--spectrum` reordered to true ROYGBIV** (was an arbitrary 6-stop purple→blue→teal→green→gold→coral
   run): `#f0796a`(R) `#f0a15a`(O) `#e6c450`(Y) `#7bd86a`(G) `#4aa3ff`(B) `#7d7dff`(I) `#c07dff`(V), also
   exposed as flat `--spectrum-1..7` vars for use outside a `linear-gradient()` context (e.g. individual
@@ -387,6 +396,63 @@ correctly, no orphaned tags). Did NOT verify in an actual browser (no visual pro
 generated HTML/CSS) — the coordinator/user should eyeball the 3 pages at a real ≥901px and a real
 ≤640px width before this is swept further; described here as the shape built, not a screenshot-
 verified render.
+
+**Real-device review pass (2026-08-28, second round) — 3 findings, all fixed in `site.css` only
+(no HTML changes except index.html's `data-initial` attributes below)**:
+
+1. **"Lost dark side of the moon" (user's live-review flag)**. Diagnosed by reading the actual
+   CSS, not guessed: the culprit was NOT the panels being light-toned (`--surface`/`--surface-2` are
+   still near-black, `#0d0f16`/`#12151d`) — it was (a) EVERY window panel (`.hero > .wrap`,
+   `.sec:has(.sec-head)`) painting a flat OPAQUE fill, turning ~90% of the page's visible area from
+   "void black with floating content" into wall-to-wall bordered graphite-grey boxes — the void that
+   made the beam/spectrum dramatic was mostly gone, replaced by generic bordered-card chrome; and
+   (b) the new `body.os-chrome` wallpaper glow used only 2 stops, both cool (accent-violet + data-
+   blue) — textbook "purple-blue SaaS hero gradient," the most generic possible dark-dashboard
+   cliché, and specifically NOT the brand's full ROYGBIV since it never showed the warm half. Fixed
+   by (a) making `.hero > .wrap` and `.sec:has(.sec-head)` translucent + `backdrop-filter:blur(...)`
+   ("glass" rather than opaque — the void + wallpaper now bleed through behind content, unifying with
+   the taskbar's pre-existing glass treatment instead of fighting it) and giving each window a 2px
+   `::before` top edge painted with the literal `--spectrum` gradient (the same one the page-top
+   `.beam` uses) so every window reads as cut from the same prism, not just grey-bordered; (b) adding
+   a third wallpaper stop using `--spectrum-1` (warm coral) low-centre, so the ambient glow spans
+   warm-to-cool instead of cool-only. Traffic-light dots (`.win-dots`, `.sec-head`'s `::before` trio)
+   were checked and left alone — `--bad`/`--warn`/`--ok` already equal or nearly equal
+   `--spectrum-1`/`-3`/`-4` (the prism-motif pass deliberately reused those slots), so they're already
+   brand-spectrum colours, not a generic macOS red/amber/green; the "3 dots" affordance itself is the
+   intended OS-chrome window-control idiom, not a bug.
+2. **Mobile icon tiles were blank colour with zero glyph** (user's flag, confirmed live on-phone by
+   coordinator screenshot: "just a coloured square", true for all 15 tiles — 4 tools + 11 packages).
+   `.card::before`'s `content:""` was replaced with `content:attr(data-initial)` inside the existing
+   ≤640px icon-grid block, plus flex-centring + bold-letter styling, so each tile now shows a 1-2
+   letter mark (`Ph` Phasor, `EA` EvalApp, `Db`/`Cl`/`Pt` the HoloDb family, `Af`/`Gp` AlgFormer(.Gpu),
+   `En` EvalApp.Neural, `Ps` Prose, `Tr` Tracer, `Hv` HoloVoxel, `An`/`Cr`/`Fc`/`Pm` the 4 tools) — no
+   new DOM element, no image/font asset, just an attribute + `attr()` in `content`. **Gotcha for any
+   future card added to `#packages`/`#tools`**: it needs its own `data-initial="Xx"` on the
+   `<article class="card" ...>` / `<a class="card tool" ...>` opening tag or its mobile tile silently
+   reverts to a blank tinted square (graceful, not broken, but loses the fix) — the sweep recipe below
+   should carry this forward once `#packages`/`#tools` markup exists on more pages (today only
+   `index.html` has those ids, so this is the only file needing the attribute).
+3. **Real functional bug (not cosmetic): the mobile bottom icon dock was broken**, found from a
+   phone screenshot (only a lone "NuGet" tile visible, mispositioned near the top, overlapping the
+   brand text) — root-caused in the CSS, not guessed: `.site-nav` carries `backdrop-filter:blur(10px)`
+   UNCONDITIONALLY (the base sticky-nav rule, active on all 17 pages at all widths). Per the CSS spec,
+   `backdrop-filter` (like `transform`/`filter`/`perspective`/`contain`) on an ancestor establishes a
+   NEW containing block for any `position:fixed` descendant. `.nav-links` (the dock) is fixed at
+   ≤640px, so it was pinning to the bottom edge of `.site-nav`'s own ~52px box — which sits at the TOP
+   of the page — instead of the viewport, collapsing the "bottom dock" into a sliver overlapping the
+   top bar, with only the rightmost item (NuGet, clear of the brand text) reading as legible. Fixed by
+   `body.os-chrome .site-nav{backdrop-filter:none}` inside the existing ≤640px block — the dock keeps
+   its own independent `backdrop-filter:blur(14px)`, so the frosted look is unaffected; only the
+   (mostly-invisible-at-52px) top-bar blur is dropped on mobile. **This bug is real on ALL 3 os-chrome
+   pages** (the rule is in the shared `.site-nav`/dock CSS, not page-specific) and would have shipped
+   identically to any of the other 14 pages the moment they're swept onto `os-chrome` — worth an extra
+   look when that sweep happens, though the fix already lives in the shared stylesheet so no further
+   action is needed per-page.
+
+Still NOT verified in an actual browser by this agent (no visual proof beyond reading the generated
+CSS/HTML and reasoning from the CSS containing-block spec for #3) — the reasoning for all 3 fixes is
+recorded inline in `site.css` next to each change; the coordinator/user should re-check on a real
+phone (the same device/screenshot that caught #2/#3) before this is considered closed.
 
 **Sweep recipe for the remaining 14 pages** (once this subset is approved): add `class="os-chrome"`
 to `<body>`; add nav-links `Tools` (`/#tools`) in place of the old `HoloDb` slot, keeping any
