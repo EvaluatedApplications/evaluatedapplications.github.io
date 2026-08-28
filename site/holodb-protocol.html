@@ -17,7 +17,7 @@
 {"@context":"https://schema.org","@type":"SoftwareApplication","name":"EvaluatedApplications.HoloDb.Protocol","description":"HoloDb.Protocol defines how the HoloDb server and client communicate: length-prefixed TCP framing and a columnar-preserving binary codec, so columnar results stay columnar all the way to the client.","applicationCategory":"DeveloperApplication","operatingSystem":".NET 8.0+","softwareVersion":"1.0.2","url":"https://evaluatedapplications.github.io/holodb-protocol.html","downloadUrl":"https://www.nuget.org/packages/EvaluatedApplications.HoloDb.Protocol","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"author":{"@type":"Organization","name":"Evaluated Applications","url":"https://evaluatedapplications.github.io/"}}
 </script>
 </head>
-<body class="os-chrome" data-cat="data">
+<body class="os-chrome" data-cat="holodb-protocol">
 <div class="beam"></div>
 
 <nav class="site-nav">
@@ -76,7 +76,7 @@
 
 <section class="sec">
   <div class="wrap">
-    <div class="sec-head"><span class="dot" style="background:var(--c-data)"></span><h2>Why it matters</h2><p>the win doesn't stop at the wire</p></div>
+    <div class="sec-head"><span class="dot" style="background:var(--c-holodb-protocol)"></span><h2>Why it matters</h2><p>the win doesn't stop at the wire</p></div>
     <p class="desc" style="max-width:74ch">Most database protocols trade columnar performance for JSON or ORM convenience. If you run a columnar
       query — the common case — and the server has to serialize it back to rows, materialize it into objects,
       and send JSON, you've lost the performance win that made the columnar query fast in the first place. This
@@ -89,19 +89,19 @@
 
 <section class="sec">
   <div class="wrap">
-    <div class="sec-head"><span class="dot" style="background:var(--c-data)"></span><h2>What it does</h2><p>features</p></div>
+    <div class="sec-head"><span class="dot" style="background:var(--c-holodb-protocol)"></span><h2>What it does</h2><p>features</p></div>
     <div class="grid">
-      <article class="card" style="--cat:var(--c-data)"><div class="card-top"><h3>Columnar results</h3></div>
+      <article class="card" style="--cat:var(--c-holodb-protocol)"><div class="card-top"><h3>Columnar results</h3></div>
         <p class="desc"><code>long[]</code>, <code>double[]</code>, <code>string[]</code> delivered directly, not wrapped in row objects.</p></article>
-      <article class="card" style="--cat:var(--c-data)"><div class="card-top"><h3>Materialized rows</h3></div>
+      <article class="card" style="--cat:var(--c-holodb-protocol)"><div class="card-top"><h3>Materialized rows</h3></div>
         <p class="desc">For non-columnar queries (JOINs, GROUP BY), results are packed into a compact binary row format.</p></article>
-      <article class="card" style="--cat:var(--c-data)"><div class="card-top"><h3>Length-prefixed frames</h3></div>
+      <article class="card" style="--cat:var(--c-holodb-protocol)"><div class="card-top"><h3>Length-prefixed frames</h3></div>
         <p class="desc">Message boundaries stay safe even over unreliable transports or when connection buffering breaks alignment.</p></article>
-      <article class="card" style="--cat:var(--c-data)"><div class="card-top"><h3>Transport-agnostic</h3></div>
+      <article class="card" style="--cat:var(--c-holodb-protocol)"><div class="card-top"><h3>Transport-agnostic</h3></div>
         <p class="desc">Works over TCP, TLS, or any duplex <code>Stream</code> — this package doesn't provide encryption; TLS is the transport layer's concern.</p></article>
-      <article class="card" style="--cat:var(--c-data)"><div class="card-top"><h3>Security hardening</h3></div>
+      <article class="card" style="--cat:var(--c-holodb-protocol)"><div class="card-top"><h3>Security hardening</h3></div>
         <p class="desc">Frame size limits and count-bounds checks protect against hostile or malformed length prefixes forcing huge allocations.</p></article>
-      <article class="card" style="--cat:var(--c-data)"><div class="card-top"><h3>Version negotiation</h3></div>
+      <article class="card" style="--cat:var(--c-holodb-protocol)"><div class="card-top"><h3>Version negotiation</h3></div>
         <p class="desc">Client and server compatibility is checked before executing queries, and error semantics distinguish protocol errors from query errors so callers know whether to retry.</p></article>
     </div>
   </div>
@@ -109,7 +109,7 @@
 
 <section class="sec">
   <div class="wrap">
-    <div class="sec-head"><span class="dot" style="background:var(--c-data)"></span><h2>A minimal example</h2><p>client and server side</p></div>
+    <div class="sec-head"><span class="dot" style="background:var(--c-holodb-protocol)"></span><h2>A minimal example</h2><p>client and server side</p></div>
     <p class="desc">Client-side (using <a href="/holodb-client.html">HoloDb.Client</a>, which wraps this protocol):</p>
     <div class="snip"><code>using var client = new HoloDbClient("localhost", 5433, token: "mytoken");
 await client.ConnectAsync();
@@ -137,7 +137,7 @@ if (request.Op == WireOp.Exec)
 
 <section class="sec">
   <div class="wrap">
-    <div class="sec-head"><span class="dot" style="background:var(--c-data)"></span><h2>Compatibility &amp; wire stability</h2><p>frozen on purpose</p></div>
+    <div class="sec-head"><span class="dot" style="background:var(--c-holodb-protocol)"></span><h2>Compatibility &amp; wire stability</h2><p>frozen on purpose</p></div>
     <p class="desc" style="max-width:74ch">The wire format is frozen: opcode byte values never change, and message field order and types are stable.
       Old clients can talk to new servers (version negotiation detects incompatibility and fails cleanly), and
       changes to the protocol are rare and coordinated — both client and server must be rebuilt together.</p>

@@ -17,7 +17,7 @@
 {"@context":"https://schema.org","@type":"SoftwareApplication","name":"EvaluatedApplications.AlgFormer.Gpu","description":"AlgFormer.Gpu adds ILGPU/CUDA-backed training and inference for AlgFormer's HoloFormer engine: same model, same weights, just faster, with automatic CPU fallback when no GPU is present.","applicationCategory":"DeveloperApplication","operatingSystem":".NET 8.0+ (CUDA optional)","softwareVersion":"1.3.0","url":"https://evaluatedapplications.github.io/algformer-gpu.html","downloadUrl":"https://www.nuget.org/packages/EvaluatedApplications.AlgFormer.Gpu","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"author":{"@type":"Organization","name":"Evaluated Applications","url":"https://evaluatedapplications.github.io/"}}
 </script>
 </head>
-<body class="os-chrome" data-cat="ml">
+<body class="os-chrome" data-cat="algformer-gpu">
 <div class="beam"></div>
 
 <nav class="site-nav">
@@ -75,15 +75,15 @@
 
 <section class="sec">
   <div class="wrap">
-    <div class="sec-head"><span class="dot" style="background:var(--c-ml)"></span><h2>Why it's useful</h2><p>drop-in, not a rewrite</p></div>
+    <div class="sec-head"><span class="dot" style="background:var(--c-algformer-gpu)"></span><h2>Why it's useful</h2><p>drop-in, not a rewrite</p></div>
     <div class="grid">
-      <article class="card" style="--cat:var(--c-ml)"><div class="card-top"><h3>Drop-in, not a rewrite</h3></div>
+      <article class="card" style="--cat:var(--c-algformer-gpu)"><div class="card-top"><h3>Drop-in, not a rewrite</h3></div>
         <p class="desc">Point it at an existing CPU <code>HoloFormer</code>; it trains and serves against the same serialized weights.</p></article>
-      <article class="card" style="--cat:var(--c-ml)"><div class="card-top"><h3>Automatic fallback</h3></div>
+      <article class="card" style="--cat:var(--c-algformer-gpu)"><div class="card-top"><h3>Automatic fallback</h3></div>
         <p class="desc">Runtime device detection means the same build works on a machine with a CUDA GPU and one without — no separate code paths for callers to maintain.</p></article>
-      <article class="card" style="--cat:var(--c-ml)"><div class="card-top"><h3>Correctness-checked against the CPU engine</h3></div>
+      <article class="card" style="--cat:var(--c-algformer-gpu)"><div class="card-top"><h3>Correctness-checked against the CPU engine</h3></div>
         <p class="desc">Every GPU kernel is gradient-checked against the CPU HoloFormer (which does the math in double precision) as the reference oracle. GPU runs in float32 for speed, so results are float-close to the CPU reference, not bit-identical.</p></article>
-      <article class="card" style="--cat:var(--c-ml)"><div class="card-top"><h3>Fused on-device Adam</h3></div>
+      <article class="card" style="--cat:var(--c-algformer-gpu)"><div class="card-top"><h3>Fused on-device Adam</h3></div>
         <p class="desc">The optimizer step runs on the GPU too, alongside the forward/backward kernels, avoiding a round trip to the CPU on every training batch.</p></article>
     </div>
   </div>
@@ -91,15 +91,15 @@
 
 <section class="sec">
   <div class="wrap">
-    <div class="sec-head"><span class="dot" style="background:var(--c-ml)"></span><h2>Key features</h2><p>what you get</p></div>
+    <div class="sec-head"><span class="dot" style="background:var(--c-algformer-gpu)"></span><h2>Key features</h2><p>what you get</p></div>
     <div class="grid">
-      <article class="card" style="--cat:var(--c-ml)"><div class="card-top"><h3>GPU-batched training</h3></div>
+      <article class="card" style="--cat:var(--c-algformer-gpu)"><div class="card-top"><h3>GPU-batched training</h3></div>
         <p class="desc">Forward and backward for HoloFormer, including per-layer weight-tied iterative refinement ("StackIter") and all-positions loss.</p></article>
-      <article class="card" style="--cat:var(--c-ml)"><div class="card-top"><h3>Checkpoint/resume</h3></div>
+      <article class="card" style="--cat:var(--c-algformer-gpu)"><div class="card-top"><h3>Checkpoint/resume</h3></div>
         <p class="desc">Fused on-device Adam optimizer state can be checkpointed and resumed alongside the GPU-resident training loop.</p></article>
-      <article class="card" style="--cat:var(--c-ml)"><div class="card-top"><h3>Device detection</h3></div>
+      <article class="card" style="--cat:var(--c-algformer-gpu)"><div class="card-top"><h3>Device detection</h3></div>
         <p class="desc"><code>GpuDevice.HasGpu</code> with silent, safe CPU fallback when no supported CUDA device is present.</p></article>
-      <article class="card" style="--cat:var(--c-ml)"><div class="card-top"><h3>Standalone kernel verification</h3></div>
+      <article class="card" style="--cat:var(--c-algformer-gpu)"><div class="card-top"><h3>Standalone kernel verification</h3></div>
         <p class="desc">Utilities to confirm a given GPU matches the CPU reference before trusting it in production.</p></article>
     </div>
   </div>
@@ -107,13 +107,13 @@
 
 <section class="sec">
   <div class="wrap">
-    <div class="sec-head"><span class="dot" style="background:var(--c-ml)"></span><h2>Good to know</h2><p>honest limits</p></div>
+    <div class="sec-head"><span class="dot" style="background:var(--c-algformer-gpu)"></span><h2>Good to know</h2><p>honest limits</p></div>
     <div class="grid">
-      <article class="card" style="--cat:var(--c-ml)"><div class="card-top"><h3>Requires a CUDA device to use the GPU path</h3></div>
+      <article class="card" style="--cat:var(--c-algformer-gpu)"><div class="card-top"><h3>Requires a CUDA device to use the GPU path</h3></div>
         <p class="desc">Without an ILGPU-supported CUDA device at runtime, the package falls back to the CPU <code>HoloFormer</code> engine automatically — the same build works either way.</p></article>
-      <article class="card" style="--cat:var(--c-ml)"><div class="card-top"><h3>Optional</h3></div>
+      <article class="card" style="--cat:var(--c-algformer-gpu)"><div class="card-top"><h3>Optional</h3></div>
         <p class="desc">The core <code>AlgFormer</code> package has no GPU dependency at all and stays dependency-free and AOT/trim-safe. Add this package only if you want GPU-accelerated training or inference.</p></article>
-      <article class="card" style="--cat:var(--c-ml)"><div class="card-top"><h3>The older softmax path is deprecated</h3></div>
+      <article class="card" style="--cat:var(--c-algformer-gpu)"><div class="card-top"><h3>The older softmax path is deprecated</h3></div>
         <p class="desc">The package also includes GPU support for AlgFormer's earlier (non-HoloFormer) softmax-attention model. That path still builds and runs, but all current development — including the fused Adam step — targets HoloFormer only. New projects should use the HoloFormer path.</p></article>
     </div>
     <p class="lim">Install from NuGet: <code>EvaluatedApplications.AlgFormer.Gpu</code>. Requires the core <code>EvaluatedApplications.AlgFormer</code> package alongside it. <b>License:</b> proprietary; every capability here is free to use today.</p>

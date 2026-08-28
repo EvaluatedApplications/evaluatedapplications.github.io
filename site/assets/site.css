@@ -17,24 +17,45 @@
   --spectrum:linear-gradient(90deg,#f0796a 0%,#f0a15a 16.6%,#e6c450 33.3%,#7bd86a 50%,#4aa3ff 66.6%,#7d7dff 83.3%,#c07dff 100%);
   --spectrum-1:#f0796a; --spectrum-2:#f0a15a; --spectrum-3:#e6c450; --spectrum-4:#7bd86a;
   --spectrum-5:#4aa3ff; --spectrum-6:#7d7dff; --spectrum-7:#c07dff;
-  /* Tools-first pivot (2026-08-28, see docs/brand-identity.md): --c-foundation is the literal
-     --spectrum gradient now ("the undispersed beam"), not a flat violet — --c-foundation-solid is
-     the flat #fff companion for the few call sites that structurally can't take a gradient (see the
-     --cat-root mechanism below). --c-ml moved off its old off-spectrum pink (#e879c8) onto Indigo
-     (--spectrum-6) so every domain colour a tool chord can draw from is a real ROYGBIV stop.
-     CORRECTED same day, real-device feedback ("machine learning is purple but it's very close to
-     blue... not a good spectrum range"): measured in HSL, Indigo (#7d7dff, hue~240°) sits only ~30°
-     from --c-data's Blue (#4aa3ff, hue~210°) -- genuinely too close, matching the complaint exactly,
-     and with --c-spatial's Green (#7bd86a, hue~111°) the 3 domains were bunched entirely in the cool
-     quadrant (111°-240°), none in the warm half. Moved --c-ml one stop further to Violet
-     (--spectrum-7, #c07dff, hue~271°) -- still unambiguously "purple" (not a hue-family change,
-     which the user didn't ask for), doubles the ML/Data separation to ~61°, and widens the whole
-     domain-colour spread to 160° (111°->271°) instead of 129° bunched at the cool end. Reused an
-     existing spectrum stop rather than inventing a new hex, consistent with "every domain colour is
-     a real ROYGBIV stop." --c-data/--c-spatial left untouched -- the user's own words named those
-     two neutrally, only ML was flagged as a problem. */
+  /* PER-PACKAGE PALETTE (2026-08-28, supersedes the 4-bucket Foundation/Data/ML/Spatial model —
+     direct user correction after seeing the live site: "still white blue purple and green, I want
+     the full spectrum... red through purple, not only the cold colours"). The old 4-bucket model
+     used only 3 hues off the cool half of the wheel (Data blue ~210°, ML violet ~271°, Spatial green
+     ~111°) plus white — it read narrow even after the Indigo->Violet nudge above, because a BUCKET
+     model has a hard ceiling of "however many buckets exist," not "however many packages exist."
+     Fixed by giving every one of the 8 non-Foundation, non-composite packages its OWN stop, computed
+     by evenly re-sampling the SAME --spectrum gradient above at t=0,1/7,2/7...1 (8 points across the
+     full named ROYGBIV run, red through violet) rather than inventing an unrelated palette — this is
+     still the one brand gradient, just sampled finer. Foundation (Phasor/EvalApp) is UNCHANGED per
+     direct instruction ("core is white... confirmed correct, don't touch") — the undispersed beam,
+     not a domain colour, so it still isn't assigned a spectrum stop of its own.
+     PLACEMENT is dependency-derived, not arbitrary: the 3 real package FAMILIES (HoloDb: HoloDb/
+     .Protocol/.Client; AlgFormer: AlgFormer/.Gpu/EvalApp.Neural; and the two Foundation-only spatial
+     leaves Tracer/HoloVoxel) each occupy a contiguous run of stops, in real dependency-chain order
+     within a family (e.g. HoloDb -> HoloDb.Protocol -> HoloDb.Client, matching who ProjectReferences
+     whom), with genuinely different domains spread apart across the wheel:
+       1 red        --c-tracer            (Tracer — foundation-only leaf, warm end)
+       2 red-orange --c-holovoxel         (HoloVoxel — foundation-only leaf, warm end)
+       3 orange     --c-holodb-client     (HoloDb.Client — depends on HoloDb.Protocol)
+       4 yellow-grn --c-holodb-protocol   (HoloDb.Protocol — depends on HoloDb)
+       5 green/teal --c-holodb            (HoloDb — the family anchor, closest to the bridge below)
+       6 blue       --c-algformer         (AlgFormer — the family anchor, closest to the bridge above)
+       7 indigo     --c-algformer-gpu     (AlgFormer.Gpu — depends on AlgFormer only)
+       8 violet     --c-evalapp-neural    (EvalApp.Neural — depends on AlgFormer + Foundation-dropped EvalApp)
+     Prose is deliberately NOT assigned a 9th stop of its own: unlike the other 8, it isn't a single-
+     domain product with one real dependency chain — its own docs/site.md says outright "Depends on:
+     HoloDb ... and AlgFormer" — so it is structurally a COMPOSITE, same as a multi-package Showroom
+     tool, and always renders as the two-tone chord of var(--c-holodb)+var(--c-algformer) (the
+     existing hard-edged chord mechanism, extended here to the finer palette) rather than getting its
+     own hex that nothing else would reference. This is also why HoloDb sits at stop 5 and AlgFormer at
+     stop 6 — adjacent on the wheel — so Prose's chord reads as one smooth neighbouring blend, not two
+     clashing hues yanked from opposite ends. See CLAUDE.md "Per-package palette" for the full table
+     (hex values + which pages/cards use which) — this comment carries the reasoning, that carries the
+     source of truth for a parallel showroom-owner task to consume the same hexes. */
   --c-foundation:var(--spectrum); --c-foundation-solid:#ffffff;
-  --c-data:#4aa3ff; --c-ml:#c07dff; --c-spatial:#7bd86a;
+  --c-tracer:#f0796a; --c-holovoxel:#f09b5c;
+  --c-holodb-client:#e9ba53; --c-holodb-protocol:#a9cf5f; --c-holodb:#66c1aa;
+  --c-algformer:#5998ff; --c-algformer-gpu:#877dff; --c-evalapp-neural:#c07dff;
   --ok:#7bd86a; --warn:#e6b450; --bad:#f0796a;
   --radius:14px; --wrap:1080px;
   --font:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
@@ -51,31 +72,39 @@
 }
 /* Per-page category tint for the parallax glow above — set once via <body data-cat="...">, read by
    the ea-parallax-near/-mid keyframes through color-mix(), so every page that ever gets os-chrome
-   automatically shows ITS OWN domain colour (Foundation/Data/ML/Spatial) without a new keyframe
-   block. Reuses the exact same category tokens the .related dots / .pkg-strip chips / .card --cat
-   accents already use elsewhere on the page, so the glow always agrees with the rest of that page's
-   colour language. --c-foundation-solid (flat white) is used, not --c-foundation (a gradient) —
-   drop-shadow()/color-mix() need one solid colour, same reason --cat-root exists for cards. */
+   automatically shows ITS OWN package colour without a new keyframe block. Reuses the exact same
+   per-package tokens the .related dots / .pkg-strip chips / .card --cat accents already use
+   elsewhere on the page, so the glow always agrees with the rest of that page's colour language.
+   --c-foundation-solid (flat white) is used, not --c-foundation (a gradient) — drop-shadow()/
+   color-mix() need one solid colour, same reason --cat-root exists for cards. Values are now the
+   PACKAGE'S OWN name (2026-08-28, per-package palette, see the :root comment above), not a
+   Foundation/Data/ML/Spatial bucket — "ml" was one shared hue for 5 different packages before,
+   which is exactly the narrowness this pass fixes. */
 body[data-cat="foundation"]{ --glow-near:var(--c-foundation-solid); --glow-mid:var(--c-foundation-solid); }
-body[data-cat="data"]{ --glow-near:var(--c-data); --glow-mid:var(--c-data); }
-body[data-cat="ml"]{ --glow-near:var(--c-ml); --glow-mid:var(--c-ml); }
-body[data-cat="spatial"]{ --glow-near:var(--c-spatial); --glow-mid:var(--c-spatial); }
-/* CHORD (multi-tone) pages, 2026-08-28 rollout — see CLAUDE.md "Chord glow tinting". A page whose
-   real subject genuinely spans more than one domain (today: only prose.html, which depends on both
-   HoloDb/Data and AlgFormer/ML — Foundation is dropped from the chord the same way it's dropped from
-   the tool-card gradients below, since Phasor/EvalApp underlie almost everything and carry no
-   distinguishing signal) gets a SECOND custom-property pair, --glow-mid-a/--glow-mid-b, read only by
-   the ea-parallax-mid-chord keyframes (see "SCROLL-TIED PARALLAX DEPTH" below) instead of the single
-   --glow-mid. Same source tokens as the tool-card --cat chord gradients (var(--c-data)/var(--c-ml),
-   never a hardcoded hex) and the same canonical domain order (Foundation, Data, ML, Spatial — the
-   order --c-foundation/--c-data/--c-ml/--c-spatial are declared in above, and the same order
-   packages.html's own sections run in) that the Creature tool card already uses for its ML+Spatial
-   gradient, so a colour retune to --c-data or --c-ml (e.g. the --c-ml Indigo->Violet correction) reaches
-   this too automatically — one token, not two independent copies to keep in sync by hand. --glow-near
-   is untouched here on purpose: no chord page today also carries .prism-beam, so there is nothing for
-   a "near" chord to tint yet; if one ever does, extend the same pattern (--glow-near-a/-b + an
-   ea-parallax-near-chord keyframe pair) rather than inventing a new mechanism. */
-body[data-cat="data-ml"]{ --glow-mid-a:var(--c-data); --glow-mid-b:var(--c-ml); }
+body[data-cat="tracer"]{ --glow-near:var(--c-tracer); --glow-mid:var(--c-tracer); }
+body[data-cat="holovoxel"]{ --glow-near:var(--c-holovoxel); --glow-mid:var(--c-holovoxel); }
+body[data-cat="holodb"]{ --glow-near:var(--c-holodb); --glow-mid:var(--c-holodb); }
+body[data-cat="holodb-protocol"]{ --glow-near:var(--c-holodb-protocol); --glow-mid:var(--c-holodb-protocol); }
+body[data-cat="holodb-client"]{ --glow-near:var(--c-holodb-client); --glow-mid:var(--c-holodb-client); }
+body[data-cat="algformer"]{ --glow-near:var(--c-algformer); --glow-mid:var(--c-algformer); }
+body[data-cat="algformer-gpu"]{ --glow-near:var(--c-algformer-gpu); --glow-mid:var(--c-algformer-gpu); }
+body[data-cat="evalapp-neural"]{ --glow-near:var(--c-evalapp-neural); --glow-mid:var(--c-evalapp-neural); }
+/* CHORD (multi-tone) pages, 2026-08-28 rollout — see CLAUDE.md "Chord glow tinting" / "Per-package
+   palette". A page whose real subject genuinely spans more than one PACKAGE (today: only prose.html,
+   which its own docs/site.md says "Depends on: HoloDb ... and AlgFormer" — Foundation is dropped from
+   the chord the same way it's dropped from the tool-card gradients below, since Phasor/EvalApp
+   underlie almost everything and carry no distinguishing signal) gets a SECOND custom-property pair,
+   --glow-mid-a/--glow-mid-b, read only by the ea-parallax-mid-chord keyframes (see "SCROLL-TIED
+   PARALLAX DEPTH" below) instead of the single --glow-mid. Same source tokens as the tool-card --cat
+   chord gradients (var(--c-holodb)/var(--c-algformer), never a hardcoded hex) so a colour retune to
+   either package reaches this too automatically — one token, not two independent copies to keep in
+   sync by hand. --glow-near is untouched here on purpose: no chord page today also carries
+   .prism-beam, so there is nothing for a "near" chord to tint yet; if one ever does, extend the same
+   pattern (--glow-near-a/-b + an ea-parallax-near-chord keyframe pair) rather than inventing a new
+   mechanism. Renamed from the old data-cat="data-ml" bucket value to "holodb-algformer" — the
+   attribute value is now the two real PACKAGE names, matching the per-package palette everywhere
+   else, not a category-pair name. */
+body[data-cat="holodb-algformer"]{ --glow-mid-a:var(--c-holodb); --glow-mid-b:var(--c-algformer); }
 
 *{box-sizing:border-box}
 html{scroll-behavior:smooth}
@@ -359,7 +388,7 @@ footer.site a{color:var(--ink-soft)}
 body.os-chrome{
   background:
     radial-gradient(1100px 560px at 12% -8%, color-mix(in srgb,var(--accent) 9%,transparent), transparent 60%),
-    radial-gradient(900px 520px at 100% 0%, color-mix(in srgb,var(--c-data) 7%,transparent), transparent 55%),
+    radial-gradient(900px 520px at 100% 0%, color-mix(in srgb,var(--spectrum-5) 7%,transparent), transparent 55%),
     radial-gradient(820px 480px at 46% 104%, color-mix(in srgb,var(--spectrum-1) 7%,transparent), transparent 55%),
     var(--bg);
 }
@@ -408,19 +437,32 @@ body.os-chrome{
    simulating distance and motion between the layers have the shadows also
    generate appropriately for the perceived depth and motion, and angle with the
    centre of the page being a spotlight"). One coupled signal per tier, not two:
-   the SAME @keyframes step that moves an element also grows/shrinks a
-   `filter:drop-shadow()` layer, so motion and shadow can never desync (there is
-   no second timeline or JS to keep in sync — same animation-timeline, same
-   progress, more properties on it). Deliberately `filter:drop-shadow()`, NOT an
-   animated `box-shadow`: `.hero > .wrap` and `.sec:has(.sec-head)` already carry
-   a carefully-tuned STATIC multi-layer `box-shadow` (the glass-panel elevation +
-   inset highlight from the second real-device pass) — animating `box-shadow`
-   replaces the WHOLE property value per keyframe, which would mean silently
-   re-deriving/duplicating those existing tuned layers inside every keyframe step
-   (real risk of a transcription drift between the static and animated copies).
-   `filter:drop-shadow()` is a separate property that composites additively on
-   top of the untouched static `box-shadow` — one new depth cue layered on, the
-   existing elevation shadow is never touched or duplicated.
+   the SAME @keyframes step that moves an element also grows/shrinks a shadow
+   layer, so motion and shadow can never desync (there is no second timeline or
+   JS to keep in sync — same animation-timeline, same progress, more properties
+   on it). Tier "near" (`.prism-beam`) uses `filter:drop-shadow()`, composited
+   additively on top of nothing else (the beam has no static box-shadow of its
+   own to duplicate).
+   **Tier "mid" uses `box-shadow`, NOT `filter:drop-shadow()` — CORRECTED
+   2026-08-28, real bug, see "HARD-CUT SHADOW BUG" below.** The original design
+   here used `filter:drop-shadow()` for tier "mid" too (reasoning at the time:
+   avoid re-deriving the existing tuned STATIC multi-layer `box-shadow` inside
+   every keyframe step) but that traded a transcription-drift risk for a WORSE,
+   real visual bug: `.hero > .wrap`/`.sec:has(.sec-head)` both carry their own
+   `overflow:hidden` (needed for `.prism-beam`'s bleed and the panels' own
+   rounded corners), and per the CSS Filter Effects spec an element's own
+   `overflow:hidden` clips that SAME element's `filter` output at its tight
+   rectangular border-box — so the glow hard-cut at the panel edge instead of
+   falling off softly (a real phone screenshot caught this: "a HARSH, hard-edged
+   black rectangular cut" on the hero panel and the `.sec` panel wrapping the
+   tool cards). `box-shadow` is NOT subject to an element's own overflow
+   clipping (spec-guaranteed, unlike `filter`) so it doesn't have this problem —
+   fixed by moving tier "mid"'s animated glow onto `box-shadow`, and solving the
+   original transcription-drift worry with a `--elev-shadow` custom property
+   (set once per element, close to its own static box-shadow declaration) that
+   both the resting rule AND every `ea-parallax-mid`/`ea-parallax-mid-chord`
+   keyframe step reference via `var(--elev-shadow)` — one authored copy of the
+   static layers, read everywhere, never duplicated by value.
    ANGLE is static per element (author-time, from where it actually sits in the
    layout — never itself scroll-reactive, exactly as asked), SIZE/opacity is the
    dynamic scroll-driven part: each pair of drop-shadow() keyframe values below is
@@ -474,14 +516,17 @@ body.os-chrome{
    they're `color-mix(in srgb, var(--glow-near|--glow-mid) N%, transparent)`,
    reading the two custom properties defined in :root / the `body[data-cat=...]`
    rules near the top of this file. That means EVERY page that ever gains
-   `os-chrome` shows its own domain colour automatically (Foundation white,
-   Data blue, ML indigo, Spatial green) with zero new keyframes — a page-level
-   attribute swap, not a per-page CSS fork. `--glow-near` (tier "near",
-   `.prism-beam`) defaults to pure white regardless of category, because the
-   beam is a literal white light source in its own SVG artwork — that's a
-   property of the GRAPHIC, not the page's product domain, so it stays fixed
-   even on a category page (e.g. algformer.html, `data-cat="ml"`, still glows
-   white for the beam, indigo for its window panels). `--glow-mid` (tier "mid",
+   `os-chrome` shows its own PACKAGE colour automatically (Foundation white,
+   plus one of the 8 per-package hues — see the :root "PER-PACKAGE PALETTE"
+   comment, 2026-08-28, superseding the original 4-bucket Data/ML/Spatial
+   description this paragraph used to carry) with zero new keyframes — a
+   page-level attribute swap, not a per-page CSS fork. `--glow-near` (tier
+   "near", `.prism-beam`) defaults to pure white regardless of category,
+   because the beam is a literal white light source in its own SVG artwork —
+   that's a property of the GRAPHIC, not the page's product domain, so it
+   stays fixed even on a category page (e.g. algformer.html, `data-cat=
+   "algformer"`, still glows white for the beam, its own package hue for its
+   window panels). `--glow-mid` (tier "mid",
    the glass window panels) is the one that actually shifts per category, since
    panels are generic chrome with no light source of their own — they read as
    catching ambient light tinted by whatever product they belong to.
@@ -507,21 +552,26 @@ body.os-chrome{
     from{transform:translateY(0); filter:drop-shadow(-16px 32px 24px color-mix(in srgb, var(--glow-near) 55%, transparent))}
     to{transform:translateY(-70px); filter:drop-shadow(-8px 16px 12px color-mix(in srgb, var(--glow-near) 25%, transparent))}
   }
+  /* box-shadow, not filter:drop-shadow — see the "HARD-CUT SHADOW BUG" note above the MAGNITUDE/
+     LIGHTING MODEL comment block for why. var(--elev-shadow) is set once per element right next to
+     its own static box-shadow (the .hero > .wrap / .sec:has(.sec-head) rules below), so this ONE
+     shared keyframes pair still resolves each element's own distinct elevation layers correctly —
+     hero and .sec have different --elev-shadow values, nothing here hardcodes either. */
   @keyframes ea-parallax-mid{
-    from{transform:translateY(30px); filter:drop-shadow(0 12px 15px color-mix(in srgb, var(--glow-mid) 20%, transparent))}
-    to{transform:translateY(0); filter:drop-shadow(0 36px 48px color-mix(in srgb, var(--glow-mid) 55%, transparent))}
+    from{transform:translateY(30px); box-shadow:var(--elev-shadow), 0 12px 15px color-mix(in srgb, var(--glow-mid) 20%, transparent)}
+    to{transform:translateY(0); box-shadow:var(--elev-shadow), 0 36px 48px color-mix(in srgb, var(--glow-mid) 55%, transparent)}
   }
   /* CHORD variant of tier "mid" (2026-08-28) — identical transform/timing/angle math to
      ea-parallax-mid above (same translateY, same X/Y/blur numbers, same scalar-multiple lock), the
-     ONLY difference is the filter carries TWO stacked drop-shadow() layers instead of one, each
-     reading a different domain colour (--glow-mid-a / --glow-mid-b, set once per chord page via
+     ONLY difference is TWO stacked animated box-shadow layers instead of one, each reading a
+     different domain colour (--glow-mid-a / --glow-mid-b, set once per chord page via
      body[data-cat="..."] near :root — see "CHORD (multi-tone) pages" above). This is what makes a
-     genuinely multi-domain page (prose.html: HoloDb/Data + AlgFormer/ML) glow two-tone instead of
-     one flat colour, without forking the tier's motion/angle logic — only used where
-     ea-parallax-mid-chord is explicitly assigned below, single-tone pages never load or pay for it. */
+     genuinely multi-domain page (prose.html: HoloDb + AlgFormer) glow two-tone instead of one flat
+     colour, without forking the tier's motion/angle logic — only used where ea-parallax-mid-chord is
+     explicitly assigned below, single-tone pages never load or pay for it. */
   @keyframes ea-parallax-mid-chord{
-    from{transform:translateY(30px); filter:drop-shadow(0 12px 15px color-mix(in srgb, var(--glow-mid-a) 20%, transparent)) drop-shadow(0 12px 15px color-mix(in srgb, var(--glow-mid-b) 20%, transparent))}
-    to{transform:translateY(0); filter:drop-shadow(0 36px 48px color-mix(in srgb, var(--glow-mid-a) 55%, transparent)) drop-shadow(0 36px 48px color-mix(in srgb, var(--glow-mid-b) 55%, transparent))}
+    from{transform:translateY(30px); box-shadow:var(--elev-shadow), 0 12px 15px color-mix(in srgb, var(--glow-mid-a) 20%, transparent), 0 12px 15px color-mix(in srgb, var(--glow-mid-b) 20%, transparent)}
+    to{transform:translateY(0); box-shadow:var(--elev-shadow), 0 36px 48px color-mix(in srgb, var(--glow-mid-a) 55%, transparent), 0 36px 48px color-mix(in srgb, var(--glow-mid-b) 55%, transparent)}
   }
 
   /* Tier 1 "far" — the wallpaper itself (the body.os-chrome background painted
@@ -578,12 +628,12 @@ body.os-chrome{
        rule immediately above, so it always wins regardless of source order while every other
        animation-* property (timing-function/fill-mode/timeline/range) still cascades in from that
        same base rule untouched — only animation-name changes. See the ea-parallax-mid-chord
-       keyframes and the body[data-cat="data-ml"] custom-property rule near :root for the rest of
+       keyframes and the body[data-cat="holodb-algformer"] custom-property rule near :root for the rest of
        this mechanism. Extend this one-line pattern (a new body[data-cat="..."] value + a matching
        override here) for any future multi-domain page rather than writing a new keyframes/selector
        pair from scratch each time. */
-    body.os-chrome[data-cat="data-ml"] .hero > .wrap,
-    body.os-chrome[data-cat="data-ml"] .sec:has(.sec-head){
+    body.os-chrome[data-cat="holodb-algformer"] .hero > .wrap,
+    body.os-chrome[data-cat="holodb-algformer"] .sec:has(.sec-head){
       animation-name:ea-parallax-mid-chord;
     }
   }
@@ -622,8 +672,13 @@ body.os-chrome .hero-bar{display:none}
     position:relative; z-index:1; background:color-mix(in srgb,var(--surface) 78%,transparent);
     backdrop-filter:blur(28px) saturate(1.15); border:1px solid var(--border-2);
     border-radius:calc(var(--radius) + 2px); overflow:hidden;
-    box-shadow:0 32px 64px -36px rgba(0,0,0,.65), inset 0 1px 0 rgba(255,255,255,.03),
+    /* --elev-shadow + the HARD-CUT SHADOW BUG fix: see the comment above the ea-parallax-mid
+       keyframes and the MAGNITUDE/LIGHTING MODEL block earlier in this file. Kept as one custom
+       property (not a literal box-shadow value) specifically so the shared keyframes can append the
+       animated tier-"mid" glow after it without duplicating these three static layers by hand. */
+    --elev-shadow:0 32px 64px -36px rgba(0,0,0,.65), inset 0 1px 0 rgba(255,255,255,.03),
                inset 0 0 0 1px color-mix(in srgb,var(--accent) 14%,transparent);
+    box-shadow:var(--elev-shadow);
   }
   body.os-chrome .hero > .wrap::before{
     content:""; position:absolute; inset:0 0 auto 0; height:2px; background:var(--spectrum); opacity:.85; z-index:2;
@@ -642,7 +697,13 @@ body.os-chrome .hero-bar{display:none}
     max-width:calc(var(--wrap) + 60px); margin:26px auto; padding:0; position:relative;
     background:color-mix(in srgb,var(--surface) 76%,transparent); backdrop-filter:blur(24px) saturate(1.1);
     border:1px solid var(--border); border-radius:var(--radius);
-    box-shadow:0 26px 54px -32px rgba(0,0,0,.6), inset 0 1px 0 rgba(255,255,255,.02);
+    /* same box-shadow-not-filter fix as .hero > .wrap above (see its comment for the full root
+       cause) — this is the panel that wraps every #tools/#packages card grid, so the reported
+       "hard cut ... on the tool cards below it" was THIS element's edge, not the .card elements
+       themselves (verified: .card carries its own overflow:hidden + border-radius but no filter or
+       animated shadow of its own, so it was never the source). */
+    --elev-shadow:0 26px 54px -32px rgba(0,0,0,.6), inset 0 1px 0 rgba(255,255,255,.02);
+    box-shadow:var(--elev-shadow);
     overflow:hidden;
   }
   body.os-chrome .sec:has(.sec-head)::before{
@@ -795,7 +856,16 @@ body.os-chrome .nav-links a.active::before{
      colours that are NOT pastel (--c-data #4aa3ff, --c-ml #7d7dff at the time this note was written,
      since retuned to #c07dff for spectrum spacing) read washed-out once both
      softenings stacked. Explicit opacity:1 here breaks that inheritance regardless of what the
-     accent-bar rule does. */
+     accent-bar rule does.
+     HISTORICAL NOTE (2026-08-28, per-package palette pass): --c-data/--c-ml/--c-spatial themselves
+     no longer exist as tokens — superseded by the 8 per-package tokens + Prose's chord, see the
+     :root comment near the top of this file. Left the var(--c-ml)/hex literals above as written,
+     since they're a dated trace of a specific past bug hunt, not live code — don't "fix" them to the
+     new token names, that would misrepresent what was actually being debugged at the time. The
+     --cat/--cat-root FALLBACK MECHANISM this whole comment describes is unchanged and still load-
+     bearing for the new palette (a two-tone chord --cat gradient still needs a --cat-root solid
+     fallback, same reason, just reading different tokens now — e.g. Prose's card sets
+     --cat-root:var(--c-holodb)). */
   body.os-chrome #packages .grid > .card::before{
     content:attr(data-initial); position:static; display:flex; align-items:center; justify-content:center;
     width:56px; height:56px; border-radius:16px; opacity:1;

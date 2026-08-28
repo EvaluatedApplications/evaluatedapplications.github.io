@@ -27,7 +27,7 @@
   .race-fill{height:100%;border-radius:5px}
   .race-fill.holo{width:0.5%;background:var(--spectrum)}
   .race-fill.sql{width:100%;background:linear-gradient(90deg,color-mix(in srgb,var(--bad) 55%,transparent),var(--bad))}
-  .race-fill.duck{width:2%;background:color-mix(in srgb,var(--c-data) 60%,transparent)}
+  .race-fill.duck{width:2%;background:color-mix(in srgb,var(--spectrum-5) 60%,transparent)}
   .race-time{font-family:var(--mono);font-size:.9rem;font-variant-numeric:tabular-nums;white-space:nowrap;min-width:96px;text-align:right}
   .race-time.win{color:var(--ok);font-weight:700}
   .race-note{margin:14px 0 0;font-size:.82rem;color:var(--ink-faint)}
@@ -67,7 +67,7 @@
 {"@context":"https://schema.org","@type":"SoftwareApplication","name":"EvaluatedApplications.HoloDb","description":"HoloDb stores data as holograms in one associative store, queried three ways over one copy: exact SQL by key, similarity search by content (NEAREST), and constant-time analytics. Relational, vector and analytical in one embeddable .NET package.","applicationCategory":"DeveloperApplication","operatingSystem":".NET 8.0+","softwareVersion":"1.7.7","url":"https://evaluatedapplications.github.io/holodb/","downloadUrl":"https://www.nuget.org/packages/EvaluatedApplications.HoloDb","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"author":{"@type":"Organization","name":"Evaluated Applications","url":"https://evaluatedapplications.github.io/"}}
 </script>
 </head>
-<body class="os-chrome" data-cat="data">
+<body class="os-chrome" data-cat="holodb">
 <div class="beam"></div>
 
 <nav class="site-nav">
@@ -136,7 +136,7 @@
 <!-- HOW IT WORKS -->
 <section class="sec" id="how">
   <div class="wrap">
-    <div class="sec-head"><span class="dot" style="background:var(--c-foundation)"></span><h2>How the holographic store works</h2><p>how it works</p></div>
+    <div class="sec-head"><span class="dot" style="background:var(--c-holodb)"></span><h2>How the holographic store works</h2><p>how it works</p></div>
     <div class="how-grid">
       <div>
         <p class="desc" style="font-size:1.02rem">Most databases store rows and bolt the rest on top — a separate analytical cube, a separate vector index — each kept in sync with the source of truth. HoloDb stores the source of truth <em>as holograms</em>.</p>
@@ -173,7 +173,7 @@
 <!-- SHAPE OF THE DATA -->
 <section class="sec" id="workload">
   <div class="wrap">
-    <div class="sec-head"><span class="dot" style="background:var(--c-data)"></span><h2>A billing SaaS's invoice ledger</h2><p>the shape of the data</p></div>
+    <div class="sec-head"><span class="dot" style="background:var(--c-holodb)"></span><h2>A billing SaaS's invoice ledger</h2><p>the shape of the data</p></div>
     <p class="desc" style="max-width:74ch">Every number on this page comes from one realistic workload: a normalised <code>invoices</code> fact joined to a <code>customers</code> dimension — what a subscription business runs its dashboards on. <strong>10 million invoices</strong> across <strong>200,000 customers</strong> and <strong>24 months</strong> of history — and the queries are the ones a billing dashboard actually fires: revenue by status, month and region; the running total; the biggest customers; a single-invoice lookup; and cross-table rollups by <strong>customer segment</strong> and <strong>signup cohort</strong>.</p>
     <div class="shape" style="margin-top:20px">
       <div class="snip"><code>CREATE TABLE customers (
@@ -210,7 +210,7 @@ CREATE TABLE invoices (
 <!-- BENCHMARKS -->
 <section class="sec" id="benchmarks">
   <div class="wrap">
-    <div class="sec-head"><span class="dot" style="background:var(--c-data)"></span><h2>Same SQL. Same data. Verified identical.</h2><p>the scoreboard</p></div>
+    <div class="sec-head"><span class="dot" style="background:var(--c-holodb)"></span><h2>Same SQL. Same data. Verified identical.</h2><p>the scoreboard</p></div>
     <p class="desc" style="max-width:76ch">Two comparisons, each between like and like: the <strong>in-process, in-memory</strong> engines (HoloDb embedded and DuckDB), and the <strong>networked services</strong> (HoloDb's server and SQL&nbsp;Server). Identical billing queries — single-table rollups <em>and</em> cross-table JOINs — over identical data (<strong>10,000,000 invoices ⋈ 200,000 customers</strong>), loaded into each engine through its own bulk path. Every result is verified <strong>byte-for-byte identical</strong> across every engine before timing; figures are the median of many runs on 16 cores.</p>
 
     <div class="stat-row" style="margin-top:24px">
@@ -274,8 +274,8 @@ CREATE TABLE invoices (
 <!-- TRY IT LIVE -->
 <section class="sec">
   <div class="wrap">
-    <div class="sec-head"><span class="dot" style="background:var(--c-spatial)"></span><h2>The engine, running in a browser tab</h2><p>the Analyst</p></div>
-    <a class="card tool" href="/tools/analyst" style="--cat:var(--c-spatial)">
+    <div class="sec-head"><span class="dot" style="background:var(--c-holodb)"></span><h2>The engine, running in a browser tab</h2><p>the Analyst</p></div>
+    <a class="card tool" href="/tools/analyst" style="--cat:var(--c-holodb)">
       <div class="card-top"><h3>The Analyst</h3><span class="tag live">live</span></div>
       <p class="desc">Any data — a CSV, a log, JSON lines — loads into a <strong>real HoloDb running entirely in the browser tab</strong> (compiled to WebAssembly, nothing leaves the device), which profiles it and opens a live SQL prompt. The same real engine as the benchmarks above — running on WASM's interpreted runtime today, not the same speed as those native numbers, honestly.</p>
       <div class="go-in">Open The Analyst →</div>
@@ -286,24 +286,24 @@ CREATE TABLE invoices (
 <!-- FEATURES -->
 <section class="sec" id="features">
   <div class="wrap">
-    <div class="sec-head"><span class="dot" style="background:var(--c-ml)"></span><h2>One store, four databases' worth of jobs</h2><p>capabilities</p></div>
+    <div class="sec-head"><span class="dot" style="background:var(--c-holodb)"></span><h2>One store, four databases' worth of jobs</h2><p>capabilities</p></div>
     <p class="desc" style="max-width:74ch;margin-bottom:20px">Relational rows, analytical rollups and a vector index are usually three separate systems kept in sync. Here they are three views of the same holographic store — one <code>dotnet add package</code>, one copy of the data.</p>
     <div class="grid">
-      <article class="card" style="--cat:var(--c-ml)"><div class="card-top"><h3>Holographic, associative store</h3></div>
+      <article class="card" style="--cat:var(--c-holodb)"><div class="card-top"><h3>Holographic, associative store</h3></div>
         <p class="desc">Values are encoded as complex <strong>phase vectors</strong>, and a row's columns are bound into one hologram, so rows can be retrieved by resemblance, not just by key. The maintained totals are superpositions — sums of encodings — that a row is removed from by exact subtraction, which keeps <code>UPDATE</code> and <code>DELETE</code> exact. Holograms are derived from the columns, not stored per row, so there is no per-row space cost.</p></article>
-      <article class="card" style="--cat:var(--c-foundation)"><div class="card-top"><h3>Transactional SQL</h3></div>
+      <article class="card" style="--cat:var(--c-holodb)"><div class="card-top"><h3>Transactional SQL</h3></div>
         <p class="desc">Real ACID: a reader/writer lock, pre-transaction snapshot rolled back on any error, fsync write-ahead log, and crash recovery bounded by <em>live data, not write history</em>. A substantial SQL dialect — joins, subqueries in <code>IN</code>, <code>LIKE</code>, <code>BETWEEN</code>, <code>GROUP BY</code>/<code>HAVING</code>, transactions.</p>
         <p class="lim">One <code>PRIMARY KEY</code> per table (INT or TEXT). <b>No</b> OUTER joins or <code>ALTER TABLE</code> yet.</p></article>
-      <article class="card" style="--cat:var(--c-spatial)"><div class="card-top"><h3>Content-addressable search</h3></div>
+      <article class="card" style="--cat:var(--c-holodb)"><div class="card-top"><h3>Content-addressable search</h3></div>
         <p class="desc">Retrieve by resemblance, not just by key: <code>SELECT … FROM t NEAREST (col=val,…) LIMIT k</code> ranks rows by similarity to a partial description — a vector query <em>in SQL</em>, over the <strong>same rows</strong>, with no separate index to build or keep in sync. A sublinear index takes over above ~8,000 rows in the in-memory engine.</p>
         <p class="lim"><code>NEAREST</code> can't yet combine with <code>WHERE</code>/<code>GROUP</code>.</p></article>
-      <article class="card" style="--cat:var(--c-data)"><div class="card-top"><h3>Size-independent analytics</h3></div>
+      <article class="card" style="--cat:var(--c-holodb)"><div class="card-top"><h3>Size-independent analytics</h3></div>
         <p class="desc">Because an integer total is itself one vector, whole-table <code>COUNT</code>/<code>SUM</code>/<code>MIN</code>/<code>MAX</code> and single-column <code>GROUP BY</code> read a maintained value in <strong>O(1)</strong> — no scan, flat as the table grows. Zone maps, compiled predicates and a columnar path keep ordinary filters fast.</p>
         <p class="lim">Integer aggregates are exact + constant-time; <b>real</b>-number sums use a SIMD scan.</p></article>
-      <article class="card" style="--cat:var(--c-data)"><div class="card-top"><h3>Durable, larger-than-memory</h3></div>
+      <article class="card" style="--cat:var(--c-holodb)"><div class="card-top"><h3>Durable, larger-than-memory</h3></div>
         <p class="desc">The paged engine stores tables on an 8&nbsp;KB buffer-pool page store with a redo-only WAL: cold pages spill to disk, so a table can <strong>exceed RAM</strong>, with bounded crash recovery — and the size-independent aggregates are maintained <em>on disk</em>.</p>
         <p class="lim">The primary-key index stays in RAM (~16&nbsp;B/row) — the limit for tables far bigger than memory.</p></article>
-      <article class="card" style="--cat:var(--c-foundation)"><div class="card-top"><h3>Live metrics under ingest</h3></div>
+      <article class="card" style="--cat:var(--c-holodb)"><div class="card-top"><h3>Live metrics under ingest</h3></div>
         <p class="desc">Whole-table and grouped counts/sums are served from an immutable snapshot republished after every write — <strong>without taking the engine lock</strong> — so a continuous streaming ingest never stalls a dashboard read.</p></article>
     </div>
   </div>
@@ -312,7 +312,7 @@ CREATE TABLE invoices (
 <!-- DEPLOY -->
 <section class="sec" id="deploy">
   <div class="wrap">
-    <div class="sec-head"><span class="dot" style="background:var(--c-foundation)"></span><h2>Runs everywhere .NET runs. Including this tab.</h2><p>deploy</p></div>
+    <div class="sec-head"><span class="dot" style="background:var(--c-holodb)"></span><h2>Runs everywhere .NET runs. Including this tab.</h2><p>deploy</p></div>
     <div class="grid">
       <article class="card"><div class="card-top"><h3>Embedded, in-process</h3></div>
         <div class="snip"><code>var db = new HoloDbService(new HoloDbOptions { WalPath = "app.wal" });

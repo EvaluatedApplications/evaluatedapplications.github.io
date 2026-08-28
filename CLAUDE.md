@@ -68,18 +68,87 @@ a phone in light mode ("get rid of light pallets then dark always"). Don't reint
 palette without an explicit, separate request — and if one's ever wanted, gate it behind an opt-in
 control, not automatic OS detection. Design tokens: `--bg/--bg-2/--surface/--surface-2`,
 `--border/--border-2`, `--ink/--ink-soft/--ink-faint`, `--accent/--accent-ink`, `--spectrum`
-(brand gradient), 4 category colours — **retinted 2026-08-28, see "Tools-first pivot" below**:
-`--c-foundation` is now the literal `--spectrum` gradient itself ("the undispersed beam", Phasor/
-EvalApp), paired with a flat `--c-foundation-solid:#fff` companion for call sites that can't take a
-gradient; `--c-data` (blue, HoloDb family, unchanged); `--c-ml` (now Indigo/`--spectrum-6`
-`#7d7dff`, was an off-spectrum pink `#e879c8` — AlgFormer family/EvalApp.Neural/Prose); `--c-spatial`
-(green, Tracer/HoloVoxel, unchanged) — plus `--cat-root`, a per-card companion custom prop (set
-alongside `--cat` only where `--cat` itself holds a gradient) for the few CSS call sites that need a
-real solid colour, `--ok/--warn/--bad`, `--radius`, `--wrap` (1080px), `--font`/`--mono`. This same
+(brand gradient) — plus the **per-package palette (2026-08-28, supersedes the old 4-bucket Data/ML/
+Spatial model — see "Per-package palette" subsection right below for the full table + reasoning)**
+and `--cat-root`, a per-card companion custom prop (set alongside `--cat` only where `--cat` itself
+holds a gradient) for the few CSS call sites that need a real solid colour, `--ok/--warn/--bad`,
+`--radius`, `--wrap` (1080px), `--font`/`--mono`. This same
 file also styles the Blazor tools shell's loading/error UI
 (`#app:has(.loading-progress)`, `#blazor-error-ui`) via the shared tokens, but that's the ONLY
 reach into `Showroom/`'s presentation from here — its own component styles are `showroom-owner`'s
-territory (see "Prism motif" below for a live coordination flag on this boundary). Reusable components: `.site-nav` (sticky, CSS-only mobile burger via
+territory (see "Prism motif" below for a live coordination flag on this boundary).
+
+**Per-package palette (2026-08-28, supersedes the 4-bucket Foundation/Data/ML/Spatial model)** —
+direct user correction after seeing the live site: "still white blue purple and green, I want the
+full spectrum... red through purple, not only the cold colours." The old bucket model had a hard
+ceiling of "however many buckets exist" (3 cool hues + white), not "however many packages exist," so
+every one of the 11 real packages now maps to the table below instead. **THE hex table, single
+source of truth** (also duplicated into `site.css`'s own `:root` comment, since there's no shared
+token file across the AboutUs/Showroom repo boundary — same "brand-mark-stopped-at-repo-boundary"
+limitation already on record under "Platform initiative" below; a parallel `showroom-owner` task
+consumes this same table to retint Prism/Analyst/Creature/Forecaster, it does NOT get its own
+independent picks):
+
+| Package | Token | Hex | Family / placement reasoning |
+|---|---|---|---|
+| Phasor | `--c-foundation` (gradient) | — | Foundation, undispersed beam. Unchanged, confirmed correct by the user, not a domain colour. |
+| EvalApp | `--c-foundation` (gradient) | — | Foundation, same as Phasor. |
+| Tracer | `--c-tracer` | `#f0796a` | Foundation-only leaf (warm end, stop 1/8 of the ROYGBIV run). |
+| HoloVoxel | `--c-holovoxel` | `#f09b5c` | Foundation-only leaf (warm end, stop 2/8), adjacent to Tracer. |
+| HoloDb.Client | `--c-holodb-client` | `#e9ba53` | HoloDb family, depends on HoloDb.Protocol (stop 3/8). |
+| HoloDb.Protocol | `--c-holodb-protocol` | `#a9cf5f` | HoloDb family, depends on HoloDb (stop 4/8). |
+| HoloDb | `--c-holodb` | `#66c1aa` | HoloDb family anchor (stop 5/8) — adjacent to AlgFormer on purpose, see Prose below. |
+| AlgFormer | `--c-algformer` | `#5998ff` | AlgFormer family anchor (stop 6/8) — adjacent to HoloDb on purpose. |
+| AlgFormer.Gpu | `--c-algformer-gpu` | `#877dff` | AlgFormer family, depends on AlgFormer only (stop 7/8). |
+| EvalApp.Neural | `--c-evalapp-neural` | `#c07dff` | AlgFormer family, depends on AlgFormer + Foundation-dropped EvalApp (stop 8/8). |
+| Prose | *(no token — see below)* | — | Composite, always the HoloDb+AlgFormer chord, never its own hex. |
+
+All 8 hexes are the SAME `--spectrum` gradient re-sampled at 8 even points (t=0,1/7,2/7…1) rather
+than an invented palette — still one brand gradient, just finer-grained than the old 7 named ROYGBIV
+stops. Placement is dependency-derived: each real package FAMILY (HoloDb: HoloDb/`.Protocol`/
+`.Client`; AlgFormer: AlgFormer/`.Gpu`/EvalApp.Neural; the 2 Foundation-only leaves Tracer/HoloVoxel)
+occupies a contiguous run of stops, ordered by real dependency chain within the family (e.g. HoloDb
+→ HoloDb.Protocol → HoloDb.Client, matching who `ProjectReference`s whom), and the families are
+spread across the FULL spectrum (warm end = the two foundation-only leaves, middle = HoloDb family,
+cool end = AlgFormer family) so the site finally shows genuine warm-to-cool range, not 3 cool hues.
+**Prose has no dedicated stop.** Unlike the other 8, it is not a single-domain product with one real
+dependency chain — its own `docs/site.md` says outright "Depends on: HoloDb ... and AlgFormer" — so
+it is structurally a COMPOSITE, same as a multi-package Showroom tool, and always renders as the
+two-tone hard-edged chord of `var(--c-holodb)`+`var(--c-algformer)` (card `--cat`, mobile icon tile,
+pkg-strip swatch — all of it, not just the page's ambient glow) rather than owning a hex nothing else
+would reference. HoloDb sits at stop 5 and AlgFormer at stop 6 (adjacent) specifically so this chord
+reads as one smooth neighbouring blend instead of two hues yanked from opposite ends of the wheel.
+
+**How this reaches every page (mechanism, unchanged shape from the old bucket system, just reading
+finer tokens now)**: `body[data-cat="<package-name>"]` (was `"foundation"|"data"|"ml"|"spatial"`, now
+the literal package name — `"tracer"`, `"holovoxel"`, `"holodb"`, `"holodb-protocol"`,
+`"holodb-client"`, `"algformer"`, `"algformer-gpu"`, `"evalapp-neural"`, or `"foundation"`) drives the
+`--glow-near`/`--glow-mid` parallax tint via the same `body[data-cat="..."]` rules near `:root` in
+`site.css`; the CHORD attribute value renamed from `"data-ml"` to `"holodb-algformer"` (prose.html
+only, the one genuinely two-package page) for the same reason — the attribute now names real
+packages, not a bucket pair. Every product page's own `.sec-head .dot` / `.card` `--cat` was swept to
+its own single package hue (previously several packages shared one bucket colour, e.g. `algformer-
+gpu.html`/`evalapp-neural.html`/`prose.html`/`holoformer.html` all used to read as identical
+`--c-ml` indigo — now each is visibly its own hue). Two real, pre-existing MISCOLOURINGS were fixed as
+part of this sweep, not just retinted: **The Analyst tool card was `--c-spatial` (green)** on both
+`index.html` and `holodb/index.html` despite depending on HoloDb only — now `--c-holodb`, matching the
+user's own named example ("Analyst draws on HoloDb only... need their own distinct package-level
+hue"). **Prism was flat `--c-ml`** (shared with 4 other packages) despite depending on AlgFormer
+only — now `--c-algformer`, the user's other named example. A few genuinely NON-dependency decorative
+uses of the old bucket tokens (an "ordinary transformer" cold-blue contrast metaphor on
+`holoformer.html`, a DuckDB competitor benchmark bar on `holodb/index.html`) were repointed to the
+neutral `--spectrum-5` stop instead of any package token, specifically so they don't newly imply a
+false dependency now that colours are package-specific rather than a shared decorative bucket.
+`algformer.html`'s "AlgFormer (softmax) vs HoloFormer (holographic)" two-core comparison cards (both
+genuinely part of the SAME package) use `--c-algformer-gpu` / `--c-algformer` respectively as a
+still-contrasting but honest pair — not a fake HoloDb dependency the old `--c-data` pick implied.
+**Flagged for `showroom-owner`** (not touched from here, out of this agent's ownership per charter
+§0): Prism/Analyst/Creature/Forecaster in `Showroom/` should retint to this same table — Prism →
+`--c-algformer` `#5998ff`, Analyst → `--c-holodb` `#66c1aa`, Creature → the AlgFormer+Tracer chord
+(`#5998ff`+`#f0796a`), Forecaster → `--c-algformer` `#5998ff` — so the two repos read as one system
+despite the missing shared token file.
+
+Reusable components: `.site-nav` (sticky, CSS-only mobile burger via
 `.nav-toggle` checkbox hack — lean, always a flat list of 4-6 plain links, see Navigation below)
 + `.related` (compact contextual cross-link pills in the hero, see Navigation),
 `.hero`/`.eyebrow`/`.lede`/`.facts`/`.fact`, `.sec`/`.sec-head`,
@@ -838,6 +907,74 @@ this sweep is considered fully closed.
 (taskbar-style nav, window-panel framing) would read as a natural extension into `Showroom/`'s own
 UI for a cohesive OS feel across the whole site+tools experience — flagged for the coordinator to
 route to `showroom-owner` if wanted, not something to reach into from here.
+
+### Real bug fix: hard-cut parallax shadow (2026-08-28, bundled into the palette pass below)
+
+Real phone screenshot, coordinator relay: the hero panel and the homepage tool cards showed a
+"HARSH, hard-edged black rectangular cut instead of a smooth shadow falloff" at the panel's bottom
+edge — user's own diagnosis, "likely not in the same container," pointed at the right neighbourhood.
+**Root-caused, not guess-patched**: `.hero > .wrap` and `.sec:has(.sec-head)` (the glass window
+panels) both carry their own `overflow:hidden` (needed for `.prism-beam`'s bleed and the panels' own
+rounded corners) AND, since the scroll-tied parallax work above, an animated tier-"mid"
+`filter:drop-shadow()`. Per the CSS Filter Effects spec, an element's own `overflow:hidden` clips
+that SAME element's `filter` output at its tight rectangular border-box — `box-shadow` is NOT subject
+to this (spec-guaranteed, cross-browser), which is why the pre-existing STATIC elevation shadow on
+these same two elements never showed the bug, only the newer animated glow did. Fixed by moving tier
+"mid"'s animated glow from `filter` onto an extra `box-shadow` layer: a `--elev-shadow` custom
+property (set once per element, right next to its own static box-shadow) is read by BOTH the resting
+rule and every `ea-parallax-mid`/`ea-parallax-mid-chord` keyframe step via `var(--elev-shadow)`, so
+the one shared keyframes pair still composes each element's own distinct static layers correctly
+(hero and `.sec` have different elevation values) without duplicating them by literal value at every
+keyframe step. Tier "near" (`.prism-beam`) was deliberately left on `filter` — it has no `overflow`
+of its own; the clipping it experiences comes from its ANCESTOR `.hero`'s overflow, which is the
+pre-existing, intentional "tastefully clipped" behaviour already documented for that beam, not the
+same same-element bug. Verified: `site.css` brace/paren parity (237/237 → 242/242 braces after this
+plus the palette work below, 619/619 → 637/637 parens) and a full re-read of both edited panel rules
++ both edited keyframes blocks. **Not verified on a real device** (no live browser here) — the
+coordinator/user should re-check the same phone screenshot's two panels before this is closed.
+
+### Per-package palette rollout (2026-08-28) — files touched + verification
+
+Full hex table + reasoning lives under Design system > "Per-package palette" above; this entry is
+just the sweep record. **`site.css`**: `:root` token block (8 new `--c-*` tokens replacing `--c-data`/
+`--c-ml`/`--c-spatial`, `--c-foundation`/`--c-foundation-solid` unchanged), the `body[data-cat="..."]`
+glow-tint rules (9 single-package rules + the renamed `"holodb-algformer"` chord rule), the chord
+`animation-name` override selector, the wallpaper's decorative blue stop (`--c-data`→`--spectrum-5`,
+not a package token — purely ambient, not per-page), and 3 historical comment blocks that would
+otherwise have gone stale (the Creature icon-tile bug trace, the glow mechanism doc, the chord-
+override doc) — left the OLD hex/token names inside dated bug-trace comments as written (accurate
+history of what was actually being debugged at the time) but added a pointer to where the live tokens
+now live. **13 HTML files swept**: 6 single-package pages via a straight `var(--c-X)`→`var(--c-Y)`
+substitution (`holodb-protocol.html`, `algformer-gpu.html`, `evalapp-neural.html`, `tracer.html`,
+`holodb-client.html`, `holovoxel.html` — each was already internally consistent, using only ONE
+bucket token throughout, confirmed by a per-file grep before touching it, not assumed); 3
+`data-cat`-only pages with no `--c-*` usage of their own (`holodb.html`, `holodb/manual/index.html`,
+plus the attribute on `holodb/index.html`); 3 mixed-usage pages requiring line-by-line judgement
+(`algformer.html` — the Creature mirror chord + the softmax/holographic comparison cards, see Design
+system for the reasoning; `holoformer.html` — the "ordinary transformer" cold-contrast metaphor
+repointed to neutral `--spectrum-5`; `holodb/index.html` — the DuckDB competitor bar to
+`--spectrum-5`, the Analyst tool card's real miscolouring fixed to `--c-holodb`, and 6 capability-grid
+cards that were cycling through all 4 old buckets purely for decorative variety, collapsed to the
+one honest `--c-holodb` since none of those 6 cards describe a different package); and 3 genuinely
+multi-package pages (`index.html` — Prism/Creature/Forecaster/Analyst tool cards + the `.pkg-strip`
+chips, both real miscolourings fixed here too since they're mirrored from the same source as
+`holodb/index.html`'s Analyst card; `packages.html` — all 11 cards + 3 family section-head dots;
+`prose.html` — every card promoted from flat `--c-ml` to the genuine HoloDb+AlgFormer two-tone
+hard-edged chord, not just the page's ambient glow attribute). **Verified**: a sitewide grep for
+`--c-data|--c-ml|--c-spatial` after the sweep returns hits ONLY inside `site.css`'s own dated
+historical-comment text (8 hits, all inside comments, none in a live rule/selector) — zero live
+references anywhere in `site/**/*.html`. `div`/`article`/`section`/`body` tag-balance re-checked on
+all 14 touched HTML files (all matched pre/post). `site.css` brace/paren parity 242/242 braces,
+637/637 parens. **Not verified in an actual browser** — same disclosed limitation as every other CSS
+pass in this file; the coordinator/user should eyeball `packages.html` (11 distinct card hues),
+`prose.html` (the two-tone chord), and `index.html`'s `#tools` grid (Prism blue vs Analyst teal-green,
+no longer collapsed together) on a real screen before this is considered closed.
+
+**Flagged for `showroom-owner`** (own task, not touched from here): retint `Showroom/`'s Prism/
+Analyst/Creature/Forecaster to this same table (values in the Design system table above) so the two
+repos read as one system — same "brand-mark-stopped-at-repo-boundary" limitation already on record
+under "Platform initiative" below, no shared token file exists across the repo boundary so this has
+to be a duplicated-by-hand hex match, not an automatic inheritance.
 
 ## Deploy
 

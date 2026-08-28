@@ -17,7 +17,7 @@
 {"@context":"https://schema.org","@type":"SoftwareApplication","name":"EvaluatedApplications.HoloDb.Client","description":"HoloDb.Client connects your .NET app to a HoloDb server over TLS. Same API as the embedded engine, columnar results stay columnar on the wire, and opt-in resilience: exponential backoff, a circuit breaker, and per-operation deadlines.","applicationCategory":"DeveloperApplication","operatingSystem":".NET 8.0+","softwareVersion":"1.4.0","url":"https://evaluatedapplications.github.io/holodb-client.html","downloadUrl":"https://www.nuget.org/packages/EvaluatedApplications.HoloDb.Client","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"author":{"@type":"Organization","name":"Evaluated Applications","url":"https://evaluatedapplications.github.io/"}}
 </script>
 </head>
-<body class="os-chrome" data-cat="data">
+<body class="os-chrome" data-cat="holodb-client">
 <div class="beam"></div>
 
 <nav class="site-nav">
@@ -74,7 +74,7 @@
 
 <section class="sec">
   <div class="wrap">
-    <div class="sec-head"><span class="dot" style="background:var(--c-data)"></span><h2>The problem</h2><p>speed vs scalability, without two APIs</p></div>
+    <div class="sec-head"><span class="dot" style="background:var(--c-holodb-client)"></span><h2>The problem</h2><p>speed vs scalability, without two APIs</p></div>
     <p class="desc" style="max-width:74ch">Building analytics or database-driven apps means choosing between speed (embed the database in-process)
       and scalability (run it on its own server). Embedding locks you to one machine; networking usually means
       two separate APIs that behave differently. HoloDb.Client lets you have both: one code path works with
@@ -84,17 +84,17 @@
 
 <section class="sec">
   <div class="wrap">
-    <div class="sec-head"><span class="dot" style="background:var(--c-data)"></span><h2>Why HoloDb.Client</h2><p>what you get</p></div>
+    <div class="sec-head"><span class="dot" style="background:var(--c-holodb-client)"></span><h2>Why HoloDb.Client</h2><p>what you get</p></div>
     <div class="grid">
-      <article class="card" style="--cat:var(--c-data)"><div class="card-top"><h3>Same API, embedded or networked</h3></div>
+      <article class="card" style="--cat:var(--c-holodb-client)"><div class="card-top"><h3>Same API, embedded or networked</h3></div>
         <p class="desc"><code>Execute</code>, <code>ExecuteAsync</code>, <code>BulkLoadAsync</code>, <code>GetStatsAsync</code>, <code>PingAsync</code> — identical surface whether you talk to in-process <code>HoloDbService</code> or a remote server.</p></article>
-      <article class="card" style="--cat:var(--c-data)"><div class="card-top"><h3>Columnar over the wire</h3></div>
+      <article class="card" style="--cat:var(--c-holodb-client)"><div class="card-top"><h3>Columnar over the wire</h3></div>
         <p class="desc">Results are typed column arrays, matching the in-process engine's <code>QueryResult</code> structure — no serialization tax.</p></article>
-      <article class="card" style="--cat:var(--c-data)"><div class="card-top"><h3>Secure by default</h3></div>
+      <article class="card" style="--cat:var(--c-holodb-client)"><div class="card-top"><h3>Secure by default</h3></div>
         <p class="desc">TLS is on. Trust a self-signed server with certificate pinning (thumbprint), or skip it in dev only.</p></article>
-      <article class="card" style="--cat:var(--c-data)"><div class="card-top"><h3>Built-in resilience</h3></div>
+      <article class="card" style="--cat:var(--c-holodb-client)"><div class="card-top"><h3>Built-in resilience</h3></div>
         <p class="desc">Optional exponential backoff with full jitter, a circuit breaker, and a per-operation deadline budget — opt in where you need it, transparent where you don't.</p></article>
-      <article class="card" style="--cat:var(--c-data)"><div class="card-top"><h3>Designed for concurrency</h3></div>
+      <article class="card" style="--cat:var(--c-holodb-client)"><div class="card-top"><h3>Designed for concurrency</h3></div>
         <p class="desc">One client per concurrent worker, or pool clients upfront with <code>HoloDbClientPool</code>.</p></article>
     </div>
   </div>
@@ -102,7 +102,7 @@
 
 <section class="sec">
   <div class="wrap">
-    <div class="sec-head"><span class="dot" style="background:var(--c-data)"></span><h2>How to use it</h2><p>basic, resilient, pinned</p></div>
+    <div class="sec-head"><span class="dot" style="background:var(--c-holodb-client)"></span><h2>How to use it</h2><p>basic, resilient, pinned</p></div>
     <div class="snip"><code>using HoloDb.Client;
 
 // Connect to server
@@ -137,13 +137,13 @@ var client = await HoloDbClient.ConnectAsync("localhost", 5433, options);</code>
 
 <section class="sec">
   <div class="wrap">
-    <div class="sec-head"><span class="dot" style="background:var(--c-data)"></span><h2>Key notes</h2><p>good to know</p></div>
+    <div class="sec-head"><span class="dot" style="background:var(--c-holodb-client)"></span><h2>Key notes</h2><p>good to know</p></div>
     <div class="grid">
-      <article class="card" style="--cat:var(--c-data)"><div class="card-top"><h3>One client = one session</h3></div>
+      <article class="card" style="--cat:var(--c-holodb-client)"><div class="card-top"><h3>One client = one session</h3></div>
         <p class="desc">Requests serialize through an internal queue; concurrent callers share the same TCP connection. Use one client per worker, or pool clients with <code>HoloDbClientPool</code>.</p></article>
-      <article class="card" style="--cat:var(--c-data)"><div class="card-top"><h3>No automatic reconnect</h3></div>
+      <article class="card" style="--cat:var(--c-holodb-client)"><div class="card-top"><h3>No automatic reconnect</h3></div>
         <p class="desc">A dropped socket raises an exception; reconnect explicitly, or opt into <code>ResilientHoloDbClient</code> which handles this transparently.</p></article>
-      <article class="card" style="--cat:var(--c-data)"><div class="card-top"><h3>Transient vs application errors</h3></div>
+      <article class="card" style="--cat:var(--c-holodb-client)"><div class="card-top"><h3>Transient vs application errors</h3></div>
         <p class="desc"><code>HoloRemoteException</code> (SQL errors, auth failures) is never retried; <code>ResilientHoloDbClient</code> retries only transport-level failures.</p></article>
     </div>
     <p class="lim"><b>Version history:</b> v1.2.0 added exponential backoff, v1.3.0 added the circuit breaker, v1.4.0 (current) adds operation deadline budgets across retries. <b>Requires:</b> .NET 8.0+, a HoloDb server v1.4.0+ (wire-protocol compatible), network connectivity with TLS support. <b>License:</b> proprietary, part of Evaluated Applications.</p>
