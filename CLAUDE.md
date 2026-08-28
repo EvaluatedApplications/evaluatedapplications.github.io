@@ -293,6 +293,31 @@ in the Site map / Design system sections above and not restated here. Still-open
   — visual inspection showed "after" reading MORE artifacted than "before", the opposite of the
   filenames' claim (likely mislabeled/unrelated capture). Flag if a correct far-LOD pair turns up.
 
+**2026-08-28: Prism "you be the judge" benchmark section, `algformer.html` only** — Prism has no
+dedicated static page (it's a Showroom tool at `/tools/prism`, referenced from `algformer.html`'s
+"Try it live" gallery + hero CTA); this new content lives as a standalone lone-`.stack` `<section
+class="sec">` (no `.sec-head`, matching the established "just a callout" pattern already used by
+`phasor.html`'s closing section) inserted between "Try it live" and "The problem it solves". Content:
+cites TinyStories (arxiv.org/abs/2305.07759) as the closest published benchmark for how small a
+language model can be and still write legible English (1M-param floor, quoted example, 28-33M for
+their reliable-coherence mark), states Prism's current checkpoint spec via `.facts`/`.fact` pills
+(the SAME component the hero uses for its version/runtime chips — reused, not invented) — `d=1536`,
+1 layer, `shifts=16`, `~28` tokens context, `128`-token vocab, `~410K` real stored parameters — then
+explicitly declines to claim coherence or a record and links to `/tools/prism` inviting the visitor
+to type something in and judge for themselves. No cherry-picked example output on the page by design
+(the user's own real live test is the whole mechanism). **Maintenance gotcha, same discipline as the
+version chips elsewhere on this page**: the `~410K`/`d=1536`/`shifts=16`/`~28`/`128` figures are a
+point-in-time snapshot (sourced this session from the real checkpoint: `Showroom/wwwroot/data/
+oracle-brain.bin` is ~3.29 MB, consistent with ~410K stored doubles), NOT a live-computed value —
+Prism itself (`Showroom/Pages/Prism.razor`) DOES compute its stats live client-side from the actual
+checkpoint bytes on every load (`_stats.ParamCount`/`.Dim`/`.Shifts`/`.Context`/`.Vocab`), which is
+why the CTA sends the visitor there rather than this page trying to duplicate a number that only the
+live tool can keep perfectly fresh. If the checkpoint is retrained to a different shape, re-derive
+these figures the same way (checkpoint file size ÷ 8 bytes/double ≈ real param count, or ask
+showroom-owner for the exact `ParamCount` the tool itself reports) before they drift far enough to
+misrepresent the comparison. Tag balance verified via a scripted open/close count on the whole file
+after the edit (section/div/p/h2/span/a/article all matched); no live browser available.
+
 ## Navigation — the reachability contract (owned by this agent, not the coordinator)
 
 **The invariant**: every page reachable in ≤2 clicks from every OTHER page's nav, without a global
