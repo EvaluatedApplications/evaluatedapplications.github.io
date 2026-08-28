@@ -21,9 +21,20 @@
      --spectrum gradient now ("the undispersed beam"), not a flat violet — --c-foundation-solid is
      the flat #fff companion for the few call sites that structurally can't take a gradient (see the
      --cat-root mechanism below). --c-ml moved off its old off-spectrum pink (#e879c8) onto Indigo
-     (--spectrum-6) so every domain colour a tool chord can draw from is a real ROYGBIV stop. */
+     (--spectrum-6) so every domain colour a tool chord can draw from is a real ROYGBIV stop.
+     CORRECTED same day, real-device feedback ("machine learning is purple but it's very close to
+     blue... not a good spectrum range"): measured in HSL, Indigo (#7d7dff, hue~240°) sits only ~30°
+     from --c-data's Blue (#4aa3ff, hue~210°) -- genuinely too close, matching the complaint exactly,
+     and with --c-spatial's Green (#7bd86a, hue~111°) the 3 domains were bunched entirely in the cool
+     quadrant (111°-240°), none in the warm half. Moved --c-ml one stop further to Violet
+     (--spectrum-7, #c07dff, hue~271°) -- still unambiguously "purple" (not a hue-family change,
+     which the user didn't ask for), doubles the ML/Data separation to ~61°, and widens the whole
+     domain-colour spread to 160° (111°->271°) instead of 129° bunched at the cool end. Reused an
+     existing spectrum stop rather than inventing a new hex, consistent with "every domain colour is
+     a real ROYGBIV stop." --c-data/--c-spatial left untouched -- the user's own words named those
+     two neutrally, only ML was flagged as a problem. */
   --c-foundation:var(--spectrum); --c-foundation-solid:#ffffff;
-  --c-data:#4aa3ff; --c-ml:#7d7dff; --c-spatial:#7bd86a;
+  --c-data:#4aa3ff; --c-ml:#c07dff; --c-spatial:#7bd86a;
   --ok:#7bd86a; --warn:#e6b450; --bad:#f0796a;
   --radius:14px; --wrap:1080px;
   --font:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
@@ -49,6 +60,22 @@ body[data-cat="foundation"]{ --glow-near:var(--c-foundation-solid); --glow-mid:v
 body[data-cat="data"]{ --glow-near:var(--c-data); --glow-mid:var(--c-data); }
 body[data-cat="ml"]{ --glow-near:var(--c-ml); --glow-mid:var(--c-ml); }
 body[data-cat="spatial"]{ --glow-near:var(--c-spatial); --glow-mid:var(--c-spatial); }
+/* CHORD (multi-tone) pages, 2026-08-28 rollout — see CLAUDE.md "Chord glow tinting". A page whose
+   real subject genuinely spans more than one domain (today: only prose.html, which depends on both
+   HoloDb/Data and AlgFormer/ML — Foundation is dropped from the chord the same way it's dropped from
+   the tool-card gradients below, since Phasor/EvalApp underlie almost everything and carry no
+   distinguishing signal) gets a SECOND custom-property pair, --glow-mid-a/--glow-mid-b, read only by
+   the ea-parallax-mid-chord keyframes (see "SCROLL-TIED PARALLAX DEPTH" below) instead of the single
+   --glow-mid. Same source tokens as the tool-card --cat chord gradients (var(--c-data)/var(--c-ml),
+   never a hardcoded hex) and the same canonical domain order (Foundation, Data, ML, Spatial — the
+   order --c-foundation/--c-data/--c-ml/--c-spatial are declared in above, and the same order
+   packages.html's own sections run in) that the Creature tool card already uses for its ML+Spatial
+   gradient, so a colour retune to --c-data or --c-ml (e.g. the --c-ml Indigo->Violet correction) reaches
+   this too automatically — one token, not two independent copies to keep in sync by hand. --glow-near
+   is untouched here on purpose: no chord page today also carries .prism-beam, so there is nothing for
+   a "near" chord to tint yet; if one ever does, extend the same pattern (--glow-near-a/-b + an
+   ea-parallax-near-chord keyframe pair) rather than inventing a new mechanism. */
+body[data-cat="data-ml"]{ --glow-mid-a:var(--c-data); --glow-mid-b:var(--c-ml); }
 
 *{box-sizing:border-box}
 html{scroll-behavior:smooth}
@@ -484,6 +511,18 @@ body.os-chrome{
     from{transform:translateY(30px); filter:drop-shadow(0 12px 15px color-mix(in srgb, var(--glow-mid) 20%, transparent))}
     to{transform:translateY(0); filter:drop-shadow(0 36px 48px color-mix(in srgb, var(--glow-mid) 55%, transparent))}
   }
+  /* CHORD variant of tier "mid" (2026-08-28) — identical transform/timing/angle math to
+     ea-parallax-mid above (same translateY, same X/Y/blur numbers, same scalar-multiple lock), the
+     ONLY difference is the filter carries TWO stacked drop-shadow() layers instead of one, each
+     reading a different domain colour (--glow-mid-a / --glow-mid-b, set once per chord page via
+     body[data-cat="..."] near :root — see "CHORD (multi-tone) pages" above). This is what makes a
+     genuinely multi-domain page (prose.html: HoloDb/Data + AlgFormer/ML) glow two-tone instead of
+     one flat colour, without forking the tier's motion/angle logic — only used where
+     ea-parallax-mid-chord is explicitly assigned below, single-tone pages never load or pay for it. */
+  @keyframes ea-parallax-mid-chord{
+    from{transform:translateY(30px); filter:drop-shadow(0 12px 15px color-mix(in srgb, var(--glow-mid-a) 20%, transparent)) drop-shadow(0 12px 15px color-mix(in srgb, var(--glow-mid-b) 20%, transparent))}
+    to{transform:translateY(0); filter:drop-shadow(0 36px 48px color-mix(in srgb, var(--glow-mid-a) 55%, transparent)) drop-shadow(0 36px 48px color-mix(in srgb, var(--glow-mid-b) 55%, transparent))}
+  }
 
   /* Tier 1 "far" — the wallpaper itself (the body.os-chrome background painted
      immediately above). Tied to scroll(root), the FULL document's own scroll
@@ -534,6 +573,18 @@ body.os-chrome{
       animation-fill-mode:both;
       animation-timeline:view();
       animation-range:entry 0% entry 45%;
+    }
+    /* CHORD override — higher specificity (adds the [data-cat] attribute selector) than the base
+       rule immediately above, so it always wins regardless of source order while every other
+       animation-* property (timing-function/fill-mode/timeline/range) still cascades in from that
+       same base rule untouched — only animation-name changes. See the ea-parallax-mid-chord
+       keyframes and the body[data-cat="data-ml"] custom-property rule near :root for the rest of
+       this mechanism. Extend this one-line pattern (a new body[data-cat="..."] value + a matching
+       override here) for any future multi-domain page rather than writing a new keyframes/selector
+       pair from scratch each time. */
+    body.os-chrome[data-cat="data-ml"] .hero > .wrap,
+    body.os-chrome[data-cat="data-ml"] .sec:has(.sec-head){
+      animation-name:ea-parallax-mid-chord;
     }
   }
 }
@@ -741,7 +792,8 @@ body.os-chrome .nav-links a.active::before{
      `opacity:.85` from the UNRELATED .card::before accent-bar rule up top (tuned for a thin 3px
      desktop bar, never meant for a 56px filled tile) purely because this rule never set its own
      opacity — compounded with the second gradient stop already fading to a 45% colour-mix, brand
-     colours that are NOT pastel (--c-data #4aa3ff, --c-ml #7d7dff) read washed-out once both
+     colours that are NOT pastel (--c-data #4aa3ff, --c-ml #7d7dff at the time this note was written,
+     since retuned to #c07dff for spectrum spacing) read washed-out once both
      softenings stacked. Explicit opacity:1 here breaks that inheritance regardless of what the
      accent-bar rule does. */
   body.os-chrome #packages .grid > .card::before{

@@ -98,8 +98,9 @@ without invalid nested-anchor markup — same reason package cards are `<article
 deliberately NOT a `.sec`/`.sec-head`, so it never grows an os-chrome window panel and can't read as
 a second top-level gallery). **`.hero-bar`/`.hero-body`/`.hero-content`/`.win-dots` + the
 `body.os-chrome` opt-in system** (window-panel chrome, taskbar/dock nav, mobile icon grid — added
-2026-08-28, live on 3 pages only so far, see the dedicated "OS chrome" section below for the full
-component list and the sweep recipe). A handful of legacy pages (`evalapp.html` pre-rewrite,
+2026-08-28, **swept to all 16 routable static pages 2026-08-28 (later same day)**, see the dedicated
+"OS chrome" section below for the full component list, the completed sweep, and the chord-glow
+mechanism). A handful of legacy pages (`evalapp.html` pre-rewrite,
 `holodb/index.html`, `holodb.html`) used to duplicate these tokens in a local `<style>` block;
 `evalapp.html` was migrated onto `site.css` in the 2026-08-26 rewrite (see Reconciliations). The
 two HoloDb pages still carry a local `<style>` (bespoke charts/race-demo/table markup that isn't
@@ -419,14 +420,48 @@ collapses to a fixed bottom icon dock, the `#packages`/`#tools` galleries become
 element it touches is real, already-linked markup (nav `<a>`, `.card-link`, `a.tool`) — narrowing a
 mobile package card to an icon hides its description text, never its link.
 
-**Opt-in via `<body class="os-chrome">`.** Currently on exactly 3 pages, deliberately not swept
-further yet (user asked for a reviewable subset first): `index.html` (flagship — also exercises the
-`.prism-beam`/`.hero-content` z-index interplay, see below), `phasor.html` (a plain product page —
-the lean-template stress test), `holodb/index.html` (the richest page — 6 windowed sections, tables,
-a bespoke SVG diagram, and the widest nav, all inside the same chrome system). The other 14 pages
-(including `algformer.html`, which also carries `.prism-beam`) are untouched and still render the
-pre-chrome design — this is an **intentional, temporary split**, not a regression; sweeping it is
-the next step once this subset is reviewed.
+**Opt-in via `<body class="os-chrome">`.** **SWEPT SITE-WIDE 2026-08-28** (direct user instruction:
+"Homepage looks great, parallax plus themed colours, proceed to apply this to all pages including
+the showcase pages"). Was on exactly 3 pages (`index.html`, `phasor.html`, `holodb/index.html`,
+kept as the reference implementation this sweep read from, unchanged); now on **all 16 routable
+static pages**: those 3, plus `algformer.html`, `algformer-gpu.html`, `evalapp.html`,
+`evalapp-neural.html`, `holodb-client.html`, `holodb-protocol.html`, `holoformer.html`,
+`holovoxel.html`, `prose.html`, `tracer.html`, `packages.html`, `holodb.html`, and
+`holodb/manual/index.html`. Only `404.html` and the deliberately-unlisted `recycledao-preview.html`
+are excluded — neither ever carried the standard nav/hero template this system hooks into, so
+neither is a gap. Two page shapes needed two different treatments:
+- **10 "hero-template" pages** (`algformer.html`, `algformer-gpu.html`, `evalapp.html`,
+  `evalapp-neural.html`, `holodb-client.html`, `holodb-protocol.html`, `holoformer.html`,
+  `holovoxel.html`, `prose.html`, `tracer.html`) plus `packages.html` (11 total) got the FULL
+  recipe below: `class="os-chrome"` on `<body>`, hero content re-wrapped in
+  `.hero-bar`/`.hero-body` (`algformer.html` additionally got `.hero-content` per the pre-existing
+  gotcha, since it carries `.prism-beam` — moved the beam from a `.wrap` sibling to the first child
+  of `.hero-body`, matching `index.html`'s exact shape). `.sec`/`.sec-head` window framing and the
+  taskbar/dock needed no further markup, per the zero-markup design.
+- **2 "prose-template" pages** (`holodb.html`, `holodb/manual/index.html`) use `<main class="wrap">
+  <article class="prose">` — no `<header class="hero">`, no `.sec`/`.sec-head` at all — so the
+  window-panel framing rule (`.sec:has(.sec-head)`) and the hero-bar mechanism have literally nothing
+  to hook into on these two; only `class="os-chrome"` was added to `<body>`, which activates the
+  wallpaper glow and the taskbar/dock nav restyle and nothing else. This is the correct, minimal
+  application of the SAME opt-in flag to a structurally different template, not a partial sweep.
+- **One genuine design consequence, not a bug, flagged for a real-device look**: `packages.html`
+  wraps all 4 category `.grid`s (Foundation/Data/ML/Spatial) inside ONE `<section class="sec"
+  id="packages">`, unlike `holodb/index.html`'s many separate single-`.sec-head` sections. Because
+  `.sec:has(.sec-head)` matches on ANY descendant `.sec-head`, this renders as ONE large glass panel
+  spanning all 11 package cards (with a horizontal divider band at each category's `.sec-head`, only
+  the first — Foundation — getting the traffic-dot/rounded-top treatment `:first-child` triggers) —
+  a "package browser in one window" read, not four stacked windows. This is what the existing
+  zero-markup mechanism produces by construction; not treated as a defect, but worth an explicit look
+  since it's a different composition than every other swept page.
+- **`holoformer.html`'s single big `<main class="sec">`** similarly wraps its whole concept-card
+  article in one `.sec`, with exactly one `.sec-head` roughly two-thirds of the way down (the
+  "Why it isn't just a small transformer" comparison) — same mechanism, so the ENTIRE article
+  becomes one glass window, and that one `.sec-head` reads as a mid-page divider band (not a
+  titlebar, since it isn't `:first-child`) rather than getting traffic dots. Its `.wrap`'s own
+  inline `style="max-width:900px"` still wins over the panel's `max-width:none` override (inline
+  style beats an external stylesheet rule regardless of specificity), so the prose column width is
+  unaffected — only the padding/background/border/blur of the glass treatment newly apply. Flagged
+  as unverified-without-a-browser, not assumed broken.
 
 **Components, all in `site.css`** under the "OS CHROME" banner comment (search that string to find
 the whole system in one place):
@@ -667,16 +702,137 @@ phone before this is considered closed, specifically: the Creature tile (finding
 cause even though the exposure is now closed by construction) and the new single-column product-card
 `#tools` layout (finding 6) actually reading as "bigger, funnel-y" rather than just "taller."
 
-**Sweep recipe for the remaining 14 pages** (once this subset is approved): add `class="os-chrome"`
-to `<body>`; nav-links already read the current 3-item `Home · Packages · NuGet` shape sitewide
-(the `Tools` slot this recipe used to add was dropped sitewide in the 2026-08-28 tools-first pivot —
-see Navigation above, don't reintroduce it here), keep any page-specific extra items after `NuGet`;
-wrap the hero's real content in `<div class="hero-bar"
-aria-hidden="true"><span class="win-dots">...</span><span class="hero-bar-title">NAME.app</span>
-</div><div class="hero-body">...</div>`; if the page also carries `.prism-beam` (only
-`algformer.html` today), additionally wrap the real text in `.hero-content` per the gotcha above.
-Everything else (`.sec` window framing, taskbar styling) needs no further HTML changes — it's already
-live in `site.css` and activates the moment `os-chrome` is on the page.
+**Sweep recipe (COMPLETED 2026-08-28 — kept here as the recipe for any FUTURE page, not a TODO
+anymore)**: add `class="os-chrome"` to `<body>`; nav-links already read the current 3-item
+`Home · Packages · NuGet` shape sitewide (the `Tools` slot this recipe used to add was dropped
+sitewide in the 2026-08-28 tools-first pivot — see Navigation above, don't reintroduce it here),
+keep any page-specific extra items after `NuGet`; wrap the hero's real content in `<div
+class="hero-bar" aria-hidden="true"><span class="win-dots">...</span><span
+class="hero-bar-title">NAME.app</span></div><div class="hero-body">...</div>`; if the page also
+carries `.prism-beam` (only `algformer.html` and `index.html`), additionally wrap the real text in
+`.hero-content` per the gotcha above. If the page has no `<header class="hero">` at all (the two
+`.prose`-template pages), skip the hero-bar/hero-content step entirely — just the `class` on
+`<body>`. Everything else (`.sec` window framing, taskbar styling) needs no further HTML changes —
+it's already live in `site.css` and activates the moment `os-chrome` is on the page. This recipe was
+applied to all 13 remaining pages in the 2026-08-28 sweep (see "Opt-in via `<body
+class="os-chrome">`" above for the full before/after and the two page-shape variants) — the next
+time a NEW page is added to the site, follow this same recipe from the start rather than shipping
+it pre-chrome and sweeping it later.
+
+### Chord glow tinting — the consolidated multi-domain colour mechanism (2026-08-28)
+
+Direct user instruction, twofold: (1) "ensure colour theming and things that use multiple packages
+have chorded two tone or tri tone theming" — extend the existing single-hue page glow to a genuine
+multi-tone glow on pages whose real subject spans more than one domain; (2) a follow-up, "It needs
+to consolidate the theming so it's easy to update all parts with CSS or shared components etc" —
+make sure this and every other colour concern resolves through ONE token chain, not per-page
+hand-copies, so a future colour change is a one-token edit, not a site-wide hunt (this is exactly
+the failure mode a concurrent `--c-ml` retune that same session exposed — see "The `--c-ml`
+cross-check" below).
+
+**Single source of truth per concern (read this before touching any colour on this site)**:
+- **The domain hue itself**: `--c-foundation` / `--c-data` / `--c-ml` / `--c-spatial` in `:root`,
+  `site.css`. Nothing else should ever hardcode one of these hex values — every call site (card
+  `--cat`, `.sec-head .dot`, chip swatches, the glow tokens below) reads through `var(--c-*)`, so a
+  hue retune (like the `--c-ml` Indigo→Violet correction, below) reaches every consumer for free.
+- **A single package/tool card's accent**: the `--cat` custom property, set inline per `.card`/
+  `.card.tool` (`style="--cat:var(--c-ml)"` etc.), consumed by `.card::before`'s accent bar and the
+  mobile icon tile. Unchanged by this pass.
+- **A card that represents MORE than one domain** (a tool spanning packages, e.g. the Creature —
+  AlgFormer/ML + Tracer/Spatial): `--cat` holds a hard-edged 2-stop `linear-gradient()` of the
+  relevant `var(--c-*)` tokens in **canonical domain order** (the order the 4 tokens are declared in
+  `:root`, i.e. the same Foundation → Data → ML → Spatial order `packages.html`'s own sections run
+  in — NOT literal ROYGBIV hue position, which would put Spatial's green before Data's blue; this is
+  the site's own established category order, already how the Creature card orders ML before
+  Spatial), weighted per DOMAIN not per package count (two packages, one domain each, so a plain
+  50/50 split), with Foundation dropped from the chord entirely (Phasor/EvalApp underlie nearly
+  everything and carry no distinguishing signal — a chord of "everything is secretly Foundation too"
+  would be meaningless). `--cat-root` is set alongside it to ONE solid fallback colour (the first
+  domain in the chord) for the few CSS call sites (`color-mix()`, the mobile icon-tile gradient)
+  that structurally cannot take a gradient as input. This formula already existed for tool cards
+  (Creature, on `index.html` and `algformer.html`'s mirror) before this pass — unchanged by it.
+- **A PAGE's own ambient glow** (the scroll-tied parallax drop-shadow tint): ONE attribute,
+  `<body data-cat="...">`, read by a handful of `body[data-cat="..."]` rules near `:root` in
+  `site.css` that set `--glow-near`/`--glow-mid` (single-domain pages: `foundation` | `data` | `ml`
+  | `spatial`, four rules total, unchanged) — these two custom props are then the ONLY thing the
+  `ea-parallax-near`/`ea-parallax-mid` `@keyframes` read via `color-mix(in srgb, var(--glow-near|
+  --glow-mid) N%, transparent)`. A page never needs its own keyframes; changing a page's glow is
+  changing one attribute value.
+- **A PAGE whose real subject is genuinely multi-domain** (today: only `prose.html`, Data+ML — see
+  below): the SAME `data-cat` attribute takes a compound value (`data-cat="data-ml"`), read by ONE
+  additional `body[data-cat="data-ml"]{--glow-mid-a:var(--c-data); --glow-mid-b:var(--c-ml);}` rule
+  (same `var(--c-*)` source tokens as the card chord above — not a second hardcoded pair), consumed
+  by a second keyframes pair, `ea-parallax-mid-chord` (identical transform/timing/angle math to the
+  single-tone `ea-parallax-mid`, only the `filter` carries TWO stacked `drop-shadow()` layers, one
+  per domain colour), wired in via a same-specificity-plus-one override
+  (`body.os-chrome[data-cat="data-ml"] .hero > .wrap, ... .sec:has(.sec-head){animation-name:
+  ea-parallax-mid-chord}`) that only touches `animation-name` — every other `animation-*` property
+  still cascades from the base single-tone rule, so there's exactly one place (the keyframes) that
+  encodes "two drop-shadows instead of one," not N page-specific copies. Extending this to a THIRD
+  chord (e.g. a hypothetical ML+Spatial page) is: one new `body[data-cat="ml-spatial"]` line setting
+  `--glow-mid-a/-b`, reusing the SAME `ea-parallax-mid-chord` keyframes (already generic over
+  `--glow-mid-a`/`-b`, not hardcoded to Data/ML) — only the override selector's `[data-cat="..."]`
+  value needs adding, not a new keyframes block. A genuine tri-tone (3 domains) would need a third
+  `--glow-mid-c` and a third stacked `drop-shadow()` in a new keyframes pair — not built since no
+  page needs it today, but the pattern extends the same way.
+- **Why `prose.html` and only `prose.html`**: it's the one package page whose own "Get started"
+  section states a real cross-domain dependency in the owner's own words — "Depends on: HoloDb (the
+  storage engine that holds mined grammar knowledge) and AlgFormer (supplies the optional
+  plausibility-scoring model)" — Data + ML, not Foundation (Phasor/EvalApp are transitive under both,
+  dropped per the rule above). Checked every other package/page against its own "Depends on"/
+  dependency note before ruling it single-domain (AlgFormer.Gpu: ML only, GPU accel of ML;
+  EvalApp.Neural: depends on EvalApp/Foundation, dropped, + AlgFormer/ML, so still single-ML since
+  Foundation drops out; HoloDb.Client/Protocol: Data only; Tracer/HoloVoxel: built on Phasor/
+  Foundation, dropped, so single-Spatial) — none of the other 10 package pages have a second
+  non-Foundation domain, so they correctly keep the existing single-tone glow, unchanged, per the
+  task's own instruction not to force multi-tone where it isn't real. `index.html`/`packages.html`
+  still carry no `data-cat` at all (unchanged) — they're not about one product's domain, single or
+  multi, so they correctly fall through to the `:root` default (`--accent`), same as before this pass.
+- **What this buys**: retuning any `--c-*` hue, or ever adding a new chord page, is a change in ONE
+  of the two places above (the `:root` token, or one `body[data-cat="..."]` line) — never a per-page
+  CSS rewrite, and never two independent formulas (tool-card chord vs. page-glow chord) that could
+  drift apart, since the page-glow chord literally reads the same `var(--c-*)` tokens the card chord
+  reads, in the same canonical order.
+
+**The `--c-ml` cross-check (mid-task correction, coordinator relay, user: "The colours need
+redoing, foundation is white ok, data is blue machine learning is purple but it's very close to
+blue, spatial is green, not a good spectrum range")**: the coordinator retuned `--c-ml` in `:root`
+from Indigo `--spectrum-6` (`#7d7dff`, ~30° from Data's Blue in HSL) to Violet `--spectrum-7`
+(`#c07dff`, ~61° from Data) directly in `site.css` while this task was in flight. Because every
+chord/glow/card call site in this pass reads `var(--c-ml)` rather than a literal hex, that retune
+propagated to this task's new work automatically with zero edits needed on my part — the `prose.html`
+chord and every ML-category page's glow already resolve to the new Violet. Per the coordinator's
+explicit ask, grepped `7d7dff` across the 5 ML-category pages (`algformer.html`,
+`algformer-gpu.html`, `evalapp-neural.html`, `prose.html`, `holoformer.html`) specifically (not the
+other 12 files, which legitimately keep `#7d7dff` forever as the eternal `--spectrum-6` stop in the
+brand-mark/favicon SVG gradient — that token didn't move, only which category variable points at
+it): found exactly 2 hits per file on every one of the 5, both confirmed by content to be that same
+brand-mark/favicon gradient, not a hardcoded category dot/accent. No stale hardcoded ML colour found
+on any page. One stale CODE COMMENT (not a live rule) in `site.css`, near the `#packages` mobile
+icon-tile opacity-fix note, still read the old hex as an example value — corrected in place to note
+the retune rather than silently going stale. This cross-check is itself the proof the consolidation
+above works as designed: a hue change needed exactly one token edit plus a grep-confirm, not a
+per-page hunt.
+
+**Verified this pass**: `site.css` brace/paren-count parity before/after (232/232 → 237/237 braces,
+573/573 → 608/608 parens — the delta is exactly the 2 new `body[data-cat]` comment+rule blocks, the
+`ea-parallax-mid-chord` `@keyframes`, and the chord override rule, nothing unexpected). Every one of
+the 13 newly-swept HTML files re-checked for tag balance after editing (`<div>`/`</div>`,
+`<header>`/`</header>`, `<body>`/`</body>` counts, plus exactly one `hero-bar`/`hero-body`/
+`os-chrome` occurrence each, and exactly one `hero-content` on `algformer.html` alongside its one
+`prism-beam`) — all balanced, no orphaned tags. `prose.html`'s `data-cat="data-ml"` attribute value
+confirmed present and correctly formatted. No hardcoded stale `--c-ml` hex found on the 5 ML-category
+pages (see the cross-check above). **Still not verified in an actual browser** (no visual proof
+beyond reading the generated HTML/CSS and reasoning from the CSS cascade/specificity rules, same
+disclosed limitation as every other pass in this file) — specifically unverified: whether
+`packages.html`'s single large glass panel (all 4 categories in one `.sec`) and `holoformer.html`'s
+single large glass panel (one `.sec-head` two-thirds down the article) read well on a real ≥901px
+screen, whether the two-tone `prose.html` glow is visually distinct/pleasant rather than muddy where
+the two drop-shadows overlap, and whether the wider 3-page-tested chrome system holds up identically
+on the 10 newly-swept hero-template pages (different content lengths/card counts than the 3
+reference pages) at both ≥901px and ≤640px. The coordinator/user should eyeball at least
+`packages.html`, `prose.html`, and one plain page (e.g. `tracer.html`) at both breakpoints before
+this sweep is considered fully closed.
 
 **Recommendation, not acted on (Showroom is out of scope for this agent)**: the same chrome system
 (taskbar-style nav, window-panel framing) would read as a natural extension into `Showroom/`'s own
@@ -1041,9 +1197,14 @@ DONE (all three, one at a time as designed, not a big-bang port; see `Showroom\C
 HoloKernel section for the per-tool detail, including the tokenizer swap and the browser-contract
 correction below).
 
-**Self-maintenance note**: this file is ~360 lines, well over the ~200-line guide. Deliberately not
-compacted yet — the initiative will obsolete large parts of the Site map / Design system sections, so
-the compaction pass should happen when the architecture lands, not before.
+**Self-maintenance note**: this file is now ~1150 lines (the "~360 lines" figure above went stale
+across several passes and wasn't caught until this one — corrected here rather than left wrong), well
+over the ~200-line guide. Still deliberately not compacted — the platform initiative above will
+obsolete large parts of the Site map / Design system sections, and this pass's own os-chrome sweep +
+chord-glow mechanism added a further ~150 lines of dated history that should compact into a handful
+of durable "how it works now" paragraphs once things settle. The compaction pass should happen when
+the architecture lands or the next time this file is opened for an unrelated reason, not deferred
+indefinitely — flagging that the deferral itself needs an actual trigger, not just "later."
 
 ## Gotchas
 
