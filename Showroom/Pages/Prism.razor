@@ -139,6 +139,45 @@
                 write like GPT-2 once the compute number clears a line — compute budget and capability are not the
                 same thing — it's just an honest way to watch a real number move over time.</p>
 
+            <p><strong>How this stacks up against the closest published research, and why that's worth taking
+                seriously even before this thing writes clean sentences.</strong> The closest published work we
+                could find on how small a language model can be and still write legible English is TinyStories
+                (Eldan &amp; Li, 2023, arXiv:2305.07759) — they trained models from 1,000,000 parameters up to
+                roughly 80,000,000, all with a 512-token context window, and found that even their smallest,
+                1-million-parameter model produced grammatical, if shallow and repetitive, text: a real quoted
+                example from their paper reads <em>"hello to the pumpkin. One day, a little girl came to the
+                pumpkin and saw the pumpkin. She was so happy and thanked the pumpkin."</em> Reliable multi-sentence
+                coherence didn't show up in their tests until somewhere around 28-33 million parameters. We didn't
+                find anything published smaller than that — not a claim that nothing smaller exists, just that a
+                real search didn't turn one up. This checkpoint currently sits at
+                <code>@_stats.ParamCount.ToString("N0")</code> real stored parameters with a
+                <code>@_stats.Context</code>-token context window — smaller than TinyStories' own floor on
+                <strong>both axes at once</strong> (roughly 2.5× fewer parameters than their 1M smallest model, and
+                roughly 18× less context than their 512-token window), which makes this a harder version of the
+                same question they were asking, not an easier one.</p>
+
+            <p><strong>So why bother, if the output below still looks rough.</strong> No published research we
+                found expects a model this far under every existing reference point to write clean prose — so it
+                doesn't, not yet. Being straightforward about it: type something into the box above and you'll
+                typically see a mix — real, recognisable English words and short 3-5-token fragments that are close
+                to grammatical (things like "you're going to you", "I don't know your") sitting right alongside
+                invented non-words that have a plausible-looking shape but no real meaning, roughly half and half in
+                an honest run we did against this exact checkpoint. Full coherent sentences aren't reliably
+                happening yet, and we're not saying they are. What's actually notable is that <em>any</em> of that
+                first kind of structure — real words, short near-correct fragments — shows up at all, given that
+                nothing at this scale and this little context has been shown to do that before, as far as we could
+                find. That's the real, unglamorous data point here, not a finished result.</p>
+
+            <p><strong>Don't take our word for any of this — measure it yourself.</strong> We're not claiming this
+                checkpoint works or doesn't; you're better placed to judge a live run than a paragraph of our own
+                copy. Try a handful of different prompts, not just one — a single lucky or unlucky run doesn't tell
+                you much. Look for real, recognisable English words and short grammatical fragments, not full
+                paragraphs — that's the right bar for a model this size, not "does it sound like a chatbot."
+                Notice, honestly, how much of what comes back is real language versus invented shapes. Then weigh
+                that against the comparison above: a model this far below the smallest published reference point on
+                this exact question wasn't expected, by any research we could find, to produce anything legible at
+                all. You be the judge of whether what you see clears that bar.</p>
+
             <p><strong>Being honest about it.</strong> This is <strong>raw text continuation, not dialogue</strong> —
                 this checkpoint was trained on plain text, never on turns, roles or "who's speaking," so it has no
                 mechanism for understanding a conversation, and this REPL doesn't fake one: each run is one prompt in,

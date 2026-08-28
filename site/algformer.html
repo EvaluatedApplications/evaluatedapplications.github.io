@@ -120,39 +120,6 @@
 
 <section class="sec">
   <div class="wrap">
-    <div class="stack">
-      <h2>Smaller than the smallest benchmark we could find. You be the judge.</h2>
-      <p>The closest published research on how small a language model can be and still write legible English is
-        <a href="https://arxiv.org/abs/2305.07759" target="_blank" rel="noopener">TinyStories</a> (Eldan &amp; Li, 2023),
-        which trained models from 1M parameters up to roughly 80M looking for exactly that floor. Their smallest
-        tested size, 1M parameters, was already enough for grammatical, if repetitive and shallow, output — a real
-        quoted example from the paper: <em>"hello to the pumpkin. One day, a little girl came to the pumpkin and saw
-        the pumpkin. She was so happy and thanked the pumpkin."</em> Reliable coherence in their tests — consistently
-        answering a prompt sensibly, not just stringing grammatical words together — didn't show up until closer to
-        28-33M parameters. As far as our own search turned up, that 1M mark is the smallest published benchmark for
-        this specific capability; we didn't find anything documented smaller. That's what a search found, not proof
-        nothing smaller exists.</p>
-      <p>Prism's live checkpoint sits under that 1M floor, not over it — under half the size:</p>
-      <div class="facts">
-        <span class="fact"><b>d=1536</b></span>
-        <span class="fact">1 layer</span>
-        <span class="fact">shifts=16</span>
-        <span class="fact">~28 tokens context</span>
-        <span class="fact">128-token vocab</span>
-        <span class="fact">~410K real stored parameters</span>
-      </div>
-      <p style="margin-top:16px">We're not claiming this checkpoint is coherent, and we're not claiming a record — only a
-        web search, which can't prove a negative. What we are saying: don't take our word for either one. Open Prism,
-        type something in, and read what comes back. You're the judge, not this page.</p>
-      <div class="cta-row" style="margin-top:16px">
-        <a class="btn btn-primary" href="/tools/prism">Type something in and judge for yourself →</a>
-      </div>
-    </div>
-  </div>
-</section>
-
-<section class="sec">
-  <div class="wrap">
     <div class="sec-head"><span class="dot" style="background:var(--c-algformer)"></span><h2>The problem it solves</h2><p>a real transformer, no native runtime</p></div>
     <p class="desc" style="max-width:74ch">Most transformer tooling means either binding into a native runtime (ONNX, PyTorch/libtorch, CUDA) or
       hand-rolling matrix code with no attention research behind it. AlgFormer sits in between: a real,
