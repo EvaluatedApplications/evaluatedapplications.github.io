@@ -1,0 +1,9 @@
+# Showroom/dist/ is a COMMITTED, PRE-BUILT publish output (see .github/workflows/deploy.yml and
+# CLAUDE.md). Blazor's fingerprinted asset names encode a content hash, and index.html embeds a
+# Subresource Integrity (SRI) hash for several of them — if git rewrites a single byte (e.g. LF ->
+# CRLF line-ending normalization on Windows), the served file no longer matches its own embedded
+# hash and the browser HARD-BLOCKS loading it ("Failed to find a valid digest... resource has been
+# blocked"), breaking the whole app. This exact bug happened once (2026-08-28) because no
+# .gitattributes existed and Windows git's default text-file heuristics silently mangled committed
+# JS files. Every file under dist/ must round-trip through git byte-for-byte, unconditionally.
+Showroom/dist/** -text -diff

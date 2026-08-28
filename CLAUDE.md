@@ -698,6 +698,21 @@ COMMITTED build artifact (~55 MB, a deliberate `.gitignore` exception) — build
 (`dotnet publish Showroom/Showroom.csproj -c Release -o <tmp>`, copy `<tmp>/wwwroot` over
 `Showroom/dist/`) and commit the result IN THE SAME COMMIT as any Showroom source change.
 
+**REAL INCIDENT (2026-08-28): committing `dist/` without `.gitattributes` broke the whole app in
+production.** Blazor's fingerprinted filenames encode a content hash, and `index.html` embeds a
+Subresource Integrity (SRI) hash for several assets — Windows git's default line-ending
+normalization (LF→CRLF) rewrote bytes in several committed files (`index.html`, both
+`dotnet.*.js` runtime files, `Showroom.styles.css`, a checkpoint data file), so the served file no
+longer matched its own embedded hash and the browser HARD-BLOCKED loading it entirely ("Failed to
+find a valid digest... resource has been blocked" → "Failed to start platform" → nothing works).
+The `warning: ... LF will be replaced by CRLF ...` git prints on every commit of `dist/` files was
+wrongly read as cosmetic noise across several commits — it was an active corruption warning for
+build artifacts whose exact bytes matter. **Fixed** with a repo-root `.gitattributes`:
+`Showroom/dist/** -text -diff` — git never touches line endings/encoding for anything under that
+path again. If `dist/` is ever rebuilt from scratch (not just refreshed), sanity-check
+`git status`/`git add` produces NO CRLF-conversion warnings for anything under `dist/` before
+committing — if one appears, `.gitattributes` isn't covering that path.
+
 **THE HARD COUPLING FLIPPED, DOESN'T DISAPPEAR.** Old risk: a Showroom compile error blocked
 the whole site's deploy (CI built Showroom itself, so a break there was loud and visible). New
 risk, arguably worse because it's SILENT: CI no longer builds or checks Showroom at all, so if
