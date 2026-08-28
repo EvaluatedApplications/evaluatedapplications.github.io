@@ -80,7 +80,7 @@
         @if (_showInspector && _lastTrace is not null && _lastCtx is not null)
         {
             <div class="cr-log">
-                <div class="log-head">last prediction <span class="log-sub">direction confidence, pass by pass (HoloKernel's Inspector — shared with The Creature and Prism)</span></div>
+                <div class="log-head">last prediction <span class="log-sub">direction confidence, pass by pass — the same per-pass view as <a href="/creature">The Creature</a> and <a href="/prism">Prism</a></span></div>
                 <div class="log-body">
                     @for (int p = 0; p < _lastTrace.Passes.Count; p++)
                     {
@@ -93,11 +93,10 @@
 
         <div class="outro">
             <p><strong>What it's actually predicting.</strong> Every hourly tick becomes two tokens — an hour-of-day
-                bucket and a return bucket (how big the move was and which way) — read off the same tight-deadband
-                edges we tuned for our own market simulator, so a real move registers as up or down instead of
-                collapsing to "flat". The brain reads the recent tape and predicts the <em>next</em> return bucket;
-                we score it right when it calls the right <em>direction</em>. It is the same
-                <code>HoloSession</code> + <code>RefinementLoop</code> live-training kernel as <a href="/creature">The
+                bucket and a return bucket (how big the move was and which way) — read off tight-deadband edges
+                sized so a real move registers as up or down instead of collapsing to "flat". The brain reads the
+                recent tape and predicts the <em>next</em> return bucket; it scores as right when it calls the
+                right <em>direction</em>. It uses the same live-training approach as <a href="/creature">The
                 Creature</a> — one holographic layer applied twice, weight-tied, with that second pass ramping in
                 over your first @IterWarm clicks instead of starting fully on.</p>
             <p><strong>Being honest about it:</strong> this is a demo, not investment advice — a few hundred hourly

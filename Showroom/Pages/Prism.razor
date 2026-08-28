@@ -23,14 +23,14 @@
     @if (_loadError is not null)
     {
         <p class="err">@_loadError</p>
-        <p class="hint">This tool ships a point-in-time copy of a live, evolving checkpoint — if the checkpoint asset
-            hasn't been published to this build yet, that's expected, not a bug.</p>
+        <p class="hint">This tool runs off a snapshot of an ongoing training run, taken at one point in time —
+            if the checkpoint files aren't available right now, please check back later.</p>
     }
     else if (!_loaded)
     {
         <div class="boot-crt ck-boot">
             <div class="boot-head"><span class="boot-dot" aria-hidden="true"></span>fetching the trained checkpoint</div>
-            <div class="boot-sub">real files, straight from <code>wwwroot/data</code> — cached by your browser after the first visit.</div>
+            <div class="boot-sub">real files, fetched fresh — cached by your browser after the first visit.</div>
             <div class="boot-log">
                 @foreach (var s in _loadSteps)
                 {
@@ -137,17 +137,18 @@
                 tokens, each bound into the model's holographic memory as a phase-and-magnitude pattern — a chord, not a
                 row in a lookup table. Reading a prediction back out is an act of <em>resonance</em>: which stored
                 pattern rings loudest against the current context. A conventional transformer buys depth by stacking
-                many physically distinct, separately-trained layers. This model buys depth differently: the K-pass
-                slider above re-runs the <em>same small transformation</em> over its own output, weight-tied, again and
-                again. Each pass doesn't add new information so much as let the pattern interfere with itself again —
-                building up harmonics, sharpening whichever resonance was already strongest, the way plucking a string
+                many physically distinct, separately-trained layers. This model buys depth differently: it re-runs
+                the <em>same small transformation</em> over its own output, weight-tied, K times in a row. Each pass
+                doesn't add new information so much as let the pattern interfere with itself again — building up
+                harmonics, sharpening whichever resonance was already strongest, the way plucking a string
                 at the right moment reinforces its own overtones instead of damping them. It's a real nonlinear
                 dynamical system iterating on its own state, not a deeper stack of unique weights — which is exactly
                 why the parameter count above is worth reading twice: <code>@_stats!.ParamCount.ToString("N0")</code>
                 real numbers, reused <code>@_k</code>× per layer, computing LIKE a real dense transformer would
                 need <code>@_stats.EquivCompute.ToString("N0")</code> parameters to match — a <strong>compute-equivalence</strong>
-                figure (12·d²·L·K, the exact same "compute-equiv" stat PrismStudio's own status bar shows for this
-                model), not a claim that this checkpoint secretly has that many real parameters stored anywhere.</p>
+                figure (12·d²·L·K, the standard way to compare a weight-tied model's iterated compute against an
+                equivalent dense transformer), not a claim that this checkpoint secretly has that many real
+                parameters stored anywhere.</p>
 
             <p><strong>Where this checkpoint stands, and where it's headed.</strong> Right now: @_stats.ParamCount.ToString("N0")
                 real stored parameters, a @_stats.Vocab-token subword vocabulary, and an @_stats.Context-token context
@@ -169,7 +170,7 @@
                 be surprised if one trails into a repeated character: the confidence gate above can read GREEDY even
                 once the model has settled into a loop, a known, real behaviour this early in training (the Inspector
                 will show you exactly where it happened, rather than hiding it). It's a frozen copy from one point in
-                an active training run in PrismStudio, not a live link to it — the real model keeps training after
+                an ongoing training run, not a live link to it — the real model keeps training after
                 this snapshot was taken. It always runs at <strong>K=@_k weight-tied pass(es)</strong> — the model's
                 one real trained depth (α=@(_trainedAlpha.ToString("0.00")), @KFactDetail). That's not a knob you can
                 move here: K isn't a parameter to explore, it's a structural fact about this checkpoint.</p>
