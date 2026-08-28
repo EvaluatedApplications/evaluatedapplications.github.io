@@ -11,12 +11,14 @@
     <header class="room-head">
         <nav class="crumb"><a href="/">Evaluated Applications</a> <span>/</span> Prism</nav>
         <h1>Prism</h1>
-        <p class="lede">Type the start of a sentence and watch a real, working copy of our own trained <strong>HoloFormer</strong>
-            checkpoint continue it, character by character, running entirely <strong>in your browser</strong>. This is
-            <strong>autocomplete, not a chatbot</strong>: the model has never seen a dialogue turn in its life, so every
-            submission is a fresh, independent continuation — it does not remember anything you typed before.</p>
+        <p class="lede">This page downloads a real, trained <strong>HoloFormer</strong> checkpoint straight to your
+            device and runs it right here, in this browser tab — no server call, no upload, nothing you type ever
+            leaves this page. Type the start of a sentence and watch it continue, character by character, computed
+            on your own CPU. This is <strong>autocomplete, not a chatbot</strong>: the model has never seen a
+            dialogue turn in its life, so every submission is a fresh, independent continuation — it does not
+            remember anything you typed before.</p>
         <div class="badges">
-            <span>Real trained checkpoint</span><span>Holographic-transformer brain</span>
+            <span>Runs on your device, not our servers</span><span>Real trained checkpoint</span><span>Holographic-transformer brain</span>
         </div>
     </header>
 
@@ -30,13 +32,16 @@
     {
         <div class="boot-crt ck-boot">
             <div class="boot-head"><span class="boot-dot" aria-hidden="true"></span>fetching the trained checkpoint</div>
-            <div class="boot-sub">real files, fetched fresh — cached by your browser after the first visit.</div>
+            <div class="boot-sub">real files, downloading once to THIS device — cached by your browser after the first visit.</div>
             <div class="boot-log">
                 @foreach (var s in _loadSteps)
                 {
                     <span class="l @s.Cls"><span class="p">&gt;</span> @s.Label <span class="boot-status">@s.Status</span></span>
                 }
             </div>
+            <p class="boot-note">This download is the whole trick. Once it finishes, the model lives in this tab's
+                own memory — there is no server behind Prism from here on, no API to call. Every character it
+                generates below is computed by your device, not ours.</p>
         </div>
     }
     else
@@ -60,7 +65,9 @@
                     <p class="hint">Type the start of a sentence — a word or two — and hit Continue. Each run starts
                         fresh from only what's in the box; the context window above is small on purpose, and this
                         checkpoint is early in training. No chat memory: nothing you typed in a previous run carries
-                        into the next one.</p>
+                        into the next one. Don't take our word for it that this is local: open your browser's dev
+                        tools, switch to the Network tab, then hit Continue — no new request fires. The checkpoint
+                        you already downloaded above is doing all the work, on your own CPU.</p>
                 }
                 @foreach (var run in _history)
                 {
@@ -69,7 +76,7 @@
                         @if (run.TrailedOff) { <span class="or-note">⋯ settled into a repeat loop (a known behaviour this early in training, not a bug)</span> }
                     </div>
                 }
-                @if (_generating) { <div class="or-run pending"><span class="or-prompt">@_pendingPrompt</span><span class="or-cont">…</span></div> }
+                @if (_generating) { <div class="or-run pending"><span class="or-prompt">@_pendingPrompt</span><span class="or-cont">@_pendingContinuation<span class="car" aria-hidden="true"></span></span></div> }
             </div>
             <div class="or-input-row">
                 <input class="or-input" @bind="_prompt" @bind:event="oninput" @onkeydown="OnKeyDown" disabled="@_generating"
@@ -85,7 +92,8 @@
         <div class="outro">
             <p><strong>What's actually happening when you hit Continue.</strong> Every prompt becomes a handful of subword
                 tokens, each bound into the model's holographic memory as a phase-and-magnitude pattern — a chord, not a
-                row in a lookup table. Reading a prediction back out is an act of <em>resonance</em>: which stored
+                row in a lookup table. None of this touches a server: tokenizing, binding and reading the resonance
+                back out all run as plain C# in this browser tab, on your own CPU. Reading a prediction back out is an act of <em>resonance</em>: which stored
                 pattern rings loudest against the current context. A conventional transformer buys depth by stacking
                 many physically distinct, separately-trained layers. This model buys depth differently: it re-runs
                 the <em>same small transformation</em> over its own output, weight-tied, K times in a row. Each pass
@@ -188,6 +196,10 @@
     bool _generating;
     string _prompt = "";
     string _pendingPrompt = "";   // shown in the "in progress" run while _generating — the prompt is cleared from the input immediately
+    string _pendingContinuation = "";   // streamed live, re-decoded after every emitted token while _generating —
+    // this is what makes generation render as a typewriter: the markup binds to THIS field, so the per-character
+    // StateHasChanged() call in the loop below actually has new text to paint (before this field existed, the
+    // pending run showed a static "…" placeholder the whole time, so those per-character renders painted nothing new).
     // one entry per submission. Each run is INDEPENDENT — no prior run's prompt/continuation is ever fed back into the
     // next one's context, so there is no accumulated "chat history"; this is autocomplete, not dialogue memory.
     sealed record RunEntry(string Prompt, string Continuation, bool TrailedOff);
@@ -279,6 +291,7 @@
         var promptText = _prompt.Trim();
         _prompt = "";
         _pendingPrompt = promptText;
+        _pendingContinuation = "";
         _generating = true; _error = null;
         StateHasChanged();
 
@@ -310,9 +323,12 @@
                 if (t == CharVocab.End) break;   // the stop marker — see the tokenizer field comment for why this id doubles as "\n"
                 outIds.Add(t); seq.Add(t);
                 if (guard.Observe(t)) { trailedOff = true; break; }
-                _generating = true;
+                // stream what's decoded so far into the pending run (NOT trimmed — trimming mid-stream would make
+                // trailing spaces flicker in and out as later characters land; the final decode below trims once).
+                _pendingContinuation = _vocab.Decode(outIds);
                 StateHasChanged();
-                await Task.Delay(20);
+                await Task.Delay(20);   // small, deliberate pace so it reads as a live stream — not a network-
+                // latency simulation, just slow enough for a human eye to follow a locally-computed character feed.
             }
 
             var shown = _vocab.Decode(outIds).TrimEnd();
@@ -320,6 +336,6 @@
             _history.Add(new RunEntry(promptText, continuationText, trailedOff));
         }
         catch (Exception ex) { _error = "Prism stumbled: " + ex.Message; }
-        finally { _generating = false; StateHasChanged(); }
+        finally { _generating = false; _pendingContinuation = ""; StateHasChanged(); }
     }
 }
