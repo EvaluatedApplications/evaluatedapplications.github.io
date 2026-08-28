@@ -109,6 +109,24 @@
                 equivalent dense transformer), not a claim that this checkpoint secretly has that many real
                 parameters stored anywhere.</p>
 
+            <p><strong>Why it's called Prism, and why the context window above is small on purpose.</strong> A
+                conventional large language model is trained across a huge context window over a huge amount of
+                text — with that much data and that much window to look back over, a lot of what it does when it
+                continues a sentence is closer to <em>interpolation</em>: finding a near neighbour somewhere in
+                everything it's seen and blending toward it. More data and more context just give it more points to
+                interpolate between. This checkpoint is trained the opposite way, on purpose: its context window is
+                only @_stats.Context tokens — kept deliberately tiny, trained hard at that size for @RoundsPhrase —
+                small enough that it structurally cannot memorise a whole passage; there is nowhere to store one.
+                That forces it to fall back on general compositional rules instead: grammar, structure, which token
+                tends to follow which, because rules are the only thing that fit inside a window that tight and
+                still generalise. Read back out through the same resonance and K-pass composition described above,
+                those rules <em>extrapolate</em>: they compose outward into a continuation longer than anything the
+                model was ever shown in one piece, rather than recalling something it saw whole. The name follows
+                the same shape — a physical prism takes one narrow, simple input, a thin beam of white light, and
+                its own internal structure turns it into something far richer coming out than obviously went in. A
+                tiny window turning into a real continuation, through nothing but the model's own internal
+                composition rather than having seen more, is the same trick.</p>
+
             <p><strong>Where this checkpoint stands, and where it's headed.</strong> Right now: @_stats.ParamCount.ToString("N0")
                 real stored parameters, a @_stats.Vocab-token subword vocabulary, and an @_stats.Context-token context
                 window — an honest, early snapshot of an ongoing training run, not a finished product.
@@ -323,6 +341,11 @@
             return ramp;
         }
     }
+
+    // Rendered in the "why it's called Prism" outro paragraph — @_rounds is optional (only shown if
+    // data/oracle-rounds.txt was published alongside the checkpoint, see field comment above), so this
+    // degrades to a true-but-vaguer phrase rather than rendering a blank/null when it's missing.
+    string RoundsPhrase => _rounds is not null ? $"{_rounds.Value:N0} rounds" : "a long time";
 
     async Task OnKeyDown(KeyboardEventArgs e) { if (e.Key == "Enter") await Ask(); }
 

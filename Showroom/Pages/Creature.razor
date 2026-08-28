@@ -1,4 +1,5 @@
 @page "/creature"
+@inject HttpClient Http
 @inject HoloKernel.SessionHost Sessions
 @using System.Text
 @using PrismFormer
@@ -93,7 +94,7 @@
     @if (_log.Count > 0)
     {
         <div class="cr-log">
-            <div class="log-head">training log <span class="log-sub">newest first · loss backpropped through the @KPass weight-tied passes</span></div>
+            <div class="log-head">training log <span class="log-sub">newest first · loss backpropped through the @_kPass weight-tied passes</span></div>
             <div class="log-body">
                 @foreach (var line in _log) { <div class="log-line">@line</div> }
             </div>
@@ -139,7 +140,17 @@
     // to 1 — a pure diagonal, no cross-channel routing — so ModelSpec's own S>1 invariant floors it, same as
     // before, just enforced by construction now instead of a local Math.Max).
     const int MaxCtx = 32;
-    const int KPass = 2;      // 1 layer applied K times, weight-tied (the "extra k-layer pass")
+    // K-pass depth — LIVE-READ from data/oracle-stackk.txt 2026-08-28 (was a hardcoded `const int KPass = 2`,
+    // a made-up number unrelated to anything real). The site's single real trained depth is Prism's own
+    // checkpoint metadata (the exact sidecar Prism.razor's OnInitializedAsync already fetches) — every
+    // HoloFormer tool on the site now reads K from THAT one source of truth instead of inventing its own, so
+    // it auto-updates if the checkpoint is ever retrained at a different K, no code change needed anywhere.
+    // Creature still trains its OWN model from scratch on its OWN task (grid navigation, vocab W*H+8) — only
+    // the K NUMBER is shared, never weights/vocab/checkpoint (architecturally unrelated tasks). Fetch/parse/
+    // fallback mirrors Prism.razor's oracle-stackk.txt handling exactly (try→parse→trim; any failure — file
+    // missing, malformed, network error — is swallowed and falls back to Prism's own bare-checkpoint fallback
+    // value of 1, never blocking page load). 1 layer applied K times, weight-tied ("the extra k-layer pass").
+    int _kPass = 1;
     const int DModel = 384;   // width = composition capacity; wider than the 256 codec dim gives the brain more room to keep cells distinct
     const int MinShifts = 8;
     // IterWarm converted from EPISODES to STEPS 2026-08-28: HoloKernel's RefinementLoop.Observe() advances the
@@ -149,6 +160,15 @@
     // a re-derivation: picked as the right order of magnitude for "~20 episodes' worth of informative steps" at
     // this task's typical experience density. Watch the live α% in the training log; retune this constant if the
     // ease-in visibly completes too fast or too slow.
+    // Verified 2026-08-28 (not assumed) that this stays sound now that _kPass is live-read and will likely jump
+    // 2->8: HoloKernel's AlphaRamp takes only a step COUNT (WarmSteps) and never reads K at all (see AlphaRamp.cs
+    // — Alpha = Steps/WarmSteps, full stop); RefinementLoop.Observe passes Session.KPass straight to
+    // IterAccumulate alongside the ramp's alpha, so K sets how many weight-tied passes that fixed alpha blends
+    // across, not how fast the blend itself ramps. The two are genuinely orthogonal by construction. The one
+    // open, UNVERIFIED question (flagged, not fixed): 8 weight-tied passes is a structurally bigger nonlinear
+    // composition per training step than the 2 this constant was tuned against — whether 300 steps is still a
+    // gentle-enough ease-in for that deeper composition hasn't been watched live. Retune here if training looks
+    // unstable early on with the real K=8.
     const int IterWarmSteps = 300;
     const int NApples = 8;    // how many apples "scatter" drops
     const int StepBudget = 150;   // steps per foraging episode
@@ -200,10 +220,16 @@
 
     bool CanRun => _hasStart && _applesInit.Count > 0;
 
-    protected override void OnInitialized()
+    protected override async Task OnInitializedAsync()
     {
         _cx = _startX; _cy = _startY;
         Scatter();   // start with something to forage
+
+        // Mirrors Prism.razor's own oracle-stackk.txt fetch exactly (GetStringAsync -> Trim -> int.Parse),
+        // including its degrade-gracefully behaviour: any failure (file missing, malformed, network error)
+        // is swallowed and falls back to the same K=1 Prism itself falls back to — never blocks page load.
+        try { _kPass = int.Parse((await Http.GetStringAsync("data/oracle-stackk.txt")).Trim()); }
+        catch { _kPass = 1; }
     }
 
     // ---- world editing ----
@@ -426,7 +452,7 @@
         if (!CanRun) return;
         if (_session is null)
         {
-            var spec = new ModelSpec { Vocab = W * H + 8, MaxContext = MaxCtx, Dim = DModel, Layers = 1, MinShifts = MinShifts, KPass = KPass, FrozenPrefix = 64, Golden = true };
+            var spec = new ModelSpec { Vocab = W * H + 8, MaxContext = MaxCtx, Dim = DModel, Layers = 1, MinShifts = MinShifts, KPass = _kPass, FrozenPrefix = 64, Golden = true };
             // SessionHost dedupes by MODEL key ("creature"): the FIRST call on this page load builds an
             // untrained model exactly as before (ServeAlpha=0, identity-init ease-in starts cold). A LATER
             // visit to this page in the same load reuses that same in-memory session/weights instead of
@@ -440,8 +466,8 @@
             _ramp = SeedRamp(IterWarmSteps, _session.ServeAlpha);
             _loop = new RefinementLoop(_session, _ramp, learningRate: 0);   // LearningRate is set per-step in EndEpisode
             Log(reused
-                ? $"brain reused from earlier this visit · L=1 · K={KPass} weight-tied passes · ctx={MaxCtx} · shifts={spec.Shifts} golden · d={DModel} · vocab={W * H + 8} · {_session.Model.ParamCount:N0} params · α {_ramp.Alpha * 100:F0}%"
-                : $"brain ready · L=1 · K={KPass} weight-tied passes · ctx={MaxCtx} · shifts={spec.Shifts} golden · d={DModel} · vocab={W * H + 8} · {_session.Model.ParamCount:N0} params");
+                ? $"brain reused from earlier this visit · L=1 · K={_kPass} weight-tied passes · ctx={MaxCtx} · shifts={spec.Shifts} golden · d={DModel} · vocab={W * H + 8} · {_session.Model.ParamCount:N0} params · α {_ramp.Alpha * 100:F0}%"
+                : $"brain ready · L=1 · K={_kPass} weight-tied passes · ctx={MaxCtx} · shifts={spec.Shifts} golden · d={DModel} · vocab={W * H + 8} · {_session.Model.ParamCount:N0} params");
         }
         _running = true;
         _apples.Clear(); foreach (var a in _applesInit) _apples.Add(a); ComputeDist();

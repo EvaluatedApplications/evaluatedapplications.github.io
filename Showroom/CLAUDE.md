@@ -59,6 +59,26 @@ shifts/dim/context are chosen up front, immutable for the session. `HoloFormer.G
 `HoloKernel` deliberately doesn't wrap either; a better model reaches visitors via a new CHECKPOINT,
 never runtime shape mutation.
 
+**K-pass is a single, live-read source of truth (2026-08-28 fix)**: Creature/Forecaster used to each
+hardcode their own `const int KPass = 2` — a made-up number. Both now fetch `data/oracle-stackk.txt`
+(the same sidecar `Prism.razor` fetches for its own checkpoint) in `OnInitializedAsync`, parse into
+`_kPass`, and use that as `ModelSpec.KPass` — mirroring Prism's exact fetch/parse/fallback shape
+(`GetStringAsync`→`Trim()`→`int.Parse`, any failure swallowed, falls back to K=1 like Prism's own
+bare-checkpoint fallback). Live value: `oracle-stackk.txt`=8 (was hardcoded 2). Each tool still
+trains its own separate model from scratch on its own task domain (Creature: grid nav vocab=`W*H+8`;
+Forecaster: price buckets vocab=17) — sharing Prism's checkpoint/weights/vocab is architecturally
+impossible; only the K *number* is now shared. If the checkpoint is retrained at a different K and
+the deployed sidecar changes, both tools pick it up next page load, no code change. **The Analyst's
+novelty-scan already did this correctly** (verified, not assumed) — `EnsurePrismLoadedAsync` reads
+`_prismSession.KPass` off the real loaded session, same `?? 1` fallback; no fix needed there.
+**Alpha-ramp verified independent of K's magnitude** (checked `AlphaRamp`/`RefinementLoop` source,
+not assumed): `Alpha = Steps/WarmSteps` never reads K; `Observe` passes `Session.KPass` straight to
+`IterAccumulate` alongside the ramp's alpha — K sets how many weight-tied passes a given alpha
+blends across, not how fast the blend ramps, genuinely orthogonal by construction, so
+`IterWarmSteps=300`/`IterWarm=40` were left unchanged. Flagged, not fixed: whether those two counts
+(tuned watching K=2) stay a gentle-enough ease-in now that a step composes through 8 real weight-tied
+passes is unverified live — watch the α%/loss curve, retune if it looks unstable at the real K.
+
 ## Boot screen — `wwwroot/index.html` + `wwwroot/css/boot.css`
 Retro-terminal boot log, authentically real not decorative: real file names as the WASM host fetches
 them (`loadBootResource` hook, pure observation, always returns `undefined` — zero added latency)
@@ -96,7 +116,9 @@ export. Row cap 500k; entity scan capped 2M chars; upload cap 64MB. Six built-in
 
 ## The Creature — `Pages/Creature.razor` (route `/creature`)
 A 20×20 grid the visitor draws (walls/start/apples) where a **HoloFormer** brain learns to forage
-live, on **HoloKernel** (see above). Brain shape: `Dim=384, Layers=1, KPass=2`, `MaxCtx=32` (a
+live, on **HoloKernel** (see above). Brain shape: `Dim=384, Layers=1, KPass=` live-read from
+`data/oracle-stackk.txt` (2026-08-28, see "K-pass is a single, live-read source of truth" above),
+`MaxCtx=32` (a
 focused recent-trajectory window — measured to converge faster than a longer one; dilution of the
 decisive last-token signal was the failure mode), `MinShifts=8` (natural `ShiftsFor(32,384)` returns
 1 — floored by `ModelSpec`'s own S>1 invariant now). Distance field: **Tracer**'s
@@ -116,7 +138,8 @@ MarketSim's smaller simulated ticks, so ~65% of bundled transitions land in the 
 buckets — direction split (what accuracy scores) stays near-balanced; magnitude granularity is
 compressed, not direction.
 
-**Model shape**: `Dim=128, Layers=1, KPass=2`, `CandleContext=128` → `MaxContext=256` tokens
+**Model shape**: `Dim=128, Layers=1, KPass=` live-read from `data/oracle-stackk.txt` (same as
+Creature, see above), `CandleContext=128` → `MaxContext=256` tokens
 (2/candle), `MinShifts=8` (no-op: `ShiftsFor(256,128)=16` already clears it; `CleanCapacity(16,128)=
 122` is under the 256-token window — a real v2 tuning knob, not a v1 blocker). **Training loop** on
 **HoloKernel**: per tick, predict via `_session.Logits(ctx)`/`Inspector.Capture` (opt-in) →

@@ -70,7 +70,7 @@
         @if (_log.Count > 0)
         {
             <div class="cr-log">
-                <div class="log-head">training log <span class="log-sub">newest first · loss backpropped through the @KPass weight-tied passes</span></div>
+                <div class="log-head">training log <span class="log-sub">newest first · loss backpropped through the @_kPass weight-tied passes</span></div>
                 <div class="log-body">
                     @foreach (var line in _log) { <div class="log-line">@line</div> }
                 </div>
@@ -126,11 +126,29 @@
     // ModelSpec.MinShifts's own doc comment holds that reasoning once now). Numbers unchanged from prior tuning.
     const int Dim = 128;          // MarketSim's tuned width for this task class
     const int Layers = 1;         // one layer, applied K times weight-tied (below)
-    const int KPass = 2;          // weight-tied extra pass (Iters)
+    // K-pass depth — LIVE-READ from data/oracle-stackk.txt 2026-08-28 (was a hardcoded `const int KPass = 2`, a
+    // made-up number unrelated to anything real). The site's single real trained depth is Prism's own checkpoint
+    // metadata (the exact sidecar Prism.razor's OnInitializedAsync already fetches) — every HoloFormer tool on
+    // the site now reads K from THAT one source of truth instead of inventing its own, so it auto-updates if the
+    // checkpoint is ever retrained at a different K, no code change needed anywhere. Forecaster still trains its
+    // OWN model from scratch on its OWN task (price-bucket vocab=17) — only the K NUMBER is shared, never
+    // weights/vocab/checkpoint (architecturally unrelated tasks). Fetch/parse/fallback mirrors Prism.razor's
+    // oracle-stackk.txt handling exactly (try→parse→trim; any failure — file missing, malformed, network error —
+    // is swallowed and falls back to Prism's own bare-checkpoint fallback value of 1, never blocking page load).
+    int _kPass = 1;                // weight-tied extra pass (Iters)
     const int IterWarm = 40;      // training CLICKS over which the extra pass's α ramps 0→1 — this one DID map
                                    // straight onto AlphaRamp: the old loop already advanced its ramp once per
                                    // click (unlike Creature's per-episode cadence), so RefinementLoop.Observe's
                                    // per-call advance is an exact match, no conversion needed here.
+                                   // Verified 2026-08-28 (not assumed) that this stays sound now that _kPass is
+                                   // live-read and will likely jump 2->8: AlphaRamp takes only a step COUNT
+                                   // (WarmSteps) and never reads K at all (Alpha = Steps/WarmSteps); K only sets
+                                   // how many weight-tied passes that ramped alpha blends across (Session.KPass,
+                                   // passed straight to IterAccumulate alongside Ramp.Alpha), so the two are
+                                   // genuinely orthogonal by construction. UNVERIFIED, flagged not fixed: 8
+                                   // weight-tied passes is a structurally bigger nonlinear composition per click
+                                   // than the 2 this constant was tuned against — whether 40 clicks is still a
+                                   // gentle-enough ease-in for that hasn't been watched live at the real K=8.
     const int CandleContext = 128;              // ~128 candles of history
     const int MaxContext = CandleContext * 2;   // 256 tokens — TIME+RETURN pair per candle
     const int MinShifts = 8;   // verified no-op here: ModelSpec.Shifts (ShiftsFor(256,128)=16) already clears it
@@ -185,6 +203,13 @@
                 int timeTok = (int)(DateTimeOffset.FromUnixTimeSeconds(raw[i].T).UtcDateTime.TimeOfDay.TotalHours) % TimeBuckets;
                 _candles.Add((timeTok, Bucket(ret), raw[i].C));
             }
+
+            // Mirrors Prism.razor's own oracle-stackk.txt fetch exactly (GetStringAsync -> Trim -> int.Parse),
+            // including its degrade-gracefully behaviour: any failure (file missing, malformed, network error)
+            // is swallowed and falls back to the same K=1 Prism itself falls back to — never blocks page load.
+            try { _kPass = int.Parse((await Http.GetStringAsync("data/oracle-stackk.txt")).Trim()); }
+            catch { _kPass = 1; }
+
             _loaded = true;
         }
         catch (Exception ex) { _loadError = "Couldn't load the sample tape: " + ex.Message; }
@@ -205,7 +230,7 @@
     async Task EnsureBrain()
     {
         if (_session is not null) return;
-        var spec = new ModelSpec { Vocab = Vocab, MaxContext = MaxContext, Dim = Dim, Layers = Layers, MinShifts = MinShifts, KPass = KPass, FrozenPrefix = 0, Golden = true };
+        var spec = new ModelSpec { Vocab = Vocab, MaxContext = MaxContext, Dim = Dim, Layers = Layers, MinShifts = MinShifts, KPass = _kPass, FrozenPrefix = 0, Golden = true };
         // SessionHost dedupes by MODEL key ("forecaster"): first visit this page load builds untrained
         // exactly as before; a later visit in the same load reuses the same in-memory session instead of
         // rebuilding it — the factory below simply never runs a second time.
@@ -218,8 +243,8 @@
         _ramp = SeedRamp(IterWarm, _session.ServeAlpha);
         _loop = new RefinementLoop(_session, _ramp, Lr);
         Log(reused
-            ? $"brain reused from earlier this visit · L={Layers} · K={KPass} weight-tied passes · ctx={MaxContext} tokens (~{CandleContext} candles) · shifts={spec.Shifts} golden · d={Dim} · vocab={Vocab} · {_session.Model.ParamCount:N0} params · α {_ramp.Alpha * 100:F0}%"
-            : $"brain ready · L={Layers} · K={KPass} weight-tied passes · ctx={MaxContext} tokens (~{CandleContext} candles) · shifts={spec.Shifts} golden · d={Dim} · vocab={Vocab} · {_session.Model.ParamCount:N0} params");
+            ? $"brain reused from earlier this visit · L={Layers} · K={_kPass} weight-tied passes · ctx={MaxContext} tokens (~{CandleContext} candles) · shifts={spec.Shifts} golden · d={Dim} · vocab={Vocab} · {_session.Model.ParamCount:N0} params · α {_ramp.Alpha * 100:F0}%"
+            : $"brain ready · L={Layers} · K={_kPass} weight-tied passes · ctx={MaxContext} tokens (~{CandleContext} candles) · shifts={spec.Shifts} golden · d={Dim} · vocab={Vocab} · {_session.Model.ParamCount:N0} params");
     }
 
     // Seed a fresh AlphaRamp already at the alpha a reused session is currently served at, instead of
