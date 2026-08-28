@@ -38,6 +38,15 @@
   margin: 0; height: 220px; overflow-y: auto; white-space: pre-wrap; word-break: break-all;
   font-family: var(--mono); font-size: .76rem; line-height: 1.6; color: var(--ink-soft);
 }
+/* Always-on sign of life: a continuously blinking terminal cursor after the last log line, CSS-only
+   and independent of any JS/lifecycle state, so there's never a moment (including gaps with no
+   loadBootResource event at all, e.g. the WASM compile step below) that reads as frozen rather than
+   working. Guaranteed to cover any wait, not just ones a hook happens to exist for. */
+.boot-log::after {
+  content: "\2588"; display: inline-block; color: var(--ok);
+  animation: boot-cursor 1s steps(2) infinite;
+}
+@media (prefers-reduced-motion: reduce) { .boot-log::after { animation: none; opacity: .55; } }
 .boot-log .l { display: block; }
 .boot-log .l .p { margin-right: .4rem; color: var(--ink-faint); }
 .boot-log .l.core { color: var(--ink); }
@@ -57,9 +66,31 @@
   background: linear-gradient(90deg, var(--spectrum-5, #4aa3ff), var(--spectrum-2, #f0a15a));
   transition: width .15s ease-out;
 }
+/* Busy stripe, toggled by index.html's real WebAssembly.compileStreaming/.compile observer via
+   #boot-bar.busy. The bar's WIDTH still reflects real cumulative bytes downloaded (unchanged) — this
+   only overlays motion for the real post-download/pre-ready compile gap, so a plateaued width (can
+   legitimately sit near 100% while the browser is still compiling) doesn't read as frozen. */
+#boot-bar.busy .boot-bar-fill {
+  background-image:
+    linear-gradient(90deg, var(--spectrum-5, #4aa3ff), var(--spectrum-2, #f0a15a)),
+    repeating-linear-gradient(115deg, rgba(255, 255, 255, .38) 0 10px, rgba(255, 255, 255, 0) 10px 20px);
+  background-size: 100% 100%, 40px 100%;
+  animation: boot-stripes 1s linear infinite;
+}
+@media (prefers-reduced-motion: reduce) { #boot-bar.busy .boot-bar-fill { animation: none; } }
+
 .boot-pct { margin-top: .5rem; font-size: .72rem; color: var(--ink-faint); }
 .boot-pct::after { content: var(--blazor-load-percentage-text, "connecting\2026"); }
 
+/* Distinct state for "downloaded but not actually ready" (see #boot-phase's own comment in
+   index.html) — separate element from .boot-pct so it never fights the framework-owned
+   --blazor-load-percentage-text var, empty/invisible except during the real compile gap. */
+.boot-phase { margin-top: .35rem; min-height: 1em; font-size: .72rem; color: var(--ink-faint); }
+.boot-phase.compiling { color: var(--ok); animation: boot-pulse 1.2s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) { .boot-phase.compiling { animation: none; } }
+
 @keyframes boot-pulse { 0%, 100% { opacity: 1 } 50% { opacity: .35 } }
+@keyframes boot-cursor { 0%, 49% { opacity: 1 } 50%, 100% { opacity: 0 } }
+@keyframes boot-stripes { to { background-position: 0 0, 40px 0; } }
 @media (prefers-reduced-motion: reduce) { .boot-dot { animation: none; } }
 @media (max-width: 480px) { .boot-log { height: 170px; } }

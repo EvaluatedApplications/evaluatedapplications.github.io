@@ -15,19 +15,19 @@
   "imports": {
     "./_framework/blazor.webassembly.js": "./_framework/blazor.webassembly.958z1vx7fr.js",
     "./_framework/dotnet.native.js": "./_framework/dotnet.native.fnz6yjpsml.js",
-    "./_framework/dotnet.js": "./_framework/dotnet.nu0elsavdk.js",
-    "./_framework/dotnet.runtime.js": "./_framework/dotnet.runtime.zbexyp8zrs.js"
+    "./_framework/dotnet.runtime.js": "./_framework/dotnet.runtime.zbexyp8zrs.js",
+    "./_framework/dotnet.js": "./_framework/dotnet.y0pkat6k4f.js"
   },
   "scopes": {},
   "integrity": {
     "./_framework/blazor.webassembly.958z1vx7fr.js": "sha256-A59Tr9HqEhHMu8kU7kruLI9ayw5MRS6Lvc6z7jCbghk=",
     "./_framework/blazor.webassembly.js": "sha256-A59Tr9HqEhHMu8kU7kruLI9ayw5MRS6Lvc6z7jCbghk=",
-    "./_framework/dotnet.js": "sha256-z4BLLXaPiKMEVGVAVROf8bQ4CECcWr0N+kRNo6gq0yE=",
+    "./_framework/dotnet.js": "sha256-svmqiSVpfhZ+juQcrTi6AilB8xcmfmjWD2Cq6f8AgV4=",
     "./_framework/dotnet.native.fnz6yjpsml.js": "sha256-BejH+RuiFMTz1zzQIUhe8JJ461jB1PUM3JUQtCea5gk=",
     "./_framework/dotnet.native.js": "sha256-BejH+RuiFMTz1zzQIUhe8JJ461jB1PUM3JUQtCea5gk=",
-    "./_framework/dotnet.nu0elsavdk.js": "sha256-z4BLLXaPiKMEVGVAVROf8bQ4CECcWr0N+kRNo6gq0yE=",
     "./_framework/dotnet.runtime.js": "sha256-MZMguyke9CroSQl+L/SHIGFkPTD+LtYGXkXjAvwWx40=",
-    "./_framework/dotnet.runtime.zbexyp8zrs.js": "sha256-MZMguyke9CroSQl+L/SHIGFkPTD+LtYGXkXjAvwWx40="
+    "./_framework/dotnet.runtime.zbexyp8zrs.js": "sha256-MZMguyke9CroSQl+L/SHIGFkPTD+LtYGXkXjAvwWx40=",
+    "./_framework/dotnet.y0pkat6k4f.js": "sha256-svmqiSVpfhZ+juQcrTi6AilB8xcmfmjWD2Cq6f8AgV4="
   }
 }</script>
     <!-- GitHub Pages SPA: restore the deep-link path that the root 404.html encoded, before Blazor boots. -->
@@ -48,14 +48,21 @@
              the progress bar/percentage are the framework's own real cumulative-bytes figure
              (--blazor-load-percentage[-text], set by the WASM host as it downloads — see boot.css and
              the script at the end of this file). Nothing here is fake flavor text: this genuinely is a
-             WebAssembly runtime + compiled binaries landing in your browser tab, not a normal page load. -->
+             WebAssembly runtime + compiled binaries landing in your browser tab, not a normal page load.
+             Two more real (not decorative) signals cover the gap after that download finishes but before
+             the AOT-compiled runtime is actually ready to run — a phase with no fetch event to hang a
+             loadBootResource line on: a #boot-phase status line + a WebAssembly.compileStreaming/.compile
+             observer (see the script below) narrate the browser's real CPU-bound module-compile step, and
+             a CSS-only blinking cursor after the log (boot.css) guarantees visible motion through ANY
+             wait regardless of whether a hook exists for it. -->
         <div class="boot">
             <div class="boot-crt">
                 <div class="boot-head"><span class="boot-dot" aria-hidden="true"></span>EVALUATED APPLICATIONS <span class="boot-sep">/</span> CLIENT-SIDE RUNTIME</div>
                 <div class="boot-sub">no server round-trip from here on — everything below runs in this browser tab.</div>
                 <pre class="boot-log" id="boot-log" aria-live="polite"></pre>
-                <div class="boot-bar"><div class="boot-bar-fill"></div></div>
+                <div class="boot-bar" id="boot-bar"><div class="boot-bar-fill"></div></div>
                 <div class="boot-pct"></div>
+                <div class="boot-phase" id="boot-phase" aria-live="polite"></div>
             </div>
         </div>
     </div>
@@ -97,6 +104,58 @@
       })();
       __bootLine('', 'target ' + (window.location.pathname || '/'));
       __bootLine('', 'requesting WebAssembly runtime + compiled binaries…');
+
+      // __bootPhase: a state DISTINCT from --blazor-load-percentage[-text] (the framework's own
+      // cumulative-bytes-downloaded figure). Real bytes-downloaded can legitimately sit at/near 100%
+      // while the browser is still genuinely compiling the big AOT-compiled dotnet.native.*.wasm
+      // module — "fully downloaded" isn't "ready". Only the WebAssembly.compileStreaming/.compile
+      // observer below ever calls this with busy=true, so it only shows during that real gap.
+      window.__bootPhase = (function () {
+        var el = document.getElementById('boot-phase');
+        var bar = document.getElementById('boot-bar');
+        return function (busy, text) {
+          if (el) { el.textContent = text || ''; el.className = 'boot-phase' + (busy ? ' compiling' : ''); }
+          if (bar) bar.classList.toggle('busy', !!busy);
+        };
+      })();
+
+      // Real narration for the one boot phase that has NO fetch event to hang a loadBootResource line
+      // on: once the big AOT-compiled dotnet.native.*.wasm module finishes downloading, the browser
+      // still has to COMPILE it — genuine, sometimes multi-second CPU work on a slow phone, invisible
+      // to loadBootResource because it isn't a fetch at all. Verified against the real shipped
+      // dotnet.*.js sources for this exact build (not guessed): the WASM host downloads that module
+      // then calls the standard WebAssembly.compileStreaming(response) API (falling back to
+      // WebAssembly.compile(bytes) if streaming compile isn't available), and grepping all three
+      // shipped runtime files confirms neither API is called anywhere else during boot — so wrapping
+      // them targets exactly this one real step. Same contract as loadBootResource: call straight
+      // through to the real implementation, add no latency, no behavior change, self-remove after the
+      // one call dotnet's own loader makes.
+      (function () {
+        if (typeof WebAssembly === 'undefined') return;
+        var announced = false;
+        function wrap(name) {
+          var real = WebAssembly[name];
+          if (typeof real !== 'function') return;
+          WebAssembly[name] = function () {
+            WebAssembly[name] = real; // self-restore — dotnet's loader only calls this once per boot
+            if (!announced) {
+              announced = true;
+              __bootLine('core', 'compiling WebAssembly module (native code — real CPU work, can take a few seconds on a phone)…');
+              __bootPhase(true, 'still working — compiling WebAssembly module…');
+            }
+            var t0 = performance.now();
+            var result = real.apply(WebAssembly, arguments);
+            var finish = function (r) {
+              __bootLine('core', 'WebAssembly module compiled (' + Math.round(performance.now() - t0) + 'ms)');
+              __bootPhase(false, '');
+              return r;
+            };
+            return result.then(finish, function (e) { finish(); throw e; });
+          };
+        }
+        wrap('compileStreaming');
+        wrap('compile');
+      })();
     </script>
     <!-- autostart=false so the loadBootResource hook below can be wired in BEFORE Blazor.start() kicks
          off the real download — the very next script tag runs immediately after this one loads (classic
@@ -113,7 +172,7 @@
           if (label) __bootLine(label[0], label[1]);
           return undefined; // pure observation — Blazor still fetches this exact resource itself
         }
-      }).then(function () { __bootLine('core', 'runtime ready — launching tool'); });
+      }).then(function () { __bootPhase(false, ''); __bootLine('core', 'runtime ready — launching tool'); });
     </script>
 </body>
 
