@@ -1,4 +1,5 @@
 @page "/creature"
+@inject HoloKernel.SessionHost Sessions
 @using System.Text
 @using PrismFormer
 @using Tracer.Helpers
@@ -426,10 +427,21 @@
         if (_session is null)
         {
             var spec = new ModelSpec { Vocab = W * H + 8, MaxContext = MaxCtx, Dim = DModel, Layers = 1, MinShifts = MinShifts, KPass = KPass, FrozenPrefix = 64, Golden = true };
-            _session = HoloSession.Create(spec);   // built untrained, ServeAlpha=0 — the identity-init ease-in starts cold, same as before
-            _ramp = new AlphaRamp(IterWarmSteps);
+            // SessionHost dedupes by MODEL key ("creature"): the FIRST call on this page load builds an
+            // untrained model exactly as before (ServeAlpha=0, identity-init ease-in starts cold). A LATER
+            // visit to this page in the same load reuses that same in-memory session/weights instead of
+            // rebuilding — the factory below simply never runs a second time.
+            bool reused = Sessions.IsLoaded("creature");
+            _session = await Sessions.GetOrCreateAsync("creature", () => Task.FromResult(HoloSession.Create(spec)));
+            // Seed the local ramp to match whatever alpha the reused session is already served at, rather
+            // than resetting to 0 — RefinementLoop.Observe trains AND serves at Ramp.Alpha every call, so a
+            // fresh ramp would otherwise silently yank a partially-warmed model's serve blend back toward 0
+            // on the very next training step.
+            _ramp = SeedRamp(IterWarmSteps, _session.ServeAlpha);
             _loop = new RefinementLoop(_session, _ramp, learningRate: 0);   // LearningRate is set per-step in EndEpisode
-            Log($"brain ready · L=1 · K={KPass} weight-tied passes · ctx={MaxCtx} · shifts={spec.Shifts} golden · d={DModel} · vocab={W * H + 8} · {_session.Model.ParamCount:N0} params");
+            Log(reused
+                ? $"brain reused from earlier this visit · L=1 · K={KPass} weight-tied passes · ctx={MaxCtx} · shifts={spec.Shifts} golden · d={DModel} · vocab={W * H + 8} · {_session.Model.ParamCount:N0} params · α {_ramp.Alpha * 100:F0}%"
+                : $"brain ready · L=1 · K={KPass} weight-tied passes · ctx={MaxCtx} · shifts={spec.Shifts} golden · d={DModel} · vocab={W * H + 8} · {_session.Model.ParamCount:N0} params");
         }
         _running = true;
         _apples.Clear(); foreach (var a in _applesInit) _apples.Add(a); ComputeDist();
@@ -449,8 +461,22 @@
 
     void ResetBrain()
     {
+        Sessions.Forget("creature");   // drop the shared instance too, or the next visit would just get the old one back
         _session = null; _ramp = null; _loop = null; _lastTrace = null; _lastCtx = null; _log.Clear();
         InvalidateOnEdit();
+    }
+
+    // Seed a fresh AlphaRamp already at the alpha a reused session is currently served at, instead of
+    // starting cold — see the call site's comment above.
+    static AlphaRamp SeedRamp(int warmSteps, double currentAlpha)
+    {
+        var ramp = new AlphaRamp(warmSteps);
+        if (warmSteps > 0 && currentAlpha > 0)
+        {
+            long steps = Math.Min(warmSteps, (long)Math.Round(Math.Clamp(currentAlpha, 0.0, 1.0) * warmSteps));
+            for (long i = 0; i < steps; i++) ramp.Advance();
+        }
+        return ramp;
     }
 
     void ToggleScent() { _showScent = !_showScent; StateHasChanged(); }

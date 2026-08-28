@@ -1,5 +1,6 @@
 @page "/forecaster"
 @inject HttpClient Http
+@inject HoloKernel.SessionHost Sessions
 @using System.Text
 @using System.Text.Json
 @using PrismFormer
@@ -202,14 +203,37 @@
         return a;
     }
 
-    void EnsureBrain()
+    async Task EnsureBrain()
     {
         if (_session is not null) return;
         var spec = new ModelSpec { Vocab = Vocab, MaxContext = MaxContext, Dim = Dim, Layers = Layers, MinShifts = MinShifts, KPass = KPass, FrozenPrefix = 0, Golden = true };
-        _session = HoloSession.Create(spec);
-        _ramp = new AlphaRamp(IterWarm);
+        // SessionHost dedupes by MODEL key ("forecaster"): first visit this page load builds untrained
+        // exactly as before; a later visit in the same load reuses the same in-memory session instead of
+        // rebuilding it — the factory below simply never runs a second time.
+        bool reused = Sessions.IsLoaded("forecaster");
+        _session = await Sessions.GetOrCreateAsync("forecaster", () => Task.FromResult(HoloSession.Create(spec)));
+        // Seed the local ramp to the reused session's current alpha rather than resetting to 0 — see
+        // Creature.razor's identical comment; RefinementLoop.Observe both trains AND serves at Ramp.Alpha
+        // on every call, so a fresh ramp would otherwise yank a partially-warmed model's serve blend back
+        // toward 0 on the very next tick.
+        _ramp = SeedRamp(IterWarm, _session.ServeAlpha);
         _loop = new RefinementLoop(_session, _ramp, Lr);
-        Log($"brain ready · L={Layers} · K={KPass} weight-tied passes · ctx={MaxContext} tokens (~{CandleContext} candles) · shifts={spec.Shifts} golden · d={Dim} · vocab={Vocab} · {_session.Model.ParamCount:N0} params");
+        Log(reused
+            ? $"brain reused from earlier this visit · L={Layers} · K={KPass} weight-tied passes · ctx={MaxContext} tokens (~{CandleContext} candles) · shifts={spec.Shifts} golden · d={Dim} · vocab={Vocab} · {_session.Model.ParamCount:N0} params · α {_ramp.Alpha * 100:F0}%"
+            : $"brain ready · L={Layers} · K={KPass} weight-tied passes · ctx={MaxContext} tokens (~{CandleContext} candles) · shifts={spec.Shifts} golden · d={Dim} · vocab={Vocab} · {_session.Model.ParamCount:N0} params");
+    }
+
+    // Seed a fresh AlphaRamp already at the alpha a reused session is currently served at, instead of
+    // starting cold — see the call site's comment above.
+    static AlphaRamp SeedRamp(int warmSteps, double currentAlpha)
+    {
+        var ramp = new AlphaRamp(warmSteps);
+        if (warmSteps > 0 && currentAlpha > 0)
+        {
+            long steps = Math.Min(warmSteps, (long)Math.Round(Math.Clamp(currentAlpha, 0.0, 1.0) * warmSteps));
+            for (long i = 0; i < steps; i++) ramp.Advance();
+        }
+        return ramp;
     }
 
     // one live-training step: predict the next return bucket, score it, then train toward the true label via
@@ -283,13 +307,13 @@
 
     void ToggleInspector() { _showInspector = !_showInspector; if (!_showInspector) { _lastTrace = null; _lastCtx = null; } }
 
-    void TrainOnce() { EnsureBrain(); TrainOnceStep(); }
+    async Task TrainOnce() { await EnsureBrain(); TrainOnceStep(); }
 
     async Task ToggleRun()
     {
         if (_running) { _running = false; return; }
         if (_candles.Count == 0) return;
-        EnsureBrain();
+        await EnsureBrain();
         _running = true;
         try
         {
@@ -306,6 +330,7 @@
 
     void ResetBrain()
     {
+        Sessions.Forget("forecaster");   // drop the shared instance too, or the next visit would just get the old one back
         _running = false; _session = null; _ramp = null; _loop = null; _lastTrace = null; _lastCtx = null;
         _seq.Clear(); _pos = 1; _trained = 0;
         _correctLifetime = 0; _totalLifetime = 0; _recentWindow.Clear(); _recentAcc = 0; _lifetimeAcc = 0;

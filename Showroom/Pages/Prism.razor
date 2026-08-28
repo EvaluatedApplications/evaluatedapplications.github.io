@@ -1,5 +1,6 @@
 @page "/prism"
 @inject HttpClient Http
+@inject HoloKernel.SessionHost Sessions
 @using System.Text
 @using PrismFormer
 @using HoloKernel
@@ -258,13 +259,9 @@
             _vocab = new SubwordVocab(merges);   // throws (caught below, degrades to _loadError) on a malformed merge line
             Finish(s, $"{vocabBytes.Length:N0} B → {_vocab.Size:N0}-symbol vocab");
 
-            s = Begin("data/oracle-brain.bin");
-            var bytes = await Http.GetByteArrayAsync("data/oracle-brain.bin");
-            var peek = HoloFormer.Deserialize(bytes);   // one-time peek at Layers/ParamCount for the boot log + the
-            // alpha-reconstruction guard below — HoloSession.FromCheckpoint needs K/alpha as ctor args (see field
-            // comment above), which in turn need Layers, so this has to happen before the session can be built.
-            Finish(s, $"{bytes.Length:N0} B → {peek.ParamCount:N0} params deserialized");
-
+            // Metadata sidecars fetched BEFORE the checkpoint bytes now (was after) — they're tiny and are
+            // needed to compute K/alpha, which the SessionHost factory below needs up front (it only ever
+            // runs once per model key, so it can't come back later to ask for them).
             s = Begin("data/oracle-rounds.txt");
             try { _rounds = long.Parse((await Http.GetStringAsync("data/oracle-rounds.txt")).Trim()); Finish(s, $"{_rounds:N0} rounds trained"); }
             catch { Finish(s, "not shipped (optional)", "fail"); _rounds = null; }
@@ -280,13 +277,35 @@
             // fixed to the REAL trained depth (falls back to the file's bare K=1 only if the metadata sidecar is
             // missing) — never adjusted after this; see the field comments above for why.
             _k = _trainedStackK ?? 1;
-            _trainedAlpha = (peek.Layers == 1 && _rounds is not null && _trainedIterWarm is > 0)
+
+            // SessionHost dedupes by MODEL key ("prism"): the FIRST visit to this page in a page load fetches
+            // + deserializes the ~2.9 MB checkpoint exactly as before. A LATER visit reuses that same in-memory
+            // HoloSession instead of re-downloading/re-parsing it — the factory below (and its boot-log step)
+            // simply never runs a second time.
+            bool reused = Sessions.IsLoaded("prism");
+            _session = await Sessions.GetOrCreateAsync("prism", async () =>
+            {
+                var sb = Begin("data/oracle-brain.bin");
+                var bytes = await Http.GetByteArrayAsync("data/oracle-brain.bin");
+                var peek = HoloFormer.Deserialize(bytes);   // one-time peek at Layers/ParamCount for the boot log +
+                // the alpha-reconstruction guard below — HoloSession.FromCheckpoint needs K/alpha as ctor args
+                // (see field comment above), which in turn need Layers, so this has to happen before the session
+                // can be built.
+                Finish(sb, $"{bytes.Length:N0} B → {peek.ParamCount:N0} params deserialized");
+                var alpha = (peek.Layers == 1 && _rounds is not null && _trainedIterWarm is > 0)
+                    ? AlphaRamp.Reconstruct(_rounds.Value, addRound: 0, _trainedIterWarm.Value)
+                    : 1.0;
+                // HoloSession.FromCheckpoint requires K/alpha as explicit ctor args — the kernel enforces the
+                // "checkpoint doesn't carry them" gotcha by construction rather than a footnote (see field comment).
+                return HoloSession.FromCheckpoint(bytes, _k, alpha);
+            });
+            if (reused) Finish(Begin("data/oracle-brain.bin"), "reused from earlier this visit (no re-download)");
+            _stats = _session.Stats();
+            // Recomputed from the session actually in hand (not the factory's local "peek"/"alpha", which don't
+            // exist on the reused-cache path) — same formula, so identical on a first-ever visit either way.
+            _trainedAlpha = (_stats.Layers == 1 && _rounds is not null && _trainedIterWarm is > 0)
                 ? AlphaRamp.Reconstruct(_rounds.Value, addRound: 0, _trainedIterWarm.Value)
                 : 1.0;
-            // HoloSession.FromCheckpoint requires K/alpha as explicit ctor args — the kernel enforces the
-            // "checkpoint doesn't carry them" gotcha by construction rather than a footnote (see field comment).
-            _session = HoloSession.FromCheckpoint(bytes, _k, _trainedAlpha);
-            _stats = _session.Stats();
             _loaded = true;
         }
         catch (Exception ex) { _loadError = "Couldn't load the checkpoint: " + ex.Message; }
