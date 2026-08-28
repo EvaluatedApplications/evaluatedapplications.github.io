@@ -335,16 +335,16 @@ template.
 
 ---
 
-## Decisions to confirm
+## Decisions — CONFIRMED by the user (2026-08-28)
 
-1. **Reassign `--c-ml` from off-spectrum pink (`#e879c8`) to Indigo (`--spectrum-6`, `#7d7dff`)** —
-   needed for "tools are visible light too" to actually hold; re-tints AlgFormer/AlgFormer.Gpu/
-   EvalApp.Neural/Prose cards and 3 of 4 tool cards sitewide. Alternative: keep the pink as a
-   deliberate house exception — the chord formula still works either way, just changes the ML hex.
-2. **The 6 orphan packages' framing on the relocated `packages.html`** — recommended: a one-line
-   "Powers: …" / "Not yet in a tool" annotation per card, no synthetic drill-down claims invented.
-   Longer-term idea (not a brand-identity call): a 5th tool demoing HoloVoxel would be the most
-   natural way to shrink that list, flagged for the coordinator/product roadmap, not decided here.
-3. **Dropping the `Tools` nav item** (redundant with `Home` once tools are the entire top-level
-   homepage) — recommended for compactness, but if "Tools" as an explicit label matters for clarity
-   elsewhere (e.g. matching copy on other pages), it can stay pointed at `/#tools` instead.
+1. **`--c-ml` reassigned to Indigo** (`--spectrum-6`, `#7d7dff`), off the old off-spectrum pink
+   (`#e879c8`). Re-tints AlgFormer/AlgFormer.Gpu/EvalApp.Neural/Prose cards and 3 of 4 tool cards
+   sitewide — implement this change everywhere `--c-ml` is referenced, not just on the pivoted pages.
+2. **The 6 orphan packages stay UNANNOTATED** on the relocated `packages.html` — no "Powers: …" /
+   "Not yet in a tool" line. Same card shape as today, just relocated. (The longer-term 5th-tool idea
+   for HoloVoxel remains a separate, not-decided-here product-roadmap note for the coordinator.)
+3. **`Tools` nav item dropped.** Nav becomes `Home · Packages · NuGet` (3 items) everywhere it
+   currently reads `Home · Packages · Tools · NuGet`. `#tools` keeps its `id` for deep-linking even
+   without a nav entry pointing at it.
+
+Implementation may now proceed per §1-§4 above with these three values locked in.
