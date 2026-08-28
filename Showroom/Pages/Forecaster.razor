@@ -3,6 +3,7 @@
 @using System.Text
 @using System.Text.Json
 @using PrismFormer
+@using HoloKernel
 
 <PageTitle>The Forecaster — a price-direction brain that learns live in your browser</PageTitle>
 
@@ -40,9 +41,10 @@
         </div>
 
         <div class="cr-controls">
-            <button class="go" @onclick="ToggleRun">@(_running ? "Pause" : (_brain is null ? "Start training" : "Resume training"))</button>
+            <button class="go" @onclick="ToggleRun">@(_running ? "Pause" : (_session is null ? "Start training" : "Resume training"))</button>
             <button class="ghost" @onclick="TrainOnce" disabled="@_running" type="button">Train one tick</button>
             <button class="ghost" @onclick="ResetBrain" type="button">Reset brain</button>
+            <button class="ghost @(_showInspector ? "on" : "")" @onclick="ToggleInspector" type="button">🔍 inspect brain</button>
             <label class="speed">speed
                 <input type="range" min="1" max="10" @bind="_speed" @bind:event="oninput" />
             </label>
@@ -56,7 +58,7 @@
                 <div class="stat"><div class="n">@_trained.ToString("N0")</div><div class="l">ticks trained</div></div>
                 <div class="stat"><div class="n">@(_recentAcc.ToString("F0"))%</div><div class="l">accuracy, last @Math.Min(_recentWindow.Count, RecentCap)</div></div>
                 <div class="stat"><div class="n">@(_lifetimeAcc.ToString("F0"))%</div><div class="l">lifetime accuracy</div></div>
-                <div class="stat"><div class="n">@((KAlpha * 100).ToString("F0"))%</div><div class="l">K-pass depth (α ramp)</div></div>
+                <div class="stat"><div class="n">@(((_ramp?.Alpha ?? 0) * 100).ToString("F0"))%</div><div class="l">K-pass depth (α ramp)</div></div>
             </div>
             <figure class="cr-curve">
                 <figcaption>rolling accuracy (last @RecentCap ticks) over training — it should climb above the 50/50 baseline as the brain learns</figcaption>
@@ -74,13 +76,27 @@
             </div>
         }
 
+        @if (_showInspector && _lastTrace is not null && _lastCtx is not null)
+        {
+            <div class="cr-log">
+                <div class="log-head">last prediction <span class="log-sub">direction confidence, pass by pass (HoloKernel's Inspector — shared with The Creature and Prism)</span></div>
+                <div class="log-body">
+                    @for (int p = 0; p < _lastTrace.Passes.Count; p++)
+                    {
+                        <div class="log-line">pass @p @(p == _lastTrace.Passes.Count - 1 ? "(final)" : "") — @TopDirText(_lastTrace.Passes[p].Logits)</div>
+                    }
+                    <div class="log-line">attends → @AttentionText(_lastCtx, _lastTrace.Attention[^1])</div>
+                </div>
+            </div>
+        }
+
         <div class="outro">
             <p><strong>What it's actually predicting.</strong> Every hourly tick becomes two tokens — an hour-of-day
                 bucket and a return bucket (how big the move was and which way) — read off the same tight-deadband
                 edges we tuned for our own market simulator, so a real move registers as up or down instead of
                 collapsing to "flat". The brain reads the recent tape and predicts the <em>next</em> return bucket;
-                we score it right when it calls the right <em>direction</em>. It is the exact same
-                <code>NewGrads → IterAccumulate → Step</code> live-training loop as <a href="/creature">The
+                we score it right when it calls the right <em>direction</em>. It is the same
+                <code>HoloSession</code> + <code>RefinementLoop</code> live-training kernel as <a href="/creature">The
                 Creature</a> — one holographic layer applied twice, weight-tied, with that second pass ramping in
                 over your first @IterWarm clicks instead of starting fully on.</p>
             <p><strong>Being honest about it:</strong> this is a demo, not investment advice — a few hundred hourly
@@ -105,28 +121,19 @@
     const int Vocab = TimeBuckets + PriceBuckets;   // 17 — time tokens then price tokens
     const int PriceBase = TimeBuckets;
 
-    // ---- model shape ----
+    // ---- model shape — ported onto HoloKernel's ModelSpec 2026-08-28 (was a hand-rolled HoloFormer ctor + a
+    // MinShifts block comment re-deriving the bindRank=shifts*d/2 reasoning The Creature's file already carried;
+    // ModelSpec.MinShifts's own doc comment holds that reasoning once now). Numbers unchanged from prior tuning.
     const int Dim = 128;          // MarketSim's tuned width for this task class
     const int Layers = 1;         // one layer, applied K times weight-tied (below)
     const int KPass = 2;          // weight-tied extra pass (Iters)
-    const int IterWarm = 40;      // training CLICKS over which the extra pass's α ramps 0→1 (Creature-style ease-in;
-                                   // roughly double Creature's 20 episodes since a single supervised tick-step here is
-                                   // noisier signal than Creature's advantage-weighted per-episode update)
+    const int IterWarm = 40;      // training CLICKS over which the extra pass's α ramps 0→1 — this one DID map
+                                   // straight onto AlphaRamp: the old loop already advanced its ramp once per
+                                   // click (unlike Creature's per-episode cadence), so RefinementLoop.Observe's
+                                   // per-call advance is an exact match, no conversion needed here.
     const int CandleContext = 128;              // ~128 candles of history
     const int MaxContext = CandleContext * 2;   // 256 tokens — TIME+RETURN pair per candle
-
-    // ROUTING-RANK floor, reasoned the same way as Creature's MinShifts (bindRank = shifts*d/2, HoloShape.cs), not
-    // copied from it. Predicting 1-of-9 return buckets is the same order of task complexity as Creature's 1-of-8 move
-    // choice, so it earns the same bindRank/d = shifts/2 = 4 target ratio (shifts/d is what tracks task complexity,
-    // not d itself) -> MinShifts = 8. It does NOT bite here: HoloShape.ShiftsFor(256, 128) — called exactly like this,
-    // 2-arg, default ratio — returns 16 on its own (verified by reflecting the published EvaluatedApplications.AlgFormer
-    // 1.2.0 package: bindRank=1024, cleanCapacity=122). S=16 clears the S>1 floor with wide margin, so the explicit
-    // MinShifts is a defensive no-op here, not the active constraint — kept anyway so a future context/dim change
-    // can't silently regress to a diagonal. Honest caveat: cleanCapacity(16,128)=122 is under the 256-token window, so
-    // the older half of a full context can read back less cleanly than the recent half — not a v1 blocker (S>1 is the
-    // hard rule and recent tokens dominate the prediction anyway), but a real knob for a v2 tuning pass.
-    const int MinShifts = 8;
-    static readonly int Shifts = Math.Max(HoloShape.ShiftsFor(MaxContext, Dim), MinShifts);
+    const int MinShifts = 8;   // verified no-op here: ModelSpec.Shifts (ShiftsFor(256,128)=16) already clears it
 
     const double Lr = 0.005;   // a reasoned starting point (between MarketSim's batched-epoch 0.02 and Creature's
                                 // per-step 0.0025-0.004), NOT yet measured live — flag for tuning once someone watches it train
@@ -137,12 +144,20 @@
     readonly List<(int TimeTok, int Bucket, double Close)> _candles = new();
     bool _loaded; string? _loadError;
 
-    HoloFormer? _brain;
+    // brain — HoloKernel, same as The Creature (see that file for the full rationale): HoloSession wraps the
+    // model + K/alpha, AlphaRamp is the ease-in, RefinementLoop.Observe replaces the hand-written
+    // NewGrads->IterAccumulate->Step triple this file used to carry independently.
+    HoloSession? _session;
+    AlphaRamp? _ramp;
+    RefinementLoop? _loop;
     readonly List<int> _seq = new();   // the growing token tape the brain reads as context
     int _pos = 1;                      // cursor into the bundled series (wraps — it's a finite real sample)
     long _trained;
-    int _trainedForAlpha;
-    double KAlpha => Math.Min(1.0, _trainedForAlpha / (double)IterWarm);
+
+    // Inspector (NEW capability, 2026-08-28 — see The Creature's file for why it's opt-in).
+    bool _showInspector;
+    PositionTrace? _lastTrace;
+    int[]? _lastCtx;
 
     readonly Queue<bool> _recentWindow = new();
     long _correctLifetime, _totalLifetime;
@@ -189,18 +204,16 @@
 
     void EnsureBrain()
     {
-        if (_brain is not null) return;
-        _brain = new HoloFormer(Vocab, shifts: Shifts, layers: Layers, maxContext: MaxContext, dModel: Dim, frozenPrefix: 0, golden: true)
-        {
-            Iters = KPass,
-            IterAlphaServe = 0
-        };
-        _trainedForAlpha = 0;
-        Log($"brain ready · L={Layers} · K={KPass} weight-tied passes · ctx={MaxContext} tokens (~{CandleContext} candles) · shifts={Shifts} golden · d={Dim} · vocab={Vocab} · {_brain.ParamCount:N0} params");
+        if (_session is not null) return;
+        var spec = new ModelSpec { Vocab = Vocab, MaxContext = MaxContext, Dim = Dim, Layers = Layers, MinShifts = MinShifts, KPass = KPass, FrozenPrefix = 0, Golden = true };
+        _session = HoloSession.Create(spec);
+        _ramp = new AlphaRamp(IterWarm);
+        _loop = new RefinementLoop(_session, _ramp, Lr);
+        Log($"brain ready · L={Layers} · K={KPass} weight-tied passes · ctx={MaxContext} tokens (~{CandleContext} candles) · shifts={spec.Shifts} golden · d={Dim} · vocab={Vocab} · {_session.Model.ParamCount:N0} params");
     }
 
-    // one live-training step: predict the next return bucket, score it, then train toward the true label —
-    // the same NewGrads -> IterAccumulate -> Step loop The Creature uses, just on a price tape instead of a trail.
+    // one live-training step: predict the next return bucket, score it, then train toward the true label via
+    // HoloKernel's RefinementLoop.Observe — the same kernel call The Creature uses, on a price tape instead of a trail.
     void TrainOnceStep()
     {
         if (_candles.Count == 0) return;
@@ -210,21 +223,25 @@
         _seq.Add(c.TimeTok);
         var ctx = BuildCtx();
 
-        var logits = _brain!.LogitsFor(ctx);   // honours Iters (the K-pass) at serve time
+        double[] logits;
+        if (_showInspector)
+        {
+            var trace = Inspector.Capture(_session!, ctx, DecodePolicy.Default);
+            _lastTrace = trace; _lastCtx = ctx;
+            logits = trace.Final.Logits;
+        }
+        else { _lastTrace = null; logits = _session!.Logits(ctx); }   // honours KPass at serve time
         int predBucket = 0; double best = double.NegativeInfinity;
         for (int b = 0; b < PriceBuckets; b++) { double v = logits[PriceBase + b]; if (v > best) { best = v; predBucket = b; } }
         int predDir = Dir(predBucket), actualDir = Dir(c.Bucket);
         bool correct = predDir == actualDir;
 
-        var g = _brain.NewGrads();
-        _brain.IterAccumulate(ctx, PriceBase + c.Bucket, g, KPass, KAlpha);
-        _brain.Step(g, Lr);
+        double loss = _loop!.Observe(ctx, PriceBase + c.Bucket);   // trains + advances the α-ramp
 
         _seq.Add(PriceBase + c.Bucket);
         if (_seq.Count > MaxContext * 6) _seq.RemoveRange(0, _seq.Count - MaxContext * 6);
 
-        _trained++; _trainedForAlpha++; _pos++;
-        _brain.IterAlphaServe = KAlpha;
+        _trained++; _pos++;
 
         _totalLifetime++; if (correct) _correctLifetime++;
         _lifetimeAcc = _totalLifetime > 0 ? 100.0 * _correctLifetime / _totalLifetime : 0;
@@ -236,8 +253,35 @@
         if (_recent.Count > ChartWindow) _recent.RemoveAt(0);
 
         if (_trained <= 5 || _trained % 10 == 0)
-            Log($"tick {_trained,4}   pred {DirGlyph(predDir)}   actual {DirGlyph(actualDir)}   {(correct ? "hit" : "miss")}   recent {_recentAcc:F0}%   α {KAlpha * 100:F0}%");
+            Log($"tick {_trained,4}   pred {DirGlyph(predDir)}   actual {DirGlyph(actualDir)}   {(correct ? "hit" : "miss")}   recent {_recentAcc:F0}%   loss {loss:F3}   α {_ramp!.Alpha * 100:F0}%");
     }
+
+    // ---- Inspector display helpers — same pattern as The Creature: the real decision lives in a SLICE of the
+    // vocab (price buckets at PriceBase..PriceBase+8), softmaxed and grouped by DIRECTION (Dir()) since 9 raw
+    // buckets collapse to 3 meaningful outcomes for accuracy purposes.
+    string TopDirText(double[] logits)
+    {
+        double max = double.NegativeInfinity;
+        for (int b = 0; b < PriceBuckets; b++) if (logits[PriceBase + b] > max) max = logits[PriceBase + b];
+        var p = new double[PriceBuckets]; double sum = 0;
+        for (int b = 0; b < PriceBuckets; b++) { p[b] = Math.Exp(logits[PriceBase + b] - max); sum += p[b]; }
+        double up = 0, down = 0, flat = 0;
+        for (int b = 0; b < PriceBuckets; b++)
+        {
+            double frac = sum > 0 ? p[b] / sum : 0;
+            int d = Dir(b);
+            if (d > 0) up += frac; else if (d < 0) down += frac; else flat += frac;
+        }
+        return $"▲{up * 100:F0}%  –{flat * 100:F0}%  ▼{down * 100:F0}%";
+    }
+
+    string AttentionText(int[] ctx, double[] resonance)
+    {
+        var top = Inspector.Focus(ctx, resonance, 3);
+        return top.Count == 0 ? "(nothing yet)" : string.Join("  ", top.Select(t => $"pos {t.Position} {t.Percent:F0}%"));
+    }
+
+    void ToggleInspector() { _showInspector = !_showInspector; if (!_showInspector) { _lastTrace = null; _lastCtx = null; } }
 
     void TrainOnce() { EnsureBrain(); TrainOnceStep(); }
 
@@ -262,7 +306,8 @@
 
     void ResetBrain()
     {
-        _running = false; _brain = null; _seq.Clear(); _pos = 1; _trained = 0; _trainedForAlpha = 0;
+        _running = false; _session = null; _ramp = null; _loop = null; _lastTrace = null; _lastCtx = null;
+        _seq.Clear(); _pos = 1; _trained = 0;
         _correctLifetime = 0; _totalLifetime = 0; _recentWindow.Clear(); _recentAcc = 0; _lifetimeAcc = 0;
         _accCurve.Clear(); _recent.Clear(); _log.Clear();
     }

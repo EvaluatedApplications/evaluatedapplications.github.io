@@ -34,6 +34,20 @@ public sealed record ModelStats(
 /// </summary>
 public sealed class HoloSession
 {
+    /// <summary>
+    /// The underlying model.
+    ///
+    /// BROWSER CONTRACT — train-only, fixed shape: a visitor refines this model's WEIGHTS (via
+    /// <see cref="RefinementLoop"/>) and never changes its STRUCTURE. <c>GrowLayers</c> and
+    /// <c>GrowShifts</c> are real capabilities on the package but are a PrismStudio / server-side
+    /// operation; the browser platform does not trigger or expose them, which is why this kernel
+    /// wraps neither. They are reachable through this property as a pragmatic escape hatch, not as
+    /// an invitation — a "grow the model" control does not belong in a tool UI.
+    ///
+    /// To put a bigger or better model in front of visitors, publish a different CHECKPOINT. Mutating
+    /// shape at runtime would also invalidate an already-downloaded checkpoint and force a multi-MB
+    /// re-fetch, which is exactly what the layered load strategy exists to prevent.
+    /// </summary>
     public HoloFormer Model { get; }
 
     /// <summary>Weight-tied pass count. A structural fact about the model, never a user control.</summary>

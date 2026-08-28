@@ -337,7 +337,9 @@ still being steered; these MEASURED facts hold whichever way it lands:
   the effect must be a pure function of scroll position (CSS `animation-timeline: view()`), never a
   JS scroll handler, or it will fight the mobile performance budget.
 
-### `HoloKernel/` — the shared model kernel (Phase 1, landed 2026-08-28, NOT yet consumed)
+### `HoloKernel/` — the shared model kernel (Phase 1, landed 2026-08-28 — **ported into all three
+live-brain tools by showroom-owner the same day**, status correction from showroom-owner with
+ground truth in hand; rest of this section is the coordinator/kernel side's to maintain)
 
 New Razor Class Library at `AboutUs/HoloKernel/` (`net10.0`, `Sdk.Razor`, root namespace
 `HoloKernel`). Coordinator-approved location: inside `AboutUs`, **NuGet-only**
@@ -373,8 +375,51 @@ ease-in + `Reconstruct` for checkpoint metadata), `RefinementLoop.cs` (`Observe`
   `IterAccumulate` throw `NotSupportedException("Iter oracle: L=1 only.")` — but
   `StackIterAccumulateAllPos` with `K>1` succeeds on a multi-layer model. That asymmetry is a trap:
   a deep model can be TRAINED at K>1 and then fail only when you try to serve it. `ModelSpec.Validate`
-  now rejects the combination at construction. **This directly constrains "grow Prism"**: growing via
-  `GrowLayers` costs you the K-pass entirely, so depth and K are an either/or in 1.5.0.
+  now rejects the combination at construction. Relevant to whoever picks a shape (PrismStudio /
+  server side), NOT to the browser — see the browser contract below.
+
+### THE BROWSER CONTRACT: train-only, fixed shape (user directive, 2026-08-28)
+
+**In the browser, visitors TRAIN the model; they never change its shape.** "Grow Prism" means
+refining the existing weights of a fixed-shape model via `RefinementLoop.Observe` /
+`ObserveSequence` — that is the whole of it. Layers, shifts, dim and context are chosen up front and
+are immutable for the life of a browser session.
+
+`HoloFormer.GrowLayers` / `GrowShifts` are real capabilities on the published package, but they are a
+**PrismStudio / server-side operation**. The browser platform neither triggers nor exposes them.
+`HoloKernel` deliberately does not wrap either method; `HoloSession.Model` makes them *reachable*,
+which is a pragmatic escape hatch, not an invitation — a "grow the model" control does not belong in
+a tool UI. Shipping a bigger or better-trained model to visitors is done by publishing a different
+CHECKPOINT, not by mutating shape at runtime.
+
+This also keeps the mobile budget honest: shape changes would invalidate a downloaded checkpoint and
+force a re-fetch of megabytes, which is exactly what the layered load strategy exists to avoid.
+
+### Session lifetime: one shared session per page load, ephemeral (user directive, 2026-08-28)
+
+The model loads **once per page load** and that same in-memory session is reused as the visitor
+navigates between tools — not a fresh model per tool. Refinement a visitor does is **lost on reload,
+by design**: no local storage, no save-back, no cross-session sync. Explicitly do NOT build
+persistence machinery for this; if "keep my progress" is ever wanted it is a new decision.
+
+`HoloKernel/SessionHost.cs` is the whole mechanism: `GetOrCreateAsync(key, factory)` over a
+`Lazy<Task<HoloSession>>`, registered as `AddSingleton<SessionHost>()`. In Blazor WASM a singleton's
+lifetime IS the page load, so the DI lifetime and the intended ephemerality are already the same
+thing — nothing extra to enforce. The one part done carefully is load de-duplication: concurrent
+callers await the SAME load, because Prism's checkpoint is ~2.9 MB and two tools racing on first
+navigation is ordinary, not exotic. `Forget(key)` backs a "reset brain" control; `Clear()` is what a
+reload does anyway. There is no `CheckpointStore` and none is wanted — `HoloSession.Export()` exists
+only to make the K/alpha round-trip verifiable, NOT as a save feature to build UI on.
+
+**Open structural question, flagged not solved**: "one session shared across tools" holds only for
+tools that share a model. The three current tools do NOT — Creature is vocab 408 / d=384 / ctx=32,
+Forecaster is vocab 17 / d=128 / ctx=256, Prism is d=1536 with a text subword vocab. A `HoloFormer`
+has exactly one `Vocab`/`Dim`/`Context`, so those three cannot be one object as they currently stand.
+`SessionHost` is therefore keyed by MODEL, not by tool: tools sharing a checkpoint share one instance,
+and the rest each get one long-lived instance instead of a rebuild per navigation. That delivers the
+actual intent (don't reload the model when navigating; lose it on refresh) without pretending
+incompatible shapes can be a single session. Whether the tools should converge on one shared brain is
+a real design question for the coordinator, not something to assume.
 
 ### The `IParallelMap` seam — investigated, and RULED OUT for this site
 
@@ -396,12 +441,16 @@ cancellation around a long run, concurrency 1) — NOT this seam. That stands re
 as a loud known-bad-list check (it rejects `PrismEval.Cpu`) so a future port fails at wire-up rather
 than as a silently frozen tab. Scoped claim: measured on these CPU paths at these shapes only.
 
-**Deploy risk this cycle: none.** Nothing references `HoloKernel` yet and `deploy.yml` only publishes
-`Showroom`, so it is inert in CI until showroom-owner wires it in.
+**Deploy risk: live now, verified low.** `Showroom.csproj` carries a `ProjectReference` to
+`HoloKernel` as of the port above — `deploy.yml`'s `dotnet publish Showroom` now pulls it in for
+real. Both `dotnet build` and `dotnet publish Showroom/Showroom.csproj -c Release` were re-verified
+green after the port (0 warnings/errors), so the hard-coupling risk noted above is checked, not
+theoretical, for this change specifically.
 
-**Boundary**: porting the tools onto this is `showroom-owner`'s to do — `Showroom/Pages/*.razor` is
-theirs, and they were actively editing during this cycle. The kernel is designed to be adopted one
-tool at a time; nothing forces a big-bang port.
+**Boundary**: `Showroom/Pages/*.razor` is showroom-owner's — porting the tools onto this kernel is
+DONE (all three, one at a time as designed, not a big-bang port; see `Showroom\CLAUDE.md`'s own
+HoloKernel section for the per-tool detail, including the tokenizer swap and the browser-contract
+correction below).
 
 **Self-maintenance note**: this file is ~360 lines, well over the ~200-line guide. Deliberately not
 compacted yet — the initiative will obsolete large parts of the Site map / Design system sections, so

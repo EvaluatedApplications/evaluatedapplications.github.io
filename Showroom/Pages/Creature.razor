@@ -2,6 +2,7 @@
 @using System.Text
 @using PrismFormer
 @using Tracer.Helpers
+@using HoloKernel
 
 <PageTitle>The Creature — a brain that learns to forage</PageTitle>
 
@@ -31,6 +32,7 @@
             <button class="tool ghost" @onclick="ClearWalls" type="button">clear walls</button>
             <button class="tool ghost" @onclick="Scatter" type="button">scatter apples</button>
             <button class="tool ghost @(_showScent ? "on" : "")" @onclick="ToggleScent" type="button">show scent</button>
+            <button class="tool ghost @(_showInspector ? "on" : "")" @onclick="ToggleInspector" type="button">🔍 inspect brain</button>
         </div>
     </div>
 
@@ -97,6 +99,20 @@
         </div>
     }
 
+    @if (_showInspector && _lastTrace is not null && _lastCtx is not null)
+    {
+        <div class="cr-log">
+            <div class="log-head">last decision <span class="log-sub">confidence in each of the 8 directions, pass by pass (new — HoloKernel's Inspector, ported from Prism)</span></div>
+            <div class="log-body">
+                @for (int p = 0; p < _lastTrace.Passes.Count; p++)
+                {
+                    <div class="log-line">pass @p @(p == _lastTrace.Passes.Count - 1 ? "(final)" : "") — @TopActionsText(_lastTrace.Passes[p].Logits)</div>
+                }
+                <div class="log-line">attends → @AttentionText(_lastCtx, _lastTrace.Attention[^1])</div>
+            </div>
+        </div>
+    }
+
     <div class="outro">
         <p><strong>What makes the brain unusual.</strong> A conventional transformer scores every token against every
             other through softmax attention — an N×N matrix. <code>AlgFormer</code> is <em>holographic</em>: it
@@ -114,33 +130,31 @@
 
 @code {
     const int W = 20, H = 20, CS = 26;
-    // brain shape: L=1 with a weight-tied extra pass (Iters=K), a focused recent-trajectory window, and shifts pegged to it (HoloShape).
-    // MaxCtx 128->32 (measured headless in CreatureLab over many worlds): a long window DILUTES the decisive signal — the current
-    // cell (the last token) — across scores of stale positions, so the brain learns the scent slower AND pays ~4x the compute per
-    // step. A 32-cell window keeps enough recent history to disambiguate which apples remain, without the dilution: it reaches a
-    // full 8/8 haul in every test world (last-20 avg ~5.9 -> ~7.6 apples) and converges by ~episode 40 instead of still climbing.
-    const int MaxCtx = 32;   // focused recent-trajectory window — fed up to this; shifts align to it (bindRank = shifts·d/2)
+    // Brain shape — ported onto HoloKernel's ModelSpec 2026-08-28 (was a hand-rolled HoloFormer ctor + a block
+    // comment deriving MinShifts from bindRank=shifts*d/2 that Forecaster's own comment separately re-derived
+    // the same way; ModelSpec.MinShifts's own doc comment now carries that reasoning once). The NUMBERS below
+    // are unchanged from the original tuning — MaxCtx=32 (measured headless in CreatureLab: a longer window
+    // dilutes the decisive last-cell signal and costs ~4x compute/step), MinShifts=8 (ShiftsFor(32,384) floors
+    // to 1 — a pure diagonal, no cross-channel routing — so ModelSpec's own S>1 invariant floors it, same as
+    // before, just enforced by construction now instead of a local Math.Max).
+    const int MaxCtx = 32;
     const int KPass = 2;      // 1 layer applied K times, weight-tied (the "extra k-layer pass")
-    const int IterWarm = 20;  // episodes over which the extra K-pass α ramps 0→1 (identity-init ease-in: the single-pass base learns FIRST, then the depth phases in — without this the cold second pass just doubles down on random transforms and it doesn't learn)
     const int DModel = 384;   // width = composition capacity; wider than the 256 codec dim gives the brain more room to keep cells distinct
-    // ROUTING-RANK floor, reasoned from bindRank = shifts*d/2 (HoloShape.cs), not an arbitrary round number. The over-bundle
-    // law (ShiftsFor) pegs shifts to ctx/d and returns EXACTLY 1 here -> S=1 is a pure DIAGONAL, zero cross-channel routing,
-    // so we floor it. bindRank/d = shifts/2 is d-INDEPENDENT, so PrismStudio's MinShifts=16 (its d=1536 production
-    // LM+reasoning model, bindRank=12288) does NOT mechanically scale down to this d=384 model just because d is 4x
-    // smaller: the floor should track TASK complexity, not d. At S=8, bindRank=8*384/2=1536: 4x the bare S=2 (the
-    // smallest S that isn't a diagonal) of headroom for real golden-spaced multi-channel coverage, and its clean
-    // readback capacity (~0.12*bindRank ~= 184 tokens, HoloShape.CleanFrac) dwarfs the 32-step trajectory window ->
-    // capacity was never the binding constraint here, routing rank is, and 8 golden-spaced channels comfortably cover
-    // an 8-way local move decision. Kept well below PrismStudio's 16 on purpose: that floor serves general language
-    // modeling + hard reasoning (columnar arithmetic); Creature's task (pick the best of 8 directions from a short
-    // scent trail) is far simpler, and shift-bank compute is linear in S, so half the per-step cost matters in a live,
-    // click-to-train browser demo. golden: true (below) is what makes 8 shifts span the width instead of clustering.
     const int MinShifts = 8;
+    // IterWarm converted from EPISODES to STEPS 2026-08-28: HoloKernel's RefinementLoop.Observe() advances the
+    // AlphaRamp on every call (one call = one informative training step), not once per episode the way the old
+    // hand-rolled loop did (`_kTrainedEps++` fired once in EndEpisode regardless of how many weighted steps that
+    // episode trained). 300 is an ESTIMATED conversion (not measured — can't launch the browser from here), not
+    // a re-derivation: picked as the right order of magnitude for "~20 episodes' worth of informative steps" at
+    // this task's typical experience density. Watch the live α% in the training log; retune this constant if the
+    // ease-in visibly completes too fast or too slow.
+    const int IterWarmSteps = 300;
     const int NApples = 8;    // how many apples "scatter" drops
     const int StepBudget = 150;   // steps per foraging episode
     const int EatReward = 3;      // extra advantage for landing on an apple (on top of the +1 for getting closer)
     static readonly int[] DX = { 0, 1, 1, 1, 0, -1, -1, -1 };
     static readonly int[] DY = { -1, -1, 0, 1, 1, 1, 0, -1 };
+    static readonly string[] DirArrow = { "↑", "↗", "→", "↘", "↓", "↙", "←", "↖" };   // matches DX/DY order exactly
 
     bool[] _wall = new bool[W * H];
     int _startX = W / 2, _startY = H / 2;
@@ -154,8 +168,6 @@
     // creature + episode state
     int _cx, _cy, _steps, _eaten, _lastEaten, _bestEaten;
     int _episode;
-    int _kTrainedEps;   // cumulative TRAINED episodes for the current brain — drives the α-ramp. Unlike _episode it never resets on a world edit, so an already-trained brain keeps its depth fully on.
-    double KAlpha => Math.Min(1.0, _kTrainedEps / (double)IterWarm);   // extra-K-pass strength: 0 = single-pass (identity), 1 = full depth
     double _eps = 0.7;
     readonly List<int> _ctxWin = new();                 // the trajectory this episode (fed as context)
     // (context, target action, advantage weight) — an advantage-weighted training target per informative step
@@ -165,10 +177,20 @@
     readonly List<string> _log = new();
     void Log(string s) { _log.Insert(0, s); if (_log.Count > 250) _log.RemoveAt(_log.Count - 1); }
 
-    // brain (holographic transformer) + wandering RNG
-    HoloFormer? _brain;
+    // brain — HoloKernel (2026-08-28): HoloSession wraps the HoloFormer + K/alpha; AlphaRamp is the identity-init
+    // ease-in (see IterWarmSteps above); RefinementLoop is the NewGrads->IterAccumulate->Step triple, replacing
+    // the hand-rolled KTrain method this file used to carry (same one The Forecaster wrote independently).
+    HoloSession? _session;
+    AlphaRamp? _ramp;
+    RefinementLoop? _loop;
     int _actionBase => W * H;
     readonly Random _rng = new();
+
+    // Inspector (NEW capability, 2026-08-28 — Creature had no per-pass view before HoloKernel; opt-in via the
+    // toggle so the extra InspectStackIter/InspectAttention recompute only happens when someone's watching it).
+    bool _showInspector;
+    PositionTrace? _lastTrace;
+    int[]? _lastCtx;
 
     bool _running;
     int _speed = 5;
@@ -283,8 +305,24 @@
         // LEGAL ones. Before this, the brain took the global argmax and Step() silently refused an illegal move — so a
         // wall the player just dropped in the path made the creature freeze and burn the turn. Masking routes it around
         // the obstacle instead (the Tracer oracle already re-plans through the gap, and editing walls re-opens exploration).
-        if (_brain is null || _rng.NextDouble() < _eps) return RandomLegalMove();
-        var lg = _brain.LogitsFor(ctx);            // LogitsFor honours Iters (the k-pass) at serve time
+        if (_session is null || _rng.NextDouble() < _eps) { _lastTrace = null; return RandomLegalMove(); }
+
+        double[] lg;
+        if (_showInspector)
+        {
+            // full per-pass recompute (opt-in, see the field comment) — Inspector.Capture is the SAME kernel
+            // path Prism uses, so watching the brain "firm up" its answer is now a shared capability, not a
+            // one-off Prism thing.
+            var trace = Inspector.Capture(_session, ctx, DecodePolicy.Default);
+            _lastTrace = trace; _lastCtx = ctx;
+            lg = trace.Final.Logits;
+        }
+        else
+        {
+            _lastTrace = null;
+            lg = _session.Logits(ctx);   // HoloSession.Logits honours KPass at serve time (same as LogitsFor did)
+        }
+
         int best = -1; double bv = double.NegativeInfinity;
         for (int a = 0; a < 8; a++)
         {
@@ -293,6 +331,29 @@
         }
         return best >= 0 ? best : RandomLegalMove();
     }
+
+    // ---- Inspector display helpers: the model's real decision lives in an 8-wide SLICE of the vocab (the
+    // action tokens at _actionBase.._actionBase+7), not the full vocab — so this reads PassSnapshot.Logits
+    // directly and softmaxes just that slice, rather than trusting Inspector's own full-vocab Top/Gate (which
+    // would rank cell tokens alongside actions and mean nothing here).
+    string TopActionsText(double[] logits)
+    {
+        var p = new double[8];
+        double max = double.NegativeInfinity;
+        for (int a = 0; a < 8; a++) if (logits[_actionBase + a] > max) max = logits[_actionBase + a];
+        double sum = 0;
+        for (int a = 0; a < 8; a++) { p[a] = Math.Exp(logits[_actionBase + a] - max); sum += p[a]; }
+        var order = Enumerable.Range(0, 8).OrderByDescending(a => p[a]).Take(3);
+        return string.Join("  ", order.Select(a => $"{DirArrow[a]}{(100 * p[a] / sum):F0}%"));
+    }
+
+    string AttentionText(int[] ctx, double[] resonance)
+    {
+        var top = Inspector.Focus(ctx, resonance, 3);
+        return top.Count == 0 ? "(nothing yet)" : string.Join("  ", top.Select(t => $"step-{ctx.Length - 1 - t.Position} {t.Percent:F0}%"));
+    }
+
+    void ToggleInspector() { _showInspector = !_showInspector; if (!_showInspector) { _lastTrace = null; _lastCtx = null; } }
 
     int RandomLegalMove()
     {
@@ -330,7 +391,7 @@
     {
         _lastEaten = _eaten;
         _curve.Add(_eaten); if (_curve.Count > 60) _curve.RemoveAt(0);
-        if (_brain is not null && _epExp.Count > 0)
+        if (_session is not null && _epExp.Count > 0)
         {
             bool best = _eaten > _bestEaten;
             if (best) _bestEaten = _eaten;
@@ -340,12 +401,13 @@
             foreach (var (ctx, target, weight) in _epExp)
             {
                 double w = Math.Clamp(weight / maxW, 0.2, 1.0);   // advantage-normalized learning rate per step
-                sum += KTrain(ctx, _actionBase + target, baseLr * w); n++;
+                _loop!.LearningRate = baseLr * w;
+                sum += _loop.Observe(ctx, _actionBase + target);   // NewGrads->IterAccumulate->Step, plus advances the α-ramp
+                n++;
             }
-            _kTrainedEps++; _brain.IterAlphaServe = KAlpha;   // advance the α-ramp and keep serve matched to train
-            Log($"ep {_episode + 1,3}   ate {_eaten,2}/{_applesInit.Count,-2}   advantage-trained {n,3} steps   loss {(n > 0 ? sum / n : 0):F3}   lr {baseLr:F4}   α {KAlpha * 100:F0}%   ε {_eps * 100:F0}%{(best ? "   ★ best haul" : "")}");
+            Log($"ep {_episode + 1,3}   ate {_eaten,2}/{_applesInit.Count,-2}   advantage-trained {n,3} steps   loss {(n > 0 ? sum / n : 0):F3}   lr {baseLr:F4}   α {_ramp!.Alpha * 100:F0}%   ε {_eps * 100:F0}%{(best ? "   ★ best haul" : "")}");
         }
-        else if (_brain is not null)
+        else if (_session is not null)
         {
             Log($"ep {_episode + 1,3}   ate {_eaten,2}/{_applesInit.Count,-2}   no scent to learn from      ε {_eps * 100:F0}%");
         }
@@ -357,29 +419,17 @@
         _cx = _startX; _cy = _startY; _steps = 0; _eaten = 0; _epExp.Clear(); _trail.Clear(); _ctxWin.Clear();
     }
 
-    // one online gradient step, backpropagated through the K weight-tied passes (α=1 = the extra pass fully on); returns the loss
-    double KTrain(int[] ctx, int target, double lr)
-    {
-        var g = _brain!.NewGrads();
-        double loss = _brain.IterAccumulate(ctx, target, g, KPass, KAlpha);   // train the extra pass at the CURRENT ramped α (matches serve)
-        _brain.Step(g, lr);
-        return loss;
-    }
-
     async Task ToggleRun()
     {
         if (_running) { _running = false; return; }
         if (!CanRun) return;
-        if (_brain is null)
+        if (_session is null)
         {
-            int shifts = Math.Max(HoloShape.ShiftsFor(MaxCtx, DModel), MinShifts);   // floor at MinShifts: the over-bundle sizing gives 1 here (a diagonal, no routing), so spend shifts on bank RANK instead
-            _brain = new HoloFormer(W * H + 8, shifts: shifts, layers: 1, maxContext: MaxCtx, dModel: DModel, frozenPrefix: 64, golden: true)
-            {
-                Iters = KPass,          // apply the single layer K times, weight-tied
-                IterAlphaServe = 0      // α ramps in (identity-init); re-matched to KAlpha at each EndEpisode so serve == train
-            };
-            _kTrainedEps = 0;   // fresh brain → restart the α-ramp
-            Log($"brain ready · L=1 · K={KPass} weight-tied passes · ctx={MaxCtx} · shifts={shifts} golden · d={DModel} · vocab={W * H + 8} · {_brain.ParamCount:N0} params");
+            var spec = new ModelSpec { Vocab = W * H + 8, MaxContext = MaxCtx, Dim = DModel, Layers = 1, MinShifts = MinShifts, KPass = KPass, FrozenPrefix = 64, Golden = true };
+            _session = HoloSession.Create(spec);   // built untrained, ServeAlpha=0 — the identity-init ease-in starts cold, same as before
+            _ramp = new AlphaRamp(IterWarmSteps);
+            _loop = new RefinementLoop(_session, _ramp, learningRate: 0);   // LearningRate is set per-step in EndEpisode
+            Log($"brain ready · L=1 · K={KPass} weight-tied passes · ctx={MaxCtx} · shifts={spec.Shifts} golden · d={DModel} · vocab={W * H + 8} · {_session.Model.ParamCount:N0} params");
         }
         _running = true;
         _apples.Clear(); foreach (var a in _applesInit) _apples.Add(a); ComputeDist();
@@ -399,7 +449,7 @@
 
     void ResetBrain()
     {
-        _brain = null; _log.Clear();
+        _session = null; _ramp = null; _loop = null; _lastTrace = null; _lastCtx = null; _log.Clear();
         InvalidateOnEdit();
     }
 

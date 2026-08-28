@@ -8,54 +8,83 @@ that only ever *consumes* MonoRepo packages via published NuGet, never source.
 
 ## Purpose
 Each tool = a real, working demo of a published `EvaluatedApplications.*` package's actual
-capability, driven live by the visitor. No smoke and mirrors, no mocked output. Four tools listed
-in the public gallery today: **The Analyst** (HoloDb), **The Creature** (AlgFormer/HoloFormer +
-Tracer), **The Forecaster** (AlgFormer/HoloFormer), **Prism** (AlgFormer/HoloFormer, a real
-trained checkpoint + full per-pass inspector). New tools follow the same shape. Plus one
-**unlisted** page (see below) that's a client preview, not a package-capability demo.
+capability, driven live by the visitor. No smoke and mirrors, no mocked output. Four tools in the
+public gallery: **The Analyst** (HoloDb), **The Creature** (AlgFormer/HoloFormer + Tracer),
+**The Forecaster** (AlgFormer/HoloFormer), **Prism** (AlgFormer/HoloFormer, a real trained
+checkpoint + full per-pass inspector). Plus one **unlisted** page (below) that's a client preview,
+not a package-capability demo.
 
 ## Site plumbing
 - `Program.cs`: standard Blazor WASM host; one scoped `HttpClient` with `BaseAddress =
   HostEnvironment.BaseAddress` (so relative fetches like `data/foo.json` resolve under `/tools/`).
 - `App.razor` / `_Imports.razor` / `Layout/MainLayout.razor`: router + shared nav/footer chrome.
-  `MainLayout.razor`'s `.nav-links` lists every tool by relative href (`analyst`, `creature`,
-  `forecaster`, `prism`) — add a new tool here too, not just Home.razor's gallery.
+  `MainLayout.razor`'s `.nav-links`: `Home · HoloDb · Tools · NuGet` (4 items — `Tools` links back
+  to `Home.razor`'s own gallery via `href="."`, resolving to `/tools/` under `<base href="/tools/">`;
+  a new tool needs a `Home.razor` card, not a nav entry).
 - `Home.razor` (`@page "/"`): the tool gallery. Each tool is a whole-card `<a class="card tool"
   href="/tools/<slug>">` (absolute path) with a `--cat` accent colour, a `live`/`soon` tag, a
   one-line desc, "Open X →". Mirror this shape for any new tool.
-- `wwwroot/index.html`: `<base href="/tools/" />`, links the SHARED `/assets/site.css` (absolute
-  path — the AboutUs static site's root, not `/tools/`, so Showroom borrows the one design system)
-  plus Showroom's OWN `wwwroot/css/boot.css` (see Boot screen below) and Blazor's bundled
-  `Showroom.styles.css`. Also carries the GitHub Pages SPA deep-link restore script and
-  `window.analystDownload` (Blob download helper for The Analyst's CSV export).
+- `wwwroot/index.html`: `<base href="/tools/" />`, links the SHARED `/assets/site.css` (the AboutUs
+  static site's root, so Showroom borrows the one design system) plus Showroom's OWN
+  `wwwroot/css/boot.css` (see Boot screen) and Blazor's bundled `Showroom.styles.css`. Also carries
+  the GitHub Pages SPA deep-link restore script and `window.analystDownload` (Blob download helper
+  for The Analyst's CSV export).
 - `Pages/NotFound.razor` (`@page "/not-found"`): router fallback.
 - **CSS pattern**: each tool has its own `Pages/<Tool>.razor.css`, Blazor-scoped to that component
-  only. All four currently DUPLICATE the same base block (`.room`/`.crumb`/`.room-head
-  h1`/`.lede`/`.badges`/`.err`/`.hint`/`.cr-controls`/`.cr-stats`/`.cr-curve`/`.cr-log`/`.outro`) —
-  established house style (CSS isolation can't share a partial file across components without a
-  real shared stylesheet import, nobody's introduced one). Reuse it verbatim for a new tool.
+  only. All four DUPLICATE the same base block (`.room`/`.crumb`/`.room-head h1`/`.lede`/`.badges`/
+  `.err`/`.hint`/`.cr-controls`/`.cr-stats`/`.cr-curve`/`.cr-log`/`.outro`) — established house style
+  (CSS isolation can't share a partial file across components without a real shared stylesheet
+  import, nobody's introduced one). Reuse it verbatim for a new tool.
 
-## Boot screen — `wwwroot/index.html` + `wwwroot/css/boot.css` (2026-08-28)
-Every tool shares ONE app-shell boot (single WASM app, client-routed) — reworked from a generic
-spinner into a retro-terminal boot log that's authentically true, not decorative: real file names as
-the WASM host actually fetches them (`loadBootResource` hook — PURE OBSERVATION, always returns
-`undefined` so the framework's own fetch proceeds unmodified, zero added latency) plus the framework's
-own real cumulative-bytes progress (`--blazor-load-percentage`/`-text`, set on `document.
-documentElement` by the SDK's own boot script — verified straight from the published `dotnet.*.js`,
-not assumed). `autostart="false"` + a `Blazor.start({loadBootResource})` call in the NEXT script tag
-(synchronous order, no `load`-event wait) installs the hook before the real download starts.
-`boot.css` is Showroom's OWN file (`site.css` boundary stays hard) but reuses `site.css`'s already-
-global tokens (`--bg`/`--ok`/`--mono`/`--spectrum-*`) for on-brand styling for free. **Prism's
-checkpoint fetch gets its own step** (`Prism.razor`'s `!_loaded` branch): `LoadStep`/`Begin`/`Finish`
-narrate each real asset (`oracle-vocab.txt`/`-brain.bin`/`-rounds.txt`/`-stackk.txt`/`-iterwarm.txt`)
-with real byte counts off the actual response, reusing `boot.css`'s classes directly (global CSS
-applies fine to Blazor-scoped elements, no duplication) — pure narration, adds no fetch/latency.
+## HoloKernel — `ProjectReference ..\HoloKernel\HoloKernel.csproj`
+A sibling RCL in this repo (`AboutUs\HoloKernel`), itself NuGet-only against AlgFormer 1.5.0 — a
+`ProjectReference` to it is the designed consumption path, not a MonoRepo boundary break. All three
+live-brain tools are ported onto it (2026-08-28), verified against the real kernel source first, not
+the extraction agent's description. Surface used: `ModelSpec` (shape + the S>1 invariant, and
+`Validate()` which also rejects `Layers>1 && KPass>1` — AlgFormer 1.5.0's weight-tied K-pass is
+single-layer only, verified live via `NotSupportedException`; irrelevant to all three tools today
+since each is `Layers=1`, but a real constraint on ever growing one deeper while keeping K>1),
+`HoloSession` (`Create(spec)` / `FromCheckpoint(bytes,kPass,serveAlpha)` — K/alpha mandatory,
+`Stats()`), `AlphaRamp` (`Advance`/`Reconstruct`), `RefinementLoop` (`Observe`/`ObserveSequence`,
+replaces the `NewGrads→IterAccumulate→Step` triple Creature/Forecaster each wrote independently),
+`Decoding` (`DecodePolicy`/`Gate`/`DegenGuard`), `InspectorTrace` (`Inspector.Capture`/`Focus` —
+NEW capability for Creature/Forecaster, which had no per-pass view before; both got an opt-in "🔍
+inspect brain" toggle). `ParallelMapping` isn't wired into any tool (inert, not a gap).
 
-**Also fixed while in these files**: `MainLayout.razor`'s brand mark + `index.html`'s favicon still
-carried the RETIRED hexagon/3-stop gradient after the site-wide 2026-08-28 prism-triangle restyle
-(website-owner flagged this as "not fixable from here — coordinator hand-off"; fixed here since
-these are literally Showroom's own files) — now the same triangle path (`M16 5L27 26H5Z`) + 7-stop
-ROYGBIV gradient as all 17 static pages.
+**Cadence gotcha**: `RefinementLoop.Observe` advances its `AlphaRamp` on EVERY call, not once per
+episode. Forecaster's old per-CLICK ramp already matched this exactly. Creature's old ramp was
+per-EPISODE, so its `IterWarmSteps=300` is an **ESTIMATED, unmeasured** conversion (can't launch the
+browser from here) — retune live if the ease-in looks too fast/slow.
+
+**Prism's tokenizer swapped to the published `SubwordVocab`** (was a hand-rolled ~50-line greedy-
+longest-match encoder). Verified safe first by reading `MonoRepo\AlgFormer\SubwordVocab.cs` directly:
+`CharN=>CharVocab.N=96` already special-cases `Symbol(CharVocab.End)=="\n"` internally, matching
+Prism's own "id 95 is both newline and the stop marker" quirk exactly; its ctor takes ONLY the
+merges list (not the base chars, which it handles internally — a real gotcha vs. the old hand-rolled
+version). Byte-for-byte equivalent semantics confirmed, not "close enough."
+
+**Browser contract (user directive): visitors TRAIN, they never reshape.** "Grow Prism" in the
+browser means refining a FIXED-shape model's weights via `RefinementLoop.Observe`/`ObserveSequence`
+— that's the whole of it; layers/shifts/dim/context are chosen up front and immutable for the
+session. `HoloFormer.GrowLayers`/`.GrowShifts` are real, published, in-place growth methods, but
+they're a PrismStudio/server-side operation, not something a visitor triggers or that in-browser
+training causes — `HoloKernel` deliberately doesn't wrap either (a bigger/better-trained model
+reaches visitors via a new CHECKPOINT, not runtime shape mutation). Worth knowing regardless: the
+`Layers>1 && KPass>1` finding above means growing Prism's layers server-side would cost it the
+K-pass entirely at 1.5.0 (either/or, not both) — a fact about the package, not the browser tool.
+
+## Boot screen — `wwwroot/index.html` + `wwwroot/css/boot.css`
+Retro-terminal boot log, authentically real not decorative: real file names as the WASM host fetches
+them (`loadBootResource` hook, pure observation, always returns `undefined` — zero added latency)
+plus the framework's own real cumulative-bytes progress (`--blazor-load-percentage`/`-text`, set on
+`document.documentElement` by the SDK's own boot script). `autostart="false"` +
+`Blazor.start({loadBootResource})` in the next script tag (synchronous order, no `load`-event wait)
+installs the hook before the real download starts. `boot.css` is Showroom's OWN file (`site.css`
+boundary stays hard) but reuses its global tokens (`--bg`/`--ok`/`--mono`/`--spectrum-*`) for
+on-brand styling for free. Prism's checkpoint fetch gets its own step (`Prism.razor`'s `!_loaded`
+branch, `LoadStep`/`Begin`/`Finish`) narrating each real asset with real byte counts, reusing
+`boot.css`'s classes directly — pure narration, no extra fetch/latency. `MainLayout.razor`'s brand
+mark + `index.html`'s favicon carry the site-wide prism-triangle motif, matching all static pages.
 
 ## The Analyst — `Pages/Analyst.razor` (route `/analyst`)
 In-browser data profiler + live SQL REPL over **HoloDb** (`Database.Open(null)`, in-memory). Sniffs
@@ -71,125 +100,88 @@ library. `window.analystDownload` JS interop does the CSV save (Blob URL + synth
 download>` can be CSP-blocked).
 
 ## The Creature — `Pages/Creature.razor` (route `/creature`)
-A 20×20 grid the visitor draws (walls/start/apples) where a **HoloFormer** brain learns to forage,
-live. Brain shape: `Dim=384, Layers=1, KPass(Iters)=2` (weight-tied extra pass, α ramps 0→1 over
-`IterWarm=20` episodes — identity-init ease-in), `MaxCtx=32` (a focused recent-trajectory window,
-measured to converge faster than a longer one — dilution of the decisive last-token signal was the
-failure mode), `MinShifts=8` floor (natural `HoloShape.ShiftsFor(32,384)` returns 1 — a pure
-diagonal, no cross-channel routing — so it's floored; derived via `bindRank=shifts·d/2`, full
-reasoning in the file's own comment). Distance field: **Tracer**'s `GridTactics.Reachable` BFS to
-the nearest apple; the brain trains toward the DECISIVE move (advantage-weighted: best move minus
-the mean of legal moves) so it commits to eating rather than lingering in the scent. Training loop:
-`NewGrads()` → `IterAccumulate(ctx, target, g, KPass, KAlpha)` → `Step(g, lr)` once per informative
-step at episode end; `LogitsFor` honours `Iters` at serve time. `ResetBrain` just drops the
-reference (WASM has no filesystem).
+A 20×20 grid the visitor draws (walls/start/apples) where a **HoloFormer** brain learns to forage
+live, on **HoloKernel** (see above). Brain shape: `Dim=384, Layers=1, KPass=2`, `MaxCtx=32` (a
+focused recent-trajectory window — measured to converge faster than a longer one; dilution of the
+decisive last-token signal was the failure mode), `MinShifts=8` (natural `ShiftsFor(32,384)` returns
+1 — floored by `ModelSpec`'s own S>1 invariant now). Distance field: **Tracer**'s
+`GridTactics.Reachable` BFS to the nearest apple; trains toward the DECISIVE move (advantage-
+weighted: best move minus the mean of legal moves) via `RefinementLoop.Observe(ctx,
+_actionBase+target)` once per informative step, `LearningRate` set per-call from the advantage
+weight. `ResetBrain` drops `_session`/`_ramp`/`_loop` (WASM has no filesystem).
 
 ## The Forecaster — `Pages/Forecaster.razor` (route `/forecaster`)
 Same **HoloFormer** substrate as The Creature, pointed at a price tape instead of a foraging grid.
 Predicts the direction (and coarse magnitude) of the next hourly tick for one bundled real stock
-series. Milestone 1, shipped 2026-08-26.
+series.
 
 **Tokenisation** (ported from `MonoRepo\MarketSim\PriceForecaster.cs`; `STOCK_i` token DROPPED —
 single-symbol demo): each candle → `[TIME_bucket][RETURN_bucket]`. `TimeBuckets=8` = hour-of-day
-(UTC) mod 8 from the candle's real Unix timestamp (not MarketSim's index-modulo fallback — our
-bundled data has real timestamps). `RetEdges` ported VERBATIM: `{-0.0020,-0.0009,-0.0004,-0.00003,
-0.00003,0.0004,0.0009,0.0020}` → 9 buckets, `FlatBucket=4`. Vocab=`8+9=17`. **Known skew**: edges
-tuned for MarketSim's smaller simulated ticks, so ~65% of bundled transitions land in the two
-outermost buckets (measured 138/449, 155/449) — but direction split (what accuracy scores) stays
-near-balanced (~209/5/235); it's magnitude granularity that's compressed, not direction.
+(UTC) mod 8 from the candle's real Unix timestamp. `RetEdges` ported VERBATIM: `{-0.0020,-0.0009,
+-0.0004,-0.00003,0.00003,0.0004,0.0009,0.0020}` → 9 buckets, `FlatBucket=4`. Vocab=`8+9=17`.
+**Known skew**: edges tuned for MarketSim's smaller simulated ticks, so ~65% of bundled transitions
+land in the two outermost buckets — but direction split (what accuracy scores) stays near-balanced;
+magnitude granularity is compressed, not direction.
 
-**Model shape**: `Dim=128, Layers=1, KPass(Iters)=2` weight-tied, α ramps over `IterWarm=40` clicks
-(double Creature's 20 — a single supervised tick-step here is noisier than Creature's advantage-
-weighted update, reasoned not measured). `CandleContext=128` → `MaxContext=256` tokens (2/candle).
-`Shifts=Math.Max(HoloShape.ShiftsFor(256,128), MinShifts=8)` — verified `ShiftsFor(256,128)=16`
-already clears the floor (floor is a no-op here, unlike Creature where it bites); `MinShifts=8`
-derived the same `bindRank/d=shifts/2=4` way as Creature's (1-of-9 buckets ≈ 1-of-8 moves in task
-complexity). Caveat: `CleanCapacity(16,128)=122` is under the 256-token window — the older context
-half reads back less cleanly (v2 tuning knob, not a v1 blocker). `golden:true`, `frozenPrefix:0`.
+**Model shape**: `Dim=128, Layers=1, KPass=2`, `CandleContext=128` → `MaxContext=256` tokens
+(2/candle), `MinShifts=8` (verified no-op: `ShiftsFor(256,128)=16` already clears it). Caveat:
+`CleanCapacity(16,128)=122` is under the 256-token window — a real v2 tuning knob, not a v1 blocker.
 
-**Training loop** — same shape as Creature, NOT `HoloFormer.TrainStep` (ignores K-pass): per tick,
-`LogitsFor(ctx)` predicts (honours `Iters`) → score vs true bucket → `NewGrads()` →
-`IterAccumulate(ctx, PriceBase+trueBucket, g, KPass, KAlpha)` → `Step(g, Lr=0.005)` → append the
-TRUE token to the tape → advance the α-ramp. `Lr=0.005` reasoned (between MarketSim's `0.02` and
-Creature's `0.0025-0.004`), not yet watched live.
+**Training loop** on **HoloKernel**: per tick, predict via `_session.Logits(ctx)`/`Inspector.Capture`
+(opt-in) → `RefinementLoop.Observe(ctx, PriceBase+trueBucket)` (trains + advances the α-ramp) →
+append the TRUE token to the tape. `IterWarm=40` clicks mapped straight onto `AlphaRamp` with no
+conversion (the old loop already advanced once per click, matching `Observe`'s per-call cadence
+exactly — unlike Creature). `Lr=0.005` reasoned (between MarketSim's `0.02` and Creature's
+`0.0025-0.004`), not yet watched live.
 
 **Data**: `wwwroot/data/forecaster-sample.json` — 450 REAL hourly AAPL closes (~3 months), fetched
-once from Yahoo Finance's public chart JSON endpoint, bundled as a static asset (not a live feed —
-Yahoo's endpoint doesn't send CORS headers browser-side). Training cursor wraps the finite
-449-transition series when it runs out — fine for a demo, a real v2 upgrade path.
+once from Yahoo Finance's public chart JSON endpoint, bundled as a static asset. Training cursor
+wraps the finite series when it runs out — fine for a demo, a real v2 upgrade path.
 
 **Queued**: live CORS-open feed once one's confirmed browser-fetchable; a symbol picker; tuning
-`Lr`/`IterWarm` against an actual observed run (build-verified only so far).
+`Lr`/`IterWarm` against an actual observed run.
 
 ## Prism — `Pages/Prism.razor` (route `/prism`)
-A REPL over a real, point-in-time COPY of the user's own live `prism-holo.bin` HoloFormer checkpoint
-from PrismStudio, with a full per-character Inspector trace underneath — same spirit as PrismStudio's
-own Inspect tab (`HoloEngine.InspectResponse`/`GateInfo`/`PickToken`, sibling `PrismFormer` repo,
-`studio\PrismGym\HoloEngine.cs`, read as a REFERENCE for data/semantics only — nothing here
-`ProjectReference`s it; everything is published-NuGet API or a from-scratch reimplementation of
-small, verified algorithms, same pattern as the Forecaster's ported tokenization). Renamed from
-"The Oracle" 2026-08-28 (route `/oracle`→`/prism`, files `Oracle.razor`(`.css`)→`Prism.razor`(`.css`))
-to match the product line's naming; checkpoint asset filenames (`oracle-brain.bin`/`-vocab.txt`/
-`-rounds.txt`) deliberately kept as-is — internal names, no need to track the public tool name.
-**Checkpoint asset status: SHIPPED** (`oracle-brain.bin` ~3.0MB, `-vocab.txt` 128B, `-rounds.txt` 5B
-all present; loads fail gracefully, `_loadError`, if any ever go missing in a future build).
+An autocomplete REPL over a real, point-in-time COPY of the user's own live `prism-holo.bin`
+HoloFormer checkpoint from PrismStudio, with a full per-character Inspector trace — same spirit as
+PrismStudio's own Inspect tab. Renamed from "The Oracle" to match the product line's naming; the
+underlying checkpoint asset filenames (`oracle-brain.bin`/`-vocab.txt`/`-rounds.txt`/`-stackk.txt`/
+`-iterwarm.txt`) were deliberately kept as-is — internal names, no need to track the public tool
+name. Each submission is an INDEPENDENT prompt-in/continuation-out pass — no chat memory, no
+speaker-labelled bubbles (`_history: List<RunEntry(Prompt, Continuation, TrailedOff)>`, rendered as
+prompt-text immediately followed by continuation-text, Copilot-suggestion style).
 
-**Autocomplete, not chat**: trained on raw text continuation only, no turn-taking — a two-party-chat
-UI (`_transcript` "you"/"prism" bubbles, "Ask" button) misrepresented that even though the generation
-loop itself never leaked cross-run context (`Ask()` seeds `seq` fresh from `Encode(promptText)` every
-call — verified, so it was a UI/copy bug only). Now `_history: List<RunEntry(Prompt, Continuation,
-TrailedOff)>`, prompt-text immediately followed by continuation-text in one run (Copilot-suggestion
-style, no bubbles), button "Continue". `.or-chat/-msg/-who/-text` → `.or-runs/-run/-prompt/-cont`.
+**On HoloKernel** (see that section): `HoloSession.FromCheckpoint(bytes, kPass, serveAlpha)` +
+`Inspector.Capture`/`Gate.Pick`/`Gate.TopK`/`Inspector.Focus` replace the old hand-rolled
+`GateInfo`/`PickToken`/`TopFaces`/`TopAttn`. `FromCheckpoint` REQUIRES K/alpha as ctor args
+(kernel-enforced — `HoloFormer.Iters`/`.IterAlphaServe` are **NOT persisted** by `Serialize()`,
+verified by round-tripping the real checkpoint, always read back `1`/`1`). This file peek-
+deserializes the checkpoint once (`HoloFormer.Deserialize`) to read `Layers`/`ParamCount` before
+K/alpha are known, then builds the real `HoloSession` from the same bytes (one negligible redundant
+deserialize on a 381K-param model). `_stats` (`HoloSession.Stats()`) replaces the old hand-rolled
+`EquivCompute`/`InvisibleX` properties.
 
-**Published API used** (verified against the real 1.5.0 DLL — this tool is WHY AlgFormer was bumped
-1.2.0→1.5.0): `HoloFormer.Deserialize(byte[])`, `.InspectStackIter(ctx,K,alpha)` (per-pass raw
-"faces"), `.InspectAttention(ctx,K,alpha)` (per-pass source-position resonance rows),
-`.DecodeFace(double[])` (decode a face against the codebook), `HoloShape.EquivCompute(d,L,K)`
-(`12·d²·L·K`, dense-transformer-equivalent compute) and `.InvisibleMultiplier(paramCount,d,L,K)`
-(ratio to real `ParamCount`) — drive the "model stats" cards. `PrismFormer.CharVocab.Lo/Hi/End`
-(32/126/95) are the base-96-symbol alphabet. NOT used: `InspectRetrieval` (unverified semantics, not
-called by the reference `InspectResponse`, left out rather than guessed at).
+**K is FIXED, not a control**: a structural fact about the trained checkpoint ("k is not a
+parameter, its fixed to the model count" — user), not a visitor-exploreable knob — no slider exists.
+`_k` sourced live from `oracle-stackk.txt`/`oracle-iterwarm.txt` (never hardcoded — verified live in
+`HoloEngine.cs`: `OneShotStackK=8`, `OneShotIterWarm=20000`; `studio\CLAUDE.md`'s cached `3000` is
+stale). `_trainedAlpha` reconstructed via `AlphaRamp.Reconstruct(rounds, addRound:0, iterWarm)` —
+valid for a single-layer checkpoint only, falls back to 1.0 otherwise. Current snapshot
+(rounds=24,360 > iterWarm=20,000) reconstructs to exactly 1.0 (ramp already done) — coincidental for
+THIS snapshot, the mechanism matters for a future mid-ramp one.
 
-**GOTCHA, verified by round-tripping the real checkpoint through `Serialize()`/`Deserialize()`**:
-`HoloFormer.Iters`/`.IterAlphaServe` (K-pass depth) are **NOT persisted** — always read back `1`/`1`.
+**Generation loop**: full-recompute per character via `Inspector.Capture` (not `LogitsFor`/`Prime`/
+`Step` — no per-pass data, and those aren't verified to honour `Iters`), so the trace always matches
+what was decoded. Confidence gate = `DecodePolicy.Default` (`ConfidentThreshold=0.60`/
+`Temperature=0.80`/`FloorK=3.0`/`DegenRepeat=4`, ported verbatim from PrismStudio's `HoloEngine`) +
+`DegenGuard` — **verified necessary**: dry-running this algorithm against an earlier live checkpoint
+snapshot (round ~21,720) produced a 100%-confidence GREEDY space-repeat on every short prompt tried,
+a real repetition-collapse, not a demo bug. Current shipped snapshot (round 24,360) deserialized+
+verified `Dim=1536,Layers=1,Shifts=16,ParamCount=381,056`, matching live `OneShot*` shape exactly.
 
-**K is FIXED, not a control**: K is a structural fact about the trained checkpoint ("k is not a
-parameter, its fixed to the model count" — user), not a visitor-exploreable knob; no slider exists.
-`_k` is set ONCE at load from the real trained `OneShotStackK`, never mutated, shown as a plain fact
-badge (`K=@_k pass(es)`) and in the outro copy. Sourced live from `oracle-stackk.txt`/
-`oracle-iterwarm.txt` (never hardcoded — same hand-off pattern as `oracle-rounds.txt`; verified live
-in `HoloEngine.cs` 2026-08-28: `OneShotStackK=8`, `OneShotIterWarm=20000` — `studio\CLAUDE.md`'s
-`3000` is stale, the live `const` line is the only reliable source). **Alpha reconstructed, not
-assumed 1.0**: `HoloEngine.AlphaFor`'s formula (`clamp((trainedRounds-addRound)/iterWarm,0,1)`)
-ported to `_trainedAlpha` from shipped `trainedRounds` + `addRound=0` (single-layer checkpoint only;
-falls back to 1.0 if `Layers>1` or metadata missing), always served (K fixed → nothing to branch on).
-Current snapshot (rounds=24,360 > iterWarm=20,000) reconstructs to 1.0 (ramp done) — coincidental for
-THIS snapshot, mechanism matters for a future mid-ramp one.
-
-**Tokenizer**: a from-scratch greedy-longest-match subword encoder/decoder against the published
-`CharVocab` statics + the bundled `oracle-vocab.txt` merges — reproduces `MintTokenizer` exactly,
-including its real quirk: token id `CharVocab.End` (95) doubles as BOTH `"\n"` AND the stop marker
-(trained on single-line snippets, so newline=stop; `Normalize` maps input `\n`→space, so this id is
-only ever produced as OUTPUT). Kept verbatim, not "fixed" — real trained behaviour.
-
-**Generation loop**: full-recompute per character via `InspectStackIter`/`InspectAttention`/
-`DecodeFace` (not `LogitsFor`/`Prime`/`Step` — no per-pass data, and plain `Prime`/`Step` aren't
-verified to honour `Iters`, same caveat as `TrainStep`), so the Inspector trace always matches what
-was generated. Confidence gate (`GateInfo`/`PickToken`, ported verbatim): greedy at top-1 ≥
-`DecodeConfident=0.60`, else sample at `DecodeTemp=0.80` over a `mean+DecodeFloorK(3.0)σ` resonance
-floor. A `DegenRepeat=4` guard (ported `ProbeDegenRepeat`) stops + labels a collapsed run rather than
-padding silently — **verified necessary**: dry-running this exact algorithm against an earlier live
-checkpoint snapshot (round ~21,720, `Iters=1`) produced a 100%-confidence GREEDY space-repeat on every
-short prompt tried — a real repetition-collapse, not a demo bug. Re-check whatever snapshot ships
-(current shipped snapshot: round 24,360, deserialized+verified `Dim=1536,Layers=1,Shifts=16,
-ParamCount=381,056`, matches live `OneShot*` shape exactly — not stale).
-
-**Model stats copy — labeling fixed**: a user comparison against PrismStudio's own status bar caught
-real copy drift, not a formula/snapshot bug (verified: `EquivCompute(1536,1,8)=226,492,416` matches
-exactly; checkpoint's real deserialized shape matches live `OneShot*`). Framing-only bug: `MainForm.
-cs` labels this "compute-equiv", never "parameters", but this page's outro called it an "M-parameter
-dense transformer" — implying 226M real stored params vs the real `ParamCount`=381K. Reworded to
-match PrismStudio's "compute-equivalence" framing + a disclaimer it isn't a real-param claim.
+**Model stats framing**: real `ParamCount` vs. `_stats.EquivCompute` (`12·d²·L·K`, verified
+`226,492,416` for this shape) explicitly framed as **compute-equivalence** (matching PrismStudio's
+own status-bar wording, "compute-equiv"), not a claim of real stored parameters.
 
 ## Unlisted: RecycleDAO marketplace prototype — `Pages/RecycleDaoDemo.razor` (`/recycledao-demo`)
 NOT a package-capability demo and NOT in the public gallery — a private, share-by-link-only client
@@ -198,19 +190,18 @@ preview for the RecycleDAO PoC (`C:\Users\dongy\RecycleDAO`, separate repo, owne
 and `MainLayout.razor`'s nav, and carries `<meta name="robots" content="noindex,nofollow">` via
 `<HeadContent>` (same pattern as `AboutUs\site\recycledao-preview.html`, which is website-owner's).
 
-**Rebuilt 2026-08-26 as a full eBay-classifieds marketplace** (client steer via Antonio). Domain
-mapping: RCYT is EARNED by verified recycling and SPENT claiming material other participants
-rescued from the waste stream — a real token sink, not just a reward wallet. 21 screens off one
-`Screen` enum + `Nav` record-struct stack (real Back button); one `<section class="app-page">`
-renders at a time, every navigation driven by a card/row/tile/action.
+**A full eBay-classifieds marketplace**: RCYT is EARNED by verified recycling and SPENT claiming
+material other participants rescued from the waste stream — a real token sink, not just a reward
+wallet. 21 screens off one `Screen` enum + `Nav` record-struct stack (real Back button); one
+`<section class="app-page">` renders at a time, every navigation driven by a card/row/tile/action.
 
 **Mint invariant (must never regress)**: `MintForApproval` is the ONLY method that appends to
 `_mintLog`/increases `_totalMinted`/`_lifetimeMinted`, reachable from exactly two call sites (the
 verifier queue's `ApproveSubmission`, and seeding). All other marketplace money movement only
 *moves* RCYT between balances; no other path adds supply. Tier table verbatim from
 `RecycleDAO/docs/demo-mechanics-spec.md` §2 (`Paper/Cardboard=3, Plastic=5, Glass=5,
-Metal/Aluminum=8, Electronics/E-waste=15`). Seeding (8 personas/20 listings/etc.) also runs through
-`MintForApproval`, so every starting token still has a mint-log/ledger row.
+Metal/Aluminum=8, Electronics/E-waste=15`). Seeding also runs through `MintForApproval`, so every
+starting token still has a mint-log/ledger row.
 
 **Chrome honesty**: header/search/category bar/filters genuinely live; only the top utility strip +
 footer link columns (+ photo-upload box, notification toggles) stay inert, tagged `.mk-tag` "mockup".
@@ -223,82 +214,69 @@ counterparty actions only fire from a labelled demo control, never a timer.
 **Verified gotcha**: Blazor scoped CSS DOES apply the `b-*` scope attribute inside `RenderFragment<T>`
 templates in the same `.razor` file — a shared `ListingCard`/`ListingRow` templated-delegate helper
 styles correctly and beats duplicating card markup across screens.
+
 ## Dependencies (exact NuGet versions, `Showroom.csproj`)
 - `Microsoft.AspNetCore.Components.WebAssembly` 10.0.8 (+ `.DevServer` 10.0.8, dev-only)
 - `EvaluatedApplications.HoloDb` 1.4.0 — The Analyst
-- `EvaluatedApplications.AlgFormer` **1.5.0** (bumped from 1.2.0 for Prism — needs
-  `InspectStackIter`/`InspectAttention`/`DecodeFace`/`HoloShape.EquivCompute`/`InvisibleMultiplier`/
-  `CharVocab`, none published before 1.5.0; verified via reflection against the real 1.2.0 vs 1.5.0
-  DLLs, not assumed) — The Creature, The Forecaster, Prism (`PrismFormer` namespace:
-  `HoloFormer`, `HoloShape`, `CharVocab`). The `HoloFormer`/`AlgFormer` public constructor and
-  `Step`/`IterAccumulate` signatures are UNCHANGED 1.2.0→1.5.0 (checked before bumping) — Creature/
-  Forecaster needed no code changes for this bump.
+- `EvaluatedApplications.AlgFormer` **1.5.0** — The Creature, The Forecaster, Prism (`PrismFormer`
+  namespace: `HoloFormer`, `HoloShape`, `CharVocab`, `SubwordVocab`) — needs `InspectStackIter`/
+  `InspectAttention`/`DecodeFace`/`EquivCompute`/`InvisibleMultiplier`, none published before 1.5.0.
 - `EvaluatedApplications.Tracer` 1.1.0 — The Creature (`Tracer.Helpers.GridTactics`)
 - `EvaluatedApplications.EvalApp` comes in transitively (AlgFormer's own dependency); Showroom
   never references it directly
+- `ProjectReference ..\HoloKernel\HoloKernel.csproj` — Creature, Forecaster, Prism (see HoloKernel
+  section). A sibling in-repo RCL, not a MonoRepo reference; itself NuGet-only against AlgFormer.
 - `TargetFramework=net10.0`, `PublishTrimmed=false` (our libraries use reflection the trimmer can't
   fully see — a demo values reliability over a few MB of download)
-- **Version bumps happen only via `dotnet add package`** (picks up the latest published version) —
-  never hand-edit a `<Version>` here; that's how this file stays honest about what's actually
-  wired in. If a tool needs a capability not yet in the published version, that's a hand-off to the
-  coordinator (flag the exact gap), not a reach into MonoRepo source.
+- **Version bumps only via `dotnet add package`** (latest published) — never hand-edit `<Version>`.
+  A capability not yet published is a hand-off to the coordinator, not a reach into MonoRepo source.
 
 ## Boundary (hard, from the agent charter)
-- **Checkpoint hand-off (Prism) is `prismstudio-owner`'s call, not this repo's.** What to ask
-  for: a copy of `%LOCALAPPDATA%\Prism\prism-holo.bin` + `-vocab.txt` (+ ideally `-iter.txt`, the
-  round counter, for the "rounds trained" stat) at a snapshot THEY pick — checked 2026-08-27 that the
-  live checkpoint at round ~21,720 currently produces a repetition-collapse (100%-confidence GREEDY
-  space-repeat) on short generic prompts; worth asking whether to wait for a further-trained/healthier
-  snapshot rather than freezing today's. Drop the three files at `Showroom/wwwroot/data/oracle-brain.
-  bin` / `oracle-vocab.txt` / `oracle-rounds.txt` — the page already fetches those exact paths and
-  degrades gracefully (clear `_loadError`, no crash) if any are absent.
+- **Checkpoint hand-off (Prism) is `prismstudio-owner`'s call, not this repo's.** What to ask for: a
+  copy of `%LOCALAPPDATA%\Prism\prism-holo.bin` + `-vocab.txt` (+ `-iter.txt`, the round counter) at
+  a snapshot THEY pick. Drop the files at `Showroom/wwwroot/data/oracle-*` — the page already fetches
+  those exact paths and degrades gracefully (`_loadError`, no crash) if any are absent.
 - **NuGet only, never MonoRepo `ProjectReference`.** Verify any API assumption against the actual
-  published DLL (e.g. via a throwaway reflection probe, or a scratch console project referencing
-  the same `PackageReference` version) before wiring new code to it — MonoRepo source can diverge
-  from what's actually published. This bit twice already: `HoloShape.ShiftsFor`'s true default
-  `ratio` is `0.25`, not whatever an ad-hoc guess assumes; always check via `GetParameters()` /
-  `DefaultValue` rather than assuming.
+  published DLL (throwaway reflection probe, or a scratch console project) before wiring new code to
+  it — MonoRepo source can diverge from what's actually published. This bit twice already:
+  `HoloShape.ShiftsFor`'s true default `ratio` is `0.25`, not whatever an ad-hoc guess assumes.
+  (`HoloKernel` is the one deliberate exception — a sibling in-repo RCL, not MonoRepo.)
 - Never touch `AboutUs/site/*`, nav, or the shared design system — that's `website-owner`'s. Own
-  everything under `Showroom/` only; `website-owner`'s static pages may *link* to a tool, that's
-  the extent of the overlap.
+  everything under `Showroom/` only; `website-owner`'s static pages may *link* to a tool.
 - Never launch the app / open a browser session — build-verify only (`dotnet build
   Showroom.csproj -c Release`). Demonstrating a tool live is the user's to do.
 
 ## Standing technical facts
 - **Shifts must be > 1, always** — at S=1 every relation-bank is a pure diagonal, zero cross-
   channel routing. Re-derive a floor from `bindRank = shifts·d/2` per tool's own d/context; never
-  copy another tool's `MinShifts` verbatim (Creature's 8 and Forecaster's 8 landed on the same
-  number by independent reasoning, not by copying).
-- `golden: true` on every `HoloFormer` construction so far — keep it unless a specific reason says
-  otherwise. WASM has no filesystem — no live-training tool can persist a checkpoint (`Serialize`/
-  `Deserialize` exist, verified, but nothing here calls them for that; a "Reset brain" button just
-  drops the in-memory reference). WASM is single-threaded/interpreted (no AOT) — keep live-training
-  shapes small (Creature `d=384,L=1`; Forecaster `d=128,L=1`; MarketSim's own server shape is
-  `d=128,L=4,K=2` — ours is shallower since it trains one step/click, not a full epoch/tick).
-- The manual `NewGrads()` → `IterAccumulate`/`StackIterAccumulate` → `Step` loop is the house
-  pattern for live-training. `HoloFormer.TrainStep(toks, answer, lr)` exists but does NOT honour
-  the `Iters`/K-pass depth knob — never use it where weight-tied extra passes matter.
+  copy another tool's `MinShifts` verbatim.
+- `golden: true` on every `HoloFormer` construction so far. WASM has no filesystem — no live-training
+  tool can persist a checkpoint (a "Reset brain" button just drops the in-memory reference). WASM is
+  single-threaded/interpreted (no AOT) — keep live-training shapes small (Creature `d=384,L=1`;
+  Forecaster `d=128,L=1`).
+- `HoloKernel.RefinementLoop.Observe`/`ObserveSequence` is the house pattern for live-training now
+  (wraps the same `NewGrads()`→`IterAccumulate`/`StackIterAccumulateAllPos`→`Step` triple).
+  `HoloFormer.TrainStep(toks, answer, lr)` still exists but does NOT honour the `Iters`/K-pass depth
+  knob — never use it where weight-tied extra passes matter.
 - `HoloFormer`'s public ctor: `(vocab, shifts, layers, maxContext, dModel=0, frozenPrefix=-1,
-  embedSeed=null, seed=42, bindFfn=false, golden=false, normalize=true, unitary=false)` — unchanged
-  1.2.0→1.5.0 (verified). `HoloShape` statics: `ShiftsFor(ctx,d,ratio=0.25)`, `BindRank(shifts,d)`,
-  `CleanCapacity(shifts,d)`, `InteractionBudget(shifts,d)`, `EquivCompute(d,L,K)` (1.5.0+),
-  `InvisibleMultiplier(paramCount,d,L,K)` (1.5.0+).
+  embedSeed=null, seed=42, bindFfn=false, golden=false, normalize=true, unitary=false)`. `HoloShape`
+  statics: `ShiftsFor(ctx,d,ratio=0.25)`, `BindRank(shifts,d)`, `CleanCapacity(shifts,d)`,
+  `InteractionBudget(shifts,d)`, `EquivCompute(d,L,K)`, `InvisibleMultiplier(paramCount,d,L,K)`.
 
 ## Build / verify
 ```
 dotnet build Showroom.csproj -c Release
 ```
-Green as of 2026-08-28 (0 warnings, 0 errors) with all four tools + the boot screen wired in
-(`dotnet publish` also spot-checked once this pass, since deploy hard-couples to it — see AboutUs\
+Green as of 2026-08-28 (0 warnings, 0 errors) with all four tools + boot screen + HoloKernel port
+wired in (`dotnet publish` also spot-checked, since deploy hard-couples to it — see AboutUs\
 CLAUDE.md). No test project exists — verification is build-green + code review; live behaviour is
 the user's to check (dev server: `dotnet run` here, or the deployed `/tools/` URL once pushed).
 
 ## Gotchas
 - Windows/PS 5.1: edit via Read/Edit/Write or UTF-8-safe .NET I/O, never `Get-Content`/
   `Set-Content` on these files (non-ASCII punctuation throughout → mojibake risk).
-- `Home.razor` card hrefs are ABSOLUTE (`/tools/<slug>`) matching the deployed base href;
-  `MainLayout.razor`'s nav hrefs are RELATIVE (`<slug>`, resolved against the current base href
-  from wherever the visitor currently is). Both need a new tool added, in their own style — don't
-  copy one pattern into the other spot.
+- `Home.razor` card hrefs are ABSOLUTE (`/tools/<slug>`); `MainLayout.razor`'s nav no longer lists
+  individual tools (see HoloKernel section's nav-trim note) — a new tool still needs a `Home.razor`
+  gallery card, just not a nav entry.
 - `EvaluatedApplications.AlgFormer`'s `PrismFormer` namespace (not `AlgFormer`) is where
-  `HoloFormer`/`HoloShape` actually live — easy to reach for the wrong `@using`.
+  `HoloFormer`/`HoloShape`/`SubwordVocab` actually live — easy to reach for the wrong `@using`.

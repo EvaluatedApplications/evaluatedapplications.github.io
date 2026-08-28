@@ -19,6 +19,13 @@
     <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly.DevServer" Version="10.0.8" PrivateAssets="all" />
   </ItemGroup>
 
+  <!-- HoloKernel: a sibling project IN THIS SAME REPO (AboutUs\HoloKernel), not MonoRepo — a ProjectReference
+       here is the designed consumption path, not a boundary break. It is itself NuGet-only against AlgFormer
+       (see its own csproj), so this repo's "never a MonoRepo ProjectReference" rule is unaffected. -->
+  <ItemGroup>
+    <ProjectReference Include="..\HoloKernel\HoloKernel.csproj" />
+  </ItemGroup>
+
   <!-- The showroom runs our real published libraries client-side (browser-wasm): HoloDb (in-memory SQL),
        AlgFormer (tiny learning model), Tracer (navigation) — straight from NuGet, exactly what a user gets.
        EvalApp comes transitively. Versions are set by `dotnet add package` (latest published). -->

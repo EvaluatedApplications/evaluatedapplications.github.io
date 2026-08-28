@@ -2,6 +2,7 @@
 @inject HttpClient Http
 @using System.Text
 @using PrismFormer
+@using HoloKernel
 
 <PageTitle>Prism — autocomplete with a live holographic-transformer checkpoint</PageTitle>
 
@@ -40,15 +41,15 @@
     else
     {
         <div class="cr-stats">
-            <div class="stat"><div class="n">@_brain!.ParamCount.ToString("N0")</div><div class="l">real stored parameters</div></div>
-            <div class="stat"><div class="n">@EquivCompute.ToString("N0")</div><div class="l">dense-transformer-equivalent compute / token</div></div>
-            <div class="stat"><div class="n">@(InvisibleX.ToString("F0"))×</div><div class="l">compute bought per stored parameter</div></div>
-            <div class="stat"><div class="n">@_brain.Context</div><div class="l">tokens of context</div></div>
+            <div class="stat"><div class="n">@_stats!.ParamCount.ToString("N0")</div><div class="l">real stored parameters</div></div>
+            <div class="stat"><div class="n">@_stats.EquivCompute.ToString("N0")</div><div class="l">dense-transformer-equivalent compute / token</div></div>
+            <div class="stat"><div class="n">@(_stats.ComputePerStoredParam.ToString("F0"))×</div><div class="l">compute bought per stored parameter</div></div>
+            <div class="stat"><div class="n">@_stats.Context</div><div class="l">tokens of context</div></div>
         </div>
         <div class="badges or-shape">
-            <span>d=@_brain.Dim</span><span>@_brain.Layers layer(s)</span><span>K=@_k pass(es)</span>
-            <span>shifts=@_brain.Shifts@(_brain.Golden ? " golden" : "")</span>
-            <span>vocab=@_sym.Count subwords</span>@if (_rounds is not null) { <span>@_rounds.Value.ToString("N0") rounds trained</span> }
+            <span>d=@_stats.Dim</span><span>@_stats.Layers layer(s)</span><span>K=@_k pass(es)</span>
+            <span>shifts=@_stats.Shifts@(_stats.Golden ? " golden" : "")</span>
+            <span>vocab=@_stats.Vocab subwords</span>@if (_rounds is not null) { <span>@_rounds.Value.ToString("N0") rounds trained</span> }
         </div>
 
         <div class="or-runs">
@@ -86,10 +87,10 @@
                 <div class="or-insp-head">
                     <h2>Inside that last continuation</h2>
                     <p class="hint">One card per emitted character. <strong>GREEDY</strong> = the top decoded token cleared the
-                        @((DecodeConfident * 100).ToString("F0"))% confidence gate outright. <strong>SAMPLED</strong> = it didn't, so the
-                        model drew from every token whose resonance cleared a floor of mean + @(DecodeFloorK.ToString("0.#"))σ
+                        @((Policy.ConfidentThreshold * 100).ToString("F0"))% confidence gate outright. <strong>SAMPLED</strong> = it didn't, so the
+                        model drew from every token whose resonance cleared a floor of mean + @(Policy.FloorK.ToString("0.#"))σ
                         (the "resonance floor" — everything under it reads as crosstalk noise, not signal) at temperature
-                        @(DecodeTemp.ToString("0.00")). The row marked <span class="or-settle-tag">settles</span> is the first
+                        @(Policy.Temperature.ToString("0.00")). The row marked <span class="or-settle-tag">settles</span> is the first
                         layer/pass whose own top-1 decode already matches what actually got emitted.</p>
                 </div>
                 @for (int ci = 0; ci < _lastTrace.Count; ci++)
@@ -141,14 +142,14 @@
                 building up harmonics, sharpening whichever resonance was already strongest, the way plucking a string
                 at the right moment reinforces its own overtones instead of damping them. It's a real nonlinear
                 dynamical system iterating on its own state, not a deeper stack of unique weights — which is exactly
-                why the parameter count above is worth reading twice: <code>@_brain.ParamCount.ToString("N0")</code>
+                why the parameter count above is worth reading twice: <code>@_stats!.ParamCount.ToString("N0")</code>
                 real numbers, reused <code>@_k</code>× per layer, computing LIKE a real dense transformer would
-                need <code>@EquivCompute.ToString("N0")</code> parameters to match — a <strong>compute-equivalence</strong>
+                need <code>@_stats.EquivCompute.ToString("N0")</code> parameters to match — a <strong>compute-equivalence</strong>
                 figure (12·d²·L·K, the exact same "compute-equiv" stat PrismStudio's own status bar shows for this
                 model), not a claim that this checkpoint secretly has that many real parameters stored anywhere.</p>
 
-            <p><strong>Where this checkpoint stands, and where it's headed.</strong> Right now: @_brain.ParamCount.ToString("N0")
-                real stored parameters, a @_sym.Count-token subword vocabulary, and an @_brain.Context-token context
+            <p><strong>Where this checkpoint stands, and where it's headed.</strong> Right now: @_stats.ParamCount.ToString("N0")
+                real stored parameters, a @_stats.Vocab-token subword vocabulary, and an @_stats.Context-token context
                 window — an honest, early snapshot of an ongoing training run, not a finished product.
                 <strong>Next rung:</strong> GPT-2 small (OpenAI, 2019) — 124,000,000 real dense parameters, the smallest
                 of the original public GPT-2 releases and the field's most commonly-cited "smallest real language
@@ -181,18 +182,24 @@
 </div>
 
 @code {
-    // ---- ported constants (from PrismStudio/PrismGym's HoloEngine.cs PickToken/GateInfo — reference only; this repo
-    // consumes the checkpoint file + the published AlgFormer NuGet API, never MonoRepo/PrismFormer source directly).
-    // Greedy when the top decoded token clears DecodeConfident outright; otherwise sample at DecodeTemp from every
-    // token whose resonance clears a floor of mean + DecodeFloorK standard deviations (the "resonance floor" — the
-    // decode is a correlation readback against the codebook, so most tokens form a crosstalk noise bulk and the real
-    // signal stands out above it).
-    const double DecodeConfident = 0.60, DecodeTemp = 0.80, DecodeFloorK = 3.0;
+    // ---- decode policy — ported onto HoloKernel's DecodePolicy 2026-08-28 (was 4 local consts + a hand-rolled
+    // GateInfo/PickToken pair; DecodePolicy.Default carries the exact same thresholds, ported verbatim from
+    // PrismStudio's HoloEngine originally, so these numbers are unchanged, just centralised now).
+    static readonly DecodePolicy Policy = DecodePolicy.Default;   // ConfidentThreshold=0.60, Temperature=0.80, FloorK=3.0, DegenRepeat=4
     const int InspectTopK = 3;      // top-K faces/attention entries shown per pass row
     const int MaxReplyChars = 40;   // a runaway guard — this checkpoint's context is tiny, long continuations aren't meaningful yet
-    const int DegenRepeat = 4;      // ported from HoloEngine.cs's ProbeDegenRepeat — N identical tokens in a row = a collapsed run
 
-    HoloFormer? _brain;
+    HoloSession? _session;
+    ModelStats? _stats;
+    SubwordVocab? _vocab;   // published PrismFormer.SubwordVocab — replaces this file's own hand-rolled greedy-
+                             // longest-match tokenizer (2026-08-28, verified safe against MonoRepo\AlgFormer\
+                             // SubwordVocab.cs before swapping, not assumed): CharN=>CharVocab.N=96 already treats
+                             // id 95 (CharVocab.End) as "\n" internally (Symbol(95)=="\n"), matching this file's
+                             // OWN "id 95 is both newline and the stop marker" quirk exactly — the ctor takes ONLY
+                             // the merges list (2-4 char strings), NOT the base chars (those are handled inside
+                             // the class), and Encode() folds non-printable input to space internally too, same
+                             // as this file's old Normalize() did by hand. Confirmed byte-for-byte equivalent
+                             // greedy-longest-match semantics, not just "close enough."
     bool _loaded; string? _loadError; string? _error;
     long? _rounds;   // optional: only shown if data/oracle-rounds.txt was published alongside the checkpoint
 
@@ -218,20 +225,13 @@
     // hand-editing these files).
     int? _trainedStackK;
     int? _trainedIterWarm;
-    double _trainedAlpha = 1.0;   // reconstructed below from (trainedRounds, addRound=0, iterWarm) via the same
-    // AlphaFor formula HoloEngine itself uses — a mid-ramp snapshot deserves a mid-ramp alpha, not a flat 1.0
-    // guess (that would ALSO misrepresent it, just in the opposite direction). Only valid for a single-layer
-    // checkpoint (layer 0's real add-round is 0 by construction — it's present from round 0); falls back to
-    // 1.0 (fully composed) if the checkpoint ever ships with >1 layer, or if either metadata file is missing.
-    // ALWAYS served (no "what if" branch — K is fixed, so there's only ever the one real alpha to serve at).
-
-    // ---- vocab: CharVocab.Lo..Hi (published PrismFormer.CharVocab) as the 95-char base + "\n" + merged subwords
-    // loaded from the bundled vocab.txt — a from-scratch greedy-longest-match tokenizer built to match EXACTLY how
-    // the embedded checkpoint's own vocab.txt was produced (ported algorithm, not a MonoRepo reference at runtime).
-    readonly List<string> _sym = new();
-    readonly Dictionary<string, int> _id = new(StringComparer.Ordinal);
-    readonly Dictionary<char, int> _firstMax = new();
-    int _stop;   // CharVocab.End — doubles as both the "\n" token id and the generation stop marker (real, ported behaviour)
+    double _trainedAlpha = 1.0;   // reconstructed below via HoloKernel's AlphaRamp.Reconstruct (the SAME formula
+    // HoloEngine.AlphaFor uses) — a mid-ramp snapshot deserves a mid-ramp alpha, not a flat 1.0 guess (that would
+    // ALSO misrepresent it, just in the opposite direction). Only valid for a single-layer checkpoint (layer 0's
+    // real add-round is 0 by construction — it's present from round 0); falls back to 1.0 (fully composed) if the
+    // checkpoint ever ships with >1 layer, or if either metadata file is missing. ALWAYS served (no "what if"
+    // branch — K is fixed, so there's only ever the one real alpha to serve at); passed to HoloSession.
+    // FromCheckpoint as a MANDATORY argument (the kernel enforces this by construction — see field comment above).
 
     int _k = 1;   // the model's one real trained depth — set once at load, never mutated (no slider, see field comments above)
     bool _generating;
@@ -242,9 +242,6 @@
     sealed record RunEntry(string Prompt, string Continuation, bool TrailedOff);
     readonly List<RunEntry> _history = new();
     List<CharTrace>? _lastTrace;
-
-    long EquivCompute => HoloShape.EquivCompute(_brain!.Dim, _brain.Layers, Math.Max(1, _brain.Iters));
-    double InvisibleX => HoloShape.InvisibleMultiplier(_brain!.ParamCount, _brain.Dim, _brain.Layers, Math.Max(1, _brain.Iters));
 
     sealed record FaceItem(string Sym, double Pct);
     sealed record AttnItem(string Sym, int Pos, double Pct);
@@ -257,13 +254,16 @@
         {
             var s = Begin("data/oracle-vocab.txt");
             var vocabBytes = await Http.GetByteArrayAsync("data/oracle-vocab.txt");
-            BuildVocab(Encoding.UTF8.GetString(vocabBytes));
-            Finish(s, $"{vocabBytes.Length:N0} B");
+            var merges = Encoding.UTF8.GetString(vocabBytes).Replace("\r\n", "\n").Split('\n').Where(l => l.Length > 0).ToList();
+            _vocab = new SubwordVocab(merges);   // throws (caught below, degrades to _loadError) on a malformed merge line
+            Finish(s, $"{vocabBytes.Length:N0} B → {_vocab.Size:N0}-symbol vocab");
 
             s = Begin("data/oracle-brain.bin");
             var bytes = await Http.GetByteArrayAsync("data/oracle-brain.bin");
-            _brain = HoloFormer.Deserialize(bytes);
-            Finish(s, $"{bytes.Length:N0} B → {_brain.ParamCount:N0} params deserialized");
+            var peek = HoloFormer.Deserialize(bytes);   // one-time peek at Layers/ParamCount for the boot log + the
+            // alpha-reconstruction guard below — HoloSession.FromCheckpoint needs K/alpha as ctor args (see field
+            // comment above), which in turn need Layers, so this has to happen before the session can be built.
+            Finish(s, $"{bytes.Length:N0} B → {peek.ParamCount:N0} params deserialized");
 
             s = Begin("data/oracle-rounds.txt");
             try { _rounds = long.Parse((await Http.GetStringAsync("data/oracle-rounds.txt")).Trim()); Finish(s, $"{_rounds:N0} rounds trained"); }
@@ -280,121 +280,25 @@
             // fixed to the REAL trained depth (falls back to the file's bare K=1 only if the metadata sidecar is
             // missing) — never adjusted after this; see the field comments above for why.
             _k = _trainedStackK ?? 1;
-            _brain.Iters = _k;
-            _trainedAlpha = (_brain.Layers == 1 && _rounds is not null && _trainedIterWarm is > 0)
-                ? Math.Clamp(_rounds.Value / (double)_trainedIterWarm.Value, 0.0, 1.0)
+            _trainedAlpha = (peek.Layers == 1 && _rounds is not null && _trainedIterWarm is > 0)
+                ? AlphaRamp.Reconstruct(_rounds.Value, addRound: 0, _trainedIterWarm.Value)
                 : 1.0;
-            _brain.IterAlphaServe = _trainedAlpha;
+            // HoloSession.FromCheckpoint requires K/alpha as explicit ctor args — the kernel enforces the
+            // "checkpoint doesn't carry them" gotcha by construction rather than a footnote (see field comment).
+            _session = HoloSession.FromCheckpoint(bytes, _k, _trainedAlpha);
+            _stats = _session.Stats();
             _loaded = true;
         }
         catch (Exception ex) { _loadError = "Couldn't load the checkpoint: " + ex.Message; }
-    }
-
-    void BuildVocab(string vocabText)
-    {
-        for (var i = 0; i < CharVocab.End; i++) AddSym(((char)(CharVocab.Lo + i)).ToString());
-        AddSym("\n");
-        foreach (var line in vocabText.Replace("\r\n", "\n").Split('\n'))
-            if (line.Length > 0) AddSym(line);
-        _stop = CharVocab.End;
-    }
-
-    void AddSym(string s)
-    {
-        if (_id.ContainsKey(s)) return;
-        var id = _sym.Count; _sym.Add(s); _id[s] = id;
-        var f = s[0];
-        if (!_firstMax.TryGetValue(f, out var m) || s.Length > m) _firstMax[f] = s.Length;
-    }
-
-    static string Normalize(string text)
-    {
-        var sb = new StringBuilder(text.Length);
-        foreach (var c in text) sb.Append(c >= CharVocab.Lo && c <= CharVocab.Hi ? c : ' ');
-        return sb.ToString();
-    }
-
-    int[] Encode(string text)
-    {
-        var s = Normalize(text);
-        var outp = new List<int>(s.Length);
-        var i = 0;
-        while (i < s.Length)
-        {
-            var c0 = s[i];
-            int matched = 1, id = _id.TryGetValue(c0.ToString(), out var cid) ? cid : 0;
-            var max = _firstMax.TryGetValue(c0, out var fm) ? Math.Min(fm, s.Length - i) : 1;
-            for (var len = max; len >= 2; len--)
-                if (_id.TryGetValue(s.Substring(i, len), out var tid)) { id = tid; matched = len; break; }
-            outp.Add(id); i += matched;
-        }
-        return outp.ToArray();
-    }
-
-    string Decode(IEnumerable<int> ids)
-    {
-        var sb = new StringBuilder();
-        foreach (var id in ids) if (id != _stop && id >= 0 && id < _sym.Count) sb.Append(_sym[id]);
-        return sb.ToString();
     }
 
     // display glyph for a symbol id — the stop id doubles as "\n" in the real vocab (the model was trained on
     // single-line snippets, so a newline IS the stop signal; shown explicitly rather than as an invisible blank)
     string SymDisplay(int id)
     {
-        if (id == _stop) return "⏹";
-        var s = id >= 0 && id < _sym.Count ? _sym[id] : "?";
+        if (id == CharVocab.End) return "⏹";
+        var s = _vocab is not null && id >= 0 && id < _vocab.Size ? _vocab.Symbol(id) : "?";
         return s == " " ? "·" : s;
-    }
-
-    // ---- ported PickToken/GateInfo (HoloEngine.cs) — same thresholds, GateInfo without the RNG draw so the
-    // Inspector can label WHY a character was emitted without re-drawing the sample itself.
-    static (int top, double topProb, bool greedy, int overFloor) GateInfo(double[] lg, int V)
-    {
-        var top = 0; var max = lg[0];
-        for (var i = 1; i < V; i++) if (lg[i] > max) { max = lg[i]; top = i; }
-        double sum = 0; for (var i = 0; i < V; i++) sum += Math.Exp(lg[i] - max);
-        var topProb = 1.0 / sum;
-        if (topProb >= DecodeConfident) return (top, topProb, true, 1);
-        double mean = 0; for (var i = 0; i < V; i++) mean += lg[i]; mean /= V;
-        double var2 = 0; for (var i = 0; i < V; i++) { var dd = lg[i] - mean; var2 += dd * dd; } var2 /= V;
-        var floor = Math.Min(mean + DecodeFloorK * Math.Sqrt(var2), max);
-        int over = 0; for (var i = 0; i < V; i++) if (lg[i] >= floor) over++;
-        return (top, topProb, false, over);
-    }
-
-    static int PickToken(double[] lg, int V)
-    {
-        var top = 0; var max = lg[0];
-        for (var i = 1; i < V; i++) if (lg[i] > max) { max = lg[i]; top = i; }
-        double sum = 0; for (var i = 0; i < V; i++) sum += Math.Exp(lg[i] - max);
-        if (1.0 / sum >= DecodeConfident) return top;
-        double mean = 0; for (var i = 0; i < V; i++) mean += lg[i]; mean /= V;
-        double var2 = 0; for (var i = 0; i < V; i++) { var dd = lg[i] - mean; var2 += dd * dd; } var2 /= V;
-        var floor = Math.Min(mean + DecodeFloorK * Math.Sqrt(var2), max);
-        var tp = new double[V]; double tsum = 0;
-        for (var i = 0; i < V; i++) { tp[i] = lg[i] >= floor ? Math.Exp((lg[i] - max) / DecodeTemp) : 0.0; tsum += tp[i]; }
-        var r = Random.Shared.NextDouble() * tsum; double acc = 0;
-        for (var i = 0; i < V; i++) { acc += tp[i]; if (r <= acc) return i; }
-        return top;
-    }
-
-    List<FaceItem> TopFaces(double[] face, int n)
-    {
-        var lg = _brain!.DecodeFace(face);
-        var V = Math.Min(lg.Length, _sym.Count);
-        double mx = double.NegativeInfinity; for (var i = 0; i < V; i++) if (lg[i] > mx) mx = lg[i];
-        var p = new double[V]; double s = 0;
-        for (var i = 0; i < V; i++) { p[i] = Math.Exp(lg[i] - mx); s += p[i]; }
-        return Enumerable.Range(0, V).OrderByDescending(i => p[i]).Take(n).Select(i => new FaceItem(SymDisplay(i), 100 * p[i] / s)).ToList();
-    }
-
-    List<AttnItem> TopAttn(int[] ctx, double[] res, int n)
-    {
-        double mx = res.Max(); double s = 0; var p = new double[res.Length];
-        for (var i = 0; i < res.Length; i++) { p[i] = Math.Exp(res[i] - mx); s += p[i]; }
-        return Enumerable.Range(0, res.Length).OrderByDescending(j => p[j]).Take(n)
-            .Select(j => new AttnItem(SymDisplay(ctx[j]), j, 100 * p[j] / s)).ToList();
     }
 
     // K has no UI control anymore — this is purely the explanatory ramp detail for the outro copy's fact
@@ -404,7 +308,7 @@
         get
         {
             if (_trainedStackK is null) return "depth metadata wasn't shipped with this build, so K falls back to the bare checkpoint file's own K=1";
-            var ramp = _brain is not null && _brain.Layers == 1 && _trainedIterWarm is > 0 && _rounds is not null
+            var ramp = _stats is not null && _stats.Layers == 1 && _trainedIterWarm is > 0 && _rounds is not null
                 ? (_rounds.Value >= _trainedIterWarm.Value
                     ? $"ramp fully complete (finished {_trainedIterWarm:N0} rounds in)"
                     : $"reconstructed from {_rounds:N0} of {_trainedIterWarm:N0} ramp rounds trained — still ramping in")
@@ -417,7 +321,7 @@
 
     async Task Ask()
     {
-        if (_brain is null || string.IsNullOrWhiteSpace(_prompt) || _generating) return;
+        if (_session is null || _vocab is null || string.IsNullOrWhiteSpace(_prompt) || _generating) return;
         var promptText = _prompt.Trim();
         _prompt = "";
         _pendingPrompt = promptText;
@@ -429,55 +333,52 @@
             // fresh context every run: seeded ONLY from this submission's own tokens — nothing from a prior run's
             // prompt or continuation ever gets folded in, so there is no cross-run "memory" to leak (autocomplete,
             // not chat: each Continue click is one independent prompt-in/continuation-out pass).
-            var seq = new List<int>(Encode(promptText));
+            var seq = new List<int>(_vocab.Encode(promptText));
             var outIds = new List<int>();
             var trace = new List<CharTrace>();
-            var K = Math.Max(1, _brain.Iters);
-            var alpha = _brain.IterAlphaServe;
-            var prevT = -1; var repeatStreak = 0; var trailedOff = false;   // repetition-collapse guard, ported from
-            // HoloEngine.cs's own ProbeDegenRepeat=4 — a known behaviour this early in training (the confidence gate
-            // still reads GREEDY on a collapsed distribution), surfaced honestly rather than silently padded with spaces
+            var vocabLimit = _vocab.Size;
+            var K = _session.KPass;
+            var guard = new DegenGuard(Policy);   // HoloKernel port of HoloEngine's ProbeDegenRepeat=4 — a known
+            // behaviour this early in training (the confidence gate still reads GREEDY on a collapsed
+            // distribution), surfaced honestly rather than silently padded with spaces
+            var trailedOff = false;
 
             for (var step = 0; step < MaxReplyChars; step++)
             {
-                var take = Math.Min(seq.Count, _brain.Context);
+                var take = Math.Min(seq.Count, _stats!.Context);
                 var ctx = take > 0 ? seq.Skip(seq.Count - take).ToArray() : new[] { 0 };
 
-                var snaps = _brain.InspectStackIter(ctx, K, alpha);
-                var attn = _brain.InspectAttention(ctx, K, alpha);
-                var final = _brain.DecodeFace(snaps[^1]);
-                var V = Math.Min(final.Length, _sym.Count);
-                var gate = GateInfo(final, V);
-                var t = PickToken(final, V);
+                // full-recompute per character via HoloKernel's Inspector — same reasoning as before: it's the
+                // only path with per-pass data, and it guarantees the trace matches exactly what gets decoded.
+                var posTrace = Inspector.Capture(_session, ctx, Policy, vocabLimit);
+                var t = Gate.Pick(posTrace.Final.Logits, vocabLimit, Policy, Random.Shared);   // Capture doesn't draw — Pick does
 
                 var settleAt = -1;
-                for (var i = 0; i < snaps.Length; i++)
-                {
-                    var lg = _brain.DecodeFace(snaps[i]);
-                    var vv = Math.Min(lg.Length, _sym.Count);
-                    var top = 0; var mx = lg[0]; for (var j = 1; j < vv; j++) if (lg[j] > mx) { mx = lg[j]; top = j; }
-                    if (top == t) { settleAt = i; break; }
-                }
+                for (var i = 0; i < posTrace.Passes.Count; i++)
+                    if (posTrace.Passes[i].Top == t) { settleAt = i; break; }
+
                 var rows = new List<PassRow>();
-                for (var i = 0; i < snaps.Length; i++)
+                for (var i = 0; i < posTrace.Passes.Count; i++)
                 {
-                    var label = i == 0 ? "input (embedding)" : i == snaps.Length - 1 ? "final" : $"layer {(i - 1) / K + 1} · pass {(i - 1) % K + 1}";
-                    var top = TopFaces(snaps[i], InspectTopK);
-                    List<AttnItem>? at = i == 0 ? null : TopAttn(ctx, attn[i - 1], InspectTopK);
+                    var label = i == 0 ? "input (embedding)" : i == posTrace.Passes.Count - 1 ? "final" : $"layer 1 · pass {i}";
+                    var top = Gate.TopK(posTrace.Passes[i].Logits, vocabLimit, InspectTopK)
+                        .Select(f => new FaceItem(SymDisplay(f.Index), f.Percent)).ToList();
+                    List<AttnItem>? at = i == 0 ? null : Inspector.Focus(ctx, posTrace.Attention[i - 1], InspectTopK)
+                        .Select(a => new AttnItem(SymDisplay(a.Token), a.Position, a.Percent)).ToList();
                     rows.Add(new PassRow(label, top, at, i == settleAt));
                 }
-                trace.Add(new CharTrace(SymDisplay(t), gate.greedy, SymDisplay(gate.top), gate.topProb, gate.overFloor, rows));
+                var gate = Gate.Evaluate(posTrace.Final.Logits, vocabLimit, Policy);
+                trace.Add(new CharTrace(SymDisplay(t), gate.Greedy, SymDisplay(gate.Top), gate.TopProb, gate.OverFloor, rows));
 
-                if (t == _stop) break;
+                if (t == CharVocab.End) break;   // the stop marker — see the tokenizer field comment for why this id doubles as "\n"
                 outIds.Add(t); seq.Add(t);
-                repeatStreak = t == prevT ? repeatStreak + 1 : 1; prevT = t;
-                if (repeatStreak >= DegenRepeat) { trailedOff = true; break; }
+                if (guard.Observe(t)) { trailedOff = true; break; }
                 _generating = true;
                 StateHasChanged();
                 await Task.Delay(20);
             }
 
-            var shown = Decode(outIds).TrimEnd();
+            var shown = _vocab.Decode(outIds).TrimEnd();
             var continuationText = shown.Length > 0 ? shown : "(blank — this checkpoint is still very early in training)";
             _history.Add(new RunEntry(promptText, continuationText, trailedOff));
             _lastTrace = trace;

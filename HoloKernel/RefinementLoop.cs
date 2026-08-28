@@ -17,6 +17,10 @@ public readonly record struct SequenceResult(double TotalLoss, double MeanLoss, 
 ///
 /// Note this deliberately does NOT use <c>HoloFormer.TrainStep</c>: that convenience method ignores
 /// the <c>Iters</c>/K-pass depth, so it silently trains a different model than the one being served.
+///
+/// This is the ONLY sanctioned way a browser session changes a model: weights move, shape does not.
+/// Structural growth (<c>GrowLayers</c>/<c>GrowShifts</c>) is a server-side/PrismStudio operation and
+/// is out of scope for the platform — see the remarks on <see cref="HoloSession.Model"/>.
 /// </summary>
 public sealed class RefinementLoop
 {
