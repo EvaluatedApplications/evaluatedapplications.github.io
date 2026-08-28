@@ -69,7 +69,10 @@ territory (see "Prism motif" below for a live coordination flag on this boundary
 `.install` (copy-button code chip), `.btn`/`.btn-primary`/`.btn-ghost`, `.crumb` (breadcrumb),
 `.stack` (callout box, `.flow` for pipeline diagrams), `.prose`/`.toc` (manual/docs pages),
 `.snip`/`.lim` (code-sample box / caveat note — added 2026-08-26 for the product-page rollout,
-reused by 9+ pages), `footer.site`. A handful of legacy pages (`evalapp.html` pre-rewrite,
+reused by 9+ pages), `footer.site`. **`.hero-bar`/`.hero-body`/`.hero-content`/`.win-dots` + the
+`body.os-chrome` opt-in system** (window-panel chrome, taskbar/dock nav, mobile icon grid — added
+2026-08-28, live on 3 pages only so far, see the dedicated "OS chrome" section below for the full
+component list and the sweep recipe). A handful of legacy pages (`evalapp.html` pre-rewrite,
 `holodb/index.html`, `holodb.html`) used to duplicate these tokens in a local `<style>` block;
 `evalapp.html` was migrated onto `site.css` in the 2026-08-26 rewrite (see Reconciliations). The
 two HoloDb pages still carry a local `<style>` (bespoke charts/race-demo/table markup that isn't
@@ -148,7 +151,11 @@ that IS the cohesion mechanism (§0 of the agent charter).
 second bottom-of-page path into the graph beyond the top nav. Plain product pages + `index.html` +
 `holoformer.html`: `Home · Packages(/#packages) · HoloDb · NuGet`. The 3 HoloDb pages use a
 page-appropriate subset (hub: `Home · Packages · Docs · Benchmarks · NuGet`; benchmarks: `Home ·
-HoloDb · Manual · NuGet`; manual: `Home · HoloDb · Packages · NuGet`).
+HoloDb · Manual · NuGet`; manual: `Home · HoloDb · Packages · NuGet`). **Flagged 2026-08-28**: the
+top nav's HoloDb-pinning was fixed this pass (see Navigation section), but this footer set still
+privileges HoloDb the same way and wasn't touched — out of scope for the nav fix as asked (that was
+specifically "top-level nav"), but it's the same residual pattern and a candidate for the same fix
+next time the footer is touched.
 
 **SEO tags** (every page): unique `<title>` + description + canonical + OG/Twitter tags, all present.
 JSON-LD before `</head>`: `Organization`+`WebSite` on the index, `SoftwareApplication`
@@ -193,12 +200,29 @@ mega-menu bloating every page (tried a 5-column/17-item `<details>` dropdown 202
 feedback: too dense, too large on mobile, and it duplicated what the homepage already does — see
 below for the revised shape).
 
-**The shape (revised 2026-08-26, second pass)**: three layers, each doing ONE job.
-1. **Lean top nav, identical shape everywhere**: `Home · HoloDb · Packages(→/#packages) · NuGet`,
-   plain text links, no dropdown, no JS. A few pages add 1-2 page-appropriate items (the HoloDb hub:
-   `Home · Benchmarks · Docs · Packages · NuGet`; the manual: adds `Manual`+`The Analyst`) but NEVER
-   more than ~6 items — that's the compactness bar, checked on a narrow viewport (mobile burger
-   reveals a short flat list, nothing nested/wide).
+**The shape (revised 2026-08-28, third pass — see "OS chrome" below for why this changed)**: three
+layers, each doing ONE job.
+1. **Lean top nav, identical shape everywhere**: `Home · Packages(→/#packages) · Tools(→/#tools) ·
+   NuGet`, plain text links, no dropdown, no JS. **Changed 2026-08-28**: this used to pin `HoloDb` as
+   a permanent 2nd slot — a historical artifact (it was the first/richest page built), not a
+   principled choice, and it gave HoloDb a 1-click universal link that the other 10 packages didn't
+   get (user flag: "top level ones should be relevant not arbitrary eg. HoloDb is pinned only").
+   Fixed by swapping the HoloDb-specific slot for `Tools`, which — like `Packages` — routes to a hub
+   section (`/#tools`) rather than to any one product, so nothing is singled out. HoloDb is still
+   ≤2 clicks from everywhere via `Packages` → its card, exactly like the other 10 packages, and is
+   still 1 click from most pages via its `.related` pill (see layer 3). A few pages add 1-2
+   page-appropriate items on top of the 4 universal ones (the HoloDb hub: `Home · Packages · Tools ·
+   Benchmarks · Docs · NuGet`, 6 items — at the compactness ceiling; the manual: adds `Manual`+`The
+   Analyst`) but NEVER more than ~6 items total — that's the compactness bar, checked on a narrow
+   viewport.
+   **Rollout status**: only the 3 pages listed under "OS chrome" below carry this new nav shape as of
+   2026-08-28. The other 14 `site/**/*.html` files still carry the OLD `Home · HoloDb · Packages ·
+   NuGet` shape — a real, temporary cross-page inconsistency, open until the sweep (tracked in "OS
+   chrome" below, same sweep as the chrome rollout since both touch the same nav markup in the same
+   pass). Of those 14, 12 are ordinary content pages with the standard nav; the other 2
+   (`404.html`, a brand-only bounce page with no `.nav-links` at all, and the unlisted
+   `recycledao-preview.html`, which deliberately uses a standalone non-EA header per its own
+   CLAUDE.md entry) never carried the pinned-HoloDb pattern and don't need this particular fix.
 2. **The homepage IS the routable index.** `index.html`'s `#packages` gallery already lists every
    package with a fully clickable card (`.card-link` stretched-link overlay, not just a small
    "Explore →" — see below); nav's "Packages" link just sends you there. This is why the nav doesn't
@@ -266,6 +290,117 @@ CTA or "Try it live" card = 1 click. No nav items added (lean nav unchanged on e
 mobile compactness is unaffected structurally. `holoformer.html` (the deep-dive page) was left
 without its own tool link — it's one crumb-click from `algformer.html`, which now carries the link,
 so it stays within budget without adding a fourth divergent cross-link spot.
+
+**2026-08-28 pass (nav de-arbitrary-ing, folded into the OS-chrome pass below)**: reachability walk
+re-run after swapping the pinned `HoloDb` nav slot for `Tools`, on the 3 pages that carry the new nav
+shape (`index.html`, `phasor.html`, `holodb/index.html`). From `phasor.html`'s nav: `Home`(1)→
+`#packages`→any of 11 cards(1) = 2 clicks to every package incl. HoloDb; `Tools`(1)→`/#tools`→any of
+4 tool cards(1) = 2 clicks to every tool; `NuGet`(1) = 1 click, external. HoloDb is additionally 1
+click via `phasor.html`'s own `.related` pill (unchanged, still lists HoloDb). From `index.html`
+itself: `Packages`/`Tools` land on the same page (no click needed, already visible) → 1 click to any
+card/tool. From `holodb/index.html`'s nav (6 items, at the compactness ceiling): same `Home`/
+`Packages`/`Tools` ≤2-click guarantee, plus its own page-specific `Benchmarks`(same-page anchor,
+0 extra click)/`Docs`(1 click). No href was removed anywhere — HoloDb lost its one guaranteed
+1-click universal slot but gained nothing-lost in the ≤2-click invariant, which was never depending
+on that slot in the first place (`Packages` already covered it). Checked narrow-viewport
+compactness: the new nav is 4 items on 15 of 17 pages (down from 4) and 6 on the HoloDb hub (same
+count as before, just reordered) — never above the ~6-item ceiling.
+
+## OS chrome (in review, 2026-08-28 — NOT yet swept past 3 pages)
+
+Desktop/wide viewports get a window-panel treatment (bordered "window" frame around `.hero` and
+every `.sec` that carries a `.sec-head`, a titlebar with decorative traffic-light dots, the nav
+restyled as a floating taskbar/dock); narrow viewports get a phone-home-screen treatment (nav
+collapses to a fixed bottom icon dock, the `#packages`/`#tools` galleries become an app-icon grid).
+**Chrome only** — no JS, no draggable/resizable windows, static HTML/CSS unchanged in cost; every
+element it touches is real, already-linked markup (nav `<a>`, `.card-link`, `a.tool`) — narrowing a
+mobile package card to an icon hides its description text, never its link.
+
+**Opt-in via `<body class="os-chrome">`.** Currently on exactly 3 pages, deliberately not swept
+further yet (user asked for a reviewable subset first): `index.html` (flagship — also exercises the
+`.prism-beam`/`.hero-content` z-index interplay, see below), `phasor.html` (a plain product page —
+the lean-template stress test), `holodb/index.html` (the richest page — 6 windowed sections, tables,
+a bespoke SVG diagram, and the widest nav, all inside the same chrome system). The other 14 pages
+(including `algformer.html`, which also carries `.prism-beam`) are untouched and still render the
+pre-chrome design — this is an **intentional, temporary split**, not a regression; sweeping it is
+the next step once this subset is reviewed.
+
+**Components, all in `site.css`** under the "OS CHROME" banner comment (search that string to find
+the whole system in one place):
+- **`.hero-bar` + `.hero-body`**: the hero splits into a titlebar (`.hero-bar`, desktop-only, hidden
+  by default so tablet/mobile renders `.hero-body`'s children exactly like the old flat hero) and a
+  body wrapper. `.hero-bar` carries `.win-dots` (3 real `<i>` elements, red/amber/green via the
+  existing `--bad`/`--warn`/`--ok` tokens — reused, not new colours) + a `.hero-bar-title` mono label
+  (`"phasor.app"` style). The whole `.hero-bar` is `aria-hidden="true"` — it's a decorative echo of
+  info already in the real `.crumb`/`.eyebrow`/`h1`, same pattern as `.prism-beam`.
+- **`.sec` window framing is ZERO-MARKUP**: `body.os-chrome .sec:has(.sec-head)` gets a bordered
+  panel; `.sec-head` itself grows a `::before`/box-shadow trio of 3 dots (no new elements — CSS
+  generated content with `content:""` carries no accessible text, so nothing needs `aria-hidden`
+  here). Because this hooks off `.sec`/`.sec-head`, which every page already has identically, **this
+  part of the chrome needs no HTML changes at all once a page's `<body>` carries the class** — the
+  sweep to the remaining 14 pages is `class="os-chrome"` + the hero restructure below, nothing more.
+  Sections that are just a lone `.stack` callout (no `.sec-head`, e.g. every page's closing "get
+  started"/"how it fits together" CTA) are deliberately left unframed — `.stack` is already its own
+  bordered card; a second frame around it would double-border, not read as a widget.
+- **Taskbar/dock is `.site-nav` restyled**, not a new element: ≥901px it floats as a rounded,
+  blurred chrome bar off the top edge with each `.nav-links a` rendered as a small app-tile pill
+  (colour cycled through `--spectrum-1..7` by `nth-child`, shared between the desktop pill size and
+  the mobile dock size so they read as one component in two sizes). ≤640px the same `.nav-links`
+  becomes a `position:fixed` bottom icon dock (burger/checkbox hidden, `env(safe-area-inset-bottom)`
+  padding) instead of the plain site's CSS-only slide-down menu — this is the "phone home screen"
+  status-bar-and-dock read, using the exact same links, same hrefs, same count as everywhere else.
+- **`#packages`/`#tools` icon grid (≤640px only)**: the real `.card`/`a.tool` elements collapse to
+  compact tiles — `.card::before` (normally the 3px category accent bar) becomes a 56px rounded-
+  square "icon" tinted by the existing `--cat` category colour, `.desc`/`.install`/`.links`/`.pkgid`/
+  `.note`/`.tag`/`.go-in` are hidden (not removed — still real DOM, just not shown at this size), and
+  the pre-existing `.card-link` stretched-link overlay (or the tool card's own `<a>`) still covers
+  the whole tile, so every icon is still a real, focusable, hrefed link. A `:active` tap-scale is
+  gated inside `@media (prefers-reduced-motion:no-preference)`; reduced-motion gets no transform at
+  all (nothing to opt out of, satisfies the requirement by construction rather than by exception).
+  Scoped to `#packages`/`#tools` specifically — other `.grid`s (e.g. phasor's "Key features" cards)
+  are NOT navigation entry points and correctly stay plain reading cards on mobile, not icons.
+- **`body.os-chrome` wallpaper**: two faint `radial-gradient`s (accent + data-blue, ~7-9% mixed in)
+  over the base `--bg`, at every viewport width — cheap (no image asset), and reads as "windows/
+  icons floating over a desktop" in the gaps between panels/tiles.
+- **Breakpoints reused, not invented**: `min-width:901px` for all window/taskbar chrome (matches the
+  existing `.prism-beam` mobile-hide breakpoint), `max-width:640px` for the dock/icon-grid (matches
+  the existing mobile-burger breakpoint). 641-900px (tablet) is a deliberate no-op fallback — plain
+  base layout, already responsive, already tested — rather than a third half-tuned chrome variant.
+
+**`.prism-beam` z-index gotcha (only matters on pages that carry both `.prism-beam` and
+`os-chrome`, currently just `index.html`)**: once `.hero > .wrap` gets an opaque window-panel
+background, a `.prism-beam` positioned as a *sibling* of `.wrap` (the pre-chrome markup) would sit
+fully behind that new opaque panel and vanish. Fixed by moving `.prism-beam` to be the first child
+*inside* `.hero-body` instead, with the real hero text wrapped in one more div, `.hero-content`
+(`position:relative;z-index:1`), so the beam (`position:absolute;z-index:0`, unchanged CSS) paints
+behind the text but on top of the now-opaque panel background — and its bleed (`right:-40px`) gets
+tastefully clipped by the panel's `overflow:hidden` instead of hanging off the page. `algformer.html`
+also carries `.prism-beam` but is NOT yet on `os-chrome`, so it's unaffected today; **when
+`algformer.html` is swept, its hero markup needs the same `.hero-content` wrapper**, or its beam will
+silently disappear behind the new window panel — this is the one page in the remaining 14 where the
+"zero-markup" claim above doesn't hold and an extra wrapper is required.
+
+**Verified this pass**: reachability walk re-run (see Navigation section above) — unaffected by
+chrome, since no href changed, only presentation + a wrapping-div restructure of the hero. Read all
+3 files back after editing to confirm well-formed nesting (hero-bar/hero-body/hero-content close
+correctly, no orphaned tags). Did NOT verify in an actual browser (no visual proof beyond reading the
+generated HTML/CSS) — the coordinator/user should eyeball the 3 pages at a real ≥901px and a real
+≤640px width before this is swept further; described here as the shape built, not a screenshot-
+verified render.
+
+**Sweep recipe for the remaining 14 pages** (once this subset is approved): add `class="os-chrome"`
+to `<body>`; add nav-links `Tools` (`/#tools`) in place of the old `HoloDb` slot, keeping any
+page-specific extra items after it; wrap the hero's real content in `<div class="hero-bar"
+aria-hidden="true"><span class="win-dots">...</span><span class="hero-bar-title">NAME.app</span>
+</div><div class="hero-body">...</div>`; if the page also carries `.prism-beam` (only
+`algformer.html` today), additionally wrap the real text in `.hero-content` per the gotcha above.
+Everything else (`.sec` window framing, taskbar styling) needs no further HTML changes — it's already
+live in `site.css` and activates the moment `os-chrome` is on the page.
+
+**Recommendation, not acted on (Showroom is out of scope for this agent)**: the same chrome system
+(taskbar-style nav, window-panel framing) would read as a natural extension into `Showroom/`'s own
+UI for a cohesive OS feel across the whole site+tools experience — flagged for the coordinator to
+route to `showroom-owner` if wanted, not something to reach into from here.
 
 ## Deploy
 
@@ -470,8 +605,9 @@ the compaction pass should happen when the architecture lands, not before.
   shared class into `site.css` first rather than copy-pasting the inline styles a third time.
 - New package coming: bootstrap its page the same way — read `MonoRepo/<Pkg>/docs/site.md` (+
   `PACKAGE.md`/`CLAUDE.md`/csproj `<Version>` for facts), copy the page template shape from any
-  existing plain product page (e.g. `phasor.html`) INCLUDING its lean nav (`Home · HoloDb ·
-  Packages · NuGet`) and its `.related` pills row, add it to `index.html`'s gallery (pick a category
+  existing plain product page (e.g. `phasor.html`) INCLUDING its lean nav (`Home · Packages · Tools ·
+  NuGet` — see Navigation section; NOT the older HoloDb-pinned shape some of the 14 not-yet-swept
+  pages still carry) and its `.related` pills row, add it to `index.html`'s gallery (pick a category
   colour, add the `.card-link` overlay — this alone makes it reachable in ≤2 clicks from every page
   via Home/Packages → the gallery, so it's the step that actually matters), then add it into the
   `.related` pills of its closest 1-2 siblings (not every page — contextual, not exhaustive), add the

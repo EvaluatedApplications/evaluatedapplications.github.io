@@ -220,6 +220,175 @@ footer.site a{color:var(--ink-soft)}
 }
 @media (prefers-reduced-motion:reduce){*{transition:none!important; scroll-behavior:auto}}
 
+/* ================================================================================
+   OS CHROME — opt-in via <body class="os-chrome">. Desktop/wide viewports get a
+   window-panel treatment (bordered "window" frame around .hero and every .sec that
+   carries a .sec-head, a titlebar with decorative traffic-light dots, a floating
+   taskbar/dock nav); narrow viewports get a phone-home-screen treatment (nav
+   collapses to a fixed bottom icon dock, the #packages/#tools galleries become an
+   app-icon grid). Tablet widths (641-900px) intentionally fall back to the plain
+   base layout above — no window chrome, no dock — the same responsive layout every
+   other page already uses. CHROME ONLY: no JS, no window drag/resize; every element
+   this touches is real, already-linked HTML (nav <a>, .card-link, a.tool) — hiding
+   description text on a mobile icon tile hides text, never a link. Decorative-only
+   markup (.hero-bar, .win-dots) is aria-hidden; .sec-head's traffic dots are a
+   zero-markup ::before/box-shadow trio so EVERY page that already has a .sec-head
+   inherits window framing the moment os-chrome is added — no per-section HTML edit
+   needed. See CLAUDE.md "OS chrome" for the page rollout list + the sweep recipe.
+   ================================================================================ */
+
+body.os-chrome{
+  background:
+    radial-gradient(1100px 560px at 12% -8%, color-mix(in srgb,var(--accent) 9%,transparent), transparent 60%),
+    radial-gradient(900px 520px at 100% 0%, color-mix(in srgb,var(--c-data) 7%,transparent), transparent 55%),
+    var(--bg);
+}
+
+/* shared window-titlebar traffic-light dots — real (empty, aria-hidden-parent) markup,
+   used inside .hero-bar; sits alongside the CSS-only version .sec-head grows below. */
+.win-dots{display:inline-flex; gap:6px; flex:none}
+.win-dots i{display:block; width:9px; height:9px; border-radius:50%}
+.win-dots i:nth-child(1){background:var(--bad)}
+.win-dots i:nth-child(2){background:var(--warn)}
+.win-dots i:nth-child(3){background:var(--ok)}
+
+/* hero splits into a titlebar (.hero-bar, desktop-only chrome) + a body (.hero-body,
+   always present) so at narrow/tablet widths — where .hero-bar just stays hidden —
+   .hero-body renders its children exactly like the old flat hero, unchanged. */
+body.os-chrome .hero-bar{display:none}
+.hero-body{position:relative}
+.hero-content{position:relative; z-index:1} /* only needed on the page(s) that also nest .prism-beam in .hero-body */
+.hero-bar-title{font-family:var(--mono); font-size:.78rem; color:var(--ink-faint); letter-spacing:.02em}
+
+@media (min-width:901px){
+  body.os-chrome .hero{padding:22px 0 10px}
+  body.os-chrome .hero > .wrap{
+    max-width:calc(var(--wrap) + 60px); /* matches .sec:has(.sec-head)'s own max-width below, so
+      window edges line up as you scroll from the hero into the first section, not two different
+      panel widths stacked on top of each other */
+    position:relative; z-index:1; background:var(--surface); border:1px solid var(--border-2);
+    border-radius:calc(var(--radius) + 2px); overflow:hidden;
+    box-shadow:0 32px 64px -36px rgba(0,0,0,.65), inset 0 1px 0 rgba(255,255,255,.03),
+               inset 0 0 0 1px color-mix(in srgb,var(--accent) 14%,transparent);
+  }
+  body.os-chrome .hero-bar{display:flex; align-items:center; gap:12px; padding:13px 22px;
+      background:var(--surface-2); border-bottom:1px solid var(--border)}
+  body.os-chrome .hero-body{padding:32px 36px 36px}
+
+  /* every .sec that carries a .sec-head becomes its own window: bordered panel, the
+     .sec-head bleeds edge-to-edge as its titlebar, a zero-markup ::before/box-shadow
+     trio stands in for window-control dots. Sections that are just a lone .stack
+     callout (no .sec-head) are left unframed on purpose: .stack is already its own
+     bordered card, so wrapping it in a second frame would be a double border, not
+     a widget — it reads fine floating on the desktop background as-is. */
+  body.os-chrome .sec:has(.sec-head){
+    max-width:calc(var(--wrap) + 60px); margin:26px auto; padding:0;
+    background:var(--surface); border:1px solid var(--border); border-radius:var(--radius);
+    box-shadow:0 26px 54px -32px rgba(0,0,0,.6), inset 0 1px 0 rgba(255,255,255,.02);
+    overflow:hidden;
+  }
+  body.os-chrome .sec:has(.sec-head) > .wrap{max-width:none; margin:0; padding:0 30px 30px}
+  body.os-chrome .sec-head{position:relative; margin:0 -30px 22px; padding:16px 30px;
+      background:var(--surface-2); border-top:0; border-bottom:1px solid var(--border)}
+  body.os-chrome .sec > .wrap > .sec-head:first-child{padding-left:78px; border-radius:var(--radius) var(--radius) 0 0}
+  body.os-chrome .sec > .wrap > .sec-head:first-child::before{
+    content:""; position:absolute; left:30px; top:50%; transform:translateY(-50%);
+    width:9px; height:9px; border-radius:50%; background:var(--bad);
+    box-shadow:16px 0 0 var(--warn), 32px 0 0 var(--ok);
+  }
+  body.os-chrome .sec-head:not(:first-child){margin-top:38px; border-top:1px solid var(--border)}
+
+  /* taskbar/dock: the same .site-nav, floated as a rounded chrome bar off the top
+     edge; each link renders as a small app-tile pill (colour-cycled through the
+     brand spectrum, see the shared rule below) instead of a plain text link. */
+  body.os-chrome .site-nav{
+    top:10px; margin:10px auto 0; max-width:calc(var(--wrap) + 60px);
+    background:color-mix(in srgb,var(--bg-2) 82%,transparent); backdrop-filter:blur(16px) saturate(1.3);
+    border:1px solid var(--border); border-radius:16px;
+    box-shadow:0 20px 42px -26px rgba(0,0,0,.65), inset 0 1px 0 rgba(255,255,255,.03);
+  }
+  body.os-chrome .site-nav .wrap{padding:0 18px; min-height:56px}
+  body.os-chrome .brand{padding:6px 12px 6px 8px; border-radius:11px; background:var(--surface); border:1px solid var(--border)}
+  body.os-chrome .nav-links a{display:inline-flex; align-items:center; gap:8px; padding:7px 12px; border-radius:10px}
+  body.os-chrome .nav-links a:hover{background:var(--surface-2); color:var(--ink)}
+  body.os-chrome .nav-links a.active{background:var(--surface-2); color:var(--ink)}
+  body.os-chrome .nav-links a::before{width:14px; height:14px; border-radius:5px}
+}
+
+/* app-tile colour cycle for nav-link icon squares — declared once (unsized here, sized
+   per breakpoint above/below) so the desktop pills and the mobile dock read as the
+   same component wearing two sizes, not two different things. */
+body.os-chrome .nav-links a::before{content:""; flex:none; display:block; background:var(--surface-2); border:1px solid var(--border-2)}
+body.os-chrome .nav-links a:nth-child(1)::before{background:linear-gradient(135deg,var(--spectrum-1),var(--spectrum-3)); border-color:transparent}
+body.os-chrome .nav-links a:nth-child(2)::before{background:linear-gradient(135deg,var(--spectrum-4),var(--spectrum-5)); border-color:transparent}
+body.os-chrome .nav-links a:nth-child(3)::before{background:linear-gradient(135deg,var(--spectrum-5),var(--spectrum-6)); border-color:transparent}
+body.os-chrome .nav-links a:nth-child(4)::before{background:linear-gradient(135deg,var(--spectrum-6),var(--spectrum-7)); border-color:transparent}
+body.os-chrome .nav-links a:nth-child(5)::before{background:linear-gradient(135deg,var(--spectrum-2),var(--spectrum-4)); border-color:transparent}
+body.os-chrome .nav-links a:nth-child(6)::before{background:linear-gradient(135deg,var(--spectrum-3),var(--spectrum-6)); border-color:transparent}
+
+@media (max-width:640px){
+  /* phone home screen: nav collapses to a fixed bottom icon dock (always visible,
+     no burger / no slide-down list) instead of the CSS-only checkbox menu the plain
+     site uses at this width. */
+  body.os-chrome{padding-bottom:78px}
+  body.os-chrome .site-nav .nav-toggle,
+  body.os-chrome .site-nav .nav-burger{display:none}
+  body.os-chrome .site-nav .wrap{min-height:52px}
+  body.os-chrome .site-nav .nav-links{
+    display:flex; position:fixed; left:0; right:0; bottom:0; z-index:30;
+    flex-wrap:nowrap; justify-content:space-around; align-items:center; gap:0;
+    padding:8px 6px calc(6px + env(safe-area-inset-bottom));
+    background:color-mix(in srgb,var(--bg-2) 94%,transparent); backdrop-filter:blur(14px);
+    border-top:1px solid var(--border); box-shadow:0 -10px 26px -14px rgba(0,0,0,.55);
+  }
+  body.os-chrome .site-nav .nav-links a{
+    flex:1; min-width:0; display:flex; flex-direction:column; align-items:center; gap:4px;
+    padding:4px 2px; border-radius:10px; font-size:.66rem; text-align:center;
+  }
+  body.os-chrome .site-nav .nav-links a::before{width:22px; height:22px; border-radius:7px}
+  body.os-chrome .site-nav .nav-links a.active{color:var(--ink)}
+
+  /* #packages / #tools become an icon grid: the SAME real cards, the SAME real links
+     (the stretched .card-link overlay / a.tool anchor still cover the whole tile) —
+     description/install/links text is hidden, not removed, so the one-tap-away
+     destination page is where the detail lives, exactly like tapping a phone app icon. */
+  body.os-chrome #packages .grid,
+  body.os-chrome #tools .grid{
+    grid-template-columns:repeat(auto-fill,minmax(76px,1fr)); gap:22px 12px; margin-top:2px;
+  }
+  body.os-chrome #packages .grid > .card,
+  body.os-chrome #tools .grid > .card{
+    position:relative; display:flex; flex-direction:column; align-items:center; gap:8px;
+    padding:0; border:0; background:none; border-radius:0; text-align:center; overflow:visible;
+  }
+  body.os-chrome #packages .grid > .card:hover,
+  body.os-chrome #tools .grid > .card:hover{transform:none; background:none; border-color:transparent}
+  body.os-chrome #packages .grid > .card::before,
+  body.os-chrome #tools .grid > .card::before{
+    content:""; position:static; display:block; width:56px; height:56px; border-radius:16px;
+    background:linear-gradient(155deg, var(--cat,var(--accent)), color-mix(in srgb,var(--cat,var(--accent)) 45%, var(--bg-2)));
+    box-shadow:0 10px 18px -10px color-mix(in srgb,var(--cat,var(--accent)) 65%,transparent), inset 0 1px 0 rgba(255,255,255,.22);
+  }
+  body.os-chrome #packages .grid > .card .card-top,
+  body.os-chrome #tools .grid > .card .card-top{flex-direction:column; gap:2px; align-items:center}
+  body.os-chrome #packages .grid > .card h3,
+  body.os-chrome #tools .grid > .card h3{font-size:.76rem; font-weight:600}
+  body.os-chrome #packages .grid > .card .ver,
+  body.os-chrome #packages .grid > .card .pkgid,
+  body.os-chrome #packages .grid > .card .desc,
+  body.os-chrome #packages .grid > .card .note,
+  body.os-chrome #packages .grid > .card .install,
+  body.os-chrome #packages .grid > .card .links,
+  body.os-chrome #tools .grid > .card .tag,
+  body.os-chrome #tools .grid > .card .ver,
+  body.os-chrome #tools .grid > .card .desc,
+  body.os-chrome #tools .grid > .card .go-in{display:none}
+}
+@media (max-width:640px) and (prefers-reduced-motion:no-preference){
+  body.os-chrome #packages .grid > .card:active::before,
+  body.os-chrome #tools .grid > .card:active::before{transform:scale(.92); transition:transform .1s ease}
+}
+
 /* ---- Blazor tools app: loading shell + error ui ---- */
 #app:has(.loading-progress){min-height:70vh; display:flex; flex-direction:column; align-items:center; justify-content:center; background:var(--bg)}
 .loading-progress{position:relative; display:block; width:6rem; height:6rem}
