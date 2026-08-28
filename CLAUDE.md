@@ -591,6 +591,68 @@ removal, glass window panels, or the `#packages`/`#tools` mobile icon grid (`.ca
 `data-initial`) — all confirmed working per the screenshot and out of this pass's scope. The
 coordinator/user should re-check on the same real phone before this is considered closed.
 
+**Real-device review pass (2026-08-28, fourth round) — `#tools` mobile redesign + a re-trace of the
+Creature icon-tile bug, `site.css` only (no HTML changes, `index.html` untouched)**:
+
+6. **User's own words, real phone screenshot of `#tools`**: "Looks like garbage, bigger space for
+   each app with explanation under not buttons, it's should funnel people in." The icon-grid
+   treatment `#tools` shared with `#packages` (56px tile + one-word label, `.desc`/`.powered`/`.tag`/
+   `.ver`/`.install` all hidden) was the wrong shape for a section whose whole job is convincing a
+   visitor to tap into a live tool. **Fixed by pulling `#tools` out of the shared icon-grid selector
+   set entirely** and giving it its own mobile block: single-column `.grid` (`grid-template-columns:
+   1fr`), the real desktop `.card` un-shrunk (name, `live` tag, package chip, full `.desc`, the
+   "Powered by" `.powered` pill row, and `.go-in` all stay visible — nothing new hidden), `.go-in`
+   additionally styled as a bordered pill so it reads as a clear CTA. `#packages`'s icon grid is
+   UNCHANGED (still the app-icon pattern) — checked, not assumed, that this was the right split: the
+   user's screenshot and complaint were `#tools`-specific, and `#packages` is a reference index (11
+   items), not something being pitched for a visitor to "try" the way a tool is.
+7. **Traced, not fixed further (real bug status: inconclusive from static reading)**: the Creature
+   tool tile showed bare "Cr" text with NO coloured tile/background behind it (screenshot), while
+   Analyst/Forecaster/Prism's tiles rendered correctly. Traced every rule painting the mobile icon
+   tile (`body.os-chrome #packages .grid > .card::before`, the only one — `#tools` no longer shares
+   it, see finding 6): all 3 `var(--cat,...)` references were ALREADY routed through
+   `var(--cat-root,var(--cat,var(--accent)))` from an earlier pass this session, and `index.html`'s
+   Creature card already sets `--cat-root:var(--c-ml)` explicitly alongside its two-tone gradient
+   `--cat` — the fallback chain resolves to a real solid colour on paper, parens/braces balanced,
+   no bare `var(--cat,...)` call site found anywhere else in `site.css` (grepped exhaustively). Could
+   NOT reproduce a remaining syntax defect by reading the CSS alone (no live browser here) — did not
+   guess a further patch on an unconfirmed cause. **Resolved the actual exposure by construction
+   instead**: since `#tools` (the only page this pattern was live on) is now off the icon-grid
+   pattern entirely per finding 6, there is zero `color-mix()`/gradient-math left running on any
+   `#tools` mobile rule — only a plain `.card::before` 3px accent bar, `background:var(--cat,
+   var(--accent))`, which takes a gradient natively as a background-image (no math applied, already
+   noted safe in an earlier pass's comment). The bug can no longer manifest for tools regardless of
+   root cause. `#packages`'s copy of this same mechanism is presently DORMANT (packages.html isn't
+   on `os-chrome` yet, per the Site map above) — kept correct for whenever it joins, flagged here so
+   the two `--cat-root`-bearing package cards (Phasor, EvalApp) get a real-device check first when
+   that happens, not assumed fine from this pass.
+8. **Real, fixed bug (coordinator-flagged mid-task, verified before landing)**: the mobile icon-tile
+   `::before` (`#packages`, now) never set its own `opacity`, so it silently inherited `opacity:.85`
+   from the unrelated desktop 3px accent-bar rule (`.card::before` near the top of the file, tuned
+   for a thin bar, never meant for a 56px filled tile) — compounded with the tile's own gradient
+   fading its second stop to a 45% `color-mix()`, genuinely saturated brand colours (`--c-data
+   #4aa3ff`, `--c-ml #7d7dff`) read pastel/washed-out. Fixed with an explicit `opacity:1` on the
+   rule. Only reachable on `#packages` today (dormant, same caveat as finding 7) since `#tools` no
+   longer uses this rule at all.
+9. **Bug NOT reproduced from current code, flagged as likely already-covered**: the user's screenshot
+   also showed "Powered by HoloDb"/"Powered by AlgFormerTracer" pill rows overlapping across card
+   boundaries. Root-caused the MECHANISM (not just this instance): the icon-grid `.card` sets
+   `overflow:visible` on a 76px-wide flex column, so anything with `.powered`'s normal flex-wrap
+   sizing (built for a 330px+ desktop card) has nowhere to wrap and bleeds into the neighbouring grid
+   cell — but reading the CURRENT file, `.powered` was already in `#tools`'s icon-grid hide-list
+   (`display:none`) before this pass started, so this exact overlap should NOT have been reproducible
+   from the code as found; either the screenshot predates that hide-list landing, or it's a real gap
+   this agent didn't independently locate. Moot either way after finding 6: `#tools` no longer takes
+   the `overflow:visible`-narrow-column layout branch at all, so `.powered` can only wrap inside its
+   own full-width card now, never escape it, regardless of which explanation is true.
+
+Verified via brace/paren-count parity on the whole `site.css` (212 open / 212 close braces, 430/430
+parens) and by reading the edited block back in full. Still no live browser — every claim above is a
+static CSS trace, described as that. The coordinator/user should re-check `#tools` on the same real
+phone before this is considered closed, specifically: the Creature tile (finding 7, unconfirmed root
+cause even though the exposure is now closed by construction) and the new single-column product-card
+`#tools` layout (finding 6) actually reading as "bigger, funnel-y" rather than just "taller."
+
 **Sweep recipe for the remaining 14 pages** (once this subset is approved): add `class="os-chrome"`
 to `<body>`; nav-links already read the current 3-item `Home · Packages · NuGet` shape sitewide
 (the `Tools` slot this recipe used to add was dropped sitewide in the 2026-08-28 tools-first pivot —
@@ -671,11 +733,42 @@ still being steered; these MEASURED facts hold whichever way it lands:
   breakpoint in `site.css` is subtractive `@media (max-width: …)` (640px and 900px, only two), so
   base styles target desktop and mobile is an override. A mobile-first rebase means `min-width`
   breakpoints and auditing the 15 `:hover`/small-`font-size` occurrences for touch.
-- **Motion hooks already exist** in `site.css`: both `@media (prefers-reduced-motion:no-preference)`
-  and `@media (prefers-reduced-motion:reduce)` blocks are present, so the requested scroll-tied depth
-  system has a correct accessibility opt-out to hang off from day one — it must be gated there, and
-  the effect must be a pure function of scroll position (CSS `animation-timeline: view()`), never a
-  JS scroll handler, or it will fight the mobile performance budget.
+- **Scroll-tied parallax depth + spotlight shadows — BUILT (2026-08-28)**, `site.css` only, search
+  "SCROLL-TIED PARALLAX DEPTH" for the whole system in one place (right after the `body.os-chrome`
+  wallpaper `background` rule). Three layer-aware tiers, each a native CSS scroll-driven animation
+  (`animation-timeline: scroll(root)`/`view()`) — zero JS, no scroll listener anywhere, gated entirely
+  inside `@media (prefers-reduced-motion:no-preference)` (nesting `@media (min-width:901px)` for tiers
+  2-3): **tier "far"** = the `body.os-chrome` wallpaper's own `background-position`, tied to
+  `scroll(root)` (completes only over the WHOLE document scroll — the slowest layer, no shadow, it IS
+  the backdrop everything else casts onto); **tier "near"** = `.prism-beam`, tied to its own `view()`
+  (exits as the hero scrolls away, `translateY(0)->(-22px)`); **tier "mid"** = `.hero > .wrap` +
+  every `.sec:has(.sec-head)` panel, tied to `view()` capped to `animation-range:entry 0% entry 45%`
+  (settles `translateY(10px)->0` as each scrolls into view). Calibrated almost-imperceptible on
+  purpose (small px/blur values) — not verified live, no browser available, verification was
+  brace/paren-balance (226/226, 496/496 after this pass) + a full re-read of the inserted block.
+  **Lighting/shadow layer (folded in same pass, user: "the shadows also generate appropriately for
+  the perceived depth and motion, and angle with the centre of the page being a spotlight")**: each
+  tier's own `@keyframes` step ALSO animates `filter:drop-shadow()` alongside its `transform` — one
+  coupled signal, not a second timeline, so motion and shadow can't desync. Deliberately `filter`, not
+  an animated `box-shadow`: `.hero > .wrap`/`.sec:has(.sec-head)` already carry a tuned STATIC
+  multi-layer `box-shadow` (glass elevation + inset highlight, second real-device pass) that an
+  animated `box-shadow` would have had to silently re-duplicate inside every keyframe; `filter`
+  composites additively on top, untouched. ANGLE is static per element, computed from where it
+  actually sits (`.prism-beam` right-aligned in the hero -> right-of-centre -> shadow lower-LEFT;
+  the centred panels -> straight down) and never itself scroll-reactive; SIZE/opacity is the dynamic
+  part — each keyframe pair's drop-shadow X/Y is an exact scalar multiple of the other (same ratio at
+  both ends) so linear interpolation can only slide along that one ray, never drift angle mid-scroll.
+  "Near" and "mid" deliberately grow in OPPOSITE keyframe directions (near: prominent->receding,
+  shrinks; mid: arriving->settled, grows) because they're opposite phases of a `view()` timeline
+  (exit vs. entry), not an inconsistency — both encode the same rule, "larger shadow = closer/more
+  present," just at different points in each tier's own lifecycle. No element on the page today sits
+  left-of-centre, so the lower-right case is unexercised (documented in `site.css`, same X-offset-sign
+  convention extends cleanly if one shows up later). **Honest gap**: `filter` is not a pure-compositor
+  property like `transform`/`opacity` and can trigger repaint as it's driven — kept blur/spread radii
+  small and the affected element count low (≤ ~7 panels on the richest page) to bound the cost, but
+  real jank/no-jank on a live device is unverified, same caveat as every other motion change this
+  session. Motion hooks (`prefers-reduced-motion` gating) existed in `site.css` before this pass and
+  were reused as designed, not newly added.
 
 ### `HoloKernel/` — the shared model kernel (Phase 1, landed 2026-08-28 — **ported into all three
 live-brain tools by showroom-owner the same day**, status correction from showroom-owner with

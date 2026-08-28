@@ -265,9 +265,13 @@ footer.site a{color:var(--ink-soft)}
    OS CHROME — opt-in via <body class="os-chrome">. Desktop/wide viewports get a
    window-panel treatment (bordered "window" frame around .hero and every .sec that
    carries a .sec-head, a titlebar with decorative traffic-light dots, a floating
-   taskbar/dock nav); narrow viewports get a phone-home-screen treatment (nav
-   collapses to a fixed bottom icon dock, the #packages/#tools galleries become an
-   app-icon grid). Tablet widths (641-900px) intentionally fall back to the plain
+   taskbar/dock nav); narrow viewports get a phone-home-screen treatment for nav (a
+   fixed bottom icon dock) and for #packages specifically (its gallery becomes an
+   app-icon grid). #tools does NOT share the icon-grid treatment (pulled out
+   2026-08-28, see the dedicated #tools mobile block below the #packages one — full-
+   width product cards with description/tag/powered-by all visible instead, a
+   deliberate redesign, not an oversight if you're diffing against #packages).
+   Tablet widths (641-900px) intentionally fall back to the plain
    base layout above — no window chrome, no dock — the same responsive layout every
    other page already uses. CHROME ONLY: no JS, no window drag/resize; every element
    this touches is real, already-linked HTML (nav <a>, .card-link, a.tool) — hiding
@@ -290,6 +294,141 @@ body.os-chrome{
     radial-gradient(820px 480px at 46% 104%, color-mix(in srgb,var(--spectrum-1) 7%,transparent), transparent 55%),
     var(--bg);
 }
+
+/* ================================================================================
+   SCROLL-TIED PARALLAX DEPTH + SPOTLIGHT SHADOWS (2026-08-28, platform initiative
+   motion hook — see CLAUDE.md "Platform initiative": "the requested scroll-tied
+   depth system... must be gated [behind prefers-reduced-motion:no-preference], and
+   the effect must be a pure function of scroll position (CSS animation-timeline:
+   view()), never a JS scroll handler, or it will fight the mobile performance
+   budget"). Three layer-aware tiers, each a NATIVE CSS scroll-driven animation
+   (animation-timeline: scroll()/view()) — zero JS, zero new DOM, no scroll
+   listener anywhere in the codebase to fight the mobile perf budget. Calibrated
+   almost imperceptible ON PURPOSE: this should read as "the desktop has real
+   depth" on close inspection, not as a visible animated flourish — if you can
+   point at the motion mid-scroll without hunting for it, it's tuned too high.
+   Browsers without scroll-driven-animations support simply don't recognise
+   `animation-timeline` and ignore these rules outright — a static site.css, same
+   as today, no fallback code needed; this is pure progressive enhancement.
+
+   LIGHTING MODEL (folded in from the start, not bolted on — user: "since we are
+   simulating distance and motion between the layers have the shadows also
+   generate appropriately for the perceived depth and motion, and angle with the
+   centre of the page being a spotlight"). One coupled signal per tier, not two:
+   the SAME @keyframes step that moves an element also grows/shrinks a
+   `filter:drop-shadow()` layer, so motion and shadow can never desync (there is
+   no second timeline or JS to keep in sync — same animation-timeline, same
+   progress, more properties on it). Deliberately `filter:drop-shadow()`, NOT an
+   animated `box-shadow`: `.hero > .wrap` and `.sec:has(.sec-head)` already carry
+   a carefully-tuned STATIC multi-layer `box-shadow` (the glass-panel elevation +
+   inset highlight from the second real-device pass) — animating `box-shadow`
+   replaces the WHOLE property value per keyframe, which would mean silently
+   re-deriving/duplicating those existing tuned layers inside every keyframe step
+   (real risk of a transcription drift between the static and animated copies).
+   `filter:drop-shadow()` is a separate property that composites additively on
+   top of the untouched static `box-shadow` — one new depth cue layered on, the
+   existing elevation shadow is never touched or duplicated.
+   ANGLE is static per element (author-time, from where it actually sits in the
+   layout — never itself scroll-reactive, exactly as asked), SIZE/opacity is the
+   dynamic scroll-driven part: each pair of drop-shadow() keyframe values below is
+   an exact scalar multiple of the other (same X:Y ratio at both ends, e.g.
+   -5px:10px -> -2px:4px is the same -1:2 direction scaled by 0.4) so linear
+   interpolation between them can only ever slide along that one ray — the shadow
+   direction is mathematically incapable of drifting mid-scroll, only its length/
+   blur/opacity can. Per-element angle, matching where each actually sits:
+   `.prism-beam` is right-aligned in the hero (`right:-40px`) -> right-of-centre
+   -> shadow toward the lower-LEFT; `.hero > .wrap` / `.sec:has(.sec-head)` are
+   both centred (`margin:...auto`, `max-width`-capped) -> dead-centre -> shadow
+   straight down. No element in this pass sits left-of-centre, so there's no
+   lower-right example live on the page today — the SAME convention (X-offset
+   sign = which side of centre-x the element sits on) extends cleanly to one if a
+   future left-aligned decorative element is ever added to a chrome page; don't
+   hand-roll a different convention for it.
+   The two tiers use OPPOSITE growth directions for a reason, not an inconsistency:
+   `.prism-beam` (tier "near") is a `view()`-timeline EXIT — it's already visible
+   at page load with no scroll room above it, so the only real motion is scrolling
+   the hero away — from(prominent, larger shadow) -> to(exiting/receding, smaller,
+   fainter shadow). The panels (tier "mid") are a `view()`-timeline ENTRY/settle —
+   from(just arriving, smaller/fainter shadow) -> to(settled into place, larger,
+   richer shadow). Both read the same underlying rule ("larger shadow = closer/
+   more present"), just applied at opposite ends of two different tiers' own
+   lifecycles. The wallpaper (tier "far") gets NO shadow at all, on purpose — it
+   IS the backdrop everything else casts a shadow onto, not another object with
+   depth of its own.
+   HONEST PERF NOTE (measured/flat, not oversold — no live browser here to
+   profile): unlike `transform`/`opacity`, `filter` is not a pure compositor
+   property and CAN trigger repaint as it's driven. Kept the blur/spread radii
+   small and the element count low (1 beam + 1 hero panel + however many
+   `.sec:has(.sec-head)` panels a given page has, never more than ~6) to bound the
+   cost, but real jank/no-jank on a real device is unverified — same caveat as
+   every other motion change in this pass. */
+@media (prefers-reduced-motion:no-preference){
+  @keyframes ea-parallax-far{
+    from{background-position:0% 0%, 0% 0%, 0% 0%, 0% 0%}
+    to{background-position:0% 4%, 0% -3%, 0% 2%, 0% 0%}
+  }
+  @keyframes ea-parallax-near{
+    from{transform:translateY(0); filter:drop-shadow(-5px 10px 8px rgba(0,0,0,.20))}
+    to{transform:translateY(-22px); filter:drop-shadow(-2px 4px 3px rgba(0,0,0,.08))}
+  }
+  @keyframes ea-parallax-mid{
+    from{transform:translateY(10px); filter:drop-shadow(0 4px 5px rgba(0,0,0,.08))}
+    to{transform:translateY(0); filter:drop-shadow(0 12px 16px rgba(0,0,0,.24))}
+  }
+
+  /* Tier 1 "far" — the wallpaper itself (the body.os-chrome background painted
+     immediately above). Tied to scroll(root), the FULL document's own scroll
+     range, so the shift only completes once you've scrolled the entire page —
+     by far the slowest-reading layer of the three, exactly what a distant
+     backdrop should do. 4 background-position values because the background
+     above paints 4 layers (3 radial-gradients + the solid --bg base) — if that
+     declaration ever gains/loses a layer, update the value count here to match,
+     or background-position will cycle to the wrong layer. */
+  body.os-chrome{
+    animation-name:ea-parallax-far;
+    animation-timing-function:linear;
+    animation-timeline:scroll(root);
+  }
+
+  @media (min-width:901px){
+    /* Tier 2 "near" — .prism-beam, the hero's decorative beam/spectrum graphic.
+       Tied to view(), scoped to the BEAM'S OWN visibility (not the whole
+       document), so it drifts specifically across the hero's own scroll-past,
+       not diluted by total page length — the fastest-reading, most "foreground"
+       of the three tiers. Gated >=901px to match .prism-beam's own base rule
+       (display:none below 900px) — redundant with that but kept explicit so
+       this tier's scope reads in one place without cross-referencing. */
+    body.os-chrome .prism-beam{
+      animation-name:ea-parallax-near;
+      animation-timing-function:linear;
+      animation-timeline:view();
+    }
+
+    /* Tier 3 "mid" — the window panels themselves (.hero > .wrap's glass panel,
+       every .sec:has(.sec-head) panel). Each settles a few px as it scrolls into
+       view — animation-range caps the motion to the first 45% of the panel's own
+       entry, so it's a quick settle, not a long slow drift. Deliberately a
+       DIFFERENT rate, direction and technique than tier 2 (smaller displacement,
+       translateY(+)->0 "settle" instead of an outward drift, capped by
+       animation-range instead of running the panel's full visibility) so the
+       three tiers read as genuinely different depths, not one motion recipe
+       copy-pasted three times. Scoped >=901px — the same breakpoint the glass
+       window-panel treatment itself uses (see the panel rules above); the flat,
+       unchromed .hero>.wrap/.sec below 901px isn't part of the "floating window"
+       motif this depth system is dressing up, so it stays motionless there.
+       animation-fill-mode:both holds the resting (already-settled) look outside
+       the active entry range instead of a value from a stale iteration. */
+    body.os-chrome .hero > .wrap,
+    body.os-chrome .sec:has(.sec-head){
+      animation-name:ea-parallax-mid;
+      animation-timing-function:linear;
+      animation-fill-mode:both;
+      animation-timeline:view();
+      animation-range:entry 0% entry 45%;
+    }
+  }
+}
+/* ================================================================================ */
 
 /* shared window-titlebar traffic-light dots — real (empty, aria-hidden-parent) markup,
    used inside .hero-bar; sits alongside the CSS-only version .sec-head grows below. */
@@ -444,63 +583,106 @@ body.os-chrome .nav-links a.active::before{
   body.os-chrome .site-nav .nav-links a::before{width:17px; height:17px; border-radius:4px}
   body.os-chrome .site-nav .nav-links a.active{color:var(--ink)}
 
-  /* #packages / #tools become an icon grid: the SAME real cards, the SAME real links
-     (the stretched .card-link overlay / a.tool anchor still cover the whole tile) —
-     description/install/links text is hidden, not removed, so the one-tap-away
-     destination page is where the detail lives, exactly like tapping a phone app icon. */
-  body.os-chrome #packages .grid,
-  body.os-chrome #tools .grid{
+  /* #packages becomes an icon grid on mobile: the SAME real cards, the SAME real .card-link
+     overlay — description/install/links text is hidden, not removed, so the one-tap-away
+     destination page is where the detail lives, exactly like tapping a phone app icon.
+     #tools USED TO share this exact pattern but was pulled OUT of it entirely (2026-08-28,
+     real-device review, user: "looks like garbage... bigger space for each app with explanation
+     under not buttons... it should funnel people in"). A tool is a live product a visitor is about
+     to try, not a bookmark to a reference page — shrinking it to a 56px icon + one-word label
+     stripped out exactly the copy that convinces someone to tap in. See the dedicated #tools block
+     below this one for its own, deliberately un-shrunk treatment; don't re-add #tools to any
+     selector in this #packages block without re-reading both bug writeups in CLAUDE.md first. */
+  body.os-chrome #packages .grid{
     grid-template-columns:repeat(auto-fill,minmax(76px,1fr)); gap:22px 12px; margin-top:2px;
   }
-  body.os-chrome #packages .grid > .card,
-  body.os-chrome #tools .grid > .card{
+  body.os-chrome #packages .grid > .card{
     position:relative; display:flex; flex-direction:column; align-items:center; gap:8px;
     padding:0; border:0; background:none; border-radius:0; text-align:center; overflow:visible;
   }
-  body.os-chrome #packages .grid > .card:hover,
-  body.os-chrome #tools .grid > .card:hover{transform:none; background:none; border-color:transparent}
+  body.os-chrome #packages .grid > .card:hover{transform:none; background:none; border-color:transparent}
   /* Icon glyph, not a blank tinted square (2nd review flag): content:attr(data-initial) pulls a
-     1-2 letter mark from each .card/a.tool's own data-initial attribute (set once in the HTML,
-     see index.html) — no new DOM element, no image asset, no icon font. Falls back to an empty,
+     1-2 letter mark from each .card's own data-initial attribute (set once in the HTML, see
+     packages.html) — no new DOM element, no image asset, no icon font. Falls back to an empty,
      plain-tinted square if a future card is added without the attribute (graceful, not broken).
      GOTCHA (found 2026-08-28, tools-first pivot, docs/brand-identity.md §2): --cat can now hold a
-     GRADIENT (Foundation cards, the Creature tool chord) — color-mix() requires a real <color> and
-     can't take a gradient as an input, and a gradient can't be nested as a single colour-stop inside
-     this rule's own linear-gradient() either. Every var(--cat,var(--accent)) reference in THIS rule
-     falls back through --cat-root first (a plain solid colour, set alongside --cat only where --cat
-     itself is a gradient — see the .card style="" attributes in index.html/packages.html) before
-     falling to --cat, so this rule always resolves to a real solid colour even when --cat can't be
-     used directly. This is the only call site in site.css with this constraint — the plain
-     .card::before accent-bar rule near the top of the file is fine as-is (background alone accepts
-     a gradient). */
-  body.os-chrome #packages .grid > .card::before,
-  body.os-chrome #tools .grid > .card::before{
+     GRADIENT (Foundation cards) — color-mix() requires a real <color> and can't take a gradient as
+     an input, and a gradient can't be nested as a single colour-stop inside this rule's own
+     linear-gradient() either. Every var(--cat,var(--accent)) reference in THIS rule falls back
+     through --cat-root first (a plain solid colour, set alongside --cat only where --cat itself is
+     a gradient — see the .card style="" attributes in packages.html) before falling to --cat, so
+     this rule always resolves to a real solid colour even when --cat can't be used directly. This
+     is the only call site in site.css with this constraint — the plain .card::before accent-bar
+     rule near the top of the file is fine as-is (background alone accepts a gradient).
+     RE-VERIFIED 2026-08-28 (real-device review flagged the Creature tool tile blank on-phone,
+     "Cr" showing text with no coloured tile behind it at all): traced this exact fallback chain
+     against index.html's Creature card (--cat a two-tone gradient, --cat-root explicitly set to
+     var(--c-ml)) — the chain resolves correctly on paper (--cat-root present -> its var(--c-ml)
+     fallback branch is never even evaluated) and every var(--cat,...) in this rule was already
+     routed through --cat-root before this pass; could not reproduce a remaining syntax defect by
+     reading the CSS (no live browser here to confirm/deny a device-specific rendering quirk).
+     Rather than patch an unconfirmed root cause, #tools (the only page this tile pattern was live
+     on) was pulled out of this rule entirely below — the exposure for tools is now closed by
+     construction, not by a further fallback tweak. #packages itself doesn't carry this pattern on
+     any os-chrome page yet (packages.html isn't on os-chrome — see CLAUDE.md), so this whole rule
+     is presently DORMANT; the mechanism above is kept correct for whenever that page joins os-chrome,
+     at which point Phasor/EvalApp (the only two --cat-root-bearing package cards) are the ones to
+     re-check on a real device first.
+     OPACITY FIX (2026-08-28, coordinator flag on real-device review): this ::before inherited
+     `opacity:.85` from the UNRELATED .card::before accent-bar rule up top (tuned for a thin 3px
+     desktop bar, never meant for a 56px filled tile) purely because this rule never set its own
+     opacity — compounded with the second gradient stop already fading to a 45% colour-mix, brand
+     colours that are NOT pastel (--c-data #4aa3ff, --c-ml #7d7dff) read washed-out once both
+     softenings stacked. Explicit opacity:1 here breaks that inheritance regardless of what the
+     accent-bar rule does. */
+  body.os-chrome #packages .grid > .card::before{
     content:attr(data-initial); position:static; display:flex; align-items:center; justify-content:center;
-    width:56px; height:56px; border-radius:16px;
+    width:56px; height:56px; border-radius:16px; opacity:1;
     font-family:var(--font); font-weight:800; font-size:1.02rem; letter-spacing:-.02em;
     color:rgba(255,255,255,.94); text-shadow:0 1px 3px rgba(0,0,0,.35);
     background:linear-gradient(155deg, var(--cat-root,var(--cat,var(--accent))), color-mix(in srgb,var(--cat-root,var(--cat,var(--accent))) 45%, var(--bg-2)));
     box-shadow:0 10px 18px -10px color-mix(in srgb,var(--cat-root,var(--cat,var(--accent))) 65%,transparent), inset 0 1px 0 rgba(255,255,255,.22);
   }
-  body.os-chrome #packages .grid > .card .card-top,
-  body.os-chrome #tools .grid > .card .card-top{flex-direction:column; gap:2px; align-items:center}
-  body.os-chrome #packages .grid > .card h3,
-  body.os-chrome #tools .grid > .card h3{font-size:.76rem; font-weight:600}
+  body.os-chrome #packages .grid > .card .card-top{flex-direction:column; gap:2px; align-items:center}
+  body.os-chrome #packages .grid > .card h3{font-size:.76rem; font-weight:600}
   body.os-chrome #packages .grid > .card .ver,
   body.os-chrome #packages .grid > .card .pkgid,
   body.os-chrome #packages .grid > .card .desc,
   body.os-chrome #packages .grid > .card .note,
   body.os-chrome #packages .grid > .card .install,
-  body.os-chrome #packages .grid > .card .links,
-  body.os-chrome #tools .grid > .card .tag,
-  body.os-chrome #tools .grid > .card .ver,
-  body.os-chrome #tools .grid > .card .desc,
-  body.os-chrome #tools .grid > .card .powered,
-  body.os-chrome #tools .grid > .card .go-in{display:none}
+  body.os-chrome #packages .grid > .card .links{display:none}
+
+  /* #tools mobile treatment (2026-08-28 REDESIGN — replaces the icon-grid pattern above for this
+     section only): full-width single-column cards, the SAME real .card/.card-link/.powered markup
+     as desktop, un-shrunk — name, live tag, package version chip, full description, and the
+     "Powered by" pill row all stay visible, because the whole point of this pass was to keep the
+     words that make someone tap "Open". Reads as a stacked product showcase (funnel), not a
+     home-screen icon grid.
+     This also structurally CLOSES both real bugs the icon-grid version had for #tools specifically,
+     by removing the failure surface rather than patching around it further:
+     (1) the Creature tool card's --cat is a two-tone gradient (see the long comment on the
+     #packages ::before rule above for the full color-mix()/--cat-root trace) — #tools no longer
+     runs ANY color-mix()/gradient-math rule on mobile at all, only a plain .card::before 3px accent
+     bar (background:var(--cat,var(--accent)); a gradient is a completely valid background-image on
+     its own, no math applied to it, see that rule near the top of this file) — there is nothing
+     left here that could resolve to a blank tile on any device.
+     (2) the icon-grid .card got `overflow:visible` + a 76px-wide flex column so a full-size
+     .powered pill row (sized for a 330px+ desktop card) had nowhere to wrap and could bleed into
+     the neighbouring grid cell the instant it wasn't hidden. #tools no longer takes that layout
+     branch: single column, full card width, normal document flow, .card keeps its base rule's own
+     overflow:hidden (untouched) — .powered (already position:relative;z-index:2 above the
+     .card-link overlay, same as desktop) can only ever wrap within its own card now, never escape
+     it, regardless of viewport width. */
+  body.os-chrome #tools .grid{grid-template-columns:1fr; gap:18px; margin-top:2px}
+  body.os-chrome #tools .grid > .card{padding:24px 22px 22px}
+  body.os-chrome #tools .grid > .card .go-in{
+    display:inline-flex; align-items:center; gap:6px; margin-top:16px;
+    font-family:var(--mono); font-size:.85rem; font-weight:600; color:var(--accent-ink);
+    padding:8px 14px; border:1px solid var(--border-2); border-radius:999px; background:var(--bg-2);
+  }
 }
 @media (max-width:640px) and (prefers-reduced-motion:no-preference){
-  body.os-chrome #packages .grid > .card:active::before,
-  body.os-chrome #tools .grid > .card:active::before{transform:scale(.92); transition:transform .1s ease}
+  body.os-chrome #packages .grid > .card:active::before{transform:scale(.92); transition:transform .1s ease}
 }
 
 /* ---- Blazor tools app: loading shell + error ui ---- */
