@@ -327,8 +327,9 @@
                 // trailing spaces flicker in and out as later characters land; the final decode below trims once).
                 _pendingContinuation = _vocab.Decode(outIds);
                 StateHasChanged();
-                await Task.Delay(20);   // small, deliberate pace so it reads as a live stream — not a network-
+                await Task.Delay(40);   // small, deliberate pace so it reads as a live stream — not a network-
                 // latency simulation, just slow enough for a human eye to follow a locally-computed character feed.
+                // (20ms sat too close to a single browser paint frame and could visibly coalesce into one repaint.)
             }
 
             var shown = _vocab.Decode(outIds).TrimEnd();
