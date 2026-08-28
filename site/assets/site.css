@@ -60,6 +60,25 @@
   --radius:14px; --wrap:1080px;
   --font:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
   --mono:ui-monospace,"Cascadia Code","SF Mono","JetBrains Mono",Menlo,Consolas,monospace;
+  /* VERTICAL RHYTHM (2026-08-28 baseline-grid pass, see CLAUDE.md "Vertical rhythm" for the full
+     audit). --rhythm is derived from body's own type, not invented: font-size:17px x
+     line-height:1.65 = 28.05px, rounded to a clean 28px baseline unit. body's own line-height
+     declaration below stays the unitless 1.65 (NOT switched to var(--rhythm) directly) on
+     purpose: an absolute px line-height would inherit LITERALLY into every smaller-font
+     descendant (every badge/pill/mono label on the site), inflating their line boxes to a full
+     28px regardless of their own font-size — keeping body's ratio unitless is standard CSS
+     practice and still computes to ~28px for body-sized text; --rhythm is the explicit reference
+     everything else in this file is now expressed against instead. Since 28 divides evenly by 4,
+     the working sub-grid is exactly the QUARTER-baseline, 7px (--rhythm-q) — every recalibrated
+     vertical margin/padding/gap/line-height below is a whole multiple of 7px, preferring the
+     larger "rounder" rungs (--rhythm-h 14px, --rhythm-3q 21px, --rhythm 28px, or 35/42/49/56...)
+     wherever the original ad-hoc value already sat close to one. The one deliberate, documented
+     exception: inline pill/badge/chip vertical padding under 7px (.tag, .ver, .fact, .pkg-chip,
+     .related a, .powered a, .copy, .stack .flow span, the small inline code chips) is left OFF
+     this grid on purpose — decorative micro-UI atoms, not part of the vertical reading flow;
+     forcing a 7px floor onto them would visibly bloat compact badges for no rhythm benefit, since
+     their POSITION in the page flow is already governed by their parent's on-grid margin/gap. */
+  --rhythm:28px; --rhythm-3q:21px; --rhythm-h:14px; --rhythm-q:7px;
   /* Parallax GLOW colour (2026-08-28, see "SCROLL-TIED PARALLAX DEPTH" below): the site-wide
      default for the two shadow-tier custom props the parallax keyframes read through. --glow-near
      feeds .prism-beam's own drop-shadow (the beam is a literal white light source in its own SVG,
@@ -110,11 +129,23 @@ body[data-cat="holodb-algformer"]{ --glow-mid-a:var(--c-holodb); --glow-mid-b:va
 html{scroll-behavior:smooth}
 body{
   margin:0; background:var(--bg); color:var(--ink);
-  font-family:var(--font); font-size:17px; line-height:1.65;
+  font-family:var(--font); font-size:17px; line-height:1.65; /* 17*1.65=28.05px ≈ 1 --rhythm
+    baseline (28px) — the value --rhythm is rounded from; kept unitless so it still scales
+    correctly for any descendant that doesn't declare its own line-height, see the --rhythm
+    comment in :root */
   -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility;
 }
 a{color:var(--accent-ink); text-decoration:none}
 a:hover{text-decoration:underline}
+/* Headings are display type, not flowing body copy — a single unitless ratio here can't land
+   every heading instance's own font-size on a 28px multiple at once, so h1/h2/h3 keep a tight,
+   legible ratio (1.15) for THEIR OWN line box; the grid is preserved instead by each heading's own
+   vertical MARGIN (recalibrated below, per selector, to a clean multiple of --rhythm-q) so the
+   text baseline returns to the page grid right after the heading even though the heading's own
+   line doesn't subdivide evenly into it. Where an individual heading selector's real rendered
+   font-size DOES let a clean-multiple line-height fit comfortably (.sec-head h2, .card h3, .stack
+   h2, .prose h2/h3), that selector overrides this base ratio with an explicit on-grid px value
+   below — see each rule's own comment. */
 h1,h2,h3{margin:0; line-height:1.15; letter-spacing:-.02em; font-weight:650}
 .wrap{max-width:var(--wrap); margin:0 auto; padding:0 24px}
 .mono{font-family:var(--mono)}
@@ -124,16 +155,16 @@ h1,h2,h3{margin:0; line-height:1.15; letter-spacing:-.02em; font-weight:650}
 /* ---- nav (with CSS-only mobile menu) ---- */
 .site-nav{position:sticky; top:0; z-index:20; background:color-mix(in srgb,var(--bg-2) 88%,transparent);
     backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px); border-bottom:1px solid var(--border)}
-.site-nav .wrap{display:flex; align-items:center; justify-content:space-between; min-height:62px; gap:12px; flex-wrap:wrap}
+.site-nav .wrap{display:flex; align-items:center; justify-content:space-between; min-height:63px; gap:12px; flex-wrap:wrap} /* 63px=9*--rhythm-q, was 62 */
 .brand{display:flex; align-items:center; gap:11px; color:var(--ink); font-weight:650; letter-spacing:-.01em}
 .brand:hover{text-decoration:none}
 .mark{width:22px; height:22px; flex:none}
 .nav-links{display:flex; gap:22px; align-items:center}
-.nav-links a{color:var(--ink-soft); font-size:.94rem}
+.nav-links a{color:var(--ink-soft); font-size:.94rem; line-height:21px} /* 3/4 baseline, single-line nav label */
 .nav-links a:hover{color:var(--ink); text-decoration:none}
 .nav-links a.active{color:var(--ink)}
 .nav-toggle{position:absolute; opacity:0; pointer-events:none}
-.nav-burger{display:none; flex-direction:column; gap:5px; cursor:pointer; padding:8px; margin:-8px; border-radius:8px}
+.nav-burger{display:none; flex-direction:column; gap:5px; cursor:pointer; padding:8px; margin:-8px; border-radius:8px} /* gap/padding intentionally off the rhythm grid: a fixed-size (22px) icon glyph's own internal spacing, not page-flow rhythm */
 .nav-burger span{display:block; width:22px; height:2px; background:var(--ink-soft); border-radius:2px; transition:transform .2s, opacity .2s}
 
 @media (max-width:640px){
@@ -150,8 +181,8 @@ h1,h2,h3{margin:0; line-height:1.15; letter-spacing:-.02em; font-weight:650}
      be mutually exclusive (plain-site menu vs. os-chrome dock) must exclude each other's SCOPE
      outright, not rely on winning every individual property one at a time. */
   body:not(.os-chrome) .nav-burger{display:flex}
-  body:not(.os-chrome) .nav-links{display:none; flex-basis:100%; flex-direction:column; align-items:flex-start; gap:2px; padding:6px 0 12px}
-  body:not(.os-chrome) .nav-links a{padding:9px 4px; width:100%; font-size:1rem}
+  body:not(.os-chrome) .nav-links{display:none; flex-basis:100%; flex-direction:column; align-items:flex-start; gap:2px; padding:7px 0 14px} /* vertical rhythm: 7px/14px, was 6/12 */
+  body:not(.os-chrome) .nav-links a{padding:7px 4px; width:100%; font-size:1rem} /* vertical rhythm: 7px, was 9 */
   body:not(.os-chrome) .nav-toggle:checked ~ .nav-links{display:flex}
   body:not(.os-chrome) .nav-toggle:checked ~ .nav-burger span:nth-child(1){transform:translateY(7px) rotate(45deg)}
   body:not(.os-chrome) .nav-toggle:checked ~ .nav-burger span:nth-child(2){opacity:0}
@@ -162,15 +193,15 @@ h1,h2,h3{margin:0; line-height:1.15; letter-spacing:-.02em; font-weight:650}
    homepage gallery at /#packages is the exhaustive index; this is just the 2-4 siblings that
    actually matter from THIS page, plus a link back to the full gallery). Lives in the hero,
    under .cta-row, on every product/reference page. */
-.related{display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin-top:18px}
-.related-label{font-family:var(--mono); font-size:.72rem; text-transform:uppercase; letter-spacing:.06em; color:var(--ink-faint)}
-.related a{font-family:var(--mono); font-size:.8rem; color:var(--ink-soft); border:1px solid var(--border-2);
-    border-radius:999px; padding:5px 12px; background:var(--surface)}
+.related{display:flex; flex-wrap:wrap; align-items:center; row-gap:7px; column-gap:8px; margin-top:21px} /* vertical rhythm: row-gap 7px (was gap:8px), margin-top 21px=3/4 baseline (was 18) */
+.related-label{font-family:var(--mono); font-size:.72rem; text-transform:uppercase; letter-spacing:.06em; color:var(--ink-faint); line-height:14px} /* half baseline, single-line label */
+.related a{font-family:var(--mono); font-size:.8rem; color:var(--ink-soft); border:1px solid var(--border-2); line-height:14px;
+    border-radius:999px; padding:5px 12px; background:var(--surface)} /* padding vertical 5px intentionally off-grid, see :root comment on sub-7px pill padding */
 .related a:hover{color:var(--accent-ink); border-color:var(--accent); text-decoration:none}
 .related a.related-all{color:var(--accent-ink); border-color:var(--accent)}
 
 /* ---- hero ---- */
-.hero{padding:84px 0 34px; position:relative; overflow:hidden}
+.hero{padding:84px 0 28px; position:relative; overflow:hidden} /* vertical rhythm: 84px=3*--rhythm (unchanged, already on-grid), 28px=1*--rhythm (was 34) */
 .hero > .wrap{position:relative; z-index:1}
 
 /* ---- prism beam: the Dark Side of the Moon motif — a white beam entering a prism, splitting into
@@ -184,25 +215,37 @@ h1,h2,h3{margin:0; line-height:1.15; letter-spacing:-.02em; font-weight:650}
 .prism-beam svg{width:100%; height:100%; display:block}
 @media (max-width:900px){.prism-beam{display:none}}
 @media (prefers-reduced-motion:no-preference){.prism-beam{transition:opacity .3s ease}}
-.eyebrow{font-family:var(--mono); font-size:.8rem; letter-spacing:.08em; text-transform:uppercase; color:var(--ink-faint)}
-.hero h1{font-size:clamp(2.3rem,5.4vw,3.5rem); margin:16px 0 0; max-width:18ch; text-wrap:balance}
-.lede{font-size:clamp(1.05rem,2vw,1.28rem); color:var(--ink-soft); max-width:62ch; margin:22px 0 0; line-height:1.6}
-.facts{display:flex; flex-wrap:wrap; gap:10px; margin-top:30px}
-.fact{font-family:var(--mono); font-size:.82rem; color:var(--ink-soft);
-      border:1px solid var(--border); border-radius:999px; padding:6px 13px; background:var(--surface)}
+.eyebrow{font-family:var(--mono); font-size:.8rem; letter-spacing:.08em; text-transform:uppercase; color:var(--ink-faint); line-height:14px} /* half baseline, single-line label */
+.hero h1{font-size:clamp(2.3rem,5.4vw,3.5rem); line-height:1.125; margin:14px 0 0; max-width:18ch; text-wrap:balance}
+  /* h1 is fluid (clamp), so its line-height stays a unitless ratio rather than a fixed px value —
+     an absolute px would decouple from font-size across the clamp range and look cramped/loose at
+     one end. 1.125 was tuned so BOTH clamp endpoints land within ~1px of a clean quarter-baseline
+     multiple: at the 2.3rem/36.8px floor, 36.8*1.125=41.4px (target 42px=1.5*--rhythm, off by
+     0.6px); at the 3.5rem/56px ceiling, 56*1.125=63px exactly (=2.25*--rhythm=9*--rhythm-q).
+     margin-top 14px=half baseline (was 16), directly under the eyebrow label. */
+.lede{font-size:clamp(1.05rem,2vw,1.28rem); color:var(--ink-soft); max-width:62ch; margin:21px 0 0; line-height:1.6}
+  /* margin-top 21px=3/4 baseline (was 22). line-height stays unitless 1.6 for the same fluid-type
+     reason as .hero h1 above: at the 1.05rem/16.8px floor, 16.8*1.6=26.9px (target 28px=1
+     baseline, off by 1.1px); at the 1.28rem/20.48px ceiling, 20.48*1.6=32.8px (target
+     31.5px=9*--rhythm-q/2... nearest clean quarter-multiple is 35px, off by 2.2px, still the
+     closest available ratio across the whole clamp range — checked 1.5/1.55/1.65 too, none beat
+     1.6 at both ends simultaneously). */
+.facts{display:flex; flex-wrap:wrap; row-gap:7px; column-gap:10px; margin-top:28px} /* vertical rhythm: row-gap 7px (was gap:10px), margin-top 28px=1 baseline (was 30) */
+.fact{font-family:var(--mono); font-size:.82rem; color:var(--ink-soft); line-height:14px;
+      border:1px solid var(--border); border-radius:999px; padding:6px 13px; background:var(--surface)} /* padding vertical 6px intentionally off-grid, see :root comment */
 .fact b{color:var(--ink); font-weight:600}
-.hero-cta{margin-top:28px; max-width:560px}
-.cta-row{display:flex; flex-wrap:wrap; gap:10px; margin-top:14px}
+.hero-cta{margin-top:28px; max-width:560px} /* already 1 baseline, unchanged */
+.cta-row{display:flex; flex-wrap:wrap; gap:10px; margin-top:14px} /* margin-top already half baseline, unchanged; gap is a button row that essentially never wraps, left as-is (horizontal-scope) */
 
 /* ---- section framing ---- */
-.sec{padding:30px 0}
-.sec-head{display:flex; align-items:baseline; gap:14px; margin:0 0 20px; padding-top:22px; border-top:1px solid var(--border)}
-.sec-head h2{font-size:1.15rem}
+.sec{padding:28px 0} /* 1 baseline, was 30 */
+.sec-head{display:flex; align-items:baseline; gap:14px; margin:0 0 21px; padding-top:21px; border-top:1px solid var(--border)} /* vertical rhythm: 21px=3/4 baseline both sides, was 20/22 */
+.sec-head h2{font-size:1.15rem; line-height:21px} /* 3/4 baseline: 1.15rem=18.4px, 18.4*1.15(orig ratio)=21.16px, now locked to the clean 21px rung */
 .sec-head .dot{width:9px; height:9px; border-radius:3px; flex:none; align-self:center}
-.sec-head p{margin:0 0 0 auto; color:var(--ink-faint); font-size:.9rem; font-family:var(--mono)}
+.sec-head p{margin:0 0 0 auto; color:var(--ink-faint); font-size:.9rem; font-family:var(--mono); line-height:21px} /* matches h2's line so the row's baseline is coherent */
 
 /* ---- card grid ---- */
-.grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(330px,1fr)); gap:16px}
+.grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(330px,1fr)); row-gap:14px; column-gap:16px} /* vertical rhythm: row-gap 14px=half baseline (was gap:16px, column-gap kept 16 unchanged/horizontal) */
 /* REAL MOBILE BUG (found 2026-08-28, user: "on mobile horizontal overflow is not great it goes off
    screen often" — pre-existing, older than the parallax/pivot work, confirmed by the user before
    this fix landed). Root cause: `minmax(330px,1fr)` never had a narrow-viewport override anywhere in
@@ -226,30 +269,30 @@ h1,h2,h3{margin:0; line-height:1.15; letter-spacing:-.02em; font-weight:650}
   .grid{grid-template-columns:1fr}
 }
 .card{position:relative; background:var(--surface); border:1px solid var(--border);
-      border-radius:var(--radius); padding:22px 22px 20px; overflow:hidden;
-      transition:border-color .18s ease, transform .18s ease, background .18s ease}
+      border-radius:var(--radius); padding:21px 22px 21px; overflow:hidden;
+      transition:border-color .18s ease, transform .18s ease, background .18s ease} /* vertical rhythm: 21px=3/4 baseline top+bottom, was 22/20; horizontal 22 unchanged */
 .card:hover{border-color:var(--border-2); background:var(--surface-2); transform:translateY(-2px)}
 .card::before{content:""; position:absolute; left:0; top:0; bottom:0; width:3px; background:var(--cat,var(--accent)); opacity:.85}
 .card-top{display:flex; align-items:center; gap:10px; flex-wrap:wrap}
-.card h3{font-size:1.18rem}
-.ver{font-family:var(--mono); font-size:.74rem; color:var(--ink-soft); border:1px solid var(--border-2);
-     border-radius:6px; padding:2px 7px; font-variant-numeric:tabular-nums}
-.tag{font-family:var(--mono); font-size:.7rem; letter-spacing:.04em; text-transform:uppercase; padding:2px 8px; border-radius:999px}
+.card h3{font-size:1.18rem; line-height:21px} /* 3/4 baseline: 1.18rem=18.88px, close to the same 21px rung as .sec-head h2/.stack h2 */
+.ver{font-family:var(--mono); font-size:.74rem; color:var(--ink-soft); border:1px solid var(--border-2); line-height:14px;
+     border-radius:6px; padding:2px 7px; font-variant-numeric:tabular-nums} /* padding vertical 2px intentionally off-grid, see :root comment */
+.tag{font-family:var(--mono); font-size:.7rem; letter-spacing:.04em; text-transform:uppercase; padding:2px 8px; border-radius:999px; line-height:14px} /* padding vertical 2px intentionally off-grid */
 .tag.live{color:var(--ok); border:1px solid color-mix(in srgb,var(--ok) 45%,transparent); background:color-mix(in srgb,var(--ok) 12%,transparent)}
 .tag.soon{color:var(--ink-faint); border:1px solid var(--border-2)}
-.pkgid{font-family:var(--mono); font-size:.8rem; color:var(--ink-faint); margin:9px 0 0; word-break:break-all}
-.desc{color:var(--ink-soft); font-size:.96rem; margin:12px 0 0; line-height:1.55}
-.note{font-size:.86rem; color:var(--ink-faint); margin:11px 0 0}
-.note code, .desc code{font-family:var(--mono); font-size:.86em; color:var(--accent-ink); background:color-mix(in srgb,var(--accent) 12%,transparent); padding:1px 5px; border-radius:5px; word-break:break-all}
-.install{display:flex; align-items:center; gap:8px; margin-top:16px; background:var(--bg-2);
-         border:1px solid var(--border); border-radius:9px; padding:8px 10px; overflow:hidden}
-.install code{font-family:var(--mono); font-size:.82rem; color:var(--ink); white-space:nowrap; overflow-x:auto; flex:1; scrollbar-width:none}
+.pkgid{font-family:var(--mono); font-size:.8rem; color:var(--ink-faint); line-height:14px; margin:7px 0 0; word-break:break-all} /* margin-top 7px=1/4 baseline, was 9 */
+.desc{color:var(--ink-soft); font-size:.96rem; margin:14px 0 0; line-height:21px} /* margin-top 14px=half baseline (was 12); line-height 21px=3/4 baseline (was unitless 1.55~23.8px) */
+.note{font-size:.86rem; color:var(--ink-faint); margin:14px 0 0; line-height:14px} /* margin-top 14px=half baseline (was 11) */
+.note code, .desc code{font-family:var(--mono); font-size:.86em; color:var(--accent-ink); background:color-mix(in srgb,var(--accent) 12%,transparent); padding:1px 5px; border-radius:5px; word-break:break-all} /* padding vertical 1px intentionally off-grid, inline code chip */
+.install{display:flex; align-items:center; gap:8px; margin-top:14px; background:var(--bg-2);
+         border:1px solid var(--border); border-radius:9px; padding:7px 10px; overflow:hidden} /* vertical rhythm: margin-top 14px=half baseline (was 16), padding vertical 7px=1/4 baseline (was 8) */
+.install code{font-family:var(--mono); font-size:.82rem; color:var(--ink); line-height:14px; white-space:nowrap; overflow-x:auto; flex:1; scrollbar-width:none}
 .install code::-webkit-scrollbar{display:none}
-.copy{flex:none; font-family:var(--mono); font-size:.72rem; color:var(--ink-soft); cursor:pointer;
-      background:var(--surface); border:1px solid var(--border-2); border-radius:6px; padding:4px 8px; transition:color .15s, border-color .15s}
+.copy{flex:none; font-family:var(--mono); font-size:.72rem; color:var(--ink-soft); cursor:pointer; line-height:14px;
+      background:var(--surface); border:1px solid var(--border-2); border-radius:6px; padding:4px 8px; transition:color .15s, border-color .15s} /* padding vertical 4px intentionally off-grid, see :root comment */
 .copy:hover{color:var(--ink); border-color:var(--accent)}
 .copy.done{color:var(--ok); border-color:var(--ok)}
-.links{display:flex; gap:16px; margin-top:15px; font-size:.85rem; font-family:var(--mono)}
+.links{display:flex; gap:16px; margin-top:14px; font-size:.85rem; font-family:var(--mono); line-height:14px} /* margin-top 14px=half baseline, was 15 */
 .links a{color:var(--ink-soft)}
 .links a:hover{color:var(--accent-ink)}
 
@@ -261,7 +304,7 @@ h1,h2,h3{margin:0; line-height:1.15; letter-spacing:-.02em; font-weight:650}
    documented below. */
 .card.tool{display:block; color:inherit}
 .card.tool:hover{text-decoration:none}
-.card.tool .go-in{margin-top:16px; font-family:var(--mono); font-size:.85rem; color:var(--accent-ink)}
+.card.tool .go-in{margin-top:14px; font-family:var(--mono); font-size:.85rem; color:var(--accent-ink); line-height:14px} /* margin-top 14px=half baseline (was 16); line-height 14px matches .links a, same font-size band */
 
 /* package cards (and, since 2026-08-28, the homepage tool cards too) stay <article> when they nest
    a second link (NuGet, or a "Powered by" pill) — the whole card can't itself be an <a> in that case,
@@ -276,84 +319,84 @@ h1,h2,h3{margin:0; line-height:1.15; letter-spacing:-.02em; font-weight:650}
 /* "Powered by" pill row (2026-08-28 tools-first pivot): a small link-per-constituent-package row
    under a tool card's description, e.g. The Creature -> AlgFormer + Tracer. Deliberately smaller/
    quieter than .related (which lives in a hero, not a card) — same idea, tool-card-scoped. */
-.powered{display:flex; flex-wrap:wrap; align-items:center; gap:6px; margin-top:14px}
-.powered-label{font-family:var(--mono); font-size:.68rem; text-transform:uppercase; letter-spacing:.05em; color:var(--ink-faint)}
-.powered a{font-family:var(--mono); font-size:.76rem; color:var(--ink-soft); border:1px solid var(--border-2);
-    border-radius:999px; padding:3px 10px; background:var(--bg-2)}
+.powered{display:flex; flex-wrap:wrap; align-items:center; row-gap:7px; column-gap:6px; margin-top:14px} /* row-gap 7px=1/4 baseline (was gap:6px); margin-top already half baseline, unchanged */
+.powered-label{font-family:var(--mono); font-size:.68rem; text-transform:uppercase; letter-spacing:.05em; color:var(--ink-faint); line-height:14px}
+.powered a{font-family:var(--mono); font-size:.76rem; color:var(--ink-soft); border:1px solid var(--border-2); line-height:14px;
+    border-radius:999px; padding:3px 10px; background:var(--bg-2)} /* padding vertical 3px intentionally off-grid, see :root comment */
 .powered a:hover{color:var(--accent-ink); border-color:var(--accent); text-decoration:none}
 
 /* Slim homepage "Powered by" package-chip strip (2026-08-28 tools-first pivot): the ONLY
    packages-related content left on index.html once the full gallery moves to /packages.html —
    deliberately NOT a .sec/.sec-head (so it never grows an os-chrome window panel and can't read as
    a second top-level gallery), just name + colour-dot chips and one link to the real catalogue. */
-.pkg-strip{padding:10px 0 40px}
-.pkg-strip-label{display:block; font-family:var(--mono); font-size:.72rem; text-transform:uppercase; letter-spacing:.06em; color:var(--ink-faint); margin-bottom:12px}
-.pkg-chips{display:flex; flex-wrap:wrap; gap:8px}
-.pkg-chip{display:inline-flex; align-items:center; gap:7px; font-family:var(--mono); font-size:.8rem; color:var(--ink-soft);
-    border:1px solid var(--border); border-radius:999px; padding:6px 13px; background:var(--surface)}
+.pkg-strip{padding:7px 0 42px} /* vertical rhythm: 7px=1/4 baseline (was 10), 42px=1.5 baseline (was 40) */
+.pkg-strip-label{display:block; font-family:var(--mono); font-size:.72rem; text-transform:uppercase; letter-spacing:.06em; color:var(--ink-faint); line-height:14px; margin-bottom:14px} /* margin-bottom 14px=half baseline, was 12 */
+.pkg-chips{display:flex; flex-wrap:wrap; row-gap:7px; column-gap:8px} /* row-gap 7px=1/4 baseline (was gap:8px) */
+.pkg-chip{display:inline-flex; align-items:center; gap:7px; font-family:var(--mono); font-size:.8rem; color:var(--ink-soft); line-height:14px;
+    border:1px solid var(--border); border-radius:999px; padding:6px 13px; background:var(--surface)} /* padding vertical 6px intentionally off-grid, see :root comment */
 .pkg-chip:hover{color:var(--ink); border-color:var(--border-2); text-decoration:none}
 .pkg-chip .swatch{width:7px; height:7px; border-radius:50%; flex:none}
-.pkg-strip-all{display:inline-block; margin-top:14px; font-family:var(--mono); font-size:.86rem; color:var(--accent-ink)}
+.pkg-strip-all{display:inline-block; margin-top:14px; font-family:var(--mono); font-size:.86rem; color:var(--accent-ink); line-height:14px} /* margin-top already half baseline, unchanged */
 
 /* ---- foundation callout ---- */
-.stack{background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:24px 26px; margin-top:6px}
-.stack h2{font-size:1.15rem; margin-bottom:10px}
+.stack{background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:21px 26px; margin-top:7px} /* vertical rhythm: padding 21px=3/4 baseline (was 24), margin-top 7px=1/4 baseline (was 6) */
+.stack h2{font-size:1.15rem; line-height:21px; margin-bottom:7px} /* line-height 21px=3/4 baseline (same rung as .sec-head h2); margin-bottom 7px=1/4 baseline, was 10 */
 .stack p{color:var(--ink-soft); margin:0; max-width:72ch}
-.stack .flow{display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin-top:16px; font-family:var(--mono); font-size:.82rem}
-.stack .flow span{border:1px solid var(--border-2); border-radius:7px; padding:5px 10px; color:var(--ink)}
+.stack .flow{display:flex; flex-wrap:wrap; align-items:center; row-gap:7px; column-gap:8px; margin-top:14px; font-family:var(--mono); font-size:.82rem} /* row-gap 7px=1/4 baseline (was gap:8px); margin-top 14px=half baseline (was 16) */
+.stack .flow span{border:1px solid var(--border-2); border-radius:7px; padding:5px 10px; color:var(--ink)} /* padding vertical 5px intentionally off-grid, see :root comment */
 .stack .flow em{color:var(--ink-faint); font-style:normal}
 
 /* ---- buttons ---- */
-.btn{display:inline-flex; align-items:center; gap:8px; font-family:var(--font); font-size:.95rem; font-weight:600;
-     border-radius:10px; padding:.6rem 1.2rem; cursor:pointer; border:1px solid transparent; transition:all .15s ease}
+.btn{display:inline-flex; align-items:center; gap:8px; font-family:var(--font); font-size:.95rem; font-weight:600; line-height:21px;
+     border-radius:10px; padding:7px 1.2rem; cursor:pointer; border:1px solid transparent; transition:all .15s ease} /* line-height 21px=3/4 baseline; padding vertical 7px=1/4 baseline (was .6rem=9.6px) */
 .btn-primary{background:var(--accent); color:#fff; border-color:var(--accent)}
 .btn-primary:hover{filter:brightness(1.08); text-decoration:none}
 .btn-ghost{background:transparent; color:var(--ink); border-color:var(--border-2)}
 .btn-ghost:hover{border-color:var(--accent); color:var(--accent-ink); text-decoration:none}
 
 /* ---- crumb ---- */
-.crumb{font-family:var(--mono); font-size:.82rem; color:var(--ink-faint); margin-bottom:.75rem}
+.crumb{font-family:var(--mono); font-size:.82rem; color:var(--ink-faint); line-height:14px; margin-bottom:14px} /* margin-bottom 14px=half baseline (was .75rem=12px) */
 .crumb a{color:var(--ink-soft)}
 .crumb span{margin:0 .4rem; opacity:.6}
 
 /* ---- prose (manual / docs) ---- */
-.prose{max-width:760px; margin:0 auto; padding:8px 0 40px}
-.prose h2{font-size:1.5rem; margin:2.4rem 0 .3rem; scroll-margin-top:80px}
-.prose h3{font-size:1.12rem; margin:1.8rem 0 .3rem; color:var(--ink)}
-.prose p{color:var(--ink-soft); margin:.7rem 0}
-.prose ul,.prose ol{color:var(--ink-soft); padding-left:1.3rem; margin:.7rem 0}
-.prose li{margin:.3rem 0}
+.prose{max-width:760px; margin:0 auto; padding:7px 0 42px} /* vertical rhythm: 7px=1/4 baseline (was 8), 42px=1.5 baseline (was 40) */
+.prose h2{font-size:1.5rem; line-height:28px; margin:42px 0 7px; scroll-margin-top:80px} /* line-height 28px=1 full baseline (1.5rem=24px, was unitless 1.15~27.6px); margin 42px=1.5 baseline (was 2.4rem=38.4px), 7px=1/4 baseline tight heading->text gap (was .3rem=4.8px) */
+.prose h3{font-size:1.12rem; line-height:21px; margin:28px 0 7px; color:var(--ink)} /* line-height 21px=3/4 baseline (1.12rem=17.92px); margin 28px=1 baseline (was 1.8rem=28.8px, already essentially on-grid), 7px tight heading->text gap (was .3rem=4.8px) */
+.prose p{color:var(--ink-soft); margin:14px 0} /* half baseline, was .7rem=11.2px */
+.prose ul,.prose ol{color:var(--ink-soft); padding-left:1.3rem; margin:14px 0} /* half baseline, was .7rem=11.2px */
+.prose li{margin:7px 0} /* quarter baseline, was .3rem=4.8px */
 .prose strong{color:var(--ink)}
 .prose a{color:var(--accent-ink)}
 .prose p code,.prose li code,.prose td code{font-family:var(--mono); font-size:.88em; color:var(--accent-ink);
-      background:color-mix(in srgb,var(--accent) 12%,transparent); padding:1px 5px; border-radius:5px}
-.prose pre{background:var(--bg-2); border:1px solid var(--border); border-radius:12px; padding:16px 18px;
-      overflow-x:auto; margin:1rem 0; font-size:.86rem; line-height:1.55}
+      background:color-mix(in srgb,var(--accent) 12%,transparent); padding:1px 5px; border-radius:5px} /* padding vertical 1px intentionally off-grid, inline code chip */
+.prose pre{background:var(--bg-2); border:1px solid var(--border); border-radius:12px; padding:14px 18px;
+      overflow-x:auto; margin:14px 0; font-size:.86rem; line-height:21px} /* vertical rhythm: padding-block 14px=half baseline (was 16), margin 14px (was 1rem=16px), line-height 21px=3/4 baseline (was unitless 1.55~21.3px, already near-on-grid) */
 .prose pre code{font-family:var(--mono); color:var(--ink)}
-.prose table{width:100%; border-collapse:collapse; margin:1rem 0; font-size:.9rem; display:block; overflow-x:auto}
-.prose th{text-align:left; color:var(--ink); border-bottom:1px solid var(--border-2); padding:.5rem .7rem; white-space:nowrap}
-.prose td{color:var(--ink-soft); border-bottom:1px solid var(--border); padding:.5rem .7rem; vertical-align:top}
-.prose blockquote{margin:1rem 0; padding:.6rem 1rem; border-left:3px solid var(--accent); background:var(--surface); color:var(--ink-soft); border-radius:0 8px 8px 0}
-.toc{background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:16px 20px; margin:1.5rem 0 2rem}
-.toc h2{font-size:.8rem; text-transform:uppercase; letter-spacing:.06em; color:var(--ink-faint); font-family:var(--mono); margin:0 0 .6rem}
+.prose table{width:100%; border-collapse:collapse; margin:14px 0; font-size:.9rem; display:block; overflow-x:auto} /* half baseline, was 1rem=16px */
+.prose th{text-align:left; color:var(--ink); border-bottom:1px solid var(--border-2); padding:7px .7rem; white-space:nowrap} /* padding-block 7px=1/4 baseline, was .5rem=8px */
+.prose td{color:var(--ink-soft); border-bottom:1px solid var(--border); padding:7px .7rem; vertical-align:top} /* padding-block 7px=1/4 baseline, was .5rem=8px */
+.prose blockquote{margin:14px 0; padding:7px 1rem; border-left:3px solid var(--accent); background:var(--surface); color:var(--ink-soft); border-radius:0 8px 8px 0} /* margin 14px=half baseline (was 1rem=16px), padding-block 7px=1/4 baseline (was .6rem=9.6px) */
+.toc{background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:14px 20px; margin:28px 0} /* vertical rhythm: padding-block 14px=half baseline (was 16), margin 28px=1 baseline top+bottom (was 1.5rem/2rem=24/32px asymmetric) */
+.toc h2{font-size:.8rem; line-height:14px; text-transform:uppercase; letter-spacing:.06em; color:var(--ink-faint); font-family:var(--mono); margin:0 0 7px} /* quarter baseline, was .6rem=9.6px */
 .toc ul{list-style:none; padding:0; margin:0; columns:2; column-gap:24px}
-.toc li{margin:.25rem 0}
+.toc li{margin:7px 0} /* quarter baseline, was .25rem=4px */
 .toc a{color:var(--ink-soft); font-size:.92rem}
 
 /* ---- code snippet box (product pages) ---- */
-.snip{background:var(--bg-2); border:1px solid var(--border); border-radius:10px; padding:14px 16px; margin:10px 0; overflow-x:auto}
-.snip code{font-family:var(--mono); font-size:.84rem; color:var(--ink); white-space:pre}
-.lim{font-size:.85rem; color:var(--ink-faint); margin-top:12px; border-top:1px dashed var(--border-2); padding-top:10px}
+.snip{background:var(--bg-2); border:1px solid var(--border); border-radius:10px; padding:14px 16px; margin:14px 0; overflow-x:auto} /* margin half baseline, was 10 */
+.snip code{font-family:var(--mono); font-size:.84rem; color:var(--ink); line-height:21px; white-space:pre} /* 3/4 baseline (was inherited ~22.2px) */
+.lim{font-size:.85rem; color:var(--ink-faint); line-height:14px; margin-top:14px; border-top:1px dashed var(--border-2); padding-top:7px} /* margin-top 14px=half baseline (was 12), padding-top 7px=1/4 baseline (was 10) */
 .lim b{color:var(--warn)}
 
 /* ---- footer ---- */
-footer.site{border-top:1px solid var(--border); margin-top:34px; padding:30px 0 50px; color:var(--ink-faint)}
-footer.site .wrap{display:flex; flex-wrap:wrap; gap:14px; justify-content:space-between; align-items:center}
-footer.site .mono{font-family:var(--mono); font-size:.82rem}
+footer.site{border-top:1px solid var(--border); margin-top:35px; padding:28px 0 49px; color:var(--ink-faint)} /* vertical rhythm: 35px=5*--rhythm-q (was 34), 28px=1 baseline (was 30), 49px=7*--rhythm-q (was 50) */
+footer.site .wrap{display:flex; flex-wrap:wrap; gap:14px; justify-content:space-between; align-items:center} /* gap already half baseline, unchanged */
+footer.site .mono{font-family:var(--mono); font-size:.82rem; line-height:14px}
 footer.site a{color:var(--ink-soft)}
 
 @media (max-width:640px){
-  .hero{padding:48px 0 20px}
+  .hero{padding:42px 0 21px} /* vertical rhythm: 42px=1.5 baseline (was 48), 21px=3/4 baseline (was 20) */
   .sec-head p{display:none}
   .toc ul{columns:1}
 }
@@ -642,7 +685,7 @@ body.os-chrome{
 
 /* shared window-titlebar traffic-light dots — real (empty, aria-hidden-parent) markup,
    used inside .hero-bar; sits alongside the CSS-only version .sec-head grows below. */
-.win-dots{display:inline-flex; gap:6px; flex:none}
+.win-dots{display:inline-flex; gap:6px; flex:none} /* gap intentionally off the rhythm grid: 3 fixed-size (9px) decorative dots, an icon glyph not page-flow rhythm */
 .win-dots i{display:block; width:9px; height:9px; border-radius:50%}
 .win-dots i:nth-child(1){background:var(--bad)}
 .win-dots i:nth-child(2){background:var(--warn)}
@@ -654,10 +697,10 @@ body.os-chrome{
 body.os-chrome .hero-bar{display:none}
 .hero-body{position:relative}
 .hero-content{position:relative; z-index:1} /* only needed on the page(s) that also nest .prism-beam in .hero-body */
-.hero-bar-title{font-family:var(--mono); font-size:.78rem; color:var(--ink-faint); letter-spacing:.02em}
+.hero-bar-title{font-family:var(--mono); font-size:.78rem; color:var(--ink-faint); letter-spacing:.02em; line-height:14px}
 
 @media (min-width:901px){
-  body.os-chrome .hero{padding:22px 0 10px}
+  body.os-chrome .hero{padding:21px 0 7px} /* vertical rhythm: 21px=3/4 baseline (was 22), 7px=1/4 baseline (was 10) — the compact chrome titlebar variant, intentionally on the finer quarter-step */
   /* "Glass" window, not an opaque grey card: translucent panel + blur so the void-black field and
      its spectrum wallpaper glow bleed through behind the content, the same glass language the
      taskbar below already uses. A flat opaque --surface fill here read as a generic light-toned
@@ -665,6 +708,8 @@ body.os-chrome .hero-bar{display:none}
      CLAUDE.md "OS chrome" for the full diagnosis. The ::before is a 2px spectrum edge (literally
      the same gradient as the page-top .beam strip) so every window is visibly cut from the same
      prism, not just bordered in plain grey. */
+  /* NOTE: this .hero > .wrap rule's own vertical padding lives on .hero-body above (padding:35px
+     36px 35px) — the desktop chrome hero has no separate top/bottom padding of its own here. */
   body.os-chrome .hero > .wrap{
     max-width:calc(var(--wrap) + 60px); /* matches .sec:has(.sec-head)'s own max-width below, so
       window edges line up as you scroll from the hero into the first section, not two different
@@ -683,9 +728,9 @@ body.os-chrome .hero-bar{display:none}
   body.os-chrome .hero > .wrap::before{
     content:""; position:absolute; inset:0 0 auto 0; height:2px; background:var(--spectrum); opacity:.85; z-index:2;
   }
-  body.os-chrome .hero-bar{display:flex; align-items:center; gap:12px; padding:13px 22px;
+  body.os-chrome .hero-bar{display:flex; align-items:center; gap:12px; padding:14px 22px; /* vertical rhythm: 14px=half baseline, was 13 */
       background:var(--surface-2); border-bottom:1px solid var(--border)}
-  body.os-chrome .hero-body{padding:32px 36px 36px}
+  body.os-chrome .hero-body{padding:35px 36px 35px} /* vertical rhythm: 35px=5*--rhythm-q both sides, was 32/36 */
 
   /* every .sec that carries a .sec-head becomes its own window: bordered panel, the
      .sec-head bleeds edge-to-edge as its titlebar, a zero-markup ::before/box-shadow
@@ -694,7 +739,7 @@ body.os-chrome .hero-bar{display:none}
      bordered card, so wrapping it in a second frame would be a double border, not
      a widget — it reads fine floating on the desktop background as-is. */
   body.os-chrome .sec:has(.sec-head){
-    max-width:calc(var(--wrap) + 60px); margin:26px auto; padding:0; position:relative;
+    max-width:calc(var(--wrap) + 60px); margin:28px auto; padding:0; position:relative; /* vertical rhythm: 28px=1 baseline, was 26 */
     background:color-mix(in srgb,var(--surface) 76%,transparent); backdrop-filter:blur(24px) saturate(1.1);
     border:1px solid var(--border); border-radius:var(--radius);
     /* same box-shadow-not-filter fix as .hero > .wrap above (see its comment for the full root
@@ -709,8 +754,8 @@ body.os-chrome .hero-bar{display:none}
   body.os-chrome .sec:has(.sec-head)::before{
     content:""; position:absolute; inset:0 0 auto 0; height:2px; background:var(--spectrum); opacity:.85; z-index:2;
   }
-  body.os-chrome .sec:has(.sec-head) > .wrap{max-width:none; margin:0; padding:0 30px 30px}
-  body.os-chrome .sec-head{position:relative; margin:0 -30px 22px; padding:16px 30px;
+  body.os-chrome .sec:has(.sec-head) > .wrap{max-width:none; margin:0; padding:0 30px 28px} /* vertical rhythm: bottom 28px=1 baseline, was 30 */
+  body.os-chrome .sec-head{position:relative; margin:0 -30px 21px; padding:14px 30px; /* vertical rhythm: margin-bottom 21px=3/4 baseline (was 22), padding-block 14px=half baseline (was 16) */
       background:var(--surface-2); border-top:0; border-bottom:1px solid var(--border)}
   body.os-chrome .sec > .wrap > .sec-head:first-child{padding-left:78px; border-radius:var(--radius) var(--radius) 0 0}
   body.os-chrome .sec > .wrap > .sec-head:first-child::before{
@@ -718,21 +763,21 @@ body.os-chrome .hero-bar{display:none}
     width:9px; height:9px; border-radius:50%; background:var(--bad);
     box-shadow:16px 0 0 var(--warn), 32px 0 0 var(--ok);
   }
-  body.os-chrome .sec-head:not(:first-child){margin-top:38px; border-top:1px solid var(--border)}
+  body.os-chrome .sec-head:not(:first-child){margin-top:35px; border-top:1px solid var(--border)} /* vertical rhythm: 35px=5*--rhythm-q, was 38 */
 
   /* taskbar/dock: the same .site-nav, floated as a rounded chrome bar off the top
      edge; each link renders as a small app-tile pill (colour-cycled through the
      brand spectrum, see the shared rule below) instead of a plain text link. */
   body.os-chrome .site-nav{
-    top:10px; margin:10px auto 0; max-width:calc(var(--wrap) + 60px);
+    top:7px; margin:7px auto 0; max-width:calc(var(--wrap) + 60px); /* vertical rhythm: 7px=1/4 baseline, was 10 */
     background:color-mix(in srgb,var(--bg-2) 82%,transparent);
     backdrop-filter:blur(16px) saturate(1.3); -webkit-backdrop-filter:blur(16px) saturate(1.3);
     border:1px solid var(--border); border-radius:16px;
     box-shadow:0 20px 42px -26px rgba(0,0,0,.65), inset 0 1px 0 rgba(255,255,255,.03);
   }
-  body.os-chrome .site-nav .wrap{padding:0 18px; min-height:56px}
-  body.os-chrome .brand{padding:6px 12px 6px 8px; border-radius:11px; background:var(--surface); border:1px solid var(--border)}
-  body.os-chrome .nav-links a{display:inline-flex; align-items:center; gap:8px; padding:7px 12px; border-radius:10px}
+  body.os-chrome .site-nav .wrap{padding:0 18px; min-height:56px} /* min-height already 8*--rhythm-q, unchanged */
+  body.os-chrome .brand{padding:7px 12px 7px 8px; border-radius:11px; background:var(--surface); border:1px solid var(--border)} /* vertical rhythm: 7px=1/4 baseline, was 6 */
+  body.os-chrome .nav-links a{display:inline-flex; align-items:center; gap:8px; padding:7px 12px; border-radius:10px} /* padding vertical already 1/4 baseline, unchanged */
   body.os-chrome .nav-links a:hover{background:var(--surface-2); color:var(--ink)}
   body.os-chrome .nav-links a.active{background:var(--surface-2); color:var(--ink)}
   body.os-chrome .nav-links a::before{width:11px; height:11px; border-radius:2.5px}
@@ -775,7 +820,7 @@ body.os-chrome .nav-links a.active::before{
   /* phone home screen: nav collapses to a fixed bottom icon dock (always visible,
      no burger / no slide-down list) instead of the CSS-only checkbox menu the plain
      site uses at this width. */
-  body.os-chrome{padding-bottom:78px}
+  body.os-chrome{padding-bottom:77px} /* vertical rhythm: 77px=11*--rhythm-q, was 78 */
   /* BUG FIX (found via real-device screenshot, 2026-08-28): .site-nav carries backdrop-filter
      unconditionally (base rule, all pages/widths — the sticky top-bar blur). A backdrop-filter (like
      transform/filter/perspective/contain) establishes a new containing block for `position:fixed`
@@ -792,14 +837,14 @@ body.os-chrome .nav-links a.active::before{
   body.os-chrome .site-nav .nav-links{
     display:flex; flex-direction:row; flex-basis:auto; position:fixed; left:0; right:0; bottom:0; z-index:30;
     flex-wrap:nowrap; justify-content:space-around; align-items:center; gap:0;
-    padding:8px 6px calc(6px + env(safe-area-inset-bottom));
+    padding:7px 6px calc(7px + env(safe-area-inset-bottom)); /* vertical rhythm: 7px=1/4 baseline, was 8/6 */
     background:color-mix(in srgb,var(--bg-2) 94%,transparent);
     backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px);
     border-top:1px solid var(--border); box-shadow:0 -10px 26px -14px rgba(0,0,0,.55);
   }
   body.os-chrome .site-nav .nav-links a{
     flex:1; min-width:0; display:flex; flex-direction:column; align-items:center; gap:4px;
-    padding:4px 2px; border-radius:10px; font-size:.66rem; text-align:center;
+    padding:7px 2px; border-radius:10px; font-size:.66rem; line-height:14px; text-align:center; /* padding vertical 7px=1/4 baseline, was 4 */
   }
   body.os-chrome .site-nav .nav-links a::before{width:17px; height:17px; border-radius:4px}
   body.os-chrome .site-nav .nav-links a.active{color:var(--ink)}
@@ -815,10 +860,10 @@ body.os-chrome .nav-links a.active::before{
      below this one for its own, deliberately un-shrunk treatment; don't re-add #tools to any
      selector in this #packages block without re-reading both bug writeups in CLAUDE.md first. */
   body.os-chrome #packages .grid{
-    grid-template-columns:repeat(auto-fill,minmax(76px,1fr)); gap:22px 12px; margin-top:2px;
+    grid-template-columns:repeat(auto-fill,minmax(76px,1fr)); gap:21px 12px; margin-top:2px; /* vertical rhythm: row-gap 21px=3/4 baseline, was 22 (column-gap 12 unchanged/horizontal) */
   }
   body.os-chrome #packages .grid > .card{
-    position:relative; display:flex; flex-direction:column; align-items:center; gap:8px;
+    position:relative; display:flex; flex-direction:column; align-items:center; gap:7px; /* vertical rhythm: 7px=1/4 baseline (column stack: icon/label), was 8 */
     padding:0; border:0; background:none; border-radius:0; text-align:center; overflow:visible;
   }
   body.os-chrome #packages .grid > .card:hover{transform:none; background:none; border-color:transparent}
@@ -874,8 +919,8 @@ body.os-chrome .nav-links a.active::before{
     background:linear-gradient(155deg, var(--cat-root,var(--cat,var(--accent))), color-mix(in srgb,var(--cat-root,var(--cat,var(--accent))) 45%, var(--bg-2)));
     box-shadow:0 10px 18px -10px color-mix(in srgb,var(--cat-root,var(--cat,var(--accent))) 65%,transparent), inset 0 1px 0 rgba(255,255,255,.22);
   }
-  body.os-chrome #packages .grid > .card .card-top{flex-direction:column; gap:2px; align-items:center}
-  body.os-chrome #packages .grid > .card h3{font-size:.76rem; font-weight:600}
+  body.os-chrome #packages .grid > .card .card-top{flex-direction:column; gap:2px; align-items:center} /* gap intentionally off-grid: 2px hairline gap between a version chip and a live/soon tag under a 56px icon tile, decorative micro-spacing */
+  body.os-chrome #packages .grid > .card h3{font-size:.76rem; line-height:14px; font-weight:600} /* half baseline, small icon-tile label */
   body.os-chrome #packages .grid > .card .ver,
   body.os-chrome #packages .grid > .card .pkgid,
   body.os-chrome #packages .grid > .card .desc,
@@ -904,12 +949,12 @@ body.os-chrome .nav-links a.active::before{
      overflow:hidden (untouched) — .powered (already position:relative;z-index:2 above the
      .card-link overlay, same as desktop) can only ever wrap within its own card now, never escape
      it, regardless of viewport width. */
-  body.os-chrome #tools .grid{grid-template-columns:1fr; gap:18px; margin-top:2px}
-  body.os-chrome #tools .grid > .card{padding:24px 22px 22px}
+  body.os-chrome #tools .grid{grid-template-columns:1fr; gap:21px; margin-top:2px} /* vertical rhythm: 21px=3/4 baseline row-gap (single column, was 18) */
+  body.os-chrome #tools .grid > .card{padding:21px 22px 21px} /* vertical rhythm: 21px=3/4 baseline, was 24/22, matches base .card padding */
   body.os-chrome #tools .grid > .card .go-in{
-    display:inline-flex; align-items:center; gap:6px; margin-top:16px;
-    font-family:var(--mono); font-size:.85rem; font-weight:600; color:var(--accent-ink);
-    padding:8px 14px; border:1px solid var(--border-2); border-radius:999px; background:var(--bg-2);
+    display:inline-flex; align-items:center; gap:6px; margin-top:14px; /* vertical rhythm: half baseline, was 16 */
+    font-family:var(--mono); font-size:.85rem; font-weight:600; color:var(--accent-ink); line-height:14px;
+    padding:7px 14px; border:1px solid var(--border-2); border-radius:999px; background:var(--bg-2); /* vertical rhythm: 7px=1/4 baseline, was 8 */
   }
 }
 @media (max-width:640px) and (prefers-reduced-motion:no-preference){
@@ -921,9 +966,9 @@ body.os-chrome .nav-links a.active::before{
 .loading-progress{position:relative; display:block; width:6rem; height:6rem}
 .loading-progress circle{fill:none; stroke:var(--border-2); stroke-width:.5rem; transform-origin:50% 50%; transform:rotate(-90deg)}
 .loading-progress circle:last-child{stroke:var(--accent); stroke-dasharray:calc(3.141*var(--blazor-load-percentage,0%)) 500%; transition:stroke-dasharray .1s ease-in-out}
-.loading-progress-text{margin-top:1rem; font-family:var(--mono); font-size:.85rem; color:var(--ink-soft)}
+.loading-progress-text{margin-top:14px; font-family:var(--mono); font-size:.85rem; line-height:14px; color:var(--ink-soft)} /* half baseline, was 1rem=16px */
 .loading-progress-text:after{content:var(--blazor-load-percentage-text,"Loading the tool…")}
 #blazor-error-ui{color:var(--ink); background:var(--surface); border-top:1px solid var(--bad); bottom:0;
-      box-shadow:0 -1px 12px rgba(0,0,0,.3); display:none; left:0; padding:.8rem 1.4rem 1rem; position:fixed; width:100%; z-index:1000}
+      box-shadow:0 -1px 12px rgba(0,0,0,.3); display:none; left:0; padding:14px 1.4rem 14px; position:fixed; width:100%; z-index:1000} /* vertical rhythm: 14px=half baseline both sides, was .8rem/1rem=12.8/16px */
 #blazor-error-ui .dismiss{cursor:pointer; position:absolute; right:1rem; top:.6rem}
 #blazor-error-ui .reload{color:var(--accent-ink)}

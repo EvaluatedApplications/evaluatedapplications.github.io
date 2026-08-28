@@ -176,6 +176,48 @@ two HoloDb pages still carry a local `<style>` (bespoke charts/race-demo/table m
 reused elsewhere) but declare the SAME token values, so they read as one brand, not a fork — if a
 token in `site.css` ever changes, grep those two files' `<style>` blocks too.
 
+**Vertical rhythm (2026-08-28 baseline-grid pass)** — direct user request to recalibrate the
+type/spacing scale onto a real baseline grid instead of ad-hoc px values. `--rhythm:28px` (new
+`:root` token) is derived from body's own type, not invented: `font-size:17px * line-height:1.65 =
+28.05px`, rounded to a clean 28px. body's own `line-height:1.65` was deliberately left UNITLESS,
+not switched to `var(--rhythm)` directly — an absolute px line-height would inherit literally into
+every smaller-font descendant (every mono badge/pill/label site-wide), inflating their line boxes
+to a full 28px regardless of their own font-size; unitless is standard CSS practice and still
+computes to ~28px for body-sized text. Since 28 divides evenly by 4, the working sub-grid is
+exactly the quarter-baseline, **7px** (also tokenised: `--rhythm-q:7px`, `--rhythm-h:14px` half,
+`--rhythm-3q:21px` three-quarter) — every recalibrated vertical margin/padding/gap/line-height in
+`site.css` is now a whole multiple of 7px, preferring the rounder rungs (14/21/28/35/42/49/56...)
+wherever the original ad-hoc value already sat close to one. Fluid/clamp type (`.hero h1`, `.lede`)
+kept a tuned unitless line-height ratio instead of a fixed px value (an absolute value would
+decouple from font-size across the clamp range) — chosen so both clamp endpoints land within ~1-2px
+of a clean quarter-baseline multiple. Headings (h1/h2/h3) keep a tight, legible base ratio for
+their OWN line box (a single ratio can't land every heading instance's differing font-size on the
+grid at once) and the rhythm is preserved instead via each heading's own vertical MARGIN, which
+every selector (`.sec-head h2`, `.card h3`, `.stack h2`, `.prose h2/h3`) now sets explicitly to a
+clean 7px-multiple. **Deliberate, documented exception**: inline pill/badge/chip vertical padding
+under 7px (`.tag`, `.ver`, `.fact`, `.pkg-chip`, `.related a`, `.powered a`, `.copy`, `.stack .flow
+span`, the small inline code chips, `.win-dots`/`.nav-burger`'s own icon-glyph spacing) was left OFF
+this grid on purpose — decorative micro-UI atoms, not part of the vertical reading flow; forcing a
+7px floor onto them would visibly bloat compact badges for no rhythm benefit, since their POSITION
+in the page flow is already governed by their parent's on-grid margin/gap. Every reusable component
+was swept: `.hero`/`.eyebrow`/`.lede`/`.facts`/`.fact`, `.sec`/`.sec-head`, `.grid`/`.card` (+
+`.card.tool`/`.powered`/`.pkg-strip`), `.stack`/`.flow`, `.related`, `.crumb`, `.btn`, `.prose`/
+`.toc`, `.snip`/`.lim`, `footer.site`, and the whole OS-CHROME block (hero-bar/hero-body, the
+`.sec:has(.sec-head)` window panel, the taskbar/dock, the `#packages`/`#tools` mobile grids), plus
+the Blazor loading/error UI. `.facts`/`.grid`/`.stack .flow` (the task's named wrapping-row
+examples) had their `gap` shorthand split into `row-gap`(on-grid)/`column-gap`(unchanged, horizontal
+out of scope) — extended the same split to `.related`/`.powered`/`.pkg-chips` for consistency, since
+they're the same "wrapping pill row" pattern. **Local `<style>` block drift fixed as a direct
+consequence**: `holodb.html`'s and `holodb/index.html`'s local `.snip`/`.lim` redefinitions (and one
+inline-styled `.snip`/`.install` instance in each) were exact duplicates of the OLD site.css values
+— updated to the new recalibrated values so they don't silently diverge from the shared component
+now that the shared default moved (same gotcha the "two HoloDb pages" paragraph above already
+documents — checked `holoformer.html`/`holovoxel.html`'s local `<style>` blocks too: their vertical
+spacing there is either genuinely bespoke, page-local components (`.shots`, `.race-row`, `.stat`,
+`table.cmp` — not shared-class duplicates, correctly left alone) or pre-existing inline overrides
+that already diverged from the old default before this pass (not staled BY this pass, left as
+intentional one-offs). No horizontal spacing was touched anywhere (explicitly out of scope).
+
 **Prism motif (2026-08-28 restyle)** — direct user request, referencing Pink Floyd's *Dark Side of
 the Moon* cover: deep-black field + a precise geometric prism refracting a beam into a spectrum,
 read as "progress/refinement," explicitly NOT pride-flag styling. What changed, site-wide (all 17
