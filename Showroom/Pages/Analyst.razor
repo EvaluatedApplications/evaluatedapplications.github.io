@@ -110,9 +110,9 @@
                 <span class="drill-count"><strong>@_filteredRows.ToString("N0")</strong> of @_rows.ToString("N0") rows</span>
                 @foreach (var f in _filters)
                 {
-                    <button class="filter-chip" type="button" @onclick="() => RemoveFilter(f)">@f.Col = @(string.IsNullOrEmpty(f.Val) ? "(empty)" : f.Val) <span class="x">✕</span></button>
+                    <button class="filter-chip" type="button" disabled="@_busy" @onclick="() => RemoveFilter(f)">@f.Col = @(string.IsNullOrEmpty(f.Val) ? "(empty)" : f.Val) <span class="x">✕</span></button>
                 }
-                <button class="drill-clear" type="button" @onclick="ClearFilters">clear</button>
+                <button class="drill-clear" type="button" disabled="@_busy" @onclick="ClearFilters">clear</button>
             }
             else
             {
@@ -670,12 +670,13 @@
             _phase = "Profiling…"; _progress = 0.9; StateHasChanged(); await Task.Delay(1);
             _sqlNames = sqlNames; _types = types; _filters.Clear();
             var swQ = Stopwatch.StartNew();
-            RunProfile();
+            await RunProfile();
             swQ.Stop();
             _queryMs = swQ.Elapsed.TotalMilliseconds;
 
             // ---- entities from the raw text, headline flags ----
-            _entities = ExtractEntities(_text.Length > EntityScanChars ? _text[..EntityScanChars] : _text);
+            _phase = "Scanning for entities…"; StateHasChanged(); await Task.Delay(1);
+            _entities = await ExtractEntities(_text.Length > EntityScanChars ? _text[..EntityScanChars] : _text);
             _flags = BuildFlags(malformed);
 
             // ---- chart-builder default selections ----
@@ -827,7 +828,13 @@
         var s = new string[m]; for (int j = 0; j < m; j++) s[j] = c < cells[start + j].Length ? cells[start + j][c] : ""; return s;
     }
 
-    static List<Entity> ExtractEntities(string t)
+    // Async + cooperatively-yielding (2026-08-28) — 7 regex scans, each up to EntityScanChars (2M) characters,
+    // used to run back-to-back with nothing between them; a whole-file upload at the cap paid all 7 scans as one
+    // unbroken block on every Analyze() call, not just an occasional one. Can't yield mid-Regex.Matches (the BCL
+    // call itself isn't interruptible), so this yields BETWEEN patterns instead — bounds the worst uninterrupted
+    // stretch to one pattern's scan instead of all seven, same "yield at the natural sub-unit boundary" shape as
+    // RunProfile's per-column yield above.
+    static async Task<List<Entity>> ExtractEntities(string t)
     {
         var patterns = new (string Kind, string Re)[]
         {
@@ -843,9 +850,12 @@
         foreach (var (kind, re) in patterns)
         {
             var ms = Regex.Matches(t, re);
-            if (ms.Count == 0) continue;
-            var examples = ms.Select(m => m.Value).Distinct().Take(3).ToList();
-            res.Add(new Entity(kind, ms.Count, examples));
+            if (ms.Count > 0)
+            {
+                var examples = ms.Select(m => m.Value).Distinct().Take(3).ToList();
+                res.Add(new Entity(kind, ms.Count, examples));
+            }
+            await Task.Delay(1);
         }
         return res.OrderByDescending(e => e.Count).ToList();
     }
@@ -917,8 +927,17 @@
         return charts;
     }
 
-    // Re-profile the loaded table against the current drill-down filter: rebuilds field stats, charts, and the filtered count.
-    void RunProfile()
+    // Re-profile the loaded table against the current drill-down filter: rebuilds field stats, charts, and the
+    // filtered count. Made async + cooperatively-yielding (2026-08-28 responsiveness pass) — this used to run
+    // fully synchronously, including from ApplyFilter/RemoveFilter/ClearFilters, which are wired directly to
+    // click handlers on the chart bars and field mini-rows (the site's single most frequent interaction on this
+    // page once a dataset is loaded). At the row cap (500k) a wide table can carry many numeric columns, each
+    // paying its own filtered-row scan in NumericStatsDb below — with no yield anywhere, that whole click-to-
+    // drill-down step used to freeze the tab for however long the full profile took. Now yields once every 8
+    // columns (matching the file's existing "yield every N units" idiom, e.g. RunNoveltyScan's every-16-tokens)
+    // so a wide table's re-profile can't run as one unbroken block, and NumericStatsDb itself yields inside its
+    // own row scans on the largest filtered results (see that method).
+    async Task RunProfile()
     {
         if (_db is null) return;
         string where = BuildWhere();
@@ -936,10 +955,11 @@
             col.Missing = groups.Where(r => string.IsNullOrEmpty(Cell(r[q]))).Sum(r => (long)r["count(*)"]);
             if (_types[c] is FieldType.Integer or FieldType.Decimal)
             {
-                (col.Min, col.Max, col.Mean, col.Outliers, col.Hist) = NumericStatsDb(q, where);
+                (col.Min, col.Max, col.Mean, col.Outliers, col.Hist) = await NumericStatsDb(q, where);
                 col.Top = new();   // numeric columns show stats + a histogram chart, not a top-values bar
             }
             cols.Add(col);
+            if ((c & 0x7) == 7) await Task.Delay(1);   // yield every 8 columns on a wide re-profile
         }
         _cols = cols;
         _charts = BuildCharts(_db, where);
@@ -1078,21 +1098,33 @@
     }
 
     // Numeric stats (min/max/mean/outliers/histogram) over the filtered rows — one column scan, filter-aware.
-    (double, double, double, long, List<(double, double, long)>) NumericStatsDb(string col, string where)
+    // Async + cooperatively-yielding (2026-08-28) — up to 4 unyielded O(rows) passes over this column at the
+    // 500k-row cap (materialize, min/max/sum, variance, histogram bucketing), called once per numeric column
+    // from RunProfile above. Yields every 100k rows within each pass rather than only between columns, so even
+    // a table with a single very wide numeric column can't monopolize the tab. Below that threshold (the
+    // overwhelming majority of real profiles) this never triggers a single extra Task.Delay — no added latency
+    // for the common case.
+    async Task<(double, double, double, long, List<(double, double, long)>)> NumericStatsDb(string col, string where)
     {
+        const int YieldEvery = 100_000;
         var res = _db!.Execute($"SELECT {col} FROM data {where}");
         var vals = new List<double>(res.Rows.Count);
-        foreach (var r in res.Rows) { var v = r.Values.First(); if (v is null) continue; vals.Add(ToD(v)); }
+        int i = 0;
+        foreach (var r in res.Rows)
+        {
+            var v = r.Values.First(); if (v is not null) vals.Add(ToD(v));
+            if (++i % YieldEvery == 0) await Task.Delay(1);
+        }
         if (vals.Count == 0) return (0, 0, 0, 0, new());
         double min = vals[0], max = vals[0], sum = 0;
-        foreach (var v in vals) { if (v < min) min = v; if (v > max) max = v; sum += v; }
+        for (int j = 0; j < vals.Count; j++) { var v = vals[j]; if (v < min) min = v; if (v > max) max = v; sum += v; if ((j + 1) % YieldEvery == 0) await Task.Delay(1); }
         double mean = sum / vals.Count, sq = 0;
-        foreach (var v in vals) sq += (v - mean) * (v - mean);
+        for (int j = 0; j < vals.Count; j++) { sq += (vals[j] - mean) * (vals[j] - mean); if ((j + 1) % YieldEvery == 0) await Task.Delay(1); }
         double std = Math.Sqrt(sq / vals.Count);
         long outliers = std > 0 ? vals.Count(v => Math.Abs(v - mean) > 3 * std) : 0;
         int buckets = 12; double span = max - min, width = span > 0 ? span / buckets : 1;
         var counts = new long[buckets];
-        foreach (var v in vals) { int b = span > 0 ? (int)((v - min) / width) : 0; if (b < 0) b = 0; if (b >= buckets) b = buckets - 1; counts[b]++; }
+        for (int j = 0; j < vals.Count; j++) { var v = vals[j]; int b = span > 0 ? (int)((v - min) / width) : 0; if (b < 0) b = 0; if (b >= buckets) b = buckets - 1; counts[b]++; if ((j + 1) % YieldEvery == 0) await Task.Delay(1); }
         var hist = new List<(double, double, long)>();
         for (int b = 0; b < buckets; b++) hist.Add((min + b * width, min + (b + 1) * width, counts[b]));
         while (hist.Count > 1 && hist[^1].Item3 == 0) hist.RemoveAt(hist.Count - 1);
@@ -1113,17 +1145,42 @@
         return "WHERE " + string.Join(" AND ", parts);
     }
 
-    void ApplyFilter(string col, string val)
+    // ApplyFilter/RemoveFilter/ClearFilters made async (2026-08-28 responsiveness pass): these are wired
+    // directly to every chart-bar and field mini-row click, i.e. the single most frequent interaction on this
+    // page once a dataset is loaded, and used to call the (then-synchronous) RunProfile with no yield and no
+    // busy indicator at all — a click on a wide/large-row-count profile would freeze the tab with zero visual
+    // feedback that anything was happening. Now reuses the existing `_busy` flag the drop/upload/feed flow
+    // already gates every other button and filter-click off of (see the markup's `disabled="@_busy"` on the
+    // hbar/mini-row buttons), so a filter click now visibly disables further clicks while it re-profiles,
+    // rather than silently accepting a pile-up of re-entrant filter changes mid-scan.
+    async Task ApplyFilter(string col, string val)
     {
         if (_db is null || _busy) return;
         if (_filters.Any(f => f.Col == col && f.Val == val)) return;
         _filters.RemoveAll(f => f.Col == col);   // one filter per column; drilling replaces it
         _filters.Add((col, val));
-        try { RunProfile(); } catch (Exception ex) { _error = "Filter failed: " + ex.Message; }
+        _busy = true; StateHasChanged(); await Task.Delay(1);
+        try { await RunProfile(); } catch (Exception ex) { _error = "Filter failed: " + ex.Message; }
+        finally { _busy = false; StateHasChanged(); }
     }
 
-    void RemoveFilter((string Col, string Val) f) { _filters.Remove(f); RunProfile(); }
-    void ClearFilters() { _filters.Clear(); RunProfile(); }
+    async Task RemoveFilter((string Col, string Val) f)
+    {
+        if (_busy) return;
+        _filters.Remove(f);
+        _busy = true; StateHasChanged(); await Task.Delay(1);
+        try { await RunProfile(); } catch (Exception ex) { _error = "Filter failed: " + ex.Message; }
+        finally { _busy = false; StateHasChanged(); }
+    }
+
+    async Task ClearFilters()
+    {
+        if (_busy) return;
+        _filters.Clear();
+        _busy = true; StateHasChanged(); await Task.Delay(1);
+        try { await RunProfile(); } catch (Exception ex) { _error = "Filter failed: " + ex.Message; }
+        finally { _busy = false; StateHasChanged(); }
+    }
 
     // click a result-grid header to sort the shown rows (numeric-aware), toggling direction
     void SortResult(string col)

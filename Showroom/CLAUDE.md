@@ -125,6 +125,26 @@ export. Row cap 500k; entity scan capped 2M chars; upload cap 64MB. Six built-in
 `window.analystDownload` JS interop does the CSV save (Blob URL + synthetic click, since
 `<a download>` can be CSP-blocked).
 
+**Responsiveness sweep (2026-08-28)**: `RunProfile()` (the per-column aggregate rebuild, up to 500k
+filtered rows × however many numeric columns each pay their own `NumericStatsDb` scan) and
+`ExtractEntities` (7 regex passes over up to 2M chars) used to run fully synchronously with zero yield
+points — and, worse, `ApplyFilter`/`RemoveFilter`/`ClearFilters` (wired to every chart-bar/mini-row
+click, the single most frequent post-load interaction) called the then-sync `RunProfile` with no
+`_busy` gate at all, so a filter click could freeze the tab with no visual feedback. Fixed: `RunProfile`
+is now `async Task`, yielding every 8 columns; `NumericStatsDb` is now `async Task<...>`, yielding every
+100k rows within each of its up to 4 O(rows) passes (a no-op below that threshold — no added latency on
+a typical small profile); `ExtractEntities` is now `async Task<List<Entity>>`, yielding BETWEEN its 7
+regex patterns (can't yield mid-`Regex.Matches`, so this bounds the worst uninterrupted stretch to one
+pattern instead of all seven) with a `_phase` update ("Scanning for entities…") so the progress bar
+doesn't visibly stall at 90%. `ApplyFilter`/`RemoveFilter`/`ClearFilters` are now `async Task`, toggling
+the SAME `_busy` flag the drop/upload/feed flow already gates every button off of — filter-chip/clear
+buttons gained `disabled="@_busy"` to match the hbar/mini-row buttons that already had it. Build-verified
+only (0/0); not measured live, so the "would this actually have frozen visibly" call is architectural
+(unyielded O(rows)/O(chars) loops on a common click path), not a profiled number — same disclosed
+limitation as every other CSS/behaviour change in `AboutUs\CLAUDE.md`'s own passes. `BuildCharts`/
+`BuildInsights`/`BuildReplChart` were checked and left alone — all operate on already-capped result sets
+(top-6/12-bucket-histogram/`LIMIT 400`/`ReplRowCap=200`), no real unyielded loop found there.
+
 ## The Creature — `Pages/Creature.razor` (route `/creature`)
 A 20×20 grid the visitor draws (walls/start/apples) where a **HoloFormer** brain learns to forage
 live, on **HoloKernel** (see above). Brain shape: `Dim=384, Layers=1, KPass=` live-read from
@@ -192,9 +212,20 @@ token to the tape. `Lr=0.005` reasoned (between MarketSim's `0.02` and Creature'
 not yet watched live. **Data**: `wwwroot/data/forecaster-sample.json` — 450 REAL hourly AAPL closes
 (~3 months), fetched once from Yahoo Finance's public chart JSON endpoint; training cursor wraps the
 finite series when it runs out. **Queued**: live CORS-open feed; a symbol picker; tuning `Lr` against
-a real run; a producer/consumer training pipeline like Creature's, if per-tick training latency ever
-becomes visible (untested, no evidence yet it's needed — Forecaster trains once per tick, not once
-per multi-step episode, so the blocking window is much smaller than Creature's was).
+a real run.
+
+**Responsiveness sweep, re-evaluated not re-architected (2026-08-28)**: re-checked whether the
+"blocking window per-tick is small" call from the last pass still holds, since K went from a hardcoded
+`2` to live-read `8` in the meantime (~4x heavier `Observe()` per tick) and `ToggleRun`'s burst loop
+runs up to `_speed`=10 `TrainOnceStep()` calls back-to-back before its one `StateHasChanged()`/yield.
+Concluded a full Creature-style Channel producer/consumer split is the WRONG shape here, not just
+unneeded effort: Creature's episode experience list is unbounded (could be dozens of moves) and
+episodes are independent, so dropping a stale queued one is harmless; Forecaster's tape is strictly
+sequential (`_seq`/`_pos` — each tick's true label has to append in order) and burst is capped at 10,
+a much smaller and bounded worst case. Applied the proportionate fix instead: `await Task.Delay(1)`
+after every `TrainOnceStep()` inside the burst loop, not just after the whole burst — bounds the
+worst-case uninterrupted block to one `Observe()` call regardless of the speed slider. Build-verified
+only (0/0), not measured live — the K-growth reasoning is architectural, not a profiled number.
 
 ## Prism — `Pages/Prism.razor` (route `/prism`)
 An autocomplete REPL over a real, point-in-time COPY of the user's own live `prism-holo.bin`

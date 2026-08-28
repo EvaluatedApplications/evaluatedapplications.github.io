@@ -321,7 +321,25 @@
             while (_running)
             {
                 int burst = _speed;
-                for (int b = 0; b < burst && _running; b++) TrainOnceStep();
+                // Yield after every tick, not just after the whole burst (2026-08-28 responsiveness
+                // pass) — re-evaluated whether this loop still deserves its old "blocking window per-tick
+                // is small" pass since K is now live-read from the checkpoint (up to 8 weight-tied passes,
+                // was a hardcoded 2 when that call was last made — a ~4x heavier Observe() per tick), so a
+                // burst of up to 10 back-to-back Observe() calls at max speed is no longer obviously cheap.
+                // A single Task.Delay(1) per tick bounds the worst-case uninterrupted block to one Observe()
+                // call regardless of the speed slider, matching every other cooperative-yield point in this
+                // codebase — WASM is still single-threaded, this is interleaving, not real parallelism.
+                // Deliberately NOT the full Channel producer/consumer treatment Creature's EndEpisode got:
+                // unlike an episode's whole experience list (unbounded, could be dozens of moves), this
+                // burst is capped at 10, and Forecaster's tape/cursor are strictly sequential (each tick's
+                // true label has to append to `_seq` in order), so there's no natural "drop stale work"
+                // split the way Creature's independent-episode simulation had — a lighter fix earns its keep.
+                // Honest tradeoff: a browser clamps Task.Delay(1) to a real minimum (commonly ~4ms), so at
+                // max speed (burst=10) this adds real wall-clock pacing on top of the loop's own compute —
+                // ticks/sec at speed=10 will read slower than before this change, in exchange for the tab
+                // never freezing solid through a 10-tick burst. Not measured live; if the top of the speed
+                // range ever feels too throttled, widen the yield to every 2-3 ticks rather than every one.
+                for (int b = 0; b < burst && _running; b++) { TrainOnceStep(); await Task.Delay(1); }
                 StateHasChanged();
                 await Task.Delay(Math.Max(16, 120 - _speed * 10));
             }
