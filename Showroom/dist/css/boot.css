@@ -1,0 +1,65 @@
+/* Showroom's own boot screen — Showroom-owned (wwwroot/css/boot.css), NOT part of AboutUs/site/assets/
+   site.css (website-owner's territory, never touched). Reuses the SAME design tokens that stylesheet
+   already exposes globally (--bg/--ink/--accent/--ok/--mono/--spectrum-*, loaded first in index.html)
+   so this stays on-brand with the sitewide Prism/spectrum motif, without needing to touch that file.
+   Retro-terminal styling for a real boot log (see index.html's script — every line it prints is an
+   actual resource fetch, and the bar/percentage below are the framework's own real download progress
+   via --blazor-load-percentage[-text], the same mechanism site.css's old spinner used). */
+
+#app:has(.boot) { min-height: 100vh; display: flex; align-items: center; justify-content: center; background: var(--bg); padding: 2rem 1rem; }
+
+.boot { width: min(640px, 100%); font-family: var(--mono); }
+.boot-crt {
+  position: relative;
+  overflow: hidden;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 1.4rem 1.5rem 1.2rem;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, .4), 0 30px 80px -30px rgba(0, 0, 0, .85);
+}
+/* faint scanline texture — static, not animated, so it needs no reduced-motion gate */
+.boot-crt::before {
+  content: "";
+  position: absolute; inset: 0; pointer-events: none;
+  background: repeating-linear-gradient(180deg, rgba(255, 255, 255, .025) 0px, rgba(255, 255, 255, .025) 1px, transparent 1px, transparent 3px);
+}
+
+.boot-head { display: flex; align-items: center; gap: .5rem; font-size: .82rem; letter-spacing: .04em; color: var(--ink); }
+.boot-dot {
+  flex: 0 0 auto; width: .5rem; height: .5rem; border-radius: 50%;
+  background: var(--ok); box-shadow: 0 0 8px var(--ok);
+  animation: boot-pulse 1.4s ease-in-out infinite;
+}
+.boot-sep { color: var(--ink-faint); }
+.boot-sub { margin: .3rem 0 .9rem; font-size: .74rem; color: var(--ink-faint); }
+
+.boot-log {
+  margin: 0; height: 220px; overflow-y: auto; white-space: pre-wrap; word-break: break-all;
+  font-family: var(--mono); font-size: .76rem; line-height: 1.6; color: var(--ink-soft);
+}
+.boot-log .l { display: block; }
+.boot-log .l .p { margin-right: .4rem; color: var(--ink-faint); }
+.boot-log .l.core { color: var(--ink); }
+.boot-log .l.core .p { color: var(--ok); }
+.boot-log .l.fail { color: var(--ink-soft); }
+.boot-log .l.fail .p { color: var(--bad); }
+.boot-log .boot-status { margin-left: .5rem; color: var(--ink-faint); }
+
+/* compact variant — used in-page (e.g. Prism's own checkpoint fetch) rather than the full-viewport
+   app-shell boot; same visual language, just sized to sit inline in a page instead of centering #app. */
+.ck-boot { margin: 0 0 1.4rem; }
+.ck-boot .boot-log { height: auto; max-height: 170px; }
+
+.boot-bar { margin-top: .9rem; height: 4px; border-radius: 4px; overflow: hidden; background: var(--border-2); }
+.boot-bar-fill {
+  height: 100%; width: var(--blazor-load-percentage, 0%);
+  background: linear-gradient(90deg, var(--spectrum-5, #4aa3ff), var(--spectrum-2, #f0a15a));
+  transition: width .15s ease-out;
+}
+.boot-pct { margin-top: .5rem; font-size: .72rem; color: var(--ink-faint); }
+.boot-pct::after { content: var(--blazor-load-percentage-text, "connecting\2026"); }
+
+@keyframes boot-pulse { 0%, 100% { opacity: 1 } 50% { opacity: .35 } }
+@media (prefers-reduced-motion: reduce) { .boot-dot { animation: none; } }
+@media (max-width: 480px) { .boot-log { height: 170px; } }

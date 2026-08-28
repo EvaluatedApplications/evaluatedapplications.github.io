@@ -686,21 +686,27 @@ route to `showroom-owner` if wanted, not something to reach into from here.
 ## Deploy
 
 `.github/workflows/deploy.yml`, triggered on push to `main` (Pages Source must be "GitHub
-Actions", one-time repo setting). Steps: `dotnet publish Showroom/Showroom.csproj` →
-`_site/ = site/* + published wwwroot under _site/tools/` → upload-pages-artifact → deploy. You
-(website-owner) never run this or commit/push — leave changes in the working tree; the
-coordinator batch-commits and the user pushes to publish.
+Actions", one-time repo setting). You (website-owner) never run this or commit/push — leave
+changes in the working tree; the coordinator batch-commits and pushes to publish.
 
-**HARD COUPLING (structural, 2026-08-28)**: `dotnet publish Showroom` is step 1 of the single
-`build` job. If Showroom fails to compile, the job aborts *before* `upload-pages-artifact`, so
-**nothing deploys — including all 17 purely-static content pages**, which have no dependency on
-Showroom whatsoever. A compile error in one tool page takes the whole public site's updates offline.
-Before assuming a content change is live, check Showroom actually builds
-(`dotnet build Showroom/Showroom.csproj -c Release`). Decoupling this is a design item in the
-platform initiative below. *(Noted after a build failure that turned out to be a transient mid-edit
-snapshot of another owner's concurrent work, not a real defect — the coupling is real regardless of
-what triggers it, but don't record such a collision as a bug. Reading another repo's files mid-flight
-can catch a half-landed edit; re-check before reporting.)*
+**CI does NOT run `dotnet publish` (changed 2026-08-28).** Steps are now just: copy `site/*` →
+copy the PRE-BUILT `Showroom/dist/` → upload-pages-artifact → deploy. Reason: this build runs
+`RunAOTCompilation` + `PublishTrimmed=true` (see Platform initiative below), and AOT's
+Emscripten/native compile step is slow enough that redoing it in CI on every push burns real
+minutes for no reason when Showroom's own source hasn't changed. `Showroom/dist/` is a
+COMMITTED build artifact (~55 MB, a deliberate `.gitignore` exception) — build+publish locally
+(`dotnet publish Showroom/Showroom.csproj -c Release -o <tmp>`, copy `<tmp>/wwwroot` over
+`Showroom/dist/`) and commit the result IN THE SAME COMMIT as any Showroom source change.
+
+**THE HARD COUPLING FLIPPED, DOESN'T DISAPPEAR.** Old risk: a Showroom compile error blocked
+the whole site's deploy (CI built Showroom itself, so a break there was loud and visible). New
+risk, arguably worse because it's SILENT: CI no longer builds or checks Showroom at all, so if
+`Showroom/dist/` is stale (source changed, dist/ wasn't rebuilt) or was built from broken source,
+CI will happily deploy it — nothing red, no failed job, the live tools just silently misbehave or
+run old code. There is no CI safety net for this anymore; the discipline is entirely on whoever
+commits: rebuild `dist/` locally, confirm the LOCAL build succeeded, before pushing. Before
+assuming a Showroom content/behavior change is live, check that `Showroom/dist/`'s own
+`_framework` file hashes actually changed in the commit, not just that the source `.razor` file did.
 
 ## Platform initiative (in flight, 2026-08-28) — verified facts
 

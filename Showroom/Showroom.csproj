@@ -9,9 +9,13 @@
 
   <PropertyGroup>
     <IsPackable>false</IsPackable>
-    <!-- Don't trim: our libraries use reflection (EvalApp step factory) that the trimmer can't fully see; a demo values
-         reliability over a few MB of download. -->
-    <PublishTrimmed>false</PublishTrimmed>
+    <!-- EXPERIMENT (2026-08-28, testing the user's own hunch that AOT is worth it for this app's numeric
+         hot loops): AOT only affects `dotnet publish`, not `dotnet run`/the dev server. AOT requires
+         PublishTrimmed=true, so also testing whether the old "EvalApp step factory reflection" trim
+         blocker is actually still true: EvalApp was fixed to be trim-safe (a `new()` constraint on
+         its step-builder generics) earlier THIS session, so the comment this replaces may be stale. -->
+    <PublishTrimmed>true</PublishTrimmed>
+    <RunAOTCompilation>true</RunAOTCompilation>
   </PropertyGroup>
 
   <ItemGroup>
