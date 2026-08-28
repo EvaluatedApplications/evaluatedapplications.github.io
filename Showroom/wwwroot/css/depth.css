@@ -1,0 +1,149 @@
+/* Showroom — scroll-tied parallax depth + spotlight glow (Showroom-owned file; AboutUs/site/assets/
+   site.css is NEVER edited from here, per the hard boundary). This PORTS THE CONCEPT from site.css's
+   "SCROLL-TIED PARALLAX DEPTH + SPOTLIGHT SHADOWS" system (search that string in site.css for the
+   original), reimplemented against Showroom's OWN page shape — it does not reuse site.css's selectors,
+   because Showroom's tool pages don't have a .hero/.sec window-panel layout at all (they're a single
+   centered `.room` column: `.room-head` crumb+title+lede+badges, then a sequence of panel-shaped blocks
+   — `.stat` cards, `.cr-curve`/`.cr-log`/`.cr-stage`/`.fc-stage`/`.or-runs`, or Analyst's `.chart-card`/
+   `.col-card`/`.chip`). Same mechanism, same tuning philosophy, different anchor elements:
+     - Tier "far"  = an ambient wallpaper wash on <main> (every route renders inside it — see
+       Layout/MainLayout.razor), tied to the WHOLE document's scroll (scroll(root)). No shadow — it IS
+       the backdrop, not an object with depth of its own. Direct analogue of site.css's
+       `body.os-chrome` wallpaper.
+     - Tier "near" = `.room-head`, the first thing on every tool page and the thing that most visibly
+       scrolls away — the closest Showroom equivalent to site.css's `.prism-beam` foreground graphic
+       (Showroom has no decorative hero SVG, so the hero TEXT BLOCK itself plays that role here).
+     - Tier "mid"  = the panel-shaped UI blocks a tool actually presents (see class list below) —
+       direct analogue of site.css's `.sec:has(.sec-head)` window panels, settling into place as they
+       scroll into view.
+   Zero JS, zero scroll listener: pure `animation-timeline: scroll()/view()`, gated entirely inside
+   `@media (prefers-reduced-motion:no-preference)` exactly like site.css, same reason (a JS scroll
+   handler would fight the mobile perf budget the whole app is already tuned around — see CLAUDE.md
+   "Real WASM multithreading"/boot-screen sections for how seriously this app treats that budget).
+
+   MAGNITUDE: starts from site.css's ALREADY-TRIPLED, real-device-corrected numbers (that file's own
+   history: an initial "close inspection" tuning was found imperceptible on a real phone and tripled) —
+   not the original subtle pass, so this doesn't repeat that mistake. translateY travel, drop-shadow
+   blur/spread, and alpha % below are the same magnitudes site.css settled on for its own near/mid
+   tiers.
+
+   ANGLE — re-derived, not copied: site.css's tier "near" (`.prism-beam`) uses an off-centre shadow
+   (X != 0) because that graphic sits right-aligned in its hero. `.room-head` and every "mid" panel
+   here are NOT off-centre — `.room` itself is a centred column (`margin:0 auto`) and every panel
+   listed below is a full-width block inside it — so both tiers use the SAME straight-down (X=0)
+   convention site.css's own "mid" tier uses for its centred panels. This is the page-structure
+   judgement call the task asked for, not a blind copy-paste of site.css's near-tier numbers.
+
+   OPACITY-MULTIPLIER TRAP — checked per site.css's own documented gotcha (a `filter:drop-shadow()`
+   sits UNDER an element's own `opacity` and gets silently dimmed by it): every class below
+   (`.room-head`, `.stat`, `.cr-curve`, `.cr-log`, `.cr-stage`, `.fc-stage`, `.or-runs`, `.chart-card`,
+   `.col-card`, `.chip`) was checked against all four tools' own `.razor.css` files and none carries
+   its own `opacity`. `.dropzone` (Analyst) was DELIBERATELY EXCLUDED from the mid-tier list for this
+   exact reason — its `.dropzone.busy` state carries `opacity:.6`, which would dim this glow during a
+   real upload-in-progress state; simpler to leave it out than special-case a transient state.
+
+   BOX-SHADOW vs FILTER — same reasoning as site.css: none of these classes currently carry a static
+   `box-shadow` of their own (checked; they only use `border`/`border-left`), so there's nothing to
+   duplicate — still `filter:drop-shadow()`, not an animated `box-shadow`, to match the site's own
+   established choice and stay compositor-cheap.
+
+   PLACEHOLDER COLOURS — do not treat --c-data/--c-ml below as final. They are site.css's OWN existing
+   category tokens (Showroom already links /assets/site.css; Home.razor's tool cards already tag
+   Analyst=var(--c-data), Creature/Forecaster/Prism=var(--c-ml) — reused here as-is, not invented).
+   FOLLOW-UP FLAGGED: a parallel website-owner task is moving the whole site from 4 coarse category
+   colours to one distinct hue per NuGet package (Prism/AlgFormer and Analyst/HoloDb explicitly named
+   as needing genuinely different colours). Once that lands, repoint the two `[data-cat]` rules below
+   (and ideally Home.razor's own `--cat` tags) at the new per-package tokens — this file's mechanism
+   (one custom-property pair per page, consumed by keyframes via color-mix()) does not need to change,
+   only the token values it reads. Also flagged: The Creature genuinely depends on BOTH AlgFormer(ml)
+   AND Tracer(spatial) — tagged `data-cat="ml"` only here, same simplification Home.razor's own --cat
+   already makes for that card; a real two-tone chord (mirroring site.css's Creature-card gradient
+   mechanism) is natural follow-up work once the real package-colour table exists, not attempted here
+   since this task is structural-first per its own instructions. */
+
+.room[data-cat="data"]{ --glow-near:var(--c-data, #4aa3ff); --glow-mid:var(--c-data, #4aa3ff); }
+.room[data-cat="ml"]{ --glow-near:var(--c-ml, #c07dff); --glow-mid:var(--c-ml, #c07dff); }
+
+/* Static wallpaper wash — unconditional (visible with or without reduced-motion; only the DRIFT below
+   is motion-gated), same 3-stop mix as site.css's own body.os-chrome wallpaper (accent violet + data
+   blue + warm coral) so Showroom reads as one brand with the static site even before any animation
+   kicks in. Applied to <main> (Layout/MainLayout.razor wraps every route in exactly one <main>@Body</
+   main>, verified — no other <main> element exists anywhere in this app) rather than <body>, because
+   <body> lives in the single shared wwwroot/index.html and can't carry a per-route data-cat attribute
+   the way the static site's per-page <body data-cat="..."> can. */
+main{
+  background:
+    radial-gradient(1100px 560px at 12% -8%, color-mix(in srgb, var(--accent, #8b7dff) 9%, transparent), transparent 60%),
+    radial-gradient(900px 520px at 100% 0%, color-mix(in srgb, var(--c-data, #4aa3ff) 7%, transparent), transparent 55%),
+    radial-gradient(820px 480px at 46% 104%, color-mix(in srgb, var(--spectrum-1, #f0796a) 7%, transparent), transparent 55%),
+    var(--bg, #050608);
+}
+
+@media (prefers-reduced-motion:no-preference){
+  @keyframes sr-parallax-far{
+    from{ background-position: 0% 0%, 0% 0%, 0% 0%, 0% 0%; }
+    to{ background-position: 0% 12%, 0% -9%, 0% 6%, 0% 0%; }
+  }
+  @keyframes sr-parallax-near{
+    from{ transform: translateY(0); filter: drop-shadow(0 32px 24px color-mix(in srgb, var(--glow-near, #fff) 55%, transparent)); }
+    to{ transform: translateY(-70px); filter: drop-shadow(0 16px 12px color-mix(in srgb, var(--glow-near, #fff) 25%, transparent)); }
+  }
+  @keyframes sr-parallax-mid{
+    from{ transform: translateY(30px); filter: drop-shadow(0 12px 15px color-mix(in srgb, var(--glow-mid, var(--accent)) 20%, transparent)); }
+    to{ transform: translateY(0); filter: drop-shadow(0 36px 48px color-mix(in srgb, var(--glow-mid, var(--accent)) 55%, transparent)); }
+  }
+
+  /* Tier "far" — tied to scroll(root), the whole document's own scroll range, so the drift only
+     completes once the entire page has been scrolled — the slowest-reading layer, exactly what a
+     distant backdrop should do. Unconditional across all viewports (matches site.css's own tier-far
+     scope), since it's cheap (background-position only) and site.css itself doesn't width-gate it. */
+  main{
+    animation-name: sr-parallax-far;
+    animation-timing-function: linear;
+    animation-timeline: scroll(root);
+  }
+
+  /* >=901px matches site.css's own breakpoint for its near/mid tiers (and Showroom's own tablet/
+     desktop boundary — every tool's .razor.css already uses 640px as the ONLY narrow-viewport
+     breakpoint, so 901px sits cleanly above it with no new tuning needed). Below this, room-head and
+     the panel list render exactly as they do today — flat, motionless — same "don't add a half-tuned
+     third chrome variant for tablet" call site.css itself made. */
+  @media (min-width:901px){
+    /* Tier "near" — .room-head (crumb + h1 + lede + badges), the first block on every tool page and
+       the one that most visibly scrolls past. view() timeline scoped to room-head's OWN visibility
+       (an exit, same technique as site.css's .prism-beam tier), not the whole document. Also applied
+       to .hero — Home.razor (the "/" tool gallery, `@page "/"`) reuses site.css's own .hero class
+       verbatim (no Showroom-scoped equivalent exists for that page), so this is the one place this
+       file's selectors reach a site.css-defined class name; still a Showroom-owned RULE in a
+       Showroom-owned file, not an edit to site.css itself. Home.razor has no single package domain to
+       tag (it lists all four tools), so it gets no [data-cat] override and falls through to the
+       var(--glow-near,#fff)/var(--glow-mid,var(--accent)) defaults in the keyframes above — same
+       "no single focus -> site accent default" call site.css itself makes for index.html/packages.html. */
+    .room-head, .hero{
+      animation-name: sr-parallax-near;
+      animation-timing-function: linear;
+      animation-timeline: view();
+    }
+
+    /* Tier "mid" — every panel-shaped block a tool actually presents. One shared rule (comma-separated
+       selectors) covers all four tools without a per-tool CSS fork: .stat/.cr-curve/.cr-log/.cr-stage/
+       .fc-stage/.or-runs (Creature, Forecaster, Prism's stat cards + curve/log/stage/REPL panels) and
+       .chart-card/.col-card/.chip (Analyst, which has no .stat/.cr-* shape of its own).
+       DELIBERATELY NOT INCLUDED: Home.razor's `.card.tool` gallery cards — site.css's `.card:hover`
+       already animates its OWN `transform:translateY(-2px)`, and a running scroll-linked animation's
+       value for the SAME property wins over an ordinary hover rule in the cascade, so adding this
+       tier there would have silently broken the existing hover-lift affordance on every tool card.
+       Fixing that properly needs a wrapper element (animate the wrapper's transform, leave `.card`'s
+       own hover transform alone) — flagged as follow-up, not attempted in this pass. Each panel below
+       settles a few px as it individually scrolls into view (animation-range caps it to the first 45%
+       of its own entry — a quick settle, not a long drift), same as site.css's own tier "mid". */
+    .stat, .cr-curve, .cr-log, .cr-stage, .fc-stage, .or-runs,
+    .chart-card, .col-card, .chip{
+      animation-name: sr-parallax-mid;
+      animation-timing-function: linear;
+      animation-fill-mode: both;
+      animation-timeline: view();
+      animation-range: entry 0% entry 45%;
+    }
+  }
+}

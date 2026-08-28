@@ -24,8 +24,9 @@ REPL). Plus one **unlisted** page (below), a client preview, not a package-capab
   (`@page "/not-found"`) is the router fallback.
 - `wwwroot/index.html`: `<base href="/tools/" />`, links the SHARED `/assets/site.css` (Showroom
   borrows the one design system) plus Showroom's OWN `wwwroot/css/boot.css` (see Boot screen) and
-  Blazor's bundled `Showroom.styles.css`; also carries the GitHub Pages SPA deep-link restore script
-  and `window.analystDownload` (Blob download helper for The Analyst's CSV export).
+  `wwwroot/css/depth.css` (see "Scroll-tied parallax depth" below) and Blazor's bundled
+  `Showroom.styles.css`; also carries the GitHub Pages SPA deep-link restore script and
+  `window.analystDownload` (Blob download helper for The Analyst's CSV export).
 - **CSS pattern**: each tool has its own `Pages/<Tool>.razor.css`, Blazor-scoped, all four DUPLICATE
   the same base block (`.room`/`.crumb`/`.room-head h1`/`.lede`/`.badges`/`.err`/`.hint`/
   `.cr-controls`/`.cr-stats`/`.cr-curve`/`.cr-log`/`.outro` — established house style, CSS isolation
@@ -113,6 +114,61 @@ an always-on blinking terminal cursor after the log (covers any wait, hook or no
 status line distinct from `--blazor-load-percentage-text`, encoding "downloaded ≠ ready" — and a
 striped `#boot-bar.busy` overlay while compiling (fill WIDTH still tracks real bytes). Build-verified
 only (0/0), not seen live — user should confirm on the phone that showed the original stall.
+
+## Scroll-tied parallax depth + spotlight glow — `wwwroot/css/depth.css` (2026-08-28)
+Ports the CONCEPT from `AboutUs/site/assets/site.css`'s "SCROLL-TIED PARALLAX DEPTH + SPOTLIGHT
+SHADOWS" system (that file, search that string) into Showroom's own page shape — not the same
+selectors, since Showroom's tool pages have no `.hero`/`.sec` window layout at all (a single
+centred `.room` column: `.room-head` then a sequence of panel blocks). Own Showroom-owned file
+(`wwwroot/css/depth.css`, linked in `index.html` after `site.css`/`boot.css`) — `site.css` itself
+was never touched, per the hard boundary. Zero JS, gated entirely inside
+`@media (prefers-reduced-motion:no-preference)`, same as the static site.
+
+**Three tiers, re-derived for this page shape, not copy-pasted**: tier "far" = an ambient wallpaper
+wash on `<main>` (the one element every route renders inside, `Layout/MainLayout.razor`), tied to
+`scroll(root)`, no shadow — same 3-stop accent/data-blue/coral mix `site.css`'s own wallpaper uses.
+Tier "near" = `.room-head` (crumb+h1+lede+badges, the first thing on every tool page — Showroom has
+no decorative hero SVG like `.prism-beam`, so the hero text block itself plays that role) plus
+`.hero` (Home.razor's own gallery page reuses `site.css`'s `.hero` class verbatim). Tier "mid" =
+every panel-shaped block a tool actually presents, one shared rule: `.stat`/`.cr-curve`/`.cr-log`/
+`.cr-stage`/`.fc-stage`/`.or-runs` (Creature/Forecaster/Prism) + `.chart-card`/`.col-card`/`.chip`
+(Analyst, which has no `.stat`/`.cr-*` shape of its own). Magnitude starts from `site.css`'s
+ALREADY-TRIPLED real-device-corrected numbers (its own history: an initial subtle pass was found
+imperceptible and tripled) — not the original subtle pass. **Angle re-derived, not copied**:
+`.prism-beam` uses an off-centre shadow (right-aligned in its hero); `.room-head`/the mid-tier
+panels here are all centred blocks inside a centred `.room` column, so both tiers use `site.css`'s
+own centred/"mid"-tier straight-down (X=0) convention instead.
+
+**Deliberately excluded, both checked for the same opacity-multiplier trap `site.css` documents
+(an element's own `opacity` silently dims a `filter:drop-shadow()` composited under it)**:
+`.dropzone` (Analyst) — its `.dropzone.busy` state carries `opacity:.6`, would dim the glow mid-
+upload, simpler to leave out than special-case a transient state; `.card.tool` (Home.razor's
+gallery cards) — `site.css`'s own `.card:hover{transform:translateY(-2px)}` would lose that fight
+to a running scroll-linked animation's `transform` value for the same property, silently breaking
+the existing hover-lift affordance. A real fix needs a wrapper element (animate the wrapper, leave
+`.card`'s own hover transform alone) — flagged as follow-up, not attempted.
+
+**Colour — PLACEHOLDER, flagged for a follow-up recolour pass**: `.room[data-cat="data"]` (Analyst)
+/ `.room[data-cat="ml"]` (Creature/Forecaster/Prism) on each tool's outer `<div class="room">`
+(added this pass) set `--glow-near`/`--glow-mid`, read by the keyframes via `color-mix()` — reusing
+`site.css`'s OWN existing `--c-data`/`--c-ml` tokens (the same ones `Home.razor`'s tool cards
+already tag with), not invented. A parallel website-owner task is moving the whole site from 4
+coarse category colours to one distinct hue per NuGet package (Prism/AlgFormer and Analyst/HoloDb
+named explicitly as needing genuinely different colours) — once that lands, repoint the two
+`[data-cat]` rules in `depth.css` (and ideally `Home.razor`'s own `--cat` tags) at the new
+per-package tokens; the mechanism itself (one custom-property pair per page) doesn't need to
+change. Also flagged: The Creature genuinely depends on BOTH AlgFormer(ml) and Tracer(spatial),
+tagged `ml`-only here (same simplification `Home.razor`'s own `--cat` already makes) — a real
+two-tone chord is natural follow-up work once the real package-colour table exists.
+
+Verified structurally only (no live browser, per this repo's own boundary): `dotnet build
+Showroom.csproj -c Release` green (0/0) after the change; `depth.css` confirmed present in the
+build's static-web-assets manifest; brace/paren balance on the whole file confirmed via a full-file
+regex count (17/17 braces, 93/93 parens), not just a per-line eyeball. Not verified: how the effect
+actually reads live (the task's own instruction to start from an unmistakably-visible magnitude,
+not the site's original imperceptible-on-purpose first pass, was followed, but only a real device
+can confirm it "reads right" the way the coordinator/user confirmed for the static site's own
+tuning passes).
 
 ## Real WASM multithreading (2026-08-28, priority infra task) — `wwwroot/coi-serviceworker.js`
 Real OS threads (pthreads over `SharedArrayBuffer`) inside the WASM runtime, NOT the cooperative
@@ -428,3 +484,8 @@ behaviour is the user's to check (dev server: `dotnet run`, or the deployed `/to
   doesn't list individual tools — a new tool still needs a `Home.razor` gallery card, not a nav entry.
 - `EvaluatedApplications.AlgFormer`'s `PrismFormer` namespace (not `AlgFormer`) is where
   `HoloFormer`/`HoloShape`/`SubwordVocab` actually live — easy to reach for the wrong `@using`.
+- A new tool page picks up the parallax/glow treatment (`wwwroot/css/depth.css`) FOR FREE as long as
+  it reuses the house `.room`/`.room-head`/`.stat`/`.cr-curve`/`.cr-log`/`.outro` shape (see Site
+  plumbing's "CSS pattern" note) — it just needs its own `data-cat="data|ml"` on the outer
+  `<div class="room">` (see "Scroll-tied parallax depth" section) to get the right glow tint instead
+  of the site-accent default.
