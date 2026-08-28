@@ -264,62 +264,46 @@
                 ? AlphaRamp.Reconstruct(_rounds.Value, addRound: 0, _trainedIterWarm.Value)
                 : 1.0;
 
-            // Throwaway COMPUTE warm-up pass (2026-08-28) — pays WASM's cold-start cost (interpreter/
-            // type-loading overhead on the FIRST call through a given hot path — Blazor WASM has no
-            // AOT here, so the very first LogitsFor call is measurably slower than every call after
-            // it) while the boot screen is still up, not during the visitor's first real Continue
-            // click. Purely internal: never touches _history/_pendingContinuation/_prompt, discards
-            // its result, and must not be able to fail page load — a warm-up miss just means the
-            // FIRST real generation pays the cold-start cost again, exactly like before this fix
-            // existed, not a broken page. Deliberately synchronous/on the UI thread: the boot screen
-            // is already narrating real work, so a few extra ms before it flips to the REPL is
-            // honest, not hidden — and it's the only way to guarantee the cost lands before the
-            // visitor can click Continue (a fire-and-forget background warm-up could still lose the
-            // race against a fast typist).
-            //
-            // SHARPENED 2026-08-28 (user's own sharper repro): the FIRST click's PROMPT ECHO
-            // (`_pendingPrompt` — pure markup, no inference at all) also failed to render on its own,
-            // appearing together with the whole continuation instead of first. A compute-only warm-up
-            // can't explain or fix that — it never touches the render path. Real culprit is very
-            // likely the RENDER side: `.or-run.pending`'s markup (the `_generating==true` branch of
-            // this component's generated `BuildRenderTree`) is nested inside the `!_loaded` check's
-            // `else` branch, so it is NEVER exercised by anything during the boot screen — the boot
-            // log's own `Begin`/`Finish` StateHasChanged() calls only ever interpret the `!_loaded`
-            // branch. The very FIRST time that particular conditional branch's IL runs, on an
-            // interpreted (no-AOT) WASM runtime, is therefore a visitor's first real Continue click —
-            // exactly the kind of one-time cost the compute warm-up above exists to avoid, just on
-            // the render side instead. So: warm BOTH. The render warm-up below must run AFTER
-            // `_loaded = true` (that conditional is what selects the branch containing `.or-run.pending`
-            // at all) and flips `_generating` true then immediately back to false with no `await`
-            // between the two StateHasChanged() calls, so nothing actually paints in between — no
-            // visible flicker, purely paying the interpreter's first-execution cost during boot.
+            // Real example round, seeded into _history BEFORE _loaded=true (2026-08-28) — REPLACES two
+            // earlier attempts that both tried to pre-pay WASM's cold-start cost (no AOT here, so the
+            // first real invocation of a given code path — compute OR render — is measurably slower
+            // than every call after it) without keeping anything: a throwaway compute-only LogitsFor
+            // call, then a synthetic _generating-flip render warm-up. Both were fragile — the render
+            // warm-up in particular depended on catching Blazor's render batching at exactly the right
+            // moment, and even after fixing a missing-yield bug it still didn't reliably work live
+            // (confirmed by the user). This is simpler and more robust: run one REAL generation now,
+            // against a fixed example prompt, and KEEP the result as _history's first entry — a
+            // permanent piece of UI state that renders through the component's completely ordinary
+            // initial render (the same `.or-run` markup a real user round uses), no special timing
+            // tricks needed. It pays the LogitsFor/render cold-start cost as a side effect of doing
+            // real work, and unlike a hardcoded placeholder string, it stays honest with this site's
+            // "no mocked output" rule — what a visitor sees on load really did come out of the model,
+            // just one page-load earlier than their own first click.
             try
             {
-                var warmCtx = _vocab.Encode("the");
-                if (warmCtx.Length == 0) warmCtx = new[] { 0 };
-                _ = _session.Logits(warmCtx);
+                const string examplePrompt = "the";
+                var seq = new List<int>(_vocab.Encode(examplePrompt));
+                var outIds = new List<int>();
+                var vocabLimit = _vocab.Size;
+                var guard = new DegenGuard(Policy);
+                var trailedOff = false;
+                for (var step = 0; step < MaxReplyChars; step++)
+                {
+                    var take = Math.Min(seq.Count, _stats.Context);
+                    var ctx = take > 0 ? seq.Skip(seq.Count - take).ToArray() : new[] { 0 };
+                    var logits = _session.Logits(ctx);
+                    var t = Gate.Pick(logits, vocabLimit, Policy, Random.Shared);
+                    if (t == CharVocab.End) break;
+                    outIds.Add(t); seq.Add(t);
+                    if (guard.Observe(t)) { trailedOff = true; break; }
+                }
+                var shown = _vocab.Decode(outIds).TrimEnd();
+                var continuationText = shown.Length > 0 ? shown : "(blank — this checkpoint is still very early in training)";
+                _history.Add(new RunEntry(examplePrompt, continuationText, trailedOff));
             }
-            catch { /* warm-up only — never user-visible, never blocks page load either way */ }
+            catch { /* example generation only — never user-visible as an error, never blocks page load */ }
 
             _loaded = true;
-
-            try
-            {
-                _generating = true; _pendingPrompt = "warm"; _pendingContinuation = "up";
-                StateHasChanged();
-                // StateHasChanged() only SCHEDULES a render — without actually yielding back to the
-                // browser, Blazor batches it with whatever runs next and only paints the LATEST state.
-                // The original version of this warm-up reverted _generating in the very next line with
-                // no yield in between, so the scheduled render was still pending when it got overwritten
-                // — Blazor never built/diffed the .or-run.pending branch at all, and the warm-up was a
-                // silent no-op (confirmed live: the user still saw the cold-start stutter after it
-                // shipped). A real yield here (Task.Delay, not Task.Yield — WASM's message pump needs an
-                // actual round trip through the browser event loop to flush a pending render) forces
-                // that render to really happen during boot.
-                await Task.Delay(1);
-            }
-            catch { /* warm-up only — never user-visible, never blocks page load either way */ }
-            finally { _generating = false; _pendingPrompt = ""; _pendingContinuation = ""; }
         }
         catch (Exception ex) { _loadError = "Couldn't load the checkpoint: " + ex.Message; }
     }
