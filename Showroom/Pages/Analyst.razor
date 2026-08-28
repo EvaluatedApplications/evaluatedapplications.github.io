@@ -1,12 +1,15 @@
 @page "/analyst"
 @inject IJSRuntime JS
 @inject HttpClient Http
+@inject HoloKernel.SessionHost Sessions
 @using System.Diagnostics
 @using System.Globalization
 @using System.Text
 @using System.Text.RegularExpressions
 @using System.Text.Json
 @using HoloDb
+@using PrismFormer
+@using HoloKernel
 
 <PageTitle>The Analyst — free in-browser data analytics</PageTitle>
 
@@ -256,6 +259,69 @@
             }
         </div>
 
+        @if (_textCols.Count > 0)
+        {
+            <h2>Novelty scan <span class="beta-tag">experimental</span></h2>
+            <p class="repl-intro">Score a free-text column against a real, trained <strong>HoloFormer</strong> checkpoint's
+                own predictions &mdash; running entirely in your browser, same as everything else on this page. For each
+                value, it walks the text through the model token by token and reads back the probability the model
+                itself predicted for what actually came next. Low predicted probability = the model found this
+                surprising = <strong>novel relative to what it's learned so far</strong>. Nothing is generated or
+                sampled here &mdash; this only ever reads the model's own predictions against text that's already there.</p>
+            <p class="hint novelty-caveat"><strong>Being honest about it:</strong> this checkpoint is very early in
+                training, with a small vocabulary and a short context window. Right now a high score mostly reflects
+                <em>unusual character sequences for a small, undertrained model</em> &mdash; not genuine semantic
+                novelty. Read it as an honest, rough signal, not a mature capability.</p>
+            <div class="cb-controls">
+                <label>column
+                    <select @bind="_novCol">@foreach (var c in _textCols) { <option value="@c.Name">@c.Name</option> }</select>
+                </label>
+                <button class="go" @onclick="RunNoveltyScan" disabled="@(_novBusy || _busy || string.IsNullOrEmpty(_novCol))">
+                    @(_novBusy ? "Scanning…" : "Scan for novelty")
+                </button>
+                @if (_prismSession is null && !_novBusy)
+                {
+                    <span class="hint">First scan downloads a ~2.9&nbsp;MB checkpoint (shared instantly with the Prism/Creature/Forecaster tools if you've already loaded one this visit). Scans up to @NoveltyCellCap.ToString("N0") values, capped for browser responsiveness.</span>
+                }
+            </div>
+
+            @if (_novBusy)
+            {
+                <div class="progress-wrap">
+                    <div class="progress-track"><div class="progress-fill" style="width:@Pct(_novProgress)"></div></div>
+                    <span class="progress-label">@_novPhase</span>
+                </div>
+            }
+            @if (_novError is not null)
+            {
+                <p class="err">@_novError</p>
+            }
+            else if (_novResults.Count > 0)
+            {
+                <div class="speed">Scanned <strong>@_novResults.Count.ToString("N0")</strong> values from
+                    <strong>@_novCol</strong> &mdash; average surprisal <strong>@_novAvg.ToString("F2")</strong>
+                    bits/token (a relative score against this one small checkpoint, not an absolute measure of
+                    novelty).</div>
+
+                @if (_novHist is not null)
+                {
+                    <figure class="chart-card"><figcaption>Surprisal distribution (bits/token, higher = more surprising to the model)</figcaption>@RenderChart(_novHist)</figure>
+                }
+
+                <div class="nov-sub">Most novel values <span class="click-note">click to filter</span></div>
+                <div class="col-bars nov-list">
+                    @foreach (var r in _novResults.OrderByDescending(x => x.Score).Take(15))
+                    {
+                        <button class="mini-row" type="button" disabled="@_busy" @onclick="() => ApplyFilter(_novCol, r.Val)" title="@r.Val">
+                            <span class="mini-val">@Trunc(r.Val, 70)</span>
+                            <div class="mini-bar"><div class="mini-fill" style="width:@NovFill(r.Score)"></div></div>
+                            <span class="mini-n">@r.Score.ToString("F1")</span>
+                        </button>
+                    }
+                </div>
+            }
+        }
+
         <h2>Ask it anything</h2>
         <p class="repl-intro">A live SQL prompt against your data, answered by the same in-browser database. Try a
             suggestion or write your own &mdash; the fields are named just as they read above. Results come back as a
@@ -418,6 +484,32 @@
     List<Col> _dimCols = new(); List<Col> _numCols = new();
     string _cbDim = "", _cbMeasure = "", _cbAgg = "count", _cbType = "auto", _cbSql = "";
     Chart? _cbChart; string? _cbError; bool _cbBusy;
+
+    // ---- novelty scan: perplexity/surprisal against Prism's trained HoloFormer checkpoint. Opt-in and lazy —
+    // the checkpoint is only fetched the first time a visitor actually clicks "Scan for novelty", never on page
+    // load, so the (much broader, non-text-heavy-by-default) Analyst audience never pays for it unasked. Shares
+    // HoloKernel.SessionHost's "prism" key with Prism/Creature/Forecaster: if any of those already loaded it this
+    // visit, this reuses that in-memory session instantly instead of re-downloading.
+    List<Col> _textCols = new();
+    string _novCol = "";
+    bool _novBusy; double _novProgress; string _novPhase = "";
+    string? _novError;
+    record NovResult(long RowId, string Val, double Score);
+    List<NovResult> _novResults = new();
+    double _novAvg;
+    Chart? _novHist;
+
+    HoloSession? _prismSession;
+    SubwordVocab? _prismVocab;
+    int _prismKPass = 1;
+
+    // Real per-token compute on an interpreted (no-AOT) WASM runtime, against Prism's d=1536 checkpoint — the
+    // most expensive thing this page can trigger. Capped hard on BOTH axes (cells scanned, and tokens scored per
+    // cell) so a worst case stays bounded (@NoveltyCellCap * @NoveltyMaxTokensPerCell forward passes, max) rather
+    // than scaling with dataset size. Judgment call, not a measured number — flagged in the task return; retune
+    // live if a real run feels too slow or too shallow.
+    const int NoveltyCellCap = 120;
+    const int NoveltyMaxTokensPerCell = 32;
 
     static string Pct(double f) => (f * 100).ToString("F0") + "%";
     static string Secs(double ms) => ms < 1000 ? ms.ToString("F0") + " ms" : (ms / 1000).ToString("F2") + " s";
@@ -855,6 +947,17 @@
         if (_dimCols.Count == 0) _dimCols = _cols.ToList();
         _numCols = _cols.Where(c => c.Type is FieldType.Integer or FieldType.Decimal).ToList();
         _insights = _filters.Count == 0 ? BuildInsights(_db, where) : new();   // deeper analysis only at the top level
+
+        // novelty scan is scoped to whatever the profiler already calls "text" (high-cardinality, non-numeric,
+        // non-date, non-boolean, not a small closed set of categories — see InferType). Recomputed here so it
+        // tracks a drill-down filter same as _dimCols/_numCols; stale results from a previous column/filter are
+        // cleared rather than left showing against a subset they were never scored on.
+        _textCols = _cols.Where(c => c.Type == FieldType.Text).ToList();
+        if (!_textCols.Any(c => c.Name == _novCol))
+        {
+            _novCol = _textCols.FirstOrDefault()?.Name ?? "";
+            _novResults = new(); _novHist = null; _novError = null; _novAvg = 0;
+        }
     }
 
     // "What the data says": computed insights beyond the per-field profile — correlations between numeric fields,
@@ -1160,6 +1263,144 @@
         }
         catch (Exception ex) { _cbError = ex.Message; _cbChart = null; }
         finally { _cbBusy = false; StateHasChanged(); }
+    }
+
+    // ---- novelty scan ----
+
+    // Lazy checkpoint load: only ever runs from RunNoveltyScan, never from OnInitialized — the whole point of
+    // making this opt-in. Mirrors Prism.razor's own OnInitializedAsync sequence (same sidecar files, same
+    // FromCheckpoint(bytes, kPass, alpha) call, same AlphaRamp.Reconstruct call for a mid-ramp snapshot) rather
+    // than re-deriving it differently. Sidecar metadata (rounds/stackK/iterWarm) is fetched fresh here even when
+    // Prism already loaded the model, because SessionHost's factory only ever runs ONCE per key — if Prism (or
+    // Creature/Forecaster) got there first, GetOrCreateAsync below just returns their already-built session and
+    // this method's own locally-fetched K/alpha are discarded in favour of the real session's ground truth.
+    async Task<bool> EnsurePrismLoadedAsync()
+    {
+        if (_prismSession is not null && _prismVocab is not null) return true;
+        try
+        {
+            _novPhase = "Loading checkpoint vocabulary…"; StateHasChanged(); await Task.Delay(1);
+            var vocabBytes = await Http.GetByteArrayAsync("data/oracle-vocab.txt");
+            var merges = Encoding.UTF8.GetString(vocabBytes).Replace("\r\n", "\n").Split('\n').Where(l => l.Length > 0).ToList();
+            _prismVocab = new SubwordVocab(merges);
+
+            long? rounds = null; int? stackK = null; int? iterWarm = null;
+            try { rounds = long.Parse((await Http.GetStringAsync("data/oracle-rounds.txt")).Trim()); } catch { }
+            try { stackK = int.Parse((await Http.GetStringAsync("data/oracle-stackk.txt")).Trim()); } catch { }
+            try { iterWarm = int.Parse((await Http.GetStringAsync("data/oracle-iterwarm.txt")).Trim()); } catch { }
+
+            bool reused = Sessions.IsLoaded("prism");
+            _novPhase = reused ? "Reusing already-loaded checkpoint…" : "Loading checkpoint weights (~2.9 MB, once)…";
+            StateHasChanged(); await Task.Delay(1);
+            _prismSession = await Sessions.GetOrCreateAsync("prism", async () =>
+            {
+                var bytes = await Http.GetByteArrayAsync("data/oracle-brain.bin");
+                var peek = HoloFormer.Deserialize(bytes);
+                var kPass = stackK ?? 1;
+                var alpha = (peek.Layers == 1 && rounds is not null && iterWarm is > 0)
+                    ? AlphaRamp.Reconstruct(rounds.Value, addRound: 0, iterWarm.Value)
+                    : 1.0;
+                return HoloSession.FromCheckpoint(bytes, kPass, alpha);
+            });
+            _prismKPass = _prismSession.KPass;   // ground truth from whichever tool actually built the session first
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _novError = "Couldn't load the checkpoint for novelty scanning: " + ex.Message;
+            return false;
+        }
+    }
+
+    // Softmax-and-look-up the TRUE next token's probability — the same numerically-stable pattern
+    // (subtract the max before exponentiating) HoloKernel.Gate.Evaluate/TopK already use, just reading one
+    // specific index back out instead of the top-1 or top-K. No sampling, no Gate.Pick, nothing generated.
+    static double SurprisalBits(double[] logits, int vocab, int trueId)
+    {
+        double max = logits[0];
+        for (int i = 1; i < vocab; i++) if (logits[i] > max) max = logits[i];
+        double sum = 0;
+        for (int i = 0; i < vocab; i++) sum += Math.Exp(logits[i] - max);
+        double p = Math.Exp(logits[trueId] - max) / sum;
+        return -Math.Log(Math.Max(p, 1e-12), 2);   // bits of surprisal for this one token; low p -> high surprisal
+    }
+
+    async Task RunNoveltyScan()
+    {
+        if (_db is null || string.IsNullOrEmpty(_novCol) || _busy) return;
+        _novBusy = true; _novError = null; _novResults = new(); _novHist = null; _novAvg = 0; _novProgress = 0;
+        _novPhase = "Preparing…"; StateHasChanged(); await Task.Delay(1);
+        try
+        {
+            if (!await EnsurePrismLoadedAsync()) return;
+            var vocab = _prismVocab!; var session = _prismSession!;
+            int ctxCap = session.Stats().Context;
+
+            var cond = BuildWhere();
+            var extra = $"{_novCol} IS NOT NULL AND {_novCol} <> ''";
+            var where = cond.Length == 0 ? $"WHERE {extra}" : $"{cond} AND {extra}";
+            var rows = _db.Execute($"SELECT rowid, {_novCol} FROM data {where} ORDER BY rowid LIMIT {NoveltyCellCap}").Rows;
+
+            _novPhase = $"Scanning… 0/{rows.Count:N0}"; StateHasChanged(); await Task.Delay(1);
+            var results = new List<NovResult>(rows.Count);
+            int done = 0;
+            foreach (var r in rows)
+            {
+                var text = Cell(r[_novCol]);
+                if (text.Length > 0)
+                {
+                    var ids = vocab.Encode(text).ToList();
+                    if (ids.Count >= 2)
+                    {
+                        var window = new List<int> { ids[0] };
+                        double sum = 0; int scored = 0;
+                        int limit = Math.Min(ids.Count, NoveltyMaxTokensPerCell + 1);
+                        for (int i = 1; i < limit; i++)
+                        {
+                            var take = Math.Min(window.Count, ctxCap);
+                            var ctx = window.Skip(window.Count - take).ToArray();
+                            var logits = session.Logits(ctx);
+                            sum += SurprisalBits(logits, vocab.Size, ids[i]);
+                            scored++;
+                            window.Add(ids[i]);
+                            if (scored % 16 == 0) await Task.Delay(1);   // yield mid-cell on a long value, not just between cells
+                        }
+                        if (scored > 0) results.Add(new NovResult(ToLong(r["rowid"]), text, sum / scored));
+                    }
+                }
+                done++;
+                if (done % 4 == 0 || done == rows.Count)
+                {
+                    _novProgress = rows.Count > 0 ? (double)done / rows.Count : 1;
+                    _novPhase = $"Scanning… {done:N0}/{rows.Count:N0}";
+                    StateHasChanged(); await Task.Delay(1);
+                }
+            }
+            _novResults = results;
+            _novAvg = results.Count > 0 ? results.Average(x => x.Score) : 0;
+            _novHist = BuildScoreHistogram(results);
+        }
+        catch (Exception ex) { _novError = "Novelty scan failed: " + ex.Message; }
+        finally { _novBusy = false; _novProgress = 1; StateHasChanged(); }
+    }
+
+    static Chart? BuildScoreHistogram(List<NovResult> results)
+    {
+        if (results.Count < 2) return null;
+        double min = results.Min(r => r.Score), max = results.Max(r => r.Score);
+        if (max <= min) return null;
+        const int buckets = 10; double width = (max - min) / buckets;
+        var counts = new long[buckets];
+        foreach (var r in results) { int b = (int)((r.Score - min) / width); if (b < 0) b = 0; if (b >= buckets) b = buckets - 1; counts[b]++; }
+        var data = new List<(string, double)>();
+        for (int b = 0; b < buckets; b++) data.Add((HistLabel(min + b * width, min + (b + 1) * width), counts[b]));
+        return new Chart("Surprisal distribution", "bars", data);
+    }
+
+    string NovFill(double score)
+    {
+        double max = _novResults.Count > 0 ? _novResults.Max(r => r.Score) : 0;
+        return (max > 0 ? score * 100.0 / max : 0).ToString("F1") + "%";
     }
 
     static string CsvEsc(string s)

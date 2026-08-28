@@ -346,6 +346,15 @@
         _pendingContinuation = "";
         _generating = true; _error = null;
         StateHasChanged();
+        // Real yield before compute starts (2026-08-28) — the producer/consumer split below removed
+        // the only Task.Delay that used to sit inside the generation loop, which was ALSO the only
+        // thing that ever gave the browser a chance to paint mid-run. Without it, StateHasChanged()
+        // above only SCHEDULES a render; since nothing yields before the (now-undelayed) producer
+        // starts crunching, the whole run — prompt echo included — was batching into one paint at the
+        // end, exactly like the earlier warm-up bug. This single yield lets the prompt echo actually
+        // land on screen immediately, before any compute happens, independent of how the reveal
+        // cadence further down is paced.
+        await Task.Delay(1);
 
         try
         {
