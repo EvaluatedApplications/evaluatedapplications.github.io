@@ -198,7 +198,42 @@ collapsed together) and Creature's two-tone blue/coral chord at ≥901px on a re
 tagged with at the time) — flagged then as a placeholder pending the website's per-package palette
 work; that work has since landed and this file has been repointed at it, above.
 
-## Real WASM multithreading (2026-08-28, priority infra task) — `wwwroot/coi-serviceworker.js`
+## Real WASM multithreading — LANDED then REVERTED, same day (2026-08-28) — `wwwroot/coi-serviceworker.js`
+
+**REVERTED.** `WasmEnableThreads` is back to `false` in `Showroom.csproj`. Real device report, same
+day this landed: `/tools/prism`'s Continue button stuck permanently disabled on a laptop, while a
+phone loading the exact identical deploy worked fine. That platform split is the tell — the .NET WASM
+threaded runtime sizes/spins up its pthread worker pool from `navigator.hardwareConcurrency` at boot,
+and a laptop routinely reports far more logical cores than a phone, so more workers race to
+fetch/compile/instantiate redundant copies of the WASM module in the background right after
+`Blazor.start()` resolves and the page paints. Emscripten-based multithreaded WASM runtimes have a
+documented deadlock class here too (worker→main-thread calls proxy through a synchronous
+`Atomics.wait`, which can stall if the main thread's event loop is itself busy servicing the
+worker-spawn/compile queue at that exact moment) — a race whose odds scale with worker count, i.e.
+core count, i.e. exactly a laptop-not-phone split. **Could not reproduce/confirm the exact mechanism
+live** (no browser here, per this repo's own boundary) — but this app had **zero current consumers**
+of real threading (`ParallelMapping.cs`'s own measured finding: `chunks==1` always, at every shape
+this site runs), so the revert was already flagged as "the cheapest option of all... pure downside for
+zero benefit right now" in this same file *before* this incident — the incident is exactly the trigger
+that was flagged as missing then. Reverting erases the whole failure class at zero feature cost, and
+as a side effect also removes the ORIGINAL reason the crossOriginIsolated boot-gate/coi-serviceworker
+existed at all: a non-threaded module has no `SharedArrayBuffer` requirement, so it boots in any
+browser, isolated or not — including the LinkedIn in-app WebView that motivated the gate below in the
+first place. `index.html`'s boot script is back to a direct, unconditional `Blazor.start()` (generic
+`.catch` → the same `#boot-fallback` panel, now worded for any startup failure, not isolation
+specifically); `index.html` also now actively unregisters any stale `coi-serviceworker.js`
+registration on every load, so a laptop that visited on the one day threading was live doesn't stay
+stuck behind it. `wwwroot/coi-serviceworker.js` is left in place, unreferenced, with a header note —
+not deleted, in case threading is deliberately re-tried later with this exact regression reproduced
+and fixed first. **Re-verified**: `dotnet build Showroom.csproj -c Release` green (0/0), and the build
+output no longer produces a `dotnet.native.worker.*.mjs` (confirms the non-threaded runtime pack is
+what actually built, not just that the flag was accepted). **Not verified live** — same disclosed
+boundary as every claim below; the user/coordinator should confirm the Continue button now enables on
+the same laptop that reported it stuck, on a fresh deploy of `dist/`.
+
+The rest of this section is kept as history (what was actually built, and why, while it was live) —
+useful if threading is ever re-attempted, not a description of the current deployed state.
+
 Real OS threads (pthreads over `SharedArrayBuffer`) inside the WASM runtime, NOT the cooperative
 async-interleaving pattern the tools' own training loops use (that's `HoloKernel`/`ParallelMapping`'s
 territory, untouched by this). Two parts, both required together:
@@ -510,10 +545,11 @@ same `.razor` file — a shared `ListingCard`/`ListingRow` helper styles correct
   not `dotnet run`/dev server — trimming was off over an "EvalApp reflection" worry, now believed
   stale, not independently re-verified). Cost: `dotnet.native.*.wasm` becomes one large AOT module
   (~8 MB compressed) — see Boot screen's compile-gap narration, added because of this.
-- `WasmEnableThreads=true` (landed 2026-08-28, same day as the priority infra task — see "Real WASM
-  multithreading" below) — coexists cleanly with `PublishTrimmed`+`RunAOTCompilation`: full
-  `dotnet publish -c Release` succeeds (exit 0, 0/0) with this three-way combination, ~4m40s-5m15s
-  wall time on this dev machine either way (AOT link, not threading, is the slow step).
+- `WasmEnableThreads=false` (landed true 2026-08-28, REVERTED same day after a real-device regression
+  — see "Real WASM multithreading" below for the incident). While it was `true` it coexisted cleanly
+  with `PublishTrimmed`+`RunAOTCompilation` (full `dotnet publish -c Release` succeeded, exit 0, 0/0,
+  ~4m40s-5m15s wall time either way) — that compatibility fact stands if threading is ever re-tried,
+  it just isn't what's deployed today.
 - **Version bumps only via `dotnet add package`** (latest published) — never hand-edit `<Version>`.
   A capability not yet published is a hand-off to the coordinator, not a reach into MonoRepo source.
 
@@ -537,13 +573,14 @@ same `.razor` file — a shared `ListingCard`/`ListingRow` helper styles correct
   copy another tool's `MinShifts` verbatim.
 - `golden: true` on every `HoloFormer` construction so far. WASM has no filesystem — no live-training
   tool can persist a checkpoint ("Reset brain" just drops the in-memory reference). **Runtime
-  threading model, corrected 2026-08-28**: the dev server (`dotnet run`) stays single-threaded/
-  interpreted. Published builds are now REAL multithreaded WASM (`WasmEnableThreads=true`, actual OS
-  pthreads over `SharedArrayBuffer`, not the cooperative async-interleaving pattern the tools'
-  training loops themselves use) — see "Real WASM multithreading" below for the full mechanism. This
-  is a RUNTIME CAPABILITY only so far: no tool's training loop dispatches work across threads yet
-  (that's a deliberate follow-up, needs a batching restructure first — see that section) — keep
-  live-training shapes small regardless (Creature `d=384,L=1`; Forecaster `d=128,L=1`).
+  threading model, corrected 2026-08-28 twice the same day**: real multithreaded WASM
+  (`WasmEnableThreads=true`) was landed, then REVERTED after a real-device regression (a laptop's
+  Continue button on `/tools/prism` stuck permanently disabled while a phone loading the same deploy
+  was fine — see "Real WASM multithreading" below for the full incident). Both the dev server
+  (`dotnet run`) and published builds are single-threaded/interpreted again — same house pattern this
+  fact used to describe pre-2026-08-28. `Parallel.For`/`IParallelMap` degrade to sequential, not a
+  crash, but training can be visibly slow on a deep/wide config; keep live-training shapes small
+  (Creature `d=384,L=1`; Forecaster `d=128,L=1`).
 - `HoloKernel.RefinementLoop.Observe`/`ObserveSequence` is the house pattern for live-training now
   (wraps `NewGrads()`→`IterAccumulate`/`StackIterAccumulateAllPos`→`Step`). `HoloFormer.TrainStep`
   still exists but does NOT honour the `Iters`/K-pass depth knob — never use it where K matters.

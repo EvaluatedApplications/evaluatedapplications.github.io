@@ -16,11 +16,23 @@
     <link rel="stylesheet" href="css/depth.css" />
     <link href="Showroom.styles.css" rel="stylesheet" />
     <script type="importmap"></script>
-    <!-- REAL WASM MULTITHREADING (2026-08-28): must be the FIRST script in the document, before
-         anything else runs, so it gets the earliest possible chance to register + (on a repeat
-         visit) already be controlling this navigation before any other resource is requested. See
-         coi-serviceworker.js's own header comment for the full mechanism/limitations writeup. -->
-    <script src="coi-serviceworker.js"></script>
+    <!-- REAL WASM MULTITHREADING — REVERTED 2026-08-28 (see Showroom.csproj's own comment for the
+         real-device incident: a laptop's Continue button on /tools/prism stuck permanently disabled,
+         a phone loading the exact same deploy was fine). WasmEnableThreads is back to false, so this
+         build no longer needs SharedArrayBuffer / cross-origin isolation to boot at all — the
+         coi-serviceworker.js script tag that used to load here first is REMOVED (the vendored file
+         itself is left in wwwroot, unreferenced, in case threading is deliberately re-enabled later
+         with this exact regression fixed first). A laptop that visited on the ONE day threading was
+         live may still have that old service worker registered and active at this scope — the cleanup
+         script right below finds and unregisters any such leftover registration so a returning visitor
+         doesn't stay stuck behind stale SW-injected headers/caching from today's reverted change. -->
+    <script>
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.getRegistrations().then(function (regs) {
+          regs.forEach(function (r) { r.unregister(); });
+        }).catch(function () { /* best-effort cleanup only, never block boot on this */ });
+      }
+    </script>
     <!-- GitHub Pages SPA: restore the deep-link path that the root 404.html encoded, before Blazor boots. -->
     <script>
       (function (l) {
@@ -54,15 +66,16 @@
                 <div class="boot-bar" id="boot-bar"><div class="boot-bar-fill"></div></div>
                 <div class="boot-pct"></div>
                 <div class="boot-phase" id="boot-phase" aria-live="polite"></div>
-                <!-- Real fallback UI (2026-08-28, LinkedIn in-app-browser stall fix), hidden unless the
-                     boot script below decides cross-origin isolation genuinely cannot activate on this
-                     browser — see that script's own header comment for the full mechanism. Never shown
+                <!-- Real fallback UI, hidden unless the boot script below's Blazor.start() genuinely
+                     fails to start (generic net, not tied to any one cause since 2026-08-28's threading
+                     revert removed the isolation-specific gate this used to cover — see index.html's own
+                     boot script header comment and Showroom.csproj for that incident). Never shown
                      silently: this is the visible "way forward" so a visitor is never stuck on
                      "connecting…" forever with nothing to do. -->
                 <div class="boot-fallback" id="boot-fallback" hidden aria-live="polite">
                     <p class="boot-fallback-title">Can&rsquo;t start here</p>
-                    <p class="boot-fallback-body" id="boot-fallback-reason">This browser won&rsquo;t grant the isolated runtime this tool needs.</p>
-                    <p class="boot-fallback-body">This is common inside an app&rsquo;s built-in browser (LinkedIn, Instagram, Facebook, and similar). Look for &ldquo;Open in Browser&rdquo; in that app&rsquo;s menu, or copy the link below into Chrome, Safari, or Edge directly.</p>
+                    <p class="boot-fallback-body" id="boot-fallback-reason">This browser couldn&rsquo;t start the runtime this tool needs.</p>
+                    <p class="boot-fallback-body">Try reloading, or copy the link below and open it in a different browser (Chrome, Safari, or Edge).</p>
                     <div class="boot-fallback-actions">
                         <button type="button" class="btn btn-primary" id="boot-fallback-retry">Retry</button>
                         <button type="button" class="btn btn-ghost" id="boot-fallback-copy">Copy link</button>
@@ -109,19 +122,6 @@
         };
       })();
       __bootLine('', 'target ' + (window.location.pathname || '/'));
-      // REAL WASM MULTITHREADING diagnostic (2026-08-28): reports the two actual facts that decide
-      // whether the threaded runtime can init — window.crossOriginIsolated (set by the browser only
-      // when coi-serviceworker.js has already taken control of THIS navigation's headers) and
-      // navigator.hardwareConcurrency (what the pthread pool sizes itself against). On a page's very
-      // first-ever visit this will correctly read "not yet isolated" — coi-serviceworker.js is still
-      // mid-registration and, in a normal browser, this load will self-reload once. Deliberately
-      // doesn't promise that reload WILL happen (2026-08-28 fix) — some embedded/in-app browsers
-      // silently block Service Worker registration, so it may never come; the gated boot script further
-      // down (search "GATE Blazor.start()") is what actually waits, decides, and — if isolation never
-      // activates — shows a real fallback instead of leaving this line as the last word.
-      __bootLine(window.crossOriginIsolated ? 'core' : 'warn',
-        'cross-origin isolation: ' + (window.crossOriginIsolated ? 'ACTIVE' : 'not yet active') +
-        ' · logical CPUs: ' + (navigator.hardwareConcurrency || 'unknown'));
 
       // __bootPhase: a state DISTINCT from --blazor-load-percentage[-text] (the framework's own
       // cumulative-bytes-downloaded figure). Real bytes-downloaded can legitimately sit at/near 100%
@@ -180,41 +180,17 @@
          synchronous <script src>, no event-listener wait), so there's no added latency either way. -->
     <script src="_framework/blazor.webassembly#[.{fingerprint}].js" autostart="false"></script>
     <script>
-      // GATE Blazor.start() behind confirmed cross-origin isolation (2026-08-28, real bug fix).
-      //
-      // WHY THIS EXISTS: this build is compiled with WasmEnableThreads=true. Verified directly against
-      // the shipped runtime (not assumed): the loader (dotnet.js) contains an unconditional assertion —
-      // "SharedArrayBuffer is not enabled on this page..." — that throws if that global is missing, and
-      // the native module (dotnet.native.js) unconditionally requests `new WebAssembly.Memory({shared:
-      // true})` for its heap. Both are baked into this compiled build; neither has an in-place fallback
-      // to a non-threaded mode, because the compiled .wasm binary itself was linked with shared-memory
-      // imports at build time — a genuinely different artifact from a non-threaded publish, not a
-      // runtime toggle. So this SPECIFIC build hard-requires crossOriginIsolated/SharedArrayBuffer to
-      // boot at all (confirmed by reading the shipped JS; see Showroom/CLAUDE.md's "Real WASM
-      // multithreading" section for the full trace) — there genuinely is no graceful degraded-mode
-      // boot available from inside this one build.
-      //
-      // Before this fix, Blazor.start() was called unconditionally right after coi-serviceworker.js's
-      // register+reload attempt above, with no wait and no check. In a normal browser that's fine (the
-      // register+reload cycle settles in well under a second). But some embedded/in-app browsers
-      // (confirmed real-world: LinkedIn's in-app iOS WebView) restrict or silently no-op Service Worker
-      // registration — coi-serviceworker's own register() promise can simply never resolve or reject —
-      // so crossOriginIsolated never becomes true, Blazor.start() walked straight into the hard assert
-      // above, and NOTHING in that failure path produced visible output: no further boot-log line, no
-      // blazor-error-ui, nothing — the page just sat at "connecting…" forever.
-      //
-      // Fixed by never calling Blazor.start() until crossOriginIsolated is confirmed true: two instant
-      // fast-fail checks for conditions already known to be impossible, then a single bounded wait for
-      // the normal register+reload cycle, and — if isolation still hasn't activated by then — a real,
-      // actionable, visible message (the #boot-fallback block above) with a Retry button (in case it was
-      // just slow) and a Copy-link button (so the visitor can paste it into a real browser), instead of
-      // hanging silently. This does NOT make the multithreaded runtime itself work in a restricted
-      // WebView — that's outside this page's control — it only guarantees the visitor is never stuck
-      // with no feedback and no way forward, which is the actual bug being fixed here.
+      // Boot Blazor directly — SIMPLIFIED 2026-08-28 (was a cross-origin-isolation GATE that waited up
+      // to 7s for coi-serviceworker.js before calling Blazor.start(); see Showroom.csproj's own comment
+      // for the real-device incident that triggered this revert). That gate existed ONLY because a
+      // WasmEnableThreads=true build hard-requires window.crossOriginIsolated/SharedArrayBuffer with no
+      // graceful degraded-mode boot — a real, since-fixed LinkedIn in-app-WebView stall. With
+      // WasmEnableThreads back to false, this build has no such requirement at all: it boots in any
+      // browser, isolated or not, so there is nothing left to gate on. The #boot-fallback panel/CSS and
+      // its Retry/Copy-link buttons are kept, wired to a generic catch, as a real (not decorative) net
+      // for any OTHER unexpected startup failure — not removed outright, since a visible way forward on
+      // a genuine error is still worth having.
       (function () {
-        var FALLBACK_TIMEOUT_MS = 7000; // generous: a working register+reload cycle settles in well under 1s
-        var decided = false;
-
         var retryBtn = document.getElementById('boot-fallback-retry');
         if (retryBtn) retryBtn.addEventListener('click', function () { window.location.reload(); });
         var copyBtn = document.getElementById('boot-fallback-copy');
@@ -233,8 +209,6 @@
         });
 
         function showFallback(reason) {
-          if (decided) return;
-          decided = true;
           __bootPhase(false, '');
           __bootLine('warn', 'stopped: ' + reason);
           var wrap = document.getElementById('boot-fallback');
@@ -243,53 +217,25 @@
           if (wrap) wrap.hidden = false;
         }
 
-        function startBlazor() {
-          if (decided) return;
-          decided = true;
-          __bootLine('', 'requesting WebAssembly runtime + compiled binaries…');
-          Blazor.start({
-            loadBootResource: function (type, name) {
-              var label =
-                type === 'dotnetwasm' ? ['core', 'runtime ' + name] :
-                type === 'dotnetjs' ? ['core', 'loader ' + name] :
-                type === 'globalization' ? ['', 'locale data ' + name] :
-                type === 'assembly' ? ['', 'assembly ' + name] : null;
-              if (label) __bootLine(label[0], label[1]);
-              return undefined; // pure observation — Blazor still fetches this exact resource itself
-            }
-          }).then(function () {
-            __bootPhase(false, '');
-            __bootLine('core', 'runtime ready — launching tool');
-          }).catch(function (err) {
-            // Defensive net only — should be rare now that we only attempt this once isolation is
-            // already confirmed. Surfaces any OTHER startup failure as a visible message instead of an
-            // unhandled promise rejection nobody sees.
-            showFallback('the runtime failed to start (' + (err && err.message ? err.message : String(err)) + ').');
-          });
-        }
-
-        if (!window.isSecureContext) {
-          // Instant, no wait needed — coi-serviceworker.js itself already gives up synchronously on
-          // this exact condition, so we know right away, not after a timeout.
-          showFallback("this page isn't loading in a secure context, so the browser won't grant the isolated runtime this tool needs.");
-        } else if (!('serviceWorker' in navigator)) {
-          // Instant — some locked-down in-app browsers omit the Service Worker API entirely, so there's
-          // no register+reload cycle to even wait for.
-          showFallback("this browser blocks Service Workers, so it can't grant the isolated runtime this tool needs. This is common in some apps' built-in browsers.");
-        } else if (window.crossOriginIsolated) {
-          // Already isolated (repeat visit already controlled by the service worker, or the host sends
-          // the headers itself) — no reason to wait.
-          startBlazor();
-        } else {
-          __bootLine('', 'waiting for a secure, isolated context (auto-reloads once if this succeeds)…');
-          setTimeout(function () {
-            if (window.crossOriginIsolated) {
-              startBlazor();
-            } else {
-              showFallback("this browser won't grant the isolated runtime this tool needs. This is common inside an app's built-in browser (LinkedIn, Instagram, Facebook, and similar). Open this link in your regular browser instead — look for “Open in Browser” in that app's menu, or use Copy link below.");
-            }
-          }, FALLBACK_TIMEOUT_MS);
-        }
+        __bootLine('', 'requesting WebAssembly runtime + compiled binaries…');
+        Blazor.start({
+          loadBootResource: function (type, name) {
+            var label =
+              type === 'dotnetwasm' ? ['core', 'runtime ' + name] :
+              type === 'dotnetjs' ? ['core', 'loader ' + name] :
+              type === 'globalization' ? ['', 'locale data ' + name] :
+              type === 'assembly' ? ['', 'assembly ' + name] : null;
+            if (label) __bootLine(label[0], label[1]);
+            return undefined; // pure observation — Blazor still fetches this exact resource itself
+          }
+        }).then(function () {
+          __bootPhase(false, '');
+          __bootLine('core', 'runtime ready — launching tool');
+        }).catch(function (err) {
+          // Real net: surfaces any startup failure as a visible message instead of an unhandled
+          // promise rejection nobody sees.
+          showFallback('the runtime failed to start (' + (err && err.message ? err.message : String(err)) + ').');
+        });
       })();
     </script>
 </body>
