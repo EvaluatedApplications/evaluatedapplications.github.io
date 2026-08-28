@@ -194,6 +194,40 @@ and Forecaster's "🔍 inspect brain" toggles are unrelated and untouched.
 `226,492,416` for this shape) explicitly framed as **compute-equivalence** (matching PrismStudio's
 own status-bar wording, "compute-equiv"), not a claim of real stored parameters.
 
+**Cold-start warm-up, compute + render (2026-08-28)** — user-reported: FIRST Continue click after
+page load rendered the whole continuation at once (even the prompt echo, `_pendingPrompt`, failed to
+render on its own); SECOND click streamed char-by-char at the tuned ~60ms pace correctly. Ruled out
+"pending element not in DOM yet" (`_generating=true; StateHasChanged()` already runs before the
+loop). Two theories, both addressed since a compute-only fix can't explain the prompt-echo symptom
+(pure markup, no inference): (1) interpreted WASM (no AOT) pays a one-time cost on the FIRST call
+through `_session.Logits`->`LogitsFor` (K=8 passes, d=1536), synchronous/no `await` so nothing paints
+until it returns; (2) `.or-run.pending`'s markup (the `_generating==true` branch of `BuildRenderTree`)
+sits inside the `!_loaded` `else` branch, never exercised by the boot log's own renders, so its IL's
+first-ever execution is a visitor's first click. Fix, both in `OnInitializedAsync`: a throwaway
+`_session.Logits(...)` warm-up (discarded) after `_session`/`_stats` build, then AFTER `_loaded=true`
+(needed to select the right branch) a render warm-up — flip `_generating` true with throwaway
+prompt/continuation values, one `StateHasChanged()`, revert immediately with NO `await` in between
+(no visible flicker). Both wrapped in bare `try/catch` that swallows only (a miss must never surface
+as `_loadError`; worst case is pre-fix behaviour); neither touches `_history`.
+
+**Second, independent fix (direct user instruction)**: `await Task.Delay(60)` used to sit INSIDE the
+per-character compute loop, serializing real inference to typing speed instead of just pacing the
+reveal. `Ask()` is now a producer/consumer split over `System.Threading.Channels.Channel<int>`
+(unbounded, single-reader/writer): a `ProduceAsync` local function runs `LogitsFor`/`Gate.Pick`/
+`DegenGuard` with NO delay, writing each token the instant it's computed; a separate `await foreach`
+over `channel.Reader.ReadAllAsync()` reveals one token per `Task.Delay(60)` tick, decoupled from
+compute speed (WASM is single-threaded so this isn't literal parallelism, but it still un-serializes
+compute from cadence). `DegenGuard`/`trailedOff`/`MaxReplyChars` unchanged; `_history.Add(...)` still
+only after both loops finish. Minor deliberate behavior change: the `DegenGuard`-tripping token is
+now written to the channel and revealed mid-stream (previously excluded from the live typewriter,
+only baked into the final settled entry) — harmless.
+
+Both build-verified only (0/0) — **neither confirmed with real profiling**, can't launch a browser.
+Unknown whether the restructure also incidentally helped issue 1 (no longer blocking the UI thread
+for an un-paced burst before the first yield). If the first-click stutter persists, treat both
+theories as unproven and look elsewhere (first-paint cost of ANY new DOM subtree, or GC settling
+from the checkpoint deserialize) before assuming these fixes were sufficient.
+
 ## Unlisted: RecycleDAO marketplace prototype — `Pages/RecycleDaoDemo.razor` (`/recycledao-demo`)
 NOT a package-capability demo and NOT in the public gallery — a private, share-by-link-only client
 preview for the RecycleDAO PoC (`C:\Users\dongy\RecycleDAO`, separate repo, owned by

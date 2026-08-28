@@ -2,6 +2,7 @@
 @inject HttpClient Http
 @inject HoloKernel.SessionHost Sessions
 @using System.Text
+@using System.Threading.Channels
 @using PrismFormer
 @using HoloKernel
 
@@ -262,7 +263,53 @@
             _trainedAlpha = (_stats.Layers == 1 && _rounds is not null && _trainedIterWarm is > 0)
                 ? AlphaRamp.Reconstruct(_rounds.Value, addRound: 0, _trainedIterWarm.Value)
                 : 1.0;
+
+            // Throwaway COMPUTE warm-up pass (2026-08-28) — pays WASM's cold-start cost (interpreter/
+            // type-loading overhead on the FIRST call through a given hot path — Blazor WASM has no
+            // AOT here, so the very first LogitsFor call is measurably slower than every call after
+            // it) while the boot screen is still up, not during the visitor's first real Continue
+            // click. Purely internal: never touches _history/_pendingContinuation/_prompt, discards
+            // its result, and must not be able to fail page load — a warm-up miss just means the
+            // FIRST real generation pays the cold-start cost again, exactly like before this fix
+            // existed, not a broken page. Deliberately synchronous/on the UI thread: the boot screen
+            // is already narrating real work, so a few extra ms before it flips to the REPL is
+            // honest, not hidden — and it's the only way to guarantee the cost lands before the
+            // visitor can click Continue (a fire-and-forget background warm-up could still lose the
+            // race against a fast typist).
+            //
+            // SHARPENED 2026-08-28 (user's own sharper repro): the FIRST click's PROMPT ECHO
+            // (`_pendingPrompt` — pure markup, no inference at all) also failed to render on its own,
+            // appearing together with the whole continuation instead of first. A compute-only warm-up
+            // can't explain or fix that — it never touches the render path. Real culprit is very
+            // likely the RENDER side: `.or-run.pending`'s markup (the `_generating==true` branch of
+            // this component's generated `BuildRenderTree`) is nested inside the `!_loaded` check's
+            // `else` branch, so it is NEVER exercised by anything during the boot screen — the boot
+            // log's own `Begin`/`Finish` StateHasChanged() calls only ever interpret the `!_loaded`
+            // branch. The very FIRST time that particular conditional branch's IL runs, on an
+            // interpreted (no-AOT) WASM runtime, is therefore a visitor's first real Continue click —
+            // exactly the kind of one-time cost the compute warm-up above exists to avoid, just on
+            // the render side instead. So: warm BOTH. The render warm-up below must run AFTER
+            // `_loaded = true` (that conditional is what selects the branch containing `.or-run.pending`
+            // at all) and flips `_generating` true then immediately back to false with no `await`
+            // between the two StateHasChanged() calls, so nothing actually paints in between — no
+            // visible flicker, purely paying the interpreter's first-execution cost during boot.
+            try
+            {
+                var warmCtx = _vocab.Encode("the");
+                if (warmCtx.Length == 0) warmCtx = new[] { 0 };
+                _ = _session.Logits(warmCtx);
+            }
+            catch { /* warm-up only — never user-visible, never blocks page load either way */ }
+
             _loaded = true;
+
+            try
+            {
+                _generating = true; _pendingPrompt = "warm"; _pendingContinuation = "up";
+                StateHasChanged();
+            }
+            catch { /* warm-up only — never user-visible, never blocks page load either way */ }
+            finally { _generating = false; _pendingPrompt = ""; _pendingContinuation = ""; }
         }
         catch (Exception ex) { _loadError = "Couldn't load the checkpoint: " + ex.Message; }
     }
@@ -285,6 +332,17 @@
 
     async Task OnKeyDown(KeyboardEventArgs e) { if (e.Key == "Enter") await Ask(); }
 
+    // Producer/consumer split (2026-08-28, direct instruction) — replaces the old single loop that
+    // had `await Task.Delay(60)` sitting INSIDE the generation loop, artificially throttling REAL
+    // compute to typing speed. Now: the producer runs the actual LogitsFor/Gate.Pick generation loop
+    // as fast as it actually computes, no delay anywhere in it; the consumer reveals exactly one
+    // token per ~60ms tick, completely decoupled from how fast the producer produced them. WASM is
+    // single-threaded, so these two loops don't literally run in parallel — but that's fine and not
+    // the point: the point is that generation is no longer SERIALIZED behind the reveal cadence. If
+    // compute finishes 40 tokens in 5ms, they queue up in the channel and the consumer still reveals
+    // them one at a time, steadily, over the next ~2.4s; if compute is ever slower than the cadence
+    // (shouldn't happen locally, but the channel makes it safe either way), the consumer's
+    // `ReadAllAsync` just waits for the next token instead of showing nothing.
     async Task Ask()
     {
         if (_session is null || _vocab is null || string.IsNullOrWhiteSpace(_prompt) || _generating) return;
@@ -297,40 +355,66 @@
 
         try
         {
-            // fresh context every run: seeded ONLY from this submission's own tokens — nothing from a prior run's
-            // prompt or continuation ever gets folded in, so there is no cross-run "memory" to leak (autocomplete,
-            // not chat: each Continue click is one independent prompt-in/continuation-out pass).
-            var seq = new List<int>(_vocab.Encode(promptText));
             var outIds = new List<int>();
-            var vocabLimit = _vocab.Size;
-            var guard = new DegenGuard(Policy);   // HoloKernel port of HoloEngine's ProbeDegenRepeat=4 — a known
-            // behaviour this early in training (the confidence gate still reads GREEDY on a collapsed
-            // distribution), surfaced honestly rather than silently padded with spaces
             var trailedOff = false;
+            Exception? producerError = null;
+            // unbounded, single writer (the producer below)/single reader (the consumer below) — the
+            // simplest correct primitive for "one loop feeds another, same tab, no real parallelism".
+            var channel = Channel.CreateUnbounded<int>(new UnboundedChannelOptions { SingleReader = true, SingleWriter = true });
 
-            for (var step = 0; step < MaxReplyChars; step++)
+            // ---- producer: fresh context every run (seeded ONLY from this submission's own tokens —
+            // nothing from a prior run's prompt/continuation ever gets folded in, so there's no
+            // cross-run "memory" to leak — autocomplete, not chat). Runs the real LogitsFor/Gate.Pick
+            // loop with NO artificial delay; pushes each produced token onto the channel the instant
+            // it's computed. DegenGuard/trailedOff/MaxReplyChars cap logic all unchanged from before.
+            async Task ProduceAsync()
             {
-                var take = Math.Min(seq.Count, _stats!.Context);
-                var ctx = take > 0 ? seq.Skip(seq.Count - take).ToArray() : new[] { 0 };
+                try
+                {
+                    var seq = new List<int>(_vocab.Encode(promptText));
+                    var vocabLimit = _vocab.Size;
+                    var guard = new DegenGuard(Policy);   // HoloKernel port of HoloEngine's ProbeDegenRepeat=4 —
+                    // a known behaviour this early in training (the confidence gate still reads GREEDY on a
+                    // collapsed distribution), surfaced honestly rather than silently padded with spaces
 
-                // lean serving path — a single LogitsFor pass, honouring Iters/K exactly like the full-recompute
-                // Inspector path did, but without also capturing per-pass faces/attention for a trace nobody
-                // renders anymore (that per-character full-recompute inspection was the actual generation-speed
-                // cost; removed 2026-08-28 along with the Inspector UI, see Showroom\CLAUDE.md).
-                var logits = _session.Logits(ctx);
-                var t = Gate.Pick(logits, vocabLimit, Policy, Random.Shared);
+                    for (var step = 0; step < MaxReplyChars; step++)
+                    {
+                        var take = Math.Min(seq.Count, _stats!.Context);
+                        var ctx = take > 0 ? seq.Skip(seq.Count - take).ToArray() : new[] { 0 };
 
-                if (t == CharVocab.End) break;   // the stop marker — see the tokenizer field comment for why this id doubles as "\n"
-                outIds.Add(t); seq.Add(t);
-                if (guard.Observe(t)) { trailedOff = true; break; }
-                // stream what's decoded so far into the pending run (NOT trimmed — trimming mid-stream would make
-                // trailing spaces flicker in and out as later characters land; the final decode below trims once).
-                _pendingContinuation = _vocab.Decode(outIds);
-                StateHasChanged();
-                await Task.Delay(60);   // paced to read as roughly human TYPING speed, not a network-latency
-                // simulation and not an instant dump — the point is watching a locally-computed feed land
-                // character by character, so it should feel like someone typing it, not a fast machine reveal.
+                        // lean serving path — a single LogitsFor pass, honouring Iters/K exactly like the
+                        // full-recompute Inspector path did (removed 2026-08-28, see Showroom\CLAUDE.md).
+                        var logits = _session.Logits(ctx);
+                        var t = Gate.Pick(logits, vocabLimit, Policy, Random.Shared);
+
+                        if (t == CharVocab.End) break;   // stop marker — see tokenizer field comment for why this id doubles as "\n"
+                        outIds.Add(t); seq.Add(t);
+                        await channel.Writer.WriteAsync(t);   // instant on an unbounded channel — not a throttle
+                        if (guard.Observe(t)) { trailedOff = true; break; }
+                    }
+                }
+                catch (Exception ex) { producerError = ex; }
+                finally { channel.Writer.Complete(); }
             }
+            var producerTask = ProduceAsync();
+
+            // ---- consumer: steady ~60ms/token reveal cadence, decoupled from actual compute speed.
+            // Paced to read as roughly human TYPING speed, not a network-latency simulation and not an
+            // instant dump — the point is watching a locally-computed feed land character by
+            // character, so it should feel like someone typing it, not a fast machine reveal.
+            var revealed = new List<int>();
+            await foreach (var t in channel.Reader.ReadAllAsync())
+            {
+                revealed.Add(t);
+                // NOT trimmed — trimming mid-stream would make trailing spaces flicker in and out as
+                // later characters land; the final decode below trims once.
+                _pendingContinuation = _vocab.Decode(revealed);
+                StateHasChanged();
+                await Task.Delay(60);
+            }
+
+            await producerTask;
+            if (producerError is not null) throw producerError;
 
             var shown = _vocab.Decode(outIds).TrimEnd();
             var continuationText = shown.Length > 0 ? shown : "(blank — this checkpoint is still very early in training)";
