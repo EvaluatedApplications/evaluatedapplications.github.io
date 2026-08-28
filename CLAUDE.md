@@ -776,10 +776,13 @@ still being steered; these MEASURED facts hold whichever way it lands:
   2-3): **tier "far"** = the `body.os-chrome` wallpaper's own `background-position`, tied to
   `scroll(root)` (completes only over the WHOLE document scroll — the slowest layer, no shadow, it IS
   the backdrop everything else casts onto); **tier "near"** = `.prism-beam`, tied to its own `view()`
-  (exits as the hero scrolls away, `translateY(0)->(-22px)`); **tier "mid"** = `.hero > .wrap` +
-  every `.sec:has(.sec-head)` panel, tied to `view()` capped to `animation-range:entry 0% entry 45%`
-  (settles `translateY(10px)->0` as each scrolls into view). Calibrated almost-imperceptible on
-  purpose (small px/blur values) — not verified live, no browser available, verification was
+  (exits as the hero scrolls away, `translateY(0)->(-22px)` at first build); **tier "mid"** =
+  `.hero > .wrap` + every `.sec:has(.sec-head)` panel, tied to `view()` capped to
+  `animation-range:entry 0% entry 45%` (settles `translateY(10px)->0` at first build, as each scrolls
+  into view). Calibrated almost-imperceptible ON PURPOSE at this first build (small px/blur values) —
+  **since found too subtle on a real device and tripled/re-tuned, see the "Parallax/glow MAGNITUDE
+  increase" entry further down this file for the current numbers; this paragraph is the original build
+  history, not the live tuning.** Not verified live at the time, no browser available, verification was
   brace/paren-balance (226/226, 496/496 after this pass) + a full re-read of the inserted block.
   **Lighting/shadow layer (folded in same pass, user: "the shadows also generate appropriately for
   the perceived depth and motion, and angle with the centre of the page being a spotlight")**: each
@@ -833,6 +836,48 @@ Categories were cross-checked against each page's own `.sec-head .dot` `--c-*` c
 on every page) before assigning, not guessed. Verified via brace/paren-count parity on the whole
 `site.css` (232/232 braces, 547/547 parens) after both passes; still no live browser, described as a
 structural/cascade check as always.
+
+**Parallax/glow MAGNITUDE increase (2026-08-28, real-device follow-up, user: "Can we increase the
+intensity of parallax and the brightness of the inverted shadow; it really is imperceptible")**. The
+first pass (above) was deliberately tuned near-imperceptible by design ("close inspection" depth cue,
+comment literally said "if you can point at the motion mid-scroll... it's tuned too high") — that
+undershot on a real device. This pass is a straight magnitude jump, not a redesign: the scalar-multiple
+keyframe-pair mechanism (each pair's X:Y ratio locked, so angle can't drift mid-scroll), the `--glow-
+near`/`--glow-mid` per-page `data-cat` tinting mechanism, the `filter:drop-shadow()`-not-`box-shadow`
+choice, and the tier structure/timelines are all UNTOUCHED — only the numbers inside each `@keyframes`
+step changed. Before → after, all in `site.css`'s `ea-parallax-*` `@keyframes`:
+- **Tier "far"** (wallpaper `background-position`, tied to `scroll(root)`): travel tripled,
+  `0% 4%, 0% -3%, 0% 2%, 0% 0%` → `0% 12%, 0% -9%, 0% 6%, 0% 0%`.
+- **Tier "near"** (`.prism-beam`): `translateY` tripled, `0 → -22px` becomes `0 → -70px`. Drop-shadow
+  blur/spread tripled, `8px/3px → 24px/12px` (X/Y kept the same -1:2 ratio, scaled up: `-5px 10px →
+  -16px 32px`, `-2px 4px → -8px 16px`). Alpha raised ~2.75-3x, `20%/8% → 55%/25%` — raised MORE than a
+  flat 3x on this tier specifically: while retuning, found `.prism-beam`'s own base rule carries a
+  static `opacity:.65` (unrelated to the parallax rules, pre-existing, kept for the beam's "low enough
+  to read as texture" look), which multiplies the WHOLE element's rendered output AFTER the
+  `drop-shadow` filter composites — the exact same class of bug as the documented icon-tile
+  `opacity:.85` bleed-in (finding 8, above), checked for deliberately per this task's instruction, and
+  real: the near-tier glow was quietly ~35% dimmer than its keyframe alpha implied. Compensated by
+  pushing this tier's alpha higher than a flat tripling would give, rather than touching the beam's own
+  `opacity:.65` (a separate, intentional design decision, out of scope for this task).
+- **Tier "mid"** (`.hero > .wrap` + every `.sec:has(.sec-head)`): checked first for the same
+  opacity-multiplier trap — neither carries its own `opacity` property (confirmed by reading both
+  rules), so no hidden dampening here. Settle distance tripled, `translateY 10px → 0` becomes
+  `30px → 0`. Drop-shadow Y/blur tripled, `4px/5px → 12px/15px` and `12px/16px → 36px/48px`. Alpha
+  raised ~2.3-2.5x, `8%/24% → 20%/55%`.
+Reasoning for the magnitude picked: the user's word was "imperceptible," which calls for a real,
+unmistakable jump rather than a token nudge — tripling the positional/blur numbers (the geometry) and
+roughly 2.3-3x on alpha (with the near tier pushed further to cancel out the newly-found `.65` element-
+opacity multiplier) was chosen so both tiers land at a comparable EFFECTIVE peak brightness on screen
+(near: 55%×.65≈36% effective; mid: 55% effective, no multiplier) instead of a flat "×3 everywhere" that
+would have left near looking dimmer than mid for a reason invisible in the keyframe source. Did NOT
+touch: the `--glow-near`/`--glow-mid` custom-property/`data-cat` tinting mechanism (still fully
+per-page, still color-mix against the same two props), `.prism-beam`'s own `opacity:.65` (compensated
+around, not removed), the static per-element shadow ANGLE (X:Y ratios preserved exactly), or the
+`animation-timeline`/`view()`/`scroll()` wiring. Verified: brace/paren-count parity on the whole
+`site.css` (232/232 braces, 565/565 parens — paren count rose from adding explanatory comment text, not
+new rules) and a full re-read of the edited `@keyframes`/comment blocks; still no live browser, this
+remains a structural/cascade check, not a rendered screenshot — the coordinator/user should confirm the
+new intensity reads right on the same real device that flagged it as imperceptible.
 
 **Real, pre-existing mobile horizontal-overflow bug found and fixed (2026-08-28, same day, user:
 "on mobile horizontal overflow is not great it goes off screen often")**. User confirmed this predates

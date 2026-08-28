@@ -345,10 +345,34 @@ body.os-chrome{
    view()), never a JS scroll handler, or it will fight the mobile performance
    budget"). Three layer-aware tiers, each a NATIVE CSS scroll-driven animation
    (animation-timeline: scroll()/view()) — zero JS, zero new DOM, no scroll
-   listener anywhere in the codebase to fight the mobile perf budget. Calibrated
-   almost imperceptible ON PURPOSE: this should read as "the desktop has real
-   depth" on close inspection, not as a visible animated flourish — if you can
-   point at the motion mid-scroll without hunting for it, it's tuned too high.
+   listener anywhere in the codebase to fight the mobile perf budget.
+
+   MAGNITUDE (retuned 2026-08-28, real-device follow-up, user: "increase the
+   intensity of parallax and the brightness of the inverted shadow; it really
+   is imperceptible"). The first pass was deliberately calibrated near-
+   imperceptible ("close inspection" depth cue, not a flourish) and that
+   undershot on a real device — the user's own word was "imperceptible," not
+   "subtle." Every magnitude below was pushed a real step, not a token nudge:
+   tier "far"'s background-position travel tripled (4/-3/2 -> 12/-9/6, in %);
+   tier "near"'s (.prism-beam) translateY tripled (-22px -> -70px) and its
+   drop-shadow blur/spread tripled (8px/3px -> 24px/12px) with alpha raised
+   ~2.75-3x (20%/8% -> 55%/25%) — raised MORE than a flat 3x on this tier
+   specifically to compensate a compounding factor found while retuning:
+   `.prism-beam`'s own base rule (below) carries a static `opacity:.65`, which
+   multiplies the whole element's rendered output AFTER the drop-shadow filter
+   composites, so the keyframe's alpha alone understates what actually reaches
+   the screen by that same .65 factor (same class of bug as the documented
+   icon-tile `opacity:.85` bleed-in — checked for here on purpose, and real:
+   the tier-near glow was quietly ~35% dimmer than its keyframe alpha implied
+   before this pass). Tier "mid" (hero/.sec panels, no such element-opacity
+   multiplier — checked, `.hero > .wrap`/`.sec:has(.sec-head)` set no
+   `opacity` themselves) has its settle distance tripled (10px -> 30px) and
+   its drop-shadow Y/blur tripled (4-12px/5-16px -> 12-36px/15-48px) with
+   alpha raised ~2.3-2.5x (8%/24% -> 20%/55%). This should now read as a real,
+   noticeable depth cue while scrolling, not a "close inspection" easter egg —
+   if a future pass finds it's now too strong, dial back the ALPHA/blur
+   numbers first (cheapest to retune), not the underlying scalar-multiple
+   keyframe-pair mechanism (angle-lock) or the tier structure itself.
    Browsers without scroll-driven-animations support simply don't recognise
    `animation-timeline` and ignore these rules outright — a static site.css, same
    as today, no fallback code needed; this is pure progressive enhancement.
@@ -439,22 +463,26 @@ body.os-chrome{
    right call for the one page that isn't about a single domain: the site's
    own brand accent, already the "whole spectrum" page's default hue elsewhere
    (nav pills, buttons), not one product's colour borrowed for the flagship.
-   The N% figures below are the exact same alpha values the old rgba() literals
-   carried (.20/.08 near, .08/.24 mid) — color-mix against transparent is just
-   the arbitrary-colour equivalent of an alpha channel, so the tuned intensity
-   curve is untouched, only re-expressed. */
+   The N% figures below were originally the exact same alpha values the old
+   rgba() literals carried (.20/.08 near, .08/.24 mid) — color-mix against
+   transparent is just the arbitrary-colour equivalent of an alpha channel, so
+   that first recolour pass was a pure re-expression, not a retune. They were
+   since RAISED (2026-08-28 magnitude pass, see "MAGNITUDE" above the
+   keyframes below: 55%/25% near, 20%/55% mid) — that later change is a real
+   intensity increase, not just another re-expression; don't assume these
+   numbers still trace back 1:1 to the original rgba() alphas. */
 @media (prefers-reduced-motion:no-preference){
   @keyframes ea-parallax-far{
     from{background-position:0% 0%, 0% 0%, 0% 0%, 0% 0%}
-    to{background-position:0% 4%, 0% -3%, 0% 2%, 0% 0%}
+    to{background-position:0% 12%, 0% -9%, 0% 6%, 0% 0%}
   }
   @keyframes ea-parallax-near{
-    from{transform:translateY(0); filter:drop-shadow(-5px 10px 8px color-mix(in srgb, var(--glow-near) 20%, transparent))}
-    to{transform:translateY(-22px); filter:drop-shadow(-2px 4px 3px color-mix(in srgb, var(--glow-near) 8%, transparent))}
+    from{transform:translateY(0); filter:drop-shadow(-16px 32px 24px color-mix(in srgb, var(--glow-near) 55%, transparent))}
+    to{transform:translateY(-70px); filter:drop-shadow(-8px 16px 12px color-mix(in srgb, var(--glow-near) 25%, transparent))}
   }
   @keyframes ea-parallax-mid{
-    from{transform:translateY(10px); filter:drop-shadow(0 4px 5px color-mix(in srgb, var(--glow-mid) 8%, transparent))}
-    to{transform:translateY(0); filter:drop-shadow(0 12px 16px color-mix(in srgb, var(--glow-mid) 24%, transparent))}
+    from{transform:translateY(30px); filter:drop-shadow(0 12px 15px color-mix(in srgb, var(--glow-mid) 20%, transparent))}
+    to{transform:translateY(0); filter:drop-shadow(0 36px 48px color-mix(in srgb, var(--glow-mid) 55%, transparent))}
   }
 
   /* Tier 1 "far" — the wallpaper itself (the body.os-chrome background painted
