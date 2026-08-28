@@ -1337,7 +1337,11 @@
             int ctxCap = session.Stats().Context;
 
             var cond = BuildWhere();
-            var extra = $"{_novCol} IS NOT NULL AND {_novCol} <> ''";
+            // HoloDb's SQL grammar has no NULL/IS keyword at all (verified in MonoRepo\HoloDb\Engine\Sql.cs --
+            // only =, !=, <, >, <=, >= are valid comparison operators, "IS NOT NULL" threw "expected a
+            // comparison operator but found 'IS'"). There's no NULL concept to check for; <> '' alone is the
+            // real "has content" filter.
+            var extra = $"{_novCol} <> ''";
             var where = cond.Length == 0 ? $"WHERE {extra}" : $"{cond} AND {extra}";
             var rows = _db.Execute($"SELECT rowid, {_novCol} FROM data {where} ORDER BY rowid LIMIT {NoveltyCellCap}").Rows;
 

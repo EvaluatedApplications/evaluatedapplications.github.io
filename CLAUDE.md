@@ -389,6 +389,20 @@ UNCHANGED at 4 items (`Home · HoloDb · Packages · NuGet` — the older HoloDb
 index.html` stays 6 — both also just an href fix, not a shape change. No href was removed from the
 site; `#tools`'s `id` still exists for deep-linking despite losing its nav entry on the 3 pages that
 had it. Tag/brace balance
+**RESOLVED 2026-08-28, later same day**: the "OTHER 10 plain product pages… UNCHANGED at 4 items"
+gap above is now closed — swept the same `<div class="nav-links">` fix onto all 10 (`algformer.html`,
+`algformer-gpu.html`, `evalapp.html`, `evalapp-neural.html`, `holodb-client.html`,
+`holodb-protocol.html`, `holoformer.html`, `holovoxel.html`, `prose.html`, `tracer.html`): dropped the
+arbitrary pinned `<a href="/holodb/">HoloDb</a>` line, matching the exact 3-item `Home · Packages ·
+NuGet` shape the 3 already-fixed pages carry. `holodb.html` (5 items) and `holodb/manual/index.html`
+(6 items) were correctly left untouched — their `HoloDb` nav link points back to their own hub, a
+legitimate family cross-link, not the arbitrary sitewide pin this sweep targeted. Reachability walk
+re-confirmed: HoloDb is unaffected (still 2 clicks via `Home→Packages→card` from any of the 10, still
+1 click via each page's own untouched `.related` pill, which was already curated per page and still
+lists HoloDb where relevant). Narrow-viewport nav is now 3 items on all 15 non-HoloDb-family pages
+(down from 4), matching `index.html`/`phasor.html`/`packages.html` exactly — the whole site finally
+carries ONE nav shape outside the 3 legitimately-different HoloDb-family pages, closing the last
+"arbitrary pin" cohesion gap this doc had been carrying open since the pivot.
 verified on every file touched (16 HTML files + `site.css`) via a scripted open/close-tag count, not
 just read-back — no live browser available, so this is a structural check, described as that, not a
 rendered screenshot. **Deviation from `docs/brand-identity.md`, and why**: the doc's own §4 only
@@ -769,6 +783,82 @@ still being steered; these MEASURED facts hold whichever way it lands:
   real jank/no-jank on a live device is unverified, same caveat as every other motion change this
   session. Motion hooks (`prefers-reduced-motion` gating) existed in `site.css` before this pass and
   were reused as designed, not newly added.
+
+**Shadow→glow colour inversion + per-page category tint (2026-08-28, same day, two follow-up
+passes)**: the `drop-shadow()` keyframes above originally used `rgba(0,0,0,...)` — dead on arrival
+against `--bg:#050608` (a black shadow on a near-black field has ~zero contrast by construction).
+User: "since the website is black can we have the shadows be bright instead of dark. Like inverted."
+Fixed by recolouring only (angle/size/opacity math untouched): the two keyframe pairs now read
+`color-mix(in srgb, var(--glow-near|--glow-mid) N%, transparent)` at the SAME N% the old rgba() alpha
+carried (.20/.08 near, .08/.24 mid). Two new custom props carry the colour: `--glow-near` (defaults
+`#fff` in `:root` — `.prism-beam` is a literal white light source in its own SVG, so white is
+page-independent) and `--glow-mid` (defaults `var(--accent)` — the hero/`.sec` window panels have no
+light source of their own, so they read as catching ambient light). **Follow-up same day**: coordinator
+relayed the user wants the glow colour-coded PER PRODUCT PAGE, not one flat colour sitewide. Rather
+than duplicate keyframes per page, both props are overridden via `body[data-cat="foundation|data|
+ml|spatial"]` rules near the `:root` tokens (reusing `--c-foundation-solid`/`--c-data`/`--c-ml`/
+`--c-spatial` — the SAME tokens the `.related` dots/`.pkg-strip` chips/card `--cat` accents already
+use, so the glow always agrees with the rest of that page's colour language) — one attribute swap per
+page, zero new CSS per page. `data-cat` was added to all 14 category-bearing pages' `<body>` tags now
+(Foundation: `phasor.html`/`evalapp.html`; Data: the HoloDb family, all 5; ML: `algformer.html`/
+`algformer-gpu.html`/`evalapp-neural.html`/`prose.html`/`holoformer.html`; Spatial: `tracer.html`/
+`holovoxel.html`), even though the glow itself only VISUALLY activates on pages that also carry
+`os-chrome` (today: `index.html`, `phasor.html`, `holodb/index.html`) — inert but future-proof on the
+other 11, so the pending `os-chrome` sweep (see "Sweep recipe" below) never needs to remember this
+step. `index.html`/`packages.html` carry no `data-cat` (no single product focus) and fall through to
+the `:root` default — `--accent` for the panels, matching the site's own default brand hue used
+elsewhere on the flagship (nav pills, buttons) rather than one product's colour borrowed for it.
+Categories were cross-checked against each page's own `.sec-head .dot` `--c-*` colour (already live
+on every page) before assigning, not guessed. Verified via brace/paren-count parity on the whole
+`site.css` (232/232 braces, 547/547 parens) after both passes; still no live browser, described as a
+structural/cascade check as always.
+
+**Real, pre-existing mobile horizontal-overflow bug found and fixed (2026-08-28, same day, user:
+"on mobile horizontal overflow is not great it goes off screen often")**. User confirmed this predates
+the parallax/pivot work, so that was ruled out as the cause rather than chased. Root-caused by reading
+the CSS, not guessed: the base `.grid{grid-template-columns:repeat(auto-fill,minmax(330px,1fr))}`
+rule — used by every "Key features"/"Why it's useful" card grid on every product page (34 occurrences
+across 14 files, not just the homepage/packages galleries) — never had a narrow-viewport override
+anywhere in `site.css`. `auto-fill` can wrap to a new row but can't shrink a track below its 330px
+floor, so `.grid` + `.wrap`'s 24px×2 padding forces a 378px minimum content width regardless of
+viewport. Any real phone narrower than that (iPhone SE/mini at 320-375px, most budget/older Android at
+360-393px — all common, hence "often") pushed the whole page wider than the viewport: real horizontal
+scroll, not a rare edge case. Checked `html`/`body` for a masking `overflow-x:hidden` first (per the
+task's own instruction) — none existed anywhere in the file, so nothing was hiding the symptom; the
+width was genuinely escaping. Fixed at the actual source, not with a blanket `overflow-x:hidden`
+band-aid (would have silently clipped real card content instead of fixing the layout): added
+`@media (max-width:640px){.grid{grid-template-columns:1fr}}` right after the base rule — single-column
+stacking, the same proven pattern `#tools`'s existing os-chrome mobile block already uses. Scoped to
+the base `.grid` class (not chrome-gated), since the bug reproduces on all 14 plain pages today, not
+just the 3 `os-chrome` ones; the higher-specificity ID rules `body.os-chrome #packages .grid`/`#tools
+.grid` (ID selectors win regardless of source order) are untouched and still apply on the 3 pages that
+carry them. Audited other overflow candidates the task flagged and found them already safe, not
+guessed clean: `.powered`/`.pkg-chips`/`.stack .flow` all already carry `flex-wrap:wrap`; no `100vw`
+anywhere in `site.css`; `.install code` has `overflow-x:auto` which per spec zeroes its flex-item
+automatic min-width (the standard "shrinkable flex item with its own scrollbar" pattern, already
+correct); `.chartwrap svg{min-width:640px}` on `holodb/index.html` sits inside `.chartwrap{overflow-x:
+auto}`, so it scrolls within its own box rather than pushing the page; `evalapp.html`'s wide comparison
+table is likewise wrapped in `.tbl-wrap{overflow-x:auto}`. `.grid`'s 330px floor was the one real,
+unguarded, sitewide gap. Verified via brace-count parity (site.css unaffected by prior passes' counts
+plus this addition) and a tag-balance re-read of every HTML file this session touched — no live
+browser, same disclosed limitation as every other CSS change in this doc.
+
+**Homepage `#tools` reorder by technical achievement (2026-08-28, user: "can we reorder home page in
+order of technical achievement per tool? Prism should be first obv")**: `index.html`'s `#tools` grid
+order changed from Analyst/Creature/Forecaster/Prism to **Prism, Creature, Forecaster, Analyst** — no
+card content/copy/chord/powered-by list touched, sequence only. Reasoning for the 3 the user left to
+judgement: Prism first per direct instruction (the deepest single artefact — a real trained d=1536
+checkpoint over a subword text vocab, plus the only tool with a per-character/per-layer Inspector).
+Creature and Forecaster share the identical live-training HoloFormer core (per `HoloKernel`'s own
+finding, "the same loop The Creature uses") so they're ranked by system breadth, not model depth:
+Creature integrates TWO packages in real-time (AlgFormer brain + Tracer pathfinding, embodied
+world-navigation) against Forecaster's one (AlgFormer only, a single financial time series) — broader
+live-integrated system, so Creature ranks above Forecaster. Analyst last: a genuinely substantial
+achievement (a real in-browser SQL engine, HoloDb) but on a different axis entirely (no neural
+model/training involved), and the user's own framing ("Prism should be first obv") reads as ranking
+by the neural/transformer-depth axis specifically. Flagged for the user to redirect if they intended
+Analyst to rank differently. Verified: `data-initial` attributes moved with each card (mobile icon-tile
+marks stay correct), tag/div balance re-checked on `index.html` (27/27 divs, 1/1 nav, 1/1 body).
 
 ### `HoloKernel/` — the shared model kernel (Phase 1, landed 2026-08-28 — **ported into all three
 live-brain tools by showroom-owner the same day**, status correction from showroom-owner with

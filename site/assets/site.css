@@ -28,7 +28,27 @@
   --radius:14px; --wrap:1080px;
   --font:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
   --mono:ui-monospace,"Cascadia Code","SF Mono","JetBrains Mono",Menlo,Consolas,monospace;
+  /* Parallax GLOW colour (2026-08-28, see "SCROLL-TIED PARALLAX DEPTH" below): the site-wide
+     default for the two shadow-tier custom props the parallax keyframes read through. --glow-near
+     feeds .prism-beam's own drop-shadow (the beam is a literal white light source in its own SVG,
+     so white is the physically-correct default independent of page); --glow-mid feeds the hero/
+     .sec window panels' drop-shadow, defaulted to the one site-wide --accent since a page with no
+     single product focus (index.html, packages.html) has no one domain colour to reach for. Pages
+     that DO belong to one product category override both via `body[data-cat="..."]` right below —
+     same mechanism, no keyframe duplication needed per page. */
+  --glow-near:#ffffff; --glow-mid:var(--accent);
 }
+/* Per-page category tint for the parallax glow above — set once via <body data-cat="...">, read by
+   the ea-parallax-near/-mid keyframes through color-mix(), so every page that ever gets os-chrome
+   automatically shows ITS OWN domain colour (Foundation/Data/ML/Spatial) without a new keyframe
+   block. Reuses the exact same category tokens the .related dots / .pkg-strip chips / .card --cat
+   accents already use elsewhere on the page, so the glow always agrees with the rest of that page's
+   colour language. --c-foundation-solid (flat white) is used, not --c-foundation (a gradient) —
+   drop-shadow()/color-mix() need one solid colour, same reason --cat-root exists for cards. */
+body[data-cat="foundation"]{ --glow-near:var(--c-foundation-solid); --glow-mid:var(--c-foundation-solid); }
+body[data-cat="data"]{ --glow-near:var(--c-data); --glow-mid:var(--c-data); }
+body[data-cat="ml"]{ --glow-near:var(--c-ml); --glow-mid:var(--c-ml); }
+body[data-cat="spatial"]{ --glow-near:var(--c-spatial); --glow-mid:var(--c-spatial); }
 
 *{box-sizing:border-box}
 html{scroll-behavior:smooth}
@@ -127,6 +147,28 @@ h1,h2,h3{margin:0; line-height:1.15; letter-spacing:-.02em; font-weight:650}
 
 /* ---- card grid ---- */
 .grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(330px,1fr)); gap:16px}
+/* REAL MOBILE BUG (found 2026-08-28, user: "on mobile horizontal overflow is not great it goes off
+   screen often" — pre-existing, older than the parallax/pivot work, confirmed by the user before
+   this fix landed). Root cause: `minmax(330px,1fr)` never had a narrow-viewport override anywhere in
+   this file — `auto-fill` can wrap to a new row, but it can NOT shrink a track below its floor, so
+   any `.grid` (every "Key features"/"Why it's useful" card grid on every product page — 34 occurrences
+   across 14 files, not just the homepage) forces a minimum content width of 330px + `.wrap`'s 24px*2
+   padding = 378px regardless of viewport. Any real phone narrower than that (iPhone SE/mini at
+   320-375px, most budget/older Android at 360-393px — all extremely common, which is why this was
+   hit "often") pushes the grid, and with it `.sec`/`.wrap`/the page itself, wider than the viewport:
+   real horizontal scroll/clipping, not a rare edge case. `html`/`body` never carried `overflow-x:hidden`
+   anywhere in this file either (checked) — so there was nothing masking the symptom, the width was
+   genuinely escaping. Fixed at the actual source (the grid track), not with a blanket
+   `overflow-x:hidden` band-aid on body (which would have silently clipped real card content instead
+   of fixing the layout): below 640px every `.grid` collapses to a single full-width column, same
+   proven pattern `#tools`' os-chrome mobile block already uses (see the OS CHROME section) — cards
+   simply stack instead of trying to hold a 330px-wide track in less space. Scoped to the base `.grid`
+   selector (not chrome-gated) since the bug reproduces on all 14 plain pages today, not just the 3
+   os-chrome ones; `body.os-chrome #packages .grid`/`#tools .grid`'s own higher-specificity ID rules
+   (below, in the OS CHROME block) are untouched and still win on the 3 pages that carry them. */
+@media (max-width:640px){
+  .grid{grid-template-columns:1fr}
+}
 .card{position:relative; background:var(--surface); border:1px solid var(--border);
       border-radius:var(--radius); padding:22px 22px 20px; overflow:hidden;
       transition:border-color .18s ease, transform .18s ease, background .18s ease}
@@ -361,19 +403,58 @@ body.os-chrome{
    small and the element count low (1 beam + 1 hero panel + however many
    `.sec:has(.sec-head)` panels a given page has, never more than ~6) to bound the
    cost, but real jank/no-jank on a real device is unverified — same caveat as
-   every other motion change in this pass. */
+   every other motion change in this pass.
+
+   COLOUR INVERTED TO A GLOW, NOT A SHADOW (fixed same day, user: "since the
+   website is black can we have the shadows be bright instead of dark. Like
+   inverted"). The original `rgba(0,0,0,...)` values were dead on arrival against
+   `--bg:#050608` — a black drop-shadow on a near-black field has ~zero contrast
+   by construction, not "very subtle." Only the colour CHANNEL was swapped; every
+   X/Y/blur value and the scalar-multiple keyframe-pair mechanism above (same
+   ratio at both ends, angle can't drift mid-scroll) is untouched, so this is a
+   pure recolour, not a redesign. Physical model: this now reads as light being
+   CAST/CAUGHT (a rim-light glow off a lit edge), not a shadow being cast — the
+   right model for a "deep-black field + a light source" brand identity (the
+   Foundation-card doc's own language: "the brightest accent on the site, pure
+   white against deep black").
+   PER-PAGE CATEGORY TINT (follow-up same day, coordinator relaying the user:
+   colour-code the glow per product page's own theme, not one flat colour
+   sitewide). The two colours below are no longer hardcoded rgba() literals —
+   they're `color-mix(in srgb, var(--glow-near|--glow-mid) N%, transparent)`,
+   reading the two custom properties defined in :root / the `body[data-cat=...]`
+   rules near the top of this file. That means EVERY page that ever gains
+   `os-chrome` shows its own domain colour automatically (Foundation white,
+   Data blue, ML indigo, Spatial green) with zero new keyframes — a page-level
+   attribute swap, not a per-page CSS fork. `--glow-near` (tier "near",
+   `.prism-beam`) defaults to pure white regardless of category, because the
+   beam is a literal white light source in its own SVG artwork — that's a
+   property of the GRAPHIC, not the page's product domain, so it stays fixed
+   even on a category page (e.g. algformer.html, `data-cat="ml"`, still glows
+   white for the beam, indigo for its window panels). `--glow-mid` (tier "mid",
+   the glass window panels) is the one that actually shifts per category, since
+   panels are generic chrome with no light source of their own — they read as
+   catching ambient light tinted by whatever product they belong to.
+   `index.html`/`packages.html` carry no `data-cat`, so both tiers fall through
+   to the :root default (`--glow-near:#fff`, `--glow-mid:var(--accent)`) — the
+   right call for the one page that isn't about a single domain: the site's
+   own brand accent, already the "whole spectrum" page's default hue elsewhere
+   (nav pills, buttons), not one product's colour borrowed for the flagship.
+   The N% figures below are the exact same alpha values the old rgba() literals
+   carried (.20/.08 near, .08/.24 mid) — color-mix against transparent is just
+   the arbitrary-colour equivalent of an alpha channel, so the tuned intensity
+   curve is untouched, only re-expressed. */
 @media (prefers-reduced-motion:no-preference){
   @keyframes ea-parallax-far{
     from{background-position:0% 0%, 0% 0%, 0% 0%, 0% 0%}
     to{background-position:0% 4%, 0% -3%, 0% 2%, 0% 0%}
   }
   @keyframes ea-parallax-near{
-    from{transform:translateY(0); filter:drop-shadow(-5px 10px 8px rgba(0,0,0,.20))}
-    to{transform:translateY(-22px); filter:drop-shadow(-2px 4px 3px rgba(0,0,0,.08))}
+    from{transform:translateY(0); filter:drop-shadow(-5px 10px 8px color-mix(in srgb, var(--glow-near) 20%, transparent))}
+    to{transform:translateY(-22px); filter:drop-shadow(-2px 4px 3px color-mix(in srgb, var(--glow-near) 8%, transparent))}
   }
   @keyframes ea-parallax-mid{
-    from{transform:translateY(10px); filter:drop-shadow(0 4px 5px rgba(0,0,0,.08))}
-    to{transform:translateY(0); filter:drop-shadow(0 12px 16px rgba(0,0,0,.24))}
+    from{transform:translateY(10px); filter:drop-shadow(0 4px 5px color-mix(in srgb, var(--glow-mid) 8%, transparent))}
+    to{transform:translateY(0); filter:drop-shadow(0 12px 16px color-mix(in srgb, var(--glow-mid) 24%, transparent))}
   }
 
   /* Tier 1 "far" — the wallpaper itself (the body.os-chrome background painted
