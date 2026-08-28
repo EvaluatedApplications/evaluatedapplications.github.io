@@ -11,7 +11,7 @@ Each tool = a real, working demo of a published `EvaluatedApplications.*` packag
 capability, driven live by the visitor. No smoke and mirrors, no mocked output. Four tools in the
 public gallery: **The Analyst** (HoloDb), **The Creature** (AlgFormer/HoloFormer + Tracer),
 **The Forecaster** (AlgFormer/HoloFormer), **Prism** (AlgFormer/HoloFormer, a real trained
-checkpoint + full per-pass inspector). Plus one **unlisted** page (below) that's a client preview,
+checkpoint autocomplete REPL). Plus one **unlisted** page (below) that's a client preview,
 not a package-capability demo.
 
 ## Site plumbing
@@ -49,7 +49,9 @@ since each is `Layers=1`, but a real constraint on ever growing one deeper while
 replaces the `NewGrads→IterAccumulate→Step` triple Creature/Forecaster each wrote independently),
 `Decoding` (`DecodePolicy`/`Gate`/`DegenGuard`), `InspectorTrace` (`Inspector.Capture`/`Focus` —
 NEW capability for Creature/Forecaster, which had no per-pass view before; both got an opt-in "🔍
-inspect brain" toggle). `ParallelMapping` isn't wired into any tool (inert, not a gap).
+inspect brain" toggle. Prism's own Inspector UI was REMOVED, see its own section below — the two
+tools' toggles are unrelated and untouched). `ParallelMapping` isn't wired into any tool (inert, not
+a gap).
 
 **Cadence gotcha**: `RefinementLoop.Observe` advances its `AlphaRamp` on EVERY call, not once per
 episode. Forecaster's old per-CLICK ramp already matched this exactly. Creature's old ramp was
@@ -152,8 +154,8 @@ speaker-labelled bubbles (`_history: List<RunEntry(Prompt, Continuation, Trailed
 prompt-text immediately followed by continuation-text, Copilot-suggestion style).
 
 **On HoloKernel** (see that section): `HoloSession.FromCheckpoint(bytes, kPass, serveAlpha)` +
-`Inspector.Capture`/`Gate.Pick`/`Gate.TopK`/`Inspector.Focus` replace the old hand-rolled
-`GateInfo`/`PickToken`/`TopFaces`/`TopAttn`. `FromCheckpoint` REQUIRES K/alpha as ctor args
+`Gate.Pick` replace the old hand-rolled `GateInfo`/`PickToken`/`TopFaces`/`TopAttn`.
+`FromCheckpoint` REQUIRES K/alpha as ctor args
 (kernel-enforced — `HoloFormer.Iters`/`.IterAlphaServe` are **NOT persisted** by `Serialize()`,
 verified by round-tripping the real checkpoint, always read back `1`/`1`). This file peek-
 deserializes the checkpoint once (`HoloFormer.Deserialize`) to read `Layers`/`ParamCount` before
@@ -170,14 +172,23 @@ valid for a single-layer checkpoint only, falls back to 1.0 otherwise. Current s
 (rounds=24,360 > iterWarm=20,000) reconstructs to exactly 1.0 (ramp already done) — coincidental for
 THIS snapshot, the mechanism matters for a future mid-ramp one.
 
-**Generation loop**: full-recompute per character via `Inspector.Capture` (not `LogitsFor`/`Prime`/
-`Step` — no per-pass data, and those aren't verified to honour `Iters`), so the trace always matches
-what was decoded. Confidence gate = `DecodePolicy.Default` (`ConfidentThreshold=0.60`/
+**Generation loop**: one `_session.Logits(ctx)` call per character (`HoloSession.Logits` →
+`Model.LogitsFor`, which honours `Iters`/K same as the KV-cache-free serving path always did),
+`Gate.Pick` draws the token. Confidence gate = `DecodePolicy.Default` (`ConfidentThreshold=0.60`/
 `Temperature=0.80`/`FloorK=3.0`/`DegenRepeat=4`, ported verbatim from PrismStudio's `HoloEngine`) +
 `DegenGuard` — **verified necessary**: dry-running this algorithm against an earlier live checkpoint
 snapshot (round ~21,720) produced a 100%-confidence GREEDY space-repeat on every short prompt tried,
 a real repetition-collapse, not a demo bug. Current shipped snapshot (round 24,360) deserialized+
 verified `Dim=1536,Layers=1,Shifts=16,ParamCount=381,056`, matching live `OneShot*` shape exactly.
+
+**Inspector REMOVED 2026-08-28, for speed**: Prism used to full-recompute `Inspector.Capture`
+(`InspectStackIter`+`InspectAttention`, pricier than a single `LogitsFor` pass) on EVERY emitted
+character just to render a per-character trace panel — that per-character recompute was the actual
+generation-speed cost, not the model. Removed entirely (panel markup, `Inspector`/`Gate.TopK` call
+sites, `_lastTrace`/`CharTrace`/`PassRow`/`FaceItem`/`AttnItem`/`SymDisplay`/`InspectTopK`, the
+"Full per-pass trace" badge, the dead `.or-inspector`/`.or-char`/`.or-pass*`/`.or-face`/`.or-attn*`
+CSS). Generation now runs the lean `Logits`+`Gate.Pick` path above. Scoped to Prism only — Creature's
+and Forecaster's "🔍 inspect brain" toggles are unrelated and untouched.
 
 **Model stats framing**: real `ParamCount` vs. `_stats.EquivCompute` (`12·d²·L·K`, verified
 `226,492,416` for this shape) explicitly framed as **compute-equivalence** (matching PrismStudio's

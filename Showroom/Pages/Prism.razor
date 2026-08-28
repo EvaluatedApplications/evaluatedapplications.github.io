@@ -16,7 +16,7 @@
             <strong>autocomplete, not a chatbot</strong>: the model has never seen a dialogue turn in its life, so every
             submission is a fresh, independent continuation — it does not remember anything you typed before.</p>
         <div class="badges">
-            <span>Real trained checkpoint</span><span>Holographic-transformer brain</span><span>Full per-pass trace</span>
+            <span>Real trained checkpoint</span><span>Holographic-transformer brain</span>
         </div>
     </header>
 
@@ -82,56 +82,6 @@
 
         @if (_error is not null) { <p class="err">@_error</p> }
 
-        @if (_lastTrace is not null && _lastTrace.Count > 0)
-        {
-            <div class="or-inspector">
-                <div class="or-insp-head">
-                    <h2>Inside that last continuation</h2>
-                    <p class="hint">One card per emitted character. <strong>GREEDY</strong> = the top decoded token cleared the
-                        @((Policy.ConfidentThreshold * 100).ToString("F0"))% confidence gate outright. <strong>SAMPLED</strong> = it didn't, so the
-                        model drew from every token whose resonance cleared a floor of mean + @(Policy.FloorK.ToString("0.#"))σ
-                        (the "resonance floor" — everything under it reads as crosstalk noise, not signal) at temperature
-                        @(Policy.Temperature.ToString("0.00")). The row marked <span class="or-settle-tag">settles</span> is the first
-                        layer/pass whose own top-1 decode already matches what actually got emitted.</p>
-                </div>
-                @for (int ci = 0; ci < _lastTrace.Count; ci++)
-                {
-                    var c = _lastTrace[ci];
-                    <details class="or-char" open="@(ci == 0)">
-                        <summary>
-                            <span class="or-char-glyph">'@c.Ch'</span>
-                            <span class="or-gate @(c.Greedy ? "greedy" : "sampled")">@(c.Greedy ? "GREEDY" : "SAMPLED")</span>
-                            <span class="or-gate-detail">top '@c.TopSym' @((c.TopProb * 100).ToString("F1"))%@(c.Greedy ? "" : $" · {c.OverFloor} token(s) over the floor")</span>
-                        </summary>
-                        <div class="or-passes">
-                            @foreach (var row in c.Rows)
-                            {
-                                <div class="or-pass-row @(row.Settle ? "settle" : "")">
-                                    <div class="or-pass-label">@row.Label@(row.Settle ? " ◄ settles" : "")</div>
-                                    <div class="or-faces">
-                                        @foreach (var f in row.Top)
-                                        {
-                                            <span class="or-face">'@f.Sym' @(f.Pct.ToString("F0"))%</span>
-                                        }
-                                    </div>
-                                    @if (row.Attn is not null)
-                                    {
-                                        <div class="or-attn-row">
-                                            <span class="or-attn-lbl">attends</span>
-                                            @foreach (var a in row.Attn)
-                                            {
-                                                <span class="or-attn">'@a.Sym'@@@a.Pos @(a.Pct.ToString("F0"))%</span>
-                                            }
-                                        </div>
-                                    }
-                                </div>
-                            }
-                        </div>
-                    </details>
-                }
-            </div>
-        }
-
         <div class="outro">
             <p><strong>What's actually happening when you hit Continue.</strong> Every prompt becomes a handful of subword
                 tokens, each bound into the model's holographic memory as a phase-and-magnitude pattern — a chord, not a
@@ -168,8 +118,8 @@
                 one continuation out, with nothing from an earlier run fed back in. This checkpoint's vocabulary and
                 context window are both still small — expect short, rough, sometimes broken continuations, and don't
                 be surprised if one trails into a repeated character: the confidence gate above can read GREEDY even
-                once the model has settled into a loop, a known, real behaviour this early in training (the Inspector
-                will show you exactly where it happened, rather than hiding it). It's a frozen copy from one point in
+                once the model has settled into a loop, a known, real behaviour this early in training (a run like
+                that is labelled <em>settled into a repeat loop</em> above, rather than hiding it). It's a frozen copy from one point in
                 an ongoing training run, not a live link to it — the real model keeps training after
                 this snapshot was taken. It always runs at <strong>K=@_k weight-tied pass(es)</strong> — the model's
                 one real trained depth (α=@(_trainedAlpha.ToString("0.00")), @KFactDetail). That's not a knob you can
@@ -188,7 +138,6 @@
     // GateInfo/PickToken pair; DecodePolicy.Default carries the exact same thresholds, ported verbatim from
     // PrismStudio's HoloEngine originally, so these numbers are unchanged, just centralised now).
     static readonly DecodePolicy Policy = DecodePolicy.Default;   // ConfidentThreshold=0.60, Temperature=0.80, FloorK=3.0, DegenRepeat=4
-    const int InspectTopK = 3;      // top-K faces/attention entries shown per pass row
     const int MaxReplyChars = 40;   // a runaway guard — this checkpoint's context is tiny, long continuations aren't meaningful yet
 
     HoloSession? _session;
@@ -243,12 +192,6 @@
     // next one's context, so there is no accumulated "chat history"; this is autocomplete, not dialogue memory.
     sealed record RunEntry(string Prompt, string Continuation, bool TrailedOff);
     readonly List<RunEntry> _history = new();
-    List<CharTrace>? _lastTrace;
-
-    sealed record FaceItem(string Sym, double Pct);
-    sealed record AttnItem(string Sym, int Pos, double Pct);
-    sealed record PassRow(string Label, List<FaceItem> Top, List<AttnItem>? Attn, bool Settle);
-    sealed record CharTrace(string Ch, bool Greedy, string TopSym, double TopProb, int OverFloor, List<PassRow> Rows);
 
     protected override async Task OnInitializedAsync()
     {
@@ -312,15 +255,6 @@
         catch (Exception ex) { _loadError = "Couldn't load the checkpoint: " + ex.Message; }
     }
 
-    // display glyph for a symbol id — the stop id doubles as "\n" in the real vocab (the model was trained on
-    // single-line snippets, so a newline IS the stop signal; shown explicitly rather than as an invisible blank)
-    string SymDisplay(int id)
-    {
-        if (id == CharVocab.End) return "⏹";
-        var s = _vocab is not null && id >= 0 && id < _vocab.Size ? _vocab.Symbol(id) : "?";
-        return s == " " ? "·" : s;
-    }
-
     // K has no UI control anymore — this is purely the explanatory ramp detail for the outro copy's fact
     // statement (no "exploring"/"what if" branch needed, since there's nothing to explore away from).
     string KFactDetail
@@ -355,9 +289,7 @@
             // not chat: each Continue click is one independent prompt-in/continuation-out pass).
             var seq = new List<int>(_vocab.Encode(promptText));
             var outIds = new List<int>();
-            var trace = new List<CharTrace>();
             var vocabLimit = _vocab.Size;
-            var K = _session.KPass;
             var guard = new DegenGuard(Policy);   // HoloKernel port of HoloEngine's ProbeDegenRepeat=4 — a known
             // behaviour this early in training (the confidence gate still reads GREEDY on a collapsed
             // distribution), surfaced honestly rather than silently padded with spaces
@@ -368,27 +300,12 @@
                 var take = Math.Min(seq.Count, _stats!.Context);
                 var ctx = take > 0 ? seq.Skip(seq.Count - take).ToArray() : new[] { 0 };
 
-                // full-recompute per character via HoloKernel's Inspector — same reasoning as before: it's the
-                // only path with per-pass data, and it guarantees the trace matches exactly what gets decoded.
-                var posTrace = Inspector.Capture(_session, ctx, Policy, vocabLimit);
-                var t = Gate.Pick(posTrace.Final.Logits, vocabLimit, Policy, Random.Shared);   // Capture doesn't draw — Pick does
-
-                var settleAt = -1;
-                for (var i = 0; i < posTrace.Passes.Count; i++)
-                    if (posTrace.Passes[i].Top == t) { settleAt = i; break; }
-
-                var rows = new List<PassRow>();
-                for (var i = 0; i < posTrace.Passes.Count; i++)
-                {
-                    var label = i == 0 ? "input (embedding)" : i == posTrace.Passes.Count - 1 ? "final" : $"layer 1 · pass {i}";
-                    var top = Gate.TopK(posTrace.Passes[i].Logits, vocabLimit, InspectTopK)
-                        .Select(f => new FaceItem(SymDisplay(f.Index), f.Percent)).ToList();
-                    List<AttnItem>? at = i == 0 ? null : Inspector.Focus(ctx, posTrace.Attention[i - 1], InspectTopK)
-                        .Select(a => new AttnItem(SymDisplay(a.Token), a.Position, a.Percent)).ToList();
-                    rows.Add(new PassRow(label, top, at, i == settleAt));
-                }
-                var gate = Gate.Evaluate(posTrace.Final.Logits, vocabLimit, Policy);
-                trace.Add(new CharTrace(SymDisplay(t), gate.Greedy, SymDisplay(gate.Top), gate.TopProb, gate.OverFloor, rows));
+                // lean serving path — a single LogitsFor pass, honouring Iters/K exactly like the full-recompute
+                // Inspector path did, but without also capturing per-pass faces/attention for a trace nobody
+                // renders anymore (that per-character full-recompute inspection was the actual generation-speed
+                // cost; removed 2026-08-28 along with the Inspector UI, see Showroom\CLAUDE.md).
+                var logits = _session.Logits(ctx);
+                var t = Gate.Pick(logits, vocabLimit, Policy, Random.Shared);
 
                 if (t == CharVocab.End) break;   // the stop marker — see the tokenizer field comment for why this id doubles as "\n"
                 outIds.Add(t); seq.Add(t);
@@ -401,7 +318,6 @@
             var shown = _vocab.Decode(outIds).TrimEnd();
             var continuationText = shown.Length > 0 ? shown : "(blank — this checkpoint is still very early in training)";
             _history.Add(new RunEntry(promptText, continuationText, trailedOff));
-            _lastTrace = trace;
         }
         catch (Exception ex) { _error = "Prism stumbled: " + ex.Message; }
         finally { _generating = false; StateHasChanged(); }
