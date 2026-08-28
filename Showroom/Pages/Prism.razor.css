@@ -39,4 +39,11 @@
 .outro p { color: var(--ink-soft); font-size: 0.92rem; line-height: 1.55; margin: 0 0 1rem; }
 .outro code { font-family: var(--mono); font-size: 0.85rem; color: var(--accent-ink); background: var(--bg-2); padding: 0.1rem 0.4rem; border-radius: 5px; }
 
-@media (max-width: 560px) { .cr-stats { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 640px) {
+    /* narrow phones only — tighten the outer gutter and each stat card's own inner padding; the
+       desktop/tablet .room/.stat rules above (24px / 1rem) are left alone since real-device feedback
+       was specifically about wasted side space on a narrow screen, not about wider viewports. */
+    .room { padding-left: 12px; padding-right: 12px; }
+    .cr-stats { grid-template-columns: 1fr 1fr; gap: 0.55rem; }
+    .stat { padding: 0.7rem 0.6rem; }
+}
