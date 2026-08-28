@@ -6,12 +6,19 @@ own PRESENTATION — design, cohesion, rendering, nav, deploy. Package owners ow
 in `MonoRepo/<Pkg>/docs/site.md`. You never edit package source or `docs/site.md` — flag stale
 content to the owner instead. You never commit/push (coordinator commits, user pushes → Pages).
 
-## Site map (what exists, 2026-08-26)
+## Site map (what exists, 2026-08-28)
 
 Root static pages (`site/*.html`), all built on the shared design system:
-- `index.html` — landing page: company pitch, tool gallery (Analyst/Creature/Forecaster/Prism), then the full
-  package gallery in 4 categories (Foundation / Data / Machine learning / Spatial & games), then
-  a "how it fits together" flow diagram.
+- `index.html` — **tools-first homepage (2026-08-28 pivot, see "Tools-first pivot" below)**: company
+  pitch, then the 4-card tool gallery (Analyst/Creature/Forecaster/Prism) as the entire top-level
+  content, then a slim "Powered by" package-chip strip (`.pkg-strip`, no cards/descriptions) linking
+  to `/packages.html`. The 11-package gallery and the "how it fits together" flow diagram used to
+  live here inline — they now live on `packages.html` (below), not duplicated on the homepage.
+- `packages.html` — **NEW (2026-08-28)**: the relocated 11-package gallery in 4 categories
+  (Foundation / Data / Machine learning / Spatial & games) + the "how it fits together" flow
+  diagram, near-verbatim from the old `index.html#packages` section, wrapped in the standard plain
+  page template (no `os-chrome`). This is now the real `/packages.html` URL every page's nav/footer/
+  crumb/`.related` "Packages" link points at — no more same-page-anchor special-casing.
 - `holodb/index.html` — HoloDb HUB page (lean bespoke nav: Home / Benchmarks / Docs / Packages /
   NuGet — "Try it live" and "How it works" live as hero CTAs/first section instead of nav items).
   The richest page on the site: race demo, benchmark tables, capability grid, deploy options.
@@ -37,7 +44,8 @@ static content pages; don't fold tool code into `site/`. `.github/workflows/depl
 
 **All 11 current MonoRepo packages have a page**: Phasor, EvalApp, EvalApp.Neural, AlgFormer
 (+HoloFormer deep-dive), AlgFormer.Gpu, HoloDb (+benchmarks), HoloDb.Protocol, HoloDb.Client,
-HoloVoxel, Prose, Tracer.
+HoloVoxel, Prose, Tracer. All 11 are catalogued on `packages.html`; only 6 (HoloDb, AlgFormer,
+Tracer + transitively EvalApp/Phasor) currently power a live tool — see "Tools-first pivot" below.
 
 **Unlisted client page (not part of the routable site — do not "fix" this by adding it anywhere)**:
 `site/recycledao-preview.html` — a private progress preview for the RecycleDAO client PoC
@@ -60,10 +68,15 @@ a phone in light mode ("get rid of light pallets then dark always"). Don't reint
 palette without an explicit, separate request — and if one's ever wanted, gate it behind an opt-in
 control, not automatic OS detection. Design tokens: `--bg/--bg-2/--surface/--surface-2`,
 `--border/--border-2`, `--ink/--ink-soft/--ink-faint`, `--accent/--accent-ink`, `--spectrum`
-(brand gradient), 4 category colours `--c-foundation` (purple, Phasor/EvalApp) /
-`--c-data` (blue, HoloDb family) / `--c-ml` (pink, AlgFormer family/EvalApp.Neural/Prose) /
-`--c-spatial` (green, Tracer/HoloVoxel), `--ok/--warn/--bad`, `--radius`, `--wrap` (1080px),
-`--font`/`--mono`. This same file also styles the Blazor tools shell's loading/error UI
+(brand gradient), 4 category colours — **retinted 2026-08-28, see "Tools-first pivot" below**:
+`--c-foundation` is now the literal `--spectrum` gradient itself ("the undispersed beam", Phasor/
+EvalApp), paired with a flat `--c-foundation-solid:#fff` companion for call sites that can't take a
+gradient; `--c-data` (blue, HoloDb family, unchanged); `--c-ml` (now Indigo/`--spectrum-6`
+`#7d7dff`, was an off-spectrum pink `#e879c8` — AlgFormer family/EvalApp.Neural/Prose); `--c-spatial`
+(green, Tracer/HoloVoxel, unchanged) — plus `--cat-root`, a per-card companion custom prop (set
+alongside `--cat` only where `--cat` itself holds a gradient) for the few CSS call sites that need a
+real solid colour, `--ok/--warn/--bad`, `--radius`, `--wrap` (1080px), `--font`/`--mono`. This same
+file also styles the Blazor tools shell's loading/error UI
 (`#app:has(.loading-progress)`, `#blazor-error-ui`) via the shared tokens, but that's the ONLY
 reach into `Showroom/`'s presentation from here — its own component styles are `showroom-owner`'s
 territory (see "Prism motif" below for a live coordination flag on this boundary). Reusable components: `.site-nav` (sticky, CSS-only mobile burger via
@@ -75,7 +88,15 @@ territory (see "Prism motif" below for a live coordination flag on this boundary
 `.install` (copy-button code chip), `.btn`/`.btn-primary`/`.btn-ghost`, `.crumb` (breadcrumb),
 `.stack` (callout box, `.flow` for pipeline diagrams), `.prose`/`.toc` (manual/docs pages),
 `.snip`/`.lim` (code-sample box / caveat note — added 2026-08-26 for the product-page rollout,
-reused by 9+ pages), `footer.site`. **`.hero-bar`/`.hero-body`/`.hero-content`/`.win-dots` + the
+reused by 9+ pages), `footer.site`. **Added 2026-08-28 (tools-first pivot)**: `.card.tool` (class
+selector, not `a.tool` — matches both the plain `<a class="card tool">` shape still used by
+algformer.html's mini tool gallery, and the `<article class="card tool">` + `.card-link` overlay
+shape the homepage's 4 tool cards now use so they can nest a `.powered` "Powered by" pill row
+without invalid nested-anchor markup — same reason package cards are `<article>`, not `<a>`);
+`.powered`/`.powered-label` (the pill row itself, tool-card-scoped, smaller/quieter than `.related`);
+`.pkg-strip`/`.pkg-chips`/`.pkg-chip` (the homepage's slim package-chip strip below `#tools` —
+deliberately NOT a `.sec`/`.sec-head`, so it never grows an os-chrome window panel and can't read as
+a second top-level gallery). **`.hero-bar`/`.hero-body`/`.hero-content`/`.win-dots` + the
 `body.os-chrome` opt-in system** (window-panel chrome, taskbar/dock nav, mobile icon grid — added
 2026-08-28, live on 3 pages only so far, see the dedicated "OS chrome" section below for the full
 component list and the sweep recipe). A handful of legacy pages (`evalapp.html` pre-rewrite,
@@ -209,56 +230,67 @@ mega-menu bloating every page (tried a 5-column/17-item `<details>` dropdown 202
 feedback: too dense, too large on mobile, and it duplicated what the homepage already does — see
 below for the revised shape).
 
-**The shape (revised 2026-08-28, third pass — see "OS chrome" below for why this changed)**: three
-layers, each doing ONE job.
-1. **Lean top nav, identical shape everywhere**: `Home · Packages(→/#packages) · Tools(→/#tools) ·
-   NuGet`, plain text links, no dropdown, no JS. **Changed 2026-08-28**: this used to pin `HoloDb` as
-   a permanent 2nd slot — a historical artifact (it was the first/richest page built), not a
-   principled choice, and it gave HoloDb a 1-click universal link that the other 10 packages didn't
-   get (user flag: "top level ones should be relevant not arbitrary eg. HoloDb is pinned only").
-   Fixed by swapping the HoloDb-specific slot for `Tools`, which — like `Packages` — routes to a hub
-   section (`/#tools`) rather than to any one product, so nothing is singled out. HoloDb is still
-   ≤2 clicks from everywhere via `Packages` → its card, exactly like the other 10 packages, and is
-   still 1 click from most pages via its `.related` pill (see layer 3). A few pages add 1-2
-   page-appropriate items on top of the 4 universal ones (the HoloDb hub: `Home · Packages · Tools ·
-   Benchmarks · Docs · NuGet`, 6 items — at the compactness ceiling; the manual: adds `Manual`+`The
-   Analyst`) but NEVER more than ~6 items total — that's the compactness bar, checked on a narrow
-   viewport.
-   **Rollout status**: only the 3 pages listed under "OS chrome" below carry this new nav shape as of
-   2026-08-28. The other 14 `site/**/*.html` files still carry the OLD `Home · HoloDb · Packages ·
-   NuGet` shape — a real, temporary cross-page inconsistency, open until the sweep (tracked in "OS
-   chrome" below, same sweep as the chrome rollout since both touch the same nav markup in the same
-   pass). Of those 14, 12 are ordinary content pages with the standard nav; the other 2
-   (`404.html`, a brand-only bounce page with no `.nav-links` at all, and the unlisted
-   `recycledao-preview.html`, which deliberately uses a standalone non-EA header per its own
-   CLAUDE.md entry) never carried the pinned-HoloDb pattern and don't need this particular fix.
-2. **The homepage IS the routable index.** `index.html`'s `#packages` gallery already lists every
-   package with a fully clickable card (`.card-link` stretched-link overlay, not just a small
-   "Explore →" — see below); nav's "Packages" link just sends you there. This is why the nav doesn't
-   need to enumerate all 11+ pages itself: `Home`/`Packages` (1 click) → any card (1 click) = every
-   page ≤2 clicks from anywhere, guaranteed by this single path alone.
+**The shape (revised 2026-08-28, FOURTH pass — the tools-first pivot, see "Tools-first pivot" below
+for the full rationale)**: three layers, each doing ONE job.
+1. **Lean top nav, identical shape everywhere**: `Home · Packages(→/packages.html) · NuGet` — 3
+   items, plain text links, no dropdown, no JS. **Changed 2026-08-28 (tools-first pivot)**: the
+   `Tools(→/#tools)` slot was DROPPED sitewide (previously the 3rd item on the 3 pages that had it:
+   `index.html`, `phasor.html`, `holodb/index.html` — the other 14 pages never had it, see below) —
+   once the homepage's entire top-level content IS the tools grid, a nav item that scrolls to
+   `/#tools` is redundant with `Home` itself. `#tools` keeps its `id` for deep-linking even without a
+   nav entry pointing at it (a tool page's own `.related`/CTA links, or an external link, can still
+   land there directly). Net effect: nav shrinks from 4→3 items on the 3 pages that had `Tools`, well
+   under the ~6-item compactness ceiling. A few pages still add 1-2 page-appropriate items on top of
+   the 3 universal ones (the HoloDb hub: `Home · Packages · Benchmarks · Docs · NuGet`, 5 items,
+   down from 6; the manual: adds `Manual`+`The Analyst`) but NEVER more than ~6 items total.
+   **Rollout status**: all 17 `site/**/*.html` files (barring `404.html`/`recycledao-preview.html`,
+   neither of which ever carried a standard nav) now point their `Packages` link at the real
+   `/packages.html` URL — this part of the sweep WAS done sitewide in the same pass, since it's a
+   mechanical href swap (not an `os-chrome`/layout change) and leaving it half-done would have left
+   14 pages' "Packages" nav link silently landing on a homepage with no `#packages` section anymore
+   (a real reachability break, not a cosmetic one — see "Tools-first pivot" below). The `os-chrome`
+   window/taskbar/dock TREATMENT itself is still only on those same 3 pages, unchanged status, still
+   paused pending review — see "OS chrome" below; don't conflate the two, only the chrome/window
+   styling is still mid-sweep, the nav-item-count and href-target changes above are sitewide-done.
+2. **`packages.html` is the routable index for packages; `index.html` is the routable index for
+   tools.** `packages.html`'s `.grid` lists every one of the 11 packages with a fully clickable card
+   (`.card-link` stretched-link overlay, not just a small "Explore →" — see below); nav's "Packages"
+   link sends you straight there. `index.html`'s `#tools` grid IS the tools index (0 clicks from
+   Home, since it's the entire top-level page content) plus a "Powered by" pill row per tool card
+   linking straight to that tool's real constituent package page(s). This is why the nav doesn't
+   need to enumerate all 12+ pages itself: `Home`/`Packages` (1 click) → any package card (1 click) =
+   every package page ≤2 clicks from anywhere; any tool is 0-1 click from Home directly.
 3. **`.related` pills for contextual 1-click jumps.** A small pill row (2-4 sibling links + "All
-   packages →" to `/#packages`) in the hero of every product/reference page (15 of 16, all but
-   `index.html` itself — it doesn't need to link to itself). Curated per page by what's actually
-   relevant, e.g. `phasor.html` → EvalApp/AlgFormer/HoloDb/HoloVoxel; `holodb-protocol.html` →
-   HoloDb/HoloDb.Client; `holoformer.html` → AlgFormer/AlgFormer.Gpu/Phasor. This is what makes
-   closely-related pages 1 click apart instead of always routing back through the homepage.
-   CSS: `.related` in `site.css`, always paired with a `.related-label` and a `.related-all` pill.
+   packages →" to `/packages.html`) in the hero of every product/reference page (15 of 17, all but
+   `index.html`/`packages.html` themselves — neither needs to link to itself). Curated per page by
+   what's actually relevant, e.g. `phasor.html` → EvalApp/AlgFormer/HoloDb/HoloVoxel;
+   `holodb-protocol.html` → HoloDb/HoloDb.Client; `holoformer.html` → AlgFormer/AlgFormer.Gpu/Phasor.
+   This is what makes closely-related pages 1 click apart instead of always routing back through the
+   homepage. CSS: `.related` in `site.css`, always paired with a `.related-label` and a
+   `.related-all` pill.
 
 **Site-wide rules that make it hold**:
-- `#packages` must NEVER be a bare same-page anchor except literally inside `index.html` — on any
-  other page it's a dead link (no `#packages` section exists there). Always write `/#packages`.
+- **RESOLVED 2026-08-28 (tools-first pivot)**: the old rule here — "`#packages` must NEVER be a bare
+  same-page anchor except literally inside `index.html`, always write `/#packages`" — is now MOOT.
+  Packages live at a real URL (`/packages.html`) with no same-page-anchor special-casing anywhere;
+  every page's link is a normal href. Nothing to remember here anymore; kept as a one-line historical
+  note so nobody re-adds the old special-case logic by habit.
 - A gallery/index card that links onward must be clickable across its WHOLE area, not just a small
-  "Explore →" text. Pattern (all 11 cards on `index.html`): keep the card as `<article class="card">`
-  (it nests a second NuGet link, so the card itself can't be an `<a>` — invalid nested-anchor markup),
-  add a full-bleed `<a class="card-link" href="..." aria-label="...">` as the FIRST child,
-  `.card-link{position:absolute;inset:0;z-index:1}`, and lift `.install`/`.links`/`.note` to
-  `z-index:2` so their own inner links/copy-button stay independently clickable above the overlay.
-  Tool cards were already whole-card `<a class="card tool">`, unchanged.
-- Don't reach for a global mega-menu again for "make X reachable" — reach for (a) the homepage
-  card grid staying exhaustive and fully clickable, and (b) a `.related` pill on the relevant pages.
-  A dropdown only earns its keep for something genuinely global and rarely-changing (there wasn't
-  one here); it was cut once it turned out to duplicate the homepage and hurt mobile.
+  "Explore →" text. Pattern (all 11 cards on `packages.html`, and — since 2026-08-28 — all 4 tool
+  cards on `index.html` too, once they needed to nest a "Powered by" pill row): keep the card as
+  `<article class="card">` (it nests a second link — NuGet, or a powered-by pill — so the card itself
+  can't be an `<a>` — invalid nested-anchor markup), add a full-bleed
+  `<a class="card-link" href="..." aria-label="...">` as the FIRST child,
+  `.card-link{position:absolute;inset:0;z-index:1}`, and lift `.install`/`.links`/`.note`/`.powered`
+  to `z-index:2` so their own inner links/copy-button stay independently clickable above the overlay.
+  Tool cards that DON'T nest any link (e.g. algformer.html's mirror gallery) can stay the simpler
+  whole-card `<a class="card tool">` shape — both shapes share the `.card.tool` CSS selector (class,
+  not tag-qualified) so either renders identically.
+- Don't reach for a global mega-menu again for "make X reachable" — reach for (a) the `packages.html`
+  card grid staying exhaustive and fully clickable, (b) the homepage tools grid staying exhaustive for
+  tools, and (c) a `.related` pill on the relevant pages. A dropdown only earns its keep for something
+  genuinely global and rarely-changing (there wasn't one here); it was cut once it turned out to
+  duplicate the homepage and hurt mobile.
 
 **§5 VERIFICATION DISCIPLINE for this site**: checking that every `href` resolves to a real file is
 NOT proof of reachability. The proof is a reachability WALK: starting from `index.html`'s nav AND
@@ -268,7 +300,8 @@ check the nav is compact on a narrow (≤640px) viewport — that was the failin
 got re-litigated. Do this walk any time the nav, page set, or card grid changes; record it in the
 task's return message. An href-audit alone is not this check (that was the 2026-08-26 mistake).
 
-**SEO/nav facts still true**: `sitemap.xml` lists all 16 pages + the 4 live tool routes + `/tools/`.
+**SEO/nav facts still true**: `sitemap.xml` lists all 17 pages (16 + the new `packages.html`) + the
+4 live tool routes + `/tools/`.
 Every page's `footer.site` carries a second internal-link path beyond the top nav. JSON-LD on every
 page (`Organization`+`WebSite` on the index, `SoftwareApplication` on all 11 package pages,
 `TechArticle` on the 3 explainer pages). Forward cross-links exist base→extension
@@ -315,7 +348,54 @@ on that slot in the first place (`Packages` already covered it). Checked narrow-
 compactness: the new nav is 4 items on 15 of 17 pages (down from 4) and 6 on the HoloDb hub (same
 count as before, just reordered) — never above the ~6-item ceiling.
 
-## OS chrome (in review, 2026-08-28 — NOT yet swept past 3 pages)
+**2026-08-28 pass (tools-first pivot — implementing `docs/brand-identity.md`, all 3 flagged decisions
+confirmed by the user beforehand: `--c-ml`→Indigo, orphan packages stay unannotated, `Tools` nav item
+dropped)**: `index.html` restructured to tools-only top-level content (nav → hero → `#tools` grid,
+each card retinted to a real "chord" — Analyst `var(--c-data)` unchanged, Creature a new two-tone
+`--c-ml`/`--c-spatial` gradient with a `.powered` pill row to AlgFormer+Tracer, Forecaster/Prism
+`var(--c-ml)` unchanged in markup but retinted via the token move → new slim `.pkg-strip` package-chip
+row → footer). The old `#packages` gallery + closing `.stack`/`.flow` moved near-verbatim to a NEW
+page, `packages.html` (own title/description/canonical/OG/`CollectionPage` JSON-LD, added to
+`sitemap.xml`), on the plain (non-chrome) template. `site.css`: `--c-foundation` is now the literal
+`--spectrum` gradient (+ `--c-foundation-solid:#fff` companion), `--c-ml` moved off-spectrum-pink
+`#e879c8` → Indigo `--spectrum-6` `#7d7dff`; added `--cat-root` (solid-colour fallback for the few
+call sites `--cat` holding a gradient breaks — fixed the one real one, the `os-chrome` mobile
+icon-tile rule's 3 `color-mix()`/gradient-stop `var(--cat,...)` references, all repointed through
+`var(--cat-root,var(--cat,var(--accent)))`); added `.card.tool`/`.powered`/`.pkg-strip` components
+(see Design system above). Sitewide mechanical fix bundled in the SAME pass (not the paused
+`os-chrome` sweep — a plain href swap, no layout/chrome touched): every `/#packages` href on the
+other 14 pages (nav, crumb, `.related-all`, footer, CTA) repointed to `/packages.html`, since leaving
+them pointing at a same-page anchor that no longer exists on `index.html` would have been a real
+reachability regression (nav "Packages" landing on a homepage with nothing to scroll to), not just a
+cohesion nit — this was necessary for THIS pass to not break the ≤2-click invariant, not scope creep.
+`algformer.html`'s own Creature mirror card (in its "Try it live" gallery) was also retinted to the
+same two-tone gradient for the same reason: leaving one instance of "the Creature card" flat and
+another two-tone in the same pass would have been a new, avoidable inconsistency.
+Reachability walk re-run on the real new markup: from `index.html`, every tool is 0 clicks (visible)
+→1 click (card-link); every package is 1 click via `.pkg-strip` chip OR 2 clicks via `Packages`→card
+(both paths exist, both within budget). From `packages.html`: `Home`(1)→any tool(0-1) or any other
+package(1 more via `Packages`, self, already there). From a deep page (e.g. `phasor.html`):
+`Home`(1)→`index.html`(any tool 0-1 click more) = ≤2; `Packages`(1)→`packages.html`→any card(1) = 2.
+From the HoloDb hub (now 5 nav items, down from 6): same ≤2-click guarantee, one item lighter.
+Narrow-viewport compactness improved or held, never regressed — checked per page, not assumed
+uniform: `index.html`/`phasor.html`/`packages.html` now carry the leanest 3-item `Home · Packages ·
+NuGet` nav (was 4 on the first two, `Tools` dropped); `holodb/index.html` is 5 items (was 6, same
+drop); the OTHER 10 plain product pages (`algformer.html`, `algformer-gpu.html`, `evalapp.html`,
+`evalapp-neural.html`, `holodb-client.html`, `holodb-protocol.html`, `holoformer.html`,
+`holovoxel.html`, `prose.html`, `tracer.html`) never carried `Tools` in the first place and are
+UNCHANGED at 4 items (`Home · HoloDb · Packages · NuGet` — the older HoloDb-pinned shape, only the
+`Packages` href value was fixed, not the item count/order — that shape-level fix is still the paused
+`os-chrome`/nav-sweep, out of scope for this pass); `holodb.html` stays 5 items, `holodb/manual/
+index.html` stays 6 — both also just an href fix, not a shape change. No href was removed from the
+site; `#tools`'s `id` still exists for deep-linking despite losing its nav entry on the 3 pages that
+had it. Tag/brace balance
+verified on every file touched (16 HTML files + `site.css`) via a scripted open/close-tag count, not
+just read-back — no live browser available, so this is a structural check, described as that, not a
+rendered screenshot. **Deviation from `docs/brand-identity.md`, and why**: the doc's own §4 only
+explicitly scoped the `/#packages`→`/packages.html` href fix as "simpler, not harder" going forward,
+not as a mandatory same-pass sitewide edit — did it anyway (see reasoning above) because leaving it
+undone would have shipped a broken invariant on `index.html`'s own first day live, which is worse
+than the minor scope stretch of touching 14 files' hrefs (not their layout/nav-item-count/chrome).
 
 Desktop/wide viewports get a window-panel treatment (bordered "window" frame around `.hero` and
 every `.sec` that carries a `.sec-head`, a titlebar with decorative traffic-light dots, the nav
@@ -512,8 +592,10 @@ removal, glass window panels, or the `#packages`/`#tools` mobile icon grid (`.ca
 coordinator/user should re-check on the same real phone before this is considered closed.
 
 **Sweep recipe for the remaining 14 pages** (once this subset is approved): add `class="os-chrome"`
-to `<body>`; add nav-links `Tools` (`/#tools`) in place of the old `HoloDb` slot, keeping any
-page-specific extra items after it; wrap the hero's real content in `<div class="hero-bar"
+to `<body>`; nav-links already read the current 3-item `Home · Packages · NuGet` shape sitewide
+(the `Tools` slot this recipe used to add was dropped sitewide in the 2026-08-28 tools-first pivot —
+see Navigation above, don't reintroduce it here), keep any page-specific extra items after `NuGet`;
+wrap the hero's real content in `<div class="hero-bar"
 aria-hidden="true"><span class="win-dots">...</span><span class="hero-bar-title">NAME.app</span>
 </div><div class="hero-body">...</div>`; if the page also carries `.prism-beam` (only
 `algformer.html` today), additionally wrap the real text in `.hero-content` per the gotcha above.
@@ -728,12 +810,15 @@ the compaction pass should happen when the architecture lands, not before.
   shared class into `site.css` first rather than copy-pasting the inline styles a third time.
 - New package coming: bootstrap its page the same way — read `MonoRepo/<Pkg>/docs/site.md` (+
   `PACKAGE.md`/`CLAUDE.md`/csproj `<Version>` for facts), copy the page template shape from any
-  existing plain product page (e.g. `phasor.html`) INCLUDING its lean nav (`Home · Packages · Tools ·
-  NuGet` — see Navigation section; NOT the older HoloDb-pinned shape some of the 14 not-yet-swept
-  pages still carry) and its `.related` pills row, add it to `index.html`'s gallery (pick a category
-  colour, add the `.card-link` overlay — this alone makes it reachable in ≤2 clicks from every page
-  via Home/Packages → the gallery, so it's the step that actually matters), then add it into the
-  `.related` pills of its closest 1-2 siblings (not every page — contextual, not exhaustive), add the
-  nav crumb pattern, add it to `sitemap.xml`, and update the package count in `index.html`'s hero
-  facts + this file's Site map section. Re-run the reachability walk (Navigation section, above)
-  before calling it done, and check the nav is still compact on a narrow viewport.
+  existing plain product page (e.g. `phasor.html`) INCLUDING its lean nav (`Home · Packages ·
+  NuGet` — 3 items, see Navigation section; `Packages` points at `/packages.html`, NOT `/#packages` —
+  that same-page-anchor form is retired sitewide since the 2026-08-28 tools-first pivot) and its
+  `.related` pills row, add it to `packages.html`'s gallery (pick a category colour, add the
+  `.card-link` overlay — this alone makes it reachable in ≤2 clicks from every page via Home/Packages
+  → the gallery, so it's the step that actually matters — NOT `index.html`, which is tools-only now),
+  then add it into the `.related` pills of its closest 1-2 siblings (not every page — contextual, not
+  exhaustive), add the nav crumb pattern, add it to `sitemap.xml`, and update the package count in
+  `index.html`'s hero facts, `packages.html`'s hero facts, and this file's Site map section. If it
+  also powers a live tool, add a `.powered` pill linking to it on that tool's homepage card too. Re-run
+  the reachability walk (Navigation section, above) before calling it done, and check the nav is still
+  compact on a narrow viewport.
