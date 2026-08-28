@@ -269,6 +269,59 @@ Forecaster produces `IParallelMap` `chunks==1` even at `parallelism:4` (see `Hol
 ParallelMapping.cs`'s own measured finding) — real gains from this new capability need a batching
 restructure of the training loops first, which is its own follow-up task, not attempted here.
 
+### Real incident: silent infinite hang in LinkedIn's in-app browser (2026-08-28) — fixed, boundary confirmed
+
+Real device report: `/tools/prism` opened inside LinkedIn's iOS in-app WebView stalled forever right
+after "loader dotnet.js" — no error, no fallback, stuck at "connecting…". **User confirmed a real
+standalone browser works fine** — an embedded/in-app-WebView problem (these commonly restrict or
+silently no-op Service Worker registration), not a general regression.
+
+**Confirmed via evidence (grepped the shipped runtime), not assumed**: a `WasmEnableThreads=true`
+build cannot gracefully continue single-threaded when isolation never activates — no in-place fallback
+exists. `dotnet.js` contains an unconditional assert that THROWS if `SharedArrayBuffer` is missing
+(`qe(!1,"SharedArrayBuffer is not enabled on this page...")`, no degrade branch); `dotnet.native.js`
+unconditionally requests `new WebAssembly.Memory({shared:true})`; and — the real structural root cause
+— the compiled `dotnet.native.<hash>.wasm` itself was linked `--shared-memory --import-memory` (seen
+in this build's own `emcc`/`wasm-ld` invocation), a categorically different WASM module shape than a
+non-threaded publish. No runtime flag can un-bake that from an already-compiled binary.
+
+**Fix shipped: fast-detect + honest fallback UI, never a silent hang** — `wwwroot/index.html` +
+`wwwroot/css/boot.css`. `Blazor.start()` is now GATED behind confirmed `window.crossOriginIsolated`:
+two instant fast-fail checks (`!isSecureContext`, `!('serviceWorker' in navigator)` — conditions
+coi-serviceworker.js itself already silently gives up on) plus a single bounded 7s wait for the normal
+register+reload cycle (settles <1s normally; a real reload interrupts the timer first, so this never
+false-fires in the healthy case). On timeout, a `#boot-fallback` panel reveals instead of proceeding:
+honest explanation ("common inside an app's built-in browser... look for 'Open in Browser'"), a
+**Retry** button (`location.reload()`) and a **Copy link** button (`navigator.clipboard`).
+`Blazor.start(...).catch(...)` is an added defensive net, not the primary fix — the primary fix is
+that the fatal assert is now structurally unreachable, since boot is only attempted once isolation is
+already confirmed. Does NOT make threading work inside a restricted WebView (outside this page's
+control); does guarantee the visitor is never stuck with zero feedback/way-forward again.
+
+**Real dual-build graceful degradation — evaluated per the coordinator's explicit ask, NOT built**:
+the only way to get a genuinely automatic non-threaded fallback (vs. a message) is a real second
+`WasmEnableThreads=false` publish served from a second path with a pre-boot chooser redirect. Real and
+buildable, but bigger/separate: needs `deploy.yml` (website-owner's) to `dotnet publish` twice — a
+considered regression to the 2026-08-28 decision that CI no longer publishes Showroom at all — and
+roughly doubles the committed `dist/` artifact (~55 MB today). One thing that DOES make it cheap
+whenever it's picked up: since no tool's training loop dispatches across real threads yet (`chunks==1`
+always, see above), the non-threaded build is **behaviourally identical** to the threaded one today —
+no feature-parity work, just redirect plumbing + size/CI cost. **Cheapest option of all, flagged not
+acted on**: `WasmEnableThreads` has zero consumers today, so it's pure downside (this failure class)
+for zero benefit right now — removing it until a training loop actually uses real threads would erase
+the whole failure class at zero cost, cheaper than the fallback fix or a dual-build. Not done
+unilaterally (a same-day deliberate infra investment, not this task's call to revert) — flagged as a
+live option for the coordinator alongside the dual-build path.
+
+**Verified**: `dotnet build Showroom.csproj -c Release` green (0/0). `node --check` on
+`coi-serviceworker.js` (unchanged, re-checked anyway). `boot.css` brace balance (52/52). Full re-read
+of `index.html` — well-formed. **Not verified live** (no browser, per this repo's boundary) — user
+needs to re-test the LinkedIn WebView case once deployed, plus ideally a standalone browser first to
+reconfirm the happy path is unaffected. **Deploy note**: source-only change; `Showroom/dist/` needs a
+fresh `dotnet publish` + copy to reach production — not done here per this task's own instruction
+(no AOT publish, don't touch `dist/`) — flagged for the coordinator, same "hard coupling" discipline
+already on record in `AboutUs/CLAUDE.md`.
+
 ## The Analyst — `Pages/Analyst.razor` (route `/analyst`)
 In-browser data profiler + live SQL REPL over **HoloDb** (`Database.Open(null)`, in-memory). Sniffs
 CSV/TSV/JSON/JSONL/plain-text, infers a type per column, bulk-loads into a real HoloDb table (100k-row
