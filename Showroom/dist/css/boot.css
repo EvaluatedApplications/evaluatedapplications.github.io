@@ -92,6 +92,16 @@
 .boot-phase.compiling { color: var(--ok); animation: boot-pulse 1.2s ease-in-out infinite; }
 @media (prefers-reduced-motion: reduce) { .boot-phase.compiling { animation: none; } }
 
+/* Fallback UI (2026-08-28, LinkedIn in-app-browser stall fix) — shown by index.html's boot script
+   only when cross-origin isolation genuinely cannot activate on this browser (see that script's own
+   header comment). Hidden by default via the [hidden] attribute; JS reveals it, never CSS alone. */
+.boot-fallback { margin-top: 1rem; padding-top: .9rem; border-top: 1px solid var(--border); }
+.boot-fallback-title { margin: 0 0 .4rem; font-size: .92rem; font-weight: 700; color: var(--ink); }
+.boot-fallback-body { margin: 0 0 .55rem; font-size: .78rem; line-height: 1.55; color: var(--ink-soft); }
+.boot-fallback-actions { display: flex; flex-wrap: wrap; gap: .6rem; margin-top: .6rem; }
+.boot-fallback-actions .btn { font-size: .82rem; padding: .55rem 1rem; }
+.boot-fallback-copied { margin: .55rem 0 0; font-size: .74rem; color: var(--ok); }
+
 @keyframes boot-pulse { 0%, 100% { opacity: 1 } 50% { opacity: .35 } }
 @keyframes boot-cursor { 0%, 49% { opacity: 1 } 50%, 100% { opacity: 0 } }
 @keyframes boot-stripes { to { background-position: 0 0, 40px 0; } }
