@@ -307,6 +307,16 @@
             {
                 _generating = true; _pendingPrompt = "warm"; _pendingContinuation = "up";
                 StateHasChanged();
+                // StateHasChanged() only SCHEDULES a render — without actually yielding back to the
+                // browser, Blazor batches it with whatever runs next and only paints the LATEST state.
+                // The original version of this warm-up reverted _generating in the very next line with
+                // no yield in between, so the scheduled render was still pending when it got overwritten
+                // — Blazor never built/diffed the .or-run.pending branch at all, and the warm-up was a
+                // silent no-op (confirmed live: the user still saw the cold-start stutter after it
+                // shipped). A real yield here (Task.Delay, not Task.Yield — WASM's message pump needs an
+                // actual round trip through the browser event loop to flush a pending render) forces
+                // that render to really happen during boot.
+                await Task.Delay(1);
             }
             catch { /* warm-up only — never user-visible, never blocks page load either way */ }
             finally { _generating = false; _pendingPrompt = ""; _pendingContinuation = ""; }
