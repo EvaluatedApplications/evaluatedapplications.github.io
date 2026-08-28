@@ -23,6 +23,14 @@
          running). Real, measured tradeoff: dotnet.native.wasm grows about 24.8 MB to about 27.0 MB raw,
          roughly 9% bigger, worth it to never need to interrupt live training for a site rebuild again. -->
     <EmccLinkOptimizationFlag>-O1</EmccLinkOptimizationFlag>
+    <!-- REAL WASM MULTITHREADING (2026-08-28, priority infra task). This is the actual .NET/Blazor
+         flag for real OS threads inside the WASM runtime (pthreads over SharedArrayBuffer) — NOT the
+         cooperative-async-interleaving Showroom already uses elsewhere. It pulls in the threaded
+         runtime pack (browser-wasm-threads) at restore/build time; wasm-tools workload (already
+         installed for RunAOTCompilation) is the only prerequisite. See wwwroot/coi-serviceworker.js +
+         index.html for the client-side half (GitHub Pages can't send the COOP/COEP response headers
+         a threaded WASM page needs, since it's static hosting with no server-side header control). -->
+    <WasmEnableThreads>true</WasmEnableThreads>
   </PropertyGroup>
 
   <ItemGroup>

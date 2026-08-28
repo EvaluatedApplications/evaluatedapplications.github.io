@@ -12,6 +12,11 @@
     <link rel="stylesheet" href="css/boot.css" />
     <link href="Showroom.styles.css" rel="stylesheet" />
     <script type="importmap"></script>
+    <!-- REAL WASM MULTITHREADING (2026-08-28): must be the FIRST script in the document, before
+         anything else runs, so it gets the earliest possible chance to register + (on a repeat
+         visit) already be controlling this navigation before any other resource is requested. See
+         coi-serviceworker.js's own header comment for the full mechanism/limitations writeup. -->
+    <script src="coi-serviceworker.js"></script>
     <!-- GitHub Pages SPA: restore the deep-link path that the root 404.html encoded, before Blazor boots. -->
     <script>
       (function (l) {
@@ -85,6 +90,16 @@
         };
       })();
       __bootLine('', 'target ' + (window.location.pathname || '/'));
+      // REAL WASM MULTITHREADING diagnostic (2026-08-28): reports the two actual facts that decide
+      // whether the threaded runtime can init — window.crossOriginIsolated (set by the browser only
+      // when coi-serviceworker.js has already taken control of THIS navigation's headers) and
+      // navigator.hardwareConcurrency (what the pthread pool sizes itself against). On a page's very
+      // first-ever visit this will correctly read "not yet isolated" — coi-serviceworker.js is still
+      // mid-registration and this load will self-reload once; on every later visit it should read
+      // "isolated" before Blazor.start() below ever runs.
+      __bootLine(window.crossOriginIsolated ? 'core' : 'warn',
+        'cross-origin isolation: ' + (window.crossOriginIsolated ? 'ACTIVE' : 'not yet active (first visit — page will auto-reload once)') +
+        ' · logical CPUs: ' + (navigator.hardwareConcurrency || 'unknown'));
       __bootLine('', 'requesting WebAssembly runtime + compiled binaries…');
 
       // __bootPhase: a state DISTINCT from --blazor-load-percentage[-text] (the framework's own

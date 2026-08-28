@@ -114,6 +114,77 @@ status line distinct from `--blazor-load-percentage-text`, encoding "downloaded 
 striped `#boot-bar.busy` overlay while compiling (fill WIDTH still tracks real bytes). Build-verified
 only (0/0), not seen live — user should confirm on the phone that showed the original stall.
 
+## Real WASM multithreading (2026-08-28, priority infra task) — `wwwroot/coi-serviceworker.js`
+Real OS threads (pthreads over `SharedArrayBuffer`) inside the WASM runtime, NOT the cooperative
+async-interleaving pattern the tools' own training loops use (that's `HoloKernel`/`ParallelMapping`'s
+territory, untouched by this). Two parts, both required together:
+
+1. **`Showroom.csproj`: `<WasmEnableThreads>true</WasmEnableThreads>`** — pulls in the threaded
+   runtime pack at build time (`wasm-tools` workload, already installed for `RunAOTCompilation`, is
+   the only prerequisite). **Verified compatible with the existing `PublishTrimmed=true` +
+   `RunAOTCompilation=true` + `-O1` combination** — this three-way combo has real historical bugs
+   elsewhere, so it was actually build+publish tested, not assumed: `dotnet build -c Release` is
+   green (0/0), and a full `dotnet publish -c Release` (AOT+trim+threads together) succeeds end to
+   end (exit 0), ~4m40s-5m15s wall time on this dev machine, producing `_framework/
+   dotnet.native.worker.<hash>.mjs` (the pthread bootstrap worker script — confirms the threaded
+   runtime pack actually built, not just that the flag was accepted) alongside the usual
+   `dotnet.native.<hash>.{js,wasm}`. Grepped the shipped `dotnet.native.<hash>.js` for confirmation
+   it sizes its own thread pool from `navigator.hardwareConcurrency` (present, not guessed). Native
+   module size: **27.4 MB raw / 8.15 MB gzip / 5.2 MB brotli** (threaded) vs. the pre-threading
+   ~24.8-27.0 MB raw at the same `-O1` (see the Dependencies section's AOT comment) — threading adds a
+   modest, not dramatic, size cost on top of the existing AOT module.
+
+2. **`wwwroot/coi-serviceworker.js`** solves the actual hard part: real multithreaded WASM requires
+   the page to be cross-origin-isolated (`Cross-Origin-Opener-Policy: same-origin` +
+   `Cross-Origin-Embedder-Policy: require-corp`/`credentialless` response headers, which unlock
+   `SharedArrayBuffer` and set `self.crossOriginIsolated = true`) — GitHub Pages is static hosting
+   with **no server-side header control**, confirmed by serving a fresh flat-file publish through a
+   from-scratch local static server that (like GH Pages) sets neither header on any response,
+   including `.wasm`/`.mjs`/`.js`. Vendored (self-hosted, not CDN-referenced) **coi-serviceworker
+   v0.1.7** (Guido Zuidhof, MIT) — this exact widely-deployed implementation (pyodide.org and others),
+   not hand-rewritten, but its whole mechanism was traced end-to-end and is documented in the file's
+   own header comment before trusting it: on first visit it registers itself AS a Service Worker and
+   forces one `location.reload()`; from the second load on, its own `fetch` handler injects COOP/COEP
+   onto every response the SW intercepts (including the page's own navigation response), achieving
+   isolation from byte one of that load. Default mode is COEP `credentialless` (not `require-corp`) —
+   deliberate: The Analyst's own free-form external CORS-permitting feed URLs are cross-origin
+   no-cors fetches this app doesn't control the CORP headers of, and `credentialless` doesn't block
+   those the way strict `require-corp` would. Loaded as the very FIRST script in `index.html`, before
+   anything else, for the earliest possible registration/reload timing.
+
+**What was verified, and how (build/static evidence only — see the hard limitation below)**:
+`node --check` on the vendored file (syntax valid); full AOT+trim+threads publish succeeds twice in a
+row (once before, once after adding the SW file + its `index.html` wire-up, to make sure the SW file
+itself actually lands in the publish output — it does); served the fresh publish output through a
+from-scratch Node static file server (root-cause-correct MIME map, `.wasm`→`application/wasm` etc.,
+confirmed via `Invoke-WebRequest` against every relevant file) rather than the Blazor dev server,
+specifically because the dev server auto-adds COOP/COEP itself when `WasmEnableThreads` is set and so
+would NOT have exercised the coi-serviceworker path at all — confirmed via that same static server
+that the origin sends **no** COOP/COEP headers on anything, i.e. the workaround is genuinely load-
+bearing here, nothing else is silently providing isolation. Also added a real (not decorative) boot-
+log diagnostic line in `index.html` (`window.crossOriginIsolated` + `navigator.hardwareConcurrency`,
+reusing the existing boot-log narration pattern) so this is self-reporting and visible on every real
+page load going forward, not just checked once at build time.
+
+**HARD LIMITATION — could NOT verify end-to-end in an actual browser, per this repo's own boundary
+("never launch the app / open a browser session yourself")**: `self.crossOriginIsolated === true` on
+a real loaded page, the one-reload first-visit UX actually completing cleanly, and real Worker
+threads visibly spinning up in devtools are all UNVERIFIED — build/publish success does not prove
+runtime correctness, and this is exactly the kind of claim that needs a live check, not code-reading.
+**The user (or coordinator) must confirm this live** before calling it done: serve a fresh
+`dotnet publish Showroom.csproj -c Release -o <dir>` output's `wwwroot/` as flat static files (NOT
+`dotnet run` — the dev server hides this exact problem, see above) under a `/tools/` path prefix,
+load it in a real browser, and in devtools check (1) Console/Application tab: the page reloads once
+automatically, then stays put, (2) `self.crossOriginIsolated` is `true` in the console after that
+settle, (3) the boot log's own new diagnostic line agrees, (4) Sources/Threads or the Task Manager's
+"process" view shows multiple Worker processes once a tool actually runs.
+
+**Also flagged, not fixed (out of scope — deliberate, see the task's own scope boundary)**: no tool's
+training loop dispatches work across real threads yet. Today's per-step training pattern in Creature/
+Forecaster produces `IParallelMap` `chunks==1` even at `parallelism:4` (see `HoloKernel/
+ParallelMapping.cs`'s own measured finding) — real gains from this new capability need a batching
+restructure of the training loops first, which is its own follow-up task, not attempted here.
+
 ## The Analyst — `Pages/Analyst.razor` (route `/analyst`)
 In-browser data profiler + live SQL REPL over **HoloDb** (`Database.Open(null)`, in-memory). Sniffs
 CSV/TSV/JSON/JSONL/plain-text, infers a type per column, bulk-loads into a real HoloDb table (100k-row
@@ -302,6 +373,10 @@ same `.razor` file — a shared `ListingCard`/`ListingRow` helper styles correct
   not `dotnet run`/dev server — trimming was off over an "EvalApp reflection" worry, now believed
   stale, not independently re-verified). Cost: `dotnet.native.*.wasm` becomes one large AOT module
   (~8 MB compressed) — see Boot screen's compile-gap narration, added because of this.
+- `WasmEnableThreads=true` (landed 2026-08-28, same day as the priority infra task — see "Real WASM
+  multithreading" below) — coexists cleanly with `PublishTrimmed`+`RunAOTCompilation`: full
+  `dotnet publish -c Release` succeeds (exit 0, 0/0) with this three-way combination, ~4m40s-5m15s
+  wall time on this dev machine either way (AOT link, not threading, is the slow step).
 - **Version bumps only via `dotnet add package`** (latest published) — never hand-edit `<Version>`.
   A capability not yet published is a hand-off to the coordinator, not a reach into MonoRepo source.
 
@@ -324,10 +399,14 @@ same `.razor` file — a shared `ListingCard`/`ListingRow` helper styles correct
   channel routing. Re-derive a floor from `bindRank = shifts·d/2` per tool's own d/context; never
   copy another tool's `MinShifts` verbatim.
 - `golden: true` on every `HoloFormer` construction so far. WASM has no filesystem — no live-training
-  tool can persist a checkpoint ("Reset brain" just drops the in-memory reference). WASM is
-  single-threaded (`dotnet run`/dev server stays interpreted; published builds AOT-compile since
-  2026-08-28, see Dependencies) — keep live-training shapes small (Creature `d=384,L=1`; Forecaster
-  `d=128,L=1`).
+  tool can persist a checkpoint ("Reset brain" just drops the in-memory reference). **Runtime
+  threading model, corrected 2026-08-28**: the dev server (`dotnet run`) stays single-threaded/
+  interpreted. Published builds are now REAL multithreaded WASM (`WasmEnableThreads=true`, actual OS
+  pthreads over `SharedArrayBuffer`, not the cooperative async-interleaving pattern the tools'
+  training loops themselves use) — see "Real WASM multithreading" below for the full mechanism. This
+  is a RUNTIME CAPABILITY only so far: no tool's training loop dispatches work across threads yet
+  (that's a deliberate follow-up, needs a batching restructure first — see that section) — keep
+  live-training shapes small regardless (Creature `d=384,L=1`; Forecaster `d=128,L=1`).
 - `HoloKernel.RefinementLoop.Observe`/`ObserveSequence` is the house pattern for live-training now
   (wraps `NewGrads()`→`IterAccumulate`/`StackIterAccumulateAllPos`→`Step`). `HoloFormer.TrainStep`
   still exists but does NOT honour the `Iters`/K-pass depth knob — never use it where K matters.
