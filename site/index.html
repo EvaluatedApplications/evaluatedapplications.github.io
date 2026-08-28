@@ -143,11 +143,15 @@
           host — GitHub Pages, zero backend — serving files that then compute entirely inside your browser tab. That's an unusual
           thing for what these tools actually do.</p></article>
     </div>
-    <p class="lim"><b>Honestly, today:</b> this build runs on Mono's interpreted WebAssembly runtime, not ahead-of-time (AOT)
-      compilation — we know because we chased a real bug caused by it: a model's first inference pass is measurably slower than
-      every pass after, so the tools above quietly warm one up before you can type. Interpreted still means executing compiled
-      bytecode instruction-by-instruction, not re-parsing JavaScript source each time — the case above holds either way. AOT is a
-      real, available next step for this exact app, not a hypothetical ceiling we're waving at.</p>
+    <p class="lim"><b>Honestly, today:</b> this build now compiles ahead-of-time (AOT) rather than running on Mono's
+      interpreter — turned on, publish-tested, and what's actually deployed, not a hypothetical next step. The honest tradeoff:
+      the raw app before compression got bigger, not smaller (33.9 MB vs 28.0 MB pre-AOT), because a compiled native module
+      outweighs what trimming — which AOT requires — cuts back out. What actually crosses the wire tells a better story: gzip
+      transfer is a wash (10.8 MB either way) and brotli is smaller than before (7.31 MB vs 8.3 MB), because that same trimming
+      pays for itself once real compression is in the picture. One cost is still real and worth naming: the AOT runtime is now
+      one large compiled module (~7-8 MB compressed) that has to download and then be compiled/instantiated by your browser
+      before a tool is ready — a genuine one-time wait on first visit, more noticeable on mobile. Heavier first load, faster
+      execution after: that's the tradeoff we picked, and it's live right now, not a claim about what we might do.</p>
   </div>
 </section>
 
