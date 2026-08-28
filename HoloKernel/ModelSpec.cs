@@ -73,7 +73,39 @@ public sealed record ModelSpec
 
     public int BindRank => HoloShape.BindRank(Shifts, Dim);
 
-    internal HoloFormer Build() => new(
+    /// <summary>
+    /// True when this shape can actually be SERVED at its own K.
+    ///
+    /// VERIFIED CONSTRAINT (AlgFormer 1.5.0, measured): the weight-tied K-pass is single-layer only.
+    /// With <c>Layers &gt; 1</c> and <c>K &gt; 1</c>, both <c>LogitsFor</c> and <c>IterAccumulate</c>
+    /// throw <c>NotSupportedException("Iter oracle: L=1 only.")</c>.
+    ///
+    /// The nasty part is the asymmetry: <c>StackIterAccumulateAllPos</c> with K&gt;1 works fine on a
+    /// multi-layer model. So a deep model can be TRAINED at K&gt;1 and then fail the moment you try
+    /// to serve it — a trap that would only surface at inference time, long after the training run.
+    /// Caught here at construction instead.
+    /// </summary>
+    public bool SupportsKPassServing => Layers == 1 || KPass <= 1;
+
+    /// <summary>Throws if the shape is internally inconsistent. Called by <see cref="Build"/>.</summary>
+    public void Validate()
+    {
+        if (!SupportsKPassServing)
+            throw new InvalidOperationException(
+                $"Layers={Layers} with KPass={KPass} cannot be served: AlgFormer's weight-tied K-pass is " +
+                "single-layer only (LogitsFor/IterAccumulate throw \"Iter oracle: L=1 only.\"). " +
+                "Use Layers=1 to keep the K-pass, or KPass=1 to go deeper — not both.");
+
+        _ = Shifts; // re-runs the S>1 invariant
+    }
+
+    internal HoloFormer Build()
+    {
+        Validate();
+        return BuildCore();
+    }
+
+    private HoloFormer BuildCore() => new(
         vocab: Vocab,
         shifts: Shifts,
         layers: Layers,

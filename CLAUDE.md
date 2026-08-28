@@ -369,6 +369,32 @@ ease-in + `Reconstruct` for checkpoint metadata), `RefinementLoop.cs` (`Observe`
   this index onward" and was wrong; it now normalises to a per-position mean so a training curve
   can't leap when a tool switches modes. Do not trust that parameter name.
 - `AlphaRamp.Reconstruct(24_360, 0, 20_000) == 1.0`, matching Prism's real shipped snapshot.
+- **The weight-tied K-pass is SINGLE-LAYER ONLY.** With `Layers>1` and `K>1`, both `LogitsFor` and
+  `IterAccumulate` throw `NotSupportedException("Iter oracle: L=1 only.")` — but
+  `StackIterAccumulateAllPos` with `K>1` succeeds on a multi-layer model. That asymmetry is a trap:
+  a deep model can be TRAINED at K>1 and then fail only when you try to serve it. `ModelSpec.Validate`
+  now rejects the combination at construction. **This directly constrains "grow Prism"**: growing via
+  `GrowLayers` costs you the K-pass entirely, so depth and K are an either/or in 1.5.0.
+
+### The `IParallelMap` seam — investigated, and RULED OUT for this site
+
+Prompted by `evalapp-owner`'s deadlock finding. Two independent measured grounds, both recorded in
+`ParallelMapping.cs` so nobody re-derives them:
+- **Not currently dangerous**: a fresh `HoloFormer.Map` defaults to `PrismFormer.SequentialMap`
+  (verified), `PrismEval+EvalMap` is a *non-public* type reachable only by explicitly assigning
+  `PrismEval.Cpu`, and **nothing in `Showroom/` sets `.Map` at all** (grepped). So the existing tools
+  are safe as they stand; the sync-over-async hazard is strictly opt-in.
+- **And not useful either**: instrumenting the seam with a spy across every shape this site runs
+  (Forecaster d=128, Creature d=384, Prism d=1536; Layers 1/2/4; via `LogitsFor` and
+  `TrainEpoch(parallelism:4)`), `chunks` was **always 1** against `minForParallel` of 2 — 0 of 112
+  calls on the batch path ever reached the parallel threshold. The fan-out is width-1 at our shapes,
+  so even a perfect async implementation would gate one item and buy nothing.
+
+**Conclusion**: EvalApp's role in the browser is the OUTER loop (cooperative yielding, progress,
+cancellation around a long run, concurrency 1) — NOT this seam. That stands regardless of whether
+`algformer-owner`'s async `IParallelMap` redesign lands. `ParallelMapping.EnsureBrowserSafe()` exists
+as a loud known-bad-list check (it rejects `PrismEval.Cpu`) so a future port fails at wire-up rather
+than as a silently frozen tab. Scoped claim: measured on these CPU paths at these shapes only.
 
 **Deploy risk this cycle: none.** Nothing references `HoloKernel` yet and `deploy.yml` only publishes
 `Showroom`, so it is inert in CI until showroom-owner wires it in.
