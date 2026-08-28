@@ -148,27 +148,55 @@ to a running scroll-linked animation's `transform` value for the same property, 
 the existing hover-lift affordance. A real fix needs a wrapper element (animate the wrapper, leave
 `.card`'s own hover transform alone) — flagged as follow-up, not attempted.
 
-**Colour — PLACEHOLDER, flagged for a follow-up recolour pass**: `.room[data-cat="data"]` (Analyst)
-/ `.room[data-cat="ml"]` (Creature/Forecaster/Prism) on each tool's outer `<div class="room">`
-(added this pass) set `--glow-near`/`--glow-mid`, read by the keyframes via `color-mix()` — reusing
-`site.css`'s OWN existing `--c-data`/`--c-ml` tokens (the same ones `Home.razor`'s tool cards
-already tag with), not invented. A parallel website-owner task is moving the whole site from 4
-coarse category colours to one distinct hue per NuGet package (Prism/AlgFormer and Analyst/HoloDb
-named explicitly as needing genuinely different colours) — once that lands, repoint the two
-`[data-cat]` rules in `depth.css` (and ideally `Home.razor`'s own `--cat` tags) at the new
-per-package tokens; the mechanism itself (one custom-property pair per page) doesn't need to
-change. Also flagged: The Creature genuinely depends on BOTH AlgFormer(ml) and Tracer(spatial),
-tagged `ml`-only here (same simplification `Home.razor`'s own `--cat` already makes) — a real
-two-tone chord is natural follow-up work once the real package-colour table exists.
+**Colour — RETINTED to the real per-package palette (2026-08-28, follow-up pass)**: the placeholder
+4-bucket `data`/`ml` tint from the first pass (below, kept as history) is gone. `[data-cat]` on each
+tool's `.room` is now a real dependency name, matching the website's own per-package hex table
+(`AboutUs/CLAUDE.md`'s "Per-package palette" — single source of truth, hand-duplicated here since
+there's no shared token file across the repo boundary, same known limitation on record both sides):
+`data-cat="holodb"` (Analyst, HoloDb only — was wrongly sharing `--c-data` blue with 3 unrelated
+tools), `data-cat="algformer"` (Forecaster/Prism, verified AlgFormer-only — Forecaster's own `.razor`
+carries no Tracer `@using`/call, confirmed by grep before assuming), `data-cat="algformer-tracer"`
+(Creature, verified via its own `@using Tracer.Helpers` + `GridTactics.Reachable` call — a genuine
+two-package composite, same situation as the static site's `prose.html`). Each `[data-cat]` rule now
+reads `var(--c-holodb, #66c1aa)` / `var(--c-algformer, #5998ff)` / `var(--c-tracer, #f0796a)` — since
+`site.css` IS linked into this same page (`wwwroot/index.html`), the `var()` resolves to the live
+token when present, falling back to the hand-typed hex (this file's own duplicated copy) otherwise —
+same fallback-authoritative convention this file already used pre-recolour. **Creature's chord is a
+real two-tone hard-edged glow, not a placeholder single hue**: two NEW keyframes,
+`sr-parallax-near-chord`/`sr-parallax-mid-chord`, each stacking TWO `drop-shadow()` layers (one per
+`--glow-*-a`/`--glow-*-b`) instead of one — mirrors `site.css`'s own `ea-parallax-mid-chord`
+mechanism exactly (two shadow layers, never a `color-mix()`'d third hue), extended to BOTH the near
+and mid tiers here (unlike `site.css`, whose near tier is the page-specific `.prism-beam` and so
+never needed a chord variant — Showroom's near tier, `.room-head`, appears on every tool page and so
+needed the same treatment). Wired via higher-specificity override selectors
+(`.room[data-cat="algformer-tracer"] .room-head` / `...{.stat,.cr-curve,.cr-log,.cr-stage}`) that
+only touch `animation-name`, same one-line-per-extension pattern `site.css` itself documents.
+`Home.razor`'s own gallery cards retinted to match, verified against the static site's own
+`index.html` markup before mirroring it (not invented independently): Analyst `--cat:var(--c-holodb,
+#66c1aa)`; Forecaster/Prism `--cat:var(--c-algformer, #5998ff)`; Creature a hard-edged 2-stop
+`linear-gradient(90deg, var(--c-algformer,...) 0%..50%, var(--c-tracer,...) 50%..100%)` +
+`--cat-root:var(--c-algformer, #5998ff)` (a single-colour fallback, unused by any current Showroom
+CSS rule since `Home.razor` doesn't run the static site's `os-chrome` mobile icon-grid mechanism, but
+kept for consistency with the source-of-truth pattern and future-proofing). Also swept the wallpaper
+wash's one decorative (non-per-page) blue stop from the now-gone `--c-data` bucket token to the
+neutral `--spectrum-5` stop (same hex, `#4aa3ff` — a values-preserving rename, not a colour change),
+mirroring the equivalent fix `site.css` made for its own decorative wallpaper stop.
 
 Verified structurally only (no live browser, per this repo's own boundary): `dotnet build
-Showroom.csproj -c Release` green (0/0) after the change; `depth.css` confirmed present in the
-build's static-web-assets manifest; brace/paren balance on the whole file confirmed via a full-file
-regex count (17/17 braces, 93/93 parens), not just a per-line eyeball. Not verified: how the effect
-actually reads live (the task's own instruction to start from an unmistakably-visible magnitude,
-not the site's original imperceptible-on-purpose first pass, was followed, but only a real device
-can confirm it "reads right" the way the coordinator/user confirmed for the static site's own
-tuning passes).
+Showroom.csproj -c Release` green (0/0) after the change; `depth.css` confirmed present at source and
+picked up by the static-web-assets discovery manifest (`staticwebassets.build.json`); brace/paren
+balance on the whole file confirmed via a full-file regex count (26/26 braces, 145/145 parens);
+grepped all four tool `.razor` files + `Home.razor` for any stray `--c-data`/`--c-ml`/
+`data-cat="data"`/`data-cat="ml"` leftover — none found. Not verified: how the recoloured glow/chord
+actually reads live — same disclosed limitation as every other CSS pass in this file, the coordinator/
+user should eyeball all four tool pages (Analyst teal-green vs. Prism/Forecaster blue, no longer
+collapsed together) and Creature's two-tone blue/coral chord at ≥901px on a real screen.
+
+**Original placeholder pass (2026-08-28, superseded above, kept as history)**: `.room[data-cat="data"]`
+(Analyst) / `.room[data-cat="ml"]` (Creature/Forecaster/Prism) set `--glow-near`/`--glow-mid`, reusing
+`site.css`'s then-existing `--c-data`/`--c-ml` bucket tokens (the same ones `Home.razor`'s tool cards
+tagged with at the time) — flagged then as a placeholder pending the website's per-package palette
+work; that work has since landed and this file has been repointed at it, above.
 
 ## Real WASM multithreading (2026-08-28, priority infra task) — `wwwroot/coi-serviceworker.js`
 Real OS threads (pthreads over `SharedArrayBuffer`) inside the WASM runtime, NOT the cooperative

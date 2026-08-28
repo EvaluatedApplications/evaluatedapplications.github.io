@@ -47,22 +47,42 @@
    duplicate — still `filter:drop-shadow()`, not an animated `box-shadow`, to match the site's own
    established choice and stay compositor-cheap.
 
-   PLACEHOLDER COLOURS — do not treat --c-data/--c-ml below as final. They are site.css's OWN existing
-   category tokens (Showroom already links /assets/site.css; Home.razor's tool cards already tag
-   Analyst=var(--c-data), Creature/Forecaster/Prism=var(--c-ml) — reused here as-is, not invented).
-   FOLLOW-UP FLAGGED: a parallel website-owner task is moving the whole site from 4 coarse category
-   colours to one distinct hue per NuGet package (Prism/AlgFormer and Analyst/HoloDb explicitly named
-   as needing genuinely different colours). Once that lands, repoint the two `[data-cat]` rules below
-   (and ideally Home.razor's own `--cat` tags) at the new per-package tokens — this file's mechanism
-   (one custom-property pair per page, consumed by keyframes via color-mix()) does not need to change,
-   only the token values it reads. Also flagged: The Creature genuinely depends on BOTH AlgFormer(ml)
-   AND Tracer(spatial) — tagged `data-cat="ml"` only here, same simplification Home.razor's own --cat
-   already makes for that card; a real two-tone chord (mirroring site.css's Creature-card gradient
-   mechanism) is natural follow-up work once the real package-colour table exists, not attempted here
-   since this task is structural-first per its own instructions. */
+   PER-PACKAGE RECOLOUR (2026-08-28, follow-up to the placeholder note this comment used to carry):
+   the website's 4-bucket Foundation/Data/ML/Spatial model was replaced by a distinct hue per NuGet
+   package (see AboutUs/site/assets/site.css's ":root" per-package palette table + AboutUs/CLAUDE.md's
+   "Per-package palette" section for the full hex table + placement reasoning — that table is the
+   single source of truth this file duplicates by hand, since there is no shared token file across the
+   AboutUs/Showroom repo boundary, the same known limitation on record in both repos' CLAUDE.md). Each
+   [data-cat] value below is now a real dependency name, not a bucket: "holodb" (Analyst, HoloDb only —
+   was wrongly sharing --c-data blue with 3 unrelated tools), "algformer" (Forecaster/Prism, AlgFormer
+   only — was wrongly sharing --c-ml violet with Creature despite a different real dependency set), and
+   "algformer-tracer" (Creature, AlgFormer+Tracer — a genuine two-package composite, same situation as
+   the static site's own prose.html chord). `var(--c-holodb, #66c1aa)` etc. follow the SAME pattern this
+   file already used for the old bucket tokens: site.css IS linked into this same page (see
+   wwwroot/index.html), so the var() resolves to the live token when site.css is present, falling back
+   to the hand-typed hex (this file's own duplicated copy of the source-of-truth table) if it isn't —
+   not a guess, the same fallback-authoritative convention already established here for --accent/
+   --spectrum-1/--bg above. Creature's chord follows the same "hard-edged, not a soft blend" mechanism
+   site.css uses for its own chord pages: TWO stacked drop-shadow() layers (see the *-chord keyframes
+   and their [data-cat="algformer-tracer"] override selectors below), never a single color-mix()'d
+   third hue — a real two-tone glow, not a purple compromise between blue and coral. */
 
-.room[data-cat="data"]{ --glow-near:var(--c-data, #4aa3ff); --glow-mid:var(--c-data, #4aa3ff); }
-.room[data-cat="ml"]{ --glow-near:var(--c-ml, #c07dff); --glow-mid:var(--c-ml, #c07dff); }
+.room[data-cat="holodb"]{ --glow-near:var(--c-holodb, #66c1aa); --glow-mid:var(--c-holodb, #66c1aa); }
+.room[data-cat="algformer"]{ --glow-near:var(--c-algformer, #5998ff); --glow-mid:var(--c-algformer, #5998ff); }
+
+/* Creature's chord: AlgFormer (brain) + Tracer (pathfinding), both real dependencies (see
+   Creature.razor's own @using PrismFormer / @using Tracer.Helpers + GridTactics.Reachable call).
+   --glow-near/--glow-mid still get a plain single-tone fallback (AlgFormer) here, same role
+   site.css's --cat-root plays for its own chord cards — a safety net for any current or future
+   mid/near-tier element inside this room that isn't in the *-chord override selector list below. */
+.room[data-cat="algformer-tracer"]{
+  --glow-near:var(--c-algformer, #5998ff);
+  --glow-mid:var(--c-algformer, #5998ff);
+  --glow-near-a:var(--c-algformer, #5998ff);
+  --glow-near-b:var(--c-tracer, #f0796a);
+  --glow-mid-a:var(--c-algformer, #5998ff);
+  --glow-mid-b:var(--c-tracer, #f0796a);
+}
 
 /* Static wallpaper wash — unconditional (visible with or without reduced-motion; only the DRIFT below
    is motion-gated), same 3-stop mix as site.css's own body.os-chrome wallpaper (accent violet + data
@@ -74,7 +94,7 @@
 main{
   background:
     radial-gradient(1100px 560px at 12% -8%, color-mix(in srgb, var(--accent, #8b7dff) 9%, transparent), transparent 60%),
-    radial-gradient(900px 520px at 100% 0%, color-mix(in srgb, var(--c-data, #4aa3ff) 7%, transparent), transparent 55%),
+    radial-gradient(900px 520px at 100% 0%, color-mix(in srgb, var(--spectrum-5, #4aa3ff) 7%, transparent), transparent 55%),
     radial-gradient(820px 480px at 46% 104%, color-mix(in srgb, var(--spectrum-1, #f0796a) 7%, transparent), transparent 55%),
     var(--bg, #050608);
 }
@@ -91,6 +111,22 @@ main{
   @keyframes sr-parallax-mid{
     from{ transform: translateY(30px); filter: drop-shadow(0 12px 15px color-mix(in srgb, var(--glow-mid, var(--accent)) 20%, transparent)); }
     to{ transform: translateY(0); filter: drop-shadow(0 36px 48px color-mix(in srgb, var(--glow-mid, var(--accent)) 55%, transparent)); }
+  }
+
+  /* CHORD keyframes (Creature only, [data-cat="algformer-tracer"]) — same transform/timing/angle math
+     as sr-parallax-near/-mid above, only the filter carries TWO stacked drop-shadow() layers (one per
+     domain colour, --glow-*-a/--glow-*-b) instead of one — a real two-tone glow, not a color-mix()'d
+     blend into a third hue. Mirrors site.css's own ea-parallax-mid-chord mechanism (search that name in
+     AboutUs/site/assets/site.css) — Showroom additionally chords the "near" tier (.room-head), since
+     unlike site.css's page-specific .prism-beam, Showroom's near tier (the hero text block) appears on
+     every tool page and so needs a real per-page tint here too, not just the mid tier. */
+  @keyframes sr-parallax-near-chord{
+    from{ transform: translateY(0); filter: drop-shadow(0 32px 24px color-mix(in srgb, var(--glow-near-a, #5998ff) 55%, transparent)) drop-shadow(0 32px 24px color-mix(in srgb, var(--glow-near-b, #f0796a) 55%, transparent)); }
+    to{ transform: translateY(-70px); filter: drop-shadow(0 16px 12px color-mix(in srgb, var(--glow-near-a, #5998ff) 25%, transparent)) drop-shadow(0 16px 12px color-mix(in srgb, var(--glow-near-b, #f0796a) 25%, transparent)); }
+  }
+  @keyframes sr-parallax-mid-chord{
+    from{ transform: translateY(30px); filter: drop-shadow(0 12px 15px color-mix(in srgb, var(--glow-mid-a, #5998ff) 20%, transparent)) drop-shadow(0 12px 15px color-mix(in srgb, var(--glow-mid-b, #f0796a) 20%, transparent)); }
+    to{ transform: translateY(0); filter: drop-shadow(0 36px 48px color-mix(in srgb, var(--glow-mid-a, #5998ff) 55%, transparent)) drop-shadow(0 36px 48px color-mix(in srgb, var(--glow-mid-b, #f0796a) 55%, transparent)); }
   }
 
   /* Tier "far" — tied to scroll(root), the whole document's own scroll range, so the drift only
@@ -125,6 +161,15 @@ main{
       animation-timeline: view();
     }
 
+    /* Chord override (Creature only) — same specificity-wins mechanism site.css uses for its own
+       chord override (an attribute-selector-qualified rule naturally beats the bare class selector
+       above; every other animation-* property still cascades from the base rule, only animation-name
+       changes here). Higher specificity ([data-cat=...] + .room-head vs. bare .room-head) means this
+       doesn't need !important or to come after the base rule in source order, though it does anyway. */
+    .room[data-cat="algformer-tracer"] .room-head{
+      animation-name: sr-parallax-near-chord;
+    }
+
     /* Tier "mid" — every panel-shaped block a tool actually presents. One shared rule (comma-separated
        selectors) covers all four tools without a per-tool CSS fork: .stat/.cr-curve/.cr-log/.cr-stage/
        .fc-stage/.or-runs (Creature, Forecaster, Prism's stat cards + curve/log/stage/REPL panels) and
@@ -144,6 +189,18 @@ main{
       animation-fill-mode: both;
       animation-timeline: view();
       animation-range: entry 0% entry 45%;
+    }
+
+    /* Chord override (Creature only) — same reasoning as the near-tier override above. Lists only the
+       mid-tier classes Creature's own .razor.css actually uses (.stat/.cr-curve/.cr-log/.cr-stage,
+       verified by grep) rather than the whole shared list, since .fc-stage/.or-runs/.chart-card/
+       .col-card/.chip can never appear inside a [data-cat="algformer-tracer"] room — this is Creature's
+       only data-cat value site-wide, not a hedge against a future tool reusing it. */
+    .room[data-cat="algformer-tracer"] .stat,
+    .room[data-cat="algformer-tracer"] .cr-curve,
+    .room[data-cat="algformer-tracer"] .cr-log,
+    .room[data-cat="algformer-tracer"] .cr-stage{
+      animation-name: sr-parallax-mid-chord;
     }
   }
 }
