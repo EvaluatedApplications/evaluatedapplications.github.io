@@ -454,6 +454,63 @@ CSS/HTML and reasoning from the CSS containing-block spec for #3) — the reason
 recorded inline in `site.css` next to each change; the coordinator/user should re-check on a real
 phone (the same device/screenshot that caught #2/#3) before this is considered closed.
 
+**Real-device review pass (2026-08-28, third round) — mobile nav layout bug + icon redesign, both
+in `site.css` only, no HTML changes on any of the 3 pages**:
+
+4. **Real layout bug: the mobile dock rendered as a big vertical list (4 full-width stacked rows,
+   icon-over-label) instead of the compact fixed-bottom row.** Root-caused by reading the cascade,
+   not guessed: the legacy CSS-only mobile-menu block (base `@media (max-width:640px){ .nav-links{...}
+   }`, used by the 14 plain non-chrome pages, unscoped) still matched on the 3 os-chrome pages too.
+   The os-chrome dock rule (`body.os-chrome .site-nav .nav-links`, specificity 0,3,1) correctly won
+   the fight for `display`/`position` against the legacy rule's 0,1,0 — so the dock genuinely was
+   `position:fixed` — but the dock rule never re-declared `flex-direction`/`flex-basis`, so those TWO
+   properties fell through to the legacy, lower-specificity rule's `flex-direction:column;
+   flex-basis:100%`, turning the dock's 4 tiles (each already icon-over-label internally) into one
+   more level of stacked full-width rows. **Fixed two ways**: (a) scoped the entire legacy block to
+   `body:not(.os-chrome)` so it can never apply on chrome pages regardless of which properties it
+   sets (the structural fix — exclude the two rule sets' SCOPES from each other, not a per-property
+   specificity race); (b) hardened the dock rule itself with explicit `flex-direction:row;
+   flex-basis:auto` as defense in depth. Also added `-webkit-backdrop-filter` alongside every
+   `backdrop-filter` declaration that touches `.site-nav` (base, desktop taskbar, mobile-clear) —
+   unprefixed `backdrop-filter` is supported in modern Safari, but the previous mobile fix
+   (`backdrop-filter:none`) only cleared the unprefixed property, leaving a `-webkit-backdrop-filter`
+   gap if the base rule ever gained the prefix (it now has, so the mobile override needed pairing).
+   Same class of bug as the earlier containing-block fix — same lesson: two rule sets meant to be
+   mutually exclusive must exclude each other's scope outright, verified by reading every
+   `@media (max-width:...)` block touching `.nav-links`/`.site-nav` in source order, not by reading
+   one rule in isolation.
+5. **Design feedback (user, direct quote): "I don't like these buttons, the colour is not good it
+   should be prism dark side of the moon theme, not pastels."** The nav icon marks (`.nav-links
+   a::before`, shared by both the desktop taskbar pills and the mobile dock) were filled two-stop
+   ROYGBIV gradient rounded-squares — brand hues, but rendered as solid soft blobs that read as a
+   generic iOS app-icon grid, not the sharp geometric prism/thin-beam language the rest of the site
+   uses (`.prism-beam` is thin coloured LINES fanning off a triangle against void black, never a
+   filled shape). Redesigned: a thin-bordered (1.5px) DIAMOND (`transform:rotate(45deg)` on a
+   3px-radius square — a facet, echoing the brand triangle mark rather than a stock rounded-square
+   icon), void-dark (`var(--surface)` fill, `var(--border-2)` outline) and essentially invisible at
+   rest against the black chrome — each link's own text label already carries the meaning — that only
+   shows a spectrum hue as a thin edge + soft glow (`box-shadow`) on `:hover`/`:focus-visible`/
+   `.active`. Each item still cycles one spectrum stop via `nth-child` (unchanged assignment order,
+   still covers up to 6 items for the HoloDb hub nav), now stored as a `--tile` custom property
+   consumed only by the interactive-state rule, never as a permanent fill. Applies identically to
+   both the desktop pill icons (≥901px, 14px→11px, sharpened radius 5px→2.5px) and the mobile dock
+   icons (≤640px, 22px→17px, radius 7px→4px) since both breakpoints only override size/radius on the
+   one shared base rule — verified by reading both breakpoint-specific blocks after the change, not
+   assumed from touching just one.
+
+Verified via brace-count parity on the whole `site.css` (198 open / 198 close) and by reading the
+full nav-related CSS back after editing — this agent still has no live browser, so this is a cascade
+read + structural check, not a rendered screenshot. All 3 os-chrome pages (`index.html`, `phasor.html`,
+`holodb/index.html`) share byte-identical nav markup (`<input class="nav-toggle">` /
+`<label class="nav-burger">` / `<div class="nav-links">`, no page-local `<style>` override of any of
+these classes on any of the 3), so the fix in `site.css` alone reaches all 3 without per-page edits —
+confirmed by grepping each page's nav markup and `holodb/index.html`'s local `<style>` block. The
+HoloDb hub's 6-item nav (`Home/Packages/Tools/Benchmarks/Docs/NuGet`) was specifically checked against
+the `nth-child(1)`..`nth-child(6)` icon-colour assignments — no gap. Did NOT touch: the light-palette
+removal, glass window panels, or the `#packages`/`#tools` mobile icon grid (`.card::before`,
+`data-initial`) — all confirmed working per the screenshot and out of this pass's scope. The
+coordinator/user should re-check on the same real phone before this is considered closed.
+
 **Sweep recipe for the remaining 14 pages** (once this subset is approved): add `class="os-chrome"`
 to `<body>`; add nav-links `Tools` (`/#tools`) in place of the old `HoloDb` slot, keeping any
 page-specific extra items after it; wrap the hero's real content in `<div class="hero-bar"
