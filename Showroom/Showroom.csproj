@@ -16,6 +16,13 @@
          its step-builder generics) earlier THIS session, so the comment this replaces may be stale. -->
     <PublishTrimmed>true</PublishTrimmed>
     <RunAOTCompilation>true</RunAOTCompilation>
+    <!-- -O2 (the Release default) makes the emcc/wasm-opt link step OOM-fail on this dev machine whenever
+         PrismStudio is also running its own live training (which holds about 15 GB resident): confirmed
+         reproducible across four failed attempts, always dying at the identical wasm-opt invocation, and
+         confirmed fixed by dropping to -O1 (tested successfully at 5 GB free RAM with PrismStudio still
+         running). Real, measured tradeoff: dotnet.native.wasm grows about 24.8 MB to about 27.0 MB raw,
+         roughly 9% bigger, worth it to never need to interrupt live training for a site rebuild again. -->
+    <EmccLinkOptimizationFlag>-O1</EmccLinkOptimizationFlag>
   </PropertyGroup>
 
   <ItemGroup>

@@ -2,6 +2,7 @@
 @inject HttpClient Http
 @inject HoloKernel.SessionHost Sessions
 @using System.Text
+@using System.Threading.Channels
 @using PrismFormer
 @using Tracer.Helpers
 @using HoloKernel
@@ -94,7 +95,7 @@
     @if (_log.Count > 0)
     {
         <div class="cr-log">
-            <div class="log-head">training log <span class="log-sub">newest first · loss backpropped through the @_kPass weight-tied passes</span></div>
+            <div class="log-head">training log <span class="log-sub">newest first · loss backpropped through the @_kPass weight-tied passes · episodes run ahead of training, batched and queued@(_trainChannel is not null && _trainChannel.Reader.Count > 0 ? $" · {_trainChannel.Reader.Count} queued" : "")</span></div>
             <div class="log-body">
                 @foreach (var line in _log) { <div class="log-line">@line</div> }
             </div>
@@ -153,23 +154,11 @@
     int _kPass = 1;
     const int DModel = 384;   // width = composition capacity; wider than the 256 codec dim gives the brain more room to keep cells distinct
     const int MinShifts = 8;
-    // IterWarm converted from EPISODES to STEPS 2026-08-28: HoloKernel's RefinementLoop.Observe() advances the
-    // AlphaRamp on every call (one call = one informative training step), not once per episode the way the old
-    // hand-rolled loop did (`_kTrainedEps++` fired once in EndEpisode regardless of how many weighted steps that
-    // episode trained). 300 is an ESTIMATED conversion (not measured — can't launch the browser from here), not
-    // a re-derivation: picked as the right order of magnitude for "~20 episodes' worth of informative steps" at
-    // this task's typical experience density. Watch the live α% in the training log; retune this constant if the
-    // ease-in visibly completes too fast or too slow.
-    // Verified 2026-08-28 (not assumed) that this stays sound now that _kPass is live-read and will likely jump
-    // 2->8: HoloKernel's AlphaRamp takes only a step COUNT (WarmSteps) and never reads K at all (see AlphaRamp.cs
-    // — Alpha = Steps/WarmSteps, full stop); RefinementLoop.Observe passes Session.KPass straight to
-    // IterAccumulate alongside the ramp's alpha, so K sets how many weight-tied passes that fixed alpha blends
-    // across, not how fast the blend itself ramps. The two are genuinely orthogonal by construction. The one
-    // open, UNVERIFIED question (flagged, not fixed): 8 weight-tied passes is a structurally bigger nonlinear
-    // composition per training step than the 2 this constant was tuned against — whether 300 steps is still a
-    // gentle-enough ease-in for that deeper composition hasn't been watched live. Retune here if training looks
-    // unstable early on with the real K=8.
-    const int IterWarmSteps = 300;
+    // Alpha-ramp REMOVED 2026-08-28 (direct instruction): the old IterWarmSteps ease-in existed because
+    // this tool used to pick its own made-up KPass (2) as a fresh design decision that needed easing in.
+    // That premise is gone — K is live-read from Prism's own already-proven trained depth (below), not
+    // something new being introduced, so there is nothing to ease into. The model composes fully from the
+    // first move; see HoloKernel.AlphaRamp.Complete at the ToggleRun call site.
     const int NApples = 8;    // how many apples "scatter" drops
     const int StepBudget = 150;   // steps per foraging episode
     const int EatReward = 3;      // extra advantage for landing on an apple (on top of the +1 for getting closer)
@@ -198,14 +187,28 @@
     readonly List<string> _log = new();
     void Log(string s) { _log.Insert(0, s); if (_log.Count > 250) _log.RemoveAt(_log.Count - 1); }
 
-    // brain — HoloKernel (2026-08-28): HoloSession wraps the HoloFormer + K/alpha; AlphaRamp is the identity-init
-    // ease-in (see IterWarmSteps above); RefinementLoop is the NewGrads->IterAccumulate->Step triple, replacing
-    // the hand-rolled KTrain method this file used to carry (same one The Forecaster wrote independently).
+    // One finished episode's training payload, queued for the trainer below instead of trained inline.
+    sealed record EpisodeBatch(int EpisodeNo, int Eaten, int ApplesTotal, double Eps, List<(int[] ctx, int target, double weight)> Exp);
+
+    // brain — HoloKernel (2026-08-28): HoloSession wraps the HoloFormer + K/alpha; RefinementLoop is the
+    // NewGrads->IterAccumulate->Step triple, replacing the hand-rolled KTrain method this file used to carry
+    // (same one The Forecaster wrote independently). AlphaRamp.Complete (no ease-in, see NApples comment
+    // above) is passed straight through rather than stored on the instance — nothing needs to read its state.
     HoloSession? _session;
-    AlphaRamp? _ramp;
     RefinementLoop? _loop;
     int _actionBase => W * H;
     readonly Random _rng = new();
+
+    // Producer/consumer training pipeline (2026-08-28, direct instruction): EndEpisode (producer) queues a
+    // finished episode's experience and moves straight on to simulating the next one; RunTrainer (consumer)
+    // drains the queue and does the actual training, decoupled from the sim loop. Bounded + DropOldest so a
+    // slow trainer can't grow memory unbounded — the channel itself enforces "newer episodes displace stale
+    // ones" natively (BoundedChannelFullMode.DropOldest), no hand-rolled eviction. WASM is single-threaded
+    // (HoloKernel/ParallelMapping.cs) — this is cooperative interleaving via async awaits, not real
+    // parallelism, same house pattern as Prism.razor's Ask(). Created once per brain in ToggleRun, torn
+    // down (writer completed) in ResetBrain.
+    Channel<EpisodeBatch>? _trainChannel;
+    Task? _trainerTask;
 
     // Inspector (NEW capability, 2026-08-28 — Creature had no per-pass view before HoloKernel; opt-in via the
     // toggle so the extra InspectStackIter/InspectAttention recompute only happens when someone's watching it).
@@ -414,36 +417,73 @@
         if (_apples.Count == 0 || _steps >= StepBudget) EndEpisode();
     }
 
+    // PRODUCER: packages this episode's experience and hands it to the trainer, then resets simulation
+    // state for the next episode immediately — it does NOT wait for that batch to actually train. _curve/
+    // _bestEaten/the training-result log line all move to RunTrainer below (the CONSUMER), which fires
+    // only once a batch is actually dequeued and trained — so the UI never claims an episode was learned
+    // from before it (maybe) was, and a batch the bounded channel drops (displaced by a fresher one) never
+    // shows up as "learned" at all. _lastEaten/_episode/_eps stay here: they describe what the SIMULATION
+    // just did, which is true immediately and isn't a claim about training.
     void EndEpisode()
     {
         _lastEaten = _eaten;
-        _curve.Add(_eaten); if (_curve.Count > 60) _curve.RemoveAt(0);
+        int epNo = _episode + 1;
+        double epsAtRun = _eps;   // capture — batches can sit queued while _eps keeps decaying
+
         if (_session is not null && _epExp.Count > 0)
         {
-            bool best = _eaten > _bestEaten;
-            if (best) _bestEaten = _eaten;
-            double baseLr = best ? 4e-3 : 2.5e-3;
-            double maxW = 1e-9; foreach (var e in _epExp) if (e.weight > maxW) maxW = e.weight;
-            double sum = 0; int n = 0;
-            foreach (var (ctx, target, weight) in _epExp)
-            {
-                double w = Math.Clamp(weight / maxW, 0.2, 1.0);   // advantage-normalized learning rate per step
-                _loop!.LearningRate = baseLr * w;
-                sum += _loop.Observe(ctx, _actionBase + target);   // NewGrads->IterAccumulate->Step, plus advances the α-ramp
-                n++;
-            }
-            Log($"ep {_episode + 1,3}   ate {_eaten,2}/{_applesInit.Count,-2}   advantage-trained {n,3} steps   loss {(n > 0 ? sum / n : 0):F3}   lr {baseLr:F4}   α {_ramp!.Alpha * 100:F0}%   ε {_eps * 100:F0}%{(best ? "   ★ best haul" : "")}");
+            var exp = new List<(int[] ctx, int target, double weight)>(_epExp);   // copy: _epExp is cleared+reused below
+            _trainChannel!.Writer.TryWrite(new EpisodeBatch(epNo, _eaten, _applesInit.Count, epsAtRun, exp));
         }
         else if (_session is not null)
         {
-            Log($"ep {_episode + 1,3}   ate {_eaten,2}/{_applesInit.Count,-2}   no scent to learn from      ε {_eps * 100:F0}%");
+            Log($"ep {epNo,3}   ate {_eaten,2}/{_applesInit.Count,-2}   no scent to learn from      ε {epsAtRun * 100:F0}%");
         }
-        _episode++;
+
+        _episode = epNo;
         _eps = Math.Max(0.05, _eps * 0.95);
-        // respawn apples + reset the creature
+        // respawn apples + reset the creature for the NEXT episode's simulation — doesn't wait on the trainer
         _apples.Clear(); foreach (var a in _applesInit) _apples.Add(a);
         ComputeDist();
         _cx = _startX; _cy = _startY; _steps = 0; _eaten = 0; _epExp.Clear(); _trail.Clear(); _ctxWin.Clear();
+    }
+
+    // CONSUMER: drains queued episode batches and does the actual training — same per-item logic
+    // EndEpisode used to run inline (advantage-normalized learning rate per step), just decoupled from
+    // the sim loop. Runs for the lifetime of the current brain; reader.ReadAllAsync() ends cleanly once
+    // ResetBrain completes the channel's writer.
+    async Task RunTrainer(ChannelReader<EpisodeBatch> reader)
+    {
+        // Fire-and-forget from ToggleRun (nothing awaits this task), so a training-step exception has no
+        // caller to surface it to — caught and logged per-batch instead of left as an unobserved task
+        // fault that would otherwise just silently stop the log from ever updating again.
+        await foreach (var batch in reader.ReadAllAsync())
+        {
+            if (_loop is null) continue;   // brain was reset mid-flight; the channel is completing anyway
+            try
+            {
+                bool best = batch.Eaten > _bestEaten;
+                if (best) _bestEaten = batch.Eaten;
+                double baseLr = best ? 4e-3 : 2.5e-3;
+                double maxW = 1e-9; foreach (var e in batch.Exp) if (e.weight > maxW) maxW = e.weight;
+                double sum = 0; int n = 0;
+                foreach (var (ctx, target, weight) in batch.Exp)
+                {
+                    double w = Math.Clamp(weight / maxW, 0.2, 1.0);   // advantage-normalized learning rate per step
+                    _loop.LearningRate = baseLr * w;
+                    sum += _loop.Observe(ctx, _actionBase + target);   // NewGrads->IterAccumulate->Step
+                    n++;
+                }
+
+                _curve.Add(batch.Eaten); if (_curve.Count > 60) _curve.RemoveAt(0);
+                Log($"ep {batch.EpisodeNo,3}   ate {batch.Eaten,2}/{batch.ApplesTotal,-2}   advantage-trained {n,3} steps   loss {(n > 0 ? sum / n : 0):F3}   lr {baseLr:F4}   ε {batch.Eps * 100:F0}%{(best ? "   ★ best haul" : "")}");
+            }
+            catch (Exception ex)
+            {
+                Log($"ep {batch.EpisodeNo,3}   training step failed: {ex.Message}");
+            }
+            StateHasChanged();
+        }
     }
 
     async Task ToggleRun()
@@ -454,19 +494,26 @@
         {
             var spec = new ModelSpec { Vocab = W * H + 8, MaxContext = MaxCtx, Dim = DModel, Layers = 1, MinShifts = MinShifts, KPass = _kPass, FrozenPrefix = 64, Golden = true };
             // SessionHost dedupes by MODEL key ("creature"): the FIRST call on this page load builds an
-            // untrained model exactly as before (ServeAlpha=0, identity-init ease-in starts cold). A LATER
-            // visit to this page in the same load reuses that same in-memory session/weights instead of
-            // rebuilding — the factory below simply never runs a second time.
+            // untrained model; a LATER visit to this page in the same load reuses that same in-memory
+            // session/weights instead of rebuilding — the factory below simply never runs a second time.
             bool reused = Sessions.IsLoaded("creature");
             _session = await Sessions.GetOrCreateAsync("creature", () => Task.FromResult(HoloSession.Create(spec)));
-            // Seed the local ramp to match whatever alpha the reused session is already served at, rather
-            // than resetting to 0 — RefinementLoop.Observe trains AND serves at Ramp.Alpha every call, so a
-            // fresh ramp would otherwise silently yank a partially-warmed model's serve blend back toward 0
-            // on the very next training step.
-            _ramp = SeedRamp(IterWarmSteps, _session.ServeAlpha);
-            _loop = new RefinementLoop(_session, _ramp, learningRate: 0);   // LearningRate is set per-step in EndEpisode
+            // No ease-in (2026-08-28, direct instruction): K is Prism's own already-proven trained depth,
+            // not a fresh design choice this tool is introducing, so there's nothing to ramp into — serve
+            // fully composed from the very first move, not just once the first Observe() call happens to run.
+            _session.ApplyServe(AlphaRamp.Complete);
+            _loop = new RefinementLoop(_session, AlphaRamp.Complete, learningRate: 0);   // LearningRate set per-batch by RunTrainer
+
+            _trainChannel = Channel.CreateBounded<EpisodeBatch>(new BoundedChannelOptions(4)
+            {
+                FullMode = BoundedChannelFullMode.DropOldest,
+                SingleReader = true,
+                SingleWriter = true
+            });
+            _trainerTask = RunTrainer(_trainChannel.Reader);
+
             Log(reused
-                ? $"brain reused from earlier this visit · L=1 · K={_kPass} weight-tied passes · ctx={MaxCtx} · shifts={spec.Shifts} golden · d={DModel} · vocab={W * H + 8} · {_session.Model.ParamCount:N0} params · α {_ramp.Alpha * 100:F0}%"
+                ? $"brain reused from earlier this visit · L=1 · K={_kPass} weight-tied passes · ctx={MaxCtx} · shifts={spec.Shifts} golden · d={DModel} · vocab={W * H + 8} · {_session.Model.ParamCount:N0} params"
                 : $"brain ready · L=1 · K={_kPass} weight-tied passes · ctx={MaxCtx} · shifts={spec.Shifts} golden · d={DModel} · vocab={W * H + 8} · {_session.Model.ParamCount:N0} params");
         }
         _running = true;
@@ -488,21 +535,10 @@
     void ResetBrain()
     {
         Sessions.Forget("creature");   // drop the shared instance too, or the next visit would just get the old one back
-        _session = null; _ramp = null; _loop = null; _lastTrace = null; _lastCtx = null; _log.Clear();
+        _trainChannel?.Writer.TryComplete();   // lets RunTrainer's await-foreach drain out and exit cleanly
+        _trainChannel = null; _trainerTask = null;
+        _session = null; _loop = null; _lastTrace = null; _lastCtx = null; _log.Clear();
         InvalidateOnEdit();
-    }
-
-    // Seed a fresh AlphaRamp already at the alpha a reused session is currently served at, instead of
-    // starting cold — see the call site's comment above.
-    static AlphaRamp SeedRamp(int warmSteps, double currentAlpha)
-    {
-        var ramp = new AlphaRamp(warmSteps);
-        if (warmSteps > 0 && currentAlpha > 0)
-        {
-            long steps = Math.Min(warmSteps, (long)Math.Round(Math.Clamp(currentAlpha, 0.0, 1.0) * warmSteps));
-            for (long i = 0; i < steps; i++) ramp.Advance();
-        }
-        return ramp;
     }
 
     void ToggleScent() { _showScent = !_showScent; StateHasChanged(); }

@@ -59,7 +59,6 @@
                 <div class="stat"><div class="n">@_trained.ToString("N0")</div><div class="l">ticks trained</div></div>
                 <div class="stat"><div class="n">@(_recentAcc.ToString("F0"))%</div><div class="l">accuracy, last @Math.Min(_recentWindow.Count, RecentCap)</div></div>
                 <div class="stat"><div class="n">@(_lifetimeAcc.ToString("F0"))%</div><div class="l">lifetime accuracy</div></div>
-                <div class="stat"><div class="n">@(((_ramp?.Alpha ?? 0) * 100).ToString("F0"))%</div><div class="l">K-pass depth (α ramp)</div></div>
             </div>
             <figure class="cr-curve">
                 <figcaption>rolling accuracy (last @RecentCap ticks) over training — it should climb above the 50/50 baseline as the brain learns</figcaption>
@@ -97,8 +96,8 @@
                 sized so a real move registers as up or down instead of collapsing to "flat". The brain reads the
                 recent tape and predicts the <em>next</em> return bucket; it scores as right when it calls the
                 right <em>direction</em>. It uses the same live-training approach as <a href="/creature">The
-                Creature</a> — one holographic layer applied twice, weight-tied, with that second pass ramping in
-                over your first @IterWarm clicks instead of starting fully on.</p>
+                Creature</a> — one holographic layer applied twice, weight-tied, composed fully from the very
+                first tick.</p>
             <p><strong>Being honest about it:</strong> this is a demo, not investment advice — a few hundred hourly
                 ticks of one stock is a tiny, noisy sample, and "right direction" is a coin-flip-adjacent bar. Watch
                 the accuracy curve rather than trusting any single prediction.</p>
@@ -136,19 +135,11 @@
     // oracle-stackk.txt handling exactly (try→parse→trim; any failure — file missing, malformed, network error —
     // is swallowed and falls back to Prism's own bare-checkpoint fallback value of 1, never blocking page load).
     int _kPass = 1;                // weight-tied extra pass (Iters)
-    const int IterWarm = 40;      // training CLICKS over which the extra pass's α ramps 0→1 — this one DID map
-                                   // straight onto AlphaRamp: the old loop already advanced its ramp once per
-                                   // click (unlike Creature's per-episode cadence), so RefinementLoop.Observe's
-                                   // per-call advance is an exact match, no conversion needed here.
-                                   // Verified 2026-08-28 (not assumed) that this stays sound now that _kPass is
-                                   // live-read and will likely jump 2->8: AlphaRamp takes only a step COUNT
-                                   // (WarmSteps) and never reads K at all (Alpha = Steps/WarmSteps); K only sets
-                                   // how many weight-tied passes that ramped alpha blends across (Session.KPass,
-                                   // passed straight to IterAccumulate alongside Ramp.Alpha), so the two are
-                                   // genuinely orthogonal by construction. UNVERIFIED, flagged not fixed: 8
-                                   // weight-tied passes is a structurally bigger nonlinear composition per click
-                                   // than the 2 this constant was tuned against — whether 40 clicks is still a
-                                   // gentle-enough ease-in for that hasn't been watched live at the real K=8.
+    // Alpha-ramp REMOVED 2026-08-28 (direct instruction): the old IterWarm ease-in existed because this tool
+    // used to pick its own made-up KPass (2) as a fresh design decision that needed easing in. That premise is
+    // gone — K is live-read from Prism's own already-proven trained depth (above), not something new being
+    // introduced, so there's nothing to ease into. The model composes fully from the first tick; see
+    // HoloKernel.AlphaRamp.Complete at the EnsureBrain call site.
     const int CandleContext = 128;              // ~128 candles of history
     const int MaxContext = CandleContext * 2;   // 256 tokens — TIME+RETURN pair per candle
     const int MinShifts = 8;   // verified no-op here: ModelSpec.Shifts (ShiftsFor(256,128)=16) already clears it
@@ -163,10 +154,10 @@
     bool _loaded; string? _loadError;
 
     // brain — HoloKernel, same as The Creature (see that file for the full rationale): HoloSession wraps the
-    // model + K/alpha, AlphaRamp is the ease-in, RefinementLoop.Observe replaces the hand-written
-    // NewGrads->IterAccumulate->Step triple this file used to carry independently.
+    // model + K/alpha, RefinementLoop.Observe replaces the hand-written NewGrads->IterAccumulate->Step triple
+    // this file used to carry independently. AlphaRamp.Complete (no ease-in, see _kPass comment above) is
+    // passed straight through rather than stored on the instance — nothing needs to read its state.
     HoloSession? _session;
-    AlphaRamp? _ramp;
     RefinementLoop? _loop;
     readonly List<int> _seq = new();   // the growing token tape the brain reads as context
     int _pos = 1;                      // cursor into the bundled series (wraps — it's a finite real sample)
@@ -236,28 +227,14 @@
         // rebuilding it — the factory below simply never runs a second time.
         bool reused = Sessions.IsLoaded("forecaster");
         _session = await Sessions.GetOrCreateAsync("forecaster", () => Task.FromResult(HoloSession.Create(spec)));
-        // Seed the local ramp to the reused session's current alpha rather than resetting to 0 — see
-        // Creature.razor's identical comment; RefinementLoop.Observe both trains AND serves at Ramp.Alpha
-        // on every call, so a fresh ramp would otherwise yank a partially-warmed model's serve blend back
-        // toward 0 on the very next tick.
-        _ramp = SeedRamp(IterWarm, _session.ServeAlpha);
-        _loop = new RefinementLoop(_session, _ramp, Lr);
+        // No ease-in (2026-08-28, direct instruction): K is Prism's own already-proven trained depth, not a
+        // fresh design choice this tool is introducing, so there's nothing to ramp into — serve fully
+        // composed from the very first tick, not just once the first Observe() call happens to run.
+        _session.ApplyServe(AlphaRamp.Complete);
+        _loop = new RefinementLoop(_session, AlphaRamp.Complete, Lr);
         Log(reused
-            ? $"brain reused from earlier this visit · L={Layers} · K={_kPass} weight-tied passes · ctx={MaxContext} tokens (~{CandleContext} candles) · shifts={spec.Shifts} golden · d={Dim} · vocab={Vocab} · {_session.Model.ParamCount:N0} params · α {_ramp.Alpha * 100:F0}%"
+            ? $"brain reused from earlier this visit · L={Layers} · K={_kPass} weight-tied passes · ctx={MaxContext} tokens (~{CandleContext} candles) · shifts={spec.Shifts} golden · d={Dim} · vocab={Vocab} · {_session.Model.ParamCount:N0} params"
             : $"brain ready · L={Layers} · K={_kPass} weight-tied passes · ctx={MaxContext} tokens (~{CandleContext} candles) · shifts={spec.Shifts} golden · d={Dim} · vocab={Vocab} · {_session.Model.ParamCount:N0} params");
-    }
-
-    // Seed a fresh AlphaRamp already at the alpha a reused session is currently served at, instead of
-    // starting cold — see the call site's comment above.
-    static AlphaRamp SeedRamp(int warmSteps, double currentAlpha)
-    {
-        var ramp = new AlphaRamp(warmSteps);
-        if (warmSteps > 0 && currentAlpha > 0)
-        {
-            long steps = Math.Min(warmSteps, (long)Math.Round(Math.Clamp(currentAlpha, 0.0, 1.0) * warmSteps));
-            for (long i = 0; i < steps; i++) ramp.Advance();
-        }
-        return ramp;
     }
 
     // one live-training step: predict the next return bucket, score it, then train toward the true label via
@@ -284,7 +261,7 @@
         int predDir = Dir(predBucket), actualDir = Dir(c.Bucket);
         bool correct = predDir == actualDir;
 
-        double loss = _loop!.Observe(ctx, PriceBase + c.Bucket);   // trains + advances the α-ramp
+        double loss = _loop!.Observe(ctx, PriceBase + c.Bucket);   // NewGrads->IterAccumulate->Step
 
         _seq.Add(PriceBase + c.Bucket);
         if (_seq.Count > MaxContext * 6) _seq.RemoveRange(0, _seq.Count - MaxContext * 6);
@@ -301,7 +278,7 @@
         if (_recent.Count > ChartWindow) _recent.RemoveAt(0);
 
         if (_trained <= 5 || _trained % 10 == 0)
-            Log($"tick {_trained,4}   pred {DirGlyph(predDir)}   actual {DirGlyph(actualDir)}   {(correct ? "hit" : "miss")}   recent {_recentAcc:F0}%   loss {loss:F3}   α {_ramp!.Alpha * 100:F0}%");
+            Log($"tick {_trained,4}   pred {DirGlyph(predDir)}   actual {DirGlyph(actualDir)}   {(correct ? "hit" : "miss")}   recent {_recentAcc:F0}%   loss {loss:F3}");
     }
 
     // ---- Inspector display helpers — same pattern as The Creature: the real decision lives in a SLICE of the
@@ -355,7 +332,7 @@
     void ResetBrain()
     {
         Sessions.Forget("forecaster");   // drop the shared instance too, or the next visit would just get the old one back
-        _running = false; _session = null; _ramp = null; _loop = null; _lastTrace = null; _lastCtx = null;
+        _running = false; _session = null; _loop = null; _lastTrace = null; _lastCtx = null;
         _seq.Clear(); _pos = 1; _trained = 0;
         _correctLifetime = 0; _totalLifetime = 0; _recentWindow.Clear(); _recentAcc = 0; _lifetimeAcc = 0;
         _accCurve.Clear(); _recent.Clear(); _log.Clear();

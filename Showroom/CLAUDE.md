@@ -45,10 +45,24 @@ single-layer only, verified via `NotSupportedException`; irrelevant today since 
 opt-in "🔍 inspect brain" toggle; Prism's own Inspector UI was REMOVED, own section below).
 `ParallelMapping` isn't wired into any tool (inert, not a gap).
 
-**Cadence gotcha**: `RefinementLoop.Observe` advances its `AlphaRamp` on EVERY call, not once per
-episode. Forecaster's old per-CLICK ramp already matched this; Creature's old ramp was per-EPISODE,
-so its `IterWarmSteps=300` is an **ESTIMATED, unmeasured** conversion — retune live if the ease-in
-looks too fast/slow. **Prism's tokenizer swapped to the published `SubwordVocab`** (was a hand-rolled
+**Alpha-ramp REMOVED (2026-08-28, direct instruction)**: Creature and Forecaster used to each build
+their own `AlphaRamp(warmSteps)` easing K-pass composition in from 0 over the first N steps/clicks —
+a leftover from when each tool picked its OWN made-up `KPass=2` as if it were a fresh design choice
+needing a gentle warm-up. That premise is gone now that K is live-read from Prism's own already-
+proven trained depth (see below): there's nothing to ease into. Both tools now pass
+`HoloKernel.AlphaRamp.Complete` (a shared, stateless `WarmSteps=0` singleton — `Alpha` is always 1.0
+regardless of `Steps`) straight into `RefinementLoop`'s ctor, and each also calls
+`_session.ApplyServe(AlphaRamp.Complete)` immediately after acquiring the session — this second call
+matters: without it, a freshly-created `HoloSession` starts at `ServeAlpha=0` (its own ctor default)
+until the FIRST `Observe()` call sets it, so an untrained model would still serve un-composed for any
+early decision made before training starts (e.g. Creature's early high-epsilon exploration). Neither
+tool stores the ramp on an instance field anymore — nothing needs to read its state, since it never
+changes. The old per-step/per-tick `α NN%` log/UI prints were dropped site-wide (always-100% is not
+information) rather than left showing a permanent, meaningless number. `RefinementLoop`/`Observe`
+still take a `ramp` parameter — kept as-is, not narrowed to assume-always-complete, since it's shared
+HoloKernel infrastructure and a future tool could legitimately want a real ease-in; Creature/
+Forecaster just always pass the no-op instance now. **Prism's tokenizer swapped to the published
+`SubwordVocab`** (was a hand-rolled
 greedy-longest-match encoder) — verified against `MonoRepo\AlgFormer\SubwordVocab.cs`:
 `CharN=>CharVocab.N=96` already special-cases `Symbol(CharVocab.End)=="\n"`, matching Prism's own
 quirk; ctor takes ONLY the merges list (base chars handled internally, a gotcha vs. the old version).
@@ -71,13 +85,10 @@ impossible; only the K *number* is now shared. If the checkpoint is retrained at
 the deployed sidecar changes, both tools pick it up next page load, no code change. **The Analyst's
 novelty-scan already did this correctly** (verified, not assumed) — `EnsurePrismLoadedAsync` reads
 `_prismSession.KPass` off the real loaded session, same `?? 1` fallback; no fix needed there.
-**Alpha-ramp verified independent of K's magnitude** (checked `AlphaRamp`/`RefinementLoop` source,
-not assumed): `Alpha = Steps/WarmSteps` never reads K; `Observe` passes `Session.KPass` straight to
-`IterAccumulate` alongside the ramp's alpha — K sets how many weight-tied passes a given alpha
-blends across, not how fast the blend ramps, genuinely orthogonal by construction, so
-`IterWarmSteps=300`/`IterWarm=40` were left unchanged. Flagged, not fixed: whether those two counts
-(tuned watching K=2) stay a gentle-enough ease-in now that a step composes through 8 real weight-tied
-passes is unverified live — watch the α%/loss curve, retune if it looks unstable at the real K.
+**Alpha-ramp/K interaction is now moot** (see "Alpha-ramp REMOVED" above) — both tools serve and
+train at full K-pass composition from the first move/tick regardless of K's magnitude, so the old
+"is 300/40 steps still a gentle-enough ease-in at the real K=8" open question no longer applies;
+there is no ease-in to retune.
 
 ## Boot screen — `wwwroot/index.html` + `wwwroot/css/boot.css`
 Retro-terminal boot log, authentically real not decorative: real file names as the WASM host fetches
@@ -123,9 +134,40 @@ focused recent-trajectory window — measured to converge faster than a longer o
 decisive last-token signal was the failure mode), `MinShifts=8` (natural `ShiftsFor(32,384)` returns
 1 — floored by `ModelSpec`'s own S>1 invariant now). Distance field: **Tracer**'s
 `GridTactics.Reachable` BFS to the nearest apple; trains toward the DECISIVE move (advantage-
-weighted: best move minus the mean of legal moves) via `RefinementLoop.Observe(ctx,
-_actionBase+target)` once per informative step, `LearningRate` set per-call from the advantage
-weight. `ResetBrain` drops `_session`/`_ramp`/`_loop` (WASM has no filesystem).
+weighted: best move minus the mean of legal moves), `LearningRate` set per-item from the advantage
+weight. `ResetBrain` drops `_session`/`_loop` and tears down the training pipeline below (WASM has
+no filesystem, so nothing persists across a reset).
+
+**Training is a producer/consumer pipeline (2026-08-28, direct instruction)**, not inline-blocking
+anymore: the old `EndEpisode()` used to iterate that episode's whole experience list and call
+`RefinementLoop.Observe(...)` synchronously before the next episode's simulation could start — a real
+training stall between every episode. Now `EndEpisode()` (the PRODUCER) packages the finished
+episode's experience into an `EpisodeBatch` record and writes it to a
+`Channel.CreateBounded<EpisodeBatch>(4)` with `FullMode=BoundedChannelFullMode.DropOldest`, then
+immediately resets simulation state for the next episode — it never awaits training. A separate
+`RunTrainer` background task (the CONSUMER, started once per brain in `ToggleRun`, fire-and-forget,
+own try/catch per batch so one bad batch can't silently kill future training) drains the channel and
+runs the actual `_loop.Observe(...)` calls, same advantage-normalized-LR logic the old inline code
+had. Bounded+DropOldest is the BCL's native "cap it, FIFO, newer displaces older" primitive — chosen
+specifically so it doesn't need hand-rolled eviction; per the user's own framing, "new runs are
+better than old ones," so a slow consumer drops STALE queued episodes in favor of fresher ones rather
+than growing unbounded. WASM is single-threaded (see `HoloKernel/ParallelMapping.cs`'s own findings)
+so this is cooperative interleaving via async awaits, not real parallelism — same house pattern as
+`Prism.razor`'s `Ask()` producer/consumer split, adapted for bounded+evicting instead of unbounded.
+
+**What moved to the consumer, and why**: `_curve` (apples-eaten sparkline), `_bestEaten` ("best
+haul," which also gates the learning-rate choice), and the per-episode training-result log line now
+all update inside `RunTrainer` when a batch is ACTUALLY trained, not inside `EndEpisode` when it's
+merely simulated — so the UI never claims an episode was learned from before it (maybe) was, and a
+batch the channel drops (displaced by a fresher one) never shows up as "learned" at all. `_lastEaten`,
+`_episode` (the "episodes" stat), and `_eps` decay stay in the producer: they're plain facts about
+what the SIMULATION just did ("the creature just ate N apples," "M episodes have run"), true the
+instant they happen and not a claim about training — so episodes visibly keep incrementing at full
+simulation speed even while training lags behind. A small "· N queued" note is appended to the
+training-log header (`_trainChannel.Reader.Count`) so the lag itself is visible, not hidden. Each
+`EpisodeBatch` captures its own episode number and `_eps` value at production time (not read live from
+the consumer) so a queued batch's eventual log line reports what was true when it was simulated, not
+whatever the live fields have drifted to by the time it's dequeued.
 
 ## The Forecaster — `Pages/Forecaster.razor` (route `/forecaster`)
 Same **HoloFormer** substrate as The Creature, pointed at a price tape instead of a foraging grid.
@@ -143,13 +185,16 @@ Creature, see above), `CandleContext=128` → `MaxContext=256` tokens
 (2/candle), `MinShifts=8` (no-op: `ShiftsFor(256,128)=16` already clears it; `CleanCapacity(16,128)=
 122` is under the 256-token window — a real v2 tuning knob, not a v1 blocker). **Training loop** on
 **HoloKernel**: per tick, predict via `_session.Logits(ctx)`/`Inspector.Capture` (opt-in) →
-`RefinementLoop.Observe(ctx, PriceBase+trueBucket)` (trains + advances the α-ramp) → append the TRUE
-token to the tape. `IterWarm=40` clicks maps straight onto `AlphaRamp` (old loop already advanced
-once per click, matching `Observe`'s cadence exactly — unlike Creature). `Lr=0.005` reasoned (between
-MarketSim's `0.02` and Creature's `0.0025-0.004`), not yet watched live. **Data**:
-`wwwroot/data/forecaster-sample.json` — 450 REAL hourly AAPL closes (~3 months), fetched once from
-Yahoo Finance's public chart JSON endpoint; training cursor wraps the finite series when it runs out.
-**Queued**: live CORS-open feed; a symbol picker; tuning `Lr`/`IterWarm` against a real run.
+`RefinementLoop.Observe(ctx, PriceBase+trueBucket)` (trains inline, one tick at a time — unlike
+Creature, Forecaster's training was NOT moved to a producer/consumer pipeline; only its now-removed
+alpha-ramp was touched in the 2026-08-28 pass, see "Alpha-ramp REMOVED" above) → append the TRUE
+token to the tape. `Lr=0.005` reasoned (between MarketSim's `0.02` and Creature's `0.0025-0.004`),
+not yet watched live. **Data**: `wwwroot/data/forecaster-sample.json` — 450 REAL hourly AAPL closes
+(~3 months), fetched once from Yahoo Finance's public chart JSON endpoint; training cursor wraps the
+finite series when it runs out. **Queued**: live CORS-open feed; a symbol picker; tuning `Lr` against
+a real run; a producer/consumer training pipeline like Creature's, if per-tick training latency ever
+becomes visible (untested, no evidence yet it's needed — Forecaster trains once per tick, not once
+per multi-step episode, so the blocking window is much smaller than Creature's was).
 
 ## Prism — `Pages/Prism.razor` (route `/prism`)
 An autocomplete REPL over a real, point-in-time COPY of the user's own live `prism-holo.bin`
