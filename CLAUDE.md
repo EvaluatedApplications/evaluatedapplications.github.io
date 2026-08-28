@@ -275,13 +275,16 @@ Actions", one-time repo setting). Steps: `dotnet publish Showroom/Showroom.cspro
 (website-owner) never run this or commit/push — leave changes in the working tree; the
 coordinator batch-commits and the user pushes to publish.
 
-**HARD COUPLING (verified 2026-08-28, the hard way)**: `dotnet publish Showroom` is step 1 of the
-single `build` job. If Showroom fails to compile, the job aborts *before* `upload-pages-artifact`,
-so **nothing deploys — including all 17 purely-static content pages**, which have no dependency on
+**HARD COUPLING (structural, 2026-08-28)**: `dotnet publish Showroom` is step 1 of the single
+`build` job. If Showroom fails to compile, the job aborts *before* `upload-pages-artifact`, so
+**nothing deploys — including all 17 purely-static content pages**, which have no dependency on
 Showroom whatsoever. A compile error in one tool page takes the whole public site's updates offline.
 Before assuming a content change is live, check Showroom actually builds
 (`dotnet build Showroom/Showroom.csproj -c Release`). Decoupling this is a design item in the
-platform initiative below.
+platform initiative below. *(Noted after a build failure that turned out to be a transient mid-edit
+snapshot of another owner's concurrent work, not a real defect — the coupling is real regardless of
+what triggers it, but don't record such a collision as a bug. Reading another repo's files mid-flight
+can catch a half-landed edit; re-check before reporting.)*
 
 ## Platform initiative (in flight, 2026-08-28) — verified facts
 
@@ -315,12 +318,15 @@ still being steered; these MEASURED facts hold whichever way it lands:
   but `MonoRepo/EvalApp/docs/site.md` and EvalApp's `CLAUDE.md` both state EvalApp "ships trimmable
   and AOT-compatible". One of the two is wrong — open question for `evalapp-owner`.
 - **The `site/` ↔ `Showroom/` ownership boundary is a live cohesion fault line.** The 2026-08-28
-  prism-triangle brand mark was swept across all 17 static pages but **not** into Showroom:
-  `Showroom/Layout/MainLayout.razor` still renders the retired hexagon path
-  (`M16 4l10.4 6v12L16 28 5.6 22V10z`) with the retired 3-stop purple/teal/gold gradient
-  (`#8b7dff`/`#35d0c0`/`#e6b450`), and `Showroom/wwwroot/index.html`'s favicon has the same stale
-  glyph. Showroom's nav is also 7 items vs. the static site's lean 4, already past the ~6-item
-  compactness bar. Not fixable from here (showroom-owner's territory) — coordinator hand-off.
+  prism-triangle brand mark was swept across all 17 static pages but stopped dead at the repo
+  boundary: `MainLayout.razor`'s brand mark and `wwwroot/index.html`'s favicon kept the retired
+  hexagon + 3-stop gradient. **Brand half now CLOSED** — flagged from here, fixed by showroom-owner
+  in their own files (same triangle path + 7-stop ROYGBIV). **Still open**: Showroom's nav is 7 items
+  vs. the static site's lean 4, past the ~6-item compactness bar, and it grows with every new tool.
+  The durable lesson is the mechanism, not this instance: a brand/nav change swept by hand across one
+  side of an ownership boundary WILL stop at that boundary. Shared chrome in a common component
+  library is the only real fix; until then, any site-wide visual sweep needs an explicit
+  coordinator hand-off to showroom-owner in the same cycle.
 - **The design system is desktop-first**, contrary to the new mobile-first mandate: every layout
   breakpoint in `site.css` is subtractive `@media (max-width: …)` (640px and 900px, only two), so
   base styles target desktop and mobile is an override. A mobile-first rebase means `min-width`
@@ -331,7 +337,47 @@ still being steered; these MEASURED facts hold whichever way it lands:
   the effect must be a pure function of scroll position (CSS `animation-timeline: view()`), never a
   JS scroll handler, or it will fight the mobile performance budget.
 
-**Self-maintenance note**: this file is ~330 lines, well over the ~200-line guide. Deliberately not
+### `HoloKernel/` — the shared model kernel (Phase 1, landed 2026-08-28, NOT yet consumed)
+
+New Razor Class Library at `AboutUs/HoloKernel/` (`net10.0`, `Sdk.Razor`, root namespace
+`HoloKernel`). Coordinator-approved location: inside `AboutUs`, **NuGet-only**
+(`EvaluatedApplications.AlgFormer` 1.5.0 + `Microsoft.AspNetCore.Components.Web`) — never a MonoRepo
+`ProjectReference`, same hard boundary Showroom keeps.
+
+**Why it exists**: Prism has an Inspector and no training loop; Creature and Forecaster have the
+*identical* hand-written `NewGrads() -> IterAccumulate -> Step` loop and no Inspector (verified in
+the sources — Forecaster's own comment says it is "the same loop The Creature uses"). Those are the
+same refactor from opposite ends.
+
+Files: `ModelSpec.cs` (shape + the **S>1 invariant enforced by construction**, throws on
+`MinShifts<2`), `HoloSession.cs` (model + K/alpha, `ModelStats`), `AlphaRamp.cs` (the identity-init
+ease-in + `Reconstruct` for checkpoint metadata), `RefinementLoop.cs` (`Observe` single-position /
+`ObserveSequence` all-positions), `Decoding.cs` (`DecodePolicy`/`Gate.Evaluate`/`Gate.Pick`/`TopK`/
+`DegenGuard`), `InspectorTrace.cs` (`PassSnapshot`/`PositionTrace`/`Inspector.Capture`/`Focus`),
+`ParallelMapping.cs` (the `IParallelMap` seam).
+
+**Verified, not assumed** (31-check smoke suite, run green; build 0 warnings / 0 errors):
+- Reproduces both tools' independently-recorded shape derivations exactly: `ShiftsFor(32,384)=1` so
+  Creature's floor genuinely bites to 8; `ShiftsFor(256,128)=16` so Forecaster's floor is a no-op;
+  `CleanCapacity(16,128)=122 < 256` surfaces as a real flag.
+- `HoloSession.FromCheckpoint` **requires** K and alpha as arguments — because a round-trip through
+  `Serialize()`/`Deserialize()` provably loses them (confirmed live: reads back `Iters=1`,
+  `IterAlphaServe=1`). The gotcha is now structurally impossible to forget, not a footnote.
+- **`StackIterAccumulateAllPos`'s `scoreP` parameter is NOT an offset** — measured against the real
+  DLL: it is a **count** of positions to score, saturating at `sequence.Length - 1`, and the returned
+  loss is a **SUM** not a mean (31 positions -> ~87.5). The kernel's first draft assumed "score from
+  this index onward" and was wrong; it now normalises to a per-position mean so a training curve
+  can't leap when a tool switches modes. Do not trust that parameter name.
+- `AlphaRamp.Reconstruct(24_360, 0, 20_000) == 1.0`, matching Prism's real shipped snapshot.
+
+**Deploy risk this cycle: none.** Nothing references `HoloKernel` yet and `deploy.yml` only publishes
+`Showroom`, so it is inert in CI until showroom-owner wires it in.
+
+**Boundary**: porting the tools onto this is `showroom-owner`'s to do — `Showroom/Pages/*.razor` is
+theirs, and they were actively editing during this cycle. The kernel is designed to be adopted one
+tool at a time; nothing forces a big-bang port.
+
+**Self-maintenance note**: this file is ~360 lines, well over the ~200-line guide. Deliberately not
 compacted yet — the initiative will obsolete large parts of the Site map / Design system sections, so
 the compaction pass should happen when the architecture lands, not before.
 
