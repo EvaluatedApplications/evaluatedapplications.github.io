@@ -1,4 +1,15 @@
 /*
+ * UNREFERENCED as of 2026-08-28 (same day it was vendored) — WasmEnableThreads was reverted to false
+ * after a real-device regression (a laptop's Continue button on /tools/prism stuck permanently
+ * disabled while a phone loading the same deploy was fine — see Showroom.csproj's own comment for the
+ * full incident writeup). This build no longer requires cross-origin isolation to boot at all, so
+ * index.html no longer loads this file, and its boot script no longer gates on
+ * window.crossOriginIsolated. Left in place, not deleted, only in case threading is deliberately
+ * re-enabled later with that regression reproduced and fixed first — re-wire by restoring the
+ * `<script src="coi-serviceworker.js"></script>` tag as the first script in index.html's <head> again.
+ * index.html now also actively unregisters any stale registration of this exact worker on every load,
+ * so a laptop that visited on the one day this was live doesn't stay stuck behind it.
+ *
  * Vendored 2026-08-28 for real WASM multithreading (WasmEnableThreads=true, see Showroom.csproj).
  *
  * WHY THIS FILE EXISTS: the multithreaded .NET WASM runtime uses real OS threads (pthreads) backed
