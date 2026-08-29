@@ -17,7 +17,7 @@
             Creature</a> (AlgFormer), pointed at a different stream: instead of a foraging trail, it reads a
             candle-by-candle price tape and learns to predict whether the next tick goes up, down, or stays flat.</p>
         <div class="badges">
-            <span>Holographic-transformer brain</span><span>Real historical ticks</span><span>Learns live, on your device</span>
+            <span>Holographic-transformer brain</span><span>~2 years of real historical ticks</span><span>Learns live, on your device</span>
         </div>
     </header>
 
@@ -27,18 +27,34 @@
     }
     else if (!_loaded)
     {
-        <p class="hint">Loading the sample tape…</p>
+        <p class="hint">Loading the price tape…</p>
     }
     else
     {
         <div class="fc-source">
-            <span class="fc-src-label">Sample tape</span>
-            <span class="fc-src-name">@SymbolName · hourly closes · @_candles.Count.ToString("N0") ticks</span>
-            <span class="fc-src-note">bundled real data, fetched once from Yahoo Finance — no server, replays locally</span>
+            <span class="fc-src-label">Price tape</span>
+            <span class="fc-src-name">@SymbolName · hourly OHLC · @_candles.Count.ToString("N0") ticks</span>
+            <span class="fc-src-note">real historical data pulled from Yahoo Finance at build time (no server at
+                runtime — this bundle ships with the app and replays locally)@(_liveNote is null ? "" : " · ")@_liveNote</span>
         </div>
 
         <div class="fc-stage">
             @((MarkupString)ChartSvg())
+
+            @if (_revealing)
+            {
+                <div class="fc-predict-strip" @key="_revealTick">
+                    <span class="fc-predict-dir dir-@DirClass(_pendingPredDir)">@DirGlyph(_pendingPredDir)</span>
+                    <span class="fc-predict-label">the brain's guess for the next tick — revealing…</span>
+                    <div class="fc-countdown"><div class="fc-countdown-bar" style="animation-duration:@(_revealMs)ms"></div></div>
+                </div>
+            }
+            @if (_lastResult is not null)
+            {
+                <div class="fc-flash fc-flash-@_lastResult" @key="@("flash" + _revealTick)">
+                    @(_lastResult == "win" ? "✓ called it" : "✗ missed it")
+                </div>
+            }
         </div>
 
         <div class="cr-controls">
@@ -97,10 +113,19 @@
                 recent tape and predicts the <em>next</em> return bucket; it scores as right when it calls the
                 right <em>direction</em>. It uses the same live-training approach as <a href="/creature">The
                 Creature</a> — one holographic layer applied twice, weight-tied, composed fully from the very
-                first tick.</p>
-            <p><strong>Being honest about it:</strong> this is a demo, not investment advice — a few hundred hourly
-                ticks of one stock is a tiny, noisy sample, and "right direction" is a coin-flip-adjacent bar. Watch
-                the accuracy curve rather than trusting any single prediction.</p>
+                first tick. Each candle is revealed as a two-step beat: the brain's guess appears first (the
+                dashed strip above the chart, with a countdown bar), then the real candle lands and you see
+                whether it called it — same order the brain itself experiences it in, just slowed down enough
+                to watch.</p>
+            <p><strong>Where the data comes from.</strong> The bulk of the tape (~2 years of real hourly AAPL
+                candles) is pulled from Yahoo Finance's public chart API at build time — that endpoint has no
+                CORS headers at all, so it can only ever be fetched server-side, not from your browser, which is
+                why it ships as a bundled file rather than a live call. @(_liveNote is not null ? _liveNote + " " : "")
+                When available, one genuinely live tick is layered on top from a CORS-open real-time quote API,
+                fetched once when this page loads.</p>
+            <p><strong>Being honest about it:</strong> this is a demo, not investment advice — even a couple of
+                thousand hourly ticks of one stock is a small, noisy sample, and "right direction" is a
+                coin-flip-adjacent bar. Watch the accuracy curve rather than trusting any single prediction.</p>
             <p>The brain is <code>AlgFormer</code>'s holographic transformer, the very same substrate that lets
                 <a href="/analyst">The Analyst</a>'s database hold a running total as one vector. Pure managed .NET,
                 running entirely client-side. <code>dotnet add package EvaluatedApplications.AlgFormer</code></p>
@@ -122,7 +147,8 @@
 
     // ---- model shape — ported onto HoloKernel's ModelSpec 2026-08-28 (was a hand-rolled HoloFormer ctor + a
     // MinShifts block comment re-deriving the bindRank=shifts*d/2 reasoning The Creature's file already carried;
-    // ModelSpec.MinShifts's own doc comment holds that reasoning once now). Numbers unchanged from prior tuning.
+    // ModelSpec.MinShifts's own doc comment holds that reasoning once now). Numbers unchanged from prior tuning —
+    // this pass (2026-08-29) only changed the DATA feeding training, not the model architecture.
     const int Dim = 128;          // MarketSim's tuned width for this task class
     const int Layers = 1;         // one layer, applied K times weight-tied (below)
     // K-pass depth — LIVE-READ from data/oracle-stackk.txt 2026-08-28 (was a hardcoded `const int KPass = 2`, a
@@ -149,9 +175,15 @@
     const int RecentCap = 50;  // rolling-accuracy window
     const string SymbolName = "AAPL";
 
-    sealed record RawCandle(long T, double C);
-    readonly List<(int TimeTok, int Bucket, double Close)> _candles = new();
+    // ---- data (2026-08-29 rework: bigger build-time bundle + optional live top-up, see
+    // Showroom/todo/forecaster-live-data-research.md for the full research this is based on) ----
+    // Full OHLC now (was close-only) — the historical pull already carries open/high/low for free from Yahoo's
+    // chart endpoint, so the chart can render real candlesticks instead of a bare close-price line.
+    sealed record RawCandle(long T, double O, double H, double L, double C);
+    sealed record CandleData(int TimeTok, int Bucket, double Open, double High, double Low, double Close, DateTime TimeUtc);
+    readonly List<CandleData> _candles = new();
     bool _loaded; string? _loadError;
+    string? _liveNote;   // set describing whether/why a live Finnhub top-up did or didn't land — null means "no attempt", not an error
 
     // brain — HoloKernel, same as The Creature (see that file for the full rationale): HoloSession wraps the
     // model + K/alpha, RefinementLoop.Observe replaces the hand-written NewGrads->IterAccumulate->Step triple
@@ -173,9 +205,26 @@
     double _recentAcc, _lifetimeAcc;
     readonly List<double> _accCurve = new();
 
-    sealed record Point(double Close, int PredDir, int ActualDir, bool Correct);
+    sealed record Point(double Open, double High, double Low, double Close, DateTime TimeUtc, int PredDir, int ActualDir, bool Correct);
     readonly List<Point> _recent = new();
     const int ChartWindow = 70;
+
+    // ---- predict-ahead / countdown / win-lose animation state (2026-08-29, direct instruction) ----
+    // The chart now shows the brain's guess BEFORE the real candle lands, counts down, then reveals — same
+    // predict-then-train order the loop always ran in, just staged into two visible beats instead of one
+    // instantaneous update. This REPLACES the old burst-of-N-ticks-then-pause loop pacing in ToggleRun (below):
+    // the speed slider used to control how many ticks got trained per animation frame; it now controls how FAST
+    // the predict/countdown/reveal cycle runs, since running many ticks per frame is incompatible with watching
+    // each one resolve. A real, deliberate throughput tradeoff, not an oversight.
+    bool _revealing;            // true while the countdown to reveal is running (drives the dashed strip + bar)
+    int _pendingPredDir;        // the strip's predicted direction, -1/0/1
+    int _revealMs = 500;        // current countdown duration in ms, recomputed from _speed every tick — the SAME
+                                 // number drives both the real await delay and the CSS bar's animation-duration,
+                                 // so the bar never lies about how long the wait actually is.
+    int _revealTick;            // increments every predict — used as a Blazor @key so the countdown/flash elements
+                                 // remount each tick, which is what makes their CSS animation restart from 0 instead
+                                 // of just sitting there (Blazor otherwise diffs/reuses the existing DOM node).
+    string? _lastResult;        // "win" | "lose" once a reveal has happened, null before the first one / while predicting
 
     readonly List<string> _log = new();
     void Log(string s) { _log.Insert(0, s); if (_log.Count > 200) _log.RemoveAt(_log.Count - 1); }
@@ -187,12 +236,20 @@
         try
         {
             var opts = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
-            var raw = await Http.GetFromJsonAsync<List<RawCandle>>("data/forecaster-sample.json", opts) ?? new();
+            var raw = await Http.GetFromJsonAsync<List<RawCandle>>("data/forecaster-history.json", opts) ?? new();
+
+            // Optional live top-up (2026-08-29) — see TryFetchLiveTopUpAsync for the full graceful-degradation
+            // story. Only appended if it's genuinely newer than the bundle's own last row, so the return-bucket
+            // math below (which assumes strictly increasing time / a real close-to-close move) stays sound.
+            var live = await TryFetchLiveTopUpAsync();
+            if (live is not null && raw.Count > 0 && live.T > raw[^1].T) raw.Add(live);
+
             for (int i = 1; i < raw.Count; i++)
             {
                 double ret = (raw[i].C - raw[i - 1].C) / raw[i - 1].C;
                 int timeTok = (int)(DateTimeOffset.FromUnixTimeSeconds(raw[i].T).UtcDateTime.TimeOfDay.TotalHours) % TimeBuckets;
-                _candles.Add((timeTok, Bucket(ret), raw[i].C));
+                var timeUtc = DateTimeOffset.FromUnixTimeSeconds(raw[i].T).UtcDateTime;
+                _candles.Add(new CandleData(timeTok, Bucket(ret), raw[i].O, raw[i].H, raw[i].L, raw[i].C, timeUtc));
             }
 
             // Mirrors Prism.razor's own oracle-stackk.txt fetch exactly (GetStringAsync -> Trim -> int.Parse),
@@ -203,12 +260,96 @@
 
             _loaded = true;
         }
-        catch (Exception ex) { _loadError = "Couldn't load the sample tape: " + ex.Message; }
+        catch (Exception ex) { _loadError = "Couldn't load the price tape: " + ex.Message; }
+    }
+
+    // ---- live top-up (2026-08-29) — Finnhub's /quote endpoint, the one genuinely CORS-open, US-real-time-capable
+    // free API found in Showroom/todo/forecaster-live-data-research.md's research. Every failure mode here is
+    // NON-fatal by design: no key present, market closed, network error, rate-limited — all just mean "no top-up",
+    // never a page error, matching the house `_loadError`/graceful-degradation pattern used everywhere else in
+    // this app. The key itself is NOT embedded in source (this repo has no server to keep a secret anyway, and no
+    // key exists to embed here — registering one is a real self-serve step, instant, no card, at finnhub.io/register)
+    // — it's read from an optional sidecar file, data/finnhub-key.txt, that simply doesn't exist by default. This
+    // is the exact same hand-off shape this repo already uses for Prism's checkpoint (see Showroom/CLAUDE.md's
+    // "Checkpoint hand-off" boundary note): drop the file, the capability turns on; leave it absent, the tool
+    // still works fully on the historical bundle alone.
+    sealed record FinnhubQuote(double c, double h, double l, double o, double pc, long t);
+
+    async Task<RawCandle?> TryFetchLiveTopUpAsync()
+    {
+        try
+        {
+            var key = (await Http.GetStringAsync("data/finnhub-key.txt")).Trim();
+            if (string.IsNullOrEmpty(key)) return null;
+
+            if (!IsNyseOpenNowUtc())
+            {
+                _liveNote = "live top-up skipped (NYSE is closed right now) — historical bundle only";
+                return null;
+            }
+
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(6));
+            var url = $"https://finnhub.io/api/v1/quote?symbol={SymbolName}&token={Uri.EscapeDataString(key)}";
+            var resp = await Http.GetAsync(url, cts.Token);
+            if (!resp.IsSuccessStatusCode)
+            {
+                _liveNote = $"live top-up unavailable ({(int)resp.StatusCode}) — historical bundle only";
+                return null;
+            }
+            var q = await resp.Content.ReadFromJsonAsync<FinnhubQuote>(cancellationToken: cts.Token);
+            if (q is null || q.c <= 0 || q.t <= 0)
+            {
+                _liveNote = "live top-up returned no data — historical bundle only";
+                return null;
+            }
+
+            _liveNote = "+ one genuinely live Finnhub tick layered on top (fetched at page load)";
+            double open = q.o > 0 ? q.o : q.pc;
+            double hi = Math.Max(q.h, Math.Max(open, q.c));
+            double lo = q.l > 0 ? Math.Min(q.l, Math.Min(open, q.c)) : Math.Min(open, q.c);
+            return new RawCandle(q.t, open, hi, lo, q.c);
+        }
+        catch
+        {
+            // Covers: sidecar file missing (the default/undeployed state — expected, silent), network failure,
+            // CORS-blocked (shouldn't happen per the research, but fail closed if Finnhub ever changes that),
+            // malformed JSON, timeout. Deliberately no _liveNote set here for the "file missing" case specifically
+            // (the common case) so the UI doesn't show a permanent "live top-up failed" note on every single visit
+            // when nobody has ever dropped a key — only genuine attempt-then-fail paths above set an explanatory
+            // note; a bare missing key file is just silence, exactly like oracle-stackk.txt's own fallback.
+            return null;
+        }
+    }
+
+    // Fails CLOSED on purpose: if the IANA "America/New_York" zone can't be resolved (unlikely in a modern WASM
+    // ICU build, but not guaranteed), this returns false rather than guessing a fixed UTC window — a missed live
+    // top-up is a cosmetic loss; a wrong-hours guess making a pointless request against a rate limit is not worth
+    // risking. See Showroom/todo/forecaster-live-data-research.md §3 for the market-hours table this reflects.
+    static bool IsNyseOpenNowUtc()
+    {
+        try
+        {
+            var tz = TimeZoneInfo.FindSystemTimeZoneById("America/New_York");
+            var nowEt = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, tz);
+            if (nowEt.DayOfWeek == DayOfWeek.Saturday || nowEt.DayOfWeek == DayOfWeek.Sunday) return false;
+            var open = nowEt.Date.AddHours(9).AddMinutes(30);
+            var close = nowEt.Date.AddHours(16);
+            return nowEt >= open && nowEt <= close;
+        }
+        catch { return false; }
     }
 
     static int Bucket(double r) { int b = 0; while (b < RetEdges.Length && r >= RetEdges[b]) b++; return b; }
     static int Dir(int bucket) => bucket < FlatBucket ? -1 : bucket > FlatBucket ? 1 : 0;
     static string DirGlyph(int d) => d > 0 ? "▲" : d < 0 ? "▼" : "–";
+    static string DirClass(int d) => d > 0 ? "up" : d < 0 ? "down" : "flat";
+
+    static int ArgMaxPriceBucket(double[] logits)
+    {
+        int predBucket = 0; double best = double.NegativeInfinity;
+        for (int b = 0; b < PriceBuckets; b++) { double v = logits[PriceBase + b]; if (v > best) { best = v; predBucket = b; } }
+        return predBucket;
+    }
 
     int[] BuildCtx()
     {
@@ -237,9 +378,11 @@
             : $"brain ready · L={Layers} · K={_kPass} weight-tied passes · ctx={MaxContext} tokens (~{CandleContext} candles) · shifts={spec.Shifts} golden · d={Dim} · vocab={Vocab} · {_session.Model.ParamCount:N0} params");
     }
 
-    // one live-training step: predict the next return bucket, score it, then train toward the true label via
-    // HoloKernel's RefinementLoop.Observe — the same kernel call The Creature uses, on a price tape instead of a trail.
-    void TrainOnceStep()
+    // One full predict -> countdown -> reveal+train beat. Replaces the old synchronous TrainOnceStep: the
+    // PREDICT half runs first and is shown immediately (the dashed strip + countdown bar), then after the same
+    // real delay the bar animates over, the REVEAL half trains on the true label and shows win/lose. Shared by
+    // both the manual "Train one tick" button and the continuous run loop below — one code path, one visible beat.
+    async Task RunOneAnimatedTick()
     {
         if (_candles.Count == 0) return;
         if (_pos >= _candles.Count) _pos = 1;   // wrap the finite real sample
@@ -248,6 +391,7 @@
         _seq.Add(c.TimeTok);
         var ctx = BuildCtx();
 
+        // ---- PREDICT phase: read the brain's guess BEFORE the real candle is revealed ----
         double[] logits;
         if (_showInspector)
         {
@@ -256,12 +400,25 @@
             logits = trace.Final.Logits;
         }
         else { _lastTrace = null; logits = _session!.Logits(ctx); }   // honours KPass at serve time
-        int predBucket = 0; double best = double.NegativeInfinity;
-        for (int b = 0; b < PriceBuckets; b++) { double v = logits[PriceBase + b]; if (v > best) { best = v; predBucket = b; } }
-        int predDir = Dir(predBucket), actualDir = Dir(c.Bucket);
-        bool correct = predDir == actualDir;
 
+        int predBucket = ArgMaxPriceBucket(logits);
+        int predDir = Dir(predBucket);
+
+        _pendingPredDir = predDir;
+        _revealMs = Math.Max(120, 700 - _speed * 55);   // speed 1..10 -> ~645ms..150ms; the slider now paces the
+                                                          // visible reveal cadence, not a computed-ticks-per-frame burst
+        _revealTick++;
+        _lastResult = null;
+        _revealing = true;
+        StateHasChanged();
+
+        await Task.Delay(_revealMs);   // the literal countdown — same duration the CSS bar's animation-duration uses
+
+        // ---- REVEAL + TRAIN phase ----
         double loss = _loop!.Observe(ctx, PriceBase + c.Bucket);   // NewGrads->IterAccumulate->Step
+
+        int actualDir = Dir(c.Bucket);
+        bool correct = predDir == actualDir;
 
         _seq.Add(PriceBase + c.Bucket);
         if (_seq.Count > MaxContext * 6) _seq.RemoveRange(0, _seq.Count - MaxContext * 6);
@@ -274,11 +431,16 @@
         _recentAcc = _recentWindow.Count > 0 ? 100.0 * _recentWindow.Count(x => x) / _recentWindow.Count : 0;
         if (_trained % 5 == 0) { _accCurve.Add(_recentAcc); if (_accCurve.Count > 80) _accCurve.RemoveAt(0); }
 
-        _recent.Add(new Point(c.Close, predDir, actualDir, correct));
+        _recent.Add(new Point(c.Open, c.High, c.Low, c.Close, c.TimeUtc, predDir, actualDir, correct));
         if (_recent.Count > ChartWindow) _recent.RemoveAt(0);
+
+        _revealing = false;
+        _lastResult = correct ? "win" : "lose";
 
         if (_trained <= 5 || _trained % 10 == 0)
             Log($"tick {_trained,4}   pred {DirGlyph(predDir)}   actual {DirGlyph(actualDir)}   {(correct ? "hit" : "miss")}   recent {_recentAcc:F0}%   loss {loss:F3}");
+
+        StateHasChanged();
     }
 
     // ---- Inspector display helpers — same pattern as The Creature: the real decision lives in a SLICE of the
@@ -308,7 +470,7 @@
 
     void ToggleInspector() { _showInspector = !_showInspector; if (!_showInspector) { _lastTrace = null; _lastCtx = null; } }
 
-    async Task TrainOnce() { await EnsureBrain(); TrainOnceStep(); }
+    async Task TrainOnce() { await EnsureBrain(); await RunOneAnimatedTick(); }
 
     async Task ToggleRun()
     {
@@ -320,28 +482,15 @@
         {
             while (_running)
             {
-                int burst = _speed;
-                // Yield after every tick, not just after the whole burst (2026-08-28 responsiveness
-                // pass) — re-evaluated whether this loop still deserves its old "blocking window per-tick
-                // is small" pass since K is now live-read from the checkpoint (up to 8 weight-tied passes,
-                // was a hardcoded 2 when that call was last made — a ~4x heavier Observe() per tick), so a
-                // burst of up to 10 back-to-back Observe() calls at max speed is no longer obviously cheap.
-                // A single Task.Delay(1) per tick bounds the worst-case uninterrupted block to one Observe()
-                // call regardless of the speed slider, matching every other cooperative-yield point in this
-                // codebase — WASM is still single-threaded, this is interleaving, not real parallelism.
-                // Deliberately NOT the full Channel producer/consumer treatment Creature's EndEpisode got:
-                // unlike an episode's whole experience list (unbounded, could be dozens of moves), this
-                // burst is capped at 10, and Forecaster's tape/cursor are strictly sequential (each tick's
-                // true label has to append to `_seq` in order), so there's no natural "drop stale work"
-                // split the way Creature's independent-episode simulation had — a lighter fix earns its keep.
-                // Honest tradeoff: a browser clamps Task.Delay(1) to a real minimum (commonly ~4ms), so at
-                // max speed (burst=10) this adds real wall-clock pacing on top of the loop's own compute —
-                // ticks/sec at speed=10 will read slower than before this change, in exchange for the tab
-                // never freezing solid through a 10-tick burst. Not measured live; if the top of the speed
-                // range ever feels too throttled, widen the yield to every 2-3 ticks rather than every one.
-                for (int b = 0; b < burst && _running; b++) { TrainOnceStep(); await Task.Delay(1); }
-                StateHasChanged();
-                await Task.Delay(Math.Max(16, 120 - _speed * 10));
+                await RunOneAnimatedTick();
+                // A short settle so the win/lose flash is actually visible before the next countdown starts —
+                // scales down with speed same as the reveal duration itself (see RunOneAnimatedTick), never
+                // below a floor. This, together with RunOneAnimatedTick's own delay, is now the WHOLE pacing
+                // mechanism for continuous run — replaces the old "burst of _speed ticks with 1ms gaps, then a
+                // longer between-burst pause" shape, which is incompatible with watching each individual
+                // prediction resolve (that old shape traded visibility for raw throughput; this trades some
+                // throughput back for the visible predict/countdown/reveal beat the user asked to watch).
+                await Task.Delay(Math.Max(60, 220 - _speed * 15));
             }
         }
         catch (Exception ex) { _error = "The forecaster stumbled: " + ex.Message; _running = false; StateHasChanged(); }
@@ -354,27 +503,54 @@
         _seq.Clear(); _pos = 1; _trained = 0;
         _correctLifetime = 0; _totalLifetime = 0; _recentWindow.Clear(); _recentAcc = 0; _lifetimeAcc = 0;
         _accCurve.Clear(); _recent.Clear(); _log.Clear();
+        _revealing = false; _lastResult = null; _pendingPredDir = 0; _revealTick = 0;
     }
 
     // ---- rendering ----
+    // Real OHLC candlesticks (was a close-price line) + a time axis along the bottom — both made possible by the
+    // 2026-08-29 data rework carrying Open/High/Low through instead of Close only. Correctness (hit/miss) is now
+    // a subtle border treatment on the candle body rather than a separate dot, so it doesn't fight the up/down
+    // colour coding candlesticks already use.
     string ChartSvg()
     {
         if (_recent.Count < 2) return "<p class=\"hint\">Click \"Start training\" — each tick trained shows up here as it's predicted.</p>";
-        int w = 720, h = 140;
-        double max = _recent.Max(p => p.Close), min = _recent.Min(p => p.Close); if (max <= min) max = min + 1;
+        int w = 720, h = 170, axisBand = 22;
+        int chartH = h - axisBand;
+        double maxP = _recent.Max(p => p.High), minP = _recent.Min(p => p.Low);
+        if (maxP <= minP) maxP = minP + 1;
         int n = _recent.Count;
-        var pts = new StringBuilder();
-        var dots = new StringBuilder();
+        double slot = (double)w / n;
+        double bodyW = Math.Max(1.5, Math.Min(10, slot * 0.6));
+
+        double Y(double price) => 8 + (chartH - 16) - (price - minP) / (maxP - minP) * (chartH - 16);
+
+        var sb = new StringBuilder();
+        sb.Append($"<svg viewBox=\"0 0 {w} {h}\" preserveAspectRatio=\"none\" class=\"fc-chart-svg\">");
+        sb.Append($"<line class=\"fc-axis-line\" x1=\"0\" y1=\"{chartH}\" x2=\"{w}\" y2=\"{chartH}\"/>");
+
         for (int i = 0; i < n; i++)
         {
-            double px = n == 1 ? 0 : (double)i / (n - 1) * w;
-            double py = h - 10 - (_recent[i].Close - min) / (max - min) * (h - 20);
-            pts.Append(F(px)).Append(',').Append(F(py)).Append(' ');
-            string cls = _recent[i].Correct ? "hit" : "miss";
-            dots.Append($"<circle class=\"pt {cls}\" cx=\"{F(px)}\" cy=\"{F(py)}\" r=\"2.6\"/>");
+            var p = _recent[i];
+            double cx = slot * i + slot / 2;
+            double yOpen = Y(p.Open), yClose = Y(p.Close), yHigh = Y(p.High), yLow = Y(p.Low);
+            double top = Math.Min(yOpen, yClose);
+            double bh = Math.Max(1.2, Math.Abs(yClose - yOpen));
+            string dirCls = p.Close >= p.Open ? "up" : "down";
+            string hitCls = p.Correct ? "hit" : "miss";
+            sb.Append($"<line class=\"fc-wick {dirCls}\" x1=\"{F(cx)}\" y1=\"{F(yHigh)}\" x2=\"{F(cx)}\" y2=\"{F(yLow)}\"/>");
+            sb.Append($"<rect class=\"fc-body {dirCls} {hitCls}\" x=\"{F(cx - bodyW / 2)}\" y=\"{F(top)}\" width=\"{F(bodyW)}\" height=\"{F(bh)}\"/>");
         }
-        return $"<svg viewBox=\"0 0 {w} {h}\" preserveAspectRatio=\"none\" class=\"fc-chart-svg\">" +
-               $"<polyline class=\"fc-line\" points=\"{pts}\"/>{dots}</svg>";
+
+        int labelEvery = Math.Max(1, n / 6);
+        for (int i = 0; i < n; i += labelEvery)
+        {
+            double cx = slot * i + slot / 2;
+            string label = System.Net.WebUtility.HtmlEncode(_recent[i].TimeUtc.ToString("MM/dd HH:mm"));
+            sb.Append($"<text class=\"fc-axis-label\" x=\"{F(cx)}\" y=\"{h - 5}\" text-anchor=\"middle\">{label}</text>");
+        }
+
+        sb.Append("</svg>");
+        return sb.ToString();
     }
 
     string AccCurveSvg()

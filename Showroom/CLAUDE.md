@@ -434,14 +434,46 @@ whatever the live fields have drifted to by the time it's dequeued.
 
 ## The Forecaster — `Pages/Forecaster.razor` (route `/forecaster`)
 Same **HoloFormer** substrate as The Creature, pointed at a price tape instead of a foraging grid.
-Predicts the direction (and coarse magnitude) of the next hourly tick for one bundled real stock
-series. **Tokenisation** (ported from `MonoRepo\MarketSim\PriceForecaster.cs`; `STOCK_i` token
+Predicts the direction (and coarse magnitude) of the next hourly tick for one real stock series.
+**Tokenisation** (ported from `MonoRepo\MarketSim\PriceForecaster.cs`; `STOCK_i` token
 DROPPED — single-symbol demo): each candle → `[TIME_bucket][RETURN_bucket]`. `TimeBuckets=8` =
 hour-of-day (UTC) mod 8. `RetEdges` ported VERBATIM: `{-0.0020,-0.0009,-0.0004,-0.00003,0.00003,
 0.0004,0.0009,0.0020}` → 9 buckets, `FlatBucket=4`. Vocab=`8+9=17`. **Known skew**: edges tuned for
 MarketSim's smaller simulated ticks, so ~65% of bundled transitions land in the two outermost
 buckets — direction split (what accuracy scores) stays near-balanced; magnitude granularity is
 compressed, not direction.
+
+**Data (reworked 2026-08-29 — was a fixed 450-row close-only bundle the training cursor just wrapped
+forever, effectively memorising a small closed set)**: `wwwroot/data/forecaster-history.json` — **~3,484
+real hourly AAPL OHLC candles (~2 years)**, pulled build-side from Yahoo's `v8/finance/chart` endpoint
+(same one the old 450-row bundle came from — that endpoint has NO `Access-Control-Allow-Origin` header
+at all, verified live in `Showroom/todo/forecaster-live-data-research.md`, so it can only ever be
+fetched server/build-side, never from a visitor's browser). `Showroom/scripts/fetch-forecaster-history.ps1`
+is the pull script — re-run it any time to refresh the bundle (writes the new file, refuses to
+overwrite with fewer than 450 rows as a sanity floor). **Not yet wired into CI** — a scheduled GitHub
+Actions refresh was designed (propose the YAML to the coordinator; `.github/workflows/` is outside this
+repo's `Showroom/`-only boundary) but not added from here. **Optional live top-up** (page-load only,
+`TryFetchLiveTopUpAsync` in `Forecaster.razor`): if `wwwroot/data/finnhub-key.txt` exists (absent by
+default — no key was registered from this environment, same hand-off shape as Prism's checkpoint, see
+Boundary below) AND NYSE is open right now (`IsNyseOpenNowUtc`, real IANA `America/New_York` conversion,
+fails CLOSED on any resolution error), one live Finnhub `/quote` tick is fetched and appended as the
+newest candle before tokenisation. Every failure mode (no key, market closed, network error,
+rate-limited) is silent/non-fatal — `_liveNote` narrates it in the UI when a real attempt was made,
+stays null on the common "no key file" case, exactly like `oracle-stackk.txt`'s own fallback pattern.
+Old `forecaster-sample.json` deleted (superseded).
+
+**Chart (reworked 2026-08-29, direct instruction)**: `ChartSvg()` now renders real candlesticks (body
+= open/close, wick = high/low, coloured up/down) with a time-axis row along the bottom (~6 labels,
+`MM/dd HH:mm` UTC) — was a bare close-price line with hit/miss dots. **Predict-ahead + countdown +
+win/lose beat**: `RunOneAnimatedTick()` (replaces the old synchronous `TrainOnceStep`) splits every
+tick into two visible phases — PREDICT (compute the guess, show it in a dashed `.fc-predict-strip`
+with a CSS countdown bar) then, after a real `Task.Delay(_revealMs)` the bar's `animation-duration`
+also uses, REVEAL+TRAIN (train on the true label, flash a win/lose badge). `_revealMs` is derived from
+the speed slider (`Math.Max(120, 700 - _speed*55)`) — **this changes what the slider controls**: it
+used to pick how many ticks trained per animation frame (a burst-of-N-then-pause loop); it now paces
+the visible reveal cadence directly, a deliberate throughput-for-visibility tradeoff. `TrainOnce` and
+`ToggleRun` both go through the same `RunOneAnimatedTick`, so a manual single click gets the same
+predict/countdown/reveal beat as continuous run.
 
 **Model shape**: `Dim=128, Layers=1, KPass=` live-read from `data/oracle-stackk.txt` (same as
 Creature, see above), `CandleContext=128` → `MaxContext=256` tokens
@@ -452,23 +484,21 @@ Creature, see above), `CandleContext=128` → `MaxContext=256` tokens
 Creature, Forecaster's training was NOT moved to a producer/consumer pipeline; only its now-removed
 alpha-ramp was touched in the 2026-08-28 pass, see "Alpha-ramp REMOVED" above) → append the TRUE
 token to the tape. `Lr=0.005` reasoned (between MarketSim's `0.02` and Creature's `0.0025-0.004`),
-not yet watched live. **Data**: `wwwroot/data/forecaster-sample.json` — 450 REAL hourly AAPL closes
-(~3 months), fetched once from Yahoo Finance's public chart JSON endpoint; training cursor wraps the
-finite series when it runs out. **Queued**: live CORS-open feed; a symbol picker; tuning `Lr` against
-a real run.
+not yet watched live. **Data**: see the "Data (reworked 2026-08-29)" paragraph above —
+`wwwroot/data/forecaster-history.json`, ~3,484 real hourly AAPL OHLC candles (~2 years) + an optional
+live top-up; training cursor still wraps the (now much larger) finite series when it runs out.
+**Queued**: wiring the fetch script into a scheduled CI workflow (YAML proposed, not added — see
+above); a symbol picker; tuning `Lr` against a real run.
 
-**Responsiveness sweep, re-evaluated not re-architected (2026-08-28)**: re-checked whether the
-"blocking window per-tick is small" call from the last pass still holds, since K went from a hardcoded
-`2` to live-read `8` in the meantime (~4x heavier `Observe()` per tick) and `ToggleRun`'s burst loop
-runs up to `_speed`=10 `TrainOnceStep()` calls back-to-back before its one `StateHasChanged()`/yield.
-Concluded a full Creature-style Channel producer/consumer split is the WRONG shape here, not just
-unneeded effort: Creature's episode experience list is unbounded (could be dozens of moves) and
-episodes are independent, so dropping a stale queued one is harmless; Forecaster's tape is strictly
-sequential (`_seq`/`_pos` — each tick's true label has to append in order) and burst is capped at 10,
-a much smaller and bounded worst case. Applied the proportionate fix instead: `await Task.Delay(1)`
-after every `TrainOnceStep()` inside the burst loop, not just after the whole burst — bounds the
-worst-case uninterrupted block to one `Observe()` call regardless of the speed slider. Build-verified
-only (0/0), not measured live — the K-growth reasoning is architectural, not a profiled number.
+**Pacing history (superseded 2026-08-29)**: the loop used to run a "burst of up to `_speed`=10
+`TrainOnceStep()` calls with a 1ms yield between each, then a longer between-burst pause" — tuned
+2026-08-28 for raw throughput/responsiveness, not visibility. That shape is GONE — see the
+"Predict-ahead + countdown + win/lose beat" paragraph above: `RunOneAnimatedTick()` now runs one
+tick per loop iteration with a real, visible `_revealMs` delay between predicting and revealing, and
+the speed slider paces THAT instead of a computed-ticks-per-frame burst. This is a deliberate
+throughput-for-visibility tradeoff (max training rate dropped by roughly an order of magnitude at the
+top of the slider), not an oversight — kept here as history since a future perf pass on this file
+should know the old burst-tuning reasoning no longer applies to the current loop shape.
 
 ## Prism — `Pages/Prism.razor` (route `/prism`)
 An autocomplete REPL over a real, point-in-time COPY of the user's own live `prism-holo.bin`
@@ -558,6 +588,11 @@ same `.razor` file — a shared `ListingCard`/`ListingRow` helper styles correct
   `%LOCALAPPDATA%\Prism\prism-holo.bin` + `-vocab.txt` (+ `-iter.txt`) at a snapshot THEY pick. Drop
   at `Showroom/wwwroot/data/oracle-*` — the page fetches those exact paths, degrades gracefully
   (`_loadError`, no crash) if any are absent.
+- **Same hand-off shape, new instance (Forecaster's live top-up)**: a Finnhub API key is a real
+  self-serve, instant, no-card signup (`finnhub.io/register`) that this agent cannot do itself (no
+  browser/email verification available here). Drop the key as plain text at
+  `Showroom/wwwroot/data/finnhub-key.txt` to activate the live top-up; absent by default, the tool
+  degrades gracefully to the historical bundle alone (see The Forecaster's "Data" section above).
 - **NuGet only, never MonoRepo `ProjectReference`.** Verify any API assumption against the actual
   published DLL before wiring new code to it — MonoRepo source can diverge from what's published
   (bit twice already: `HoloShape.ShiftsFor`'s true default `ratio` is `0.25`, not an ad-hoc guess).

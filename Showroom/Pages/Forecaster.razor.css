@@ -15,12 +15,44 @@
 .fc-src-name { font-weight: 600; color: var(--ink); }
 .fc-src-note { color: var(--ink-faint); font-size: 0.82rem; }
 
-/* the price tape */
-.fc-stage { border: 1px solid var(--border); border-radius: 14px; overflow: hidden; background: var(--bg-2); padding: 0.6rem 0.6rem 0.2rem; }
-.fc-stage ::deep .fc-chart-svg { display: block; width: 100%; height: 150px; }
-.fc-stage ::deep .fc-line { fill: none; stroke: var(--ink-soft); stroke-width: 1.6; vector-effect: non-scaling-stroke; stroke-linejoin: round; opacity: 0.7; }
-.fc-stage ::deep .pt.hit { fill: var(--ok, #3fbf7f); }
-.fc-stage ::deep .pt.miss { fill: var(--bad, #e0607a); }
+/* the price tape — real OHLC candlesticks + a time axis (2026-08-29, was a close-price line) */
+.fc-stage { border: 1px solid var(--border); border-radius: 14px; overflow: hidden; background: var(--bg-2); padding: 0.6rem 0.6rem 0.5rem; }
+.fc-stage ::deep .fc-chart-svg { display: block; width: 100%; height: 170px; }
+.fc-stage ::deep .fc-axis-line { stroke: var(--border-2); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.fc-stage ::deep .fc-axis-label { font-family: var(--mono); font-size: 7px; fill: var(--ink-faint); }
+.fc-stage ::deep .fc-wick { stroke-width: 1; vector-effect: non-scaling-stroke; }
+.fc-stage ::deep .fc-wick.up { stroke: var(--ok, #3fbf7f); }
+.fc-stage ::deep .fc-wick.down { stroke: var(--bad, #e0607a); }
+.fc-stage ::deep .fc-body.up { fill: var(--ok, #3fbf7f); }
+.fc-stage ::deep .fc-body.down { fill: var(--bad, #e0607a); }
+/* a miss gets a dashed outline instead of a separate dot — doesn't fight the up/down colour coding */
+.fc-stage ::deep .fc-body.miss { stroke: var(--ink); stroke-width: 0.8; stroke-dasharray: 1.5 1; vector-effect: non-scaling-stroke; opacity: 0.85; }
+.fc-stage ::deep .fc-body.hit { opacity: 1; }
+
+/* predict-ahead strip: the brain's guess shown BEFORE the real candle lands, with a countdown to reveal
+   (2026-08-29, direct instruction) */
+.fc-predict-strip { display: flex; align-items: center; gap: 0.7rem; margin-top: 0.55rem; padding: 0.5rem 0.85rem; border: 1px dashed var(--border-2); border-radius: 10px; background: var(--surface); }
+.fc-predict-dir { font-size: 1.25rem; font-weight: 800; line-height: 1; }
+.fc-predict-dir.dir-up { color: var(--ok, #3fbf7f); }
+.fc-predict-dir.dir-down { color: var(--bad, #e0607a); }
+.fc-predict-dir.dir-flat { color: var(--ink-faint); }
+.fc-predict-label { font-size: 0.8rem; color: var(--ink-soft); flex: 1 1 auto; min-width: 8rem; }
+.fc-countdown { flex: 1 1 90px; max-width: 140px; height: 6px; border-radius: 999px; background: var(--border-2); overflow: hidden; }
+.fc-countdown-bar { height: 100%; width: 100%; background: var(--accent); transform-origin: left; }
+
+/* win / lose flash once the real candle reveals (2026-08-29) */
+.fc-flash { display: inline-block; margin-top: 0.55rem; padding: 0.4rem 0.85rem; border-radius: 10px; font-weight: 700; font-family: var(--mono); font-size: 0.82rem; }
+.fc-flash-win { background: color-mix(in srgb, var(--ok, #3fbf7f) 16%, transparent); color: var(--ok, #3fbf7f); border: 1px solid var(--ok, #3fbf7f); }
+.fc-flash-lose { background: color-mix(in srgb, var(--bad, #e0607a) 16%, transparent); color: var(--bad, #e0607a); border: 1px solid var(--bad, #e0607a); }
+
+@media (prefers-reduced-motion: no-preference) {
+    @keyframes fc-countdown-shrink { from { transform: scaleX(1); } to { transform: scaleX(0); } }
+    @keyframes fc-pop-win { 0% { transform: scale(0.7); opacity: 0; } 45% { transform: scale(1.08); opacity: 1; } 100% { transform: scale(1); opacity: 1; } }
+    @keyframes fc-pop-lose { 0% { transform: translateX(0); opacity: 0; } 15% { opacity: 1; } 25% { transform: translateX(-4px); } 45% { transform: translateX(4px); } 65% { transform: translateX(-3px); } 85% { transform: translateX(3px); } 100% { transform: translateX(0); opacity: 1; } }
+    .fc-countdown-bar { animation-name: fc-countdown-shrink; animation-timing-function: linear; animation-fill-mode: forwards; }
+    .fc-flash-win { animation: fc-pop-win 0.45s ease-out; }
+    .fc-flash-lose { animation: fc-pop-lose 0.5s ease-in-out; }
+}
 
 /* controls (shared shape with The Creature) */
 .cr-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 1rem; margin: 1rem 0 0; }
