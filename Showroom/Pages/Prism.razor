@@ -263,7 +263,19 @@
     // one entry per submission. Each run is INDEPENDENT — no prior run's prompt/continuation is ever fed back into the
     // next one's context, so there is no accumulated "chat history"; this is autocomplete, not dialogue memory.
     sealed record RunEntry(string Prompt, string Continuation, bool TrailedOff);
+    // Capped 2026-08-30 (real Arg_OutOfMemoryException report, "after some period of use" — i.e. many
+    // submissions in one session, not one giant submission). This list previously grew without bound for
+    // the life of the page: every submission appended one more entry forever. Blazor rebuilds + diffs this
+    // component's ENTIRE render tree on every StateHasChanged() call (there is no @key/virtualization here),
+    // so an unbounded _history means the per-render diff cost itself grows across a session — combined with
+    // the render-frequency fix in Ask() below (up to 600 renders per submission), this compounds: total
+    // render-diff work across a session was effectively unbounded on both axes at once. Fixed with the same
+    // "drop oldest" spirit Creature's `_log`/`_curve` and Forecaster's `_log`/`_accCurve` already use (see
+    // Showroom/CLAUDE.md) — HistoryCap is lower than those (40 vs 200-250) because each entry here can hold
+    // up to MaxReplyChars(600) of real text plus its own DOM subtree, not a single short log line.
+    const int HistoryCap = 40;
     readonly List<RunEntry> _history = new();
+    void AddHistory(RunEntry entry) { _history.Add(entry); if (_history.Count > HistoryCap) _history.RemoveAt(0); }
 
     protected override async Task OnInitializedAsync()
     {
@@ -348,8 +360,7 @@
                 var trailedOff = false;
                 for (var step = 0; step < MaxReplyChars; step++)
                 {
-                    var take = Math.Min(seq.Count, _stats.Context);
-                    var ctx = take > 0 ? seq.Skip(seq.Count - take).ToArray() : new[] { 0 };
+                    var ctx = BuildContext(seq, _stats.Context);
                     var logits = _session.Logits(ctx);
                     var t = Gate.Pick(logits, vocabLimit, Policy, Random.Shared);
                     if (t == CharVocab.End) break;
@@ -358,7 +369,7 @@
                 }
                 var shown = _vocab.Decode(outIds).TrimEnd();
                 var continuationText = shown.Length > 0 ? shown : "(blank — this checkpoint is still very early in training)";
-                _history.Add(new RunEntry(examplePrompt, continuationText, trailedOff));
+                AddHistory(new RunEntry(examplePrompt, continuationText, trailedOff));
             }
             catch { /* example generation only — never user-visible as an error, never blocks page load */ }
 
@@ -387,6 +398,21 @@
     // data/oracle-rounds.txt was published alongside the checkpoint, see field comment above), so this
     // degrades to a true-but-vaguer phrase rather than rendering a blank/null when it's missing.
     string RoundsPhrase => _rounds is not null ? $"{_rounds.Value:N0} rounds" : "a long time";
+
+    // Shared by OnInitializedAsync's example generation and Ask() below (was duplicated LINQ
+    // `seq.Skip(seq.Count - take).ToArray()`, called once per token — up to MaxReplyChars(600) times per
+    // submission). `Skip().ToArray()` allocates an iterator object AND the destination array on every call;
+    // this does the same slice with one allocation (the array only) via List<T>.CopyTo. A real, confirmed
+    // minor contributor investigated alongside the OOM report — nowhere near as large as the render-count/
+    // history-size issues fixed elsewhere on this page, but free to remove while in here.
+    static int[] BuildContext(List<int> seq, int maxContext)
+    {
+        var take = Math.Min(seq.Count, maxContext);
+        if (take == 0) return new[] { 0 };
+        var ctx = new int[take];
+        seq.CopyTo(seq.Count - take, ctx, 0, take);
+        return ctx;
+    }
 
     async Task OnKeyDown(KeyboardEventArgs e) { if (e.Key == "Enter") await Ask(); }
 
@@ -419,6 +445,27 @@
     // browser never gets a chance to actually paint the just-computed token before the next (real,
     // ~100ms+) LogitsFor call blocks the UI thread again — remove the yield and every token would
     // still take exactly as long to compute, you'd just never see the intermediate frames land.
+    //
+    // RENDER BATCHING (2026-08-30, real Arg_OutOfMemoryException report investigated — see
+    // Showroom/CLAUDE.md's Prism section for the full write-up). Calling StateHasChanged() after every
+    // single real token — which is exactly what "genuinely live streaming" above landed — means a full
+    // MaxReplyChars(600) reply now costs up to 600 Blazor render+diff cycles in ONE submission, where
+    // the old fake-typing pacer bounded render count to whatever a fixed ~60ms tick produced. WASM's
+    // linear memory is documented to grow but rarely shrink back down (allocations accumulate; the
+    // runtime doesn't reliably hand freed pages back to the OS) — 600 render cycles per submission,
+    // repeated over many submissions in one sitting ("some period of use"), is a real slow-growth path
+    // to the reported OOM, especially compounding with the (now-capped, see _history above) render-tree
+    // size Blazor re-diffs on every one of those calls.
+    //
+    // Fix: batch the RENDER, not the compute — RenderBatch tokens are computed and appended to
+    // `revealed` exactly as before (compute is NEVER throttled, no delay was added anywhere in this
+    // method), but the DOM only actually repaints once every RenderBatch tokens (plus always on the
+    // stopping/final token, so the visitor never waits past what they'd already see land). This is a
+    // different thing from the fake-typing pacer this method's own history describes: that pacer set
+    // the PACE of REVEAL independent of compute; this only reduces how often an already-computed,
+    // already-revealed token gets painted, cutting render-diff work by ~RenderBatch times per
+    // submission without changing when a token is computed or how fast the reply grows.
+    const int RenderBatch = 4;
     async Task Ask()
     {
         if (_session is null || _vocab is null || string.IsNullOrWhiteSpace(_prompt) || _generating) return;
@@ -446,8 +493,7 @@
 
             for (var step = 0; step < MaxReplyChars; step++)
             {
-                var take = Math.Min(seq.Count, _stats!.Context);
-                var ctx = take > 0 ? seq.Skip(seq.Count - take).ToArray() : new[] { 0 };
+                var ctx = BuildContext(seq, _stats!.Context);
 
                 // lean serving path — a single LogitsFor pass, honouring Iters/K exactly like the
                 // full-recompute Inspector path did (removed 2026-08-28, see Showroom\CLAUDE.md). This
@@ -458,17 +504,28 @@
                 if (t == CharVocab.End) break;   // stop marker — see tokenizer field comment for why this id doubles as "\n"
                 outIds.Add(t); seq.Add(t);
                 revealed.Add(t);
-                // NOT trimmed — trimming mid-stream would make trailing spaces flicker in and out as
-                // later characters land; the final decode below trims once.
-                _pendingContinuation = _vocab.Decode(revealed);
-                StateHasChanged();
-                await Task.Yield();   // paint this token now — not a delay, see method comment
-                if (guard.Observe(t)) { trailedOff = true; break; }
+                var stopping = guard.Observe(t);
+                if (stopping) trailedOff = true;
+
+                // Batch the RENDER, not the compute (see method comment above): every token above is
+                // computed and appended to `revealed` unconditionally; the DOM paint + the (relatively
+                // cheap but still O(n)) full Decode(revealed) rebuild only happen every RenderBatch
+                // tokens, or on the very last/stopping token so the final state is never stale.
+                var isLastStep = step == MaxReplyChars - 1;
+                if (stopping || isLastStep || revealed.Count % RenderBatch == 0)
+                {
+                    // NOT trimmed — trimming mid-stream would make trailing spaces flicker in and out as
+                    // later characters land; the final decode below trims once.
+                    _pendingContinuation = _vocab.Decode(revealed);
+                    StateHasChanged();
+                    await Task.Yield();   // paint this batch now — not a delay, see method comment
+                }
+                if (stopping) break;
             }
 
             var shown = _vocab.Decode(outIds).TrimEnd();
             var continuationText = shown.Length > 0 ? shown : "(blank — this checkpoint is still very early in training)";
-            _history.Add(new RunEntry(promptText, continuationText, trailedOff));
+            AddHistory(new RunEntry(promptText, continuationText, trailedOff));
         }
         catch (Exception ex) { _error = "Prism stumbled: " + ex.Message; }
         finally { _generating = false; _pendingContinuation = ""; StateHasChanged(); }

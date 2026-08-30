@@ -574,6 +574,59 @@ each character/token visibly appears as it's computed (open devtools' Performanc
 want to confirm no request fires and the UI thread is genuinely blocked per-token, not faking a
 render).
 
+**OOM investigation + fix (2026-08-30) — real bug report: `Arg_OutOfMemoryException`, "happened
+after some period of use."** Landed right after two changes: `MaxReplyChars` 40→600, and the
+streaming rework above (per-token `StateHasChanged()`, no pacer). Investigated all 4 hypotheses
+against the real code rather than guessing which one:
+1. **Confirmed, the primary fix.** `Ask()`'s loop called `StateHasChanged()` after every real
+   token — up to 600 render+diff cycles in ONE submission, unbounded by anything (the old fake-typing
+   pacer had bounded this to whatever a ~60ms tick produced). Blazor rebuilds and diffs this
+   component's whole render tree on every call. Fixed by **batching the render, not the compute**:
+   `RenderBatch=4` — every token is still computed and appended to `revealed` immediately and
+   unconditionally (nothing about compute pacing changed), but the DOM only repaints (and the O(n)
+   `Decode(revealed)` rebuild only runs) once every 4 tokens, or on the stopping/final token so the
+   visitor never sees stale state. This is a real, different thing from the removed fake-typing pacer:
+   that decoupled *reveal timing* from compute; this only throttles how often an *already-revealed*
+   token gets painted. See the method-comment in `Ask()` for the full reasoning.
+2. **Confirmed, the secondary fix.** `_history` (`List<RunEntry>`) had no cap at all — grew for the
+   life of the page, one entry per submission, forever. Every one of those entries' own DOM subtree is
+   re-walked by Blazor's diff on every `StateHasChanged()` call (see #1), so an unbounded list compounds
+   an unbounded render count: total render-diff work across a session was effectively unbounded on
+   *both* axes at once, which is a very plausible slow-growth-to-OOM path over "many submissions in
+   one sitting" (matches the report's own "after some period of use" framing better than a single big
+   submission would). Fixed with a `HistoryCap=40` + `AddHistory()` helper, same "drop oldest"
+   spirit as Creature's `_log`/`_curve` and Forecaster's `_log`/`_accCurve` caps (see those sections
+   above) — set lower than their 200-250 because each Prism run can hold up to `MaxReplyChars`(600)
+   chars of real text plus its own markup, not one short log line.
+3. **Confirmed real, fixed as a minor cleanup, not the primary driver.** The per-token context slice
+   used LINQ (`seq.Skip(seq.Count - take).ToArray()`) — allocates an iterator object AND the
+   destination array, called up to 600×/submission (in both `Ask()` and the identical
+   `OnInitializedAsync` example-generation loop). Deduplicated into one `BuildContext(seq, maxContext)`
+   helper using `List<T>.CopyTo` (array-only allocation). Real GC pressure reduction, but nowhere near
+   the scale of #1/#2 — `_session.Logits(ctx)` itself (a Vocab-sized `double[]` allocation + the
+   ~100ms+ compute) already dwarfs this per token.
+4. **Investigated, ruled a minor/non-driving factor.** Checkpoint context is ~48-52 tokens and grows
+   +4/20,000 rounds — this only affects the size of the per-token `ctx` array (tens of ints) and the
+   `Logits` return array (Vocab-sized doubles), both already-necessary per-token allocations that scale
+   with model size regardless of anything in this task. Real, but not a growth-over-a-session driver
+   the way #1/#2 are — flagged, not chased further.
+
+**What was NOT done**: no delay/timer was reintroduced anywhere — `RenderBatch` groups already-computed
+tokens for painting, it does not change when or how fast tokens are computed. `Ask()`'s
+`await Task.Yield()` calls are unchanged in kind (still zero-wait, still exist only so the browser gets
+a chance to paint before the next real compute call blocks the thread again) — there are just fewer of
+them now (once per batch instead of once per token).
+
+**Verified**: `dotnet build Showroom.csproj -c Release` green (0/0) after the change. **Not verified
+live** (no browser here, per this repo's own boundary) — this is exactly the kind of claim that needs a
+real device/session check: the user should open `/tools/prism`, watch devtools' Performance or Memory
+tab (take a heap snapshot, submit several long (near-600-char) replies back to back, take another
+snapshot) over an extended session, and confirm memory growth now plateaus/is bounded rather than
+climbing unboundedly. Also worth eyeballing that streaming still visibly reads as "live" at
+`RenderBatch=4` (should — 4 tokens at ~100ms+ each is still a visible ~400ms+ per repaint, not a
+single instant dump) rather than feeling batchy/jumpy; if it ever needs re-tuning, `RenderBatch` is
+the one number to move (lower = smoother but more renders, higher = fewer renders but chunkier reveal).
+
 ## Unlisted: RecycleDAO marketplace prototype — `Pages/RecycleDaoDemo.razor` (`/recycledao-demo`)
 NOT a package-capability demo and NOT in the public gallery — a private, share-by-link-only client
 preview for the RecycleDAO PoC (`C:\Users\dongy\RecycleDAO`, separate repo, owned by
