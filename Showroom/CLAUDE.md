@@ -531,12 +531,48 @@ GREEDY space-repeat on every short prompt, a real repetition-collapse. Shipped s
 **Inspector REMOVED 2026-08-28, for speed**: per-character `Inspector.Capture` recompute (pricier
 than `LogitsFor` alone) was the real generation-speed cost — removed entirely (panel markup, call
 sites, dead CSS); Creature/Forecaster's own "🔍 inspect brain" toggles are unrelated, untouched.
-**Cold-start + pacing fixes (2026-08-28)**, build-verified only, **neither confirmed live** — treat
-as unproven if a first-click stutter or non-realtime streaming persists: (1) first Continue click
-used to render the whole continuation at once instead of streaming, fixed with a throwaway
-`_session.Logits(...)` warm-up + a throwaway render warm-up in `OnInitializedAsync`; (2)
-`await Task.Delay(60)` used to sit INSIDE the compute loop, serializing inference to typing speed —
-`Ask()` is now a producer/consumer split over `Channel<int>`, decoupling compute from reveal cadence.
+**Cold-start fix (2026-08-28)**: first Continue click used to render the whole continuation at once
+instead of streaming — fixed with a throwaway `_session.Logits(...)` warm-up + a throwaway render
+warm-up in `OnInitializedAsync` (unrelated to the pacing history below, still in place).
+
+**Streaming architecture, corrected 2026-08-30 (real user complaint, watching the live site: "i can
+see now that u have faked the letters being typed, its still being pre-generated then fake typed")**.
+The 2026-08-28 "fix" replaced an inline `await Task.Delay(60)` with a producer/consumer split over an
+unbounded `Channel<int>` — a producer ran the real `Logits()`/`Gate.Pick` loop with NO delay, writing
+every token to the channel the instant it was computed, while a separate consumer drained the channel
+and revealed one token per a FIXED ~60ms `Task.Delay` tick, fully decoupled from how long compute
+actually took. That was a real, deliberate design from early in the project (tiny context, likely
+near-instant compute, an artificial pacer was the only way to get any visible cadence at all) — but
+it never stopped being what the user's complaint describes: compute finishes first, then a timer
+fake-types it out. **The channel is gone.** Measured with a throwaway console harness (native x64
+JIT, not WASM — see caveat below) against the real, currently shipped checkpoint (`oracle-brain.bin`:
+`Dim=1536`, `K=8` read live from `oracle-stackk.txt`, `Context=52` tokens, ~245k rounds trained — the
+context keeps growing +4/20,000 rounds, so re-measure if it grows a lot further): one real `Logits()`
+call now costs **mean=97ms / median=98ms / p90=107ms / range 72-114ms** (N=60, JIT-warmed first) —
+already inside typing-cadence territory running as fast native code, and the actual deployment is
+WASM (AOT-compiled per `Showroom.csproj`'s `RunAOTCompilation`, still measurably slower than native
+JIT for numeric hot loops), so genuine in-browser per-token compute is at least that slow, plausibly
+slower, never faster. `Ask()` is now a single loop: compute one token, decode+reveal it immediately
+(`StateHasChanged()`), `await Task.Yield()` (NOT a delay — zero artificial wait, exists only so the
+browser actually paints the just-computed token before the next real ~100ms+ `Logits()` call blocks
+the UI thread again), compute the next. No `Channel<int>`, no `Task.Delay(60)`, no pacer of any kind
+left in this path — real compute latency IS the visible cadence now, genuinely, not a simulation of
+one. **`OnInitializedAsync`'s example-round generation (seeds `_history`'s first entry before
+`_loaded=true`) was checked and deliberately left as its own straight, undelayed loop** — it already
+had no artificial pacer (never did), and it happens entirely behind the boot screen before the
+history UI renders at all, so there is nothing for a visitor to ever see "streamed" there — it's
+displayed as an already-complete historical run once the page loads, same as any other `_history`
+entry, never with the `.pending`/typing-cursor treatment `Ask()`'s own in-progress run gets. Nothing
+to rip out there; touching it would only add pointless yields to the boot path.
+**Verified**: `dotnet build Showroom.csproj -c Release` green (0/0). Native-JIT timing harness
+(throwaway, not committed) confirms real per-token compute latency at the live checkpoint shape —
+this is the evidence base for "real compute is slow enough to serve as its own pacer," not a guess.
+**Not verified live** (no browser here, per this repo's own boundary) — the actual in-browser WASM
+per-token latency (expected ≥ the native numbers above, direction only, not measured) and the
+resulting visible cadence still need a real check: open `/tools/prism`, hit Continue, and confirm
+each character/token visibly appears as it's computed (open devtools' Performance/Network tab if you
+want to confirm no request fires and the UI thread is genuinely blocked per-token, not faking a
+render).
 
 ## Unlisted: RecycleDAO marketplace prototype — `Pages/RecycleDaoDemo.razor` (`/recycledao-demo`)
 NOT a package-capability demo and NOT in the public gallery — a private, share-by-link-only client
