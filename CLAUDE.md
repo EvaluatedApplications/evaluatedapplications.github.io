@@ -35,6 +35,11 @@ Root static pages (`site/*.html`), all built on the shared design system:
 - `algformer-gpu.html`, `evalapp.html`, `evalapp-neural.html`, `phasor.html`,
   `holodb-client.html`, `holodb-protocol.html`, `holovoxel.html`, `prose.html`, `tracer.html` —
   one page per remaining package, all built on the plain shared template (see below).
+- `articles.html` — **NEW (2026-08-30)**: the personal-writing index (NOT package docs — see the
+  dedicated "Articles" section below, right after the page-template paragraph, for the full
+  content model, the empty-state shape, and the exact per-article publishing workflow).
+  `articles/_example.html` is a deliberately unlisted, noindexed TEMPLATE for the per-article page
+  shape — not a real page, never link it from anywhere.
 - `404.html` — SPA-fallback bounce for `/tools/*` deep links + a friendly not-found page.
 - `sitemap.xml`, `robots.txt`, `.nojekyll` — kept in sync with the page set above.
 
@@ -288,6 +293,60 @@ dropdown/JS) → `<header class="hero">`
 Get started with a `.snip` code sample / a `.lim` caveat note) → `footer.site` → the copy-button +
 year script (identical). New product pages should copy this shape exactly, not invent new layout —
 that IS the cohesion mechanism (§0 of the agent charter).
+
+**Articles (2026-08-30, NEW content type — the user's own writing, not package docs).** Direct
+user request: "an articles page where I can publish writings ... don't need a fully built blog,
+just a way to present interesting articles." This is genuinely different from every other page on
+the site: the words are the USER'S OWN essays, not rendered from a package's `docs/site.md`, so
+there is no owner-content pipeline for this — you (website-owner) hold the article text once the
+coordinator hands it over and build the page directly, same as any other rendering task, just with
+no source-of-truth doc to pull facts from (there are no "facts," it's an essay).
+- **`site/articles.html`** — the index. Built on the plain `os-chrome` template (own `<header
+  class="hero">`, no `.facts`/`.install`/`.related` pills — those are product-page furniture this
+  page doesn't need). Body content is `<section class="sec" id="articles"><div class="articles">`
+  (the list) `<div class="stack articles-empty">` (the honest zero-state, "Nothing published yet").
+  **No fake/placeholder articles were added** — the site's own no-mocked-content ethos — so today
+  the `.articles` div is empty except for a big HTML **comment** containing one fully-written
+  `<article class="article-item">` block (title `<h3><a>`, `<time class="article-date">`,
+  `<p class="article-summary">`) with numbered instructions right above it. **Publishing a real
+  article is exactly**: copy that commented block, fill in title/href/date/one-line summary, paste
+  it as the FIRST child of `<div class="articles">` (newest first, plain reverse-chron, no
+  tags/categories — deliberately not built, matches "don't need a fully built blog"), then delete
+  the `<div class="stack articles-empty">` block once there's at least one real entry.
+- **`site/articles/_example.html`** — the per-article page shape, proven once so a real article
+  doesn't have to re-derive it, built on the SAME `.prose`/`.toc` typography `holodb/manual/
+  index.html` uses (`<main class="wrap"><article class="prose">`, no hero, no `.grid`/`.card`
+  anywhere — real long-form reading measure, not a product page). **This file is a TEMPLATE, not a
+  real page**: leading HTML comment with the full copy-to-publish recipe (7 numbered steps), a
+  visible amber `.stack` banner right after the nav ("TEMPLATE — not a published article"),
+  `<meta name="robots" content="noindex,nofollow">`, and — same as `recycledao-preview.html`'s
+  precedent — deliberately NOT linked from `articles.html`, any nav/footer/`.related`, or
+  `sitemap.xml`. `.toc` is called out in the template as OPTIONAL (only worth it for a piece with
+  several headed sections; a short essay can delete that block and just flow as plain h2s).
+- **Publishing workflow, end to end** (also written inline in `_example.html`'s own leading
+  comment, kept here too so it isn't only discoverable by opening that file): (1) copy
+  `articles/_example.html` → `articles/<slug>.html` (kebab-case, matches the rest of the site's URL
+  style — see `holodb-client.html`), delete the leading comment + noindex meta + amber banner, fill
+  in title/description/canonical/OG/JSON-LD `Article` block/crumb/h1/date/body copy; (2) copy the
+  commented block in `articles.html` into `<div class="articles">`, fill it in, delete the
+  `articles-empty` stack once real; (3) add the new URL to `sitemap.xml` (one-off essay =
+  `monthly`/`0.5`, matching the site's existing pattern for reference pages); (4) update this
+  section's own published-count/slug list below.
+- **Reachability, deliberately NOT a nav item**: adding a 4th slot to the just-normalized 3-item
+  `Home · Packages · NuGet` nav (see Navigation section) would have re-broken the exact "one nav
+  shape everywhere" cohesion win closed only two days earlier, for a page that (today) has zero
+  content to show. Used the site's OTHER documented reachability path instead: `articles.html`
+  added to `footer.site`'s link set on `index.html` (now `Packages · Articles · HoloDb · Docs ·
+  NuGet`) and `packages.html` (now `Home · Articles · HoloDb · NuGet`) — the two top-level index
+  pages. Reachability walk: Home → footer → Articles = 1 click; Packages → footer → Articles = 1
+  click; any deep product page → Home (1) → footer Articles (1 more) = 2 clicks, inside the site's
+  own ≤2-click invariant. `articles.html`'s own footer stays the plain `Home · Packages · NuGet`
+  subset (it doesn't need to link to itself). No other page's nav/footer was touched — if Articles
+  ever earns enough real content to be a primary destination, revisit the nav-item question then,
+  don't preempt it now with zero published pieces.
+- **Published so far: zero** — `articles.html` intentionally ships with the honest empty state.
+  When the first real piece lands, update this line with the slug + a one-line note, same as every
+  other content-doc/version line in this file.
 
 **Footer link set** (every page): `footer.site .mono` carries `© <year>` + 3-4 internal links, a
 second bottom-of-page path into the graph beyond the top nav. Plain product pages + `index.html` +

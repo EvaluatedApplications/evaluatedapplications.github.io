@@ -346,6 +346,26 @@ h1,h2,h3{margin:0; line-height:1.15; letter-spacing:-.02em; font-weight:650}
 .stack .flow span{border:1px solid var(--border-2); border-radius:7px; padding:5px 10px; color:var(--ink)} /* padding vertical 5px intentionally off-grid, see :root comment */
 .stack .flow em{color:var(--ink-faint); font-style:normal}
 
+/* ---- articles (essay index + reading list, added 2026-08-30) ---- */
+/* Deliberately NOT a .card grid: these are things to READ, one at a time, not products to
+   compare side-by-side, so the index is a plain divided list — title (links through), a mono
+   date, a one-line summary — reusing .crumb's mono/faint date treatment and .desc's soft-ink
+   summary colour rather than inventing new type. See CLAUDE.md "Articles" for the full pattern
+   and the copy-paste-per-entry workflow. */
+.articles{display:flex; flex-direction:column}
+.article-item{padding:21px 0; border-top:1px solid var(--border)} /* 3/4 baseline top+bottom */
+.article-item:first-child{border-top:none; padding-top:7px} /* 1/4 baseline, matches .prose's own top gap */
+.article-item h3{font-size:1.18rem; line-height:21px} /* same rung as .card h3 */
+.article-item h3 a{color:var(--ink)}
+.article-item h3 a:hover{color:var(--accent-ink); text-decoration:none}
+.article-date{display:block; font-family:var(--mono); font-size:.78rem; color:var(--ink-faint); line-height:14px; margin-top:7px}
+.article-summary{color:var(--ink-soft); margin:7px 0 0; max-width:68ch; line-height:21px} /* same rung as .desc */
+.article-item .go-in{display:inline-block; margin-top:7px; font-family:var(--mono); font-size:.85rem; color:var(--accent-ink)}
+/* Empty state: reuses .stack (the same bordered callout every "how it fits together" closer on
+   the site already uses) instead of a bespoke empty-state component — one fewer thing to
+   maintain, and it already reads as a real, intentional box rather than broken/missing markup. */
+.stack.articles-empty p{font-style:italic}
+
 /* ---- buttons ---- */
 .btn{display:inline-flex; align-items:center; gap:8px; font-family:var(--font); font-size:.95rem; font-weight:600; line-height:21px;
      border-radius:10px; padding:7px 1.2rem; cursor:pointer; border:1px solid transparent; transition:all .15s ease} /* line-height 21px=3/4 baseline; padding vertical 7px=1/4 baseline (was .6rem=9.6px) */
