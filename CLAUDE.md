@@ -344,9 +344,19 @@ no source-of-truth doc to pull facts from (there are no "facts," it's an essay).
   subset (it doesn't need to link to itself). No other page's nav/footer was touched — if Articles
   ever earns enough real content to be a primary destination, revisit the nav-item question then,
   don't preempt it now with zero published pieces.
-- **Published so far: zero** — `articles.html` intentionally ships with the honest empty state.
-  When the first real piece lands, update this line with the slug + a one-line note, same as every
-  other content-doc/version line in this file.
+- **Published so far: one.** `nobody-read-the-warning.html` ("Nobody Read the Warning," dated
+  2026-08-30) — the user's own essay, handed over already voice-rewritten and approved verbatim; this
+  agent only adapted formatting (h2 sections, `.toc`, a `.lim` italic closing-note aside) into the
+  existing `_example.html` shape, no wording changed. `articles.html`'s `<div class="articles">` now
+  holds this one real `<article class="article-item">` entry (the honest empty-state `.stack` block
+  was deleted per the documented workflow, step 3) plus the copy-paste template comment, kept in
+  place for the next piece. JSON-LD type used: `BlogPosting` (not `Article` — a personal argumentative
+  essay reads as a blog post, and this site's `articles.html` already functions as the blog index;
+  `Article` stays the right pick for anything more reference/documentation-shaped like the 3
+  `TechArticle` explainer pages). Added to `sitemap.xml` (`monthly`/`0.5`, matching the one-off-essay
+  pattern the workflow already specifies). Byline convention established here for future articles:
+  a single `<p class="article-date">` line reading `Evaluated Applications · Published <time>...`
+  (no separate pen name — same author identity as the rest of the site's copy).
 
 **Footer link set** (every page): `footer.site .mono` carries `© <year>` + 3-4 internal links, a
 second bottom-of-page path into the graph beyond the top nav. Plain product pages + `index.html` +
