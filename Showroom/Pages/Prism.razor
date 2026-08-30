@@ -204,7 +204,10 @@
     // GateInfo/PickToken pair; DecodePolicy.Default carries the exact same thresholds, ported verbatim from
     // PrismStudio's HoloEngine originally, so these numbers are unchanged, just centralised now).
     static readonly DecodePolicy Policy = DecodePolicy.Default;   // ConfidentThreshold=0.60, Temperature=0.80, FloorK=3.0, DegenRepeat=4
-    const int MaxReplyChars = 40;   // a runaway guard — this checkpoint's context is tiny, long continuations aren't meaningful yet
+    // The real stop condition is CharVocab.End (the model's own stop token) or DegenGuard catching a
+    // collapsed repeat run — this is only a pathological-runaway backstop now, not a routine cutoff.
+    // Direct instruction (2026-08-30): let it run until it actually stops, don't truncate mid-thought.
+    const int MaxReplyChars = 600;
 
     HoloSession? _session;
     ModelStats? _stats;
