@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The Four-Token Ceiling</title>
+<meta name="description" content="I hard-trained a tiny language model that can only ever see four tokens at a time, to find out if my last one grew up too fast. Here is what it built, where it stopped, and how I know.">
+<link rel="canonical" href="https://evaluatedapplications.github.io/articles/ctx4-plateau.html">
+<meta property="og:type" content="article">
+<meta property="og:title" content="The Four-Token Ceiling">
+<meta property="og:description" content="I hard-trained a tiny language model that can only ever see four tokens at a time, to find out if my last one grew up too fast. Here is what it built, where it stopped, and how I know.">
+<meta property="og:url" content="https://evaluatedapplications.github.io/articles/ctx4-plateau.html">
+<meta name="twitter:card" content="summary">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%23f0796a'/%3E%3Cstop offset='.166' stop-color='%23f0a15a'/%3E%3Cstop offset='.333' stop-color='%23e6c450'/%3E%3Cstop offset='.5' stop-color='%237bd86a'/%3E%3Cstop offset='.666' stop-color='%234aa3ff'/%3E%3Cstop offset='.833' stop-color='%237d7dff'/%3E%3Cstop offset='1' stop-color='%23c07dff'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='32' height='32' rx='7' fill='%23050608'/%3E%3Cpath d='M16 5L27 26H5Z' fill='none' stroke='url(%23g)' stroke-width='2' stroke-linejoin='round'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="/assets/site.css">
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"BlogPosting","headline":"The Four-Token Ceiling","description":"I hard-trained a tiny language model that can only ever see four tokens at a time, to find out if my last one grew up too fast. Here is what it built, where it stopped, and how I know.","url":"https://evaluatedapplications.github.io/articles/ctx4-plateau.html","datePublished":"2026-08-31","author":{"@type":"Organization","name":"Evaluated Applications","url":"https://evaluatedapplications.github.io/"},"publisher":{"@type":"Organization","name":"Evaluated Applications","url":"https://evaluatedapplications.github.io/"}}
+</script>
+</head>
+<body class="os-chrome">
+<div class="beam"></div>
+
+<nav class="site-nav">
+  <div class="wrap">
+    <a class="brand" href="/">
+      <svg class="mark" viewBox="0 0 32 32" aria-hidden="true"><defs><linearGradient id="m" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#f0796a"/><stop offset=".166" stop-color="#f0a15a"/><stop offset=".333" stop-color="#e6c450"/><stop offset=".5" stop-color="#7bd86a"/><stop offset=".666" stop-color="#4aa3ff"/><stop offset=".833" stop-color="#7d7dff"/><stop offset="1" stop-color="#c07dff"/></linearGradient></defs><path d="M16 5L27 26H5Z" fill="none" stroke="url(#m)" stroke-width="2" stroke-linejoin="round"/></svg>
+      Evaluated Applications
+    </a>
+    <input type="checkbox" id="navtoggle" class="nav-toggle">
+    <label for="navtoggle" class="nav-burger" aria-label="Toggle menu"><span></span><span></span><span></span></label>
+    <div class="nav-links">
+      <a href="/">Home</a>
+      <a href="/packages.html">Packages</a>
+      <a href="https://www.nuget.org/profiles/evaluatedapplications" target="_blank" rel="noopener">NuGet</a>
+    </div>
+  </div>
+</nav>
+
+<main class="wrap">
+
+<article class="prose">
+
+  <nav class="crumb"><a href="/articles.html">Articles</a> <span>/</span> The Four-Token Ceiling</nav>
+  <h1>The Four-Token Ceiling</h1>
+  <p class="article-date" style="margin-top:12px">Evaluated Applications · Published <time datetime="2026-08-31">31 August 2026</time></p>
+  <p class="lede" style="margin-top:12px">I hard-trained a tiny language model that can only ever see four tokens at a time, on purpose, to find
+    out whether my last one grew up too fast. Here is what four tokens turned out to be able to build, where that
+    building genuinely stopped, and the honest bits where I got it wrong along the way.</p>
+
+  <div class="toc">
+    <h2>On this page</h2>
+    <ul>
+      <li><a href="#why">Why I did this</a></li>
+      <li><a href="#the-bet">The bet: spelling, not coherence</a></li>
+      <li><a href="#what-plateaued">What actually plateaued, and when</a></li>
+      <li><a href="#what-didnt">What never stopped moving</a></li>
+      <li><a href="#wrong">Where I was wrong along the way</a></li>
+      <li><a href="#next">What's next</a></li>
+    </ul>
+  </div>
+
+  <h2 id="why">Why I did this</h2>
+  <p>My main HoloFormer checkpoint (the one behind the Prism tool) grew its context window on a fixed schedule:
+    every 20,000 rounds, bump it up a bit, all the way out to 60 tokens of context. That schedule was never
+    validated against anything. It was just a number that felt reasonable at the time.</p>
+  <p>What I noticed anecdotally, going back through that run, was that a model overtrained hard enough at a given
+    context size never rambles into garbage. It repeats. Broken spelling, to me, is what undertrained looks like at
+    any context size, and I remembered seeing that kind of breakdown early on and then not seeing it later. So the
+    question I couldn't shake was: did I actually earn that, or did I just grow the context fast enough that I
+    never gave any one size the chance to fail cleanly? If you grow before a size is finished, you compound
+    whatever it didn't figure out into the next size up, and you can't tell the difference between "it learned
+    to extrapolate" and "it learned to interpolate and I moved the goalposts before that showed up."</p>
+  <p>So I stopped looking at that checkpoint and built something new instead: a completely separate model, same
+    shape, same real corpus, fresh weights, pinned at a context of exactly 4 tokens for its entire run, with no
+    schedule pushing it forward. The only question it was allowed to answer was: how far can four tokens of
+    context actually go, if you don't rush it?</p>
+
+  <h2 id="the-bet">The bet: spelling, not coherence</h2>
+  <p>Four tokens of context cannot produce long-range coherence. That's not a training problem, it's arithmetic:
+    if the model can only ever see the last four tokens, there is no mechanism by which it can remember a subject
+    from six tokens back and stay consistent with it. Anyone judging this experiment by "does it write a sensible
+    paragraph" would conclude nothing at all happened, and they'd be right to, because that's not what a
+    four-token window can do.</p>
+  <p>What it can do is spell correctly, chain plausible local structure together, and, if it's actually building
+    something rather than memorizing, occasionally produce a correct run of characters LONGER than four tokens.
+    That last part was the whole point. Repeating within the size of your own window is boring and expected, it's
+    just the model finding a short cycle that scores well. Repeating (or chaining) coherently PAST the size of
+    that window is a real signal, because there's no way to read it off the input directly. The model has to be
+    reconstructing something from what it learned into the weights themselves.</p>
+  <p>So the bar I actually used, the whole way through, wasn't "is this good writing." It was: does it spell
+    things correctly, and how long a stretch of correct structure can it produce before it breaks, relative to
+    its own four-token window. I called that ratio the extrapolation multiplier, and it's the number I kept
+    coming back to whenever I wanted to know if the model was still worth training further.</p>
+
+  <h2 id="what-plateaued">What actually plateaued, and when</h2>
+  <p>I built a permanent battery of tests I could run against any saved checkpoint directly, and ran it every
+    3,000 rounds against a fresh checkpoint the whole way out past 80,000 rounds. Three things genuinely stopped
+    moving, and I can point at roughly when.</p>
+  <p><strong>The primary signal, the gap between the model's top guess and its second-best guess, plateaued
+    around round 48,000.</strong> This was the metric I trusted most, because it's a proxy for "is the runner-up
+    catching up to the winner," i.e. is the model's internal uncertainty still shrinking. For a long stretch I
+    kept reading it as "still improving, just slowly," and I want to be honest that I was wrong about that for
+    longer than I should have been. When I actually split the run into thirds and compared the middle third's
+    average against the final third's, they were flat. Not "slightly up." Flat. That was the moment I accepted
+    the plateau was real rather than a slow climb I was impatient about.</p>
+  <p><strong>The model's effective vocabulary capped out somewhere around round 15,000 to 21,000</strong> and
+    never grew after that, no matter how much further training ran. I went in expecting that a model hard-trained
+    long enough would keep discovering more of the corpus's real words. I tested that twice, independently, to
+    make sure I hadn't made a measurement mistake the first time. Both times it came back the same: whatever
+    the model was going to learn to reliably spell, it had already learned within the first 15-21K rounds, and
+    the next 60,000+ rounds of training didn't add to that list. That one stung a bit. It's the cleanest evidence
+    in the whole run that "more training at the same size" and "more capability" are not the same thing past a
+    certain point.</p>
+  <p><strong>The rate at which it collapses into repetition also hit a floor.</strong> Even at the latest
+    checkpoints, a plain generation run falls into a repeat loop the large majority of the time, not the
+    exception. I'd remembered this getting rarer with more training on my old run, and when I actually went back
+    and tested that memory directly against this new, controlled run, it didn't hold up: the collapse rate was
+    already high at the earliest checkpoints and never really left that band. I'll say more about that
+    particular correction below, because it's a good example of a belief that felt true in memory and wasn't
+    true when I actually checked it.</p>
+
+  <h2 id="what-didnt">What never stopped moving</h2>
+  <p>The output-level plateau is the headline, but it isn't the whole story, and the more interesting part of
+    this experiment is what kept changing underneath a flat output. This architecture runs a fixed weight matrix
+    through eight refinement passes on every token, and I could inspect the intermediate state after each pass,
+    not just the final answer. Two things in there never plateaued, not once, the entire 80,000+ rounds.</p>
+  <p>One weight bank in particular kept specializing its channels harder and harder the whole way through, with
+    zero reversals, the entire run. One specific channel in that bank, the "no relative shift" channel, showed up
+    consistently as the most active channel across two completely separate investigations this session, on two
+    different checkpoints. What it looks like it's actually doing is acting as a gatekeeper: deciding, per
+    token, how much of the eight-pass iterative budget actually gets spent doing real work versus how much gets
+    served cheaply straight from an embedding-level guess. And there's a genuinely interesting wrinkle here: part
+    of the model's own numeric encoding is a fixed, hand-built codec that's never been trained since round one.
+    The model has learned, increasingly, to route through that frozen codec rather than learn its own equivalent
+    from scratch. It isn't learning the codec, the codec never changes, it's learning to lean on it more.</p>
+  <p>The other thing that kept improving past the plateau was calibration: when the model's top guess was wrong,
+    how good was the rest of its guess, i.e. how highly ranked was the actual correct answer, and how much
+    probability mass did the model still put near it. That kept getting better well after the primary metric
+    had gone flat. It's a genuinely useful distinction: the model wasn't getting better at being RIGHT, but it
+    was getting better at being USEFULLY WRONG, hedging its bets more honestly instead of just being confidently
+    incorrect. That's real learning still happening under a flat headline number, and it's the single strongest
+    argument that there was still something left to learn at this size, even after the primary metric said stop.</p>
+
+  <h2 id="wrong">Where I was wrong along the way</h2>
+  <p>I want to keep this part in, because it's the part that actually makes the rest of it trustworthy. A few
+    times during this I got ahead of the evidence, and I'd rather write down the correction than pretend the
+    story was clean the whole way through.</p>
+  <ul>
+    <li>Early on, watching raw accuracy under corrupted input seem to improve with more training, I read that as
+      the model getting more robust. It wasn't. A follow-up check showed it was increasingly just echoing the
+      last visible token regardless of what was corrupted, and the corruption filler I'd picked happened to
+      coincide with the model's favourite echo target. The "improvement" was an artifact of my own test design,
+      not a real gain.</li>
+    <li>I said, more than once, that this was showing us something never known before about how neural networks
+      work: that the visible output can plateau while real internal structure keeps reorganizing underneath it.
+      That's a real and useful thing to have watched happen in this specific, previously-undocumented
+      architecture. But the general phenomenon already has a name in the literature, "grokking," and it's been
+      studied properly elsewhere with real mechanistic detail. I was overclaiming novelty for something that's
+      genuinely novel in the specific, not in the general.</li>
+    <li>I also said we could see grokking itself approaching, based on watching that channel-specialization trend
+      climb. On a closer look, the trend is steady and linear, not accelerating, and acceleration is the actual
+      telling signature of an approaching grokking transition, not a steady climb. I hadn't checked for the thing
+      that would actually prove the claim before making it.</li>
+    <li>And the repetition-collapse memory I mentioned above: I remembered garbage output vanishing at larger
+      context sizes on my old run, and repeated that as if it were established. When I actually built a proper
+      long-form test against this new, controlled run and checked it directly, the collapse was already present
+      at the earliest checkpoint and never meaningfully left. My memory of the old run was, at best, not
+      transferable to this one, and possibly just wrong.</li>
+  </ul>
+  <p>None of these were catastrophic, and I caught every one of them before they became the final story. But I'd
+    rather show the corrections than the smoothed-over version.</p>
+
+  <h2 id="next">What's next</h2>
+  <p>Once the primary metric had genuinely gone flat for a sustained stretch, and the channel-specialization
+    mechanism looked like something general to the architecture rather than something specific to being stuck at
+    four tokens of context, I called it: time to grow. The whole point of this experiment was never "stay at
+    four tokens forever," it was "don't grow until this size is actually finished," and by every honest measure I
+    had, it was.</p>
+  <p>I kept every snapshot from the entire ctx=4 run, taken every 3,000 rounds the whole way through, and the
+    new context=8 run is a fork off the final trained weights, not a fresh start and not an overwrite. If growing
+    to ctx=8 turns out to have been a mistake, the entire ctx=4 lineage is still sitting there, untouched,
+    exactly as it was when I made the call.</p>
+
+  <p style="margin-top:2.5rem"><a href="/articles.html">&larr; Back to Articles</a></p>
+
+</article>
+</main>
+
+<footer class="site">
+  <div class="wrap">
+    <span>Evaluated Applications — .NET libraries, England.</span>
+    <span class="mono">© <span id="yr"></span> · <a href="/">Home</a> · <a href="/articles.html">Articles</a> · <a href="/packages.html">Packages</a> · <a href="https://www.nuget.org/profiles/evaluatedapplications" target="_blank" rel="noopener">NuGet</a></span>
+  </div>
+</footer>
+<script>document.getElementById('yr').textContent = new Date().getFullYear();</script>
+</body>
+</html>
