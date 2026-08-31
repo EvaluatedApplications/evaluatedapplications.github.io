@@ -43,8 +43,81 @@ single-layer only, verified via `NotSupportedException`; irrelevant today since 
 (`Advance`/`Reconstruct`), `RefinementLoop` (`Observe`/`ObserveSequence`, replaces the
 `NewGrads→IterAccumulate→Step` triple each tool wrote independently), `Decoding` (`DecodePolicy`/
 `Gate`/`DegenGuard`), `InspectorTrace` (`Inspector.Capture`/`Focus` — NEW for Creature/Forecaster,
-opt-in "🔍 inspect brain" toggle; Prism's own Inspector UI was REMOVED, own section below).
+opt-in "🔍 inspect brain" toggle; Prism's own Inspector UI was REMOVED, own section below),
+`CheckpointFetch` (`FetchAndDecompressGzipAsync` — NEW 2026-08-31, see "Checkpoint gzip
+precompression" below).
 `ParallelMapping` isn't wired into any tool (inert, not a gap).
+
+### Checkpoint gzip precompression — `HoloKernel/CheckpointFetch.cs` (2026-08-31)
+
+Real user report: `/tools/prism` "stuck downloading the checkpoint" — `oracle-brain.bin` was 3.29 MB
+a few days earlier, is 3.64 MB now, and grows every training round (the checkpoint's own context
+keeps expanding). GitHub Pages is a plain static host: it serves this file byte-for-byte with no
+Content-Encoding negotiation or on-the-fly compression, unlike Blazor's own `_framework/` assets
+(which get `.br`/`.gz` sidecars from `dotnet publish` and are resolved by the framework's own boot
+loader) — a raw data file dropped into `wwwroot/data/` never picks that up automatically. Confirmed
+by reading the actual publish output, not assumed: even a fresh `dotnet publish` does NOT produce a
+`.br`/`.gz` sidecar for `oracle-brain.bin` (the small text sidecars — `oracle-vocab.txt` etc. — and
+even `forecaster-history.json` DO get one; `oracle-brain.bin`/`.bin.gz` are the two exceptions, for
+reasons not chased down since it doesn't matter here — this fix doesn't depend on that mechanism at
+all).
+
+**Fix**: ship one manually-precompressed sidecar, `oracle-brain.bin.gz` (plain gzip at rest, produced
+by any dumb `GZipStream` one-liner — no dependency on the Blazor build pipeline), and decompress it
+client-side in C# with the BCL's own `System.IO.Compression.GZipStream` —
+`HoloKernel.CheckpointFetch.FetchAndDecompressGzipAsync(HttpClient, url)` fetches the `.gz` bytes and
+returns `(byte[] Bytes, int CompressedLength)`. **Deliberately NOT the browser-native
+`DecompressionStream` API via JS interop** — `GZipStream` already works inside a Blazor WebAssembly
+runtime (the WASM runtime pack ships a WASM-compiled zlib, confirmed by grepping the linker's own
+invocation: `libSystem.IO.Compression.Native.a`/`libz.a` are already linked into every build), so this
+gets the same result as zero new JS surface, zero new browser-API compatibility question, and reuses
+the exact fetch pattern (`HttpClient.GetByteArrayAsync`) every tool already uses. Two real call sites
+share it (`Prism.razor`'s own checkpoint load, and `Analyst.razor`'s independent lazy load for its
+novelty-scan feature, which fetches the same checkpoint a second way if Prism itself hasn't loaded it
+first this page load) — same "one real behaviour, not two copies that can drift" reasoning HoloKernel
+already applies to `AlphaRamp`/`Decoding.Gate`.
+
+**Failure mode, deliberately not band-aided**: no fallback to a raw uncompressed `.bin` was built. A
+`.gz` fetch or `GZipStream` decompression failure throws, exactly like an uncompressed
+`GetByteArrayAsync` failure always did — both call sites already wrap their whole load sequence in a
+try/catch that surfaces a real, visible error (`_loadError` on Prism's boot screen, `_novError` on
+Analyst's novelty-scan panel) rather than leaving the tool silently stuck. A raw-`.bin` fallback would
+have doubled the maintenance surface (two fetch paths to keep correct) for a failure mode this repo's
+own error-surfacing already handles honestly — judged not worth it for a demo tool.
+
+**Measured on the checkpoint shipped 2026-08-31**: 3,638,308 B raw -> 1,985,514 B gzip (~55% of raw,
+~1.65 MB saved per fresh visit) — real weight data (not text) doesn't compress as aggressively as the
+small sidecar files do, but it's a real, meaningful cut, and it directly targets the reported "stuck
+downloading" symptom (smaller transfer, same content).
+
+**Keeping `oracle-brain.bin.gz` in sync on every future interim checkpoint refresh — the one command
+the coordinator needs, no rebuild required.** The coordinator's own interim-refresh routine (raw copy
+of `oracle-brain.bin`/`-vocab.txt`/`-rounds.txt`/etc. from PrismStudio's live output straight into
+`wwwroot/data/` and `dist/data/`, no `dotnet publish`, since these are plain data files with no SRI
+hash) needs exactly ONE extra step after copying the fresh `oracle-brain.bin` into both dirs — plain
+.NET `GZipStream`, runnable from any PowerShell session, no Showroom-build tooling involved:
+
+```powershell
+$in = [System.IO.File]::ReadAllBytes('C:\Users\dongy\AboutUs\Showroom\wwwroot\data\oracle-brain.bin')
+foreach ($dir in 'C:\Users\dongy\AboutUs\Showroom\wwwroot\data','C:\Users\dongy\AboutUs\Showroom\dist\data') {
+    $out = [System.IO.File]::Create((Join-Path $dir 'oracle-brain.bin.gz'))
+    $gz = New-Object System.IO.Compression.GZipStream($out, [System.IO.Compression.CompressionLevel]::Optimal)
+    $gz.Write($in, 0, $in.Length); $gz.Dispose(); $out.Dispose()
+}
+```
+
+Read the fresh `.bin` ONCE, write the `.gz` into both data dirs — same shape as the existing raw-copy
+step, just one more file, still zero `dotnet publish`/rebuild involved. The raw `oracle-brain.bin`
+itself is deliberately left in place in both dirs alongside the `.gz` (unused by any fetch path now,
+but harmless to keep — a natural fallback source for regenerating the `.gz`, and removing it wasn't
+asked for). **This command needs a rebuild ONLY if `CheckpointFetch.cs`'s decompression logic itself
+ever changes** — the `.gz` file format and this regeneration step are completely decoupled from the
+Blazor build; a plain `dist/`-artifact refresh (no source change) never touches this file.
+
+Verified end-to-end for the 2026-08-31 checkpoint: compressed the real shipped `oracle-brain.bin`,
+round-tripped it back through `GZipStream.Decompress` and confirmed the result is byte-identical to
+the original (`SequenceEqual` over both 3,638,308-byte arrays) before shipping the `.gz` — not just
+"the command ran," an actual correctness check on the real file.
 
 **Alpha-ramp REMOVED (2026-08-28, direct instruction)**: Creature and Forecaster used to each build
 their own `AlphaRamp(warmSteps)` easing K-pass composition in from 0 over the first N steps/clicks —
@@ -626,6 +699,18 @@ climbing unboundedly. Also worth eyeballing that streaming still visibly reads a
 `RenderBatch=4` (should — 4 tokens at ~100ms+ each is still a visible ~400ms+ per repaint, not a
 single instant dump) rather than feeling batchy/jumpy; if it ever needs re-tuning, `RenderBatch` is
 the one number to move (lower = smoother but more renders, higher = fewer renders but chunkier reveal).
+
+**Checkpoint fetch now gzip-precompressed (2026-08-31)**: `data/oracle-brain.bin` -> `data/
+oracle-brain.bin.gz`, decompressed client-side via `HoloKernel.CheckpointFetch.FetchAndDecompressGzipAsync`
+(full reasoning, measured sizes, and the exact one-command regeneration recipe for future interim
+refreshes: "Checkpoint gzip precompression" under the HoloKernel section above). Both boot-log steps
+(`Begin("data/oracle-brain.bin.gz")` on first load, and the reused-session narration) were relabelled
+to the `.gz` filename so the boot log always names the file actually being fetched. No fallback to the
+raw `.bin` was added — a fetch/decompress failure surfaces through the same outer try/catch that
+already turns any checkpoint-load failure into a visible `_loadError`, never a silent hang.
+`Analyst.razor`'s independent `EnsurePrismLoadedAsync` lazy-load (novelty scan) was updated the same
+way, same helper, same reasoning — it fetches the identical checkpoint through a second code path
+when Prism itself hasn't loaded it first this page load.
 
 ## Unlisted: RecycleDAO marketplace prototype — `Pages/RecycleDaoDemo.razor` (`/recycledao-demo`)
 NOT a package-capability demo and NOT in the public gallery — a private, share-by-link-only client

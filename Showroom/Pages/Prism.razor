@@ -313,13 +313,21 @@
             bool reused = Sessions.IsLoaded("prism");
             _session = await Sessions.GetOrCreateAsync("prism", async () =>
             {
-                var sb = Begin("data/oracle-brain.bin");
-                var bytes = await Http.GetByteArrayAsync("data/oracle-brain.bin");
+                var sb = Begin("data/oracle-brain.bin.gz");
+                // gzip-precompressed at rest (2026-08-31 — was a raw uncompressed fetch; the checkpoint keeps
+                // growing every training round and a visitor reported it "stuck downloading"). GitHub Pages
+                // serves this byte-for-byte with no Content-Encoding/on-the-fly compression, so shipping a
+                // pre-gzipped sidecar + decompressing it here (HoloKernel.CheckpointFetch, see its own doc
+                // comment) is the only way to actually shrink the transfer — decompression happens entirely
+                // client-side, nothing about the fetched byte COUNT below misrepresents what crossed the wire.
+                // Measured on the 2026-08-31 checkpoint: 3,638,308 B raw -> 1,985,514 B gzip (~55% of raw) —
+                // real weight data doesn't compress as aggressively as text, but it's a real, meaningful cut.
+                var (bytes, gzLen) = await CheckpointFetch.FetchAndDecompressGzipAsync(Http, "data/oracle-brain.bin.gz");
                 var peek = HoloFormer.Deserialize(bytes);   // one-time peek at Layers/ParamCount for the boot log +
                 // the alpha-reconstruction guard below — HoloSession.FromCheckpoint needs K/alpha as ctor args
                 // (see field comment above), which in turn need Layers, so this has to happen before the session
                 // can be built.
-                Finish(sb, $"{bytes.Length:N0} B → {peek.ParamCount:N0} params deserialized");
+                Finish(sb, $"{gzLen:N0} B gzip → {bytes.Length:N0} B → {peek.ParamCount:N0} params deserialized");
                 var alpha = (peek.Layers == 1 && _rounds is not null && _trainedIterWarm is > 0)
                     ? AlphaRamp.Reconstruct(_rounds.Value, addRound: 0, _trainedIterWarm.Value)
                     : 1.0;
@@ -327,7 +335,7 @@
                 // "checkpoint doesn't carry them" gotcha by construction rather than a footnote (see field comment).
                 return HoloSession.FromCheckpoint(bytes, _k, alpha);
             });
-            if (reused) Finish(Begin("data/oracle-brain.bin"), "reused from earlier this visit (no re-download)");
+            if (reused) Finish(Begin("data/oracle-brain.bin.gz"), "reused from earlier this visit (no re-download)");
             _stats = _session.Stats();
             // Recomputed from the session actually in hand (not the factory's local "peek"/"alpha", which don't
             // exist on the reused-cache path) — same formula, so identical on a first-ever visit either way.

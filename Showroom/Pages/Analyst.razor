@@ -1347,11 +1347,15 @@
             try { iterWarm = int.Parse((await Http.GetStringAsync("data/oracle-iterwarm.txt")).Trim()); } catch { }
 
             bool reused = Sessions.IsLoaded("prism");
-            _novPhase = reused ? "Reusing already-loaded checkpoint…" : "Loading checkpoint weights (~2.9 MB, once)…";
+            _novPhase = reused ? "Reusing already-loaded checkpoint…" : "Loading checkpoint weights (gzip-compressed over the wire), once…";
             StateHasChanged(); await Task.Delay(1);
             _prismSession = await Sessions.GetOrCreateAsync("prism", async () =>
             {
-                var bytes = await Http.GetByteArrayAsync("data/oracle-brain.bin");
+                // Same gzip-sidecar fetch Prism.razor's own checkpoint load uses now (2026-08-31) — see
+                // HoloKernel.CheckpointFetch's doc comment. Compressed byte count isn't narrated here (this
+                // path has no per-file boot log the way Prism.razor's does), only the decompressed bytes
+                // matter to the rest of this method.
+                var (bytes, _) = await CheckpointFetch.FetchAndDecompressGzipAsync(Http, "data/oracle-brain.bin.gz");
                 var peek = HoloFormer.Deserialize(bytes);
                 var kPass = stackK ?? 1;
                 var alpha = (peek.Layers == 1 && rounds is not null && iterWarm is > 0)
