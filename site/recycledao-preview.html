@@ -29,7 +29,7 @@
       by Evaluated Applications. It is a testnet-only proof of concept — <b>not live, not fundraising, and no
       real monetary value changes hands anywhere in this build.</b></p>
     <div class="facts">
-      <span class="fact"><b>Status:</b> claim graph, ledger, and reputation engines built and tested</span>
+      <span class="fact"><b>Status:</b> claim graph, ledger, reputation, and multi-tenancy engines built and tested</span>
       <span class="fact">Pivoted 2026-08-29 to a general platform</span>
       <span class="fact">Not live · no real value</span>
       <span class="fact">Prepared for Antonio</span>
@@ -58,8 +58,8 @@
   <div class="wrap">
     <div class="sec-head"><span class="dot" style="background:var(--accent)"></span><h2>What it is, in plain terms</h2><p>a community record that keeps itself honest</p></div>
     <p class="desc" style="max-width:74ch">Picture a community wiki where every entry is a claim — "we should
-      adopt rule X," "this fact is true," "this proposal is approved" — that people can vote on. Four things
-      make it more than an ordinary wiki-plus-voting.</p>
+      adopt rule X," "this fact is true," "this proposal is approved" — that people can vote on. A handful of
+      things make it more than an ordinary wiki-plus-voting.</p>
     <div class="grid">
       <article class="card" style="--cat:var(--accent)">
         <div class="card-top"><h3>Claims remember what they depend on</h3></div>
@@ -78,11 +78,11 @@
       </article>
       <article class="card" style="--cat:var(--accent)">
         <div class="card-top"><h3>A currencyless ledger</h3></div>
-        <p class="desc">Instead of one shared token everyone earns, each community member can mint their own
-          personal currency. Whether anyone else accepts your currency is entirely a trust decision the
-          community makes, based on your public track record — not something the platform decides for them.
-          This mirrors a real historical pattern (competing local currencies, market-priced by trust in the
-          issuer) rather than being an invented gimmick.</p>
+        <p class="desc">Instead of one shared token everyone earns, each community member can mint, trade, and
+          now redeem (burn) their own personal currency. Whether anyone else accepts your currency is entirely
+          a trust decision the community makes, based on your public track record — not something the platform
+          decides for them. This mirrors a real historical pattern (competing local currencies, market-priced by
+          trust in the issuer) rather than being an invented gimmick.</p>
       </article>
       <article class="card" style="--cat:var(--accent)">
         <div class="card-top"><h3>A reputation layer built from arithmetic, not a hidden score</h3></div>
@@ -92,6 +92,14 @@
           built from the numbers, never a black-box number nobody can audit. When a mint gets disputed and
           voted down, it ripples through to your own reputation automatically, the same way an unwound claim
           ripples through its dependents.</p>
+      </article>
+      <article class="card" style="--cat:var(--accent)">
+        <div class="card-top"><h3>Resilient storage underneath all of it</h3></div>
+        <p class="desc">Records are split into pieces and spread out with a bit of built-in redundancy — the
+          same mathematical technique real-world cloud backup services use — so the system can lose a portion
+          of where those pieces are stored and still reconstruct the full, exact record. This was proven, not
+          assumed: pieces were deliberately taken away in testing, and reconstruction was confirmed to work
+          right up to the point it honestly should fail, and to fail loudly, not silently, past that point.</p>
       </article>
     </div>
     <p class="lim">Neither the dependency-tracking nor the contradiction-flagging is a fully solved research
@@ -109,12 +117,34 @@
         <div class="card-top"><h3>Current — the claim graph, ledger, and reputation engines</h3></div>
         <p class="desc">Built off-chain, on Evaluated Applications' own <b>EvalApp</b> (orchestration) and
           <b>HoloDb</b> (storage) libraries — deliberately no blockchain dependency in this part of the project,
-          at your direction. Underneath the ledger sits a resilient storage layer: records are split into
-          pieces and spread out with a bit of built-in redundancy, the same mathematical technique real-world
-          cloud backup services use (Reed-Solomon erasure coding), so the system can lose a portion of where
-          those pieces are stored and still reconstruct the full, exact record. This was proven, not assumed —
-          pieces were deliberately taken away in testing, and reconstruction was confirmed to work right up to
-          the point it honestly should fail, and to fail loudly, not silently, past that point.</p>
+          at your direction. Underneath the ledger sits a resilient storage layer using the same redundant-piece
+          technique real-world cloud backup services use, so the system can lose some pieces and still
+          reconstruct the exact record. Ahead of that exact (and comparatively expensive) reconstruction, a
+          quick approximate check — borrowed from our own <b>Phasor</b> pattern-matching library — now looks at
+          whatever pieces are actually present and flags a corrupted one fast, before bothering with the full
+          rebuild. Each block's header also now carries a compact fingerprint of its own contents baked in
+          alongside its tamper-evident hash, so a check for "has this record been altered" no longer relies on
+          the hash alone.</p>
+      </article>
+      <article class="card" style="--cat:var(--accent)">
+        <div class="card-top"><h3>Multi-tenancy — separate communities, kept fully apart</h3></div>
+        <p class="desc">Different communities using this platform now each get their own completely separate
+          claim graph, ledger, and reputation data — hard-partitioned, not just filtered by a hidden flag — so
+          one community's records can never leak into another's, even if two communities happen to reuse the
+          exact same names or IDs for things. Proven with a demonstration where two communities deliberately
+          reuse identical names throughout and never interfere with each other.</p>
+      </article>
+      <article class="card" style="--cat:var(--accent)">
+        <div class="card-top"><h3>A first proof pieces can travel over a real network</h3></div>
+        <p class="desc">Several small, independent programs were run at once on one machine, each holding only
+          its own slice of a record, and a separate program fetched pieces from them over real network
+          connections — the same kind of connection two separate computers would use to talk to each other,
+          just pointed at "this same machine" for now, not out across the internet — and rebuilt the full
+          record from what it received. When some of those programs were deliberately shut down mid-test, the
+          requester correctly noticed they'd gone quiet and, once too many were missing, honestly reported it
+          couldn't rebuild the record rather than guessing. This is a genuine step up from proving the storage
+          layer only inside one program's memory — but it is <b>not</b> yet real multi-machine deployment, see
+          "Not built yet" below.</p>
       </article>
       <article class="card" style="--cat:var(--accent)">
         <div class="card-top"><h3>Historical — the token &amp; governance work</h3></div>
@@ -144,21 +174,32 @@
           where two chains of dependency converge back on the same claim (flagged exactly once, not
           double-counted). Contradiction-flagging between claims marked as conflicting. The personal-currency
           ledger — minting, peer-to-peer trading (including paying someone in a third party's currency), and a
-          tamper-evident record. The resilient, redundant-piece storage layer underneath that ledger. The
-          reputation calculations, running against the ledger and claim graph together, with a worked example:
-          disputing someone's past activity visibly and traceably lowers their reputation score, hand-checkable,
-          not a mystery number. All of it is proven end to end with automated tests and runnable demonstrations
-          against real (if locally-hosted) storage — not just described, actually built and exercised.</p>
+          tamper-evident record. Redemption: anyone holding some of a currency, not just the person who
+          originally issued it, can now destroy it from their own balance, retiring it — the historical record
+          of how much was ever issued never changes, but how much is actually still out there correctly drops.
+          The resilient, redundant-piece storage layer underneath that ledger, plus a fast approximate check
+          that flags a corrupted piece before the expensive exact rebuild runs. The reputation calculations,
+          running against the ledger and claim graph together, with a worked example: disputing someone's past
+          activity visibly and traceably lowers their reputation score, hand-checkable, not a mystery number.
+          Separate communities running side by side with their data fully partitioned from one another. A first,
+          deliberately small proof that the redundant-piece storage can genuinely travel over a network, using
+          several independent programs on one machine talking over real network connections. All of it is
+          proven end to end with automated tests and runnable demonstrations against real (if locally-hosted)
+          storage — not just described, actually built and exercised.</p>
       </article>
       <article class="card" style="--cat:var(--accent)">
         <div class="card-top"><h3>Not built yet</h3></div>
         <p class="desc">No user interface anywhere — everything so far is backend logic, proven with automated
           tests and command-line demonstrations. No blockchain involvement in the new work — the claim graph,
           ledger, and reputation layer are deliberately built to run entirely off-chain for now, at your
-          direction. No support yet for separate, independent communities using the platform at the same time.
-          "Verification" and moderation remain manual/human decisions by design, not an automation gap. No
-          growth, referral, or "invite a friend" mechanics anywhere — deliberately out of scope, same as before
-          the pivot.</p>
+          direction. No real multi-machine deployment — the new networking proof still runs everything on one
+          machine; it shows the pieces CAN travel over a real network connection, not that they've been spread
+          across genuinely separate computers in different locations. Actually deploying across separate
+          machines, discovering who's holding what, and securing that traffic is a deliberately separate,
+          bigger piece of infrastructure work we're flagging as a decision to make explicitly, not building
+          unprompted. "Verification" and moderation remain manual/human decisions by design, not an automation
+          gap. No growth, referral, or "invite a friend" mechanics anywhere — deliberately out of scope, same
+          as before the pivot.</p>
       </article>
     </div>
   </div>
@@ -170,12 +211,14 @@
       <h2>Evaluated Applications' role</h2>
       <p>Evaluated Applications is building RecycleDAO end to end: the claim graph, the currencyless ledger, the
         reputation layer, and the resilient storage underneath it, all proven working off-chain on our own
-        EvalApp and HoloDb libraries. The original token-and-blockchain work is complete for what it covered and
-        still passes its tests, but is not the current focus. The next steps are a real interface for people to
-        interact with this through, and, eventually, a decision about how multiple independent communities
-        would each run their own instance. This page will be updated as milestones complete — it is only
-        reachable by this direct link and is not linked from, or indexed alongside, the rest of the public
-        Evaluated Applications site.</p>
+        EvalApp and HoloDb libraries. Since the last preview, that work has grown to include separate
+        communities kept fully apart from one another and a first proof that the storage layer can genuinely
+        travel over a real network connection, not just live in memory. The original token-and-blockchain work
+        is complete for what it covered and still passes its tests, but is not the current focus. The next steps
+        are a real interface for people to interact with this through, and, separately, a decision about
+        whether and how to build genuine multi-machine network deployment. This page will be updated as
+        milestones complete — it is only reachable by this direct link and is not linked from, or indexed
+        alongside, the rest of the public Evaluated Applications site.</p>
     </div>
   </div>
 </section>

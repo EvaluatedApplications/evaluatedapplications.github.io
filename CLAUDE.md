@@ -58,21 +58,37 @@ Tracer + transitively EvalApp/Phasor) currently power a live tool — see "Tools
 the user to share with the client (Antonio) by direct link only. Deliberately NOT in `index.html`'s
 gallery, NOT in `sitemap.xml`, NOT in any nav/footer, and carries `<meta name="robots"
 content="noindex,nofollow">`. Standalone minimal header (brand only, no nav-links) rather than the
-usual site nav, since it isn't an EA product page. **Re-rendered 2026-09-01** from RecycleDAO's own
-`docs/status-brief.md` (the file didn't exist at first render, when content came from `CLAUDE.md`
-directly — it now exists, was written specifically for this non-technical client audience, and is the
-current source of truth). Content reflects RecycleDAO's 2026-08-29 project pivot from a
-recycling-specific submit/verify/reward token PoC to a general "digital parliament" platform:
+usual site nav, since it isn't an EA product page. **Re-rendered again 2026-09-01** (second render
+same day, this repo's `docs/status-brief.md` moved further after the first re-render at commit
+`f7f6dcd`) from RecycleDAO's own `docs/status-brief.md` (current source of truth, written specifically
+for this non-technical client audience). Content still reflects the 2026-08-29 pivot from a
+recycling-specific submit/verify/reward token PoC to a general "digital parliament" platform —
 dependency-tracked claims with a retraction cascade (family-tree analogy), pairwise contradiction
 flagging, a currencyless self-minted peer-to-peer ledger (competing-local-currencies analogy), a
 reputation layer built from hand-checkable arithmetic over both (public-credit-report analogy), and a
-Reed-Solomon erasure-coded storage layer underneath the ledger. The original ERC-20/Governor/Timelock
-recycling-token work is now framed as historical (still built, still tested, not being extended), in
-its own "How it's built" card rather than the page's main framing. Same minimal shape as before
-(standalone brand-only header, no nav-links, 4 `.sec` blocks + closing `.stack`, noindex) — only the
-words changed, not the template. Re-render on request when the PoC's milestone status changes (next
-source-of-truth check: RecycleDAO's `docs/status-brief.md`, falling back to its `CLAUDE.md` for any
-structural fact the brief doesn't cover); never link it from anywhere.
+Reed-Solomon erasure-coded storage layer underneath the ledger — plus five things new in this pass:
+**burn/redemption** (any holder, not just the issuer, can destroy their own held balance; the
+lifetime-minted figure stays an immutable historical fact, only "still outstanding" drops), a
+**Phasor-based plausibility pre-check** ahead of the exact Reed-Solomon shard reconstruction (a cheap
+approximate check that flags a corrupted-but-present piece fast, before the expensive exact rebuild
+runs), a **holographic commitment embedded in the block header** (a compact fingerprint of a block's
+own contents baked into the tamper-evidence alongside its hash), **multi-tenancy** (hard-partitioned
+per-community claim graph/ledger/reputation stores, own tables per community, no shared-schema
+visibility filter to leak through — got its own new "How it's built" card), and a **real multi-process
+socket proof of shard distribution** (several genuinely separate OS processes on ONE machine trading
+Reed-Solomon shards over real loopback TCP and reconstructing the block; explicitly still
+same-machine only, NOT real multi-machine networking — also its own new card, and called out again in
+"Not built yet," which dropped its old "no multi-tenancy" line since that's now built and replaced it
+with the real-multi-machine-deployment caveat). "What it is, in plain terms" gained a 5th capability
+card (resilient storage promoted from an implementation detail to its own top-level concept, per the
+brief's own framing) alongside the original 4 (dependency cascade / contradiction flagging /
+currencyless ledger / reputation). The original ERC-20/Governor/Timelock recycling-token work is
+still framed as historical (still built, still tested, not being extended), still its own "How it's
+built" card. Same minimal shape as both prior renders (standalone brand-only header, no nav-links, 5
+`.sec` blocks + closing `.stack`, noindex; tag-balance re-verified: section/div/p/h2/h3/article/span
+all matched) — only the words changed, not the template. Re-render on request when the PoC's
+milestone status changes (next source-of-truth check: RecycleDAO's `docs/status-brief.md`, falling
+back to its `CLAUDE.md` for any structural fact the brief doesn't cover); never link it from anywhere.
 
 ## Design system
 
