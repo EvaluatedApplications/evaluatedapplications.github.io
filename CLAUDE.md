@@ -283,17 +283,40 @@ read as "progress/refinement," explicitly NOT pride-flag styling. What changed, 
   every file hit exactly once for the mark, 16/17 for the favicon, `404.html` correctly has no
   favicon link at all) — a brand identity glyph can't be half-migrated without being a cohesion
   regression, so this one WAS swept everywhere in one pass, unlike the hero graphic below.
-- **`.prism-beam` (NEW component, hero graphic — NOT swept everywhere)**: a small decorative inline
-  SVG (white beam → triangle outline → 7-line ROYGBIV fan), CSS-positioned absolute behind the hero
-  text (`.hero` now `position:relative;overflow:hidden`, `.hero>.wrap` lifted to `z-index:1`),
-  right-aligned, capped `min(40vw,520px)` wide, `opacity:.65`, hidden below 900px so it can't collide
-  with hero copy once it wraps to fewer chars/line on tablet. Currently on exactly **2 pages**:
-  `index.html` (the flagship/DSOTM-analogue hero) and `algformer.html` (the literal "Prism" tool is
-  linked from that page's hero CTA + Try-it-live grid, so the visual motif and the product name
-  finally point at the same place). This was a deliberate scope call, not an oversight — the task
-  asked for a reviewable before/after on representative pages rather than a silent 16-page sweep;
-  extending `.prism-beam` to more hero pages is a fast follow (same markup block, paste into any
-  `<header class="hero">`) whenever that's wanted, see Queued/Flagged in the task return.
+- **`.prism-beam` (hero graphic — deliberate subset, NOT swept everywhere)**: a small decorative
+  inline SVG (white beam → triangle outline → 7-line ROYGBIV fan), CSS-positioned absolute behind
+  the hero text (`.hero` now `position:relative;overflow:hidden`, `.hero>.wrap` lifted to
+  `z-index:1`), right-aligned, capped `min(40vw,520px)` wide, `opacity:.65`, hidden below 900px so
+  it can't collide with hero copy once it wraps to fewer chars/line on tablet. Originally on exactly
+  2 pages (`index.html`, `algformer.html`), scoped up **2026-09-01** to **5 of 16 pages**: those two
+  plus `phasor.html`, `holoformer.html`, `holovoxel.html`. Reasoning per added page (a deliberate,
+  reasoned subset, not a full sweep — chosen for flagship/product feel or a real thematic tie to the
+  beam's own "undispersed light → spectrum" story, not just decoration):
+  - `phasor.html` — the strongest thematic fit on the whole site: its own per-package palette row
+    (Design system, above) already calls Phasor "Foundation, undispersed beam" — the white source
+    the SVG itself draws before it hits the triangle. Simple hero shape (facts/install/cta-row/
+    related, no competing widget), plenty of empty right-side space at desktop width for the beam
+    to occupy — low collision risk.
+  - `holoformer.html` — the "meaning as chords" deep-dive already frames its whole thesis as a
+    spectrum/tones metaphor (its own hand-drawn `.thesis` figures: "scattered points" vs "a stack of
+    tones", the second literally 4 parallel coloured lines) — the beam's dispersion-into-lines visual
+    echoes that figure rather than competing with it. `.thesis` is capped `max-width:560px` on a
+    1080px `.wrap`, leaving right-side room at desktop width.
+  - `holovoxel.html` — a visual/rendering engine page (holographic near-crisp/far-fuzzy LOD), plain
+    hero shape like Phasor's, no competing widget, benefits from a striking hero graphic the way a
+    graphics-adjacent product page should.
+  Deliberately LEFT OUT, with reasons (not an oversight): **`holodb/index.html`** — the richest page
+  on the site, but its hero already carries a real visual centerpiece (the animated `.race` bar-chart
+  demo) as the thing that's supposed to draw the eye; layering a second decorative graphic behind it
+  risked competing for attention on the one hero that least needs help, so skipped pending a
+  real-device look rather than guessed as fine. **`algformer-gpu.html`, `evalapp.html`,
+  `evalapp-neural.html`, `holodb-client.html`, `holodb-protocol.html`, `prose.html`, `tracer.html`,
+  `packages.html`** — secondary/dependent packages or (for `packages.html`) an index/listing page,
+  not a marketing-flagship hero; adding a decorative beam here would read as sprawl without the
+  thematic tie the 5 live pages have, exactly the "busy, not deliberate" outcome the task warned
+  against. Extending further is still a fast follow (same markup block: the `.prism-beam` SVG as the
+  first child of `.hero-body`, real content wrapped in `.hero-content` right after it) whenever a
+  specific page earns the same reasoning.
 - **Fixed a real staleness while in here**: `holodb/index.html`'s inline "writes → accumulator" SVG
   diagram (its own bespoke graphic, not reusable) had 4 attribute values hardcoded to the OLD
   `--ink-faint`/`--surface`/`--border`/`--border-2` hex literals instead of `var(...)` — those would
@@ -743,17 +766,20 @@ the whole system in one place):
   base layout, already responsive, already tested — rather than a third half-tuned chrome variant.
 
 **`.prism-beam` z-index gotcha (only matters on pages that carry both `.prism-beam` and
-`os-chrome`, currently just `index.html`)**: once `.hero > .wrap` gets an opaque window-panel
-background, a `.prism-beam` positioned as a *sibling* of `.wrap` (the pre-chrome markup) would sit
-fully behind that new opaque panel and vanish. Fixed by moving `.prism-beam` to be the first child
-*inside* `.hero-body` instead, with the real hero text wrapped in one more div, `.hero-content`
-(`position:relative;z-index:1`), so the beam (`position:absolute;z-index:0`, unchanged CSS) paints
-behind the text but on top of the now-opaque panel background — and its bleed (`right:-40px`) gets
-tastefully clipped by the panel's `overflow:hidden` instead of hanging off the page. `algformer.html`
-also carries `.prism-beam` but is NOT yet on `os-chrome`, so it's unaffected today; **when
-`algformer.html` is swept, its hero markup needs the same `.hero-content` wrapper**, or its beam will
-silently disappear behind the new window panel — this is the one page in the remaining 14 where the
-"zero-markup" claim above doesn't hold and an extra wrapper is required.
+`os-chrome` — as of 2026-09-01 that's all 5 pages carrying the beam: `index.html`, `algformer.html`,
+`phasor.html`, `holoformer.html`, `holovoxel.html`, all of which are on `os-chrome`)**: once
+`.hero > .wrap` gets an opaque window-panel background, a `.prism-beam` positioned as a *sibling* of
+`.wrap` (the pre-chrome markup) would sit fully behind that new opaque panel and vanish. Fixed by
+moving `.prism-beam` to be the first child *inside* `.hero-body` instead, with the real hero text
+wrapped in one more div, `.hero-content` (`position:relative;z-index:1`), so the beam
+(`position:absolute;z-index:0`, unchanged CSS) paints behind the text but on top of the now-opaque
+panel background — and its bleed (`right:-40px`) gets tastefully clipped by the panel's
+`overflow:hidden` instead of hanging off the page. **This is the one wrapper the "zero-markup"
+os-chrome claim above doesn't hold for**: any page that ever gains `.prism-beam` in the future needs
+its real hero content wrapped in `.hero-content` too if (and only if) that page is also on
+`os-chrome` — `phasor.html`/`holoformer.html`/`holovoxel.html` didn't carry this wrapper before
+2026-09-01 (their hero content sat directly in `.hero-body`, same shape `algformer.html` used to have
+pre-chrome) and got it added in the same edit that added their beam markup, per this exact gotcha.
 
 **Verified this pass**: reachability walk re-run (see Navigation section above) — unaffected by
 chrome, since no href changed, only presentation + a wrapping-div restructure of the hero. Read all
@@ -946,7 +972,9 @@ sitewide in the 2026-08-28 tools-first pivot — see Navigation above, don't rei
 keep any page-specific extra items after `NuGet`; wrap the hero's real content in `<div
 class="hero-bar" aria-hidden="true"><span class="win-dots">...</span><span
 class="hero-bar-title">NAME.app</span></div><div class="hero-body">...</div>`; if the page also
-carries `.prism-beam` (only `algformer.html` and `index.html`), additionally wrap the real text in
+carries `.prism-beam` (as of 2026-09-01: `index.html`, `algformer.html`, `phasor.html`,
+`holoformer.html`, `holovoxel.html` — see the Prism motif section above for the full list and why),
+additionally wrap the real text in
 `.hero-content` per the gotcha above. If the page has no `<header class="hero">` at all (the two
 `.prose`-template pages), skip the hero-bar/hero-content step entirely — just the `class` on
 `<body>`. Everything else (`.sec` window framing, taskbar styling) needs no further HTML changes —
