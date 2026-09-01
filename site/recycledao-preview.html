@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>RecycleDAO — progress preview · Evaluated Applications</title>
 <meta name="robots" content="noindex,nofollow">
-<meta name="description" content="A private progress preview of RecycleDAO, a testnet-only recycling-incentive DAO proof of concept built by Evaluated Applications.">
+<meta name="description" content="A private progress preview of RecycleDAO, a testnet-only digital parliament platform proof of concept built by Evaluated Applications.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%23f0796a'/%3E%3Cstop offset='.166' stop-color='%23f0a15a'/%3E%3Cstop offset='.333' stop-color='%23e6c450'/%3E%3Cstop offset='.5' stop-color='%237bd86a'/%3E%3Cstop offset='.666' stop-color='%234aa3ff'/%3E%3Cstop offset='.833' stop-color='%237d7dff'/%3E%3Cstop offset='1' stop-color='%23c07dff'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='32' height='32' rx='7' fill='%23050608'/%3E%3Cpath d='M16 5L27 26H5Z' fill='none' stroke='url(%23g)' stroke-width='2' stroke-linejoin='round'/%3E%3C/svg%3E">
 <link rel="stylesheet" href="/assets/site.css">
 </head>
@@ -24,14 +24,13 @@
 <header class="hero">
   <div class="wrap">
     <span class="eyebrow">RecycleDAO · confidential progress preview</span>
-    <h1>RecycleDAO — a recycling-incentive DAO, in progress</h1>
-    <p class="lede">This page is a private preview prepared for Antonio to track progress on RecycleDAO: a
-      technical proof of concept for a token-and-governance layer over recycling activity, built by
-      Evaluated Applications. It is a testnet-only demonstration — <b>not live, not fundraising, and no
+    <h1>RecycleDAO — a digital parliament platform, in progress</h1>
+    <p class="lede">This page is a private preview prepared for Antonio to track progress on RecycleDAO, built
+      by Evaluated Applications. It is a testnet-only proof of concept — <b>not live, not fundraising, and no
       real monetary value changes hands anywhere in this build.</b></p>
     <div class="facts">
-      <span class="fact"><b>Status:</b> token contract + minter service built, tested locally</span>
-      <span class="fact">Not yet deployed to any testnet</span>
+      <span class="fact"><b>Status:</b> claim graph, ledger, and reputation engines built and tested</span>
+      <span class="fact">Pivoted 2026-08-29 to a general platform</span>
       <span class="fact">Not live · no real value</span>
       <span class="fact">Prepared for Antonio</span>
     </div>
@@ -40,73 +39,126 @@
 
 <section class="sec">
   <div class="wrap">
-    <div class="sec-head"><span class="dot" style="background:var(--accent)"></span><h2>What RecycleDAO is</h2><p>the concept, in plain language</p></div>
-    <p class="desc" style="max-width:74ch">RecycleDAO is a proof of concept for tying recycling activity to a
-      token-based reward and governance system. In the intended flow: a participant submits evidence of a
-      recycling activity, a reviewer approves it, and an approved submission mints a reward token to the
-      participant. Holding the reward token also carries voting weight in a DAO — token-weighted governance
-      over shared decisions. The goal of this build is to demonstrate that mechanism working end to end on a
-      public test network, cleanly and honestly, before any conversation about a real deployment.</p>
+    <div class="sec-head"><span class="dot" style="background:var(--accent)"></span><h2>A change of direction</h2><p>what moved, and why</p></div>
+    <p class="desc" style="max-width:74ch">This project started as a recycling-specific idea: submit proof you
+      recycled something, get it approved, earn a token. On 2026-08-29, at your direction, the scope broadened.
+      The recycling framing turned out to be one example of a more general, more useful idea: a
+      <b>"digital parliament"</b> — a platform where a community writes structured entries (claims, proposals,
+      rules), discusses them, and votes on them, with two extra mechanics layered on top of ordinary
+      voting/forum software to keep the community's shared record honest and self-consistent. The
+      recycling-specific pieces — the reward token, the submit/approve/earn flow — are now historical: still
+      built, still tested, but not what this project is actively extending. Everything below describes what
+      the project actually is today.</p>
+    <p class="lim">This remains, in every respect, a proof of concept on a free public test network — no real
+      money, no real tokens with market value, nothing an investor or end user can use yet.</p>
   </div>
 </section>
 
 <section class="sec">
   <div class="wrap">
-    <div class="sec-head"><span class="dot" style="background:var(--accent)"></span><h2>How it's built</h2><p>two halves, cleanly separated</p></div>
+    <div class="sec-head"><span class="dot" style="background:var(--accent)"></span><h2>What it is, in plain terms</h2><p>a community record that keeps itself honest</p></div>
+    <p class="desc" style="max-width:74ch">Picture a community wiki where every entry is a claim — "we should
+      adopt rule X," "this fact is true," "this proposal is approved" — that people can vote on. Four things
+      make it more than an ordinary wiki-plus-voting.</p>
     <div class="grid">
       <article class="card" style="--cat:var(--accent)">
-        <div class="card-top"><h3>On-chain — the token &amp; governance</h3></div>
-        <p class="desc">Solidity contracts, built with Foundry on top of <b>OpenZeppelin</b>'s audited,
-          industry-standard building blocks rather than hand-rolled security logic: an ERC-20 reward token
-          with voting and permit extensions, a Governor contract for proposals and votes, and a Timelock
-          that adds a delay before anything governance approves actually executes. Minting the reward token
-          is gated to a single authorised address — never open or public.</p>
+        <div class="card-top"><h3>Claims remember what they depend on</h3></div>
+        <p class="desc">If claim B was only written because claim A was accepted, and the community later
+          votes claim A back down, B doesn't just sit there quietly looking as valid as ever — it automatically
+          flips to "under review," along with anything that depended on B, and anything that depended on that,
+          no matter how many steps removed. Nothing has to notice this by hand; the system walks the whole
+          chain of dependencies for you. Think of it like a family tree: knock out an ancestor, and every
+          descendant is flagged, not just the direct child.</p>
       </article>
       <article class="card" style="--cat:var(--accent)">
-        <div class="card-top"><h3>Off-chain — the service</h3></div>
-        <p class="desc">A .NET service that bridges a "this submission was approved" event to the chain: it
-          calls the token contract to mint the reward, then reads back the recipient's balance to confirm it
-          landed. A library called Nethereum is the only piece that touches the chain directly — it holds a
-          testnet-only signing key and submits the mint transaction — kept behind an interface so the rest of
-          the logic is fully testable without a real network. The full intake/verification pipeline is
-          planned to run on Evaluated Applications' own <b>EvalApp</b> (orchestration) and <b>HoloDb</b>
-          (storage for submissions, decisions, and the reward ledger) in a later milestone.</p>
+        <div class="card-top"><h3>Contradictions get flagged automatically</h3></div>
+        <p class="desc">Claims can be marked as conflicting with each other. If two claims that currently both
+          stand as "accepted" turn out to directly contradict one another, the system surfaces that instead of
+          letting the community's shared record quietly hold two incompatible truths at once.</p>
+      </article>
+      <article class="card" style="--cat:var(--accent)">
+        <div class="card-top"><h3>A currencyless ledger</h3></div>
+        <p class="desc">Instead of one shared token everyone earns, each community member can mint their own
+          personal currency. Whether anyone else accepts your currency is entirely a trust decision the
+          community makes, based on your public track record — not something the platform decides for them.
+          This mirrors a real historical pattern (competing local currencies, market-priced by trust in the
+          issuer) rather than being an invented gimmick.</p>
+      </article>
+      <article class="card" style="--cat:var(--accent)">
+        <div class="card-top"><h3>A reputation layer built from arithmetic, not a hidden score</h3></div>
+        <p class="desc">How often you mint responsibly, how much of your own currency you hoard versus let
+          circulate, how often your trades and mints get disputed and retracted — all of it is plain,
+          hand-checkable arithmetic over the ledger and the claim graph above, like a public credit report
+          built from the numbers, never a black-box number nobody can audit. When a mint gets disputed and
+          voted down, it ripples through to your own reputation automatically, the same way an unwound claim
+          ripples through its dependents.</p>
       </article>
     </div>
-    <p class="lim">The "verification" step in this proof of concept is a manual reviewer action, not an
-      automated fraud-proofing system. Real-world chain-of-custody for physical recycled goods is a genuinely
-      hard, open problem — this build does not claim to solve it, only to demonstrate the token/governance
-      mechanism that would sit downstream of a real verification process.</p>
+    <p class="lim">Neither the dependency-tracking nor the contradiction-flagging is a fully solved research
+      problem — the deeper academic versions of both ideas have been studied since the late 1970s and are
+      still active research — and this project isn't claiming to have solved them. What's built is a working,
+      tested version of the practical, useful slice of each idea.</p>
+  </div>
+</section>
+
+<section class="sec">
+  <div class="wrap">
+    <div class="sec-head"><span class="dot" style="background:var(--accent)"></span><h2>How it's built</h2><p>current work, and what came before it</p></div>
+    <div class="grid">
+      <article class="card" style="--cat:var(--accent)">
+        <div class="card-top"><h3>Current — the claim graph, ledger, and reputation engines</h3></div>
+        <p class="desc">Built off-chain, on Evaluated Applications' own <b>EvalApp</b> (orchestration) and
+          <b>HoloDb</b> (storage) libraries — deliberately no blockchain dependency in this part of the project,
+          at your direction. Underneath the ledger sits a resilient storage layer: records are split into
+          pieces and spread out with a bit of built-in redundancy, the same mathematical technique real-world
+          cloud backup services use (Reed-Solomon erasure coding), so the system can lose a portion of where
+          those pieces are stored and still reconstruct the full, exact record. This was proven, not assumed —
+          pieces were deliberately taken away in testing, and reconstruction was confirmed to work right up to
+          the point it honestly should fail, and to fail loudly, not silently, past that point.</p>
+      </article>
+      <article class="card" style="--cat:var(--accent)">
+        <div class="card-top"><h3>Historical — the token &amp; governance work</h3></div>
+        <p class="desc">The original recycling-token idea — a digital token that could be minted for approved
+          recycling activity, built on <b>OpenZeppelin</b>'s audited, industry-standard building blocks rather
+          than anything custom-written — was built and tested (15 automated tests), along with a small .NET
+          bridge service that could trigger a mint and confirm it landed (9 automated tests). Neither has been
+          deployed to any live test network. This work still exists and still passes its tests; it simply
+          isn't where current effort is going.</p>
+      </article>
+    </div>
+    <p class="lim">"Verification" and moderation remain, and will remain, manual/human decisions where they
+      apply — this project has never claimed and does not claim to have automated trust or fraud detection.
+      Where a human judgement call is needed, a person makes it; the platform just tracks the consequences
+      honestly.</p>
   </div>
 </section>
 
 <section class="sec">
   <div class="wrap">
     <div class="sec-head"><span class="dot" style="background:var(--accent)"></span><h2>Current status</h2><p>honest, as of this preview</p></div>
-    <p class="desc" style="max-width:74ch">The first milestone's code is written and tested — but nothing has
-      touched a public network yet. The reward-token contract (<code>RecycleToken</code>, an ERC-20 with
-      voting and permit extensions on top of OpenZeppelin's audited building blocks) compiles and passes
-      15 out of 15 automated tests, run entirely on a local, throwaway test blockchain. A companion .NET
-      service that can mint the token and read back the resulting balance is built and passes 9 out of 9
-      automated tests of its own, using a stand-in for the real network connection. Both halves are proven
-      to work in isolation. What hasn't happened yet is putting either of them on a real (if free/test-only)
-      public network — that step needs an RPC endpoint and a funded test wallet that only Antonio can
-      supply (see the status brief for exactly what's needed). Once that's in hand, the remaining work is a
-      short live demo, not more engineering.</p>
     <div class="grid">
       <article class="card" style="--cat:var(--accent)">
-        <div class="card-top"><h3>Built and tested (locally)</h3></div>
-        <p class="desc">The reward-token contract with its mint gate (15/15 Foundry tests passing) and a
-          .NET service that can call it and read back a balance (9/9 xunit tests passing, mocked chain
-          client). Neither has touched a real or public test network — both are proven only in local,
-          throwaway test environments so far.</p>
+        <div class="card-top"><h3>Built and tested</h3></div>
+        <p class="desc">The claim graph and its "unwind" behaviour — add claims, link them by dependency, vote
+          on them, retract one, and every downstream claim correctly flips to "under review," including cases
+          where two chains of dependency converge back on the same claim (flagged exactly once, not
+          double-counted). Contradiction-flagging between claims marked as conflicting. The personal-currency
+          ledger — minting, peer-to-peer trading (including paying someone in a third party's currency), and a
+          tamper-evident record. The resilient, redundant-piece storage layer underneath that ledger. The
+          reputation calculations, running against the ledger and claim graph together, with a worked example:
+          disputing someone's past activity visibly and traceably lowers their reputation score, hand-checkable,
+          not a mystery number. All of it is proven end to end with automated tests and runnable demonstrations
+          against real (if locally-hosted) storage — not just described, actually built and exercised.</p>
       </article>
       <article class="card" style="--cat:var(--accent)">
         <div class="card-top"><h3>Not built yet</h3></div>
-        <p class="desc">Deployment to a live public testnet (blocked on an RPC endpoint + funded test
-          wallet from Antonio — nothing we can fabricate), DAO governance contracts (Governor/Timelock),
-          the real submission and verification pipeline, any user-facing interface, and anything
-          resembling a multi-user flow.</p>
+        <p class="desc">No user interface anywhere — everything so far is backend logic, proven with automated
+          tests and command-line demonstrations. No blockchain involvement in the new work — the claim graph,
+          ledger, and reputation layer are deliberately built to run entirely off-chain for now, at your
+          direction. No support yet for separate, independent communities using the platform at the same time.
+          "Verification" and moderation remain manual/human decisions by design, not an automation gap. No
+          growth, referral, or "invite a friend" mechanics anywhere — deliberately out of scope, same as before
+          the pivot.</p>
       </article>
     </div>
   </div>
@@ -116,10 +168,14 @@
   <div class="wrap">
     <div class="stack">
       <h2>Evaluated Applications' role</h2>
-      <p>Evaluated Applications is building RecycleDAO end to end: the on-chain contracts, the off-chain
-        service, and the bridge between them, using its own EvalApp and HoloDb libraries for the off-chain
-        half. This page will be updated as milestones complete — it is only reachable by this direct link
-        and is not linked from, or indexed alongside, the rest of the public Evaluated Applications site.</p>
+      <p>Evaluated Applications is building RecycleDAO end to end: the claim graph, the currencyless ledger, the
+        reputation layer, and the resilient storage underneath it, all proven working off-chain on our own
+        EvalApp and HoloDb libraries. The original token-and-blockchain work is complete for what it covered and
+        still passes its tests, but is not the current focus. The next steps are a real interface for people to
+        interact with this through, and, eventually, a decision about how multiple independent communities
+        would each run their own instance. This page will be updated as milestones complete — it is only
+        reachable by this direct link and is not linked from, or indexed alongside, the rest of the public
+        Evaluated Applications site.</p>
     </div>
   </div>
 </section>

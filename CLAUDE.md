@@ -58,9 +58,21 @@ Tracer + transitively EvalApp/Phasor) currently power a live tool — see "Tools
 the user to share with the client (Antonio) by direct link only. Deliberately NOT in `index.html`'s
 gallery, NOT in `sitemap.xml`, NOT in any nav/footer, and carries `<meta name="robots"
 content="noindex,nofollow">`. Standalone minimal header (brand only, no nav-links) rather than the
-usual site nav, since it isn't an EA product page. Content sourced from RecycleDAO's `CLAUDE.md`
-(no `docs/status-brief.md` existed there yet at render time — re-render from that file instead if/when
-it appears). Re-render on request when the PoC's milestone status changes; never link it from anywhere.
+usual site nav, since it isn't an EA product page. **Re-rendered 2026-09-01** from RecycleDAO's own
+`docs/status-brief.md` (the file didn't exist at first render, when content came from `CLAUDE.md`
+directly — it now exists, was written specifically for this non-technical client audience, and is the
+current source of truth). Content reflects RecycleDAO's 2026-08-29 project pivot from a
+recycling-specific submit/verify/reward token PoC to a general "digital parliament" platform:
+dependency-tracked claims with a retraction cascade (family-tree analogy), pairwise contradiction
+flagging, a currencyless self-minted peer-to-peer ledger (competing-local-currencies analogy), a
+reputation layer built from hand-checkable arithmetic over both (public-credit-report analogy), and a
+Reed-Solomon erasure-coded storage layer underneath the ledger. The original ERC-20/Governor/Timelock
+recycling-token work is now framed as historical (still built, still tested, not being extended), in
+its own "How it's built" card rather than the page's main framing. Same minimal shape as before
+(standalone brand-only header, no nav-links, 4 `.sec` blocks + closing `.stack`, noindex) — only the
+words changed, not the template. Re-render on request when the PoC's milestone status changes (next
+source-of-truth check: RecycleDAO's `docs/status-brief.md`, falling back to its `CLAUDE.md` for any
+structural fact the brief doesn't cover); never link it from anywhere.
 
 ## Design system
 
