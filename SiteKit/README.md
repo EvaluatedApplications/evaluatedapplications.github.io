@@ -1,14 +1,37 @@
-# SiteKit — the reusable core (extraction seed, Phase 0)
+# SiteKit — the reusable core
 
-**Status: inert extraction, not yet consumed anywhere.** Nothing in `site/assets/site.css` or
-`Showroom/wwwroot/**` has been changed to point at these files. This folder exists so the
-brand-agnostic/brand-specific split and the component inventory have a real, versioned home
-*before* the real consumer gets built. **That consumer is now planned as a declarative
-`PageSpec` + an EvalApp-native rendering pipeline (Phase 1, needs `evalapp-owner` design sign-off
-first — Phase 0.5), NOT a generic Razor-Class-Library-plus-static-generator** — read
-`AboutUs/docs/platform-architecture.md` §3-§4.5 for the corrected architecture and why; this
-README/`COMPONENTS.md` stay accurate regardless (the component markup/prop contract and the token
-split are orthogonal to which engine renders them).
+**Status (2026-09-02): `tokens/`/`COMPONENTS.md` are still an inert extraction — nothing in
+`site/assets/site.css` or `Showroom/wwwroot/**` has been changed to point at them yet. But
+`SiteKit.Spec`/`SiteKit.Render`/`SiteKit.Render.PoC` (siblings of `tokens/` in this folder) are now
+REAL, BUILDING, RUNNING code** — the declarative `PageSpec` + fluent builder, and the corrected
+EvalApp-native render pipeline (Phase 0.5's `evalapp-owner` design review is done; Phase 1's core
+is done, one real page proven). None of it is wired into the live site — `deploy.yml` doesn't
+build these projects, `site/**/*.html` is still 100% hand-authored, and the Phase 1 proof writes
+its output to a gitignored `bin/**/out/` folder, never into `site/`. Read
+`AboutUs/docs/platform-architecture.md` §3-§4.5 and §9 for the corrected architecture, why the
+first sketch was wrong, and the full verification record for the one-page port.
+
+## The code (Phase 1, done for one page)
+
+- **`SiteKit.Spec/`** — `PageSpec.cs` (the record types: `PageSpec`/`SeoSpec`/`HeroSpec`/
+  `SectionSpec`/`CardSpec`/`SnippetSpec`/`FooterSpec`/`SiteSpec`/`NavSpec`/`BrandTokens`) +
+  `SiteBuilder.cs` (the fluent builder, styled on EvalApp's own chain shape:
+  `Site.Define(...).Page(slug, title, category, catVar, p => p.Seo(...).Hero(h => ...)
+  .Section(...)).Build(out SiteSpec)`). Zero dependencies.
+- **`SiteKit.Render/`** — `Jobs.cs` (the render-in-progress records), `Composers.cs` (plain
+  string-builder fragment composers, no Razor yet), `WriteStaticFileStep.cs` (the one real side
+  effect, `SideEffectStep<PageRenderJob>` declaring `ResourceKind.DiskIO`), `SiteKitPipeline.cs`
+  (the real `Eval.App(...)` chain: nested `ForEach<SiteRenderJob>` → `ForEach<PageRenderJob>`, one
+  compiled tree, fixed `Tunable.ForCpu()`/`Tunable.Between(1,8,4)` bounds, no `.WithTuning()`).
+  `PackageReference EvaluatedApplications.EvalApp 1.7.0` — NuGet only, same boundary `HoloKernel`
+  already established for AlgFormer.
+- **`SiteKit.Render.PoC/`** — `PhasorPageSpec.cs` (the real `phasor.html` ported verbatim into a
+  `PageSpec` value), `Program.cs` (runs the real pipeline, diffs the output against
+  `site/phasor.html`), `StructuralDiff.cs` (the tag-boundary-tokenizing line diff). Run it:
+  `dotnet run -c Release` from this folder. Verified result: generated output and the hand-
+  authored original are identical once pure whitespace/line-wrap is normalized away (492/492
+  tokens, 0 diff) — see `platform-architecture.md` §9 for the full record and what that claim does
+  and doesn't cover.
 
 ## Why this exists
 

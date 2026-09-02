@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+    <RootNamespace>SiteKit.Render</RootNamespace>
+  </PropertyGroup>
+
+  <!-- NuGet ONLY against the published EvalApp package, never a MonoRepo ProjectReference —
+       same hard boundary HoloKernel already established for AlgFormer (see HoloKernel.csproj).
+       1.7.0 is the version actually published + locally restorable, verified against nuget.org
+       and the local package cache before pinning it here. -->
+  <ItemGroup>
+    <PackageReference Include="EvaluatedApplications.EvalApp" Version="1.7.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\SiteKit.Spec\SiteKit.Spec.csproj" />
+  </ItemGroup>
+
+</Project>

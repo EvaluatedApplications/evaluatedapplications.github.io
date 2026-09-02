@@ -205,51 +205,71 @@ A `SiteSpec` is `IReadOnlyList<PageSpec>` plus site-level facts (brand, nav item
 set). This is genuinely brand/content-agnostic shape-wise — a future client site produces a
 different `SiteSpec` value, never a different record TYPE.
 
-### 3.2 The render engine — an EvalApp pipeline, sketched
+### 3.2 The render engine — an EvalApp pipeline, CORRECTED and now real, compiling, verified code
 
-Two pipeline levels, matching "render one page" and "render a whole site's pages," the second a
-resource-gated fan-out over the first — this is the part that's genuinely, non-contrivedly EvalApp-
-shaped, not a stretch:
+**Superseded 2026-09-02.** The original sketch here (a two-pipeline composition: a standalone
+`ICompiledPipeline<PageRenderJob>` invoked from inside an outer pipeline's `ForEach` lambda) was
+wrong per `evalapp-owner`'s review — see §4.5 for exactly what was wrong and why. It has been
+replaced with real, building, running code, not a further sketch:
+
+- `AboutUs/SiteKit/SiteKit.Spec/` — `PageSpec.cs` (the record types) + `SiteBuilder.cs` (the
+  fluent builder, `Site.Define(...).Page(slug, title, category, catVar, p => p.Seo(...).Hero(h =>
+  ...).Section(...)).Build(out SiteSpec)`). Zero dependencies, no EvalApp reference.
+- `AboutUs/SiteKit/SiteKit.Render/` — `Jobs.cs` (`PageRenderJob`/`SiteRenderJob`/
+  `MultiSiteBuildJob`, the accumulating records), `Composers.cs` (plain string-builder fragment
+  composers — `HeadComposer`/`NavComposer`/`HeroComposer`/`SectionComposer`/`FooterComposer`/
+  `HtmlComposer`; no Razor/`HtmlRenderer` yet, see §4's note on where that still fits),
+  `WriteStaticFileStep.cs` (the one real side effect), `SiteKitPipeline.cs` (`SiteKitPipeline
+  .Build()` — the actual `Eval.App(...)` chain, ONE compiled tree, `ForEach<SiteRenderJob>` nested
+  inside `ForEach<PageRenderJob>`, no `WithTuning()`, `Tunable.ForCpu()` for both fan-outs,
+  `Tunable.Between(1, 8, 4)` for the shared `DiskIO` gate). `PackageReference
+  EvaluatedApplications.EvalApp 1.7.0` (NuGet only, never a MonoRepo `ProjectReference` — same
+  boundary `HoloKernel` already established for AlgFormer), verified this exact version is both
+  published (`api.nuget.org` query) and locally restorable before pinning it.
+- `AboutUs/SiteKit/SiteKit.Render.PoC/` — the Phase 1 proof itself: `PhasorPageSpec.cs` (the real
+  `phasor.html` page transcribed verbatim into a `PageSpec` value via the builder), `Program.cs`
+  (builds the spec, runs `SiteKitPipeline.Build()`, diffs the output against the live
+  `site/phasor.html`), `StructuralDiff.cs` (a small LCS line-diff that tokenizes on tag boundaries
+  so hand-word-wrapped prose and one-line-packed tags don't read as false content differences —
+  see §9 for why that normalization was needed and how it was verified honest, not just
+  convenient).
+
+All three projects build clean (`dotnet build`, 0 errors/0 warnings) against the real, published
+EvalApp package — this is no longer illustrative. The actual pipeline chain, reproduced here
+because it's now truth rather than a sketch (see `SiteKitPipeline.cs` for the authoritative,
+commented version):
 
 ```csharp
-// Level 1 — one page. The record threaded through is the render-in-progress job, not the raw
-// spec (mirrors EvalApp's own pattern of an accumulating data record moving step to step).
-public sealed record PageRenderJob(PageSpec Spec, BrandTokens Brand,
-    string? HeadHtml = null, string? NavHtml = null, string? BodyHtml = null,
-    string? FooterHtml = null, string? FinalHtml = null, string? OutputPath = null,
-    IReadOnlyList<string> Diagnostics = null!);
-
-Eval.App("SiteKit.RenderPage")
-    .DefineDomain("Pages")
-        .DefineTask<PageRenderJob>("RenderPage")
-            .AddStep("RenderHead",   job => job with { HeadHtml   = HeadRenderer.Render(job.Spec.Seo, job.Brand) })
-            .AddStep("RenderNav",    job => job with { NavHtml    = NavRenderer.Render(job.Spec, job.Brand) })
-            .AddStep("RenderHero",   job => job with { BodyHtml   = HeroRenderer.Render(job.Spec.Hero, job.Brand) })
-            .AddStep("RenderSections", job => job with { BodyHtml = job.BodyHtml + SectionsRenderer.Render(job.Spec.Sections, job.Spec.Islands, job.Brand) })
-            .AddStep("RenderFooter", job => job with { FooterHtml = FooterRenderer.Render(job.Spec, job.Brand) })
-            .AddStep("ComposeHtml",  job => job with { FinalHtml  = HtmlComposer.Compose(job) })
-            .AddStep<WriteStaticFileStep>()   // the ONE real side effect — declares ResourceKind.DiskIO,
-        .Run(out ICompiledPipeline<PageRenderJob> renderPage)  // auto-gated via AddStep<TStep>()'s existing mechanism
-    .Build();
-
-// Level 2 — a whole site. Resource-gated fan-out over pages; this is the "render N pages (or many
-// client sites at once) for free" payoff the coordinator asked this design to deliver.
-Eval.App("SiteKit.BuildSite")
-    .WithResource(ResourceKind.Cpu, Tunable.ForCpu())
+Eval.App("SiteKit.BuildSites")
     .WithResource(ResourceKind.DiskIO, Tunable.Between(1, 8, 4))
     .DefineDomain("Sites")
-        .DefineTask<SiteBuildJob>("BuildSite")
-            .ForEach(job => job.Spec.Pages, Tunable.ForItems(),
-                async (page, ct) => await renderPage.RunAsync(new PageRenderJob(page, job.Brand), ct))
-        .Run(out ICompiledPipeline<SiteBuildJob> buildSite)
+        .DefineTask<MultiSiteBuildJob>("BuildSites")
+            .ForEach<SiteRenderJob>(
+                select: job => job.Sites.Select(s => new SiteRenderJob(s)),
+                merge: (job, results) => job with { WrittenFiles = results.SelectMany(r => r.WrittenFiles ?? Array.Empty<string>()).ToList() },
+                collectionName: "sites", parallelism: Tunable.ForCpu(),
+                configure: site => site
+                    .ForEach<PageRenderJob>(
+                        select: s => s.Spec.Pages.Select(p => new PageRenderJob(p, s.Spec.Brand, s.Spec.Nav, s.Spec.OutputRoot)),
+                        merge: (s, results) => s with { WrittenFiles = results.Select(r => r.OutputPath!).ToList() },
+                        collectionName: "pages", parallelism: Tunable.ForCpu(),
+                        configure: page => page
+                            .AddStep("RenderHead",     job => job with { HeadHtml = HeadComposer.Compose(job.Spec, job.Brand) })
+                            .AddStep("RenderNav",      job => job with { NavHtml = NavComposer.Compose(job.Spec, job.Nav, job.Brand) })
+                            .AddStep("RenderHero",     job => job with { BodyFragments = new List<string> { HeroComposer.Compose(job.Spec, job.Brand) } })
+                            .AddStep("RenderSections", job => job with { BodyFragments = (job.BodyFragments ?? Array.Empty<string>()).Concat(SectionComposer.ComposeAll(job.Spec)).ToList() })
+                            .AddStep("RenderFooter",   job => job with { FooterHtml = FooterComposer.Compose(job.Spec.Footer, job.Brand.CompanyName) })
+                            .AddStep("ComposeHtml",    job => job with { FinalHtml = HtmlComposer.Compose(job), OutputPath = Path.Combine(job.OutputRoot, job.Spec.Slug + ".html") })
+                            .AddStep<WriteStaticFileStep>("WriteFile")
+                    )
+            )
+        .Run(out ICompiledPipeline<MultiSiteBuildJob> pipeline)
     .Build();
 ```
 
-**This is illustrative, not verified-compiling code** — I have not confirmed `ForEach`'s exact
-signature supports invoking a nested `ICompiledPipeline<T>.RunAsync` from inside its lambda, nor
-whether that's the idiomatic composition EvalApp expects for "a task made of sub-pipeline-shaped
-work" vs. `AddSubTaskFor`/nested `DefineDomain`. **This exact question is the first line item in
-§4.5's evalapp-owner sign-off list** — flagged, not assumed.
+Note the `BodyFragments` shape: a list accumulated through `RenderHero`/`RenderSections`, joined
+exactly once in `HtmlComposer.Compose` — the direct fix for the O(n²) string-concat bug flagged in
+§4.5, not a cosmetic rename.
 
 ### 3.3 Static emission vs. island mounting — genuinely different pipeline shapes, not the same
 step type wearing two hats
@@ -289,37 +309,56 @@ orchestration is EvalApp:
   step emitted, once a visitor's gesture fires it. Still real, still the right primitive, still
   genuinely outside any pipeline's reach once execution moves to the browser.
 
-## 4.5 Needs `evalapp-owner` sign-off before Phase 1 starts — not decided unilaterally here
+## 4.5 `evalapp-owner` sign-off — RECEIVED 2026-09-02, composition corrected and proven
 
-This design uses EvalApp for something outside its documented consumer set (AlgFormer/HoloDb/
-Tracer/EvalApp.Neural today) — a build-time, batch, page-rendering workload rather than a
-request-driven or long-running data pipeline. That's a real, good-faith engineering fit (§3.2's
-closing paragraph makes the honest case), but it is `evalapp-owner`'s call whether the specific
-composition below is sound, not this agent's to assert unilaterally. Concrete open questions,
-worth a real design conversation before any of Phase 1 is implemented:
+`evalapp-owner`'s verdict: EvalApp is a good, correct fit for this workload — but the original
+§3.2 code sketch below (now replaced, see the corrected version further down) was WRONG and would
+not have compiled. Recorded here so the mistake and the fix are both on the record, not just the
+fix:
 
-1. **Nested-pipeline composition**: is invoking `renderPage.RunAsync(...)` from inside the outer
-   `BuildSite` pipeline's `ForEach` lambda (site → pages, sketched in §3.2) a sound, supported
-   pattern — or does EvalApp expect hierarchical work like this expressed via `AddSubTaskFor`/
-   nested `DefineDomain` instead, with "one page" as a genuine nested task rather than a
-   separately-built pipeline invoked from a closure?
-2. **Record-copy overhead at page-render scale**: `PageRenderJob` above threads through ~6-7
-   sequential `with`-copies per page. Fine at today's scale (17 pages); is it still the idiomatic
-   EvalApp shape at "many client sites, hundreds of pages," or does a lighter accumulate-fragments-
-   then-compose-once shape fit EvalApp's own performance model better at that scale?
-3. **Does `SideEffectStep<T>` + `AddStep<TStep>()` auto-gating fit a static-site-generation file
-   write cleanly**, or is an explicit `.Gate(ResourceKind.DiskIO, ...)`-wrapped lambda the more
-   appropriate shape for "write this one file" specifically?
-4. **Does the tuner's model transfer to a one-shot batch build?** EvalApp's adaptive tuner is
-   described (its own docs) as discovering a steady-state operating point over ongoing traffic; a
-   site build is short-lived and invoked fresh per CI run. Is `Tunable.ForItems()`'s tuning still
-   the right choice here, or does a build-time batch workload want a fixed `Tunable.ForCpu()`
-   bound instead (no adaptive-learning value across a single short run, no persisted-state benefit
-   worth the file I/O)?
+- **`ForEach` has no per-item execution-delegate overload.** Every real overload's last parameter
+  is a build-time step-DSL callback (`Action<ISubTaskBuilder<TItem>>`), compiled once into a
+  reused inner tree — not a `Parallel.ForEachAsync`-style per-item lambda. Verified directly
+  against `EvalApp/Consumer/Fluent/ITaskBuilder.cs`/`ISubTaskBuilder.cs`.
+- **A separately-built `ICompiledPipeline<T>` cannot be plugged in as a step.**
+  `Consumer.ICompiledPipeline<T>` does not implement `IStep<T>`. Calling
+  `otherPipeline.RunAsync(...)` from inside a step body *works* (nothing stops it) but buys
+  nothing and breaks the outer pipeline's own debug/breadcrumb tracing — so it's a real anti-
+  pattern, not just a compile error to route around.
+- **The correct shape**: ONE compiled tree using nested `ForEach`-in-`ForEach` — sites → pages —
+  all builder-authored in a single `Eval.App(...)` chain, no separate pipeline object for
+  per-page rendering. If a standalone single-page pipeline is ever wanted too (e.g. a live-
+  preview/watch mode), share the step *code* (extract render steps as reusable methods/classes
+  used by both trees), never share a pre-compiled pipeline instance.
+- **`Gate(ResourceKind.DiskIO, ...)` genuinely is constructed once and shared** across every page
+  write, site-wide, under this shape — confirmed by `evalapp-owner` and re-confirmed independently
+  below (§9) by reading `Fluent/Builders.cs`: `WithResource(kind, tunable)` on the app builder
+  registers one shared semaphore per `ResourceKind`; every `Gate(kind, ...)`/auto-gated
+  `AddStep<TStep>()` call with that same kind draws from the same pool. This is exactly the
+  resource-gating benefit the whole design exists for, and it holds.
+- **A real, separate perf bug was in the sketch too, unrelated to the pipeline choice**:
+  `RenderSections`'s `job with { BodyHtml = job.BodyHtml + ... }` re-concatenated the whole growing
+  body string every section — O(n²) string-concat-in-a-loop, ordinary C# hygiene, not an EvalApp
+  issue. Fixed by accumulating fragments in a list through the steps and joining once in
+  `ComposeHtml` (see `SiteKit.Render/SiteKitPipeline.cs` — `BodyFragments` is a list the whole way
+  through, `HtmlComposer.Compose` does the one join).
+- **`SideEffectStep<T>` + `AddStep<WriteStaticFileStep>()` was already correct as sketched** — no
+  change needed. Confirmed it auto-gates on the declared `ResourceKind.DiskIO` and works fine
+  nested inside the per-page `ForEach`.
+- **No `.WithTuning()` on this pipeline** — `Tunable.ForCpu()` for the render-step `ForEach`
+  fan-outs, a small fixed `Tunable.Between(1, 8, 4)` for the `DiskIO` write-gate bound. Mirrors an
+  existing HoloDb precedent (a workload whose optimum is already obvious doesn't benefit from
+  per-run adaptive tuning) and sidesteps the separately-logged EvalApp gotcha: no sanctioned
+  non-file-persisting tuning store for CI/ephemeral contexts.
 
-Until these are answered, §3.2's code is a sketch establishing the SHAPE of the recommendation
-(spec-in, EvalApp-orchestrated-render-out, resource-gated per-page fan-out), not an implementation
-plan ready to execute.
+All four of §4.5's original open questions are answered by the above: (1) nested `ForEach`, not
+`AddSubTaskFor` and not a plugged-in `ICompiledPipeline`; (2) the O(n²) risk was real but was in
+the sketch's string handling, not EvalApp's record-copy cost, and is fixed; (3) `AddStep<TStep>()`
+auto-gating is correct as-is; (4) fixed bounds, no `WithTuning()`.
+
+§3.2's code is no longer a sketch — see the corrected, real version there, backed by the building/
+running code in `SiteKit.Spec`/`SiteKit.Render`/`SiteKit.Render.PoC` and the verification record
+in §9.
 
 ## 5. AboutUs-specific vs. reusable core — the concrete split
 
@@ -343,32 +382,40 @@ re-deriving per client.
 `Showroom/wwwroot/css/*` remain the live, load-bearing files, unchanged. Zero rendering risk —
 verified by NOT touching either.
 
-**Phase 0.5 — evalapp-owner design review (not started, blocks Phase 1).** Coordinator dispatches
-§4.5's four open questions to `evalapp-owner` as a real design conversation, not a rubber stamp.
-Output: a confirmed (or corrected) shape for `PageRenderJob`/the two pipeline levels/the
-`WriteStaticFileStep` gating choice/the tuning-vs-fixed-bound call for a build-time batch workload.
-Nothing below is implemented until this lands — a wrong composition pattern baked into Phase 1
-would be expensive to unwind later.
+**Phase 0.5 — evalapp-owner design review — DONE 2026-09-02.** Verdict: EvalApp is a good, correct
+fit; the original §3.2 sketch's composition was wrong (see §4.5 for exactly what and why) and has
+been corrected. `WriteStaticFileStep`'s auto-gating was confirmed correct as originally sketched.
 
-**Phase 1 — `SiteKit.Spec` + `SiteKit.Render`, real code (not started).** Build the record types +
-fluent builder (`SiteKit.Spec`, no EvalApp dependency — pure data + a builder, same shape as any
-other C# fluent API) and the EvalApp-based render pipeline (`SiteKit.Render`, `NuGet`-only against
-`EvalApp` + `Microsoft.AspNetCore.Components.Web`, per Phase 0.5's confirmed shape). Port ONE
-existing page (recommend `phasor.html` — small, canonical, exercises every component) through the
-new pipeline and diff its output against the hand-written original before porting further pages.
-Rewire `site/assets/site.css` to `@import` `SiteKit/tokens/core.css` + `brand-ea.css` instead of
-restating the values (mechanical, low-risk, independent of the render-engine work, can land early).
-Port `Showroom/Layout/MainLayout.razor` onto the shared `SiteKit.Components` (`<SiteNav>`/
-`<SiteFooter>`/`<BrandMark>`) via `ProjectReference` (the exact pattern `HoloKernel` already proved
-works for Showroom). This is the pass that actually closes the brand-mark-sweep and
-hex-triplication pains for good, structurally, not by discipline — and replaces "website-owner
-hand-copies an existing page's HTML" with "website-owner authors/maintains `PageSpec` values and
-verifies pipeline output."
+**Phase 1 — `SiteKit.Spec` + `SiteKit.Render`, real code — CORE DONE 2026-09-02, one page proven.**
+Built: the record types + fluent builder (`SiteKit.Spec`, zero dependencies), the corrected
+EvalApp-based render pipeline (`SiteKit.Render`, `NuGet`-only against `EvaluatedApplications
+.EvalApp` 1.7.0 — no `Microsoft.AspNetCore.Components.Web` dependency yet, since Phase 1's fragment
+composers are plain string builders, not Razor; that upgrade is still available later without
+changing the pipeline shape, see §4). Ported `phasor.html` (small, canonical, exercises hero
+facts/install/CTAs/related pills, prose section, two card-grid sections (one with a `.lim`
+caveat), a six-card grid, a two-snippet code section, and a closing `.stack` CTA section — a good
+cross-section of the component inventory) through the real pipeline in
+`SiteKit.Render.PoC/PhasorPageSpec.cs` + `Program.cs`, and diffed the output against the live
+`site/phasor.html`. **Result: after normalizing away pure whitespace/line-wrap differences (the
+hand-authored file hand-wraps long prose across physical lines and packs some tags on one line;
+the generator always emits one logical element per line), the generated page and the hand-authored
+original are IDENTICAL — 492 normalized tokens each, 0 additions, 0 removals.** A second,
+independent check (strip ALL whitespace from both raw files, byte-compare) also returned equal:
+12,606 non-whitespace characters, identical. See §9 for the full verification record, including
+what the normalization does and doesn't paper over (documented, not asserted). **This is real
+proof the composition works and reproduces a real page exactly** — not a toy example. Still open
+before this phase is fully "done": `site/assets/site.css` has NOT yet been rewired to `@import`
+`SiteKit/tokens/*.css` (mechanical, low-risk, independent of the render-engine work — a fast
+follow, not attempted this pass to keep this pass's blast radius to "new code only, nothing live
+touched"), and `Showroom/Layout/MainLayout.razor` has not been touched (that's the
+`showroom-owner` half of Phase 1, still not dispatched).
 
-**Phase 2 — full catalogue migration (not started, needs Phase 1 parity proof).** Once `phasor.html`
-round-trips correctly through the real pipeline, migrate the rest of the 17-page catalogue from
-hand-written HTML to `PageSpec` values + generated output, one page (or a small batch) at a time,
-each verified against the hand-written original before moving on.
+**Phase 2 — full catalogue migration (not started, needs Phase 1's parity proof — now exists).**
+`phasor.html` has round-tripped correctly through the real pipeline (§9). Migrate the rest of the
+17-page catalogue from hand-written HTML to `PageSpec` values + generated output, one page (or a
+small batch) at a time, each verified against the hand-written original the same way before moving
+on. Nothing in `site/` itself changes until this phase actually runs — Phase 1's output lives only
+in `SiteKit.Render.PoC/bin/**/out/`, gitignored, never written into `site/`.
 
 **Phase 3 — islands (not started, needs Phase 2).** Pick ONE real, justified island (the
 `algformer.html`-to-Prism "you be the judge" content, already written once and reverted for
@@ -451,6 +498,60 @@ don't import them, don't change `depth.css` or `MainLayout.razor` because of thi
 eager-load the Blazor runtime, don't treat this hand-off as authorization to start a big rewrite —
 Phase 1 needs explicit coordinator dispatch with both agents' scope agreed, per this repo's
 existing cross-cutting-change discipline.
+
+## 9. Verification record — the Phase 1 proof, in full
+
+Run 2026-09-02, from `AboutUs/SiteKit/SiteKit.Render.PoC`:
+
+```
+dotnet build -c Release      # SiteKit.Spec, SiteKit.Render, SiteKit.Render.PoC — 0 warnings, 0 errors
+dotnet run -c Release
+```
+
+Output:
+```
+Pipeline succeeded. Wrote 1 file(s):
+  ...\SiteKit.Render.PoC\bin\Release\net10.0\out\phasor.html
+
+=== Structural diff (whitespace-normalized: trim each line, drop blank lines) ===
+
+IDENTICAL after whitespace normalization (492 non-blank lines each). No content or structural
+differences found.
+```
+
+A second, independent, cruder check (not via the diff tool at all — raw PowerShell, both files'
+ENTIRE text with all whitespace runs collapsed to nothing, then a case-sensitive string compare):
+`orig stripped length: 12606`, `gen stripped length: 12606`, `equal: True`. Two different
+comparison methods, same conclusion — not relying on the diff tool being honest with itself.
+
+**What "IDENTICAL after whitespace normalization" actually means, stated precisely so it isn't
+oversold**: the `StructuralDiff` normalizer tokenizes both files on tag boundaries (splits right
+before `<` and right after `>`), then collapses internal whitespace (including embedded newlines)
+to a single space per token and drops empty tokens. This intentionally erases exactly two classes
+of difference and no others: (1) which physical line a hand-typed author chose to word-wrap long
+prose onto, and (2) whether several short tags were packed onto one physical source line or given
+one line each. It does NOT erase attribute differences (a changed `href`, a missing `style=`, a
+different class), tag differences, tag order, or text content differences — those would all show
+up as a token substitution and be reported as `-`/`+` lines, because each token is either one
+complete tag (with all its attributes) or one text run, so any change inside either is a changed
+token. The all-whitespace-stripped byte comparison is the belt-and-braces check that would catch
+anything the tokenizer-based diff might in principle miss (e.g. a text difference that happened to
+still normalize to the same token count) — it found none. Between the two, the honest claim is:
+**the generated `phasor.html` carries the exact same tags, attributes, and text content, in the
+exact same order, as the hand-authored original.** The only real difference between the two files,
+found and named rather than hidden, is presentational whitespace an author typed by hand and a
+generator does not reproduce byte-for-byte — which is expected and fine, not a defect.
+
+**What this does and does not prove about the wider plan**: it proves the corrected `SiteKit.Spec`
+record shape can faithfully hold one real page's content, and the corrected `SiteKit.Render`
+EvalApp pipeline can faithfully turn that data back into the exact markup a human previously hand-
+typed — for one page, exercising most (not all) of the current component inventory (no
+`RelatedAllHref` override was exercised since Phasor uses the default; no per-card `CatOverride`
+was exercised since Phasor's cards are all one category; islands are untouched, correctly, since
+Phasor doesn't have one — see §3.3). It does NOT yet prove the pipeline scales cleanly to the
+other 16 pages' component combinations (the HoloDb hub's race-demo/benchmark tables, the `.prose`/
+`.toc` manual template, the OS-chrome taskbar/dock on non-plain pages) — that's exactly Phase 2's
+job, one page/batch at a time, each checked the same way.
 
 ---
 

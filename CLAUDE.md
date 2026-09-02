@@ -47,13 +47,25 @@ Non-content: `Showroom/` (Blazor WASM app, publishes to `/tools`) — a SEPARATE
 static content pages; don't fold tool code into `site/`. `.github/workflows/deploy.yml` builds
 `Showroom` and copies `site/` + the published `wwwroot` into one `_site/` artifact for Pages.
 
-**`SiteKit/` (NEW 2026-09-02, Phase 0 of the reusable-toolkit plan — see "Platform initiative"
-below + `docs/platform-architecture.md`)**: `tokens/core.css`+`brand-ea.css` (value-preserving
-extraction of `site.css`'s `:root`, split brand-agnostic/brand-specific) + `COMPONENTS.md` (the
-full reusable-component inventory) + `README.md`. **INERT** — not referenced by `deploy.yml`, not
-`<link>`ed from any page, not part of the deployed site. Don't delete it as dead weight; it's the
-seed for Phase 1 (a real Razor Class Library both `site/` generation and `Showroom/` would
-consume).
+**`SiteKit/` (2026-09-02, the reusable-toolkit plan — see "Platform initiative" below +
+`docs/platform-architecture.md`)**: `tokens/core.css`+`brand-ea.css` (value-preserving extraction
+of `site.css`'s `:root`) + `COMPONENTS.md` (component inventory) + `README.md` — still INERT
+(Phase 0), not referenced by `deploy.yml`, not `<link>`ed from any page. **Now also 3 real C#
+projects (Phase 1 core, done for one page 2026-09-02)**: `SiteKit.Spec/` (the declarative
+`PageSpec` record types + fluent builder, zero deps), `SiteKit.Render/` (the EvalApp-native render
+pipeline — `PackageReference EvaluatedApplications.EvalApp 1.7.0`, NuGet-only, same boundary
+`HoloKernel` uses for AlgFormer), `SiteKit.Render.PoC/` (ports `phasor.html` through the real
+pipeline and diffs the output against the live file — verified IDENTICAL after normalizing away
+pure whitespace/line-wrap, full record in `platform-architecture.md` §9). **Still fully INERT
+w.r.t. the deployed site**: `deploy.yml` doesn't build these projects, no `site/**/*.html` was
+touched, the PoC's generated output lands only in a gitignored `bin/**/out/` folder. `evalapp-
+owner`'s design review (Phase 0.5) is done — the original two-pipeline sketch in
+`platform-architecture.md` §3.2 was wrong (wouldn't compile: `ForEach` takes a build-time step-DSL
+callback, not a per-item delegate; `ICompiledPipeline<T>` isn't a valid step) and has been replaced
+with real, building, running code: one compiled tree, nested `ForEach<SiteRenderJob>` inside
+`ForEach<PageRenderJob>` (sites → pages), fixed `Tunable` bounds, no `.WithTuning()`. Next up is
+Phase 2 (migrate the rest of the 17-page catalogue the same page-by-page verified way) — not
+started, don't treat this pass as authorization to start touching `site/**/*.html` for real yet.
 
 **All 11 current MonoRepo packages have a page**: Phasor, EvalApp, EvalApp.Neural, AlgFormer
 (+HoloFormer deep-dive), AlgFormer.Gpu, HoloDb (+benchmarks), HoloDb.Protocol, HoloDb.Client,
