@@ -22,6 +22,8 @@ public interface IPageBuilder
     IPageBuilder Hero(Action<IHeroBuilder> configure);
     IPageBuilder Section(SectionSpec section);
     IPageBuilder Footer(FooterSpec footer);
+    /// <summary>Verbatim page-local `&lt;style&gt;...&lt;/style&gt;` block — see PageSpec.PageStyleHtml.</summary>
+    IPageBuilder PageStyle(string styleBlockHtml);
 }
 
 public interface IHeroBuilder
@@ -30,11 +32,13 @@ public interface IHeroBuilder
     IHeroBuilder Headline(string text);
     IHeroBuilder Lede(string text);
     IHeroBuilder Fact(string html);
-    IHeroBuilder Install(string command);
+    IHeroBuilder Install(string command, int maxWidthPx = 520);
     IHeroBuilder Cta(string text, string href, CtaStyle style, bool externalNewTab = false);
     IHeroBuilder Related(string text, string href, bool externalNewTab = false);
     IHeroBuilder BarTitle(string title);
     IHeroBuilder PrismBeam();
+    /// <summary>Optional `.lim` caveat paragraph, rendered after the CTA row and before Related — see HeroSpec.LimHtml.</summary>
+    IHeroBuilder Lim(string html);
 }
 
 internal sealed class SiteBuilder : ISiteBuilder
@@ -75,6 +79,7 @@ internal sealed class PageBuilder : IPageBuilder
     private HeroSpec? _hero;
     private readonly List<SectionSpec> _sections = new();
     private FooterSpec? _footer;
+    private string? _pageStyleHtml;
 
     public PageBuilder(string slug, string title, string category, string categoryDotVar)
     {
@@ -95,12 +100,14 @@ internal sealed class PageBuilder : IPageBuilder
 
     public IPageBuilder Footer(FooterSpec footer) { _footer = footer; return this; }
 
+    public IPageBuilder PageStyle(string styleBlockHtml) { _pageStyleHtml = styleBlockHtml; return this; }
+
     public PageSpec Build()
     {
         if (_seo is null) throw new InvalidOperationException($"Page '{_slug}': .Seo(...) is required.");
         if (_hero is null) throw new InvalidOperationException($"Page '{_slug}': .Hero(...) is required.");
         if (_footer is null) throw new InvalidOperationException($"Page '{_slug}': .Footer(...) is required.");
-        return new PageSpec(_slug, _title, _category, _categoryDotVar, _seo, _hero, _sections, _footer);
+        return new PageSpec(_slug, _title, _category, _categoryDotVar, _seo, _hero, _sections, _footer, _pageStyleHtml);
     }
 }
 
@@ -108,7 +115,9 @@ internal sealed class HeroBuilder : IHeroBuilder
 {
     private string _eyebrow = "", _headline = "", _lede = "", _barTitle = "";
     private string? _install;
+    private int _installMaxWidthPx = 520;
     private bool _prismBeam;
+    private string? _limHtml;
     private readonly List<FactChip> _facts = new();
     private readonly List<CtaLink> _ctas = new();
     private readonly List<RelatedLink> _related = new();
@@ -117,13 +126,14 @@ internal sealed class HeroBuilder : IHeroBuilder
     public IHeroBuilder Headline(string text) { _headline = text; return this; }
     public IHeroBuilder Lede(string text) { _lede = text; return this; }
     public IHeroBuilder Fact(string html) { _facts.Add(new FactChip(html)); return this; }
-    public IHeroBuilder Install(string command) { _install = command; return this; }
+    public IHeroBuilder Install(string command, int maxWidthPx = 520) { _install = command; _installMaxWidthPx = maxWidthPx; return this; }
     public IHeroBuilder Cta(string text, string href, CtaStyle style, bool externalNewTab = false)
     { _ctas.Add(new CtaLink(text, href, style, externalNewTab)); return this; }
     public IHeroBuilder Related(string text, string href, bool externalNewTab = false)
     { _related.Add(new RelatedLink(text, href, externalNewTab)); return this; }
     public IHeroBuilder BarTitle(string title) { _barTitle = title; return this; }
     public IHeroBuilder PrismBeam() { _prismBeam = true; return this; }
+    public IHeroBuilder Lim(string html) { _limHtml = html; return this; }
 
-    public HeroSpec Build() => new(_eyebrow, _headline, _lede, _facts, _install, _ctas, _related, _barTitle, _prismBeam);
+    public HeroSpec Build() => new(_eyebrow, _headline, _lede, _facts, _install, _ctas, _related, _barTitle, _prismBeam, LimHtml: _limHtml, InstallMaxWidthPx: _installMaxWidthPx);
 }

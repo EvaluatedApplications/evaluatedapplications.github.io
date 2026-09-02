@@ -636,6 +636,91 @@ over one page's symptom.
 
 ---
 
+## 11. Verification record — Phase 2's second batch (6 more pages), 2026-09-02
+
+Run from `AboutUs/SiteKit/SiteKit.Render.PoC` after the nav-item-count question above was
+resolved (this batch was dispatched as the follow-on task in the same session):
+
+```
+dotnet build -c Release      # SiteKit.Spec, SiteKit.Render, SiteKit.Render.PoC — 0 warnings, 0 errors
+dotnet run -c Release
+```
+
+`evalapp.html`, `holovoxel.html`, `holodb-client.html`, `holodb-protocol.html`,
+`evalapp-neural.html`, `algformer-gpu.html` were each transcribed verbatim into a `PageSpec`
+(`EvalAppPageSpec.cs`, `HoloVoxelPageSpec.cs`, `HoloDbClientPageSpec.cs`,
+`HoloDbProtocolPageSpec.cs`, `EvalAppNeuralPageSpec.cs`, `AlgFormerGpuPageSpec.cs`), added to the
+same `Program.cs` site build alongside Phase 1/2's first 3 pages, and run through one
+`SiteKitPipeline.Build()` call together — 9 pages, 1 pipeline, 1 run. All 9 verified IDENTICAL
+under both checks (tag-boundary structural diff AND the independent all-whitespace-stripped byte
+compare):
+
+```
+=== evalapp.html === IDENTICAL (639 lines). Byte compare: 16628=16628, equal=True
+=== holovoxel.html === IDENTICAL (457 lines). Byte compare: 13180=13180, equal=True
+=== holodb-client.html === IDENTICAL (423 lines). Byte compare: 10512=10512, equal=True
+=== holodb-protocol.html === IDENTICAL (399 lines). Byte compare: 10427=10427, equal=True
+=== evalapp-neural.html === IDENTICAL (420 lines). Byte compare: 10295=10295, equal=True
+=== algformer-gpu.html === IDENTICAL (386 lines). Byte compare: 9785=9785, equal=True
+ALL PAGES VERIFIED IDENTICAL. (all 9, including the 3 from the prior batch)
+```
+
+**This batch was deliberately picked to surface every remaining composer gap in one pass rather
+than one new feature per page** (per the dispatching task's own instruction). Real, additive
+(non-breaking) additions to `SiteKit.Spec`/`SiteKit.Render`, each proven necessary by an actual
+page rather than speculated:
+- **`HeroSpec.LimHtml`** (+ `IHeroBuilder.Lim(...)`) — a `.lim` caveat paragraph between the CTA
+  row and the Related pills. First needed by `evalapp.html` and `holodb-protocol.html`.
+- **`SectionSpec.StackFlow`** (new `SectionKind`) — a `.sec-head`-titled section whose body is a
+  `.stack` holding one prose paragraph plus a `.flow` diagram row. Needed by exactly one section,
+  `evalapp.html`'s "What you'd otherwise assemble" (`SemaphoreSlim + MediatR + ... = EvalApp`).
+  Deliberately kept distinct from `ClosingStack` (no `.sec-head`, always the page's final CTA).
+- **`SectionSpec.Raw`** (new `SectionKind`, + `RawBodyHtml`) — an escape hatch that still gets
+  standard `.sec`/`.wrap`/`.sec-head` framing but drops a raw HTML blob as the body. Needed by
+  exactly one section site-wide so far, `evalapp.html`'s "None of this is invented from nothing"
+  `<table>` (idea-provenance vs. feature). Deliberately NOT a typed table spec — one real use
+  doesn't earn its own schema yet; revisit if a second table-shaped section ever turns up.
+- **`SectionSpec.ExtraHtml`** (on the existing `Prose` kind) — raw HTML inserted after a Prose
+  section's own `<p class="desc">` and before its optional `.lim`. Needed by `holovoxel.html`'s
+  "What the same engine output can look like" section (the before/after `.shots` figure grid).
+- **`SnippetSpec.DescBeforeHtml`** — a description paragraph emitted immediately BEFORE its own
+  snippet, as opposed to the pre-existing `DescAfterHtml` (emitted after, reading as an intro to
+  the NEXT snippet even though attached to the previous one). Needed by `holodb-protocol.html`'s
+  "A minimal example," where every snippet — including the first — gets its own lead-in line, a
+  shape `DescAfterHtml` alone can't express (there's no prior snippet for the first lead-in to
+  attach "after"). `holodb-client.html`/`evalapp-neural.html` both re-confirmed the pre-existing
+  `DescAfterHtml` shape still holds unchanged on 2 more pages, no regression.
+- **`PageSpec.PageStyleHtml`** (+ `IPageBuilder.PageStyle(...)`) — a verbatim page-local
+  `<style>...</style>` block, emitted in `<head>` right after the shared stylesheet `<link>` and
+  before the JSON-LD `<script>`. Needed by `holovoxel.html`'s `.shots` grid CSS (one of only 3
+  pages site-wide that still carries page-local CSS — the other 2, `holodb.html`/`holodb/manual/
+  index.html`, are `.prose`-template pages not yet attempted through this pipeline).
+- **`HeroSpec.InstallMaxWidthPx`** (default `520`, + `IHeroBuilder.Install(cmd, maxWidthPx:)`) —
+  the ONE real bug this batch's diff caught, not a speculative addition: `HeroComposer` hardcoded
+  `.install`'s `max-width` to `520px`, but `holodb-protocol.html`/`algformer-gpu.html` (both with
+  longer NuGet package names) actually use `560px` on the live site so the chip doesn't wrap. The
+  first run of this batch caught it as a genuine 1-line diff on both pages (`orig=10427 chars,
+  gen=10427, equal=False` etc.) — not silently accepted, not special-cased per page in the
+  composer; fixed as a proper parameter, re-verified clean on the second run. This is exactly the
+  kind of thing page-by-page verification against the real files exists to catch, as opposed to
+  trusting the composer by inspection (same lesson `prose.html` already taught Phase 2's first
+  batch with the `.hero-content` gap).
+
+**`holodb-client.html`, `evalapp-neural.html`, `algformer-gpu.html` needed ZERO new composer
+capability** — deliberately included as controls proving the by-then-larger composer surface
+already generalizes to a 4th/5th/6th/7th/8th/9th page, not just re-exercising known-good paths on
+pages picked to need nothing new. `algformer-gpu.html` in particular is the first page site-wide
+with zero Prose/Snippets/StackFlow/Raw sections at all — three plain `CardGrid`s only — proving
+that shape is valid too.
+
+**Still unattempted, same status as before this batch** (`deploy.yml` untouched, no
+`site/**/*.html` PAGE markup touched, generated output still lands only in a gitignored
+`bin/**/out/` folder): the HoloDb hub/benchmarks/manual, `algformer.html`'s `.card.tool` gallery
+shape, `holoformer.html`'s bespoke concept-card layout, and `articles.html`/`articles/_example.html`'s
+`.prose`/`.toc` template. 9 of 17 routable pages now proven; 8 remain, all needing new composer
+support before a `PageSpec` can even be attempted for them, per the same discipline this whole
+doc has followed from Phase 1 onward.
+
 ## Open questions, genuinely unresolved (flagged, not decided here)
 
 - Should Showroom's OS-chrome-equivalent (a taskbar/dock shell for tool pages) exist at all, or is
@@ -646,5 +731,27 @@ over one page's symptom.
   verbatim, or whether client content needs a richer schema (sections, ordering, feature lists as
   structured data rather than prose the renderer re-parses). Phase 2's actual generator design
   should answer this with real code, not guessed here.
-- The nav-item-count drift (Showroom 7 vs. static site 3-6) flagged above needs an actual decision
-  before Phase 1's `<SiteNav>` component can ship an honest single API — noted, not resolved.
+- **RESOLVED 2026-09-02 — the nav-item-count/redundant-`Tools`-link question, direct user
+  decision**: "I prefer the HTML versions, as the Blazor-only pages are for apps, not sharing
+  info." This hardens the existing content/app split (16 static pages + 4 Blazor tool routes)
+  from an observation into a firm principle: the static HTML site is the canonical home for ALL
+  informational/shareable content; Showroom exists ONLY for interactive tool apps, never for
+  restating info content. Practical implication: **do not build a shared `<SiteNav Items="..."/>`
+  component that lists the same items in both places.** The two navs are independently scoped and
+  don't need matching item counts:
+  - The static site's nav stays exactly what it already is (`Home · Packages · NuGet` + 0-3
+    page-appropriate extras, see the Navigation section of `AboutUs/CLAUDE.md`) — `Home` already
+    IS the tools front door post-pivot, so there's nothing to add here on the user's account of
+    "a link out to Tools."
+  - Showroom's own nav (currently `Home · Packages · Tools · NuGet`, 4 items, per
+    `SiteKit/COMPONENTS.md` entry 2) is `showroom-owner`'s own call to resolve — including the
+    already-flagged `Tools` link redundancy (it points at `Home.razor`, which already IS the tool
+    gallery and is already the first nav item) — on Showroom's own terms, not by forcing parity
+    with the static site's count. The coordinator is messaging showroom-owner the same resolution
+    separately so both sides can close independently.
+  This was a real blocker specifically for a SHARED component's single API; it is not a blocker
+  for either site's own nav shape, and neither nav needed to change as a result of resolving it.
+  `SiteKit/COMPONENTS.md` entry 2 updated to record this (see that file for the closing note) —
+  no unified `<SiteNav>` component is planned; each repo keeps rendering its own nav markup
+  (Showroom hand-typed Razor, the static site via `SiteKitPipeline`'s `NavComposer` once/if a
+  page is cut over) from its own `NavSpec`-shaped item list.

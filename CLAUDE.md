@@ -59,22 +59,57 @@ ea.css`'s chord rule had picked up a stray `--glow-near` override the live site 
 `@import`'s relative path resolves to `/SiteKit/tokens/...` once served from the Pages artifact
 root, so this copy is load-bearing, not cosmetic (without it the import 404s live and every custom
 property on the deployed site goes undefined). Full record: `platform-architecture.md` §10.
-**3 real C# projects, Phase 1 core + Phase 2 in progress (3 of 17 pages proven 2026-09-02)**:
+**3 real C# projects, Phase 1 core + Phase 2 in progress (9 of 17 pages proven 2026-09-02)**:
 `SiteKit.Spec/` (the declarative `PageSpec` record types + fluent builder, zero deps —
-`CardSpec` gained `CatRootOverride` this pass for the `--cat-root` chord companion prop),
+`CardSpec` gained `CatRootOverride` in the Phase-1 pass; the second Phase-2 batch, same day, added
+`HeroSpec.LimHtml`+`InstallMaxWidthPx`, `SnippetSpec.DescBeforeHtml`, `SectionSpec.ExtraHtml` (on
+`Prose`), two new `SectionKind`s `StackFlow`/`Raw`, and `PageSpec.PageStyleHtml` — see below),
 `SiteKit.Render/` (the EvalApp-native render pipeline — `PackageReference
 EvaluatedApplications.EvalApp 1.7.0`, NuGet-only, same boundary `HoloKernel` uses for AlgFormer;
-`HeroComposer` had a real bug fixed this pass, see below), `SiteKit.Render.PoC/` (ports
-`phasor.html`+`prose.html`+`tracer.html` through the real pipeline in one run and diffs each output
-against its live file — all 3 verified IDENTICAL after normalizing away pure whitespace/line-wrap
-AND under an independent whitespace-stripped byte compare, full record in
-`platform-architecture.md` §9/§10). Prose/Tracer were deliberately picked to be structurally
-DIFFERENT from Phasor (a real two-tone `CatOverride`+`CatRootOverride` chord, `Category` !=
-`CategoryDotVar`, no `.prism-beam`, no `ClosingStack`, a bare single-snippet Snippets section, a
-CardGrid section that also carries a `.lim`) — doing so surfaced a real `HeroComposer` bug (it
-emitted the `.hero-content` z-index wrapper unconditionally; the live site only nests it on the 5
-pages that also carry `.prism-beam` — Phasor alone, being one of those 5, could never have caught
-this), now fixed and conditional on `HeroSpec.ShowPrismBeam`, re-verified against all 3 pages.
+`HeroComposer` had two real bugs fixed across the two passes, see below), `SiteKit.Render.PoC/`
+(ports 9 pages through the real pipeline in ONE run and diffs each output against its live file —
+all 9 verified IDENTICAL after normalizing away pure whitespace/line-wrap AND under an independent
+whitespace-stripped byte compare, full record in `platform-architecture.md` §9/§10/§11).
+
+**Phase 1 + Phase 2's first batch (2026-09-02, morning)**: `phasor.html` (Phase 1), then
+`prose.html`+`tracer.html`, deliberately picked to be structurally DIFFERENT from Phasor (a real
+two-tone `CatOverride`+`CatRootOverride` chord, `Category` != `CategoryDotVar`, no `.prism-beam`,
+no `ClosingStack`, a bare single-snippet Snippets section, a CardGrid section that also carries a
+`.lim`) — doing so surfaced a real `HeroComposer` bug (it emitted the `.hero-content` z-index
+wrapper unconditionally; the live site only nests it on the 5 pages that also carry `.prism-beam`
+— Phasor alone, being one of those 5, could never have caught this), now fixed and conditional on
+`HeroSpec.ShowPrismBeam`.
+
+**Phase 2's second batch (2026-09-02, afternoon)**: `evalapp.html`, `holovoxel.html`,
+`holodb-client.html`, `holodb-protocol.html`, `evalapp-neural.html`, `algformer-gpu.html` — chosen
+to surface every remaining composer gap in one pass. New, additive `SiteKit.Spec`/`SiteKit.Render`
+capabilities, each proven necessary by an actual page: `HeroSpec.LimHtml` (a `.lim` aside between
+the CTA row and Related pills — `evalapp.html`, `holodb-protocol.html`), `SectionSpec.StackFlow` (a
+`.sec-head` section whose body is a `.stack` + `.flow` diagram row, distinct from `ClosingStack` —
+`evalapp.html`'s "What you'd otherwise assemble"), `SectionSpec.Raw` (a `.sec-head`-framed raw-HTML
+escape hatch, not yet a typed table spec — `evalapp.html`'s "None of this is invented from nothing"
+`<table>`), `SectionSpec.ExtraHtml` on `Prose` (raw HTML between the prose paragraph and `.lim` —
+`holovoxel.html`'s `.shots` before/after figure grid), `SnippetSpec.DescBeforeHtml` (a lead-in
+BEFORE its own snippet, vs. the pre-existing `DescAfterHtml` which reads as introducing the NEXT
+one — `holodb-protocol.html`, where even the FIRST snippet needs a lead-in), and
+`PageSpec.PageStyleHtml` (a verbatim page-local `<style>` block in `<head>` — `holovoxel.html`'s
+`.shots` CSS, one of only 3 pages site-wide still carrying page-local CSS). **One real bug the diff
+itself caught** (not speculative): `HeroComposer` hardcoded `.install`'s `max-width` to `520px`;
+`holodb-protocol.html`/`algformer-gpu.html` actually use `560px` on the live site (longer NuGet
+package names) — the first run reported a genuine 1-line diff on both, fixed via a new
+`HeroSpec.InstallMaxWidthPx` parameter (default 520), re-verified clean. `holodb-client.html`/
+`evalapp-neural.html`/`algformer-gpu.html` needed ZERO new capability — deliberate controls proving
+the by-then-larger surface already generalizes; `algformer-gpu.html` is also the first page
+site-wide with zero Prose/Snippets/StackFlow/Raw sections (3 plain CardGrids only), proving that
+shape is valid too.
+
+**Nav-item-count question (Showroom 4 vs. static site 3-6), RESOLVED 2026-09-02, direct user
+decision**: "I prefer the HTML versions, as the Blazor-only pages are for apps, not sharing info" —
+hardens content/app as a firm split. No shared `<SiteNav>` component is planned; the two navs stay
+independently scoped (full record: `docs/platform-architecture.md`'s "Open questions" section,
+`SiteKit/COMPONENTS.md` entry 2). Nothing about this site's own nav changed as a result — `Home`
+already is the tools front door post-pivot.
+
 **Still fully INERT w.r.t. the deployed site's PAGES** (the tokens/CSS half is live, see above, but
 `site/**/*.html` itself is untouched): `deploy.yml` doesn't build `SiteKit.Spec`/`SiteKit.Render`/
 `SiteKit.Render.PoC`, no page markup was touched, the PoC's generated output lands only in a
@@ -83,11 +118,12 @@ two-pipeline sketch in `platform-architecture.md` §3.2 was wrong (wouldn't comp
 a build-time step-DSL callback, not a per-item delegate; `ICompiledPipeline<T>` isn't a valid step)
 and has been replaced with real, building, running code: one compiled tree, nested
 `ForEach<SiteRenderJob>` inside `ForEach<PageRenderJob>` (sites → pages), fixed `Tunable` bounds,
-no `.WithTuning()`. Next up: more of the remaining 14 pages the same verified way — the holodb hub/
-benchmarks/manual, `algformer.html`'s `.card.tool` gallery shape, and any bespoke local-`<style>`
-page will need new composer support first, not just a new `PageSpec` value. Don't treat this pass
-as authorization to start touching `site/**/*.html` PAGE markup for real yet — that's still a later,
-explicit cutover decision; only the shared CSS token layer actually went live this pass.
+no `.WithTuning()`. Next up: 8 of 17 pages remain — the holodb hub/benchmarks/manual,
+`algformer.html`'s `.card.tool` gallery shape, `holoformer.html`'s bespoke concept-card layout, and
+`articles.html`/`articles/_example.html`'s `.prose`/`.toc` template all need new composer support
+first, not just a new `PageSpec` value. Don't treat this pass as authorization to start touching
+`site/**/*.html` PAGE markup for real yet — that's still a later, explicit cutover decision; only
+the shared CSS token layer actually went live this pass.
 
 **All 11 current MonoRepo packages have a page**: Phasor, EvalApp, EvalApp.Neural, AlgFormer
 (+HoloFormer deep-dive), AlgFormer.Gpu, HoloDb (+benchmarks), HoloDb.Protocol, HoloDb.Client,

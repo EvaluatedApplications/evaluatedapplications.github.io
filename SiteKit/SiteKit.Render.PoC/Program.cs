@@ -11,10 +11,24 @@ var outputRoot = Path.Combine(AppContext.BaseDirectory, "out");
 // header comment for the full list. Both pages run through ONE compiled pipeline tree, proving the
 // nested ForEach<SiteRenderJob>/ForEach<PageRenderJob> shape actually fans out over >1 page, not
 // just executes a single hardcoded path.
+// Phase 2's second batch (2026-09-02): evalapp/holovoxel/holodb-client/holodb-protocol/
+// evalapp-neural/algformer-gpu, chosen (per the coordinator's own dispatch) to exercise the
+// composer's remaining gaps in one pass rather than one new feature per page: HeroSpec.LimHtml
+// (evalapp, holodb-protocol), SectionSpec.StackFlow + SectionSpec.Raw (evalapp only — the
+// richest page in this batch), PageSpec.PageStyleHtml + a second live .PrismBeam() page
+// (holovoxel), SnippetSpec.DescBeforeHtml (holodb-protocol), and three genuine "no new feature
+// needed" controls (holodb-client, evalapp-neural, algformer-gpu) proving the existing surface
+// already generalizes. See each PageSpec's own header comment for its specific reasoning.
 Site.Define("aboutus-poc", PhasorPageSpec.Brand(), PhasorPageSpec.Nav(), outputRoot)
     .Page("phasor", "Phasor", "foundation", "var(--c-foundation)", PhasorPageSpec.Configure)
     .Page("prose", "Prose", "holodb-algformer", "var(--c-algformer)", ProsePageSpec.Configure)
     .Page("tracer", "Tracer", "tracer", "var(--c-tracer)", TracerPageSpec.Configure)
+    .Page("evalapp", "EvalApp", "foundation", "var(--c-foundation)", EvalAppPageSpec.Configure)
+    .Page("holovoxel", "HoloVoxel", "holovoxel", "var(--c-holovoxel)", HoloVoxelPageSpec.Configure)
+    .Page("holodb-client", "HoloDb.Client", "holodb-client", "var(--c-holodb-client)", HoloDbClientPageSpec.Configure)
+    .Page("holodb-protocol", "HoloDb.Protocol", "holodb-protocol", "var(--c-holodb-protocol)", HoloDbProtocolPageSpec.Configure)
+    .Page("evalapp-neural", "EvalApp.Neural", "evalapp-neural", "var(--c-evalapp-neural)", EvalAppNeuralPageSpec.Configure)
+    .Page("algformer-gpu", "AlgFormer.Gpu", "algformer-gpu", "var(--c-algformer-gpu)", AlgFormerGpuPageSpec.Configure)
     .Build(out SiteSpec siteSpec);
 
 var pipeline = SiteKitPipeline.Build();
@@ -30,7 +44,7 @@ var written = result.GetData().WrittenFiles ?? Array.Empty<string>();
 Console.WriteLine($"Pipeline succeeded. Wrote {written.Count} file(s):");
 foreach (var f in written) Console.WriteLine("  " + f);
 
-var pagesToVerify = new[] { "phasor", "prose", "tracer" };
+var pagesToVerify = new[] { "phasor", "prose", "tracer", "evalapp", "holovoxel", "holodb-client", "holodb-protocol", "evalapp-neural", "algformer-gpu" };
 var overallOk = true;
 
 foreach (var slug in pagesToVerify)

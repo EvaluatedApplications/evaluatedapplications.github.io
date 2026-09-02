@@ -26,6 +26,7 @@ public static class HeadComposer
         sb.Append("<meta name=\"twitter:card\" content=\"").Append(page.Seo.TwitterCard).Append("\">\n");
         sb.Append("<link rel=\"icon\" href=\"").Append(brand.FaviconDataUri).Append("\">\n");
         sb.Append("<link rel=\"stylesheet\" href=\"/assets/site.css\">\n");
+        if (page.PageStyleHtml is not null) sb.Append(page.PageStyleHtml).Append('\n');
         sb.Append("<script type=\"application/ld+json\">\n").Append(page.Seo.JsonLd).Append("\n</script>\n");
         sb.Append("</head>");
         return sb.ToString();
@@ -97,7 +98,7 @@ public static class HeroComposer
         }
         if (h.InstallCommand is not null)
         {
-            sb.Append("        <div class=\"install\" style=\"max-width:520px;margin-top:20px\"><code>")
+            sb.Append("        <div class=\"install\" style=\"max-width:").Append(h.InstallMaxWidthPx).Append("px;margin-top:20px\"><code>")
               .Append(h.InstallCommand).Append("</code><button class=\"copy\" type=\"button\">copy</button></div>\n");
         }
         if (h.Ctas.Count > 0)
@@ -106,6 +107,10 @@ public static class HeroComposer
             foreach (var cta in h.Ctas)
                 sb.Append("          ").Append(RenderCta(cta)).Append('\n');
             sb.Append("        </div>\n");
+        }
+        if (h.LimHtml is not null)
+        {
+            sb.Append("        <p class=\"lim\" style=\"margin-top:18px\">").Append(h.LimHtml).Append("</p>\n");
         }
         if (h.Related.Count > 0)
         {
@@ -146,6 +151,8 @@ public static class SectionComposer
         SectionKind.CardGrid => ComposeCardGrid(s, defaultCatVar),
         SectionKind.Snippets => ComposeSnippets(s, defaultCatVar),
         SectionKind.ClosingStack => ComposeClosingStack(s),
+        SectionKind.StackFlow => ComposeStackFlow(s, defaultCatVar),
+        SectionKind.Raw => ComposeRaw(s, defaultCatVar),
         _ => throw new InvalidOperationException($"Unknown SectionKind: {s.Kind}"),
     };
 
@@ -158,7 +165,29 @@ public static class SectionComposer
         sb.Append("\n<section class=\"sec\">\n  <div class=\"wrap\">\n    ");
         sb.Append(SecHead(s, catVar)).Append('\n');
         sb.Append("    <p class=\"desc\" style=\"max-width:74ch\">").Append(s.ProseHtml).Append("</p>\n");
+        if (s.ExtraHtml is not null) sb.Append("    ").Append(s.ExtraHtml).Append('\n');
         if (s.LimHtml is not null) sb.Append("    <p class=\"lim\">").Append(s.LimHtml).Append("</p>\n");
+        sb.Append("  </div>\n</section>");
+        return sb.ToString();
+    }
+
+    private static string ComposeStackFlow(SectionSpec s, string catVar)
+    {
+        var sb = new StringBuilder();
+        sb.Append("\n<section class=\"sec\">\n  <div class=\"wrap\">\n    ");
+        sb.Append(SecHead(s, catVar)).Append('\n');
+        sb.Append("    <div class=\"stack\">\n      <p>").Append(s.ProseHtml).Append("</p>\n");
+        sb.Append("      <div class=\"flow\" style=\"margin-top:18px\">\n        ").Append(s.FlowHtml).Append("\n      </div>\n    </div>\n");
+        sb.Append("  </div>\n</section>");
+        return sb.ToString();
+    }
+
+    private static string ComposeRaw(SectionSpec s, string catVar)
+    {
+        var sb = new StringBuilder();
+        sb.Append("\n<section class=\"sec\">\n  <div class=\"wrap\">\n    ");
+        sb.Append(SecHead(s, catVar)).Append('\n');
+        sb.Append("    ").Append(s.RawBodyHtml).Append('\n');
         sb.Append("  </div>\n</section>");
         return sb.ToString();
     }
@@ -192,6 +221,8 @@ public static class SectionComposer
         sb.Append(SecHead(s, catVar)).Append('\n');
         foreach (var snip in s.Snippets!)
         {
+            if (snip.DescBeforeHtml is not null)
+                sb.Append("    <p class=\"desc\">").Append(snip.DescBeforeHtml).Append("</p>\n");
             sb.Append("    <div class=\"snip\"><code>").Append(snip.Code).Append("</code></div>\n");
             if (snip.DescAfterHtml is not null)
                 sb.Append("    <p class=\"desc\">").Append(snip.DescAfterHtml).Append("</p>\n");

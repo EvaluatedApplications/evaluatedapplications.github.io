@@ -55,10 +55,20 @@ that just re-links the page you're already 1 click from" pattern the static site
 pivot deliberately eliminated (see `AboutUs/CLAUDE.md`'s Navigation section, "the `Tools(→/#tools)`
 slot was DROPPED sitewide... once the homepage's entire top-level content IS the tools grid, a nav
 item that scrolls to `#tools` is redundant with `Home` itself" — same reasoning applies here
-verbatim, Showroom just never had the equivalent pass run against it). Not fixed from here
-unilaterally — this is exactly the kind of thing `platform-architecture.md` §8 flags as a real
-design decision for a shared `<SiteNav Items="@navItems" />` component's honest single API, not
-something to silently resolve while building the component OR while just reviewing this doc.
+verbatim, Showroom just never had the equivalent pass run against it).
+
+**RESOLVED 2026-09-02, direct user decision (full record: `platform-architecture.md`'s "Open
+questions" section)**: "I prefer the HTML versions, as the Blazor-only pages are for apps, not
+sharing info" — hardens content/app as a firm split, not just an observation. Consequence for
+THIS entry: **no shared `<SiteNav Items="@navItems" />` component is planned.** The static site's
+nav and Showroom's nav are independently scoped and don't need matching item counts or a common
+API — each repo keeps rendering its own nav markup from its own item list (Showroom: hand-typed
+Razor in `MainLayout.razor`; the static site: hand-typed HTML today, `SiteKitPipeline`'s
+`NavComposer` + `NavSpec` once/if a page is actually cut over, still PoC-only as of this note).
+Showroom's own `Tools`-link redundancy (flagged above) is `showroom-owner`'s own call to resolve
+on Showroom's own terms — not something this entry or a shared component forces. This closes the
+"real drift... worth carrying into the design decision" language above: there is no longer a
+shared-component design decision pending on it.
 
 ## 3. Footer — `footer.site .mono`
 `© <year>` + 3-5 internal links, page-appropriate subset. Plain text, no component complexity —
