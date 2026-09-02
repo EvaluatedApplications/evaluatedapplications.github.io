@@ -2,7 +2,9 @@
 
 One entry per reusable pattern. For each: what it is, its exact markup shape today (elided where
 long), which custom props/classes it depends on, and its current independent implementations —
-the static-HTML shape (`site/**/*.html`, hand-typed per page, ~17 copies) and, where one exists,
+the static-HTML shape (`site/**/*.html`, hand-typed per page, 23 files as of the 2026-09-02 tidy-up
+recount — see `AboutUs/CLAUDE.md`'s "SiteKit — reconciled status & open decisions" for the exact
+breakdown; the "~17" this line used to say was stale) and, where one exists,
 Showroom's own shape (`.razor`/`.razor.css`, hand-typed once, different syntax, same intent).
 This is the transcription source for Phase 1's real Razor components (see
 `AboutUs/docs/platform-architecture.md`) — build each component FROM its entry here, not by
@@ -16,7 +18,9 @@ file documents the *contract* (markup shape + props), not a second copy of every
 ## 1. `<BrandMark>` — the prism triangle
 **Values**: see `tokens/brand-ea.css`'s trailing comment (viewBox, path, gradient stops).
 **Current shape**: an inline `<svg class="mark">` (nav) repeated as a `data:image/svg+xml` favicon
-`<link>` (per `<head>`), both literal, both in every one of 17 static pages. Showroom repeats a
+`<link>` (per `<head>`), both literal — the nav mark is present on all 23 files under `site/`
+(re-verified by grep, 2026-09-02); the favicon `<link>` is on all but `404.html`, which correctly
+carries none. Showroom repeats a
 third copy in `Layout/MainLayout.razor` and a fourth in `wwwroot/index.html`'s favicon. **4
 independent hand-typed copies of the same 3 lines of SVG is the exact failure this toolkit
 exists to fix** — a real `<BrandMark size="nav|favicon" />` component (Phase 1) renders both
@@ -114,9 +118,12 @@ grid), raw content (a `.snip`) before `.desc`, and no `--cat` at all — all in 
 nav, mobile icon-grid variants of `#packages`/`#tools` `.grid`. Desktop/wide viewports get
 window-panel framing (`.sec:has(.sec-head)` grows a fake app-window chrome) — a purely decorative,
 opt-in visual treatment layered on top of the plain component set above via one class on `<body>`,
-not a parallel page structure. **Rollout status (as of this doc): 3 of 16 static pages carry it**
-(`index.html`, `phasor.html`, `holodb/index.html`) — a deliberately paused sweep, not abandoned;
-see `AboutUs/CLAUDE.md`'s Navigation section. Showroom has no equivalent today (`Home.razor`'s own
+not a parallel page structure. **Rollout status, re-verified by grep 2026-09-02 (was stale at "3 of
+16" — that described the system's first day, before the sitewide sweep documented in `AboutUs/
+CLAUDE.md`'s "Opt-in via `<body class="os-chrome">`" section): 21 of the 23 real `site/**/*.html`
+files carry `class="os-chrome"`** — every routable page plus `articles/_example.html`; only
+`404.html` and `recycledao-preview.html` are excluded, neither of which ever carried the standard
+nav/hero template this system hooks into (not a gap). Showroom has no equivalent today (`Home.razor`'s own
 `.hero` reuses the plain `.hero` class, no window-chrome layer) — an open question for whether
 Showroom's shell should ever opt in, noted, not decided, in `platform-architecture.md`.
 

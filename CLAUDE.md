@@ -59,7 +59,11 @@ ea.css`'s chord rule had picked up a stray `--glow-near` override the live site 
 `@import`'s relative path resolves to `/SiteKit/tokens/...` once served from the Pages artifact
 root, so this copy is load-bearing, not cosmetic (without it the import 404s live and every custom
 property on the deployed site goes undefined). Full record: `platform-architecture.md` §10.
-**3 real C# projects, Phase 1 core + Phase 2 (16 of 17 pages proven 2026-09-02)**:
+**3 real C# projects, Phase 1 core + Phase 2 (16 of the 23 real `site/**/*.html` files proven
+2026-09-02 — see "SiteKit — reconciled status & open decisions" below for the corrected count, the
+exact 7 unattempted, and 3 other open items; the "17"/"9 of 17"/"16 of 17" figures anywhere below
+this line are dated batch-log text from earlier the same day and are KNOWN STALE, kept verbatim as
+history, not as current fact)**:
 `SiteKit.Spec/` (the declarative `PageSpec` record types + fluent builder, zero deps —
 `CardSpec` gained `CatRootOverride` in the Phase-1 pass; the second Phase-2 batch, same day, added
 `HeroSpec.LimHtml`+`InstallMaxWidthPx`, `SnippetSpec.DescBeforeHtml`, `SectionSpec.ExtraHtml` (on
@@ -212,12 +216,146 @@ the 16 despite `articles/_example.html` being a noindexed, unlinked template (no
 "routable" pages CLAUDE.md's Site map counts) — included because the task explicitly named it as
 needing the same `.prose`/`.toc` composer support as `articles.html` itself.
 
-**Still not ported: `index.html`, `packages.html`** — neither was named in the composer-gap flag
-this batch closes (both are plain package/tool gallery grids, already close to the proven
-CardGrid/ToolGrid shape), so they're left as the one remaining gap in the 17-page count rather than
-assumed done. Still fully INERT w.r.t. the deployed site's PAGES (see below) — this whole batch,
-like the two before it, only proves the pipeline CAN reproduce these pages; it doesn't cut any of
-them over.
+**Still not attempted, 7 files (corrected count, see "SiteKit — reconciled status & open decisions"
+below for the full derivation)**: `index.html`, `packages.html`, `404.html`, `recycledao-preview.html`,
+and the 3 real article pages (`articles/ctx4-plateau.html`, `articles/ctx8-and-the-reverse-grow.html`,
+`articles/nobody-read-the-warning.html`). This is a WIDER list than the "index.html, packages.html"
+this paragraph used to name — that older version only counted the 2 pages the dispatching task had
+explicitly named as composer gaps and silently dropped `404.html`/`recycledao-preview.html` (never
+routable, never in scope for a page-count) and the 3 articles (added to the site before this batch,
+never brought into the SiteKit spec/pipeline at all) from the reckoning. None of the 7 was named in
+the composer-gap flag this batch closed. Still fully INERT w.r.t. the deployed site's PAGES (see
+below) — this whole batch, like the two before it, only proves the pipeline CAN reproduce a page;
+it doesn't cut any of them over.
+
+### SiteKit — reconciled status & open decisions (2026-09-02 tidy-up pass)
+
+**Why this section exists**: three consecutive same-day SiteKit batches (commits `dea3258`,
+`4f23eda`, `f83655f`) each restated a page-count denominator, and it drifted — `4f23eda`'s own commit
+message says "9/17", `f83655f`'s says "16 of 23 live pages" (the user corrected it live during that
+commit). The "17" figure had already been typed into 3 places (`CLAUDE.md` in several spots,
+`docs/platform-architecture.md` §1/§2/§11/§12, `SiteKit/COMPONENTS.md`) before the correction landed
+anywhere. This section is the one place the corrected, RE-DERIVED (not carried-forward) ground truth
+lives; every other "17"/"16 of 17"/"9 of 17" in this file below this point is dated batch-log text
+left verbatim as history, not current fact.
+
+**Ground truth, derived directly from disk + `sitemap.xml` this pass, not from any earlier report**:
+`site/**/*.html` contains **23 real files** (`Glob site/**/*.html`, counted fresh). Breakdown:
+- **11 package pages** (`evalapp.html`, `evalapp-neural.html`, `phasor.html`, `algformer.html`,
+  `algformer-gpu.html`, `holodb/index.html`, `holodb-client.html`, `holodb-protocol.html`,
+  `holovoxel.html`, `prose.html`, `tracer.html`)
+- **3 reference/explainer pages** (`holoformer.html`, `holodb.html`, `holodb/manual/index.html`)
+- **3 index pages** (`index.html`, `packages.html`, `articles.html`)
+- **3 real article pages** (`articles/ctx4-plateau.html`, `articles/ctx8-and-the-reverse-grow.html`,
+  `articles/nobody-read-the-warning.html`)
+- **3 deliberately non-routable files** (`404.html`, `recycledao-preview.html`,
+  `articles/_example.html` — none carries `<meta name="robots" content="index...">`/is in `sitemap.xml`)
+
+11+3+3+3 = **20 routable pages**, cross-checked against `sitemap.xml` itself: it lists exactly 20
+`<loc>` page URLs (the homepage `/` + 19 named pages) plus 5 tool routes (`/tools/` + 4 tool app
+routes) = 25 `<url>` entries total, 0 extra, 0 missing — the 20 matches the direct-count exactly, so
+`sitemap.xml` is itself currently correct and does NOT need editing this pass. 20 routable + 3
+non-routable = the 23 total.
+
+Of the 23: **16 have been round-tripped through `SiteKit.Render.PoC` and verified byte-identical**
+against their live file (all 11 package pages + all 3 reference pages + `articles.html` +
+`articles/_example.html`). **7 have not been attempted at all** — no `PageSpec` exists for any of
+them yet:
+- **`index.html`** — needs a `PageSpec` for the tools-first homepage shape (hero + `#tools`
+  `ToolGrid`-like gallery of 4 tool cards with `.powered` pills + the `.pkg-strip` chip row). Close
+  to proven shapes (`ToolGrid` exists) but `.pkg-strip`/`.powered` have no typed section/card
+  support yet — would need at least one new `SectionKind` or `CardSpec` field, not just a spec value.
+- **`packages.html`** — needs a `PageSpec` for the 11-card, 4-category gallery + the closing
+  "how it fits together" `.flow` diagram. `CardGrid` + `StackFlow` both already exist; this is
+  probably the cheapest of the 7 to attempt, largely a control proving the composer surface
+  generalizes to a 4-category-grouped-in-one-section shape, not a new-capability page.
+- **`404.html`** — no standard nav/hero/footer template at all (confirmed earlier in this doc); would
+  need its own minimal `PageSpec` shape or a deliberate decision to leave it hand-authored forever
+  (a 404 page arguably never needs the pipeline — it's one file, never swept, no cohesion risk from
+  staying hand-typed).
+- **`recycledao-preview.html`** — **do not port as-is; the content itself is stale, see the dedicated
+  flag below.** Needs a content refresh from RecycleDAO's current `docs/status-brief.md` FIRST
+  (owned by `recycledao-owner`, a different repo/agent), and only then is it worth deciding whether to
+  bring the refreshed version into `SiteKit.Spec` at all, given it's deliberately noindexed/unlinked
+  and may not be worth the pipeline's overhead for a single private client-preview page.
+- **3 real articles** (`ctx4-plateau.html`, `ctx8-and-the-reverse-grow.html`,
+  `nobody-read-the-warning.html`) — structurally the SAME `.prose`/`.toc` shell `ProseArticleSpec`
+  already proved on `articles/_example.html`/`holodb.html`/`holodb/manual/index.html`. These 3 are
+  very likely a near-zero-new-capability batch (a good next control, matching the "pick pages that
+  need nothing new to prove generalization" pattern the second Phase-2 batch already used) — flagged
+  as the cheapest 3 of the 7 to close, not attempted this pass since this was a documentation
+  tidy-up, not a rendering task.
+
+**Open decision 1 — should `SectionSpec.Raw` be promoted to something more typed?** **Correcting the
+record, not just restating it**: it does NOT have "one live use" — checked by grepping every
+`SectionSpec.Raw(` call site in `SiteKit.Render.PoC` fresh this pass. It has **5 real call sites
+across 3 pages**: `evalapp.html` (the "None of this is invented from nothing" idea-provenance
+`<table>`), `articles.html` (the entire `<div class="articles">` article-list body), and the HoloDb
+hub 3 times (`holodb/index.html`'s "How it works" prose+diagram section, "The shape of the data"
+section, and the benchmarks "scoreboard" section with 2 embedded `<table>`s). Whoever is carrying
+"one live use, a second would warrant reconsidering" forward has stale information — the real count
+is 5, and it was already 5 by the time the third SiteKit batch landed (`f83655f`), same day. Having
+re-read the actual 5 bodies: they are NOT shape-similar to each other (a comparison table, a
+reverse-chron article list, two different prose+diagram/prose+table combinations) — each would need
+its OWN typed record if typed at all, which mostly defeats the point of typing (5 near-bespoke types
+instead of 5 raw-HTML blobs isn't an obvious win). The more useful question per-use is narrower:
+does `evalapp.html`'s idea-provenance table shape recur if a 4th page ever wants "feature ⇒ where the
+idea came from" framing (worth a `TwoColTableSpec` then), and does `articles.html`'s article-list
+shape recur (it won't — it's the one page that owns that pattern by definition). Left open, not
+decided here — this is a design call for whoever next touches `SiteKit.Spec`, now with the correct
+input (5 uses, 3 pages, genuinely dissimilar shapes) instead of the "1 use" framing that had been
+circulating.
+
+**Open decision 2 — watch item: the spec surface grew ~2 dozen narrow override fields in one batch.**
+The third Phase-2 batch alone added roughly two dozen single-purpose override fields/params
+(`HeroSpec.RawBodyHtml`/`CrumbHtml`/`ExtraBodyHtml`/`ExtraClass`/`LeadingCommentHtml`,
+`SectionSpec.SectionId`/`LeadingCommentHtml`/`IntroHtml`/`LimStyleAttr`, `CardSpec.LimHtml`/
+`PreBodyHtml`/`OmitCatStyle`, `SeoSpec.OgType`/`RobotsMeta`, `PageSpec.TailScriptHtml`/`LeadingHtml`/
+`MetaCharset`/`NavBurgerAriaLabel`/`NavItemsOverride`, `RelatedLink.CssClass`, plus the second batch's
+`HeroSpec.LimHtml`/`InstallMaxWidthPx`, `SnippetSpec.DescBeforeHtml`, `SectionSpec.ExtraHtml`,
+`PageSpec.PageStyleHtml`) — each individually justified by one real page's diff, none speculative,
+all documented above. **The watch item, not yet resolved either way**: a taxonomy that needs a new
+named field almost every time a new page is ported might mean the SPEC is being stretched to
+reproduce each hand-authored page's incidental one-off markup choices, rather than the pages actually
+being structurally different from each other in ways worth a shared vocabulary for. The 7 remaining
+unattempted pages (above) are the next real evidence either way: if `index.html`/`packages.html`/the
+3 articles need FEW or NO new fields (the second batch's "3 pages needed zero new capability" pattern
+repeating), that's evidence the surface has actually converged and the override count is real,
+load-bearing diversity. If they each need 3-5 more narrow fields apiece, that's evidence for the
+taxonomy-stretch reading and worth stepping back to ask whether `SectionSpec.Raw`/`HeroSpec.RawBodyHtml`
+should be reached for MORE readily instead of typing every literal divergence — not decided here,
+flagged for whoever picks up the next batch to actually watch for, not assume either way in advance.
+
+**Open decision 3 — the cutover itself is still unmade.** Every verification record in this file and
+in `docs/platform-architecture.md` proves the pipeline can REPRODUCE a page byte-identically. None of
+it has ever written into `site/**/*.html` — `deploy.yml` still doesn't build `SiteKit.Spec`/
+`SiteKit.Render`, and the PoC's output lands only in a gitignored `bin/**/out/` folder. Nobody has
+decided WHEN (all-at-once vs. one-page-at-a-time), by WHOM (this agent vs. a build step), or under
+WHAT gate (a CI diff-check against the hand-authored file before it's allowed to replace it,
+presumably) the actual switch from "hand-authored `.html` is the source of truth" to "the `PageSpec`
+is the source of truth and the `.html` is generated output" happens. This is a real, consequential,
+unmade decision — recorded here explicitly so it isn't only in a chat log or assumed implicit from
+"the pipeline works now."
+
+**Open verification step — NOT closed, do not assume it is**: the `site.css` token `@import` rewire
++ `deploy.yml`'s `SiteKit/tokens/` copy step (commit `dea3258`) are committed to `main` locally but,
+per the coordinator's own note at hand-off, **NOT yet pushed to `origin/main` and therefore NOT yet
+verified live**. The only thing that actually confirms the `@import` resolves in production is a
+green GitHub Pages Actions build AFTER a push — reading the workflow file (confirmed present, see
+Deploy section) is not that proof. Until that happens, treat "the token rewire is live" as unverified,
+not closed — if it's ever wrong (a path typo, a missing artifact-root copy), every custom property on
+the deployed site goes undefined and the whole site renders unstyled. This agent does not push (§6);
+flagging so the coordinator/user does this push and reports back green before this line is removed.
+
+**recycledao-preview.html — flagged stale again, do not port faithfully.** This file was already
+flagged stale weeks ago (its own re-render history in this doc records 2 prior refreshes,
+2026-08-29 and 2026-09-01) and RecycleDAO has changed further since, including changes made the same
+day as this tidy-up pass. It is one of the 7 unattempted SiteKit pages above — when it's eventually
+picked up, the correct move is a fresh content pull from RecycleDAO's own current
+`docs/status-brief.md` (falling back to its `CLAUDE.md`), the same discipline every prior render of
+this page has used, NOT a mechanical port of the existing (already-known-stale) `site/
+recycledao-preview.html` HTML into a `PageSpec`. Porting stale content faithfully into the new
+pipeline would just give the staleness a second, harder-to-notice home.
 
 **All 11 current MonoRepo packages have a page**: Phasor, EvalApp, EvalApp.Neural, AlgFormer
 (+HoloFormer deep-dive), AlgFormer.Gpu, HoloDb (+benchmarks), HoloDb.Protocol, HoloDb.Client,
@@ -744,8 +882,12 @@ check the nav is compact on a narrow (≤640px) viewport — that was the failin
 got re-litigated. Do this walk any time the nav, page set, or card grid changes; record it in the
 task's return message. An href-audit alone is not this check (that was the 2026-08-26 mistake).
 
-**SEO/nav facts still true**: `sitemap.xml` lists all 17 pages (16 + the new `packages.html`) + the
-4 live tool routes + `/tools/`.
+**SEO/nav facts, re-verified against the real `sitemap.xml` this pass (2026-09-02 tidy-up, was stale
+at "17 pages")**: `sitemap.xml` lists **20 routable page URLs** (the homepage `/` + 19 named pages —
+11 package + 3 reference + `packages.html`/`articles.html` + the 3 real articles) + 4 live tool
+routes + `/tools/` = 25 `<url>` entries total. `404.html`, `recycledao-preview.html`, and
+`articles/_example.html` are correctly absent (deliberately non-routable — see "SiteKit — reconciled
+status & open decisions" above for the full 23-file breakdown this count is derived from).
 Every page's `footer.site` carries a second internal-link path beyond the top nav. JSON-LD on every
 page (`Organization`+`WebSite` on the index, `SoftwareApplication` on all 11 package pages,
 `TechArticle` on the 3 explainer pages). Forward cross-links exist base→extension

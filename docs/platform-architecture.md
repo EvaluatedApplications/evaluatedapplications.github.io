@@ -59,10 +59,11 @@ JS disabled. A page/experience is APP if it requires genuinely stateful client c
 cannot be meaningfully pre-rendered — a trained model doing live inference, a real SQL engine
 running over data the visitor just uploaded, a training loop with a mutable weight tensor.
 
-Applying that test to the real 2026-09-02 catalogue: **every one of the 17 static pages
-(16 product/reference/index pages + `articles.html` + the unlisted `recycledao-preview.html`)
-passes as pure content — none of them do anything a search engine or a no-JS browser can't already
-read.** All 4 Showroom tools genuinely fail the test (a live HoloFormer session, a live HoloDb
+Applying that test to the real catalogue (re-derived from disk 2026-09-02, tidy-up pass — see §13;
+the "17" figure that used to sit here was wrong even at the time it was written, both arithmetically
+and because it silently dropped the 3 real article pages that already existed): **every one of the
+23 real `.html` files under `site/` passes as pure content — none of them do anything a search
+engine or a no-JS browser can't already read.** All 4 Showroom tools genuinely fail the test (a live HoloFormer session, a live HoloDb
 query engine) — they cannot be meaningfully static. **Conclusion: the boundary — which artifacts
 are static HTML vs. which are the WASM app — is correctly drawn today.** Nothing needs to move
 from one side to the other. This is worth stating with confidence rather than re-litigating,
@@ -91,7 +92,7 @@ authors each side is where the real problem lives, and it's the thing the two ad
 times — see `SiteKit/README.md` for both, checked against the real files, not just quoted from the
 brief) both trace back to:
 
-- **`site/**/*.html`**: 17 files, each a hand-typed, hand-copied instantiation of "the page
+- **`site/**/*.html`**: 23 files (see §13 for the exact breakdown), each a hand-typed, hand-copied instantiation of "the page
   template" (`CLAUDE.md`'s own words: "New product pages should copy this shape exactly, not
   invent new layout"). The template is a *convention*, enforced by a human/agent re-reading a
   1500+ line CLAUDE.md and being careful — not a structural guarantee. Every sweep (brand mark,
@@ -788,12 +789,66 @@ needed to change):
 batch's 3 controls, confirming the composer surface still had real gaps left to find right up to
 the last page (the HoloDb hub alone needed roughly a dozen of the additions above).
 
-**Still unattempted**: `index.html`, `packages.html` — neither was named in the task that dispatched
-this batch (both are plain package/tool gallery grids, structurally close to the already-proven
-CardGrid/ToolGrid shapes), so they're the one remaining gap in the 17-page count, not assumed done.
-`deploy.yml` is still untouched, no `site/**/*.html` PAGE markup was touched, and generated output
-still lands only in a gitignored `bin/**/out/` folder — this batch, like the two before it, proves
-the pipeline CAN reproduce these pages, it does not cut any of them over.
+**Still unattempted, 7 files, corrected count (see §13)**: `index.html`, `packages.html`,
+`404.html`, `recycledao-preview.html`, and the 3 real article pages (`ctx4-plateau.html`,
+`ctx8-and-the-reverse-grow.html`, `nobody-read-the-warning.html`). The "index.html, packages.html"
+framing this paragraph used to carry only counted the 2 pages the dispatching task had named as
+composer gaps and dropped the other 5 (never routable, or added to the site after the composer-gap
+flag was written) from the reckoning — corrected in §13, which is also where the true denominator
+(16 of 23, not 16 of 17) is derived. `deploy.yml` is still untouched, no `site/**/*.html` PAGE markup
+was touched, and generated output still lands only in a gitignored `bin/**/out/` folder — this
+batch, like the two before it, proves the pipeline CAN reproduce these pages, it does not cut any of
+them over.
+
+## 13. Page-count reconciliation + open decisions (2026-09-02 tidy-up pass, no new rendering)
+
+**Why this section exists.** Across §1, §2, §11, and §12 above, this doc repeated a "17 pages"
+denominator that had already gone stale — and, per §1's own original wording, was arithmetically
+wrong even the day it was typed (it silently dropped the 3 real article pages that already existed
+at the time). The same "17" figure was also independently repeated in `AboutUs/CLAUDE.md` and
+`SiteKit/COMPONENTS.md`. This section is the corrected, RE-DERIVED ground truth (counted fresh
+against `site/**/*.html` and `sitemap.xml` this pass, not carried forward from any earlier report);
+CLAUDE.md's "SiteKit — reconciled status & open decisions" section carries the identical figures —
+treat the two as one fact, kept in two files because each is the natural home for half the audience.
+
+**The corrected count**: `site/**/*.html` = **23 real files** — 11 package pages, 3 reference pages
+(`holoformer.html`, `holodb.html`, `holodb/manual/index.html`), 3 index pages (`index.html`,
+`packages.html`, `articles.html`), 3 real article pages, and 3 deliberately non-routable files
+(`404.html`, `recycledao-preview.html`, `articles/_example.html`). 20 of the 23 are routable and
+appear in `sitemap.xml` (cross-checked: `sitemap.xml` lists exactly 20 page `<loc>`s + 5 tool
+routes = 25 entries, matching the direct count with 0 discrepancy — `sitemap.xml` itself needed no
+edit this pass). Of the 23, **16 are round-tripped through `SiteKit.Render.PoC` and verified
+byte-identical** (all 11 package pages + all 3 reference pages + `articles.html` +
+`articles/_example.html`); **7 have no `PageSpec` at all yet**: `index.html`, `packages.html`,
+`404.html`, `recycledao-preview.html`, `articles/ctx4-plateau.html`,
+`articles/ctx8-and-the-reverse-grow.html`, `articles/nobody-read-the-warning.html`. Per-page notes on
+what each of the 7 needs are in `CLAUDE.md`'s mirrored section, not duplicated verbatim here.
+
+**Three open decisions, recorded so they aren't only in a chat log**:
+
+1. **`SectionSpec.Raw` — is "one live use" even true?** No. Grepped fresh this pass: **5 real call
+   sites across 3 pages** (`evalapp.html`'s idea-provenance table, `articles.html`'s entire article
+   list, and 3 uses on the HoloDb hub — "how it works," "shape of the data," and the benchmarks
+   scoreboard). The "1 use, a 2nd would warrant typing it" framing that had been circulating was
+   already wrong by the time the 3rd SiteKit batch landed. Read fresh, the 5 bodies are genuinely
+   dissimilar shapes (a table, a list, two different prose+widget combinations) — typing each would
+   mean 5 near-bespoke record types, which undercuts the case for typing at all except where a
+   SPECIFIC shape (e.g. the idea-provenance 2-column table) is independently seen a 2nd time on a
+   4th page. Left open, corrected inputs recorded so the next person doesn't reason from "1 use."
+2. **Watch item: ~2 dozen narrow override fields added in one batch.** Real risk, not yet resolved:
+   the taxonomy may be stretching to reproduce each page's hand-authored incidentals rather than
+   pages being genuinely structurally different. The 7 remaining unattempted pages are the next real
+   test — few/no new fields needed would support "the surface has converged"; several new fields per
+   page would support "lean on `Raw`/`RawBodyHtml` more, type less." Not pre-judged either way here.
+3. **The cutover from hand-authored files to pipeline output is still completely unmade.** No page
+   has ever been written by the pipeline into `site/`; `deploy.yml` doesn't build any `SiteKit.*`
+   project. WHEN, by WHOM, and under WHAT verification gate that switch happens is an open decision,
+   not implicitly "whenever all 23 pages are proven" — recorded here explicitly rather than assumed.
+
+**Separately, the token-rewire deploy step (`dea3258`) is committed but not pushed, hence not
+verified live** — a green Pages Actions build after a push is the only thing that actually confirms
+`site.css`'s `@import` of `SiteKit/tokens/` resolves in production; reading the workflow file is not
+that proof. Flagged in `CLAUDE.md` as well; not treated as closed in either doc.
 
 ## Open questions, genuinely unresolved (flagged, not decided here)
 
@@ -807,7 +862,8 @@ the pipeline CAN reproduce these pages, it does not cut any of them over.
   should answer this with real code, not guessed here.
 - **RESOLVED 2026-09-02 — the nav-item-count/redundant-`Tools`-link question, direct user
   decision**: "I prefer the HTML versions, as the Blazor-only pages are for apps, not sharing
-  info." This hardens the existing content/app split (16 static pages + 4 Blazor tool routes)
+  info." This hardens the existing content/app split (the static `site/` catalogue, 23 files as of the
+2026-09-02 tidy-up recount, §13 — + 4 Blazor tool routes)
   from an observation into a firm principle: the static HTML site is the canonical home for ALL
   informational/shareable content; Showroom exists ONLY for interactive tool apps, never for
   restating info content. Practical implication: **do not build a shared `<SiteNav Items="..."/>`
