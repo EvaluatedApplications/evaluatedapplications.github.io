@@ -1,0 +1,67 @@
+/* SiteKit — BRAND layer for Evaluated Applications ("Dark Side of the Moon" prism identity).
+   Extracted verbatim (value-preserving, no changes) from site/assets/site.css's :root +
+   body[data-cat="..."] blocks, 2026-09-02. INERT: nothing imports this file yet.
+
+   A future client site replaces THIS ONE FILE with their own brand-*.css (their own accent, their
+   own palette-per-category scheme if they even have one) and keeps core.css untouched. Nothing
+   structural (layout, spacing, radius) lives here — only colour and the brand mark's own values.
+
+   Requires core.css to be loaded first (uses --bg-2 in the chord-glow default comment context,
+   though no rule below actually reads a core.css token directly today). */
+
+:root{
+  --accent:#8b7dff; --accent-ink:#b3a9ff;
+
+  /* True ROYGBIV, ordered to match real prism physics — the site's brand gradient. */
+  --spectrum:linear-gradient(90deg,#f0796a 0%,#f0a15a 16.6%,#e6c450 33.3%,#7bd86a 50%,#4aa3ff 66.6%,#7d7dff 83.3%,#c07dff 100%);
+  --spectrum-1:#f0796a; --spectrum-2:#f0a15a; --spectrum-3:#e6c450; --spectrum-4:#7bd86a;
+  --spectrum-5:#4aa3ff; --spectrum-6:#7d7dff; --spectrum-7:#c07dff;
+
+  /* Foundation (Phasor/EvalApp) = the undispersed beam, not a domain colour: the gradient itself,
+     plus a flat white companion for call sites that can't take a gradient (drop-shadow/color-mix,
+     the OS-chrome icon-tile rule — see COMPONENTS.md's "--cat / --cat-root" note). */
+  --c-foundation:var(--spectrum); --c-foundation-solid:#ffffff;
+
+  /* Per-package palette (2026-08-28) — every non-Foundation, non-composite package gets its own
+     stop, evenly re-sampled off the SAME --spectrum gradient (t=0,1/7,...1), placed by real
+     dependency-chain order within its family so families read as contiguous, warm-to-cool runs.
+     Full reasoning + the source table: AboutUs/CLAUDE.md "Per-package palette". Composite packages
+     (today: Prose) get no stop of their own — they render as the hard-edged chord of their two
+     real dependency packages' own tokens instead (see COMPONENTS.md's "Chord" pattern). */
+  --c-tracer:#f0796a; --c-holovoxel:#f09b5c;
+  --c-holodb-client:#e9ba53; --c-holodb-protocol:#a9cf5f; --c-holodb:#66c1aa;
+  --c-algformer:#5998ff; --c-algformer-gpu:#877dff; --c-evalapp-neural:#c07dff;
+
+  /* Parallax/glow defaults — see COMPONENTS.md's "Scroll-tied parallax depth" entry. --glow-near
+     defaults white (a literal light-source colour, page-independent); --glow-mid defaults to
+     --accent (no single product focus). Both are overridden per product page below. */
+  --glow-near:#ffffff; --glow-mid:var(--accent);
+}
+
+/* Per-page category tint — set via <body data-cat="<package-name>">, read by the parallax
+   keyframes through color-mix(). One rule per package; a future brand with a different package
+   set replaces this block wholesale alongside the palette above. */
+body[data-cat="foundation"]{ --glow-near:var(--c-foundation-solid); --glow-mid:var(--c-foundation-solid); }
+body[data-cat="tracer"]{ --glow-near:var(--c-tracer); --glow-mid:var(--c-tracer); }
+body[data-cat="holovoxel"]{ --glow-near:var(--c-holovoxel); --glow-mid:var(--c-holovoxel); }
+body[data-cat="holodb"]{ --glow-near:var(--c-holodb); --glow-mid:var(--c-holodb); }
+body[data-cat="holodb-protocol"]{ --glow-near:var(--c-holodb-protocol); --glow-mid:var(--c-holodb-protocol); }
+body[data-cat="holodb-client"]{ --glow-near:var(--c-holodb-client); --glow-mid:var(--c-holodb-client); }
+body[data-cat="algformer"]{ --glow-near:var(--c-algformer); --glow-mid:var(--c-algformer); }
+body[data-cat="algformer-gpu"]{ --glow-near:var(--c-algformer-gpu); --glow-mid:var(--c-algformer-gpu); }
+body[data-cat="evalapp-neural"]{ --glow-near:var(--c-evalapp-neural); --glow-mid:var(--c-evalapp-neural); }
+
+/* Chord (multi-domain) pages — today only prose.html (HoloDb + AlgFormer). See COMPONENTS.md. */
+body[data-cat="holodb-algformer"]{
+  --glow-near:var(--c-holodb);
+  --glow-mid-a:var(--c-holodb); --glow-mid-b:var(--c-algformer);
+}
+
+/* Brand mark — the prism triangle. Not a CSS token (it's SVG path data + gradient stops), kept
+   here as the canonical VALUES so the eventual <BrandMark> component (Phase 1) and, until then,
+   any manual sweep of the inline SVG in site/**/*.html + Showroom/Layout/MainLayout.razor, has
+   ONE place to copy from instead of re-deriving the path by eye.
+     viewBox: 0 0 32 32
+     path:    M16 5L27 26H5Z
+     gradient stops: the 7-stop --spectrum sequence above, same order, same offsets.
+*/

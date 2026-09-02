@@ -1,0 +1,35 @@
+/* SiteKit — CORE tokens (brand-agnostic).
+   Extracted verbatim (value-preserving, no changes) from site/assets/site.css's :root block,
+   2026-09-02. INERT: nothing imports this file yet — site/assets/site.css remains the live
+   source of truth until Phase 1 (see AboutUs/docs/platform-architecture.md) rewires it to
+   @import core.css + a brand file instead of restating these values.
+
+   This is the part of the system a future client site keeps UNCHANGED: a dark UI shell, a real
+   baseline-grid rhythm, radius/wrap/font-stack, and semantic (not brand) status colours. Nothing
+   in this file names "Evaluated Applications," "prism," or a package — that's brand-ea.css. */
+
+:root{
+  /* Surface/ink scale — a genuinely deep-black field, not a grey "dark mode." A future light-mode
+     variant (if one is ever wanted for a client) is a SEPARATE opt-in palette file, never an
+     automatic prefers-color-scheme override — that was tried on this brand and explicitly
+     reverted after real-device testing washed the identity out. See platform-architecture.md. */
+  --bg:#050608; --bg-2:#090a0e; --surface:#0d0f16; --surface-2:#12151d;
+  --border:#1e2430; --border-2:#2c3444;
+  --ink:#e9ecf3; --ink-soft:#98a2b3; --ink-faint:#7c869c;
+
+  /* Semantic status colours (success/caution/error) — not a brand choice, kept green/amber/red-ish
+     regardless of which brand file is active. A brand file MAY override these but the default
+     here is the sane one. */
+  --ok:#7bd86a; --warn:#e6b450; --bad:#f0796a;
+
+  /* Layout primitives */
+  --radius:14px; --wrap:1080px;
+  --font:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  --mono:ui-monospace,"Cascadia Code","SF Mono","JetBrains Mono",Menlo,Consolas,monospace;
+
+  /* Baseline rhythm grid (28px unit, derived from body font-size:17px * line-height:1.65). Every
+     recalibrated vertical margin/padding/gap in the component set is a multiple of --rhythm-q.
+     See COMPONENTS.md's "Vertical rhythm" note for the one deliberate exception (inline pill/
+     badge/chip vertical padding under one quarter-step, left off-grid on purpose). */
+  --rhythm:28px; --rhythm-3q:21px; --rhythm-h:14px; --rhythm-q:7px;
+}

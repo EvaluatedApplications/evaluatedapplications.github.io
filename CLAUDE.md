@@ -47,6 +47,14 @@ Non-content: `Showroom/` (Blazor WASM app, publishes to `/tools`) — a SEPARATE
 static content pages; don't fold tool code into `site/`. `.github/workflows/deploy.yml` builds
 `Showroom` and copies `site/` + the published `wwwroot` into one `_site/` artifact for Pages.
 
+**`SiteKit/` (NEW 2026-09-02, Phase 0 of the reusable-toolkit plan — see "Platform initiative"
+below + `docs/platform-architecture.md`)**: `tokens/core.css`+`brand-ea.css` (value-preserving
+extraction of `site.css`'s `:root`, split brand-agnostic/brand-specific) + `COMPONENTS.md` (the
+full reusable-component inventory) + `README.md`. **INERT** — not referenced by `deploy.yml`, not
+`<link>`ed from any page, not part of the deployed site. Don't delete it as dead weight; it's the
+seed for Phase 1 (a real Razor Class Library both `site/` generation and `Showroom/` would
+consume).
+
 **All 11 current MonoRepo packages have a page**: Phasor, EvalApp, EvalApp.Neural, AlgFormer
 (+HoloFormer deep-dive), AlgFormer.Gpu, HoloDb (+benchmarks), HoloDb.Protocol, HoloDb.Client,
 HoloVoxel, Prose, Tracer. All 11 are catalogued on `packages.html`; only 6 (HoloDb, AlgFormer,
@@ -1222,6 +1230,33 @@ assuming a Showroom content/behavior change is live, check that `Showroom/dist/`
 
 ## Platform initiative (in flight, 2026-08-28) — verified facts
 
+**2026-09-02: superseded as the plan-of-record by `docs/platform-architecture.md`.** Direct
+strategic instruction: this site becomes a reusable toolkit for future client sites, not a
+bespoke AboutUs homepage — read that doc for the actual architecture. Content/app boundary
+re-verified correct (16-static+4-Blazor split stays; the real gap is authoring/sharing, not
+runtime placement). **Corrected mid-session on a second direct instruction**: not a generic
+Razor-Class-Library-plus-static-generator design — every EA product is declarative-first
+(EvalApp/HoloDb/PrismSpec), so pages get the same treatment: a declarative `PageSpec` record
+authored via an EvalApp-styled fluent builder, rendered by an engine built AS a real EvalApp
+pipeline (each render concern — head/nav/hero/sections/static-file-write/island-placeholder — a
+genuine EvalApp `Step`, so rendering many pages across many client sites is a resource-gated,
+tuned fan-out EvalApp already does, not a bespoke second engine). `HtmlRenderer`/`JSComponents`
+are still real and used, demoted to "how one render step implements its fragment" / "how an
+island mounts client-side," not the top-level driver. **Flagged, not decided unilaterally**: this
+uses EvalApp for a build-time batch workload outside its documented consumer set — `evalapp-owner`
+sign-off is a real blocking step (Phase 0.5) before any of this is implemented, concrete open
+questions listed in the doc's §4.5. Phase 0 (token + component-inventory extraction into
+`AboutUs/SiteKit/`) is DONE and unaffected by the correction (pure CSS/data, orthogonal to the
+render-engine choice) — `SiteKit/tokens/{core,brand-ea}.css` (value-preserving extraction, INERT,
+not yet imported by anything) + `SiteKit/COMPONENTS.md` (the full component inventory +
+AboutUs-specific-vs-reusable-core split) + `SiteKit/README.md`. Nothing in `site/` or `Showroom/`
+was changed to do this — `site/assets/site.css` and `Showroom/wwwroot/css/*` remain the live,
+load-bearing files. The showroom-owner hand-off for the next phase is written out in full in that
+doc's own §8, ready to dispatch as its own task whenever the coordinator picks this up. This
+section below is kept as the verified-facts HISTORY the new doc's reasoning is built on (payload
+measurement, the HtmlRenderer/JSComponents spikes, the incident/tuning log) — still true, just no
+longer the plan-of-record framing at the top.
+
 A multi-cycle initiative is running to turn the site into a Blazor app platform with Prism (the
 in-browser HoloFormer) woven into the site rather than isolated at `/tools/prism`. Architecture is
 still being steered; these MEASURED facts hold whichever way it lands:
@@ -1549,6 +1584,12 @@ indefinitely — flagging that the deferral itself needs an actual trigger, not 
 
 ## Gotchas
 
+- **New (2026-09-02): before hand-sweeping a token/component change across N pages again, check
+  `SiteKit/COMPONENTS.md` first.** It's the documented single source of truth for what a
+  component's markup/prop contract SHOULD be (transcribed from the real files, kept current), even
+  though Phase 1's real Razor Class Library doesn't exist yet — check a sweep's target shape
+  against that doc before typing it into 17 files from memory of `site.css`, and update the doc's
+  entry if the sweep changes the contract. See `docs/platform-architecture.md` for why.
 - Windows/PS 5.1: edit via the editor tools (Read/Edit/Write) or UTF-8-safe .NET I/O; never
   `Get-Content`/`Set-Content` on these files (em dashes, arrows, non-ASCII punctuation throughout
   → mojibake risk).
