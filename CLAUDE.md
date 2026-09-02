@@ -59,16 +59,26 @@ ea.css`'s chord rule had picked up a stray `--glow-near` override the live site 
 `@import`'s relative path resolves to `/SiteKit/tokens/...` once served from the Pages artifact
 root, so this copy is load-bearing, not cosmetic (without it the import 404s live and every custom
 property on the deployed site goes undefined). Full record: `platform-architecture.md` §10.
-**3 real C# projects, Phase 1 core + Phase 2 in progress (9 of 17 pages proven 2026-09-02)**:
+**3 real C# projects, Phase 1 core + Phase 2 (16 of 17 pages proven 2026-09-02)**:
 `SiteKit.Spec/` (the declarative `PageSpec` record types + fluent builder, zero deps —
 `CardSpec` gained `CatRootOverride` in the Phase-1 pass; the second Phase-2 batch, same day, added
 `HeroSpec.LimHtml`+`InstallMaxWidthPx`, `SnippetSpec.DescBeforeHtml`, `SectionSpec.ExtraHtml` (on
-`Prose`), two new `SectionKind`s `StackFlow`/`Raw`, and `PageSpec.PageStyleHtml` — see below),
+`Prose`), two new `SectionKind`s `StackFlow`/`Raw`, and `PageSpec.PageStyleHtml`; the THIRD batch,
+same day, closed every remaining composer gap — 4 new `SectionKind`s (`ToolGrid`/`Compare`/
+`ConceptArticle`/`ProseArticle`), `PageSpec.Hero` made nullable, plus a long tail of small typed
+overrides (`SeoSpec.OgType`/`RobotsMeta`, `PageSpec.TailScriptHtml`/`LeadingHtml`/`MetaCharset`/
+`NavBurgerAriaLabel`/`NavItemsOverride`, `HeroSpec.RawBodyHtml`/`CrumbHtml`/`ExtraBodyHtml`/
+`ExtraClass`/`LeadingCommentHtml`, `SectionSpec.SectionId`/`LeadingCommentHtml`/`IntroHtml`/
+`LimStyleAttr`, `CardSpec.LimHtml`/`PreBodyHtml`/`OmitCatStyle`, `RelatedLink.CssClass`) — full
+list and reasoning below),
 `SiteKit.Render/` (the EvalApp-native render pipeline — `PackageReference
 EvaluatedApplications.EvalApp 1.7.0`, NuGet-only, same boundary `HoloKernel` uses for AlgFormer;
-`HeroComposer` had two real bugs fixed across the two passes, see below), `SiteKit.Render.PoC/`
-(ports 9 pages through the real pipeline in ONE run and diffs each output against its live file —
-all 9 verified IDENTICAL after normalizing away pure whitespace/line-wrap AND under an independent
+`HeroComposer` had two real bugs fixed across the first two passes, plus several more real
+gaps the third batch's diffs caught directly — `og:type` hardcoded to `"website"`, a missing
+CardGrid intro-paragraph slot, an unconditional `.grid` wrapper on ToolGrid — see below),
+`SiteKit.Render.PoC/`
+(ports 16 pages through the real pipeline in ONE run and diffs each output against its live file —
+all 16 verified IDENTICAL after normalizing away pure whitespace/line-wrap AND under an independent
 whitespace-stripped byte compare, full record in `platform-architecture.md` §9/§10/§11).
 
 **Phase 1 + Phase 2's first batch (2026-09-02, morning)**: `phasor.html` (Phase 1), then
@@ -118,12 +128,96 @@ two-pipeline sketch in `platform-architecture.md` §3.2 was wrong (wouldn't comp
 a build-time step-DSL callback, not a per-item delegate; `ICompiledPipeline<T>` isn't a valid step)
 and has been replaced with real, building, running code: one compiled tree, nested
 `ForEach<SiteRenderJob>` inside `ForEach<PageRenderJob>` (sites → pages), fixed `Tunable` bounds,
-no `.WithTuning()`. Next up: 8 of 17 pages remain — the holodb hub/benchmarks/manual,
-`algformer.html`'s `.card.tool` gallery shape, `holoformer.html`'s bespoke concept-card layout, and
-`articles.html`/`articles/_example.html`'s `.prose`/`.toc` template all need new composer support
-first, not just a new `PageSpec` value. Don't treat this pass as authorization to start touching
-`site/**/*.html` PAGE markup for real yet — that's still a later, explicit cutover decision; only
-the shared CSS token layer actually went live this pass.
+no `.WithTuning()`.
+
+**Phase 2's third batch (2026-09-02, same day) — the 7 previously-flagged composer-gap pages, all
+now proven, 16/17 total.** `algformer.html` (`.card.tool` "Try it live" gallery + the "Two cores,
+same shape" `.cmp` comparison), `holoformer.html` (the bespoke 7-card concept-explainer article),
+`articles.html` + `articles/_example.html` (the `.prose`/`.toc` template + the personal-writing
+index), and all 3 HoloDb pages (`holodb/index.html` the hub, `holodb.html` the benchmarks
+sub-page, `holodb/manual/index.html` the manual) — every one verified structurally AND
+whitespace-stripped-byte IDENTICAL against its live file, same discipline as the first two
+batches. New, additive `SiteKit.Spec`/`SiteKit.Render` capabilities, each proven necessary by an
+actual page (not spec'd speculatively):
+- **`SectionKind.ToolGrid`** (`ToolCardSpec`: Title/Href/Tag/nullable-Ver/DescHtml/GoInText) — the
+  `.card.tool` gallery shape, shared verbatim by `algformer.html`'s 3-card `.grid` gallery and the
+  HoloDb hub's lone, `.grid`-less "The Analyst" card (`SectionSpec.ToolGrid(...,
+  omitGridWrapper:true)` — a real, live markup difference the diff itself caught, not assumed).
+- **`SectionKind.Compare`** — `algformer.html`'s two-card `.cmp` "AlgFormer vs HoloFormer" block,
+  reusing `CardSpec` verbatim (same `.card`/`.card-top` shape CardGrid uses) inside a `.cmp` wrapper
+  instead of `.grid`, plus one trailing prose paragraph.
+- **`SectionKind.ConceptArticle`** (`ConceptCardSpec`: glyph SVG + kick label + h2 + N paragraphs +
+  anchor callout; `ConceptCompareCardSpec` for the closing "ordinary vs. this model" `.cmp`) — the
+  whole bespoke `<main class="sec">` body of `holoformer.html`'s 7-card "meaning as chords"
+  explainer, the single richest new typed shape this batch, chosen over piling `Raw`/`ExtraHtml`
+  onto a 7-times-repeating component per the standing "type what recurs" rule.
+- **`SectionKind.ProseArticle`** (`ProseArticleSpec`: CrumbHtml/H1/optional ByelineHtml/optional
+  LedeHtml/optional Related pills/optional TocItems/BodyHtml) — the `<main class="wrap"><article
+  class="prose">` shell shared by all 3 "prose-template" pages (`articles/_example.html`,
+  `holodb.html`, `holodb/manual/index.html`), paired with **`PageSpec.Hero` becoming nullable**
+  (no `<header class="hero">` at all on these 3 — the pipeline's RenderHero step now skips
+  `HeroComposer` entirely when `Hero is null`). Each page's own h2-sectioned body content stays raw
+  `BodyHtml` — genuinely one-off prose/tables/snippets per page, not worth typing further, same
+  "type the shell, escape-hatch the one-off content" split as `SectionSpec.Raw`.
+- **`HeroSpec.RawBodyHtml`** — a full escape-hatch override of the entire hero-body (crumb through
+  related, all bypassed) for a hero widget-heavy enough that the typed fields would mostly go
+  unused while fighting the ones that don't fit: the HoloDb hub's hero has no crumb, no `.facts`
+  pills, a `.race` benchmark widget between the lede and the CTA row, and `.install` AFTER
+  `.cta-row` (every other page puts install first). `HeroSpec.CrumbHtml`/`ExtraBodyHtml` are the
+  lighter-weight siblings used where the standard hero shape mostly fits (`holoformer.html`'s
+  2-hop crumb + `.thesis` figure pair between lede and related; `articles.html`'s 1-hop crumb on a
+  facts-only hero).
+- **`SectionSpec.SectionId`** + **`SectionSpec.LeadingCommentHtml`** / **`HeroSpec.LeadingCommentHtml`**
+  — `id="..."` on `<section class="sec">` for same-page anchors (`articles.html`'s `#articles`; the
+  HoloDb hub's `#how`/`#workload`/`#benchmarks`/`#features`/`#deploy`), and raw HTML (in practice,
+  an `<!-- HOW IT WORKS -->`-style comment) emitted immediately before a section/hero tag — the
+  HoloDb hub carries one such marker before every one of its 8 top-level blocks; reproduced
+  verbatim rather than dropped, since the structural-diff tokenizer treats comment text as real
+  content.
+- **`CardSpec.LimHtml`** (a second `.lim` INSIDE one card, after its own `.desc` — distinct from
+  the section-level `.lim` after the whole grid), **`CardSpec.PreBodyHtml`** (raw HTML, typically a
+  `.snip` code sample, before a card's own `.desc`), **`CardSpec.OmitCatStyle`** (drops
+  `style="--cat:..."` entirely rather than falling back to the section default — the HoloDb hub's
+  3 "Deploy" cards carry no `--cat` at all on the live page) — all first exercised by the HoloDb
+  hub's "Capabilities"/"Deploy" CardGrids.
+- **`SectionSpec.IntroHtml`** (CardGrid) — a lead-in `.desc` paragraph BEFORE the `.grid`, distinct
+  from the existing `.lim` which trails after it; **`SectionSpec.LimStyleAttr`** — an inline
+  `style="..."` on that trailing `.lim` (the hub's "Deploy" section is the first with one,
+  `margin-top:16px`, every other CardGrid `.lim` is unstyled).
+- **`SectionSpec.ClosingStackWithInstall`** (`ClosingInstallCommand`) — an `.install` chip between
+  a ClosingStack's `<p>` and `.cta-row`, the hub's "Get started" closing block.
+- **`SeoSpec.OgType`** (default `"website"`, `"article"` for the 4 explainer/reference pages) and
+  **`SeoSpec.RobotsMeta`** — both were REAL, unhandled gaps the diff itself caught (HeadComposer
+  had `og:type` hardcoded to `"website"` until `holoformer.html`'s diff failed on it), not
+  speculative additions.
+- **`PageSpec.TailScriptHtml`** (full `<script>` override; null = the standard year+copy-button
+  script), **`PageSpec.LeadingHtml`** (raw HTML before `<!DOCTYPE html>` —
+  `articles/_example.html`'s own publishing-recipe comment), **`PageSpec.MetaCharset`** (default
+  `"utf-8"`; `holodb.html` live-carries the uppercase literal `"UTF-8"`, reproduced not "fixed"),
+  **`PageSpec.NavBurgerAriaLabel`** (default `"Toggle menu"`; `holodb.html` live-carries `"Menu"`),
+  **`PageSpec.NavItemsOverride`** (per-page nav item list — most pages share one site-level
+  `NavSpec`, but `holoformer.html`'s NuGet link points at the AlgFormer package directly instead of
+  the site's usual profile URL, and the 3 HoloDb pages each carry their own extra nav items), and
+  **`RelatedLink.CssClass`** (the HoloDb manual's own "Manual" nav link carries `class="active"`) —
+  a cluster of small, real, page-level literal divergences the byte-identity check surfaced one at
+  a time, each fixed as a typed override rather than a special case in the composer.
+- **`HeroSpec.ExtraClass`** — an extra space-separated class on `<header class="hero ...">` (the
+  HoloDb hub's own `hd-hero` page-local class).
+
+All additions are backward-compatible (new optional fields/params with defaults, or new enum
+cases) — none of the 9 pages proven in the first two Phase-2 batches needed to change, re-verified
+clean in the same run as these 7. `SiteKit.Render.PoC/Program.cs` now builds and diffs all 16 pages
+in one pipeline run; `articles.html`/`articles/_example.html`'s hand-authored originals are 2 of
+the 16 despite `articles/_example.html` being a noindexed, unlinked template (not one of the 17
+"routable" pages CLAUDE.md's Site map counts) — included because the task explicitly named it as
+needing the same `.prose`/`.toc` composer support as `articles.html` itself.
+
+**Still not ported: `index.html`, `packages.html`** — neither was named in the composer-gap flag
+this batch closes (both are plain package/tool gallery grids, already close to the proven
+CardGrid/ToolGrid shape), so they're left as the one remaining gap in the 17-page count rather than
+assumed done. Still fully INERT w.r.t. the deployed site's PAGES (see below) — this whole batch,
+like the two before it, only proves the pipeline CAN reproduce these pages; it doesn't cut any of
+them over.
 
 **All 11 current MonoRepo packages have a page**: Phasor, EvalApp, EvalApp.Neural, AlgFormer
 (+HoloFormer deep-dive), AlgFormer.Gpu, HoloDb (+benchmarks), HoloDb.Protocol, HoloDb.Client,

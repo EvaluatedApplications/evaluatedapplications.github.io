@@ -102,6 +102,13 @@ a NuGet link or a "Powered by" pill — invalid nested-anchor markup otherwise);
 nests that must stay independently clickable is lifted to `z-index:2`.
 `@media(max-width:640px){.grid{grid-template-columns:1fr}}` is a real, load-bearing fix (a 2026-08
 mobile-overflow bug) — any reusable grid component must ship this from day one, not rediscover it.
+**A second, related shape, `.card.tool`** (`<a class="card tool">`, not `<article>`): its own
+`.tag`/`.ver` pair in `.card-top` and a closing `.go-in` "Open X →" line instead of trailing after
+`.desc` — same `.grid`, sometimes grid-less for a single card (`holodb/index.html`'s lone "The
+Analyst"). Catalogued as `ToolCardSpec` in `SiteKit.Spec/PageSpec.cs` (2026-09-02), proven against
+2 real pages. Plain `.card` itself also proved 3 real per-card variations worth a component prop
+each: a second `.lim` note inside one card (distinct from the section-level one after the whole
+grid), raw content (a `.snip`) before `.desc`, and no `--cat` at all — all in `CardSpec`.
 
 ## 6. OS-chrome shell — `body.os-chrome` opt-in: `.hero-bar`/`.win-dots` (titlebar), a taskbar/dock
 nav, mobile icon-grid variants of `#packages`/`#tools` `.grid`. Desktop/wide viewports get
@@ -132,6 +139,21 @@ Smaller reusable atoms: callout box, code-sample box, caveat note, long-form art
 table-of-contents, breadcrumb, buttons. All brand-agnostic, all straightforward Phase-1 component
 candidates (or, for the simplest ones, plain CSS classes a client site just uses directly without
 needing a Razor wrapper at all — not every reusable thing needs to become a component).
+**The `.prose`/`.toc` PAGE SHELL** (`<main class="wrap"><article class="prose">`, no `<header
+class="hero">` at all) is now proven as its own reusable unit, not just the CSS atoms inside it —
+`SectionSpec.ProseArticle`/`ProseArticleSpec` (`SiteKit.Spec/PageSpec.cs`, 2026-09-02) types the
+recurring shell (crumb, h1, optional byline, optional lede, optional `.related`, optional `.toc`)
+across all 3 real prose-template pages (`articles/_example.html`, `holodb.html`, `holodb/manual/
+index.html`), each verified byte-identical; each page's own h2-sectioned body content stays a raw
+block (genuinely one-off per page, not worth typing further).
+
+## 10. Concept-card explainer article — `.concept` (sticky glyph + kick label + h2 + N paragraphs +
+`.anchor` callout, repeating) + a closing `.cmp` "ordinary vs. this" comparison + a `.closer`
+pull-quote. A NEW pattern this inventory hadn't catalogued before `holoformer.html` was ported
+(2026-09-02) — typed as `SectionKind.ConceptArticle`/`ConceptCardSpec`/`ConceptCompareCardSpec` in
+`SiteKit.Spec/PageSpec.cs` since the glyph+kick+h2+paragraphs+anchor shape genuinely repeats 7
+times on that one page (a real, reusable component, not a one-off). Only one live page uses it
+today; worth watching for a second real use before assuming the exact field shape is final.
 
 ## 9. `.pkg-strip`/`.pkg-chips`/`.pkg-chip`, `.powered`/`.powered-label`
 The lightweight "acknowledge related things exist without a full card" pattern — smaller than

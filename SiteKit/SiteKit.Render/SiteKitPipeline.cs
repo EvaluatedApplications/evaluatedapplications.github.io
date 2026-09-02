@@ -58,7 +58,12 @@ public static class SiteKitPipeline
                                     {
                                         // First body fragment. Accumulation, not concatenation —
                                         // see RenderSections below + evalapp-owner's O(n^2) flag.
-                                        BodyFragments = new List<string> { HeroComposer.Compose(job.Spec, job.Brand) }
+                                        // Hero is null on a "prose-template" page (no <header
+                                        // class="hero"> at all) — start the fragment list empty
+                                        // instead of calling the composer.
+                                        BodyFragments = job.Spec.Hero is not null
+                                            ? new List<string> { HeroComposer.Compose(job.Spec, job.Brand) }
+                                            : new List<string>()
                                     })
                                     .AddStep("RenderSections", job => job with
                                     {

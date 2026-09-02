@@ -713,13 +713,87 @@ pages picked to need nothing new. `algformer-gpu.html` in particular is the firs
 with zero Prose/Snippets/StackFlow/Raw sections at all — three plain `CardGrid`s only — proving
 that shape is valid too.
 
-**Still unattempted, same status as before this batch** (`deploy.yml` untouched, no
-`site/**/*.html` PAGE markup touched, generated output still lands only in a gitignored
-`bin/**/out/` folder): the HoloDb hub/benchmarks/manual, `algformer.html`'s `.card.tool` gallery
-shape, `holoformer.html`'s bespoke concept-card layout, and `articles.html`/`articles/_example.html`'s
-`.prose`/`.toc` template. 9 of 17 routable pages now proven; 8 remain, all needing new composer
-support before a `PageSpec` can even be attempted for them, per the same discipline this whole
-doc has followed from Phase 1 onward.
+**Status after this batch, since superseded by §12 below**: 9 of 17 routable pages proven; the
+HoloDb hub/benchmarks/manual, `algformer.html`'s `.card.tool` gallery shape, `holoformer.html`'s
+bespoke concept-card layout, and `articles.html`/`articles/_example.html`'s `.prose`/`.toc`
+template all still needed new composer support before a `PageSpec` could even be attempted for
+them — see §12 for that work, done the same day.
+
+## 12. Verification record — Phase 2's third batch (the last 7 flagged pages), 2026-09-02
+
+Run from `AboutUs/SiteKit/SiteKit.Render.PoC`, same session, dispatched as "continue Phase 2" with
+the 7 pages §11 flagged as needing new composer support first:
+
+```
+dotnet build -c Release      # SiteKit.Spec, SiteKit.Render, SiteKit.Render.PoC — 0 errors
+dotnet run -c Release
+```
+
+`algformer.html`, `holoformer.html`, `articles.html`, `articles/_example.html`, `holodb.html`
+(benchmarks), `holodb/manual/index.html`, `holodb/index.html` (the hub) were each transcribed
+verbatim into a `PageSpec` (`AlgFormerPageSpec.cs`, `HoloFormerPageSpec.cs`, `ArticlesPageSpec.cs`,
+`ArticleExamplePageSpec.cs`, `HoloDbBenchmarksPageSpec.cs`, `HoloDbManualPageSpec.cs`,
+`HoloDbHubPageSpec.cs`), added to the same `Program.cs` site build alongside all 9 prior pages —
+16 pages, 1 pipeline, 1 run. All 16 verified IDENTICAL under both checks:
+
+```
+=== algformer.html === IDENTICAL (560 lines). Byte compare: 15185=15185, equal=True
+=== holoformer.html === IDENTICAL (673 lines). Byte compare: 18963=18963, equal=True
+=== articles.html === IDENTICAL (218 lines). Byte compare: 6461=6461, equal=True
+=== articles/_example.html === IDENTICAL (244 lines). Byte compare: 7174=7174, equal=True
+=== holodb.html === IDENTICAL (804 lines). Byte compare: 14044=14044, equal=True
+=== holodb/manual/index.html === IDENTICAL (937 lines). Byte compare: 16640=16640, equal=True
+=== holodb/index.html === IDENTICAL (1620 lines). Byte compare: 32370=32370, equal=True
+ALL PAGES VERIFIED IDENTICAL. (all 16, including the 9 from the prior two batches)
+```
+
+Every one of the 7 pages needed at least one real capability that didn't exist before this batch
+(unlike the second batch's 3 "zero new capability" controls) — this was the batch explicitly
+chosen to be structurally hard, not a confirming pass. Additions (all additive/backward-compatible
+— new optional fields/params with defaults, or new enum cases; none of the prior 9 pages' specs
+needed to change):
+
+- **4 new `SectionKind`s**: `ToolGrid` (`ToolCardSpec`, the `.card.tool` gallery shape —
+  `algformer.html`'s 3-card `.grid` version and the HoloDb hub's grid-less 1-card version, via the
+  new `omitGridWrapper` flag, a real live-markup difference caught by the diff, not assumed),
+  `Compare` (`algformer.html`'s 2-card `.cmp` shape, reusing `CardSpec` verbatim), `ConceptArticle`
+  (`ConceptCardSpec`/`ConceptCompareCardSpec` — `holoformer.html`'s whole bespoke 7-concept-card
+  `<main class="sec">` body, typed because the glyph+kick+h2+paragraphs+anchor shape genuinely
+  repeats 7 times on one page), `ProseArticle` (`ProseArticleSpec` — the `<main class="wrap">
+  <article class="prose">` shell shared by `articles/_example.html`/`holodb.html`/`holodb/manual/
+  index.html`, paired with **`PageSpec.Hero` becoming nullable** so the pipeline can skip
+  `HeroComposer` entirely for a page with no `<header class="hero">` at all).
+- **`HeroSpec.RawBodyHtml`** — a full hero-body escape hatch for the HoloDb hub's hero (no crumb,
+  no `.facts`, a `.race` widget, `.install` AFTER `.cta-row` — every typed field would have gone
+  unused while fighting the ones that don't fit). `HeroSpec.CrumbHtml`/`ExtraBodyHtml` are the
+  lighter option used where the standard shape mostly fits (`holoformer.html`, `articles.html`).
+- **`SectionSpec.SectionId`** (`id="..."` for same-page anchors) and **`SectionSpec`/`HeroSpec`
+  `LeadingCommentHtml`** (raw HTML, in practice an `<!-- HOW IT WORKS -->`-style marker, before a
+  section/hero tag — the HoloDb hub carries one before all 8 of its top-level blocks; the
+  structural-diff tokenizer treats comment text as real content, so these had to be reproduced
+  verbatim once discovered as a real diff, not dropped as "just a comment").
+- **`CardSpec.LimHtml`/`PreBodyHtml`/`OmitCatStyle`**, **`SectionSpec.IntroHtml`/`LimStyleAttr`**,
+  **`SectionSpec.ClosingStackWithInstall`** — all first exercised by the HoloDb hub's
+  "Capabilities"/"Deploy"/"Get started" sections (a second `.lim` inside one card; a `.snip` before
+  a card's `.desc`; a card with no `--cat` at all; a lead-in paragraph before a `.grid`; an inline
+  style on a trailing `.lim`; an `.install` chip inside a ClosingStack).
+- **`SeoSpec.OgType`/`RobotsMeta`**, **`PageSpec.TailScriptHtml`/`LeadingHtml`/`MetaCharset`/
+  `NavBurgerAriaLabel`/`NavItemsOverride`**, **`HeroSpec.ExtraClass`**, **`RelatedLink.CssClass`**
+  — a cluster of small, REAL, page-level literal divergences the byte-identity check surfaced one
+  at a time (an `og:type` hardcoded to `"website"` in HeadComposer was a genuine unhandled gap,
+  not a hypothetical one — `holoformer.html`'s first diff run failed on exactly this line). Each
+  fixed as a typed override, not a special case threaded through the composer.
+
+**No page in this batch needed zero new capability** — a deliberate contrast with the second
+batch's 3 controls, confirming the composer surface still had real gaps left to find right up to
+the last page (the HoloDb hub alone needed roughly a dozen of the additions above).
+
+**Still unattempted**: `index.html`, `packages.html` — neither was named in the task that dispatched
+this batch (both are plain package/tool gallery grids, structurally close to the already-proven
+CardGrid/ToolGrid shapes), so they're the one remaining gap in the 17-page count, not assumed done.
+`deploy.yml` is still untouched, no `site/**/*.html` PAGE markup was touched, and generated output
+still lands only in a gitignored `bin/**/out/` folder — this batch, like the two before it, proves
+the pipeline CAN reproduce these pages, it does not cut any of them over.
 
 ## Open questions, genuinely unresolved (flagged, not decided here)
 

@@ -29,6 +29,13 @@ Site.Define("aboutus-poc", PhasorPageSpec.Brand(), PhasorPageSpec.Nav(), outputR
     .Page("holodb-protocol", "HoloDb.Protocol", "holodb-protocol", "var(--c-holodb-protocol)", HoloDbProtocolPageSpec.Configure)
     .Page("evalapp-neural", "EvalApp.Neural", "evalapp-neural", "var(--c-evalapp-neural)", EvalAppNeuralPageSpec.Configure)
     .Page("algformer-gpu", "AlgFormer.Gpu", "algformer-gpu", "var(--c-algformer-gpu)", AlgFormerGpuPageSpec.Configure)
+    .Page("algformer", "AlgFormer", "algformer", "var(--c-algformer)", AlgFormerPageSpec.Configure)
+    .Page("holoformer", "HoloFormer", "algformer", "var(--c-algformer)", HoloFormerPageSpec.Configure)
+    .Page("articles", "Articles", "", "var(--accent)", ArticlesPageSpec.Configure)
+    .Page("articles/_example", "Example", "", "var(--accent)", ArticleExamplePageSpec.Configure)
+    .Page("holodb", "Benchmarks", "holodb", "var(--c-holodb)", HoloDbBenchmarksPageSpec.Configure)
+    .Page("holodb/manual/index", "Manual", "holodb", "var(--c-holodb)", HoloDbManualPageSpec.Configure)
+    .Page("holodb/index", "HoloDb", "holodb", "var(--c-holodb)", HoloDbHubPageSpec.Configure)
     .Build(out SiteSpec siteSpec);
 
 var pipeline = SiteKitPipeline.Build();
@@ -44,7 +51,7 @@ var written = result.GetData().WrittenFiles ?? Array.Empty<string>();
 Console.WriteLine($"Pipeline succeeded. Wrote {written.Count} file(s):");
 foreach (var f in written) Console.WriteLine("  " + f);
 
-var pagesToVerify = new[] { "phasor", "prose", "tracer", "evalapp", "holovoxel", "holodb-client", "holodb-protocol", "evalapp-neural", "algformer-gpu" };
+var pagesToVerify = new[] { "phasor", "prose", "tracer", "evalapp", "holovoxel", "holodb-client", "holodb-protocol", "evalapp-neural", "algformer-gpu", "algformer", "holoformer", "articles", "articles/_example", "holodb", "holodb/manual/index", "holodb/index" };
 var overallOk = true;
 
 foreach (var slug in pagesToVerify)
