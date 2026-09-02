@@ -1,5 +1,7 @@
 # SiteKit component inventory (spec, not code — Phase 0)
 
+**Last verified:** 2026-09-02
+
 One entry per reusable pattern. For each: what it is, its exact markup shape today (elided where
 long), which custom props/classes it depends on, and its current independent implementations —
 the static-HTML shape (`site/**/*.html`, hand-typed per page, 23 files as of the 2026-09-02 tidy-up

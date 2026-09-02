@@ -1,5 +1,7 @@
 # Showroom — CLAUDE.md (showroom-owner)
 
+**Last verified:** 2026-09-02
+
 Blazor WebAssembly app at `C:\Users\dongy\AboutUs\Showroom`, published under `/tools` on the public
 site (`AboutUs` repo, base href `/tools/` — see `wwwroot/index.html`). Every tool runs entirely
 client-side: no server, no upload, the interesting compute happens in the visitor's own browser tab.

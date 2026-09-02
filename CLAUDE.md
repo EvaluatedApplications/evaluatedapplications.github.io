@@ -1,5 +1,7 @@
 # AboutUs — CLAUDE.md (website-owner)
 
+**Last verified:** 2026-09-02
+
 Public site repo for `evaluatedapplications.github.io`. Static HTML content (indexable, instant)
 + a Blazor WebAssembly tools app under `/tools` (The Analyst, The Creature). You (website-owner)
 own PRESENTATION — design, cohesion, rendering, nav, deploy. Package owners own CONTENT, authored

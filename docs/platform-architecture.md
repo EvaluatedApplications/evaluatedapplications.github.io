@@ -1,5 +1,7 @@
 # Platform architecture — the intentional version
 
+**Last verified:** 2026-09-02
+
 Written by website-owner, 2026-09-02, on direct strategic instruction: this site (and its
 relationship to Showroom) is becoming a real product — "Evaluated Applications' website hosting
 project," a reusable toolkit for building future client sites, not a bespoke AboutUs homepage.
@@ -806,23 +808,16 @@ them over.
 denominator that had already gone stale — and, per §1's own original wording, was arithmetically
 wrong even the day it was typed (it silently dropped the 3 real article pages that already existed
 at the time). The same "17" figure was also independently repeated in `AboutUs/CLAUDE.md` and
-`SiteKit/COMPONENTS.md`. This section is the corrected, RE-DERIVED ground truth (counted fresh
-against `site/**/*.html` and `sitemap.xml` this pass, not carried forward from any earlier report);
-CLAUDE.md's "SiteKit — reconciled status & open decisions" section carries the identical figures —
-treat the two as one fact, kept in two files because each is the natural home for half the audience.
+`SiteKit/COMPONENTS.md` — three hand-copies of one number, exactly the failure mode that let it
+drift stale in all three at once.
 
-**The corrected count**: `site/**/*.html` = **23 real files** — 11 package pages, 3 reference pages
-(`holoformer.html`, `holodb.html`, `holodb/manual/index.html`), 3 index pages (`index.html`,
-`packages.html`, `articles.html`), 3 real article pages, and 3 deliberately non-routable files
-(`404.html`, `recycledao-preview.html`, `articles/_example.html`). 20 of the 23 are routable and
-appear in `sitemap.xml` (cross-checked: `sitemap.xml` lists exactly 20 page `<loc>`s + 5 tool
-routes = 25 entries, matching the direct count with 0 discrepancy — `sitemap.xml` itself needed no
-edit this pass). Of the 23, **16 are round-tripped through `SiteKit.Render.PoC` and verified
-byte-identical** (all 11 package pages + all 3 reference pages + `articles.html` +
-`articles/_example.html`); **7 have no `PageSpec` at all yet**: `index.html`, `packages.html`,
-`404.html`, `recycledao-preview.html`, `articles/ctx4-plateau.html`,
-`articles/ctx8-and-the-reverse-grow.html`, `articles/nobody-read-the-warning.html`. Per-page notes on
-what each of the 7 needs are in `CLAUDE.md`'s mirrored section, not duplicated verbatim here.
+**The corrected count now lives in ONE place, not two.** Per the charter's "one file, not two"
+rule (`.claude/AGENT-CHARTER.md` §3), `AboutUs/CLAUDE.md`'s "SiteKit — reconciled status & open
+decisions" section is the single source of truth for the page-count breakdown (23 real files under
+`site/**/*.html`, the 11/3/3/3/3 split, the 20 routable vs. `sitemap.xml` cross-check, the 16
+verified byte-identical, the 7 unattempted by name and what each still needs) — read it there. This
+doc no longer restates that breakdown (it used to, right here, which is the same duplication risk
+that let "17" go stale in three places — not repeating it a second time).
 
 **Three open decisions, recorded so they aren't only in a chat log**:
 
