@@ -51,9 +51,13 @@ body[data-cat="algformer"]{ --glow-near:var(--c-algformer); --glow-mid:var(--c-a
 body[data-cat="algformer-gpu"]{ --glow-near:var(--c-algformer-gpu); --glow-mid:var(--c-algformer-gpu); }
 body[data-cat="evalapp-neural"]{ --glow-near:var(--c-evalapp-neural); --glow-mid:var(--c-evalapp-neural); }
 
-/* Chord (multi-domain) pages — today only prose.html (HoloDb + AlgFormer). See COMPONENTS.md. */
+/* Chord (multi-domain) pages — today only prose.html (HoloDb + AlgFormer). See COMPONENTS.md.
+   --glow-near is deliberately NOT set here (fixed 2026-09-02, Phase 1 rewire verification found
+   this rule had drifted from the live site.css it was extracted from): the live original never
+   overrode --glow-near for a chord page, since --glow-near only feeds the .prism-beam keyframe
+   and no chord page carries .prism-beam today — it falls through to :root's white default like
+   every other page without one. See docs/platform-architecture.md's Phase-1 token-diff record. */
 body[data-cat="holodb-algformer"]{
-  --glow-near:var(--c-holodb);
   --glow-mid-a:var(--c-holodb); --glow-mid-b:var(--c-algformer);
 }
 

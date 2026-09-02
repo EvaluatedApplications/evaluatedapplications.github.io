@@ -403,19 +403,46 @@ original are IDENTICAL — 492 normalized tokens each, 0 additions, 0 removals.*
 independent check (strip ALL whitespace from both raw files, byte-compare) also returned equal:
 12,606 non-whitespace characters, identical. See §9 for the full verification record, including
 what the normalization does and doesn't paper over (documented, not asserted). **This is real
-proof the composition works and reproduces a real page exactly** — not a toy example. Still open
-before this phase is fully "done": `site/assets/site.css` has NOT yet been rewired to `@import`
-`SiteKit/tokens/*.css` (mechanical, low-risk, independent of the render-engine work — a fast
-follow, not attempted this pass to keep this pass's blast radius to "new code only, nothing live
-touched"), and `Showroom/Layout/MainLayout.razor` has not been touched (that's the
-`showroom-owner` half of Phase 1, still not dispatched).
+proof the composition works and reproduces a real page exactly** — not a toy example. **Fully
+closed 2026-09-02**: `site/assets/site.css` now `@import`s `SiteKit/tokens/{core,brand-ea}.css`
+instead of restating their values (mechanical, low-risk, done independently of the render-engine
+work as planned) — see §10 for the rewire + its own verification record, including a real drift it
+caught. `Showroom/Layout/MainLayout.razor` has still not been touched (that's the
+`showroom-owner` half of Phase 1, still not dispatched — unaffected by the rewire, since
+`Showroom/wwwroot/index.html` already `<link>`s the same physical `/assets/site.css` that now
+resolves its tokens from `SiteKit/tokens/` instead of inline — no Showroom-side change needed for
+that half to keep working).
 
-**Phase 2 — full catalogue migration (not started, needs Phase 1's parity proof — now exists).**
-`phasor.html` has round-tripped correctly through the real pipeline (§9). Migrate the rest of the
-17-page catalogue from hand-written HTML to `PageSpec` values + generated output, one page (or a
-small batch) at a time, each verified against the hand-written original the same way before moving
-on. Nothing in `site/` itself changes until this phase actually runs — Phase 1's output lives only
-in `SiteKit.Render.PoC/bin/**/out/`, gitignored, never written into `site/`.
+**Phase 2 — full catalogue migration, IN PROGRESS (started 2026-09-02, 3 of 17 pages proven).**
+`phasor.html` round-tripped correctly through the real pipeline in Phase 1 (§9). This pass added
+two more pages, deliberately chosen to be structurally DIFFERENT from Phasor (per this phase's own
+mandate: broaden the proof, don't re-confirm the same path) — both ported, run through the SAME
+compiled pipeline as Phasor in one call, and verified against their live originals the same
+rigorous way (tag-boundary structural diff + whitespace-stripped byte compare):
+- **`prose.html`** — exercises `CardSpec.CatOverride` as a real two-tone chord (paired with the
+  new `CatRootOverride` field, `--cat-root`), a page where `Category` (the `data-cat` attribute,
+  `"holodb-algformer"`) and `CategoryDotVar` (the `.sec-head .dot` colour, `var(--c-algformer)`)
+  are genuinely different values, no `.prism-beam`, and no closing `ClosingStack` section.
+- **`tracer.html`** — a Snippets section with exactly one snippet and no `LimHtml`/`DescAfterHtml`
+  at all, a `CardGrid` section that also carries a trailing `.lim` note in the same section, and a
+  second, independent non-beam page (re-confirming the bug fix below wasn't a Prose-only fix).
+
+**Two real bugs were found and fixed in `SiteKit.Render`/`SiteKit.Spec` doing this, not just
+content transcribed** — see §10 for the full record: (1) `HeroComposer` emitted the
+`.hero-content` z-index wrapper unconditionally; the live site only nests it on the 5 pages that
+also carry `.prism-beam` (`site.css`'s own comment on the rule says so) — Phasor alone couldn't
+have caught this since it's one of those 5 pages. Fixed to be conditional on
+`HeroSpec.ShowPrismBeam`, re-verified Phasor still matches after the fix. (2) A content
+transcription slip in the first `ProsePageSpec.cs` draft (copied Phasor's snippet-2 lead-in
+sentence instead of Prose's own) — caught by the same diff tooling, not missed silently. Remaining
+14 pages (holodb hub/benchmarks/manual, algformer.html's `.card.tool` gallery shape, holoformer.html
+and holovoxel.html's bespoke local-`<style>` pages, the remaining plain product pages, `index.html`/
+`packages.html`/`articles.html`) not started — the composer set proven so far covers Prose/CardGrid/
+Snippets/ClosingStack sections and the plain `os-chrome` template; `.card.tool` galleries and any
+page with a genuinely bespoke local `<style>` block will need new composer support before they can
+be ported the same way, not just a new `PageSpec` value. Nothing in `site/` itself changes until a
+future phase actually cuts over — Phase 1/2's output still lives only in
+`SiteKit.Render.PoC/bin/**/out/`, gitignored, never written into `site/`.
 
 **Phase 3 — islands (not started, needs Phase 2).** Pick ONE real, justified island (the
 `algformer.html`-to-Prism "you be the judge" content, already written once and reverted for
@@ -552,6 +579,60 @@ Phasor doesn't have one — see §3.3). It does NOT yet prove the pipeline scale
 other 16 pages' component combinations (the HoloDb hub's race-demo/benchmark tables, the `.prose`/
 `.toc` manual template, the OS-chrome taskbar/dock on non-plain pages) — that's exactly Phase 2's
 job, one page/batch at a time, each checked the same way.
+
+## 10. Verification record — the token rewire + Phase 2's two-page batch, 2026-09-02
+
+**The token rewire.** Before editing `site/assets/site.css`, its pre-edit `:root` block +
+`body[data-cat="..."]` rules were saved verbatim. After rewiring to the two `@import`s, both the
+saved original text and the concatenated `SiteKit/tokens/core.css`+`brand-ea.css` were parsed
+independently (strip comments, match `:root{...}`/`body[data-cat="..."]{...}` blocks, extract every
+`--prop:value;` declaration, normalize internal whitespace) into `selector → {prop=value}` maps and
+diffed. First run found a real mismatch: `brand-ea.css`'s chord rule carried
+`--glow-near:var(--c-holodb)`, which the live original never set for that selector. Fixed
+`brand-ea.css` (removed the stray declaration, documented why in a comment), re-ran the same
+diff: **11/11 selectors (`:root` + 10 `body[data-cat="..."]` rules), identical property=value sets,
+zero mismatches.** A brace-balance check on the edited `site.css` also passed (242 open, 242
+close). `deploy.yml` was updated in the same pass to copy `SiteKit/tokens/` into the Pages artifact
+at the exact relative depth the `@import`'s path expects (`../../SiteKit/tokens/...` from
+`/assets/site.css` resolves to `/SiteKit/tokens/...` once served from the artifact root) — without
+this the import would have silently 404'd live and blanked every custom property sitewide; this was
+reasoned through and fixed proactively, not discovered by trial.
+
+**Phase 2's `prose.html` + `tracer.html`.** Both ported into `PageSpec` values
+(`ProsePageSpec.cs`/`TracerPageSpec.cs`), both run through the same `SiteKitPipeline.Build()` call
+as `phasor.html` in one `Program.cs` invocation (`dotnet build -c Release` — 0 warnings/0 errors
+across `SiteKit.Spec`/`SiteKit.Render`/`SiteKit.Render.PoC` — then `dotnet run -c Release`):
+
+```
+Pipeline succeeded. Wrote 3 file(s): phasor.html, prose.html, tracer.html
+
+=== phasor.html ===
+IDENTICAL after whitespace normalization (492 non-blank lines each).
+All-whitespace-stripped byte compare: orig=12606 chars, gen=12606 chars, equal=True
+
+=== prose.html ===
+IDENTICAL after whitespace normalization (409 non-blank lines each).
+All-whitespace-stripped byte compare: orig=12573 chars, gen=12573 chars, equal=True
+
+=== tracer.html ===
+IDENTICAL after whitespace normalization (412 non-blank lines each).
+All-whitespace-stripped byte compare: orig=10902 chars, gen=10902 chars, equal=True
+
+ALL PAGES VERIFIED IDENTICAL.
+```
+
+This wasn't clean on the first attempt for `prose.html`, which is the point of doing this
+page-by-page instead of trusting the composers by inspection: the first run reported 7
+generated-only lines (`<div class="hero-content">`/`</div>` plus a wrong DescAfterHtml sentence
+copied from Phasor) and 1 original-only line (Prose's actual "Parse a single sentence directly..."
+lead-in). Both were real: the `.hero-content` gap was a genuine composer bug, now fixed in
+`HeroComposer` for every page (conditional on `HeroSpec.ShowPrismBeam`), not special-cased for
+Prose — see §6's Phase 2 writeup above for the full description. The wrong sentence was a
+transcription slip in `ProsePageSpec.cs` (fixed in the spec, not the composer — that half was
+content, not code). `tracer.html` then passed cleanly on its first run, which is itself part of the
+proof: it independently re-exercises the non-beam `HeroComposer` path (different page, unrelated
+content) and found nothing further wrong, some evidence the fix generalizes rather than papering
+over one page's symptom.
 
 ---
 

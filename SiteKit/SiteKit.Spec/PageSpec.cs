@@ -47,7 +47,14 @@ public sealed record HeroSpec(
     string RelatedAllHref = "/packages.html"
 );
 
-public sealed record CardSpec(string Title, string BodyHtml, string? CatOverride = null);
+/// <summary>CatOverride sets the card's own --cat (a solid colour OR a two-tone
+/// linear-gradient() "chord" for a composite/multi-domain package, e.g. Prose). CatRootOverride
+/// is the companion --cat-root a chord ALSO needs (CSS custom props can't be read back out of a
+/// gradient value, so any call site that needs one real solid colour from a chorded card —
+/// today: none on Prose's own page, but the pattern exists sitewide, see COMPONENTS.md's "--cat
+/// / --cat-root" note) sets this second prop alongside it. Null unless CatOverride is itself a
+/// gradient.</summary>
+public sealed record CardSpec(string Title, string BodyHtml, string? CatOverride = null, string? CatRootOverride = null);
 
 public sealed record SnippetSpec(string Code, string? DescAfterHtml = null);
 

@@ -48,24 +48,46 @@ static content pages; don't fold tool code into `site/`. `.github/workflows/depl
 `Showroom` and copies `site/` + the published `wwwroot` into one `_site/` artifact for Pages.
 
 **`SiteKit/` (2026-09-02, the reusable-toolkit plan — see "Platform initiative" below +
-`docs/platform-architecture.md`)**: `tokens/core.css`+`brand-ea.css` (value-preserving extraction
-of `site.css`'s `:root`) + `COMPONENTS.md` (component inventory) + `README.md` — still INERT
-(Phase 0), not referenced by `deploy.yml`, not `<link>`ed from any page. **Now also 3 real C#
-projects (Phase 1 core, done for one page 2026-09-02)**: `SiteKit.Spec/` (the declarative
-`PageSpec` record types + fluent builder, zero deps), `SiteKit.Render/` (the EvalApp-native render
-pipeline — `PackageReference EvaluatedApplications.EvalApp 1.7.0`, NuGet-only, same boundary
-`HoloKernel` uses for AlgFormer), `SiteKit.Render.PoC/` (ports `phasor.html` through the real
-pipeline and diffs the output against the live file — verified IDENTICAL after normalizing away
-pure whitespace/line-wrap, full record in `platform-architecture.md` §9). **Still fully INERT
-w.r.t. the deployed site**: `deploy.yml` doesn't build these projects, no `site/**/*.html` was
-touched, the PoC's generated output lands only in a gitignored `bin/**/out/` folder. `evalapp-
-owner`'s design review (Phase 0.5) is done — the original two-pipeline sketch in
-`platform-architecture.md` §3.2 was wrong (wouldn't compile: `ForEach` takes a build-time step-DSL
-callback, not a per-item delegate; `ICompiledPipeline<T>` isn't a valid step) and has been replaced
-with real, building, running code: one compiled tree, nested `ForEach<SiteRenderJob>` inside
-`ForEach<PageRenderJob>` (sites → pages), fixed `Tunable` bounds, no `.WithTuning()`. Next up is
-Phase 2 (migrate the rest of the 17-page catalogue the same page-by-page verified way) — not
-started, don't treat this pass as authorization to start touching `site/**/*.html` for real yet.
+`docs/platform-architecture.md`)**: `tokens/core.css`+`brand-ea.css` + `COMPONENTS.md` (component
+inventory) + `README.md`. **`tokens/` is now LIVE, not inert** (closed 2026-09-02): `site/assets/
+site.css` `@import`s `SiteKit/tokens/{core,brand-ea}.css` right after its top comment instead of
+restating their values inline — verified equivalent by parsing both the pre-edit `:root`/
+`body[data-cat]` text and the token files into `selector→{prop=value}` maps and diffing
+programmatically (11/11 selectors, identical, after fixing one real drift the diff caught: `brand-
+ea.css`'s chord rule had picked up a stray `--glow-near` override the live site never had).
+`deploy.yml`'s "Assemble site" step now also `cp -r SiteKit/tokens/. _site/SiteKit/tokens/` — the
+`@import`'s relative path resolves to `/SiteKit/tokens/...` once served from the Pages artifact
+root, so this copy is load-bearing, not cosmetic (without it the import 404s live and every custom
+property on the deployed site goes undefined). Full record: `platform-architecture.md` §10.
+**3 real C# projects, Phase 1 core + Phase 2 in progress (3 of 17 pages proven 2026-09-02)**:
+`SiteKit.Spec/` (the declarative `PageSpec` record types + fluent builder, zero deps —
+`CardSpec` gained `CatRootOverride` this pass for the `--cat-root` chord companion prop),
+`SiteKit.Render/` (the EvalApp-native render pipeline — `PackageReference
+EvaluatedApplications.EvalApp 1.7.0`, NuGet-only, same boundary `HoloKernel` uses for AlgFormer;
+`HeroComposer` had a real bug fixed this pass, see below), `SiteKit.Render.PoC/` (ports
+`phasor.html`+`prose.html`+`tracer.html` through the real pipeline in one run and diffs each output
+against its live file — all 3 verified IDENTICAL after normalizing away pure whitespace/line-wrap
+AND under an independent whitespace-stripped byte compare, full record in
+`platform-architecture.md` §9/§10). Prose/Tracer were deliberately picked to be structurally
+DIFFERENT from Phasor (a real two-tone `CatOverride`+`CatRootOverride` chord, `Category` !=
+`CategoryDotVar`, no `.prism-beam`, no `ClosingStack`, a bare single-snippet Snippets section, a
+CardGrid section that also carries a `.lim`) — doing so surfaced a real `HeroComposer` bug (it
+emitted the `.hero-content` z-index wrapper unconditionally; the live site only nests it on the 5
+pages that also carry `.prism-beam` — Phasor alone, being one of those 5, could never have caught
+this), now fixed and conditional on `HeroSpec.ShowPrismBeam`, re-verified against all 3 pages.
+**Still fully INERT w.r.t. the deployed site's PAGES** (the tokens/CSS half is live, see above, but
+`site/**/*.html` itself is untouched): `deploy.yml` doesn't build `SiteKit.Spec`/`SiteKit.Render`/
+`SiteKit.Render.PoC`, no page markup was touched, the PoC's generated output lands only in a
+gitignored `bin/**/out/` folder. `evalapp-owner`'s design review (Phase 0.5) is done — the original
+two-pipeline sketch in `platform-architecture.md` §3.2 was wrong (wouldn't compile: `ForEach` takes
+a build-time step-DSL callback, not a per-item delegate; `ICompiledPipeline<T>` isn't a valid step)
+and has been replaced with real, building, running code: one compiled tree, nested
+`ForEach<SiteRenderJob>` inside `ForEach<PageRenderJob>` (sites → pages), fixed `Tunable` bounds,
+no `.WithTuning()`. Next up: more of the remaining 14 pages the same verified way — the holodb hub/
+benchmarks/manual, `algformer.html`'s `.card.tool` gallery shape, and any bespoke local-`<style>`
+page will need new composer support first, not just a new `PageSpec` value. Don't treat this pass
+as authorization to start touching `site/**/*.html` PAGE markup for real yet — that's still a later,
+explicit cutover decision; only the shared CSS token layer actually went live this pass.
 
 **All 11 current MonoRepo packages have a page**: Phasor, EvalApp, EvalApp.Neural, AlgFormer
 (+HoloFormer deep-dive), AlgFormer.Gpu, HoloDb (+benchmarks), HoloDb.Protocol, HoloDb.Client,
@@ -112,7 +134,10 @@ back to its `CLAUDE.md` for any structural fact the brief doesn't cover); never 
 
 ## Design system
 
-**One stylesheet**: `site/assets/site.css`. Dark, UNCONDITIONALLY — this is a branded visual
+**One stylesheet**: `site/assets/site.css` (its `:root`/`body[data-cat]` token values now live in
+`SiteKit/tokens/{core,brand-ea}.css` via `@import`, 2026-09-02 — see the `SiteKit/` paragraph above
+for the rewire + its verification; edit the token FILES, not `site.css`, for any future palette/
+token change). Dark, UNCONDITIONALLY — this is a branded visual
 identity (Dark Side of the Moon), not a neutral utility UI, so it never defers to the visitor's
 system/browser colour-scheme. **Changed 2026-08-28**: a `prefers-color-scheme:light` palette
 override used to exist (`:root` block + a `.prism-beam` opacity tweak) and was REMOVED, direct user
@@ -1207,7 +1232,12 @@ Actions", one-time repo setting). You (website-owner) never run this or commit/p
 changes in the working tree; the coordinator batch-commits and pushes to publish.
 
 **CI does NOT run `dotnet publish` (changed 2026-08-28).** Steps are now just: copy `site/*` →
-copy the PRE-BUILT `Showroom/dist/` → upload-pages-artifact → deploy. Reason: this build runs
+copy the PRE-BUILT `Showroom/dist/` → copy `SiteKit/tokens/` (added 2026-09-02, see the `SiteKit/`
+paragraph above — `site/assets/site.css` now `@import`s `SiteKit/tokens/{core,brand-ea}.css` by a
+relative path that resolves to `/SiteKit/tokens/...` once served from the Pages artifact root; this
+copy step is what makes that import resolve live instead of 404ing — if `SiteKit/tokens/` ever
+moves or gets a new file, keep this copy step and the `@import` paths in `site.css` in sync) →
+upload-pages-artifact → deploy. Reason (for the Showroom half): this build runs
 `RunAOTCompilation` + `PublishTrimmed=true` (see Platform initiative below), and AOT's
 Emscripten/native compile step is slow enough that redoing it in CI on every push burns real
 minutes for no reason when Showroom's own source hasn't changed. `Showroom/dist/` is a

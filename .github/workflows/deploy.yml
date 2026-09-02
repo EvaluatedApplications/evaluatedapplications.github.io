@@ -42,6 +42,13 @@ jobs:
           cp -r site/. _site/
           mkdir -p _site/tools
           cp -r Showroom/dist/. _site/tools/
+          # site/assets/site.css @imports SiteKit/tokens/{core,brand-ea}.css by a relative path
+          # two levels up from /assets/ ("../../SiteKit/tokens/..."), which resolves to /SiteKit/
+          # tokens/... once served from _site's root -- ship that folder so the import isn't a
+          # live 404. SiteKit/tokens/ is the source of truth (see docs/platform-architecture.md);
+          # this is a verbatim copy, not a build step.
+          mkdir -p _site/SiteKit/tokens
+          cp -r SiteKit/tokens/. _site/SiteKit/tokens/
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3

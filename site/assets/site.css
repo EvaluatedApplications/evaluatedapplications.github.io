@@ -6,124 +6,19 @@
    then dark always") after real-device testing showed it firing and washing out the brand on a
    phone in light mode. Do not reintroduce a light palette without an explicit, separate request. */
 
-:root{
-  /* Dark Side of the Moon: a genuinely deep-black field (not a grey "dark mode"), with the brand
-     spectrum re-ordered to real prism physics (ROYGBIV) so the beam/accent motifs read as light
-     resolved through a prism, not a decorative rainbow. See CLAUDE.md "Design system > Prism motif". */
-  --bg:#050608; --bg-2:#090a0e; --surface:#0d0f16; --surface-2:#12151d;
-  --border:#1e2430; --border-2:#2c3444;
-  --ink:#e9ecf3; --ink-soft:#98a2b3; --ink-faint:#7c869c;
-  --accent:#8b7dff; --accent-ink:#b3a9ff;
-  --spectrum:linear-gradient(90deg,#f0796a 0%,#f0a15a 16.6%,#e6c450 33.3%,#7bd86a 50%,#4aa3ff 66.6%,#7d7dff 83.3%,#c07dff 100%);
-  --spectrum-1:#f0796a; --spectrum-2:#f0a15a; --spectrum-3:#e6c450; --spectrum-4:#7bd86a;
-  --spectrum-5:#4aa3ff; --spectrum-6:#7d7dff; --spectrum-7:#c07dff;
-  /* PER-PACKAGE PALETTE (2026-08-28, supersedes the 4-bucket Foundation/Data/ML/Spatial model —
-     direct user correction after seeing the live site: "still white blue purple and green, I want
-     the full spectrum... red through purple, not only the cold colours"). The old 4-bucket model
-     used only 3 hues off the cool half of the wheel (Data blue ~210°, ML violet ~271°, Spatial green
-     ~111°) plus white — it read narrow even after the Indigo->Violet nudge above, because a BUCKET
-     model has a hard ceiling of "however many buckets exist," not "however many packages exist."
-     Fixed by giving every one of the 8 non-Foundation, non-composite packages its OWN stop, computed
-     by evenly re-sampling the SAME --spectrum gradient above at t=0,1/7,2/7...1 (8 points across the
-     full named ROYGBIV run, red through violet) rather than inventing an unrelated palette — this is
-     still the one brand gradient, just sampled finer. Foundation (Phasor/EvalApp) is UNCHANGED per
-     direct instruction ("core is white... confirmed correct, don't touch") — the undispersed beam,
-     not a domain colour, so it still isn't assigned a spectrum stop of its own.
-     PLACEMENT is dependency-derived, not arbitrary: the 3 real package FAMILIES (HoloDb: HoloDb/
-     .Protocol/.Client; AlgFormer: AlgFormer/.Gpu/EvalApp.Neural; and the two Foundation-only spatial
-     leaves Tracer/HoloVoxel) each occupy a contiguous run of stops, in real dependency-chain order
-     within a family (e.g. HoloDb -> HoloDb.Protocol -> HoloDb.Client, matching who ProjectReferences
-     whom), with genuinely different domains spread apart across the wheel:
-       1 red        --c-tracer            (Tracer — foundation-only leaf, warm end)
-       2 red-orange --c-holovoxel         (HoloVoxel — foundation-only leaf, warm end)
-       3 orange     --c-holodb-client     (HoloDb.Client — depends on HoloDb.Protocol)
-       4 yellow-grn --c-holodb-protocol   (HoloDb.Protocol — depends on HoloDb)
-       5 green/teal --c-holodb            (HoloDb — the family anchor, closest to the bridge below)
-       6 blue       --c-algformer         (AlgFormer — the family anchor, closest to the bridge above)
-       7 indigo     --c-algformer-gpu     (AlgFormer.Gpu — depends on AlgFormer only)
-       8 violet     --c-evalapp-neural    (EvalApp.Neural — depends on AlgFormer + Foundation-dropped EvalApp)
-     Prose is deliberately NOT assigned a 9th stop of its own: unlike the other 8, it isn't a single-
-     domain product with one real dependency chain — its own docs/site.md says outright "Depends on:
-     HoloDb ... and AlgFormer" — so it is structurally a COMPOSITE, same as a multi-package Showroom
-     tool, and always renders as the two-tone chord of var(--c-holodb)+var(--c-algformer) (the
-     existing hard-edged chord mechanism, extended here to the finer palette) rather than getting its
-     own hex that nothing else would reference. This is also why HoloDb sits at stop 5 and AlgFormer at
-     stop 6 — adjacent on the wheel — so Prose's chord reads as one smooth neighbouring blend, not two
-     clashing hues yanked from opposite ends. See CLAUDE.md "Per-package palette" for the full table
-     (hex values + which pages/cards use which) — this comment carries the reasoning, that carries the
-     source of truth for a parallel showroom-owner task to consume the same hexes. */
-  --c-foundation:var(--spectrum); --c-foundation-solid:#ffffff;
-  --c-tracer:#f0796a; --c-holovoxel:#f09b5c;
-  --c-holodb-client:#e9ba53; --c-holodb-protocol:#a9cf5f; --c-holodb:#66c1aa;
-  --c-algformer:#5998ff; --c-algformer-gpu:#877dff; --c-evalapp-neural:#c07dff;
-  --ok:#7bd86a; --warn:#e6b450; --bad:#f0796a;
-  --radius:14px; --wrap:1080px;
-  --font:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
-  --mono:ui-monospace,"Cascadia Code","SF Mono","JetBrains Mono",Menlo,Consolas,monospace;
-  /* VERTICAL RHYTHM (2026-08-28 baseline-grid pass, see CLAUDE.md "Vertical rhythm" for the full
-     audit). --rhythm is derived from body's own type, not invented: font-size:17px x
-     line-height:1.65 = 28.05px, rounded to a clean 28px baseline unit. body's own line-height
-     declaration below stays the unitless 1.65 (NOT switched to var(--rhythm) directly) on
-     purpose: an absolute px line-height would inherit LITERALLY into every smaller-font
-     descendant (every badge/pill/mono label on the site), inflating their line boxes to a full
-     28px regardless of their own font-size — keeping body's ratio unitless is standard CSS
-     practice and still computes to ~28px for body-sized text; --rhythm is the explicit reference
-     everything else in this file is now expressed against instead. Since 28 divides evenly by 4,
-     the working sub-grid is exactly the QUARTER-baseline, 7px (--rhythm-q) — every recalibrated
-     vertical margin/padding/gap/line-height below is a whole multiple of 7px, preferring the
-     larger "rounder" rungs (--rhythm-h 14px, --rhythm-3q 21px, --rhythm 28px, or 35/42/49/56...)
-     wherever the original ad-hoc value already sat close to one. The one deliberate, documented
-     exception: inline pill/badge/chip vertical padding under 7px (.tag, .ver, .fact, .pkg-chip,
-     .related a, .powered a, .copy, .stack .flow span, the small inline code chips) is left OFF
-     this grid on purpose — decorative micro-UI atoms, not part of the vertical reading flow;
-     forcing a 7px floor onto them would visibly bloat compact badges for no rhythm benefit, since
-     their POSITION in the page flow is already governed by their parent's on-grid margin/gap. */
-  --rhythm:28px; --rhythm-3q:21px; --rhythm-h:14px; --rhythm-q:7px;
-  /* Parallax GLOW colour (2026-08-28, see "SCROLL-TIED PARALLAX DEPTH" below): the site-wide
-     default for the two shadow-tier custom props the parallax keyframes read through. --glow-near
-     feeds .prism-beam's own drop-shadow (the beam is a literal white light source in its own SVG,
-     so white is the physically-correct default independent of page); --glow-mid feeds the hero/
-     .sec window panels' drop-shadow, defaulted to the one site-wide --accent since a page with no
-     single product focus (index.html, packages.html) has no one domain colour to reach for. Pages
-     that DO belong to one product category override both via `body[data-cat="..."]` right below —
-     same mechanism, no keyframe duplication needed per page. */
-  --glow-near:#ffffff; --glow-mid:var(--accent);
-}
-/* Per-page category tint for the parallax glow above — set once via <body data-cat="...">, read by
-   the ea-parallax-near/-mid keyframes through color-mix(), so every page that ever gets os-chrome
-   automatically shows ITS OWN package colour without a new keyframe block. Reuses the exact same
-   per-package tokens the .related dots / .pkg-strip chips / .card --cat accents already use
-   elsewhere on the page, so the glow always agrees with the rest of that page's colour language.
-   --c-foundation-solid (flat white) is used, not --c-foundation (a gradient) — drop-shadow()/
-   color-mix() need one solid colour, same reason --cat-root exists for cards. Values are now the
-   PACKAGE'S OWN name (2026-08-28, per-package palette, see the :root comment above), not a
-   Foundation/Data/ML/Spatial bucket — "ml" was one shared hue for 5 different packages before,
-   which is exactly the narrowness this pass fixes. */
-body[data-cat="foundation"]{ --glow-near:var(--c-foundation-solid); --glow-mid:var(--c-foundation-solid); }
-body[data-cat="tracer"]{ --glow-near:var(--c-tracer); --glow-mid:var(--c-tracer); }
-body[data-cat="holovoxel"]{ --glow-near:var(--c-holovoxel); --glow-mid:var(--c-holovoxel); }
-body[data-cat="holodb"]{ --glow-near:var(--c-holodb); --glow-mid:var(--c-holodb); }
-body[data-cat="holodb-protocol"]{ --glow-near:var(--c-holodb-protocol); --glow-mid:var(--c-holodb-protocol); }
-body[data-cat="holodb-client"]{ --glow-near:var(--c-holodb-client); --glow-mid:var(--c-holodb-client); }
-body[data-cat="algformer"]{ --glow-near:var(--c-algformer); --glow-mid:var(--c-algformer); }
-body[data-cat="algformer-gpu"]{ --glow-near:var(--c-algformer-gpu); --glow-mid:var(--c-algformer-gpu); }
-body[data-cat="evalapp-neural"]{ --glow-near:var(--c-evalapp-neural); --glow-mid:var(--c-evalapp-neural); }
-/* CHORD (multi-tone) pages, 2026-08-28 rollout — see CLAUDE.md "Chord glow tinting" / "Per-package
-   palette". A page whose real subject genuinely spans more than one PACKAGE (today: only prose.html,
-   which its own docs/site.md says "Depends on: HoloDb ... and AlgFormer" — Foundation is dropped from
-   the chord the same way it's dropped from the tool-card gradients below, since Phasor/EvalApp
-   underlie almost everything and carry no distinguishing signal) gets a SECOND custom-property pair,
-   --glow-mid-a/--glow-mid-b, read only by the ea-parallax-mid-chord keyframes (see "SCROLL-TIED
-   PARALLAX DEPTH" below) instead of the single --glow-mid. Same source tokens as the tool-card --cat
-   chord gradients (var(--c-holodb)/var(--c-algformer), never a hardcoded hex) so a colour retune to
-   either package reaches this too automatically — one token, not two independent copies to keep in
-   sync by hand. --glow-near is untouched here on purpose: no chord page today also carries
-   .prism-beam, so there is nothing for a "near" chord to tint yet; if one ever does, extend the same
-   pattern (--glow-near-a/-b + an ea-parallax-near-chord keyframe pair) rather than inventing a new
-   mechanism. Renamed from the old data-cat="data-ml" bucket value to "holodb-algformer" — the
-   attribute value is now the two real PACKAGE names, matching the per-package palette everywhere
-   else, not a category-pair name. */
-body[data-cat="holodb-algformer"]{ --glow-mid-a:var(--c-holodb); --glow-mid-b:var(--c-algformer); }
+/* Design tokens (2026-09-02, SiteKit Phase 1 rewire): the :root token block + the per-package
+   body[data-cat="..."] glow-tint rules that used to be typed out here directly now live in
+   AboutUs/SiteKit/tokens/{core,brand-ea}.css — core.css is the brand-agnostic shell (dark
+   surface/ink scale, semantic ok/warn/bad, radius/wrap/font, the baseline rhythm grid),
+   brand-ea.css is this brand's own values (the ROYGBIV --spectrum, the per-package hex table,
+   the body[data-cat] glow overrides, the chord rule). Values are UNCHANGED — this is a
+   value-preserving rewire, not a retint; see docs/platform-architecture.md §"Phase 1" and
+   CLAUDE.md's "Design system"/"Per-package palette" sections for the full reasoning/history
+   those two files now carry instead of this one. The relative path below resolves correctly
+   both live (deploy.yml copies SiteKit/tokens/ to the site root alongside site/, preserving the
+   same relative depth) and when browsing the raw repo directly. */
+@import url("../../SiteKit/tokens/core.css");
+@import url("../../SiteKit/tokens/brand-ea.css");
 
 *{box-sizing:border-box}
 html{scroll-behavior:smooth}

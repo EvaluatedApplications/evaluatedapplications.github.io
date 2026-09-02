@@ -4,10 +4,17 @@ using SiteKit.Spec;
 
 var repoRoot = FindRepoRoot(AppContext.BaseDirectory);
 var outputRoot = Path.Combine(AppContext.BaseDirectory, "out");
-var handAuthoredPath = Path.Combine(repoRoot, "site", "phasor.html");
 
+// Phase 1 proved phasor.html alone. Phase 2 adds prose.html to the SAME site build — deliberately
+// chosen for its structural DIFFERENCES from Phasor (per-card CatOverride+CatRootOverride chord,
+// Category != CategoryDotVar, no prism-beam, no ClosingStack section) — see ProsePageSpec.cs's own
+// header comment for the full list. Both pages run through ONE compiled pipeline tree, proving the
+// nested ForEach<SiteRenderJob>/ForEach<PageRenderJob> shape actually fans out over >1 page, not
+// just executes a single hardcoded path.
 Site.Define("aboutus-poc", PhasorPageSpec.Brand(), PhasorPageSpec.Nav(), outputRoot)
     .Page("phasor", "Phasor", "foundation", "var(--c-foundation)", PhasorPageSpec.Configure)
+    .Page("prose", "Prose", "holodb-algformer", "var(--c-algformer)", ProsePageSpec.Configure)
+    .Page("tracer", "Tracer", "tracer", "var(--c-tracer)", TracerPageSpec.Configure)
     .Build(out SiteSpec siteSpec);
 
 var pipeline = SiteKitPipeline.Build();
@@ -23,21 +30,45 @@ var written = result.GetData().WrittenFiles ?? Array.Empty<string>();
 Console.WriteLine($"Pipeline succeeded. Wrote {written.Count} file(s):");
 foreach (var f in written) Console.WriteLine("  " + f);
 
-var generatedPath = Path.Combine(outputRoot, "phasor.html");
-if (!File.Exists(handAuthoredPath))
+var pagesToVerify = new[] { "phasor", "prose", "tracer" };
+var overallOk = true;
+
+foreach (var slug in pagesToVerify)
 {
-    Console.WriteLine($"\nCould not find hand-authored original at {handAuthoredPath} — cannot diff.");
-    return 1;
+    var handAuthoredPath = Path.Combine(repoRoot, "site", slug + ".html");
+    var generatedPath = Path.Combine(outputRoot, slug + ".html");
+
+    Console.WriteLine($"\n=== {slug}.html ===");
+    if (!File.Exists(handAuthoredPath))
+    {
+        Console.WriteLine($"Could not find hand-authored original at {handAuthoredPath} — cannot diff.");
+        overallOk = false;
+        continue;
+    }
+    if (!File.Exists(generatedPath))
+    {
+        Console.WriteLine($"Pipeline did not write {generatedPath} — cannot diff.");
+        overallOk = false;
+        continue;
+    }
+
+    var generated = await File.ReadAllTextAsync(generatedPath);
+    var original = await File.ReadAllTextAsync(handAuthoredPath);
+
+    Console.WriteLine("--- Structural diff (tag-boundary tokenized, whitespace-normalized) ---");
+    var report = StructuralDiff.Compare(original, generated);
+    Console.WriteLine(report);
+    if (!report.StartsWith("IDENTICAL")) overallOk = false;
+
+    var strippedOriginal = System.Text.RegularExpressions.Regex.Replace(original, @"\s+", "");
+    var strippedGenerated = System.Text.RegularExpressions.Regex.Replace(generated, @"\s+", "");
+    var byteEqual = strippedOriginal == strippedGenerated;
+    Console.WriteLine($"--- All-whitespace-stripped byte compare: orig={strippedOriginal.Length} chars, gen={strippedGenerated.Length} chars, equal={byteEqual} ---");
+    if (!byteEqual) overallOk = false;
 }
 
-var generated = await File.ReadAllTextAsync(generatedPath);
-var original = await File.ReadAllTextAsync(handAuthoredPath);
-
-Console.WriteLine("\n=== Structural diff (whitespace-normalized: trim each line, drop blank lines) ===\n");
-var report = StructuralDiff.Compare(original, generated);
-Console.WriteLine(report);
-
-return 0;
+Console.WriteLine(overallOk ? "\nALL PAGES VERIFIED IDENTICAL." : "\nAT LEAST ONE PAGE DID NOT VERIFY — see above.");
+return overallOk ? 0 : 1;
 
 static string FindRepoRoot(string startDir)
 {

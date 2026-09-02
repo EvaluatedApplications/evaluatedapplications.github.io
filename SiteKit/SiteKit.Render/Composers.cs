@@ -70,10 +70,20 @@ public static class HeroComposer
         sb.Append("      <span class=\"win-dots\"><i></i><i></i><i></i></span>\n");
         sb.Append("      <span class=\"hero-bar-title\">").Append(h.BarTitle).Append("</span>\n");
         sb.Append("    </div>\n    <div class=\"hero-body\">\n");
+        // .hero-content is a z-index lift wrapper, only needed when .prism-beam is also nested in
+        // .hero-body (see site.css's own comment on the .hero-content rule: "only needed on the
+        // page(s) that also nest .prism-beam in .hero-body") -- pages without a beam (the majority)
+        // never carry this wrapper on the live site (verified: prose.html has no .hero-content).
+        // Emitting it unconditionally was a real Phase-1 gap that only showed up once a non-beam
+        // page (Prose) was ported through the pipeline -- Phasor alone couldn't have caught this,
+        // it's one of the 5 pages that DOES carry the beam.
         if (h.ShowPrismBeam)
+        {
             sb.Append("      <div class=\"prism-beam\" aria-hidden=\"true\">\n").Append(brand.PrismBeamSvg).Append("\n      </div>\n");
-        sb.Append("      <div class=\"hero-content\">\n");
-        sb.Append("        <p class=\"crumb\"><a href=\"/\">Home</a><span>/</span><a href=\"/packages.html\">Packages</a><span>/</span>")
+            sb.Append("      <div class=\"hero-content\">\n");
+        }
+        var indent = h.ShowPrismBeam ? "        " : "      ";
+        sb.Append(indent).Append("<p class=\"crumb\"><a href=\"/\">Home</a><span>/</span><a href=\"/packages.html\">Packages</a><span>/</span>")
           .Append(page.Title).Append("</p>\n");
         sb.Append("        <span class=\"eyebrow\">").Append(h.Eyebrow).Append("</span>\n");
         sb.Append("        <h1>").Append(h.Headline).Append("</h1>\n");
@@ -109,7 +119,8 @@ public static class HeroComposer
             sb.Append("          <a class=\"related-all\" href=\"").Append(h.RelatedAllHref).Append("\">")
               .Append(h.RelatedAllText).Append("</a>\n        </div>\n");
         }
-        sb.Append("      </div>\n    </div>\n  </div>\n</header>");
+        if (h.ShowPrismBeam) sb.Append("      </div>\n"); // closes .hero-content
+        sb.Append("    </div>\n  </div>\n</header>");
         return sb.ToString();
     }
 
@@ -161,7 +172,9 @@ public static class SectionComposer
         foreach (var card in s.Cards!)
         {
             var cat = card.CatOverride ?? catVar;
-            sb.Append("      <article class=\"card\" style=\"--cat:").Append(cat).Append("\">\n");
+            sb.Append("      <article class=\"card\" style=\"--cat:").Append(cat);
+            if (card.CatRootOverride is not null) sb.Append("; --cat-root:").Append(card.CatRootOverride);
+            sb.Append("\">\n");
             sb.Append("        <div class=\"card-top\"><h3>").Append(card.Title).Append("</h3></div>\n");
             sb.Append("        <p class=\"desc\">").Append(card.BodyHtml).Append("</p>\n");
             sb.Append("      </article>\n");
