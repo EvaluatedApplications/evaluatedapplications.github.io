@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Growing the Wrong Way</title>
+<meta name="description" content="After the four-token experiment plateaued, I grew to eight and expected hard-mining to pay off. It didn't. Here's why, and the structural fix that came out of admitting it.">
+<link rel="canonical" href="https://evaluatedapplications.github.io/articles/ctx8-and-the-reverse-grow.html">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Growing the Wrong Way">
+<meta property="og:description" content="After the four-token experiment plateaued, I grew to eight and expected hard-mining to pay off. It didn't. Here's why, and the structural fix that came out of admitting it.">
+<meta property="og:url" content="https://evaluatedapplications.github.io/articles/ctx8-and-the-reverse-grow.html">
+<meta name="twitter:card" content="summary">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%23f0796a'/%3E%3Cstop offset='.166' stop-color='%23f0a15a'/%3E%3Cstop offset='.333' stop-color='%23e6c450'/%3E%3Cstop offset='.5' stop-color='%237bd86a'/%3E%3Cstop offset='.666' stop-color='%234aa3ff'/%3E%3Cstop offset='.833' stop-color='%237d7dff'/%3E%3Cstop offset='1' stop-color='%23c07dff'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='32' height='32' rx='7' fill='%23050608'/%3E%3Cpath d='M16 5L27 26H5Z' fill='none' stroke='url(%23g)' stroke-width='2' stroke-linejoin='round'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="/assets/site.css">
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"BlogPosting","headline":"Growing the Wrong Way","description":"After the four-token experiment plateaued, I grew to eight and expected hard-mining to pay off. It didn't. Here's why, and the structural fix that came out of admitting it.","url":"https://evaluatedapplications.github.io/articles/ctx8-and-the-reverse-grow.html","datePublished":"2026-09-02","author":{"@type":"Organization","name":"Evaluated Applications","url":"https://evaluatedapplications.github.io/"},"publisher":{"@type":"Organization","name":"Evaluated Applications","url":"https://evaluatedapplications.github.io/"}}
+</script>
+</head>
+<body class="os-chrome">
+<div class="beam"></div>
+
+<nav class="site-nav">
+  <div class="wrap">
+    <a class="brand" href="/">
+      <svg class="mark" viewBox="0 0 32 32" aria-hidden="true"><defs><linearGradient id="m" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#f0796a"/><stop offset=".166" stop-color="#f0a15a"/><stop offset=".333" stop-color="#e6c450"/><stop offset=".5" stop-color="#7bd86a"/><stop offset=".666" stop-color="#4aa3ff"/><stop offset=".833" stop-color="#7d7dff"/><stop offset="1" stop-color="#c07dff"/></linearGradient></defs><path d="M16 5L27 26H5Z" fill="none" stroke="url(#m)" stroke-width="2" stroke-linejoin="round"/></svg>
+      Evaluated Applications
+    </a>
+    <input type="checkbox" id="navtoggle" class="nav-toggle">
+    <label for="navtoggle" class="nav-burger" aria-label="Toggle menu"><span></span><span></span><span></span></label>
+    <div class="nav-links">
+      <a href="/">Home</a>
+      <a href="/packages.html">Packages</a>
+      <a href="https://www.nuget.org/profiles/evaluatedapplications" target="_blank" rel="noopener">NuGet</a>
+    </div>
+  </div>
+</nav>
+
+<main class="wrap">
+
+<article class="prose">
+
+  <nav class="crumb"><a href="/articles.html">Articles</a> <span>/</span> Growing the Wrong Way</nav>
+  <h1>Growing the Wrong Way</h1>
+  <p class="article-date" style="margin-top:12px">Evaluated Applications · Published <time datetime="2026-09-02">2 September 2026</time></p>
+  <p class="lede" style="margin-top:12px">The last piece ended with a real plateau and a decision to grow. This one is about what actually
+    happened when I did, why my own hunch about it turned out wrong, and a structural bug I only found because I was
+    willing to admit that.</p>
+
+  <div class="toc">
+    <h2>On this page</h2>
+    <ul>
+      <li><a href="#the-grow">The grow, and the long wait for a payoff that never came</a></li>
+      <li><a href="#debunked">Was it the training procedure? No. Was the hunch wrong? Also yes.</a></li>
+      <li><a href="#not-discounted">Growing wasn't the mistake, either</a></li>
+      <li><a href="#the-bug">The bug I only found by comparing round counts</a></li>
+      <li><a href="#the-fix">Growing from the front instead of the back</a></li>
+      <li><a href="#now">Where it stands now</a></li>
+    </ul>
+  </div>
+
+  <h2 id="the-grow">The grow, and the long wait for a payoff that never came</h2>
+  <p>The four-token model plateaued, cleanly enough that I trusted it, and the plan going in was straightforward:
+    seed a new model from those final trained weights, grow it to eight tokens of context, and see whether all that
+    hard-mining at the smaller size gave the bigger one a head start. That was the actual bet, not just "grow it,"
+    but "grow it from something that was genuinely finished, and see if finished pays off."</p>
+  <p>It didn't show up. Not in the first 20,000 rounds after the grow, not in the next 70,000. The primary metric,
+    the same rank-gap number that told me ctx=4 was really done, never settled into a clean recovery. It oscillated
+    in a wide band the entire time, past the point where the ctx=4 run's own entire training life would have
+    finished. Calibration got worse before it got better. Long-form generation stayed collapsed into repeat loops
+    at every single checkpoint I pulled, dozens of them, spread over nearly 100,000 rounds.</p>
+  <p>The one thing that didn't wobble was the same weight bank I'd already flagged as doing something general
+    rather than context-specific. It kept specializing, checkpoint after checkpoint, completely unbothered by the
+    grow. That was real, and it held up. Everything else about "is this settling in" didn't.</p>
+
+  <h2 id="debunked">Was it the training procedure? No. Was the hunch wrong? Also yes.</h2>
+  <p>My first instinct, when the numbers wouldn't move, was to blame the mechanics. I found a real, fixable gap: a
+    learning-rate boost the training engine is supposed to give a model right after a context grow had never
+    actually fired for this particular run, because the fork bypassed the normal path that would have triggered
+    it. That felt like the answer for about five minutes.</p>
+  <p>It wasn't. The ctx=4 model had produced every bit of its own real improvement running at that exact same
+    floor learning rate, the whole time. If a starved learning rate explained the stall, ctx=4 shouldn't have
+    worked either, and it plainly had. I had to drop that explanation the moment I actually checked it against the
+    model that disproved it.</p>
+  <p>With that gone, I didn't have anywhere left to hide from the actual conclusion: fully mining a small context
+    before growing did not make the bigger context easier to absorb. That was the whole premise of the previous
+    experiment, and the evidence, once I stopped explaining it away, didn't support it. I'd go further and guess
+    the opposite might be closer to true. A model sitting in a fully converged minimum for one task may have less
+    real room to redirect toward new capacity than a less-settled one would, not more. I can't prove that part
+    yet, but the milder claim, "hard-mining first doesn't obviously help," is one I'm now confident in.</p>
+
+  <h2 id="not-discounted">Growing wasn't the mistake, either</h2>
+  <p>It would have been easy to read all that as "growing context doesn't work, stick with tiny models." I don't
+    think that's right, and I think the same data that killed the hard-mining hunch also points at why. The one
+    thing that never stopped improving through the whole ctx=8 mess was the general, non-position-specific
+    structure, the same mechanism that seemed to be building reusable skill rather than something tied to a
+    particular context size. If a piece of what the model learns really is generic, it shouldn't need a context
+    size to be "finished" before it's worth having, and the evidence I actually have is consistent with that.</p>
+  <p>So the new plan wasn't slower training, it was faster growing: a context tier every 200 rounds instead of
+    every 20,000, on the logic that the cheap, early, token-level stuff doesn't need to be relearned from scratch
+    at a bigger size, and growing quickly through it should cost less than training a thousand-token model cold.
+    Early results on that front actually look decent, comparable capability shows up at comparable round counts
+    to what the four-token run needed, which is exactly what "generic skill transfers regardless of size" would
+    predict.</p>
+
+  <h2 id="the-bug">The bug I only found by comparing round counts</h2>
+  <p>Here's the part that only showed up once I started actually comparing the fast-growing run against the
+    fixed-size one, round for round. The fixed-size model's problem was obvious: it plateaus, because there's
+    nowhere left to go. The fast-growing model doesn't have that problem, it can keep going all the way to a
+    real, useful context length. But growing quickly toward a thousand tokens exposes something the slow version
+    never had time to show me.</p>
+  <p>Every position slot in the context window has its own dedicated, separately-trained representation, and the
+    highest-indexed slot always means "the token immediately before the one I'm about to predict," the single
+    most load-bearing position there is. Every time you grow the context, new capacity gets appended past that
+    slot, which sounds harmless until you notice what it actually does: it takes the position that mattered the
+    most, the one that had accumulated the most training, and demotes it to the middle of the window, replacing
+    it with a brand new, untrained slot in the one role that mattered most.</p>
+  <p>That happens on every single grow, forever, no matter how carefully you pace it. Growing slowly doesn't fix
+    it, it just spreads the damage out. By the time a model has grown all the way to a thousand tokens of context,
+    the position doing the most important job, reading what was just said, has had less training time than almost
+    any other slot in the entire window. That's backwards from what you'd want, and it's not a training problem
+    at all, it's a structural one, baked into how growing has always worked.</p>
+
+  <h2 id="the-fix">Growing from the front instead of the back</h2>
+  <p>The fix is a genuine reversal, not a tuning knob. Instead of appending new, untrained capacity past the most
+    important slot, you insert it before the oldest one, and shift every existing position up to make room. The
+    slot that means "immediately before prediction" keeps its own already-trained values and never gets bumped
+    out of that role again, no matter how many more times the model grows. New capacity always lands representing
+    context further into the past, which is exactly where it's cheapest to start from zero, since the far past was
+    already the least useful part of a small window's memory.</p>
+  <p>I want to be honest about a wrong turn along the way. My first explanation for why this would be safe leaned
+    on an assumption about how the model's attention mechanism handles relative distance between tokens. That
+    assumption turned out to be wrong when it was actually checked against the real code, the mechanism doesn't
+    work on relative position at all. The real reason the fix is safe is simpler and better grounded: the model's
+    sense of position lives in exactly one place, a straightforward lookup table added onto each token, nowhere
+    else. There was nothing else for the change to accidentally break, which is a cleaner argument than the one I
+    started with, and I only have it because someone checked rather than trusted my reasoning.</p>
+  <p>It shipped as a real default, not a manual toggle you have to remember: any newly built model gets it
+    automatically, and every existing checkpoint is explicitly pinned to the old behavior on load, so nothing
+    already trained changes underneath itself. Old and new can sit side by side without either one silently
+    drifting.</p>
+
+  <h2 id="now">Where it stands now</h2>
+  <p>I restarted training from scratch under the new convention. It's extremely early, a few hundred rounds in as
+    of writing, nowhere near enough to say the fix delivered on its promise. What I can say honestly: the raw
+    numbers at this stage don't look dramatically different from how the old approach looked at the same age,
+    which is expected, the problem this fixes is about what happens over many grows, not about the first one. But
+    the generated text is already producing real, cleanly space-separated word-shaped chunks this early, the
+    individual words aren't spelled right yet, but the model has clearly already worked out where word boundaries
+    go. Whether that's the fix paying off early or just ordinary progress I can't fully separate yet. I'll know
+    more the longer this runs, specifically whether the long-form collapse that never once recovered under the
+    old growth scheme finally does under this one.</p>
+
+  <p style="margin-top:2.5rem"><a href="/articles.html">&larr; Back to Articles</a></p>
+
+</article>
+</main>
+
+<footer class="site">
+  <div class="wrap">
+    <span>Evaluated Applications — .NET libraries, England.</span>
+    <span class="mono">© <span id="yr"></span> · <a href="/">Home</a> · <a href="/articles.html">Articles</a> · <a href="/packages.html">Packages</a> · <a href="https://www.nuget.org/profiles/evaluatedapplications" target="_blank" rel="noopener">NuGet</a></span>
+  </div>
+</footer>
+<script>document.getElementById('yr').textContent = new Date().getFullYear();</script>
+</body>
+</html>

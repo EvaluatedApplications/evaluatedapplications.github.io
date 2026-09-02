@@ -395,7 +395,15 @@ no source-of-truth doc to pull facts from (there are no "facts," it's an essay).
   subset (it doesn't need to link to itself). No other page's nav/footer was touched — if Articles
   ever earns enough real content to be a primary destination, revisit the nav-item question then,
   don't preempt it now with zero published pieces.
-- **Published so far: two.** `nobody-read-the-warning.html` ("Nobody Read the Warning," dated
+- **Published so far: three.** `ctx8-and-the-reverse-grow.html` ("Growing the Wrong Way," dated
+  2026-09-02) — coordinator-authored follow-up to `ctx4-plateau.html`: the ctx=4→ctx=8 fork's
+  ~96,000-round non-recovery, the debunked "hard-mine-first-then-grow" hunch (with the honest
+  correction that the LR-starvation explanation was checked and ruled out), the pivot to fast
+  200-round-tier growth, and the position-freshness structural bug this surfaced (every grow was
+  demoting the single most load-bearing context position to make room for a fresh, untrained one)
+  — plus the `growFromFront` fix that resulted, including an honest correction of the author's own
+  first (wrong) safety reasoning. Written directly from session context, same first-person voice,
+  same `.toc`+h2 shape as the other two. `nobody-read-the-warning.html` ("Nobody Read the Warning," dated
   2026-08-30) — the user's own essay, handed over already voice-rewritten and approved verbatim; this
   agent only adapted formatting (h2 sections, `.toc`, a `.lim` italic closing-note aside) into the
   existing `_example.html` shape, no wording changed. `ctx4-plateau.html` ("The Four-Token Ceiling,"
