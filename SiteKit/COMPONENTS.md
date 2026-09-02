@@ -41,10 +41,24 @@ reusable core's "responsive nav" answer** — brand-agnostic, structural, belong
 component layer (not `brand-ea.css`).
 **Showroom's shape**: `Layout/MainLayout.razor`'s own header, hand-typed Razor with the SAME
 class names (`site.css` is directly `<link>`ed into `Showroom/wwwroot/index.html`, so the CSS is
-already shared today — only the MARKUP that emits those classes is duplicated). Known drift:
-Showroom's nav carries 7 items vs. the static site's lean 3-6 (flagged, unresolved, in
-`AboutUs/CLAUDE.md`'s Platform initiative section) — exactly the kind of thing a single shared
-`<SiteNav Items="@navItems" />` component would make structurally impossible to diverge on.
+already shared today — only the MARKUP that emits those classes is duplicated). **Correction
+2026-09-02 (showroom-owner, verified against the real files, not the stale "7 items" figure this
+entry and `AboutUs/CLAUDE.md`'s Platform initiative section both carried)**: Showroom's nav is
+`Home · Packages · Tools · NuGet` — **4 items today**, not 7 (checked live against
+`Showroom/Layout/MainLayout.razor`). The static site's lean nav is now 3 items (`Home · Packages ·
+NuGet`, per the 2026-08-28 tools-first pivot — checked against `site/phasor.html`, the reference
+page). So the real drift is 4 vs. 3, one item, not a 7-vs-3-6 gap — smaller than previously
+recorded, but the extra item is a genuine, nameable redundancy worth carrying into the design
+decision below: Showroom's `Tools` nav link (`href="."`) points at `Home.razor` itself, which
+already IS the tool gallery and is already the first nav item (`Home`) — the exact "a nav item
+that just re-links the page you're already 1 click from" pattern the static site's own tools-first
+pivot deliberately eliminated (see `AboutUs/CLAUDE.md`'s Navigation section, "the `Tools(→/#tools)`
+slot was DROPPED sitewide... once the homepage's entire top-level content IS the tools grid, a nav
+item that scrolls to `#tools` is redundant with `Home` itself" — same reasoning applies here
+verbatim, Showroom just never had the equivalent pass run against it). Not fixed from here
+unilaterally — this is exactly the kind of thing `platform-architecture.md` §8 flags as a real
+design decision for a shared `<SiteNav Items="@navItems" />` component's honest single API, not
+something to silently resolve while building the component OR while just reviewing this doc.
 
 ## 3. Footer — `footer.site .mono`
 `© <year>` + 3-5 internal links, page-appropriate subset. Plain text, no component complexity —
