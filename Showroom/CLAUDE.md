@@ -16,8 +16,61 @@ REPL). Plus one **unlisted** page (below), a client preview, not a package-capab
 - `Program.cs`: standard Blazor WASM host; one scoped `HttpClient` with `BaseAddress =
   HostEnvironment.BaseAddress` (relative fetches like `data/foo.json` resolve under `/tools/`).
 - `App.razor` / `_Imports.razor` / `Layout/MainLayout.razor`: router + shared nav/footer chrome.
-  `MainLayout.razor`'s `.nav-links`: `Home · HoloDb · Tools · NuGet` (`Tools` links to `Home.razor`'s
-  gallery via `href="."`; a new tool needs a `Home.razor` card, not a nav entry).
+  `MainLayout.razor`'s `.nav-links`: **`Home · Tools · NuGet`** (2026-09-02, 3 items, down from 4 —
+  see "Nav scope" below; `Tools` links to `Home.razor`'s gallery via `href="."`; a new tool needs a
+  `Home.razor` card, not a nav entry). This entry used to read "`Home · HoloDb · Tools · NuGet`",
+  already stale before this pass (the live file actually had `Packages` in that 3rd slot, not
+  `HoloDb` — never caught until this pass verified the real file against this doc).
+
+### Nav scope — resolved 2026-09-02 (user decision, content/app split hardened)
+
+Direct user decision, relayed as a resolution both `website-owner` and this agent got independently
+(no shared `<SiteNav>` component built as a result — see below): "I prefer the HTML versions, as the
+Blazor-only pages are for apps, not sharing info." This hardens the existing content/app split into
+a firm principle — the static HTML site (`AboutUs/site/`) is the sole home for informational/
+shareable content; `Showroom/` exists ONLY for interactive tool apps, never to restate or duplicate
+info content. Practical effect on THIS repo's nav: `MainLayout.razor`'s `Packages` link
+(`/packages.html`, the static site's package-info index) was dropped — Showroom's nav is scoped
+strictly to Showroom's own tool list, not to informational pages that already live on the static
+site (those pages already link INTO Showroom's tools where relevant; the reverse direction — a tool
+page linking back OUT to package-info prose — isn't this app's job). Grepped `packages.html` across
+`Showroom/` first to confirm the nav link was the only reference (it was — `Home.razor` and every
+tool page link straight to package NuGet pages or nothing, never to the static site's info gallery).
+New shape: `Home` (href=`/`, escape hatch back to the marketing/info site — kept; this is wayfinding,
+not restated content, and matches the static site's own convention of a textual `Home` link
+alongside the brand-mark logo link, not a redundancy specific to this decision), `Tools` (href=`.`,
+Showroom's own gallery — correctly scoped, this IS "Showroom's own tool list"), `NuGet` (external,
+the actual package-distribution channel, not AboutUs content, kept). Net: 4 items -> 3.
+**`SiteKit.Components` RCL (nav/brand/footer) — assessed again given this resolution, still not
+built, judgment updated**: the earlier open question was whether the two navs' *item counts* should
+be unified via a shared component; that's now moot, since the two navs' JOBS are genuinely different
+(info-nav: `Home · Packages · NuGet`; app-nav: `Home · Tools · NuGet`) and always will be — there is
+no shared nav-items list to factor out, only a shared *shape* (brand mark + a lean link row), which a
+parameterized-items-list component would barely simplify over two small hardcoded files. Re-assessed
+per-piece:
+- **Nav**: keep fully local. No shared value once the item lists genuinely diverge by design, not by
+  neglect.
+- **Footer**: keep fully local. `AboutUs/site/**`'s footer is `© year · 3-4 links`; Showroom's is
+  `© year · Home` (one link) — same asymmetry as the nav, plus it's small enough (one line) that
+  hand-sync risk is negligible.
+- **Brand mark (the SVG logo)**: the one piece with REAL, demonstrated drift risk — `AboutUs/
+  CLAUDE.md`'s own record: the 2026-08-28 prism-triangle motif sweep hit all 17 static pages but
+  "stopped dead at the repo boundary," and this file's brand mark had to be fixed by hand afterward
+  (confirmed still correct as of this pass — same triangle path `M16 5L27 26H5Z`, same 7-stop ROYGBIV
+  gradient, byte-checked against `Layout/MainLayout.razor`'s current markup). This is the one
+  candidate genuinely worth componentizing — but its only real cross-repo consumption path is
+  `AboutUs/CLAUDE.md`'s in-flight `SiteKit.Render` (an `HtmlRenderer`-based pipeline that could render
+  a shared Razor brand-mark component into the static pages too), and that pipeline is explicitly
+  NOT YET wired into any real `site/**/*.html` page as of 2026-09-02 (3 of 17 pages proven in a
+  sandboxed PoC only, per that doc's own "still fully INERT w.r.t. the deployed site's PAGES" note).
+  Building a `SiteKit.Components` RCL for the brand mark today would only ever be consumed by THIS
+  repo (a trivial refactor of markup that's already inline and already correct) — zero real
+  drift-prevention benefit until `SiteKit.Render`'s page pipeline actually ships. **Conclusion: not
+  worth building yet.** Revisit specifically if/when `SiteKit.Render` reaches the point of rendering
+  real static pages (not just its PoC) — at that point the brand mark is the one piece worth pulling
+  into a shared component; nav and footer stay local even then, per the reasoning above. Until then,
+  the working discipline stays what it already is: whenever the brand motif changes, sweep both
+  repos by hand and byte-check the SVG path/gradient stops match (same check just re-run this pass).
 - `Home.razor` (`@page "/"`): the tool gallery. Each tool is a whole-card `<a class="card tool"
   href="/tools/<slug>">` (absolute path) with a `--cat` accent colour, a `live`/`soon` tag, a
   one-line desc, "Open X →". Mirror this shape for any new tool. `Pages/NotFound.razor`
