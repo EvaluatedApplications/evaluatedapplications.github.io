@@ -828,6 +828,29 @@ publish` to reach `dist/` — done, `robocopy /MIR`-mirrored, both `dotnet build
 (0/0). **Not verified live** — same disclosed boundary; user should confirm `/tools/prism` reads right
 and loads the r135,406 checkpoint on a fresh `dist/` deploy.
 
+**Input-box default reverted + refresh to round 139,306 (2026-09-04, third pass, same day)**. Direct
+user correction: the prior pass's `_prompt` field default (`"Th"`) put real, selectable text in the
+live input box a visitor has to delete before typing — reverted to `string _prompt = "";`.
+`placeholder="Th"` on the `<input>` (grey hint text, gone the instant a visitor types) and the
+boot-time `examplePrompt = "Th"` (the seeded example history entry, not the live box) were both left
+alone — neither is the "actual text box people write to." **Checkpoint**: same refresh recipe as the
+two passes above, from `%LOCALAPPDATA%\Prism-MainSnapshot\snapshots\r0139306\`. Re-verified
+deserialization at AlgFormer 2.2.0 via the same throwaway-console-app round-trip (byte-identical),
+same shape (`Vocab=192,Dim=1536,Context=32,Shifts=16,Layers=1,ParamCount=516,288`), vocab byte-identical
+(no new merges). `oracle-stackk.txt`/`oracle-iterwarm.txt` re-checked against `HoloEngine.cs`'s live
+consts (still `OneShotStackK=2`/`OneShotIterWarm=100`) — written fresh, not carried forward, matching.
+`oracle-brain.bin.gz` regenerated + round-trip verified byte-identical in both `wwwroot/data` and
+`dist/data`. **Real gotcha hit writing the sidecar `.txt` files**: PowerShell `Set-Content -Encoding
+utf8` silently prepends a UTF-8 BOM (caught because `oracle-rounds.txt` came out 9 bytes for a 6-char
+round number) — exactly the mojibake-class risk the house rule against `Set-Content`/`Get-Content` on
+source already warns about; rewrote via `[System.IO.File]::WriteAllText(path, text, new
+UTF8Encoding(false))` instead, re-verified byte lengths (6/1/3, no BOM). Source changed (the `_prompt`
+revert), so did a full `dotnet publish` + `robocopy /MIR` into `dist/` — both `dotnet build`/`dotnet
+publish` green (0/0), and the publish output's own `oracle-brain.bin`/`.bin.gz` byte lengths matched the
+hand-copied files exactly (4,130,340 / 2,257,537), confirming the publish step didn't touch the data
+files. **Not verified live** — same disclosed boundary; user should confirm the input box starts empty
+and `/tools/prism` loads the r139,306 checkpoint on a fresh `dist/` deploy.
+
 ## Unlisted: RecycleDAO marketplace prototype — `Pages/RecycleDaoDemo.razor` (`/recycledao-demo`)
 NOT a package-capability demo and NOT in the public gallery — a private, share-by-link-only client
 preview for the RecycleDAO PoC (`C:\Users\dongy\RecycleDAO`, separate repo, owned by
