@@ -768,131 +768,68 @@ already turns any checkpoint-load failure into a visible `_loadError`, never a s
 way, same helper, same reasoning — it fetches the identical checkpoint through a second code path
 when Prism itself hasn't loaded it first this page load.
 
-**Checkpoint refresh + AlgFormer 2.2.0 bump (2026-09-04)**: refreshed `oracle-brain.bin`/`-vocab.txt`/
-`-rounds.txt`/`-stackk.txt`/`-iterwarm.txt` from a SNAPSHOT (copied first, per the same discipline
-`ctx4-battery` runs use — the live PrismStudio process was actively writing) of the user's live
-`%LOCALAPPDATA%\Prism\prism-holo*` checkpoint at round 129,136. No dedicated "oracle export" tool
-exists anywhere in PrismFormer/PrismGym (grepped `Program.cs`'s full `mode ==` dispatch list — no
-`oracle`/`export` case) — the hand-off is, and has only ever been, the raw-copy convention this file's
-own Boundary section already documents; `oracle-vocab.txt`'s format is unchanged (one merge per line,
-`Prism.razor` sizes everything off `_vocab.Size` live, nothing hardcodes 128), so the 128→192 vocab
-expansion (96 base `CharVocab` chars + 96 merges, was 32 merges) needed no code change, only fresh data.
-**Real blocker found and fixed**: the live checkpoint is `CheckpointFormat` **v2**; the then-pinned
-AlgFormer 1.5.0 only reads v1 and throws `CheckpointFormatException` on load — confirmed by actually
-deserializing the snapshot through a throwaway console app first at 1.5.0 (threw) then at 2.2.0
-(succeeded: `Vocab=192, Dim=1536, Context=32, Shifts=16, Layers=1, ParamCount=516,288`, matching the
-coordinator's stated shape exactly). Bumped `Showroom.csproj` + `HoloKernel.csproj` to AlgFormer 2.2.0
-(latest published) via `dotnet add package`, which surfaced a real breaking API change (AlgFormer
-2.0.0, per its own CLAUDE.md: every `StackIter*` entry point now takes per-layer `double[] alpha`, not
-a scalar) at 2 call sites — `InspectorTrace.Capture` (`InspectStackIter`/`InspectAttention`) and
-`RefinementLoop.ObserveSequence` (`StackIterAccumulateAllPos`). Fixed both with a uniform
-length-`model.Layers` array (every Showroom tool is `Layers=1`, and AlgFormer's own docs guarantee a
-uniform array reproduces the old scalar path bit-for-bit) — a signature adapter, not a behavior change.
-`RefinementLoop.Observe` (the single-layer `IterAccumulate` oracle) is untouched, still scalar by design.
-**`oracle-stackk.txt=2`/`oracle-iterwarm.txt=100`**: NOT recoverable from the checkpoint itself (`Iters`/
-`IterAlphaServe` are never persisted by `Serialize()`, confirmed prior pass) and NOT confirmed against
-the live running process (barred from launching PrismStudio) — read from PrismFormer studio's current
-checked-out `HoloEngine.cs` source consts, the best available ground truth, but PrismStudio's own
-CLAUDE.md calls these values "the user's own live-hand-edited knob... never trust a stale number,
-always read live" — flagged, not silently trusted; see the FLAGGED note in the return message for the
-recovery-window concern this also raises. Did a FULL `dotnet publish` this pass (not a data-only
-interim refresh) since source changed (package bumps + 2 signature fixes) — `dist/` mirrored from the
-fresh publish output (`robocopy /MIR`), which regenerated the small text files' `.br`/`.gz` sidecars
-itself; `oracle-brain.bin.gz` was hand-regenerated via the documented `GZipStream` recipe and round-trip
-verified byte-identical to the raw `.bin` before shipping. **Verified**: `dotnet build`/`dotnet publish
-Showroom.csproj -c Release` both green (0/0) at every stage (before AND after the AlgFormer bump).
-**Not verified live** (no browser here, per this repo's boundary) — the user should open `/tools/prism`
-on a fresh `dist/` deploy and confirm the checkpoint loads and Ask/Continue works with the new 192-vocab
-shape before this is considered fully proven.
+**Checkpoint refresh history (2026-09-04, five passes same day) — consolidated 2026-09-04, was 5
+near-duplicate dated entries each restating the same verification recipe; compacted per §3 dedupe,
+no fact dropped, just de-repeated.** Current ground truth: round **152,476**,
+`Vocab=192,Dim=1536,Context=32,Shifts=16,Layers=1,ParamCount=516,288`, `oracle-stackk.txt=2`/
+`oracle-iterwarm.txt=100` (matches `HoloEngine.cs`'s live `OneShotStackK`/`OneShotIterWarm` consts,
+re-checked fresh every pass, never carried forward), AlgFormer pinned at **2.2.0**.
 
-**Data-only refresh to round 135,406 + copy cut (2026-09-04, same day, second pass)**: refreshed `oracle-
-brain.bin`/`-vocab.txt`/`-rounds.txt` again from a fresh snapshot (`%LOCALAPPDATA%\Prism-MainSnapshot\
-snapshots\r0135406\`, copied off the live process). Re-verified deserialization against the pinned
-AlgFormer 2.2.0 via a throwaway console app (round-tripped `Serialize()` byte-identical to the source
-`.bin`) rather than assuming the format blocker couldn't recur — same shape as before
-(`Vocab=192,Dim=1536,Context=32,Shifts=16,Layers=1,ParamCount=516,288`), vocab file byte-identical (no
-new merges since r129,136), only the trained weights/round count changed. Cross-checked
-`oracle-stackk.txt`/`oracle-iterwarm.txt` against `HoloEngine.cs`'s live consts again per the standing
-habit — still `OneShotStackK=2`/`OneShotIterWarm=100` (the 2026-09-03 revert noted in PrismStudio's own
-CLAUDE.md), matching the already-shipped sidecar values, so those two files were left untouched.
-`oracle-brain.bin.gz` regenerated and round-trip verified byte-identical to the raw `.bin` in both
-`wwwroot/data` and `dist/data`. **Lede/outro copy cut ~80% same pass (direct user instruction)**: the
-long lede + 7-paragraph `.outro` explainer (TinyStories comparison, compute-equivalence math, "why it's
-called Prism," etc. — 11,566 chars) was replaced with a ~2,255-char (19.5%) 2-paragraph version framing
-this as a technical demo, not a finished product — behaviour varies with whatever's being trained, and
-what's live is simply the last checkpoint pushed to check on it, not a curated best result. `KFactDetail`/
-`RoundsPhrase` C# properties are now unused (left in place, harmless — no build warning) since the prose
-referencing them was cut; nothing else on the page (input, boot log, history list, badges/stat panels)
-was touched. This pass's source change (unlike the data-only refresh above) required a full `dotnet
-publish` to reach `dist/` — done, `robocopy /MIR`-mirrored, both `dotnet build`/`dotnet publish` green
-(0/0). **Not verified live** — same disclosed boundary; user should confirm `/tools/prism` reads right
-and loads the r135,406 checkpoint on a fresh `dist/` deploy.
+**Standing refresh recipe** (every pass below follows this, stated once): copy the snapshot's
+`prism-holo.bin`/`-vocab.txt`/`-iter.txt` from `%LOCALAPPDATA%\Prism-MainSnapshot\snapshots\r0NNNNNN\`
+(never the live-writing `%LOCALAPPDATA%\Prism\` dir directly — no dedicated "oracle export" tool
+exists anywhere in PrismFormer/PrismGym, grepped `Program.cs`'s full `mode ==` dispatch, so this
+raw-copy convention is the only hand-off shape there's ever been) into `oracle-brain.bin`/
+`-vocab.txt`/`-rounds.txt`; deserialize the fresh `.bin` through a throwaway console app pinned at
+AlgFormer 2.2.0 and round-trip `Serialize()` byte-identical before trusting it (catches a format
+regression instead of assuming one can't recur); cross-check `oracle-stackk.txt`/
+`oracle-iterwarm.txt` fresh against `HoloEngine.cs`'s live consts every time (never carried forward —
+PrismStudio's own CLAUDE.md calls these "the user's own live-hand-edited knob... never trust a stale
+number"); write every `.txt` sidecar via `[System.IO.File]::WriteAllText(path, text, new
+UTF8Encoding(false))`, never PowerShell `Set-Content` (**real gotcha, hit once, r139,306 pass**:
+`Set-Content -Encoding utf8` silently prepends a UTF-8 BOM — caught because a 6-char round number
+came out 9 bytes); regenerate `oracle-brain.bin.gz` via the `GZipStream` recipe (HoloKernel section
+above) and round-trip decompress-verify byte-identical to the raw `.bin` in both `wwwroot/data` and
+`dist/data`; if source changed too, a full `dotnet publish Showroom.csproj -c Release` +
+`robocopy /MIR` into `dist/`, confirming the publish output's own regenerated checkpoint bytes match
+the hand-copied ones exactly (proves publish never silently re-touches the data files).
 
-**Input-box default reverted + refresh to round 139,306 (2026-09-04, third pass, same day)**. Direct
-user correction: the prior pass's `_prompt` field default (`"Th"`) put real, selectable text in the
-live input box a visitor has to delete before typing — reverted to `string _prompt = "";`.
-`placeholder="Th"` on the `<input>` (grey hint text, gone the instant a visitor types) and the
-boot-time `examplePrompt = "Th"` (the seeded example history entry, not the live box) were both left
-alone — neither is the "actual text box people write to." **Checkpoint**: same refresh recipe as the
-two passes above, from `%LOCALAPPDATA%\Prism-MainSnapshot\snapshots\r0139306\`. Re-verified
-deserialization at AlgFormer 2.2.0 via the same throwaway-console-app round-trip (byte-identical),
-same shape (`Vocab=192,Dim=1536,Context=32,Shifts=16,Layers=1,ParamCount=516,288`), vocab byte-identical
-(no new merges). `oracle-stackk.txt`/`oracle-iterwarm.txt` re-checked against `HoloEngine.cs`'s live
-consts (still `OneShotStackK=2`/`OneShotIterWarm=100`) — written fresh, not carried forward, matching.
-`oracle-brain.bin.gz` regenerated + round-trip verified byte-identical in both `wwwroot/data` and
-`dist/data`. **Real gotcha hit writing the sidecar `.txt` files**: PowerShell `Set-Content -Encoding
-utf8` silently prepends a UTF-8 BOM (caught because `oracle-rounds.txt` came out 9 bytes for a 6-char
-round number) — exactly the mojibake-class risk the house rule against `Set-Content`/`Get-Content` on
-source already warns about; rewrote via `[System.IO.File]::WriteAllText(path, text, new
-UTF8Encoding(false))` instead, re-verified byte lengths (6/1/3, no BOM). Source changed (the `_prompt`
-revert), so did a full `dotnet publish` + `robocopy /MIR` into `dist/` — both `dotnet build`/`dotnet
-publish` green (0/0), and the publish output's own `oracle-brain.bin`/`.bin.gz` byte lengths matched the
-hand-copied files exactly (4,130,340 / 2,257,537), confirming the publish step didn't touch the data
-files. **Not verified live** — same disclosed boundary; user should confirm the input box starts empty
-and `/tools/prism` loads the r139,306 checkpoint on a fresh `dist/` deploy.
+**The five passes, in order** (round : what changed beyond the checkpoint itself, if anything):
+- **r129,136** — the checkpoint moved `CheckpointFormat` v1->v2 (128->192 vocab, 96 base `CharVocab`
+  chars + 96 merges), unreadable by the then-pinned AlgFormer 1.5.0 (`CheckpointFormatException`,
+  confirmed by actually trying). Bumped `Showroom.csproj`+`HoloKernel.csproj` to AlgFormer 2.2.0
+  (`dotnet add package`), which surfaced a real breaking API change (2.0.0: every `StackIter*` entry
+  point takes per-layer `double[] alpha`, not a scalar) at 2 call sites — `InspectorTrace.Capture`
+  (`InspectStackIter`/`InspectAttention`) and `RefinementLoop.ObserveSequence`
+  (`StackIterAccumulateAllPos`) — fixed with a uniform length-`model.Layers` array (every Showroom
+  tool is `Layers=1`; AlgFormer's own docs guarantee this reproduces the old scalar path bit-for-bit
+  — a signature adapter, not a behavior change). `RefinementLoop.Observe` (the single-layer oracle)
+  untouched, still scalar by design.
+- **r135,406** — data-only, plus a **lede/outro copy cut ~80%** (direct user instruction): the long
+  lede + 7-paragraph `.outro` explainer (11,566 chars) replaced with a ~2,255-char 2-paragraph
+  version framing this as a technical demo, not a finished product. `KFactDetail`/`RoundsPhrase` C#
+  properties are now unused (left in place, harmless).
+- **r139,306** — `_prompt` field default reverted `"Th"` -> `""` (direct user correction: real
+  selectable text in the live input box was a papercut a visitor had to delete first);
+  `placeholder="Th"` and the boot-time `examplePrompt` left alone (neither is the live box). This is
+  the pass that caught the `Set-Content` BOM gotcha now folded into the standing recipe above.
+- **r143,776** — generation length clipped to the model's own context instead of a flat cap (direct
+  user instruction: "clip the prism output to its context length"). `const int MaxReplyChars = 600`
+  -> `int MaxReplyChars => _stats?.Context ?? 32`, live off the loaded checkpoint (same
+  live-not-hardcoded discipline `_k`/`_trainedAlpha` use). **Supersedes** the 2026-08-30 "let it run
+  until it actually stops" instruction recorded in the streaming-architecture section above — the
+  flat 600 cap let a run wander ~18x past the one window the model can actually see; a straight 1x
+  multiple (cap = `_stats.Context`) is the point past which "continuing" stops being continuation
+  with any of the original prompt still in view. `CharVocab.End`/`DegenGuard` still fire first when
+  they fire at all — this only tightens the outer backstop.
+- **r152,476** — data-only, no source change; a full `dotnet publish`+`robocopy /MIR` was still run
+  per this pass's explicit instruction (overriding the normally-cheaper interim-refresh path the
+  "Checkpoint gzip precompression" section above documents) rather than a bare data-file copy.
 
-**Generation length clipped to the model's own context, refresh to round 143,776 (2026-09-04, fourth
-pass, same day, direct user instruction: "clip the prism output to its context length. So it doesn't
-ramble on.").** `const int MaxReplyChars = 600` (the loop bound in both `Ask()` and the boot-time
-example generation) is GONE — replaced with `int MaxReplyChars => _stats?.Context ?? 32`, read live
-off the loaded checkpoint every time, same live-not-hardcoded discipline `_k`/`_trainedAlpha` already
-use. **Supersedes the 2026-08-30 "let it run until it actually stops, don't truncate mid-thought"
-instruction recorded in that section's own history above** — the flat 600 cap was totally decoupled
-from `_stats.Context` (32 tokens on the live checkpoint): `BuildContext(seq, _stats.Context)` already
-trimmed the model's INPUT to its last `Context` tokens every step, but nothing capped NEW tokens
-generated, so a run could wander up to ~18x past the one window the model can actually see at once.
-Chose a straight **1x multiple** (cap = `_stats.Context`, not a scaled-up number) — the reasoning
-written into the field's own comment: once generation has produced one full context-window's worth of
-new tokens, the ENTIRE window `BuildContext` feeds back into the model is something it wrote itself,
-with zero of the original prompt still in view, which is the point past which "continuing" stops
-being continuation and starts being unanchored drift. **Before/after against the live checkpoint**:
-600 (flat) -> 32 (`_stats.Context` on the r143,776 checkpoint). The real stop conditions
-(`CharVocab.End`, `DegenGuard`) are unchanged and still fire first when they fire at all — this only
-tightens the outer backstop. A few nearby comments that referenced the old flat "(600)" value as if it
-were still current were reworded to point at `MaxReplyChars`'s own field comment instead of restating
-a number that's now wrong (see the field's own comment + the render-batching/OOM-investigation
-comments in `Ask()`/`_history`'s own doc). **Checkpoint**: same refresh recipe as the three passes
-above, from `%LOCALAPPDATA%\Prism-MainSnapshot\snapshots\r0143776\` (copied off the live process
-first, per the same discipline). Re-verified deserialization at the pinned AlgFormer 2.2.0 via a
-throwaway console app (round-tripped `Serialize()` byte-identical to the source `.bin`), same shape as
-every refresh since the format bump (`Vocab=192,Dim=1536,Context=32,Shifts=16,Layers=1,
-ParamCount=516,288`), vocab file byte-identical (96 merges, no new merges since r129,136).
-`oracle-stackk.txt`/`oracle-iterwarm.txt` re-checked fresh against `HoloEngine.cs`'s live consts
-(`const int OneShotIters = 1, OneShotStackK = 2, OneShotIterWarm = 100`) — still `2`/`100`, matching
-the already-shipped sidecar values, written fresh via `File.WriteAllText`+`UTF8Encoding(false)` (not
-PowerShell `Set-Content`, which silently prepends a BOM — the same gotcha the prior pass caught).
-`oracle-brain.bin.gz` regenerated via the documented `GZipStream` recipe and round-trip verified
-byte-identical to the raw `.bin` in both `wwwroot/data` and `dist/data` (decompressed the `.gz` back
-and did a `SequenceEqual` against the source bytes, not just "the command ran"). Source changed (the
-`MaxReplyChars` rework), so did a full `dotnet publish Showroom.csproj -c Release` + mirrored the
-output over `dist/` via `robocopy /MIR` (purged 12 stale files, notably an old-hash
-`Showroom.*.wasm.gz` from a prior publish) rather than a data-only interim refresh — both `dotnet
-build`/`dotnet publish` green (0/0), and the publish output's own regenerated `oracle-brain.bin.gz`
-byte length (2,257,732) matched the hand-regenerated file exactly, confirming publish didn't silently
-re-touch the data files. **Not verified live** (no browser here, per this repo's boundary) — the user
-should confirm `/tools/prism` now stops generating within one context-window's worth of new
-characters (not a full ~600-char ramble) and that the r143,776 checkpoint loads correctly on a fresh
-`dist/` deploy.
+**Not verified live on any of the five passes** (no browser here, per this repo's boundary) — the
+user should confirm `/tools/prism` loads the current (r152,476) checkpoint, the input box starts
+empty, generation stops within one context-window's worth of characters, and Ask/Continue works with
+the 192-vocab shape, on a fresh `dist/` deploy.
 
 ## Unlisted: RecycleDAO marketplace prototype — `Pages/RecycleDaoDemo.razor` (`/recycledao-demo`)
 NOT a package-capability demo and NOT in the public gallery — a private, share-by-link-only client
