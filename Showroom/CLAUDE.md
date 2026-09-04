@@ -768,12 +768,49 @@ already turns any checkpoint-load failure into a visible `_loadError`, never a s
 way, same helper, same reasoning — it fetches the identical checkpoint through a second code path
 when Prism itself hasn't loaded it first this page load.
 
-**Checkpoint refresh history (2026-09-04, seven passes same day) — consolidated 2026-09-04, was 5
+**Coordinator process correction (2026-09-04, after all eight passes above): every one of them ran a
+full `dotnet publish` for a DATA-ONLY refresh, contradicting the fast path already documented above
+("Keeping `oracle-brain.bin.gz` in sync..." — no `dotnet publish` needed, just the raw copy + one
+`GZipStream` command, since checkpoint data carries no SRI hash and isn't part of the compiled
+output). User caught the pattern directly ("It never took the fast path") after the ninth dispatch.
+Root cause: the coordinator's own dispatch instructions explicitly told the agent to run a full
+publish every time, not an independent agent mistake — each agent correctly followed what it was
+told. From the next data-only refresh onward, use the fast path (raw copy + `GZipStream`, no publish,
+no rebuild) unless `Prism.razor`/`HoloKernel`'s fetch/decompress logic itself changed that pass.**
+
+**Checkpoint refresh history (2026-09-04, eight passes same day) — consolidated 2026-09-04, was 5
 near-duplicate dated entries each restating the same verification recipe; compacted per §3 dedupe,
-no fact dropped, just de-repeated.** Current ground truth: round **169,066**,
+no fact dropped, just de-repeated.** Current ground truth: round **174,166**,
 `Vocab=192,Dim=1536,Context=32,Shifts=16,Layers=1,ParamCount=516,288`, `oracle-stackk.txt=2`/
 `oracle-iterwarm.txt=100` (matches `HoloEngine.cs`'s live `OneShotStackK`/`OneShotIterWarm` consts,
 re-checked fresh every pass, never carried forward), AlgFormer pinned at **2.2.0**.
+
+- **r174,166 (eighth pass)** — data-only, shape unchanged from r169,066 (same 5 fields above;
+  `oracle-brain.bin` is still exactly 4,130,340 bytes, same as every pass back to r167,386 — the
+  checkpoint's trained weights keep moving but its shape hasn't). **Same directory/round mismatch
+  pattern as the sixth/seventh passes, again not silently resolved**: snapshot directory named
+  `...\snapshots\r0174166\`, and this time its own `prism-holo-iter.txt` DOES agree (`174166`,
+  confirmed both agree per this pass's own instruction) — used 174,166 throughout.
+  `oracle-stackk.txt`/`oracle-iterwarm.txt` re-cross-checked fresh against `HoloEngine.cs`
+  (`PrismFormer\studio\PrismGym\HoloEngine.cs:218`, `const int OneShotIters = 1, OneShotStackK = 2,
+  OneShotIterWarm = 100`) — unchanged, both genuinely re-read from source this pass, not carried
+  forward. Deserialize+round-trip verified via a throwaway console app pinned at AlgFormer 2.2.0
+  (`HoloFormer.Deserialize` then `.Serialize()`, 4,130,340 bytes in, 4,130,340 bytes out,
+  byte-identical; also dumped every public property via reflection as a shape sanity check —
+  `Golden=True`, `Shifts=16` confirmed > 1). `oracle-brain.bin.gz` regenerated in both
+  `wwwroot/data` and `dist/data` via the standing `GZipStream` recipe and round-trip
+  decompress-verified byte-identical to the raw `.bin` in both locations (2,259,134 bytes gzip).
+  Sidecar `.txt` files written via `[System.IO.File]::WriteAllText` + `UTF8Encoding(false)` in both
+  data dirs (confirmed no BOM by exact byte length: `oracle-rounds.txt`=6 bytes for `"174166"`,
+  `oracle-stackk.txt`=1 byte for `"2"`, `oracle-iterwarm.txt`=3 bytes for `"100"`). Per this pass's
+  own instruction (checkpoint data changed, full publish still wanted despite being data-only), ran
+  a full `dotnet publish Showroom.csproj -c Release` (AOT+trim, exit clean, `dotnet build` green 0/0
+  beforehand) and mirrored the output into `dist/` via `robocopy /MIR` (exit code 3 — files
+  copied + old-hash extras removed, the expected result of Blazor's fingerprinted filenames
+  changing between builds, not an error). Verified the publish output's own regenerated
+  `oracle-brain.bin`/`oracle-brain.bin.gz` are byte-identical to the hand-copied ones (proves
+  publish never silently re-touches the data files) and that `oracle-rounds.txt`/`oracle-stackk.txt`/
+  `oracle-iterwarm.txt` in the final `dist/data` read back `174166`/`2`/`100`.
 
 - **r169,066 (seventh pass)** — data-only, shape unchanged from r167,386 (same 5 fields above).
   **Same directory/file-content mismatch as the sixth pass, again flagged not silently resolved**:
@@ -876,8 +913,8 @@ the hand-copied ones exactly (proves publish never silently re-touches the data 
   per this pass's explicit instruction (overriding the normally-cheaper interim-refresh path the
   "Checkpoint gzip precompression" section above documents) rather than a bare data-file copy.
 
-**Not verified live on any of the seven passes** (no browser here, per this repo's boundary) — the
-user should confirm `/tools/prism` loads the current (r169,066) checkpoint, the input box starts
+**Not verified live on any of the eight passes** (no browser here, per this repo's boundary) — the
+user should confirm `/tools/prism` loads the current (r174,166) checkpoint, the input box starts
 empty, generation stops within two context-windows' worth of characters (the seventh pass's 2x cap,
 not the earlier 1x), and Ask/Continue works with the 192-vocab shape, on a fresh `dist/` deploy.
 
