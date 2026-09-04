@@ -11,12 +11,11 @@
     <header class="room-head">
         <nav class="crumb"><a href="/">Evaluated Applications</a> <span>/</span> Prism</nav>
         <h1>Prism</h1>
-        <p class="lede">This page downloads a real, trained <strong>HoloFormer</strong> checkpoint straight to your
-            device and runs it right here, in this browser tab — no server call, no upload, nothing you type ever
-            leaves this page. Type the start of a sentence and watch it continue, character by character, computed
-            on your own CPU. This is <strong>autocomplete, not a chatbot</strong>: the model has never seen a
-            dialogue turn in its life, so every submission is a fresh, independent continuation — it does not
-            remember anything you typed before.</p>
+        <p class="lede">A real, trained <strong>HoloFormer</strong> checkpoint, downloaded once and run entirely in
+            this browser tab — nothing you type ever leaves this page. This is a <strong>technical demo, not a
+            finished product</strong>: what's deployed here is just the last checkpoint we bothered to push, to see
+            how training is going, not a curated "best" result — its behaviour will shift as the real model keeps
+            changing underneath it.</p>
         <div class="badges">
             <span>Runs on your device, not our servers</span><span>Real trained checkpoint</span><span>Holographic-transformer brain</span>
         </div>
@@ -90,109 +89,23 @@
         @if (_error is not null) { <p class="err">@_error</p> }
 
         <div class="outro">
-            <p><strong>What's actually happening when you hit Continue.</strong> Every prompt becomes a handful of subword
-                tokens, each bound into the model's holographic memory as a phase-and-magnitude pattern — a chord, not a
-                row in a lookup table. None of this touches a server: tokenizing, binding and reading the resonance
-                back out all run as plain C# in this browser tab, on your own CPU. Reading a prediction back out is an act of <em>resonance</em>: which stored
-                pattern rings loudest against the current context. A conventional transformer buys depth by stacking
-                many physically distinct, separately-trained layers. This model buys depth differently: it re-runs
-                the <em>same small transformation</em> over its own output, weight-tied, K times in a row. Each pass
-                doesn't add new information so much as let the pattern interfere with itself again — building up
-                harmonics, sharpening whichever resonance was already strongest, the way plucking a string
-                at the right moment reinforces its own overtones instead of damping them. It's a real nonlinear
-                dynamical system iterating on its own state, not a deeper stack of unique weights — which is exactly
-                why the parameter count above is worth reading twice: <code>@_stats!.ParamCount.ToString("N0")</code>
-                real numbers, reused <code>@_k</code>× per layer, computing LIKE a real dense transformer would
-                need <code>@_stats.EquivCompute.ToString("N0")</code> parameters to match — a <strong>compute-equivalence</strong>
-                figure (12·d²·L·K, the standard way to compare a weight-tied model's iterated compute against an
-                equivalent dense transformer), not a claim that this checkpoint secretly has that many real
-                parameters stored anywhere.</p>
+            <p><strong>What's happening when you hit Continue.</strong> Each prompt is bound into the model's
+                holographic memory as phase-and-magnitude patterns, then read back out by <em>resonance</em> — which
+                stored pattern rings loudest against the current context. Depth here isn't stacked layers: it's the
+                same small transformation re-run <strong>K=@_k</strong> times over its own output, weight-tied,
+                letting the pattern reinforce itself before a token is picked. All of it — tokenizing, binding,
+                resonance — runs as plain C# in this tab, on your own CPU.</p>
 
-            <p><strong>Why it's called Prism, and why the context window above is small on purpose.</strong> A
-                conventional large language model is trained across a huge context window over a huge amount of
-                text — with that much data and that much window to look back over, a lot of what it does when it
-                continues a sentence is closer to <em>interpolation</em>: finding a near neighbour somewhere in
-                everything it's seen and blending toward it. More data and more context just give it more points to
-                interpolate between. This checkpoint is trained the opposite way, on purpose: its context window is
-                only @_stats.Context tokens — kept deliberately tiny, trained hard at that size for @RoundsPhrase —
-                small enough that it structurally cannot memorise a whole passage; there is nowhere to store one.
-                That forces it to fall back on general compositional rules instead: grammar, structure, which token
-                tends to follow which, because rules are the only thing that fit inside a window that tight and
-                still generalise. Read back out through the same resonance and K-pass composition described above,
-                those rules <em>extrapolate</em>: they compose outward into a continuation longer than anything the
-                model was ever shown in one piece, rather than recalling something it saw whole. The name follows
-                the same shape — a physical prism takes one narrow, simple input, a thin beam of white light, and
-                its own internal structure turns it into something far richer coming out than obviously went in. A
-                tiny window turning into a real continuation, through nothing but the model's own internal
-                composition rather than having seen more, is the same trick.</p>
-
-            <p><strong>Where this checkpoint stands, and where it's headed.</strong> Right now: @_stats.ParamCount.ToString("N0")
-                real stored parameters, a @_stats.Vocab-token subword vocabulary, and an @_stats.Context-token context
-                window — an honest, early snapshot of an ongoing training run, not a finished product.
-                <strong>Next rung:</strong> GPT-2 small (OpenAI, 2019) — 124,000,000 real dense parameters, the smallest
-                of the original public GPT-2 releases and the field's most commonly-cited "smallest real language
-                model" reference point. That's the next milestone on the dense-equivalent-compute axis: grow context,
-                vocabulary and resonance depth until this checkpoint's own compute budget clears that line, while its
-                real stored-parameter count stays a small fraction of it. <strong>Further out:</strong> GPT-2 medium
-                (355M) and large (774M) sit beyond that as the next horizons. None of this is a promise the model will
-                write like GPT-2 once the compute number clears a line — compute budget and capability are not the
-                same thing — it's just an honest way to watch a real number move over time.</p>
-
-            <p><strong>How this stacks up against the closest published research, and why that's worth taking
-                seriously even before this thing writes clean sentences.</strong> The closest published work we
-                could find on how small a language model can be and still write legible English is TinyStories
-                (Eldan &amp; Li, 2023, arXiv:2305.07759) — they trained models from 1,000,000 parameters up to
-                roughly 80,000,000, all with a 512-token context window, and found that even their smallest,
-                1-million-parameter model produced grammatical, if shallow and repetitive, text: a real quoted
-                example from their paper reads <em>"hello to the pumpkin. One day, a little girl came to the
-                pumpkin and saw the pumpkin. She was so happy and thanked the pumpkin."</em> Reliable multi-sentence
-                coherence didn't show up in their tests until somewhere around 28-33 million parameters. We didn't
-                find anything published smaller than that — not a claim that nothing smaller exists, just that a
-                real search didn't turn one up. This checkpoint currently sits at
-                <code>@_stats.ParamCount.ToString("N0")</code> real stored parameters with a
-                <code>@_stats.Context</code>-token context window — smaller than TinyStories' own floor on
-                <strong>both axes at once</strong> (roughly 2.5× fewer parameters than their 1M smallest model, and
-                roughly 18× less context than their 512-token window), which makes this a harder version of the
-                same question they were asking, not an easier one.</p>
-
-            <p><strong>So why bother, if the output below still looks rough.</strong> No published research we
-                found expects a model this far under every existing reference point to write clean prose — so it
-                doesn't, not yet. Being straightforward about it: type something into the box above and you'll
-                typically see a mix — real, recognisable English words and short 3-5-token fragments that are close
-                to grammatical (things like "you're going to you", "I don't know your") sitting right alongside
-                invented non-words that have a plausible-looking shape but no real meaning, roughly half and half in
-                an honest run we did against this exact checkpoint. Full coherent sentences aren't reliably
-                happening yet, and we're not saying they are. What's actually notable is that <em>any</em> of that
-                first kind of structure — real words, short near-correct fragments — shows up at all, given that
-                nothing at this scale and this little context has been shown to do that before, as far as we could
-                find. That's the real, unglamorous data point here, not a finished result.</p>
-
-            <p><strong>Don't take our word for any of this — measure it yourself.</strong> We're not claiming this
-                checkpoint works or doesn't; you're better placed to judge a live run than a paragraph of our own
-                copy. Try a handful of different prompts, not just one — a single lucky or unlucky run doesn't tell
-                you much. Look for real, recognisable English words and short grammatical fragments, not full
-                paragraphs — that's the right bar for a model this size, not "does it sound like a chatbot."
-                Notice, honestly, how much of what comes back is real language versus invented shapes. Then weigh
-                that against the comparison above: a model this far below the smallest published reference point on
-                this exact question wasn't expected, by any research we could find, to produce anything legible at
-                all. You be the judge of whether what you see clears that bar.</p>
-
-            <p><strong>Being honest about it.</strong> This is <strong>raw text continuation, not dialogue</strong> —
-                this checkpoint was trained on plain text, never on turns, roles or "who's speaking," so it has no
-                mechanism for understanding a conversation, and this REPL doesn't fake one: each run is one prompt in,
-                one continuation out, with nothing from an earlier run fed back in. This checkpoint's vocabulary and
-                context window are both still small — expect short, rough, sometimes broken continuations, and don't
-                be surprised if one trails into a repeated character: the confidence gate above can read GREEDY even
-                once the model has settled into a loop, a known, real behaviour this early in training (a run like
-                that is labelled <em>settled into a repeat loop</em> above, rather than hiding it). It's a frozen copy from one point in
-                an ongoing training run, not a live link to it — the real model keeps training after
-                this snapshot was taken. It always runs at <strong>K=@_k weight-tied pass(es)</strong> — the model's
-                one real trained depth (α=@(_trainedAlpha.ToString("0.00")), @KFactDetail). That's not a knob you can
-                move here: K isn't a parameter to explore, it's a structural fact about this checkpoint.</p>
+            <p><strong>Where it stands, plainly.</strong> This is <strong>raw text continuation, not a chatbot</strong>:
+                trained on plain text with no notion of turns or "who's speaking," so every run starts fresh with
+                nothing carried over from an earlier one. Right now: @_stats!.ParamCount.ToString("N0") real stored
+                parameters, a @_stats.Vocab-token vocabulary, @_stats.Context tokens of context — early in an
+                ongoing training run, not a finished result. Expect short, rough continuations: real words and
+                near-grammatical fragments next to invented non-words, occasionally trailing into a repeated
+                character (flagged above as <em>settled into a repeat loop</em>, not hidden).</p>
 
             <p>The brain is <code>AlgFormer</code>'s holographic transformer — the same substrate behind
-                <a href="/creature">The Creature</a> and <a href="/forecaster">The Forecaster</a>, and the one that lets
-                <a href="/analyst">The Analyst</a>'s database hold a running total as a single vector. Pure managed
+                <a href="/creature">The Creature</a> and <a href="/forecaster">The Forecaster</a>. Pure managed
                 .NET, running entirely client-side. <code>dotnet add package EvaluatedApplications.AlgFormer</code></p>
         </div>
     }

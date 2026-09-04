@@ -805,6 +805,29 @@ Showroom.csproj -c Release` both green (0/0) at every stage (before AND after th
 on a fresh `dist/` deploy and confirm the checkpoint loads and Ask/Continue works with the new 192-vocab
 shape before this is considered fully proven.
 
+**Data-only refresh to round 135,406 + copy cut (2026-09-04, same day, second pass)**: refreshed `oracle-
+brain.bin`/`-vocab.txt`/`-rounds.txt` again from a fresh snapshot (`%LOCALAPPDATA%\Prism-MainSnapshot\
+snapshots\r0135406\`, copied off the live process). Re-verified deserialization against the pinned
+AlgFormer 2.2.0 via a throwaway console app (round-tripped `Serialize()` byte-identical to the source
+`.bin`) rather than assuming the format blocker couldn't recur — same shape as before
+(`Vocab=192,Dim=1536,Context=32,Shifts=16,Layers=1,ParamCount=516,288`), vocab file byte-identical (no
+new merges since r129,136), only the trained weights/round count changed. Cross-checked
+`oracle-stackk.txt`/`oracle-iterwarm.txt` against `HoloEngine.cs`'s live consts again per the standing
+habit — still `OneShotStackK=2`/`OneShotIterWarm=100` (the 2026-09-03 revert noted in PrismStudio's own
+CLAUDE.md), matching the already-shipped sidecar values, so those two files were left untouched.
+`oracle-brain.bin.gz` regenerated and round-trip verified byte-identical to the raw `.bin` in both
+`wwwroot/data` and `dist/data`. **Lede/outro copy cut ~80% same pass (direct user instruction)**: the
+long lede + 7-paragraph `.outro` explainer (TinyStories comparison, compute-equivalence math, "why it's
+called Prism," etc. — 11,566 chars) was replaced with a ~2,255-char (19.5%) 2-paragraph version framing
+this as a technical demo, not a finished product — behaviour varies with whatever's being trained, and
+what's live is simply the last checkpoint pushed to check on it, not a curated best result. `KFactDetail`/
+`RoundsPhrase` C# properties are now unused (left in place, harmless — no build warning) since the prose
+referencing them was cut; nothing else on the page (input, boot log, history list, badges/stat panels)
+was touched. This pass's source change (unlike the data-only refresh above) required a full `dotnet
+publish` to reach `dist/` — done, `robocopy /MIR`-mirrored, both `dotnet build`/`dotnet publish` green
+(0/0). **Not verified live** — same disclosed boundary; user should confirm `/tools/prism` reads right
+and loads the r135,406 checkpoint on a fresh `dist/` deploy.
+
 ## Unlisted: RecycleDAO marketplace prototype — `Pages/RecycleDaoDemo.razor` (`/recycledao-demo`)
 NOT a package-capability demo and NOT in the public gallery — a private, share-by-link-only client
 preview for the RecycleDAO PoC (`C:\Users\dongy\RecycleDAO`, separate repo, owned by
