@@ -117,9 +117,24 @@
     // PrismStudio's HoloEngine originally, so these numbers are unchanged, just centralised now).
     static readonly DecodePolicy Policy = DecodePolicy.Default;   // ConfidentThreshold=0.60, Temperature=0.80, FloorK=3.0, DegenRepeat=4
     // The real stop condition is CharVocab.End (the model's own stop token) or DegenGuard catching a
-    // collapsed repeat run — this is only a pathological-runaway backstop now, not a routine cutoff.
-    // Direct instruction (2026-08-30): let it run until it actually stops, don't truncate mid-thought.
-    const int MaxReplyChars = 600;
+    // collapsed repeat run — those are unchanged and still fire first when they fire at all.
+    //
+    // SUPERSEDES the 2026-08-30 instruction below (kept for the record, no longer the live policy):
+    // "let it run until it actually stops, don't truncate mid-thought." That was a flat 600-char cap
+    // totally decoupled from the model's real context window (`_stats.Context` — 32 tokens on the
+    // live checkpoint as of this change). `BuildContext(seq, _stats.Context)` already trims the
+    // model's INPUT to only its last `Context` tokens every step — nothing capped how many NEW
+    // tokens got generated, so a run could wander up to ~18x past the one window the model can
+    // actually see at once, with everything before that window structurally invisible to it. Direct
+    // instruction (2026-09-04): "clip the prism output to its context length. So it doesn't ramble
+    // on" — ties directly to a separately-verified finding the same day that raw autoregressive
+    // generation gets visibly more garbled the further it runs past its trained context.
+    // Cap is now read LIVE off the loaded checkpoint's own context window, not hardcoded — a 1x
+    // multiple: once generation has produced one full context-window's worth of new tokens, the
+    // ENTIRE window BuildContext feeds back into the model is now something it wrote itself, with
+    // zero of the original prompt still in view — that's the point past which "continuing" stops
+    // being continuation and starts being unanchored drift, so it's where the outer backstop cuts in.
+    int MaxReplyChars => _stats?.Context ?? 32;
 
     HoloSession? _session;
     ModelStats? _stats;
@@ -181,11 +196,13 @@
     // the life of the page: every submission appended one more entry forever. Blazor rebuilds + diffs this
     // component's ENTIRE render tree on every StateHasChanged() call (there is no @key/virtualization here),
     // so an unbounded _history means the per-render diff cost itself grows across a session — combined with
-    // the render-frequency fix in Ask() below (up to 600 renders per submission), this compounds: total
-    // render-diff work across a session was effectively unbounded on both axes at once. Fixed with the same
-    // "drop oldest" spirit Creature's `_log`/`_curve` and Forecaster's `_log`/`_accCurve` already use (see
-    // Showroom/CLAUDE.md) — HistoryCap is lower than those (40 vs 200-250) because each entry here can hold
-    // up to MaxReplyChars(600) of real text plus its own DOM subtree, not a single short log line.
+    // the render-frequency fix in Ask() below (up to MaxReplyChars renders per submission — was a flat 600
+    // at the time this comment was written, now the live checkpoint's own context length, see MaxReplyChars'
+    // own field comment), this compounds: total render-diff work across a session was effectively unbounded
+    // on both axes at once. Fixed with the same "drop oldest" spirit Creature's `_log`/`_curve` and
+    // Forecaster's `_log`/`_accCurve` already use (see Showroom/CLAUDE.md) — HistoryCap is lower than those
+    // (40 vs 200-250) because each entry here can hold up to MaxReplyChars chars of real text plus its own
+    // DOM subtree, not a single short log line.
     const int HistoryCap = 40;
     readonly List<RunEntry> _history = new();
     void AddHistory(RunEntry entry) { _history.Add(entry); if (_history.Count > HistoryCap) _history.RemoveAt(0); }
@@ -321,7 +338,7 @@
     string RoundsPhrase => _rounds is not null ? $"{_rounds.Value:N0} rounds" : "a long time";
 
     // Shared by OnInitializedAsync's example generation and Ask() below (was duplicated LINQ
-    // `seq.Skip(seq.Count - take).ToArray()`, called once per token — up to MaxReplyChars(600) times per
+    // `seq.Skip(seq.Count - take).ToArray()`, called once per token — up to MaxReplyChars times per
     // submission). `Skip().ToArray()` allocates an iterator object AND the destination array on every call;
     // this does the same slice with one allocation (the array only) via List<T>.CopyTo. A real, confirmed
     // minor contributor investigated alongside the OOM report — nowhere near as large as the render-count/
@@ -370,11 +387,13 @@
     // RENDER BATCHING (2026-08-30, real Arg_OutOfMemoryException report investigated — see
     // Showroom/CLAUDE.md's Prism section for the full write-up). Calling StateHasChanged() after every
     // single real token — which is exactly what "genuinely live streaming" above landed — means a full
-    // MaxReplyChars(600) reply now costs up to 600 Blazor render+diff cycles in ONE submission, where
-    // the old fake-typing pacer bounded render count to whatever a fixed ~60ms tick produced. WASM's
-    // linear memory is documented to grow but rarely shrink back down (allocations accumulate; the
-    // runtime doesn't reliably hand freed pages back to the OS) — 600 render cycles per submission,
-    // repeated over many submissions in one sitting ("some period of use"), is a real slow-growth path
+    // MaxReplyChars reply costs up to that many Blazor render+diff cycles in ONE submission (was up to
+    // 600 at the time this was written, now the live checkpoint's own context length — see
+    // MaxReplyChars' own field comment), where the old fake-typing pacer bounded render count to
+    // whatever a fixed ~60ms tick produced. WASM's linear memory is documented to grow but rarely
+    // shrink back down (allocations accumulate; the runtime doesn't reliably hand freed pages back to
+    // the OS) — hundreds of render cycles per submission, repeated over many submissions in one sitting
+    // ("some period of use"), is a real slow-growth path
     // to the reported OOM, especially compounding with the (now-capped, see _history above) render-tree
     // size Blazor re-diffs on every one of those calls.
     //

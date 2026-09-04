@@ -1,6 +1,6 @@
 # Showroom — CLAUDE.md (showroom-owner)
 
-**Last verified:** 2026-09-02
+**Last verified:** 2026-09-04
 
 Blazor WebAssembly app at `C:\Users\dongy\AboutUs\Showroom`, published under `/tools` on the public
 site (`AboutUs` repo, base href `/tools/` — see `wwwroot/index.html`). Every tool runs entirely
@@ -850,6 +850,49 @@ publish` green (0/0), and the publish output's own `oracle-brain.bin`/`.bin.gz` 
 hand-copied files exactly (4,130,340 / 2,257,537), confirming the publish step didn't touch the data
 files. **Not verified live** — same disclosed boundary; user should confirm the input box starts empty
 and `/tools/prism` loads the r139,306 checkpoint on a fresh `dist/` deploy.
+
+**Generation length clipped to the model's own context, refresh to round 143,776 (2026-09-04, fourth
+pass, same day, direct user instruction: "clip the prism output to its context length. So it doesn't
+ramble on.").** `const int MaxReplyChars = 600` (the loop bound in both `Ask()` and the boot-time
+example generation) is GONE — replaced with `int MaxReplyChars => _stats?.Context ?? 32`, read live
+off the loaded checkpoint every time, same live-not-hardcoded discipline `_k`/`_trainedAlpha` already
+use. **Supersedes the 2026-08-30 "let it run until it actually stops, don't truncate mid-thought"
+instruction recorded in that section's own history above** — the flat 600 cap was totally decoupled
+from `_stats.Context` (32 tokens on the live checkpoint): `BuildContext(seq, _stats.Context)` already
+trimmed the model's INPUT to its last `Context` tokens every step, but nothing capped NEW tokens
+generated, so a run could wander up to ~18x past the one window the model can actually see at once.
+Chose a straight **1x multiple** (cap = `_stats.Context`, not a scaled-up number) — the reasoning
+written into the field's own comment: once generation has produced one full context-window's worth of
+new tokens, the ENTIRE window `BuildContext` feeds back into the model is something it wrote itself,
+with zero of the original prompt still in view, which is the point past which "continuing" stops
+being continuation and starts being unanchored drift. **Before/after against the live checkpoint**:
+600 (flat) -> 32 (`_stats.Context` on the r143,776 checkpoint). The real stop conditions
+(`CharVocab.End`, `DegenGuard`) are unchanged and still fire first when they fire at all — this only
+tightens the outer backstop. A few nearby comments that referenced the old flat "(600)" value as if it
+were still current were reworded to point at `MaxReplyChars`'s own field comment instead of restating
+a number that's now wrong (see the field's own comment + the render-batching/OOM-investigation
+comments in `Ask()`/`_history`'s own doc). **Checkpoint**: same refresh recipe as the three passes
+above, from `%LOCALAPPDATA%\Prism-MainSnapshot\snapshots\r0143776\` (copied off the live process
+first, per the same discipline). Re-verified deserialization at the pinned AlgFormer 2.2.0 via a
+throwaway console app (round-tripped `Serialize()` byte-identical to the source `.bin`), same shape as
+every refresh since the format bump (`Vocab=192,Dim=1536,Context=32,Shifts=16,Layers=1,
+ParamCount=516,288`), vocab file byte-identical (96 merges, no new merges since r129,136).
+`oracle-stackk.txt`/`oracle-iterwarm.txt` re-checked fresh against `HoloEngine.cs`'s live consts
+(`const int OneShotIters = 1, OneShotStackK = 2, OneShotIterWarm = 100`) — still `2`/`100`, matching
+the already-shipped sidecar values, written fresh via `File.WriteAllText`+`UTF8Encoding(false)` (not
+PowerShell `Set-Content`, which silently prepends a BOM — the same gotcha the prior pass caught).
+`oracle-brain.bin.gz` regenerated via the documented `GZipStream` recipe and round-trip verified
+byte-identical to the raw `.bin` in both `wwwroot/data` and `dist/data` (decompressed the `.gz` back
+and did a `SequenceEqual` against the source bytes, not just "the command ran"). Source changed (the
+`MaxReplyChars` rework), so did a full `dotnet publish Showroom.csproj -c Release` + mirrored the
+output over `dist/` via `robocopy /MIR` (purged 12 stale files, notably an old-hash
+`Showroom.*.wasm.gz` from a prior publish) rather than a data-only interim refresh — both `dotnet
+build`/`dotnet publish` green (0/0), and the publish output's own regenerated `oracle-brain.bin.gz`
+byte length (2,257,732) matched the hand-regenerated file exactly, confirming publish didn't silently
+re-touch the data files. **Not verified live** (no browser here, per this repo's boundary) — the user
+should confirm `/tools/prism` now stops generating within one context-window's worth of new
+characters (not a full ~600-char ramble) and that the r143,776 checkpoint loads correctly on a fresh
+`dist/` deploy.
 
 ## Unlisted: RecycleDAO marketplace prototype — `Pages/RecycleDaoDemo.razor` (`/recycledao-demo`)
 NOT a package-capability demo and NOT in the public gallery — a private, share-by-link-only client
