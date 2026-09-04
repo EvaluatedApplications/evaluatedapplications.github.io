@@ -80,7 +80,7 @@
             </div>
             <div class="or-input-row">
                 <input class="or-input" @bind="_prompt" @bind:event="oninput" @onkeydown="OnKeyDown" disabled="@_generating"
-                       placeholder="start typing a sentence…" maxlength="60" />
+                       placeholder="Th" maxlength="60" />
                 <button class="go" @onclick="Ask" disabled="@(_generating || string.IsNullOrWhiteSpace(_prompt))">
                     @(_generating ? "continuing…" : "Continue")
                 </button>
@@ -254,7 +254,7 @@
 
     int _k = 1;   // the model's one real trained depth — set once at load, never mutated (no slider, see field comments above)
     bool _generating;
-    string _prompt = "";
+    string _prompt = "Th";
     string _pendingPrompt = "";   // shown in the "in progress" run while _generating — the prompt is cleared from the input immediately
     string _pendingContinuation = "";   // streamed live, re-decoded after every emitted token while _generating —
     // this is what makes generation render as a typewriter: the markup binds to THIS field, so the per-character
