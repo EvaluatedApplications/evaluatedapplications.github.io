@@ -129,12 +129,15 @@
     // instruction (2026-09-04): "clip the prism output to its context length. So it doesn't ramble
     // on" — ties directly to a separately-verified finding the same day that raw autoregressive
     // generation gets visibly more garbled the further it runs past its trained context.
-    // Cap is now read LIVE off the loaded checkpoint's own context window, not hardcoded — a 1x
-    // multiple: once generation has produced one full context-window's worth of new tokens, the
-    // ENTIRE window BuildContext feeds back into the model is now something it wrote itself, with
-    // zero of the original prompt still in view — that's the point past which "continuing" stops
-    // being continuation and starts being unanchored drift, so it's where the outer backstop cuts in.
-    int MaxReplyChars => _stats?.Context ?? 32;
+    // Cap is now read LIVE off the loaded checkpoint's own context window, not hardcoded. Widened
+    // 2026-09-04 (direct instruction) from a 1x multiple to a 2x multiple of the model's real context
+    // window: at 1x, generation stopped the instant the ENTIRE window BuildContext feeds back into the
+    // model was something it wrote itself — a real anchor point, but tighter than needed. 2x still ties
+    // the cap to the model's own real context window rather than an arbitrary constant (the old flat 600
+    // let a run wander ~18x past the one window the model can actually see, which is the problem this
+    // whole live-read mechanism exists to avoid) — it just allows one extra full window's worth of
+    // unanchored drift past that point before the outer backstop cuts in, instead of zero.
+    int MaxReplyChars => (_stats?.Context ?? 32) * 2;
 
     HoloSession? _session;
     ModelStats? _stats;

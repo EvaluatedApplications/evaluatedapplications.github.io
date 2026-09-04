@@ -768,12 +768,32 @@ already turns any checkpoint-load failure into a visible `_loadError`, never a s
 way, same helper, same reasoning — it fetches the identical checkpoint through a second code path
 when Prism itself hasn't loaded it first this page load.
 
-**Checkpoint refresh history (2026-09-04, six passes same day) — consolidated 2026-09-04, was 5
+**Checkpoint refresh history (2026-09-04, seven passes same day) — consolidated 2026-09-04, was 5
 near-duplicate dated entries each restating the same verification recipe; compacted per §3 dedupe,
-no fact dropped, just de-repeated.** Current ground truth: round **167,386**,
+no fact dropped, just de-repeated.** Current ground truth: round **169,066**,
 `Vocab=192,Dim=1536,Context=32,Shifts=16,Layers=1,ParamCount=516,288`, `oracle-stackk.txt=2`/
 `oracle-iterwarm.txt=100` (matches `HoloEngine.cs`'s live `OneShotStackK`/`OneShotIterWarm` consts,
 re-checked fresh every pass, never carried forward), AlgFormer pinned at **2.2.0**.
+
+- **r169,066 (seventh pass)** — data-only, shape unchanged from r167,386 (same 5 fields above).
+  **Same directory/file-content mismatch as the sixth pass, again flagged not silently resolved**:
+  snapshot directory named `...\snapshots\r0169036\`, but its own `prism-holo-iter.txt` reads
+  **169066** — trusted the file, used 169,066 throughout (deployed `oracle-rounds.txt`, this doc's
+  own ground truth above). `oracle-stackk.txt`/`oracle-iterwarm.txt` re-cross-checked fresh against
+  `HoloEngine.cs` (line 218, `const int OneShotIters = 1, OneShotStackK = 2, OneShotIterWarm = 100`)
+  — unchanged. Deserialize+round-trip verified via a throwaway console app pinned at AlgFormer 2.2.0
+  (4,130,340 bytes in, 4,130,340 out, byte-identical). `oracle-brain.bin.gz` regenerated in both
+  `wwwroot/data` and `dist/data`, round-trip decompress-verified byte-identical to the raw `.bin` in
+  both (2,259,114 bytes gzip). Sidecar `.txt` files written via `File.WriteAllText`+`UTF8Encoding(false)`
+  in both data dirs (confirmed no BOM by exact byte length: `oracle-rounds.txt`=6 bytes for `"169066"`,
+  `oracle-stackk.txt`=1 byte for `"2"`, `oracle-iterwarm.txt`=3 bytes for `"100"`). **This pass also
+  changed source** (`Pages/Prism.razor`'s `MaxReplyChars` widened from a 1x to a 2x multiple of the
+  live checkpoint's context window, direct instruction — see the "Generation loop" section above), so
+  ran a full `dotnet publish Showroom.csproj -c Release` (AOT+trim, exit 0, green) and mirrored the
+  output into `dist/` via `robocopy /MIR` — verified the publish output's own regenerated
+  `oracle-brain.bin` is byte-identical to the hand-copied one and that `oracle-rounds.txt`/
+  `oracle-stackk.txt`/`oracle-iterwarm.txt` in the final `dist/data` read back `169066`/`2`/`100`.
+  `dotnet build Showroom.csproj -c Release` green (0/0) before publishing.
 
 - **r167,386 (sixth pass)** — data-only, shape unchanged from r152,476
   (`Vocab=192,Dim=1536,Context=32,Shifts=16,Layers=1,ParamCount=516,288`, still AlgFormer 2.2.0).
@@ -849,15 +869,17 @@ the hand-copied ones exactly (proves publish never silently re-touches the data 
   flat 600 cap let a run wander ~18x past the one window the model can actually see; a straight 1x
   multiple (cap = `_stats.Context`) is the point past which "continuing" stops being continuation
   with any of the original prompt still in view. `CharVocab.End`/`DegenGuard` still fire first when
-  they fire at all — this only tightens the outer backstop.
+  they fire at all — this only tightens the outer backstop. **Widened to a 2x multiple in the
+  seventh pass (r169,066, below)** — the 1x floor was correct but tighter than needed; see that
+  pass's own entry and `Pages/Prism.razor`'s `MaxReplyChars` comment for the current reasoning.
 - **r152,476** — data-only, no source change; a full `dotnet publish`+`robocopy /MIR` was still run
   per this pass's explicit instruction (overriding the normally-cheaper interim-refresh path the
   "Checkpoint gzip precompression" section above documents) rather than a bare data-file copy.
 
-**Not verified live on any of the six passes** (no browser here, per this repo's boundary) — the
-user should confirm `/tools/prism` loads the current (r167,386) checkpoint, the input box starts
-empty, generation stops within one context-window's worth of characters, and Ask/Continue works with
-the 192-vocab shape, on a fresh `dist/` deploy.
+**Not verified live on any of the seven passes** (no browser here, per this repo's boundary) — the
+user should confirm `/tools/prism` loads the current (r169,066) checkpoint, the input box starts
+empty, generation stops within two context-windows' worth of characters (the seventh pass's 2x cap,
+not the earlier 1x), and Ask/Continue works with the 192-vocab shape, on a fresh `dist/` deploy.
 
 ## Unlisted: RecycleDAO marketplace prototype — `Pages/RecycleDaoDemo.razor` (`/recycledao-demo`)
 NOT a package-capability demo and NOT in the public gallery — a private, share-by-link-only client
