@@ -88,7 +88,8 @@ per-piece:
   can't share a partial file across components); reuse it verbatim for a new tool.
 
 ## HoloKernel — `ProjectReference ..\HoloKernel\HoloKernel.csproj`
-A sibling RCL in this repo (`AboutUs\HoloKernel`), itself NuGet-only against AlgFormer 1.5.0 — a
+A sibling RCL in this repo (`AboutUs\HoloKernel`), itself NuGet-only against AlgFormer 2.2.0 (bumped
+from 1.5.0 2026-09-04, see "Checkpoint refresh + AlgFormer 2.2.0 bump" below) — a
 `ProjectReference` to it is the designed consumption path, not a MonoRepo boundary break. All three
 live-brain tools are ported onto it (2026-08-28). Surface used: `ModelSpec` (shape + the S>1
 invariant; `Validate()` also rejects `Layers>1 && KPass>1` — AlgFormer 1.5.0's weight-tied K-pass is
@@ -767,6 +768,43 @@ already turns any checkpoint-load failure into a visible `_loadError`, never a s
 way, same helper, same reasoning — it fetches the identical checkpoint through a second code path
 when Prism itself hasn't loaded it first this page load.
 
+**Checkpoint refresh + AlgFormer 2.2.0 bump (2026-09-04)**: refreshed `oracle-brain.bin`/`-vocab.txt`/
+`-rounds.txt`/`-stackk.txt`/`-iterwarm.txt` from a SNAPSHOT (copied first, per the same discipline
+`ctx4-battery` runs use — the live PrismStudio process was actively writing) of the user's live
+`%LOCALAPPDATA%\Prism\prism-holo*` checkpoint at round 129,136. No dedicated "oracle export" tool
+exists anywhere in PrismFormer/PrismGym (grepped `Program.cs`'s full `mode ==` dispatch list — no
+`oracle`/`export` case) — the hand-off is, and has only ever been, the raw-copy convention this file's
+own Boundary section already documents; `oracle-vocab.txt`'s format is unchanged (one merge per line,
+`Prism.razor` sizes everything off `_vocab.Size` live, nothing hardcodes 128), so the 128→192 vocab
+expansion (96 base `CharVocab` chars + 96 merges, was 32 merges) needed no code change, only fresh data.
+**Real blocker found and fixed**: the live checkpoint is `CheckpointFormat` **v2**; the then-pinned
+AlgFormer 1.5.0 only reads v1 and throws `CheckpointFormatException` on load — confirmed by actually
+deserializing the snapshot through a throwaway console app first at 1.5.0 (threw) then at 2.2.0
+(succeeded: `Vocab=192, Dim=1536, Context=32, Shifts=16, Layers=1, ParamCount=516,288`, matching the
+coordinator's stated shape exactly). Bumped `Showroom.csproj` + `HoloKernel.csproj` to AlgFormer 2.2.0
+(latest published) via `dotnet add package`, which surfaced a real breaking API change (AlgFormer
+2.0.0, per its own CLAUDE.md: every `StackIter*` entry point now takes per-layer `double[] alpha`, not
+a scalar) at 2 call sites — `InspectorTrace.Capture` (`InspectStackIter`/`InspectAttention`) and
+`RefinementLoop.ObserveSequence` (`StackIterAccumulateAllPos`). Fixed both with a uniform
+length-`model.Layers` array (every Showroom tool is `Layers=1`, and AlgFormer's own docs guarantee a
+uniform array reproduces the old scalar path bit-for-bit) — a signature adapter, not a behavior change.
+`RefinementLoop.Observe` (the single-layer `IterAccumulate` oracle) is untouched, still scalar by design.
+**`oracle-stackk.txt=2`/`oracle-iterwarm.txt=100`**: NOT recoverable from the checkpoint itself (`Iters`/
+`IterAlphaServe` are never persisted by `Serialize()`, confirmed prior pass) and NOT confirmed against
+the live running process (barred from launching PrismStudio) — read from PrismFormer studio's current
+checked-out `HoloEngine.cs` source consts, the best available ground truth, but PrismStudio's own
+CLAUDE.md calls these values "the user's own live-hand-edited knob... never trust a stale number,
+always read live" — flagged, not silently trusted; see the FLAGGED note in the return message for the
+recovery-window concern this also raises. Did a FULL `dotnet publish` this pass (not a data-only
+interim refresh) since source changed (package bumps + 2 signature fixes) — `dist/` mirrored from the
+fresh publish output (`robocopy /MIR`), which regenerated the small text files' `.br`/`.gz` sidecars
+itself; `oracle-brain.bin.gz` was hand-regenerated via the documented `GZipStream` recipe and round-trip
+verified byte-identical to the raw `.bin` before shipping. **Verified**: `dotnet build`/`dotnet publish
+Showroom.csproj -c Release` both green (0/0) at every stage (before AND after the AlgFormer bump).
+**Not verified live** (no browser here, per this repo's boundary) — the user should open `/tools/prism`
+on a fresh `dist/` deploy and confirm the checkpoint loads and Ask/Continue works with the new 192-vocab
+shape before this is considered fully proven.
+
 ## Unlisted: RecycleDAO marketplace prototype — `Pages/RecycleDaoDemo.razor` (`/recycledao-demo`)
 NOT a package-capability demo and NOT in the public gallery — a private, share-by-link-only client
 preview for the RecycleDAO PoC (`C:\Users\dongy\RecycleDAO`, separate repo, owned by
@@ -792,9 +830,13 @@ same `.razor` file — a shared `ListingCard`/`ListingRow` helper styles correct
 ## Dependencies (exact NuGet versions, `Showroom.csproj`)
 - `Microsoft.AspNetCore.Components.WebAssembly` 10.0.8 (+ `.DevServer` 10.0.8, dev-only)
 - `EvaluatedApplications.HoloDb` 1.4.0 — The Analyst
-- `EvaluatedApplications.AlgFormer` **1.5.0** — The Creature, The Forecaster, Prism (`PrismFormer`
+- `EvaluatedApplications.AlgFormer` **2.2.0** (bumped from 1.5.0, 2026-09-04 — see "Checkpoint refresh
+  + AlgFormer 2.2.0 bump" under Prism below) — The Creature, The Forecaster, Prism (`PrismFormer`
   namespace: `HoloFormer`, `HoloShape`, `CharVocab`, `SubwordVocab`) — needs `InspectStackIter`/
   `InspectAttention`/`DecodeFace`/`EquivCompute`/`InvisibleMultiplier`, none published before 1.5.0.
+  **2.0.0+ is REQUIRED to read the live PrismStudio checkpoint format (v2)** — 1.5.0 only reads v1 and
+  throws `CheckpointFormatException` on a v2 file; also carries a real breaking change (StackIter entry
+  points take per-layer `double[] alpha`, not a scalar) — both HoloKernel call sites were adapted, below.
 - `EvaluatedApplications.Tracer` 1.1.0 — The Creature (`Tracer.Helpers.GridTactics`). `EvalApp` comes
   in transitively (AlgFormer's own dependency); Showroom never references it directly.
 - `ProjectReference ..\HoloKernel\HoloKernel.csproj` — Creature, Forecaster, Prism (see HoloKernel

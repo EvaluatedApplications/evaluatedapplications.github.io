@@ -48,7 +48,11 @@ public static class Inspector
 
         var model = session.Model;
         var k = session.KPass;
-        var alpha = session.ServeAlpha;
+        // AlgFormer 2.0.0 (2026-08-27, this package's own note) made every StackIter entry point take a
+        // PER-LAYER double[] alpha instead of a scalar (length MUST == layer count). HoloSession.ServeAlpha
+        // stays a scalar (every Showroom tool is Layers=1) — a uniform array reproduces the old scalar
+        // path bit-for-bit, so this is a signature adapter, not a behavior change.
+        var alpha = UniformAlpha(session.ServeAlpha, model.Layers);
 
         var faces = model.InspectStackIter(context, k, alpha);
         var attention = model.InspectAttention(context, k, alpha);
@@ -66,6 +70,15 @@ public static class Inspector
         var gate = Gate.Evaluate(final.Logits, Clamp(vocabLimit, final.Logits.Length), policy);
 
         return new PositionTrace(passes, attention, gate);
+    }
+
+    /// <summary>Length-<paramref name="layers"/> array of <paramref name="alpha"/> — the per-layer StackIter
+    /// signature's uniform-array equivalent of a single scalar (see the call site's own comment).</summary>
+    private static double[] UniformAlpha(double alpha, int layers)
+    {
+        var a = new double[Math.Max(1, layers)];
+        Array.Fill(a, alpha);
+        return a;
     }
 
     /// <summary>

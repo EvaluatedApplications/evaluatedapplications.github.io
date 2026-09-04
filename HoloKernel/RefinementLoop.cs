@@ -93,7 +93,11 @@ public sealed class RefinementLoop
             throw new ArgumentOutOfRangeException(nameof(maxPositions), requested, "Scoring zero positions is a silent no-op.");
 
         var model = Session.Model;
-        var alpha = Ramp.Alpha;
+        // AlgFormer 2.0.0 made StackIterAccumulateAllPos take a PER-LAYER double[] alpha (length MUST ==
+        // layer count) instead of a scalar — every Showroom tool is Layers=1, so a uniform 1-length array
+        // reproduces the old scalar path bit-for-bit (signature adapter, not a behavior change).
+        var alpha = new double[Math.Max(1, model.Layers)];
+        Array.Fill(alpha, Ramp.Alpha);
 
         var grads = model.NewGrads();
         var (totalLoss, scored) = model.StackIterAccumulateAllPos(sequence, grads, requested, Session.KPass, alpha);
