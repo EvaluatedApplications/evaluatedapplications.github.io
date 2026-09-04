@@ -28,6 +28,42 @@ Root static pages (`site/*.html`), all built on the shared design system:
 - `holodb.html` — HoloDb benchmark methodology sub-page (full method + every number, in/out of
   process vs DuckDB/SQL Server). Linked from the hub's `#benchmarks` section.
 - `holodb/manual/index.html` — HoloDb manual (prose docs, `.prose`/`.toc` template).
+- `evalapp/manual/index.html` — **NEW (2026-09-04)**: EvalApp manual, same `.prose`/`.toc`
+  (`ProseArticleSpec`-shaped) template as the HoloDb manual — crumb / h1 / lede / Related pills /
+  TOC / 17 h2-sectioned body (Install through the 4 public extension seams), code samples as plain
+  `<pre><code>` inside `.prose` (matches `.prose pre`'s own styling, same discipline the HoloDb
+  manual uses — not the product-page `.snip` box, which is a different component for pages outside
+  `.prose`). Rendered from `MonoRepo/EvalApp/docs/getting-started.md` (20.7KB, verbatim technical
+  content, only markup shape adapted — nothing trimmed or invented); intro/lede written fresh
+  (task-oriented "install it, build a pipeline" framing) rather than reusing `evalapp.html`'s own
+  what/why pitch, per the content/presentation split — `docs/site.md`/`about-us-evalapp.md`/
+  `cross-project-guidance.md` were read too but didn't belong in a task-oriented manual (the first
+  is already `evalapp.html`'s own source, the second is first-person origin-story framing for a
+  different context, the third is an internal ADVISE-mode playbook, not public docs). Version
+  cross-checked against `EvalApp/EvalApp.csproj`'s `<Version>1.7.0</Version>` — matches
+  `evalapp.html`'s own `v1.7.0` fact pill, no drift. Wired in exactly like the HoloDb manual:
+  `evalapp.html` gained a nav "Manual" link, a hero `btn-primary` "Read the manual →" CTA (was
+  NuGet-only before), a "Manual" related pill, a footer "Manual" link, and a manual pointer in the
+  closing "Get started" section's `.desc`; the manual page's own nav is Home / EvalApp / Manual
+  (active) / Packages / NuGet, crumb `EvalApp / Manual`, closing links back to `evalapp.html` +
+  `evalapp-neural.html`. Carries `class="os-chrome"` + `data-cat="foundation"` (same category
+  EvalApp/Phasor already share) — matches every other prose-template page. Added to `sitemap.xml`
+  (`/evalapp/manual/`, weekly/0.7, same tier as the HoloDb manual's own entry). Reachability: 2
+  clicks from the homepage (`index.html`'s `.pkg-chip` row links `evalapp.html` directly → manual
+  CTA), same depth as the HoloDb manual and `holoformer.html` from any other page (nav → Packages →
+  product page → manual/deep-dive = 3 clicks from an arbitrary page, consistent with existing site
+  depth, not a new regression). Tag-balance verified on both the new file (div/article/main/nav/
+  header/footer/ul/ol/li/p/h1/h2/pre/code/blockquote/a/span all matched, 18 `<h2>` = 17 body
+  sections + the TOC's own `<h2>On this page</h2>`) and `evalapp.html` post-edit (div/a/nav/header/
+  footer/p/h1/h2/h3/section/article all matched). No CSS touched, so no brace/paren check needed —
+  `.prose pre`/`.toc`/`.related`/`.btn-primary` are all pre-existing shared components, reused
+  as-is. Not yet run through `SiteKit.Render.PoC` — this is a brand-new page, not one of the 23
+  files the "SiteKit reconciled status" section below counted, so it doesn't have a `PageSpec`
+  either, same as `index.html`/`packages.html`/`404.html`/the 3 real articles it now joins as
+  unattempted; the "23 total / 7 unattempted" figures below are now stale by one file and NOT
+  updated as part of this pass (out of scope — that section is a separate, inert pipeline-porting
+  effort; hand-authored HTML is still the live source of truth for this page, same as everywhere
+  else on the site today).
 - `algformer.html` — AlgFormer package page (BOTH cores: softmax `AlgFormer` + holographic
   `HoloFormer`, per `AlgFormer/docs/site.md`). Links onward to `holoformer.html` for the deep dive.
 - `holoformer.html` — "meaning as chords" explainer article, specifically about the HoloFormer

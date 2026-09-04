@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>EvalApp manual — how to use it</title>
+<meta name="description" content="How to use EvalApp: install, your first pipeline, designing a pipeline before you build it, pure/async/side-effecting steps, context, gates and resource kinds, parallel ForEach, conditional and parallel branches, sagas with compensation, dependency injection, licensing, tuning modes, and the public extension seams.">
+<link rel="canonical" href="https://evaluatedapplications.github.io/evalapp/manual/">
+<meta property="og:type" content="article">
+<meta property="og:title" content="EvalApp manual — how to use it">
+<meta property="og:description" content="A practical guide to EvalApp: your first pipeline, steps, gates, ForEach, branches, sagas, DI, licensing, and tuning modes.">
+<meta property="og:url" content="https://evaluatedapplications.github.io/evalapp/manual/">
+<meta name="twitter:card" content="summary">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%23f0796a'/%3E%3Cstop offset='.166' stop-color='%23f0a15a'/%3E%3Cstop offset='.333' stop-color='%23e6c450'/%3E%3Cstop offset='.5' stop-color='%237bd86a'/%3E%3Cstop offset='.666' stop-color='%234aa3ff'/%3E%3Cstop offset='.833' stop-color='%237d7dff'/%3E%3Cstop offset='1' stop-color='%23c07dff'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='32' height='32' rx='7' fill='%23050608'/%3E%3Cpath d='M16 5L27 26H5Z' fill='none' stroke='url(%23g)' stroke-width='2' stroke-linejoin='round'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="/assets/site.css">
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"TechArticle","headline":"EvalApp manual — how to use it","description":"How to use EvalApp: install, your first pipeline, designing a pipeline, pure/async/side-effecting steps, context, gates and resource kinds, parallel ForEach, conditional and parallel branches, sagas with compensation, dependency injection, licensing, and tuning modes.","url":"https://evaluatedapplications.github.io/evalapp/manual/","author":{"@type":"Organization","name":"Evaluated Applications","url":"https://evaluatedapplications.github.io/"},"publisher":{"@type":"Organization","name":"Evaluated Applications","url":"https://evaluatedapplications.github.io/"},"about":{"@type":"SoftwareApplication","name":"EvaluatedApplications.EvalApp","url":"https://evaluatedapplications.github.io/evalapp.html"}}
+</script>
+</head>
+<body class="os-chrome" data-cat="foundation">
+<div class="beam"></div>
+
+<nav class="site-nav">
+  <div class="wrap">
+    <a class="brand" href="/">
+      <svg class="mark" viewBox="0 0 32 32" aria-hidden="true"><defs><linearGradient id="m" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#f0796a"/><stop offset=".166" stop-color="#f0a15a"/><stop offset=".333" stop-color="#e6c450"/><stop offset=".5" stop-color="#7bd86a"/><stop offset=".666" stop-color="#4aa3ff"/><stop offset=".833" stop-color="#7d7dff"/><stop offset="1" stop-color="#c07dff"/></linearGradient></defs><path d="M16 5L27 26H5Z" fill="none" stroke="url(#m)" stroke-width="2" stroke-linejoin="round"/></svg>
+      Evaluated Applications
+    </a>
+    <input type="checkbox" id="navtoggle" class="nav-toggle">
+    <label for="navtoggle" class="nav-burger" aria-label="Toggle menu"><span></span><span></span><span></span></label>
+    <div class="nav-links">
+      <a href="/">Home</a>
+      <a href="/evalapp.html">EvalApp</a>
+      <a href="/evalapp/manual/" class="active">Manual</a>
+      <a href="/packages.html">Packages</a>
+      <a href="https://www.nuget.org/packages/EvaluatedApplications.EvalApp" target="_blank" rel="noopener">NuGet</a>
+    </div>
+  </div>
+</nav>
+
+<main class="wrap">
+<article class="prose">
+
+  <nav class="crumb"><a href="/evalapp.html">EvalApp</a> <span>/</span> Manual</nav>
+  <h1>EvalApp manual</h1>
+  <p class="lede" style="margin-top:12px">A resource-gated, self-tuning async pipeline runtime for .NET. You describe a
+    process as a plain typed data record and a sequence of steps; EvalApp compiles that into a single, reusable
+    execution path, gates every resource it touches at a real bound, and — when you turn tuning on — discovers the
+    concurrency that actually works on the hardware it's running on. This page is the practical guide: install it,
+    design a pipeline, wire up steps, gates, branches, sagas, and tuning.</p>
+
+  <div class="related">
+    <span class="related-label">Related</span>
+    <a href="/evalapp.html">EvalApp</a>
+    <a href="/evalapp-neural.html">EvalApp.Neural</a>
+    <a class="related-all" href="/packages.html">All packages →</a>
+  </div>
+
+  <div class="toc">
+    <h2>On this page</h2>
+    <ul>
+      <li><a href="#install">Install</a></li>
+      <li><a href="#import">The one import that matters</a></li>
+      <li><a href="#first-pipeline">Your first pipeline</a></li>
+      <li><a href="#design">Design before you build</a></li>
+      <li><a href="#steps">Steps: pure, async, side-effecting</a></li>
+      <li><a href="#context">Context-aware steps</a></li>
+      <li><a href="#gates">Gates and resource kinds</a></li>
+      <li><a href="#foreach">Parallel collections (ForEach)</a></li>
+      <li><a href="#conditional">Conditional branches</a></li>
+      <li><a href="#parallel-branches">Parallel branches</a></li>
+      <li><a href="#sagas">Sagas: compensation on failure</a></li>
+      <li><a href="#di">Dependency injection</a></li>
+      <li><a href="#licensing">Licensing</a></li>
+      <li><a href="#tuning">Tuning modes</a></li>
+      <li><a href="#inspecting">Inspecting a pipeline</a></li>
+      <li><a href="#anti-patterns">Anti-patterns to avoid</a></li>
+      <li><a href="#architecture">Architecture: the four extension seams</a></li>
+    </ul>
+  </div>
+
+  <h2 id="install">Install</h2>
+  <pre><code>dotnet add package EvaluatedApplications.EvalApp</code></pre>
+  <p>Targets <code>net8.0</code> and has <strong>zero dependencies</strong> — adding the package reference is the
+    whole installation. The package ships binary-only (no source, no XML docs): author against the
+    <code>EvalApp.Consumer</code> namespace and let IntelliSense on the public types be your reference.</p>
+  <blockquote>The fluent builder and <code>AddStep&lt;TStep&gt;()</code>/<code>AddBranch&lt;TStep&gt;()</code>
+    step-construction path are verified trim- and AOT-safe (publish-trimmed smoke-tested).
+    <code>WithTuning</code>'s JSON file persistence and a couple of internal reflection caches are not fully
+    trim-clean yet — skip <code>WithTuning</code> if you're publishing trimmed and that matters to you.</blockquote>
+  <p>The current published version is <strong>v1.7.0</strong>; check NuGet for the latest.</p>
+
+  <h2 id="import">The one import that matters</h2>
+  <pre><code>using EvalApp.Consumer;</code></pre>
+  <p>Everything you need — <code>Eval</code>, <code>IAppBuilder</code>, <code>ResourceKind</code>,
+    <code>Tunable</code>, <code>PipelineResult&lt;T&gt;</code>, <code>ICompiledPipeline&lt;T&gt;</code>, the step
+    base classes, licensing — lives in this one namespace. Root namespaces like <code>EvalApp.Fluent</code> or
+    <code>EvalApp.Core</code> are the internal engine: not part of the supported public surface, and not covered
+    here.</p>
+
+  <h2 id="first-pipeline">Your first pipeline</h2>
+  <p>Design comes before code (see "Design before you build" below), but here's the shape you're working toward — a
+    three-step order pipeline, built once and run many times:</p>
+  <pre><code>using EvalApp.Consumer;
+
+public sealed record OrderData(string CustomerName, decimal Total, string Status = "New");
+
+Eval.App("Orders")
+    .DefineDomain("Orders")
+        .DefineTask&lt;OrderData&gt;("ProcessOrder")
+            .AddStep("Validate", d =&gt;
+            {
+                if (d.Total &lt;= 0) throw new InvalidOperationException("Total must be positive");
+                return d with { Status = "Validated" };
+            })
+            .AddStep("ApplyDiscount", d =&gt; d with { Total = d.Total * 0.9m })
+            .AddStep("Complete", d =&gt; d with { Status = "Complete" })
+        .Run(out ICompiledPipeline&lt;OrderData&gt; pipeline)
+    .Build();   // no license key needed: nothing is license-gated today; runs at full concurrency
+
+// Build once (e.g. at startup, register `pipeline` as a singleton). Run many times:
+var result = await pipeline.RunAsync(new OrderData("Alice", 99.99m));
+
+switch (result)
+{
+    case PipelineResult&lt;OrderData&gt;.Success success:
+        Console.WriteLine($"{success.Data.Status}: {success.Data.Total}");
+        break;
+    case PipelineResult&lt;OrderData&gt;.Failure failure:
+        Console.WriteLine($"Failed: {failure.Exception.Message}");
+        break;
+    case PipelineResult&lt;OrderData&gt;.Skipped skipped:
+        Console.WriteLine($"Skipped: {skipped.Reason}");
+        break;
+}</code></pre>
+  <p>Read the fluent chain top to bottom and it reads like the process: define an app, define a domain, define a
+    task, add steps, run it, build it. That's deliberate — the builder chain <em>is</em> the architecture, and
+    unlike a design document it can't drift out of sync with the code, because it <strong>is</strong> the code.</p>
+  <p>A few things to notice:</p>
+  <ul>
+    <li><strong><code>AddStep</code></strong> takes a name and any of: a <code>Func&lt;T,T&gt;</code> lambda, an
+      async <code>Func&lt;T, CancellationToken, ValueTask&lt;T&gt;&gt;</code> lambda, an <code>IStep&lt;T&gt;</code>
+      instance, or a <code>PureStep&lt;T&gt;</code> / <code>AsyncStep&lt;T&gt;</code> subclass.</li>
+    <li><strong><code>with</code> expressions, not mutation.</strong> <code>OrderData</code> is a <code>record</code>;
+      every step returns a new value. This is what makes parallel <code>ForEach</code> (below) safe without locks —
+      no step can see another's in-progress state.</li>
+    <li><strong><code>Run(out ICompiledPipeline&lt;T&gt; pipeline)</code></strong> hands you the compiled, reusable
+      pipeline; <strong>then</strong> <code>.Build(licenseKey?)</code> finalizes the whole app. Build the pipeline
+      once at startup and call <code>RunAsync</code> many times — rebuilding per request throws away every bit of
+      the tuner's learned state (see "Rebuilding the pipeline per request" in Anti-patterns, below).</li>
+    <li><strong>Results are a discriminated union</strong>, not an exception. <code>PipelineResult&lt;T&gt;</code>
+      is <code>Success(Data)</code> / <code>Failure(Data, Exception, Message?)</code> /
+      <code>Skipped(Data, Reason)</code>. Pattern-match it, or use
+      <code>.GetData()</code> / <code>.IsSuccess</code> / <code>.IsFailure</code> / <code>.IsSkipped</code> if you
+      just need the value.</li>
+  </ul>
+
+  <h2 id="design">Design before you build</h2>
+  <p>The single biggest lever on whether an EvalApp pipeline reads cleanly is answering these questions
+    <em>before</em> touching the fluent API. The order matters — each answer constrains the next.</p>
+  <ol>
+    <li><strong>What is the unit of work?</strong> One sentence. One order, one invoice, one request, one batch?</li>
+    <li><strong>What does it start with, carry, and produce?</strong> List every piece of information that exists at
+      any point in the process, then encode it as a record: non-nullable = required input, nullable = an output
+      that appears once its step runs, bool flags = control (loop/branch/skip). If you can't describe the full
+      lifecycle by reading the record's fields alone, the design isn't finished yet.</li>
+    <li><strong>What resource does each operation touch?</strong> Classify every operation: <code>Network</code> /
+      <code>DiskIO</code> / <code>Cpu</code> / <code>Database</code> / a custom
+      <code>ResourceKind.Of("name")</code> / or none (pure). This decides which operations need a
+      <code>Gate</code> — see below.</li>
+    <li><strong>What needs to run per-item in parallel?</strong> Independent items in a collection (ones that must
+      not read each other's in-progress state) are <code>ForEach</code> boundaries.</li>
+    <li><strong>What conditional branches exist?</strong> Every <code>If</code>/<code>Else</code>: the condition,
+      what each branch does, whether both branches write the same fields.</li>
+    <li><strong>What needs to be rolled back if something fails?</strong> Walk the steps again asking what has
+      <em>externally</em> happened by the time each completes (money moved, email sent, record written). Only
+      external effects need compensation — see Sagas, below.</li>
+    <li><strong>Wire it together.</strong> Only now write the fluent declaration. If it doesn't read like a
+      plain-language description of the process, the data model or topology needs more work, not more code.</li>
+  </ol>
+  <p>This degrades gracefully: a single-item pipeline with no branches and no external effects skips straight to a
+    flat sequence of steps, and that's a sign the problem was simple, not that the method failed.</p>
+
+  <h2 id="steps">Steps: pure, async, and side-effecting</h2>
+  <pre><code>public sealed class ApplyTaxStep : PureStep&lt;OrderData&gt;
+{
+    private readonly decimal _rate;
+    public ApplyTaxStep(decimal rate) =&gt; _rate = rate;
+
+    public override OrderData Execute(OrderData data)
+        =&gt; data with { Total = data.Total * (1 + _rate) };
+}
+
+public sealed class FetchPriceStep : AsyncStep&lt;OrderData&gt;
+{
+    private readonly ICatalog _catalog;
+    public FetchPriceStep(ICatalog catalog) =&gt; _catalog = catalog;
+
+    public override async ValueTask&lt;OrderData&gt; ExecuteAsync(OrderData data, CancellationToken ct)
+    {
+        var price = await _catalog.GetPriceAsync(data.CustomerName, ct);
+        return data with { Total = price };
+    }
+}</code></pre>
+  <p>Add an instance directly: <code>.AddStep("Tax", new ApplyTaxStep(0.08m))</code>.</p>
+  <p>For a step whose job is a <strong>side effect</strong> (write to a database, publish an event, send an email),
+    subclass <code>SideEffectStep&lt;T&gt;</code> and declare the resource it touches:</p>
+  <pre><code>public sealed class SendConfirmationEmailStep : SideEffectStep&lt;OrderData&gt;
+{
+    public override ResourceKind? ResourceKind =&gt; EvalApp.Consumer.ResourceKind.Network;
+
+    public override async ValueTask&lt;OrderData&gt; ExecuteAsync(OrderData data, CancellationToken ct)
+    {
+        await EmailClient.SendAsync(data.CustomerName, ct);
+        return data with { Status = "Confirmed" };
+    }
+}</code></pre>
+  <blockquote><code>SideEffectStep&lt;T&gt;</code> <strong>cannot</strong> be added with the plain
+    <code>AddStep(name, step)</code> overload — passing a <code>SideEffectStep&lt;T&gt;</code> instance to
+    <code>AddStep</code> binds to a <code>[Obsolete(error: true)]</code> overload and fails to compile (this applies
+    everywhere <code>AddStep</code> is offered, including inside a <code>Gate</code>). The supported way to run a
+    <code>SideEffectStep&lt;T&gt;</code> is <code>AddStep&lt;TStep&gt;()</code>, which auto-gates it on its declared
+    <code>ResourceKind</code>.</blockquote>
+  <pre><code>// Auto-gated on the declared ResourceKind (needs a public parameterless constructor,
+// or a registered IStepFactory — see "Dependency injection", below):
+.AddStep&lt;SendConfirmationEmailStep&gt;("SendConfirmation")</code></pre>
+  <p>If you instead gate the work explicitly, the <code>Gate</code> already supplies the resource, so you don't need
+    <code>SideEffectStep&lt;T&gt;</code> there at all — write the side effect as an async step inside the gate:</p>
+  <pre><code>.Gate(ResourceKind.Network, onWaiting: null, g =&gt; g
+    .AddStep("SendConfirmation", async (OrderData d, CancellationToken ct) =&gt;
+    {
+        await EmailClient.SendAsync(d.CustomerName, ct);
+        return d with { Status = "Confirmed" };
+    }))</code></pre>
+  <p>Either way, there is no path to an ungated side effect — that's enforced at compile/build time, not by
+    convention.</p>
+
+  <h2 id="context">Context-aware steps</h2>
+  <p>If a step needs data that's constant for a whole app run (a config, a connection factory) or for a whole domain
+    (a tenant ID, a region), don't thread it through every record — subclass <code>GlobalContext</code> /
+    <code>DomainContext</code> and wire them in at the top:</p>
+  <pre><code>public sealed class AppGlobal : GlobalContext { public required IEmailClient EmailClient { get; init; } }
+public sealed class OrderDomain : DomainContext { public required string Region { get; init; } }
+
+public sealed class SendConfirmationStep : ContextPureStep&lt;AppGlobal, OrderDomain, OrderData&gt;
+{
+    protected override ValueTask&lt;OrderData&gt; TransformAsync(
+        OrderData data, AppGlobal global, OrderDomain domain, CancellationToken ct)
+        =&gt; ValueTask.FromResult(data with { Status = $"Confirmed:{domain.Region}" });
+}
+
+Eval.App("Orders")
+    .WithContext(new AppGlobal { EmailClient = emailClient })
+    .DefineDomain("Orders", new OrderDomain { Region = "US" })
+        .DefineTask&lt;OrderData&gt;("ProcessOrder")
+            .AddStep&lt;SendConfirmationStep&gt;("SendConfirmation")   // NOT AddStep("name", new SendConfirmationStep())
+        .Run(out ICompiledPipeline&lt;OrderData&gt; pipeline)
+    .Build();</code></pre>
+  <p><code>Global</code>/<code>Domain</code> are populated as properties on the step before it runs — read them
+    directly, no parameter threading needed. Two things that don't work the way they look like they should:</p>
+  <ul>
+    <li><strong>Always add a context step with <code>AddStep&lt;TStep&gt;()</code>, never
+      <code>AddStep(name, instance)</code>.</strong> <code>ContextPureStep&lt;TGlobal,TDomain,T&gt;</code>/
+      <code>ContextSideEffectStep&lt;TGlobal,TDomain,T&gt;</code> don't implement the plain
+      <code>IStep&lt;T&gt;</code> the instance-overload expects (that's how context gets injected before the step
+      runs), so <code>AddStep("x", new MyContextStep())</code> is a compile error (<code>CS1503</code>) — always use
+      the generic <code>AddStep&lt;TStep&gt;()</code> form for these, same as <code>SideEffectStep&lt;T&gt;</code>
+      above.</li>
+    <li><strong>There is no <code>StepContext</code> parameter, ever, on the public base classes</strong>, unlike
+      the pipeline's internal engine. If you find yourself wanting to reference a type called
+      <code>StepContext</code> or a <code>ContextPureStep&lt;TGlobal,TDomain,T&gt;</code> NOT in the
+      <code>EvalApp.Consumer</code> namespace, that's the internal engine, not this facade — it won't compile
+      against the published package and never has, in any released version.</li>
+  </ul>
+
+  <h2 id="gates">Gates and resource kinds</h2>
+  <p>A <code>Gate</code> declares that everything inside it contends for a named, shared resource:</p>
+  <pre><code>.Gate(ResourceKind.Database, onWaiting: null, g =&gt; g
+    .AddStep("CheckInventory", d =&gt; d))</code></pre>
+  <p>Built-in kinds: <code>ResourceKind.Network</code>, <code>.DiskIO</code>, <code>.Cpu</code>,
+    <code>.Database</code>. Define your own pool with <code>ResourceKind.Of("my-pool-name")</code>. Declare a
+    resource's tunable bounds at the app level:</p>
+  <pre><code>Eval.App("Orders")
+    .WithResource(ResourceKind.Database, Tunable.Between(min: 2, max: 16, @default: 4))
+    ...</code></pre>
+  <p><code>Tunable</code> factory methods: <code>Between(min, max, default)</code>, <code>FixedAt(value)</code>,
+    <code>ForCpu()</code> (scales with <code>Environment.ProcessorCount</code>), <code>ForItems()</code> /
+    <code>ForItems(default)</code>, <code>ModelOps()</code> (fixed at 1 — exclusive access, e.g. GPU training),
+    <code>DiskIo()</code>, <code>Network()</code>. These are starting points, not final answers — when tuning is
+    enabled the adaptive tuner adjusts within the declared <code>[Min, Max]</code> bounds at runtime; without tuning
+    a gate holds at its declared default. Nothing here is license-gated (see Licensing, below).</p>
+
+  <h2 id="foreach">Parallel collections: ForEach</h2>
+  <pre><code>.DefineTask&lt;OrderData&gt;("CalculateLineTotals")
+    .ForEach(
+        select: d =&gt; d.Items,
+        merge: (order, items) =&gt; order with { Total = items.Sum(i =&gt; i.LineTotal) },
+        collectionName: "Items",
+        parallelism: Tunable.ForItems(),
+        configure: sub =&gt; sub
+            .AddStep("CalcLineTotal", item =&gt; item with { LineTotal = item.Price * item.Quantity }))</code></pre>
+  <p><code>select</code> extracts the collection, the per-item pipeline runs on each item independently,
+    <code>merge</code> combines the results back into the parent. Parallelism can be a plain <code>int</code>, a
+    <code>Func&lt;int&gt;</code>, or a <code>TunableConfig</code> (the tuner-friendly form, via
+    <code>Tunable.*</code>). There's also a <code>ForEachFailureMode</code>
+    (<code>CollectAndThrow</code> / <code>FailFast</code> / <code>ContinueOnError</code>) overload for controlling
+    how per-item failures are handled.</p>
+
+  <h2 id="conditional">Conditional branches</h2>
+  <pre><code>.If(
+    d =&gt; d.Total &gt; 100,
+    then: b =&gt; b.AddStep("VipDiscount", d =&gt; d with { Total = d.Total * 0.8m, Status = "VIP" }),
+    @else: b =&gt; b.AddStep("StandardProcess", d =&gt; d with { Status = "Standard" }))</code></pre>
+
+  <h2 id="parallel-branches">Parallel branches</h2>
+  <p>Not per-item — a fixed set of concurrent operations:</p>
+  <pre><code>.AddParallelGroup(pg =&gt; pg
+    .AddBranch("CalcTax", d =&gt; d with { Tax = d.Total * 0.08m })
+    .AddBranch("CalcShipping", d =&gt; d with { Shipping = 9.99m }))</code></pre>
+  <p>Each branch writes different fields and both merge cleanly by default (<code>FirstChangeWins</code>); pass a
+    custom <code>IMergeStrategy&lt;T&gt;</code> (one of the four public extension seams — see Architecture below) if
+    two branches might legitimately write the same field and you want that treated as a conflict rather than
+    silently resolved.</p>
+
+  <h2 id="sagas">Sagas: compensation on failure</h2>
+  <pre><code>.BeginSaga()
+    .AddStepWithCompensation("ReserveInventory",
+        forward:    d =&gt; d with { Status = "Reserved" },
+        compensate: d =&gt; d with { Status = "Unreserved" })
+    .AddStepWithCompensation("ChargePayment",
+        forward:    d =&gt; throw new InvalidOperationException("Payment declined"),
+        compensate: d =&gt; d with { Status = "Refunded" })
+.EndSaga()</code></pre>
+  <p>If a later step fails, every prior step's compensation runs in reverse (LIFO) order. Only
+    <code>.BeginSaga()...EndSaga()</code> compiles into a valid saga — the compiler enforces that a saga you start
+    gets closed before <code>.Run()</code>.</p>
+
+  <h2 id="di">Dependency injection</h2>
+  <p><code>AddStep&lt;TStep&gt;(name)</code> resolves <code>TStep</code> through an <code>IStepFactory</code>. By
+    default that's <code>DefaultStepFactory</code> (<code>Activator.CreateInstance</code> — the step needs a
+    public parameterless constructor). To resolve steps from your own container instead:</p>
+  <pre><code>Eval.App("Orders")
+    .WithStepFactory(new ServiceProviderStepFactory(serviceProvider))
+    ...
+        .AddStep&lt;ValidateOrderStep&gt;("Validate")   // resolved from DI</code></pre>
+  <p><code>ServiceProviderStepFactory</code> falls back to <code>Activator.CreateInstance</code> for any type not
+    registered in the container.</p>
+
+  <h2 id="licensing">Licensing</h2>
+  <p><strong>Everything in EvalApp is free to use today — nothing is license-gated, and that is intentional.</strong>
+    Every pipeline shape above runs at full declared concurrency whether or not you pass a license key. The
+    adaptive/Bayesian tuner attaches whenever you call <code>WithTuning(...)</code>, independent of any license. So
+    <code>Build(null)</code> and <code>Build(key)</code> behave identically at runtime; a license key changes no
+    capability today. The license <em>system</em> below still exists — it's the sanctioned wiring every Evaluated
+    Applications product shares, kept ready for a possible future advanced tier — but it caps nothing now.</p>
+  <pre><code>Eval.App("Orders")
+    ...
+    .Build(licenseKey);   // null/empty/invalid/expired key all degrade to Unlicensed — never throws</code></pre>
+  <p>To check license status yourself (e.g. to show a UI banner) rather than just letting <code>Build</code>
+    degrade silently:</p>
+  <pre><code>var validator = LicenseValidator.ForEvalApp();      // or LicenseValidator.For("your-product")
+LicenseMode mode = validator.Check(licenseKey);       // Unlicensed | Licensed
+// or, in a hot loop (e.g. a 60fps game loop):
+LicenseMode mode = validator.CheckPeriodic(licenseKey, TimeSpan.FromSeconds(5));</code></pre>
+  <p>License verification is entirely offline (ECDsa P-256) — there is no network call, ever.</p>
+
+  <h2 id="tuning">Tuning modes</h2>
+  <p>Two opt-in modes (enable either by calling it — neither is license-gated):</p>
+  <pre><code>.WithTuning()            // reactive: rediscovers the optimum from scratch each restart —
+                          // best for a long-running, stable, single-instance deployment
+.WithBayesianTuning()     // predictive: a persisted performance model survives restarts —
+                          // best for frequently-restarting or multi-instance workloads</code></pre>
+  <p>Both take an optional store path; both share the same underlying phase machine, so switching between them
+    doesn't reset state.</p>
+  <p>You don't configure the phase machine to get good behaviour — the defaults are derived from a simulation
+    harness and are what <code>.WithTuning()</code> uses out of the box. For reference, the current built-in
+    defaults are:</p>
+  <ul>
+    <li>Improvement threshold <code>0.04</code>, convergence std-dev <code>0.04</code></li>
+    <li>Converging runs needed <code>5</code></li>
+    <li>Monitoring regression <code>0.19</code>, monitoring improvement <code>0.30</code></li>
+    <li>Max probe interval <code>18</code>, max history size <code>50</code>, exploration window size <code>28</code></li>
+    <li>Emergency degradation <code>0.36</code>, emergency runs needed <code>4</code></li>
+    <li>Converging-instability threshold <code>1.50</code></li>
+    <li>Minimum items for parallel <code>4</code></li>
+  </ul>
+  <p>These are informational, not a stability contract — they're re-derived from first principles when the harness
+    is re-run, and a change to them is a change to the default tuning path. To override them explicitly, load your
+    own set with <code>.WithTunerSettings(path)</code>.</p>
+
+  <h2 id="inspecting">Inspecting a pipeline</h2>
+  <p><code>ICompiledPipeline&lt;T&gt;</code> is intentionally opaque: its entire public surface is
+    <code>Name</code> (the name given at build time) and <code>RunAsync(data, ct)</code>. There is no exposed
+    internal step tree and no visualization/export API in the <code>EvalApp.Consumer</code> facade — any tree/graph
+    rendering lives in the internal engine.</p>
+  <blockquote>Known gap (does not block these docs): if a public visualizer surface
+    (<code>ToTextTree</code>/<code>ToMermaid</code>/JSON export) is ever wanted, that's a deliberate facade
+    <em>addition</em> to weigh — not a capability to assume exists today.</blockquote>
+
+  <h2 id="anti-patterns">Anti-patterns to avoid</h2>
+  <p>EvalApp's tuner and gates can only account for work they can <em>see</em> — anything that happens outside the
+    declared pipeline topology is invisible to both. Watch for:</p>
+  <ul>
+    <li><code>Task.WhenAll</code> inside a step body instead of a declared <code>.ForEach(...)</code>.</li>
+    <li>A background <code>Task</code> started and stored on the data record — it races the pipeline, ungated.</li>
+    <li>Async work before/after <code>RunAsync</code>, outside the pipeline — unthrottled, untuned.</li>
+    <li>A shared mutable collection written from inside a <code>ForEach</code> item — not thread-safe; let each
+      item own its own result and collect them in <code>merge</code>.</li>
+    <li>Mutating the data record instead of using <code>with</code> — breaks the no-lock parallel-<code>ForEach</code>
+      guarantee.</li>
+    <li>Instance fields on a step class holding per-run state — steps are singletons reused across every concurrent
+      invocation; per-run state belongs on the data record only.</li>
+    <li>Rebuilding the pipeline per request — discards all accumulated tuner state; build once, run many times.</li>
+    <li>Blocking I/O inside a sync step — always use the async overload for I/O.</li>
+    <li>Not propagating the <code>CancellationToken</code> into every awaited call inside a step.</li>
+  </ul>
+
+  <h2 id="architecture">Architecture note: the four public extension seams</h2>
+  <p>Beyond <code>Consumer.*</code> and <code>Licensing.*</code>, exactly four extension points in the internal
+    namespaces are deliberately kept public for advanced integration: <code>EvalApp.Context.GlobalContext</code> /
+    <code>DomainContext</code> (subclass for <code>WithContext</code>/<code>DefineDomain(..., context)</code>),
+    <code>EvalApp.Abstractions.IMergeStrategy&lt;T&gt;</code> (custom <code>AddParallelGroup</code> conflict
+    handling), and <code>EvalApp.Core.Pressure.IPressureResource</code> (a soft, non-blocking budget signal for
+    <code>.Pressure()</code>/<code>.WithPressure()</code>). Everything else outside
+    <code>Consumer</code>/<code>Licensing</code> is internal engine — don't reach for it; if something you need
+    isn't reachable from <code>Consumer</code>, that's a gap to report, not a reason to bypass the facade.</p>
+
+  <p style="margin-top:2.5rem"><a href="/evalapp.html">← Back to EvalApp</a> &nbsp;·&nbsp; <a href="/evalapp-neural.html">EvalApp.Neural →</a></p>
+
+</article>
+</main>
+
+<footer class="site">
+  <div class="wrap">
+    <span>Evaluated Applications — .NET libraries, England.</span>
+    <span class="mono">© <span id="yr"></span> · <a href="/">Home</a> · <a href="/evalapp.html">EvalApp</a> · <a href="/packages.html">Packages</a> · <a href="https://www.nuget.org/packages/EvaluatedApplications.EvalApp" target="_blank" rel="noopener">NuGet</a></span>
+  </div>
+</footer>
+<script>document.getElementById('yr').textContent = new Date().getFullYear();</script>
+</body>
+</html>
