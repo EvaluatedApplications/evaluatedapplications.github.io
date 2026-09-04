@@ -778,12 +778,38 @@ publish every time, not an independent agent mistake — each agent correctly fo
 told. From the next data-only refresh onward, use the fast path (raw copy + `GZipStream`, no publish,
 no rebuild) unless `Prism.razor`/`HoloKernel`'s fetch/decompress logic itself changed that pass.**
 
-**Checkpoint refresh history (2026-09-04, eight passes same day) — consolidated 2026-09-04, was 5
+**Checkpoint refresh history (2026-09-04, nine passes same day) — consolidated 2026-09-04, was 5
 near-duplicate dated entries each restating the same verification recipe; compacted per §3 dedupe,
-no fact dropped, just de-repeated.** Current ground truth: round **174,166**,
+no fact dropped, just de-repeated.** Current ground truth: round **180,910**,
 `Vocab=192,Dim=1536,Context=32,Shifts=16,Layers=1,ParamCount=516,288`, `oracle-stackk.txt=2`/
 `oracle-iterwarm.txt=100` (matches `HoloEngine.cs`'s live `OneShotStackK`/`OneShotIterWarm` consts,
 re-checked fresh every pass, never carried forward), AlgFormer pinned at **2.2.0**.
+
+- **r180,910 (ninth pass, combined with a source change)** — snapshot directory named
+  `...\snapshots\r0180880\`, its own `prism-holo-iter.txt` reads **180910** — same directory/file-
+  content mismatch pattern as the sixth/seventh/eighth passes, again not silently resolved, file
+  trusted per the standing rule. Shape unchanged from r174,166 (same 5 fields above;
+  `oracle-brain.bin` still exactly 4,130,340 bytes). `oracle-stackk.txt`/`oracle-iterwarm.txt`
+  re-cross-checked fresh against live `HoloEngine.cs:218` (`OneShotStackK=2, OneShotIterWarm=100`)
+  — unchanged. Deserialize+round-trip verified via the reusable `ckpt-verify` console app pinned at
+  AlgFormer 2.2.0 (byte-identical in/out, `Golden=True`, `Shifts=16`). `oracle-brain.bin.gz`
+  regenerated in both `wwwroot/data` and `dist/data` via the standing `GZipStream` recipe,
+  round-trip decompress-verified byte-identical (2,258,827 bytes gzip). Sidecar `.txt` files written
+  via `File.WriteAllText`+`UTF8Encoding(false)` in both data dirs (no-BOM byte lengths confirmed:
+  `oracle-rounds.txt`=6 for `"180910"`, `oracle-stackk.txt`=1 for `"2"`, `oracle-iterwarm.txt`=3 for
+  `"100"`). **This pass ALSO shipped a real source change** (`Pages/Prism.razor`'s hint-text
+  placeholder attribute changed to `"Hello!"`, a prior pass's edit that had never been published) —
+  per the standing rule ("only a source change needs a full publish"), this was NOT a fast-path
+  data-only refresh: ran `dotnet build Showroom.csproj -c Release` (green, 0/0), then a full
+  `dotnet publish Showroom.csproj -c Release` (AOT+trim, exit clean), then mirrored the output into
+  `dist/` via `robocopy /MIR` (exit code 3 — files copied + old-hash extras removed, the expected
+  fingerprinted-filename churn, not an error). Verified the placeholder itself actually landed in
+  the compiled output, not just the source tree: scanned the published `Showroom.*.wasm` module as
+  UTF-16LE text and found the literal `"Hello!"` string baked into both the scratch publish output
+  and the final `dist/_framework/Showroom.*.wasm`. Also verified the publish's own regenerated
+  `oracle-brain.bin`/`.bin.gz` are byte-identical to the hand-copied ones and that
+  `oracle-rounds.txt`/`-stackk.txt`/`-iterwarm.txt` in the final `dist/data` read back
+  `180910`/`2`/`100`.
 
 - **r174,166 (eighth pass)** — data-only, shape unchanged from r169,066 (same 5 fields above;
   `oracle-brain.bin` is still exactly 4,130,340 bytes, same as every pass back to r167,386 — the
