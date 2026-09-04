@@ -768,12 +768,40 @@ already turns any checkpoint-load failure into a visible `_loadError`, never a s
 way, same helper, same reasoning — it fetches the identical checkpoint through a second code path
 when Prism itself hasn't loaded it first this page load.
 
-**Checkpoint refresh history (2026-09-04, five passes same day) — consolidated 2026-09-04, was 5
+**Checkpoint refresh history (2026-09-04, six passes same day) — consolidated 2026-09-04, was 5
 near-duplicate dated entries each restating the same verification recipe; compacted per §3 dedupe,
-no fact dropped, just de-repeated.** Current ground truth: round **152,476**,
+no fact dropped, just de-repeated.** Current ground truth: round **167,386**,
 `Vocab=192,Dim=1536,Context=32,Shifts=16,Layers=1,ParamCount=516,288`, `oracle-stackk.txt=2`/
 `oracle-iterwarm.txt=100` (matches `HoloEngine.cs`'s live `OneShotStackK`/`OneShotIterWarm` consts,
 re-checked fresh every pass, never carried forward), AlgFormer pinned at **2.2.0**.
+
+- **r167,386 (sixth pass)** — data-only, shape unchanged from r152,476
+  (`Vocab=192,Dim=1536,Context=32,Shifts=16,Layers=1,ParamCount=516,288`, still AlgFormer 2.2.0).
+  **Real discrepancy found, flagged not silently resolved**: the snapshot directory was named
+  `%LOCALAPPDATA%\Prism-MainSnapshot\snapshots\r0167356\`, but `prism-holo-iter.txt` inside it
+  reads **167386**, not 167356 (a transposed-digit mismatch between the directory name and its own
+  file content) — trusted the FILE, per the standing "never carry forward a stale number" rule, and
+  used 167,386 as the real round throughout this pass (deployed `oracle-rounds.txt`, this doc's own
+  ground truth above). `oracle-stackk.txt`/`oracle-iterwarm.txt` re-cross-checked fresh against
+  `HoloEngine.cs` (`PrismFormer\studio\PrismGym\HoloEngine.cs:218`,
+  `const int OneShotIters = 1, OneShotStackK = 2, OneShotIterWarm = 100`) — unchanged from the prior
+  pass, both values genuinely re-verified, not carried forward. Deserialize+round-trip verified via
+  a throwaway console app pinned at AlgFormer 2.2.0 (`HoloFormer.Deserialize` then `.Serialize()`,
+  4,130,340 bytes in, 4,130,340 bytes out, byte-identical) — confirms the checkpoint format is still
+  readable at the pinned version, not assumed. `oracle-brain.bin.gz` regenerated in both
+  `wwwroot/data` and `dist/data` via the standing `GZipStream` recipe and round-trip
+  decompress-verified byte-identical to the raw `.bin` in both locations (2,258,893 bytes gzip, was
+  raw 4,130,340 bytes — ~55% of raw, consistent with the ratio the gzip-precompression section above
+  measured). Sidecar `.txt` files written via `File.WriteAllText`+`UTF8Encoding(false)` in both data
+  dirs, not PowerShell `Set-Content` (confirmed no BOM by exact byte-length: `oracle-rounds.txt`=6
+  bytes for `"167386"`, `oracle-stackk.txt`=1 byte for `"2"`, `oracle-iterwarm.txt`=3 bytes for
+  `"100"` — no extra 3-byte BOM prefix on any of them). Per this pass's own instruction (checkpoint
+  data changed), ran a full `dotnet publish Showroom.csproj -c Release` (AOT+trim, green) and
+  mirrored the output into `dist/` via `robocopy /MIR` — verified the publish output's own
+  regenerated `oracle-brain.bin` is byte-identical to the hand-copied one (proves publish never
+  silently re-touches the data files, same check the standing recipe calls for) and that
+  `oracle-rounds.txt`/`oracle-stackk.txt`/`oracle-iterwarm.txt` in the final `dist/data` read back
+  `167386`/`2`/`100`. `dotnet build Showroom.csproj -c Release` green (0/0) before publishing.
 
 **Standing refresh recipe** (every pass below follows this, stated once): copy the snapshot's
 `prism-holo.bin`/`-vocab.txt`/`-iter.txt` from `%LOCALAPPDATA%\Prism-MainSnapshot\snapshots\r0NNNNNN\`
@@ -826,8 +854,8 @@ the hand-copied ones exactly (proves publish never silently re-touches the data 
   per this pass's explicit instruction (overriding the normally-cheaper interim-refresh path the
   "Checkpoint gzip precompression" section above documents) rather than a bare data-file copy.
 
-**Not verified live on any of the five passes** (no browser here, per this repo's boundary) — the
-user should confirm `/tools/prism` loads the current (r152,476) checkpoint, the input box starts
+**Not verified live on any of the six passes** (no browser here, per this repo's boundary) — the
+user should confirm `/tools/prism` loads the current (r167,386) checkpoint, the input box starts
 empty, generation stops within one context-window's worth of characters, and Ask/Continue works with
 the 192-vocab shape, on a fresh `dist/` deploy.
 
