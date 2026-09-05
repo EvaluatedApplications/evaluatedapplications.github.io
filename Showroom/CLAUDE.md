@@ -1,6 +1,6 @@
 # Showroom — CLAUDE.md (showroom-owner)
 
-**Last verified:** 2026-09-04
+**Last verified:** 2026-09-05
 
 Blazor WebAssembly app at `C:\Users\dongy\AboutUs\Showroom`, published under `/tools` on the public
 site (`AboutUs` repo, base href `/tools/` — see `wwwroot/index.html`). Every tool runs entirely
@@ -780,10 +780,35 @@ no rebuild) unless `Prism.razor`/`HoloKernel`'s fetch/decompress logic itself ch
 
 **Checkpoint refresh history (2026-09-04, nine passes same day) — consolidated 2026-09-04, was 5
 near-duplicate dated entries each restating the same verification recipe; compacted per §3 dedupe,
-no fact dropped, just de-repeated.** Current ground truth: round **180,910**,
+no fact dropped, just de-repeated.** Current ground truth: round **253,570**,
 `Vocab=192,Dim=1536,Context=32,Shifts=16,Layers=1,ParamCount=516,288`, `oracle-stackk.txt=2`/
 `oracle-iterwarm.txt=100` (matches `HoloEngine.cs`'s live `OneShotStackK`/`OneShotIterWarm` consts,
 re-checked fresh every pass, never carried forward), AlgFormer pinned at **2.2.0**.
+
+- **r253,570 (2026-09-05, tenth pass, first real FAST-PATH pass — no publish)**: data-only, shape
+  unchanged from r180,910 (same 5 fields above; `oracle-brain.bin` still exactly 4,130,340 bytes;
+  `oracle-vocab.txt` byte-identical to the prior deploy's — same 192-entry vocab, confirmed via
+  `SequenceEqual`, not just same length). Snapshot directory named `...\snapshots\r0253556\`, its own
+  `prism-holo-iter.txt` reads **253570** — same directory/file-content mismatch pattern as five prior
+  passes, again not silently resolved, file trusted per the standing rule.
+  `oracle-stackk.txt`/`oracle-iterwarm.txt` re-cross-checked fresh against live `HoloEngine.cs:218`
+  (`OneShotStackK=2, OneShotIterWarm=100`) — unchanged. Deserialize+round-trip verified via a
+  throwaway console app pinned at AlgFormer 2.2.0 (`HoloFormer.Deserialize` then `.Serialize()`,
+  4,130,340 bytes in/out, byte-identical; reflected every public property as a shape sanity check —
+  `Golden=True`, `Shifts=16` confirmed >1, `GrowFromFront=True`). **Took the actual fast path this
+  time** (the 2026-09-04 process-correction note above, "from the next data-only refresh onward, use
+  the fast path unless source changed" — this pass's dispatch instruction explicitly named it): raw
+  `File.ReadAllBytes`/`WriteAllBytes` copy of `oracle-brain.bin`/`oracle-vocab.txt` straight into both
+  `wwwroot/data` and `dist/data`, no `dotnet publish`, no `robocopy /MIR`. `oracle-brain.bin.gz`
+  regenerated in both dirs via the standing `GZipStream` recipe, round-trip decompress-verified
+  byte-identical to the raw `.bin` in both locations (2,256,574 bytes gzip). Sidecar `.txt` files
+  written via `[System.IO.File]::WriteAllText`+`UTF8Encoding(false)` in both data dirs (confirmed no
+  BOM by exact byte length: `oracle-rounds.txt`=6 bytes for `"253570"`, `oracle-stackk.txt`=1 byte for
+  `"2"`, `oracle-iterwarm.txt`=3 bytes for `"100"`). `dotnet build Showroom.csproj -c Release` re-run
+  after the data swap and stayed green (0/0), as expected for a data-only change — confirms the fast
+  path genuinely needs no rebuild. Total wall time: seconds for the copy+gzip+sidecar step, plus the
+  one-off throwaway-console-app setup for the deserialize check (a `dotnet new console` + `dotnet add
+  package` + one run, not a Showroom publish).
 
 - **r180,910 (ninth pass, combined with a source change)** — snapshot directory named
   `...\snapshots\r0180880\`, its own `prism-holo-iter.txt` reads **180910** — same directory/file-
@@ -939,8 +964,8 @@ the hand-copied ones exactly (proves publish never silently re-touches the data 
   per this pass's explicit instruction (overriding the normally-cheaper interim-refresh path the
   "Checkpoint gzip precompression" section above documents) rather than a bare data-file copy.
 
-**Not verified live on any of the eight passes** (no browser here, per this repo's boundary) — the
-user should confirm `/tools/prism` loads the current (r174,166) checkpoint, the input box starts
+**Not verified live on any of the ten passes** (no browser here, per this repo's boundary) — the
+user should confirm `/tools/prism` loads the current (r253,570) checkpoint, the input box starts
 empty, generation stops within two context-windows' worth of characters (the seventh pass's 2x cap,
 not the earlier 1x), and Ask/Continue works with the 192-vocab shape, on a fresh `dist/` deploy.
 
