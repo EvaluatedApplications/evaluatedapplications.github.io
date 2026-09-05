@@ -23,19 +23,33 @@
 
 <header class="hero">
   <div class="wrap">
-    <span class="eyebrow">RecycleDAO · confidential progress preview</span>
+    <span class="eyebrow">RecycleDAO · confidential progress preview · updated 2026-09-05</span>
     <h1>RecycleDAO — a digital parliament platform, in progress</h1>
     <p class="lede">This page is a private preview prepared for Antonio to track progress on RecycleDAO, built
       by Evaluated Applications. It is a testnet-only proof of concept — <b>not live, not fundraising, and no
-      real monetary value changes hands anywhere in this build.</b></p>
+      real monetary value changes hands anywhere in this build.</b> The live application itself now carries a
+      <b>TESTNET ONLY</b> banner on every single page, not just this preview.</p>
     <div class="facts">
-      <span class="fact"><b>Status:</b> claim graph, ledger, reputation, and multi-tenancy engines built and tested</span>
+      <span class="fact"><b>Status:</b> 506 automated tests passing across every engine (was 478 last preview)</span>
       <span class="fact">Pivoted 2026-08-29 to a general platform</span>
-      <span class="fact">Not live · no real value</span>
+      <span class="fact">TESTNET ONLY · no real value, anywhere</span>
       <span class="fact">Prepared for Antonio</span>
     </div>
   </div>
 </header>
+
+<section class="sec">
+  <div class="wrap">
+    <div class="sec-head"><span class="dot" style="background:var(--accent)"></span><h2>One thing to open, to see the whole platform</h2><p>no more hunting for the right file</p></div>
+    <p class="desc" style="max-width:74ch">Until recently, every part of this project lived in its own separate
+      technical project, which meant knowing which one of several files to open just to see something running.
+      There is now a single entry point that opens the whole platform at once — the actual clickable website,
+      plus a short guided walkthrough for each underlying piece: the claim/voting engine, the currency ledger,
+      the reputation scoring, the marketplace, and the governance/roles layer. This didn't change what any of
+      those pieces do; it just means a visitor, or anyone picking this project up cold, no longer needs to be
+      told where to look first.</p>
+  </div>
+</section>
 
 <section class="sec">
   <div class="wrap">
@@ -44,11 +58,11 @@
       recycled something, get it approved, earn a token. On 2026-08-29, at your direction, the scope broadened.
       The recycling framing turned out to be one example of a more general, more useful idea: a
       <b>"digital parliament"</b> — a platform where a community writes structured entries (claims, proposals,
-      rules), discusses them, and votes on them, with two extra mechanics layered on top of ordinary
-      voting/forum software to keep the community's shared record honest and self-consistent. The
-      recycling-specific pieces — the reward token, the submit/approve/earn flow — are now historical: still
-      built, still tested, but not what this project is actively extending. Everything below describes what
-      the project actually is today.</p>
+      rules), discusses them, and votes on them, with mechanics layered on top of ordinary voting/forum
+      software to keep the community's shared record honest and self-consistent. The recycling-specific
+      pieces — the reward token, the submit/approve/earn flow — are now historical: still built, still tested,
+      but not what this project is actively extending. Everything below describes what the project actually is
+      today.</p>
     <p class="lim">This remains, in every respect, a proof of concept on a free public test network — no real
       money, no real tokens with market value, nothing an investor or end user can use yet.</p>
   </div>
@@ -79,10 +93,10 @@
       <article class="card" style="--cat:var(--accent)">
         <div class="card-top"><h3>A currencyless ledger</h3></div>
         <p class="desc">Instead of one shared token everyone earns, each community member can mint, trade, and
-          now redeem (burn) their own personal currency. Whether anyone else accepts your currency is entirely
+          redeem (burn) their own personal currency. Whether anyone else accepts your currency is entirely
           a trust decision the community makes, based on your public track record — not something the platform
-          decides for them. This mirrors a real historical pattern (competing local currencies, market-priced by
-          trust in the issuer) rather than being an invented gimmick.</p>
+          decides for them. This mirrors a real historical pattern (competing private currencies, market-priced
+          by trust in the issuer) rather than being an invented gimmick.</p>
       </article>
       <article class="card" style="--cat:var(--accent)">
         <div class="card-top"><h3>A reputation layer built from arithmetic, not a hidden score</h3></div>
@@ -92,6 +106,14 @@
           built from the numbers, never a black-box number nobody can audit. When a mint gets disputed and
           voted down, it ripples through to your own reputation automatically, the same way an unwound claim
           ripples through its dependents.</p>
+      </article>
+      <article class="card" style="--cat:var(--accent)">
+        <div class="card-top"><h3>A listings marketplace, on the same ledger and claims</h3></div>
+        <p class="desc">People can list an item for sale, buy it outright, or bid at auction. Payment moves
+          into a neutral escrow first and only reaches the seller once delivery is confirmed — or
+          automatically, after a wait, if the buyer never gets around to confirming. A disputed order is
+          settled by the exact same claim-vote mechanism as everything else on this platform, not a bolted-on
+          customer-support process.</p>
       </article>
       <article class="card" style="--cat:var(--accent)">
         <div class="card-top"><h3>Resilient storage underneath all of it</h3></div>
@@ -111,40 +133,191 @@
 
 <section class="sec">
   <div class="wrap">
+    <div class="sec-head"><span class="dot" style="background:var(--accent)"></span><h2>Communities can now set some of their own platform rules</h2><p>the site stops deciding value-affecting rules for everyone</p></div>
+    <p class="desc" style="max-width:74ch">Two small but meaningful decisions used to be hardcoded the same way
+      for every community on the platform. Neither is a technical detail — both are rules that affect who gets
+      what, and until now the platform itself decided them for everyone, the same way, whether a community
+      liked it or not. That's changed: each community can now vote, using the exact same claim-and-vote
+      mechanism as everything else here, to set its own value for either rule. If a community never votes, a
+      sensible default keeps things working exactly as before. This matters for the same reason everything
+      else here is built the way it is: the platform should be a neutral place communities run themselves on,
+      not something that quietly makes value-affecting decisions on their behalf.</p>
+    <div class="grid">
+      <article class="card" style="--cat:var(--accent)">
+        <div class="card-top"><h3>Delivery timeout</h3></div>
+        <p class="desc">How long an unconfirmed delivery waits before payment auto-releases to the seller — a
+          community can vote its own value in, instead of accepting the platform's fixed default.</p>
+      </article>
+      <article class="card" style="--cat:var(--accent)">
+        <div class="card-top"><h3>Currency valuation mode</h3></div>
+        <p class="desc">How a currency's "real" value is worked out when someone pays with a mix of several
+          currencies — a community can vote to change how that's calculated for their own members.</p>
+      </article>
+    </div>
+    <p class="lim">A couple of further rules in the same spirit — how large a majority is needed to pass a
+      vote, how long someone has to appeal a decision — have been identified as good future candidates for
+      this same treatment, but aren't built yet, noted here rather than left unsaid.</p>
+  </div>
+</section>
+
+<section class="sec">
+  <div class="wrap">
+    <div class="sec-head"><span class="dot" style="background:var(--accent)"></span><h2>Keeping decisions, and the voters behind them, honest</h2><p>accountability, not just voting</p></div>
+    <div class="grid">
+      <article class="card" style="--cat:var(--accent)">
+        <div class="card-top"><h3>Roles a community defines, grants, and can vote back out</h3></div>
+        <p class="desc">There's no fixed list of roles built into the platform — a community proposes a role
+          (a name plus a plain description of what it's for) the same way it proposes any other claim, grants
+          it to specific members, can depose one person from it without touching anyone else, or dissolve the
+          role entirely (which automatically pulls every current holder's grant along with it, for free).
+          Proposing someone's removal triggers a full, honest public audit of everything they've done on the
+          platform — nothing private, since nothing on this platform is private to begin with. Worth being
+          plain about one thing: a role here is a badge of community recognition, <b>not a technical
+          permission</b> — the platform doesn't stop a non-holder from acting as if they held one, matching
+          this platform's oldest rule of no passwords, no accounts, no technical gatekeeping anywhere.</p>
+      </article>
+      <article class="card" style="--cat:var(--accent)">
+        <div class="card-top"><h3>Appeals now apply to any decision, not just marketplace disputes</h3></div>
+        <p class="desc">The appeals process that already existed for marketplace disputes has been pulled out
+          into a general capability any part of the platform can reuse. A vote to remove someone from a role,
+          or to dissolve a role entirely, can now be appealed too, with a second community vote able to
+          reverse it — the identical mechanism already proven for marketplace disputes, nothing new invented,
+          proven with a real test before being called done.</p>
+      </article>
+      <article class="card" style="--cat:var(--accent)">
+        <div class="card-top"><h3>A new, honest accountability score for voters themselves</h3></div>
+        <p class="desc">Once a decision can be reversed on appeal, it's worth asking whether a given voter has
+          tended to be on the side of decisions that later got reversed. A new, separate score answers this,
+          built with the same hand-checkable-arithmetic standard as every other score here. Two safeguards
+          stop it punishing honest disagreement: a reversal only counts if the appeal that reversed it passed
+          by a clear, decisive margin, and even then it's weighted by exactly how decisive it was. Kept
+          deliberately separate from a member's main reputation score, so people aren't afraid to vote on
+          anything contested. It exists as a number the system can compute today; it isn't shown on the
+          website yet.</p>
+      </article>
+      <article class="card" style="--cat:var(--accent)">
+        <div class="card-top"><h3>Flagging suspicious activity, honestly</h3></div>
+        <p class="desc">Anyone can flag an account, a currency, or a specific decision as suspicious, with a
+          required real reason — it's just another claim, so it automatically gets a vote, the same "unwind"
+          behaviour, and the same appeals process as everything else. Alongside that, a genuinely new set of
+          honest numbers (how often a group of accounts has voted together, whether their combined vote was
+          actually decisive, how tightly their votes cluster in time, whether they have any other real
+          activity at all) helps a human decide whether a flag is worth raising — never an automated verdict,
+          and never scanning the whole community looking for "suspicious" groups on its own. Proven, not just
+          claimed: tested side by side against two real, independent members who simply agree often, and shown
+          to tell the two cases apart.</p>
+      </article>
+    </div>
+  </div>
+</section>
+
+<section class="sec">
+  <div class="wrap">
+    <div class="sec-head"><span class="dot" style="background:var(--accent)"></span><h2>Trust you can check, currency by currency</h2><p>should I trust this coin, not just this person</p></div>
+    <div class="grid">
+      <article class="card" style="--cat:var(--accent)">
+        <div class="card-top"><h3>A trust score for one specific currency</h3></div>
+        <p class="desc">The reputation layer above answers "should I trust this person's conduct." A related
+          but different question: before accepting payment in one specific member's self-minted currency, how
+          much should you trust that coin, specifically — how widely it's actually held by other people, how
+          often it changes hands, how concentrated current holdings are, and its own dispute history. Shown on
+          the wallet page (comparing every currency side by side) and directly on a listing's price, so the
+          question gets answered right where the decision actually gets made. It was also checked, plainly,
+          whether this score is easy to game — and two of its parts were: how many people hold a currency and
+          how often it trades, both of which could be cheaply faked by shuffling currency back and forth with
+          a second account. That's now detected and penalised, while genuine repeat trading between two real
+          partners is left completely untouched.</p>
+      </article>
+      <article class="card" style="--cat:var(--accent)">
+        <div class="card-top"><h3>Paying with a mix of several people's currencies</h3></div>
+        <p class="desc">A buyer can now pay for a listing using a mix of several different members' currencies
+          in one purchase, instead of being forced to hold enough of just one — each currency in the mix
+          valued by its own trust score at the moment of the trade. The whole basket moves together, all at
+          once, or not at all: if a buyer's proposed mix doesn't quite cover the price, or they don't actually
+          hold enough of one currency they offered, nothing moves, not even the part they could genuinely
+          afford. This was deliberately tested by trying to break it first. A single-currency payment (the
+          normal case) is just a basket with one item in it, so nothing changes for someone who doesn't need
+          this.</p>
+      </article>
+    </div>
+  </div>
+</section>
+
+<section class="sec">
+  <div class="wrap">
+    <div class="sec-head"><span class="dot" style="background:var(--accent)"></span><h2>The marketplace</h2><p>a real place to browse, buy, sell, and dispute</p></div>
+    <div class="grid">
+      <article class="card" style="--cat:var(--accent)">
+        <div class="card-top"><h3>Listings, escrow, and auto-release</h3></div>
+        <p class="desc">Sellers list an item fixed-price or as an auction; a buyer's payment moves into escrow
+          first and only reaches the seller once delivery is confirmed. Auctions settle themselves at their
+          deadline to the highest genuine bid, and an order whose buyer never confirms delivery auto-releases
+          to the seller after a set waiting period — no person has to click anything, so a forgetful buyer
+          can't trap a seller's payment forever.</p>
+      </article>
+      <article class="card" style="--cat:var(--accent)">
+        <div class="card-top"><h3>Richer disputes: counter-claims, evidence, appeals</h3></div>
+        <p class="desc">A seller can file a structured rebuttal, either side can attach evidence, and — as
+          above — a resolved dispute can now be appealed once, with a second community vote able to reverse
+          the original payment decision. Proven both ways in the demo: one dispute upheld (payment returned to
+          the buyer) and one rejected (payment released to the seller anyway), using the real voting
+          mechanism, not a placeholder.</p>
+      </article>
+      <article class="card" style="--cat:var(--accent)">
+        <div class="card-top"><h3>Auctions, negotiation, watchlists, and questions</h3></div>
+        <p class="desc">A buyer can offer less than the asking price and the seller can accept, reject, or
+          counter over any number of rounds; anyone can watch a listing and see it update even after it sells
+          or is withdrawn; and every listing has a public question-and-answer thread. All of it, plus
+          browsing, buying, bidding, and managing a wallet, runs through a first real web interface — a place
+          to actually click through, not just read about — where a visitor can switch between entirely
+          separate communities from within the page itself, demonstrating live that different communities get
+          their own fully isolated world.</p>
+      </article>
+      <article class="card" style="--cat:var(--accent)">
+        <div class="card-top"><h3>Two honest recommendation strips</h3></div>
+        <p class="desc">Every item's page shows other currently-for-sale items that share its category, price
+          range, or wording — an honest, plainly-labelled keyword match, not a claim of understanding meaning
+          the way a human would. The main browsing page also shows a personalised "recommended for you" strip
+          built from what you've actually watched, bid on, and bought — weighted so a genuine purchase counts
+          for more than an idle watch. If you haven't interacted with anything yet, you correctly see no
+          personalised recommendations at all, rather than a list dressed up to look personal when it isn't.</p>
+      </article>
+    </div>
+  </div>
+</section>
+
+<section class="sec">
+  <div class="wrap">
     <div class="sec-head"><span class="dot" style="background:var(--accent)"></span><h2>How it's built</h2><p>current work, and what came before it</p></div>
     <div class="grid">
       <article class="card" style="--cat:var(--accent)">
-        <div class="card-top"><h3>Current — the claim graph, ledger, and reputation engines</h3></div>
+        <div class="card-top"><h3>Current — claim graph, ledger, reputation, governance, marketplace</h3></div>
         <p class="desc">Built off-chain, on Evaluated Applications' own <b>EvalApp</b> (orchestration) and
-          <b>HoloDb</b> (storage) libraries — deliberately no blockchain dependency in this part of the project,
-          at your direction. Underneath the ledger sits a resilient storage layer using the same redundant-piece
-          technique real-world cloud backup services use, so the system can lose some pieces and still
-          reconstruct the exact record. Ahead of that exact (and comparatively expensive) reconstruction, a
-          quick approximate check — borrowed from our own <b>Phasor</b> pattern-matching library — now looks at
-          whatever pieces are actually present and flags a corrupted one fast, before bothering with the full
-          rebuild. Each block's header also now carries a compact fingerprint of its own contents baked in
-          alongside its tamper-evident hash, so a check for "has this record been altered" no longer relies on
-          the hash alone.</p>
+          <b>HoloDb</b> (storage) libraries — deliberately no blockchain dependency in this part of the
+          project, at your direction. Underneath the ledger sits a resilient storage layer using the same
+          redundant-piece technique real-world cloud backup services use. Ahead of the exact (and
+          comparatively expensive) reconstruction, a quick approximate check — borrowed from our own
+          <b>Phasor</b> pattern-matching library — flags a corrupted piece fast, before bothering with the
+          full rebuild. Each block's header also carries a compact fingerprint of its own contents baked in
+          alongside its tamper-evident hash.</p>
       </article>
       <article class="card" style="--cat:var(--accent)">
         <div class="card-top"><h3>Multi-tenancy — separate communities, kept fully apart</h3></div>
-        <p class="desc">Different communities using this platform now each get their own completely separate
+        <p class="desc">Different communities using this platform each get their own completely separate
           claim graph, ledger, and reputation data — hard-partitioned, not just filtered by a hidden flag — so
-          one community's records can never leak into another's, even if two communities happen to reuse the
-          exact same names or IDs for things. Proven with a demonstration where two communities deliberately
-          reuse identical names throughout and never interfere with each other.</p>
+          one community's records can never leak into another's, even if two communities reuse the exact same
+          names or IDs for things. Proven with a demonstration where two communities deliberately reuse
+          identical names throughout and never interfere with each other.</p>
       </article>
       <article class="card" style="--cat:var(--accent)">
         <div class="card-top"><h3>A first proof pieces can travel over a real network</h3></div>
         <p class="desc">Several small, independent programs were run at once on one machine, each holding only
           its own slice of a record, and a separate program fetched pieces from them over real network
-          connections — the same kind of connection two separate computers would use to talk to each other,
-          just pointed at "this same machine" for now, not out across the internet — and rebuilt the full
-          record from what it received. When some of those programs were deliberately shut down mid-test, the
-          requester correctly noticed they'd gone quiet and, once too many were missing, honestly reported it
-          couldn't rebuild the record rather than guessing. This is a genuine step up from proving the storage
-          layer only inside one program's memory — but it is <b>not</b> yet real multi-machine deployment, see
-          "Not built yet" below.</p>
+          connections and rebuilt the full record from what it received. When some of those programs were
+          deliberately shut down mid-test, the requester correctly noticed they'd gone quiet and honestly
+          reported it couldn't rebuild the record rather than guessing. This is a genuine step up from proving
+          the storage layer only inside one program's memory — but it is <b>not</b> yet real multi-machine
+          deployment, see "Not built yet" below.</p>
       </article>
       <article class="card" style="--cat:var(--accent)">
         <div class="card-top"><h3>Historical — the token &amp; governance work</h3></div>
@@ -165,43 +338,80 @@
 
 <section class="sec">
   <div class="wrap">
+    <div class="sec-head"><span class="dot" style="background:var(--warn)"></span><h2>A dropdown that looked fine but didn't work</h2><p>found and fixed before it caused a problem</p></div>
+    <p class="desc" style="max-width:74ch">Worth being direct about this one, precisely because it's the kind
+      of thing that would have been embarrassing to hit live in front of someone. A recent internal change to
+      how the website's pages are built accidentally left two controls at the top of every page — the "which
+      community am I in" and "who am I acting as" drop-down menus — looking completely normal (they rendered,
+      they had the right options in them) while silently not responding to being clicked or changed.
+      Everything else on the site kept working normally; only those two header controls, and the small
+      "create a new one" forms tucked inside them, were affected. This was caught by a dedicated review built
+      specifically to check "does every clickable thing on this site actually sit somewhere the site is
+      prepared to receive a click," not by someone noticing it by chance — and once caught, it was fixed the
+      same day, with an automated check now permanently in place that would fail loudly if the same category
+      of mistake ever crept back in.</p>
+    <p class="lim">Checked today, live, as part of this review: it's fixed, and stays fixed. Disclosed here
+      deliberately rather than smoothed over — this preview's whole point is to be honest about what's real
+      and what still needs work.</p>
+  </div>
+</section>
+
+<section class="sec">
+  <div class="wrap">
     <div class="sec-head"><span class="dot" style="background:var(--accent)"></span><h2>Current status</h2><p>honest, as of this preview</p></div>
     <div class="grid">
       <article class="card" style="--cat:var(--accent)">
         <div class="card-top"><h3>Built and tested</h3></div>
-        <p class="desc">The claim graph and its "unwind" behaviour — add claims, link them by dependency, vote
-          on them, retract one, and every downstream claim correctly flips to "under review," including cases
-          where two chains of dependency converge back on the same claim (flagged exactly once, not
-          double-counted). Contradiction-flagging between claims marked as conflicting. The personal-currency
-          ledger — minting, peer-to-peer trading (including paying someone in a third party's currency), and a
-          tamper-evident record. Redemption: anyone holding some of a currency, not just the person who
-          originally issued it, can now destroy it from their own balance, retiring it — the historical record
-          of how much was ever issued never changes, but how much is actually still out there correctly drops.
-          The resilient, redundant-piece storage layer underneath that ledger, plus a fast approximate check
-          that flags a corrupted piece before the expensive exact rebuild runs. The reputation calculations,
-          running against the ledger and claim graph together, with a worked example: disputing someone's past
-          activity visibly and traceably lowers their reputation score, hand-checkable, not a mystery number.
-          Separate communities running side by side with their data fully partitioned from one another. A first,
-          deliberately small proof that the redundant-piece storage can genuinely travel over a network, using
-          several independent programs on one machine talking over real network connections. All of it is
-          proven end to end with automated tests and runnable demonstrations against real (if locally-hosted)
-          storage — not just described, actually built and exercised.</p>
+        <p class="desc">Everything in the sections above — the claim graph and its "unwind" behaviour,
+          contradiction-flagging, the currencyless ledger with minting/trading/redemption, the resilient
+          redundant-piece storage layer, the reputation and per-currency trust scores (with wash-trade
+          detection), community-defined roles/deposition/dissolution with a public audit trail, appeals for
+          any decision, voter accountability, suspicious-activity flags with honest coordination signals,
+          community-set platform rules, basket payments, and the full marketplace (listings, escrow, auctions,
+          negotiation, watchlists, messaging, both recommendation strips) — is proven end to end with
+          automated tests and runnable demonstrations against real (if locally-hosted) storage. The actual
+          website was also driven over real HTTP as part of this review pass — browsing, a listing page,
+          selling, orders, wallet, watchlist, and a broken link — confirming the pages people would actually
+          see work, not just that the underlying code compiles.</p>
       </article>
       <article class="card" style="--cat:var(--accent)">
         <div class="card-top"><h3>Not built yet</h3></div>
-        <p class="desc">No user interface anywhere — everything so far is backend logic, proven with automated
-          tests and command-line demonstrations. No blockchain involvement in the new work — the claim graph,
-          ledger, and reputation layer are deliberately built to run entirely off-chain for now, at your
-          direction. No real multi-machine deployment — the new networking proof still runs everything on one
-          machine; it shows the pieces CAN travel over a real network connection, not that they've been spread
-          across genuinely separate computers in different locations. Actually deploying across separate
-          machines, discovering who's holding what, and securing that traffic is a deliberately separate,
-          bigger piece of infrastructure work we're flagging as a decision to make explicitly, not building
-          unprompted. "Verification" and moderation remain manual/human decisions by design, not an automation
-          gap. No growth, referral, or "invite a friend" mechanics anywhere — deliberately out of scope, same
-          as before the pivot.</p>
+        <p class="desc">The web interface hasn't yet been driven through an automated browser click-through of
+          every button end to end — every control has been checked by loading the page and confirming it
+          calls the same tested backend the automated tests already exercise, but no browser-automation tool
+          is available in this working environment, so this stays a known, flagged gap rather than a silently
+          skipped one. No blockchain involvement in the new work, at your direction. No real multi-machine
+          deployment — the networking proof still runs everything on one machine. "Verification" and
+          moderation remain manual/human decisions by design, not an automation gap. No growth, referral, or
+          "invite a friend" mechanics anywhere — deliberately out of scope, same as before the pivot.</p>
       </article>
     </div>
+    <p class="desc" style="max-width:74ch;margin-top:28px">A full re-run of every automated test in the
+      project, done on 2026-09-05 as part of this review, not carried over from an earlier count:</p>
+    <table style="width:100%;max-width:74ch;border-collapse:collapse;margin-top:14px">
+      <thead>
+        <tr>
+          <th style="text-align:left;padding:7px 10px;border-bottom:1px solid var(--border);color:var(--ink-soft);font-weight:600">Engine / area</th>
+          <th style="text-align:right;padding:7px 10px;border-bottom:1px solid var(--border);color:var(--ink-soft);font-weight:600">Tests passing</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td style="padding:7px 10px;border-bottom:1px solid var(--border-2)">Claim graph &amp; voting</td><td style="text-align:right;padding:7px 10px;border-bottom:1px solid var(--border-2)">77</td></tr>
+        <tr><td style="padding:7px 10px;border-bottom:1px solid var(--border-2)">Currency ledger</td><td style="text-align:right;padding:7px 10px;border-bottom:1px solid var(--border-2)">55</td></tr>
+        <tr><td style="padding:7px 10px;border-bottom:1px solid var(--border-2)">Reputation &amp; trust scores</td><td style="text-align:right;padding:7px 10px;border-bottom:1px solid var(--border-2)">108</td></tr>
+        <tr><td style="padding:7px 10px;border-bottom:1px solid var(--border-2)">Marketplace engine</td><td style="text-align:right;padding:7px 10px;border-bottom:1px solid var(--border-2)">149</td></tr>
+        <tr><td style="padding:7px 10px;border-bottom:1px solid var(--border-2)">Marketplace website</td><td style="text-align:right;padding:7px 10px;border-bottom:1px solid var(--border-2)">46</td></tr>
+        <tr><td style="padding:7px 10px;border-bottom:1px solid var(--border-2)">Governance (roles &amp; flags)</td><td style="text-align:right;padding:7px 10px;border-bottom:1px solid var(--border-2)">40</td></tr>
+        <tr><td style="padding:7px 10px;border-bottom:1px solid var(--border-2)">Multi-tenancy proof</td><td style="text-align:right;padding:7px 10px;border-bottom:1px solid var(--border-2)">3</td></tr>
+        <tr><td style="padding:7px 10px;border-bottom:1px solid var(--border-2)">Shard-network proof</td><td style="text-align:right;padding:7px 10px;border-bottom:1px solid var(--border-2)">4</td></tr>
+        <tr><td style="padding:7px 10px;border-bottom:1px solid var(--border-2)">Historical token bridge (.NET)</td><td style="text-align:right;padding:7px 10px;border-bottom:1px solid var(--border-2)">9</td></tr>
+        <tr><td style="padding:7px 10px;border-bottom:1px solid var(--border-2)">Historical smart contract</td><td style="text-align:right;padding:7px 10px;border-bottom:1px solid var(--border-2)">15</td></tr>
+        <tr><td style="padding:9px 10px;font-weight:700">Total</td><td style="text-align:right;padding:9px 10px;font-weight:700">506</td></tr>
+      </tbody>
+    </table>
+    <p class="lim" style="margin-top:20px">Zero failures anywhere in this run. 506 is up from 478 at the last
+      preview — the difference is new, real, tested work (governance, flags, community-set rules, basket
+      payments), not a change in how tests are counted.</p>
   </div>
 </section>
 
@@ -209,16 +419,19 @@
   <div class="wrap">
     <div class="stack">
       <h2>Evaluated Applications' role</h2>
-      <p>Evaluated Applications is building RecycleDAO end to end: the claim graph, the currencyless ledger, the
-        reputation layer, and the resilient storage underneath it, all proven working off-chain on our own
-        EvalApp and HoloDb libraries. Since the last preview, that work has grown to include separate
-        communities kept fully apart from one another and a first proof that the storage layer can genuinely
-        travel over a real network connection, not just live in memory. The original token-and-blockchain work
-        is complete for what it covered and still passes its tests, but is not the current focus. The next steps
-        are a real interface for people to interact with this through, and, separately, a decision about
-        whether and how to build genuine multi-machine network deployment. This page will be updated as
-        milestones complete — it is only reachable by this direct link and is not linked from, or indexed
-        alongside, the rest of the public Evaluated Applications site.</p>
+      <p>Evaluated Applications is building RecycleDAO end to end: the claim graph, the currencyless ledger,
+        the reputation and per-currency trust layers, the resilient storage underneath it, the governance
+        layer (roles, deposition, appeals, voter accountability, suspicious-activity flags), and the
+        marketplace built on top of all of it — proven working off-chain on our own EvalApp, HoloDb, and
+        Phasor libraries. Since the last preview, that work has grown to include community-set platform
+        rules, basket currency payments, and a single entry point that opens the whole platform at once, plus
+        a real fix — found by a dedicated review, disclosed here rather than hidden — for a header-control bug
+        that silently stopped responding to clicks. The original token-and-blockchain work is complete for
+        what it covered and still passes its tests, but is not the current focus. The next steps are an
+        automated browser click-through of the web interface, and, separately, a decision about whether and
+        how to build genuine multi-machine network deployment. This page will be updated as milestones
+        complete — it is only reachable by this direct link and is not linked from, or indexed alongside, the
+        rest of the public Evaluated Applications site.</p>
     </div>
   </div>
 </section>

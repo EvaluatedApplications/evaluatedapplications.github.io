@@ -385,10 +385,26 @@ not closed — if it's ever wrong (a path typo, a missing artifact-root copy), e
 the deployed site goes undefined and the whole site renders unstyled. This agent does not push (§6);
 flagging so the coordinator/user does this push and reports back green before this line is removed.
 
-**recycledao-preview.html — flagged stale again, do not port faithfully.** This file was already
-flagged stale weeks ago (its own re-render history in this doc records 2 prior refreshes,
-2026-08-29 and 2026-09-01) and RecycleDAO has changed further since, including changes made the same
-day as this tidy-up pass. It is one of the 7 unattempted SiteKit pages above — when it's eventually
+**recycledao-preview.html — RE-RENDERED 2026-09-05, no longer stale.** Rebuilt from scratch off
+RecycleDAO's `docs/status-brief.md` at its own commit `7a20b3a` (the brief itself had drifted 10
+commits / 4 days and was reconciled against HEAD first — that ordering is the point: re-render the
+page only AFTER the brief is current, never from the page's own prior HTML). Driven by a client
+visiting in person, so it was treated as live client-facing material rather than a housekeeping
+pass. New this render: the single-entry-point demo note, community-parameterised platform rules
+(delivery timeout + currency valuation mode, votable per community — the most client-legible new
+capability), the governance/accountability block, currency trust score + wash-trade detection +
+basket payments, the fuller marketplace section, and the corrected 506-test count with a per-suite
+breakdown pulled via the CLAUDE.md-fallback rule (the brief only carries the 491+15 rollup).
+**Deliberately kept, not sanded off**: a dedicated section disclosing the 2026-09-02 header-dropdown
+bug (controls rendered but silently didn't respond) — this page's whole voice is candid about what
+isn't built, and openly owning a caught-and-fixed bug reads as confidence. The "Not built yet"
+section was kept current rather than quietly shrunk. Privacy constraints re-verified after the
+render: `noindex,nofollow` present, absent from `sitemap.xml`, zero inbound links from any other
+page, standalone brand-only header with no nav links. NOT verified in a live browser (no browser
+here) — the new table/grid additions' CSS rendering is the one thing still needing a human look.
+**Historical note (superseded):** this file was previously flagged stale weeks ago (its own
+re-render history in this doc records 2 prior refreshes, 2026-08-29 and 2026-09-01) and RecycleDAO
+had changed further since. It is one of the 7 unattempted SiteKit pages above — when it's eventually
 picked up, the correct move is a fresh content pull from RecycleDAO's own current
 `docs/status-brief.md` (falling back to its `CLAUDE.md`), the same discipline every prior render of
 this page has used, NOT a mechanical port of the existing (already-known-stale) `site/
