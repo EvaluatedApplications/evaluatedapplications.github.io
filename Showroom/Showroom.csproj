@@ -82,8 +82,21 @@
          Trimming is ON below, but that is NOT what fixed this. It is on because it is simply better
          here: 60 assemblies and 3.6 MB brotli against 208 and 6.2 MB untrimmed. -->
 
+    <!-- AOT IS BACK ON (2026-09-06). My "AOT is not worth it" argument below was measured correctly on
+         download size but WRONG on necessity, and this is the correction.
+         With the version skew fixed the runtime started, and then died at:
+             MONO interpreter: NIY encountered in method Prism.Inference.DecodePolicy:.cctor ()
+         NIY is the Mono INTERPRETER meeting IL it does not implement. With AOT on, that method is
+         compiled ahead of time and the interpreter never sees it, which is why this code ran fine for
+         weeks. Turning AOT off did not reveal a latent bug so much as remove the thing that was
+         carrying it. DecodePolicy is a plain sealed record whose static constructor only does `new()`,
+         and Prism resolves to lib/net10.0 (verified in project.assets.json), so the IL is unremarkable
+         and this looks like a genuine interpreter gap rather than anything wrong in Prism.
+         So AOT is not a luxury here, it is load-bearing. The download cost stands (7.5 MB brotli vs
+         3.6) and is simply the price. Do not disable it again without first proving the interpreter
+         can execute Prism.Inference and the AlgFormer serve path. -->
     <PublishTrimmed>true</PublishTrimmed>
-    <RunAOTCompilation>false</RunAOTCompilation>
+    <RunAOTCompilation>true</RunAOTCompilation>
     <!-- -O2 (the Release default) makes the emcc/wasm-opt link step OOM-fail on this dev machine whenever
          PrismStudio is also running its own live training (which holds about 15 GB resident): confirmed
          reproducible across four failed attempts, always dying at the identical wasm-opt invocation, and
