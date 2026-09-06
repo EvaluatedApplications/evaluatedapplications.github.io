@@ -14,7 +14,32 @@
          PublishTrimmed=true, so also testing whether the old "EvalApp step factory reflection" trim
          blocker is actually still true: EvalApp was fixed to be trim-safe (a `new()` constraint on
          its step-builder generics) earlier THIS session, so the comment this replaces may be stale. -->
-    <!-- TRIM + AOT DISABLED 2026-09-06 to restore a DOWN site, deliberately and temporarily.
+    <!-- AOT IS OFF PERMANENTLY (user decision, 2026-09-06): "is the aot worth it? lets just not use
+         it then". Measured, not assumed. Holding trimming constant to isolate AOT's own contribution:
+
+             trim + AOT      raw 36.4 MB   brotli 7.5 MB   60 assemblies   <- what broke
+             trim, no AOT    raw 12.2 MB   brotli 3.6 MB   60 assemblies
+             no trim, no AOT raw 22.1 MB   brotli 6.2 MB  208 assemblies   <- shipped
+
+         AOT COSTS 3.9 MB of brotli download (7.5 vs 3.6). It more than doubles what every visitor
+         fetches, because the AOT'd dotnet.native.wasm blob dwarfs anything trimming saves. That is the
+         opposite of the usual intuition, and it lands on a page whose one real user complaint was
+         already "stuck downloading". Add the phone boot-stall it caused (multi-second WASM compile
+         behind a plateaued progress bar, which needed the boot-log compile narration as a workaround),
+         4-minute publishes (100 while ILGPU was in the graph), the PublishTrimmed dependency it drags
+         in, and its role in the 2026-09-06 outage.
+         Against all that it buys faster numeric loops, which this csproj's own earlier comment admits
+         was only ever an EXPERIMENT to find out whether that helps here, and which was never measured
+         in the weeks it was enabled. An unmeasured benefit does not outweigh a measured 2x download.
+         Do not re-enable without a real before/after measurement of in-browser generation speed.
+
+         TRIMMING is off too, for now, but for a weaker reason and it is the more reversible half:
+         it would save 2.6 MB brotli (6.2 -> 3.6), which is worth having. It is off because AOT
+         required it so the two were disabled together during the outage, and because trim-only is a
+         configuration nobody has yet loaded in a browser. Turning it back on is a real 2.6 MB win and
+         a reasonable next step, but it needs someone to actually open the page afterwards.
+
+         ORIGINAL OUTAGE NOTE (2026-09-06), kept because the root cause is NOT yet identified:
          Symptom: /tools/prism loaded every assembly, compiled the WebAssembly module in 156ms, then
          froze on the boot screen forever. Prism.razor's own checkpoint-fetch narration never printed,
          so the app died between Blazor.start() and the first component rendering, i.e. before any
