@@ -59,18 +59,27 @@
          RunAOTCompilation REQUIRES PublishTrimmed, so both move together.
          RE-ENABLE only after reproducing the failure in a browser and fixing the real root cause,
          with a trim descriptor or an explicit root, not by flipping this back and hoping. -->
-    <!-- TRIMMING IS REQUIRED, not optional (root-caused 2026-09-06 from the real browser console).
-         Turning it OFF to work around the outage caused a SECOND, worse outage:
+    <!-- ==== THE ACTUAL ROOT CAUSE OF THE 2026-09-06 OUTAGE (everything above it was wrong) ====
+         KEEP THE Microsoft.AspNetCore.Components.WebAssembly PACKAGE VERSION EQUAL TO THE INSTALLED
+         WASM RUNTIME PACK. They were skewed, and that is the whole bug:
+             runtime pack linked : Microsoft.NETCore.App.Runtime.Mono.browser-wasm  10.0.11
+             package pinned      : Microsoft.AspNetCore.Components.WebAssembly      10.0.8
+         The native Mono runtime (dotnet.native.wasm) came from 10.0.11 while the managed framework
+         assemblies, System.Private.CoreLib included, came from 10.0.8. The interpreter then executed
+         IL it did not recognise and died:
              MONO interpreter: NIY encountered in method System.OutOfMemoryException:.ctor (string)
              [MONO] * Assertion: should not be reached at interp.c:4135
              MONO_WASM: mono_wasm_load_runtime () failed
-         The WASM heap is exhausted while LOADING THE RUNTIME, before any app code runs, because an
-         untrimmed publish ships 208 assemblies (the whole desktop framework surface: System.Windows,
-         WindowsBase, System.ServiceProcess, mscorlib, netstandard) instead of 60. The interpreter then
-         hits a not-implemented path constructing the OutOfMemoryException itself, so it dies on an
-         assertion rather than reporting cleanly, and Blazor.start() neither resolves nor rejects,
-         which is exactly why the boot screen hung forever with no error and no fallback panel.
-         So: trimming ON. It is what keeps this app inside the WASM memory budget at all. -->
+         mono_wasm_load_runtime failing means it never reached app code, so Blazor.start() neither
+         resolved nor rejected and the boot screen hung with no error and no fallback panel.
+         WHY IT SURFACED WHEN IT DID, which is the part worth remembering: the SDK was updated to
+         10.0.11 at some point, and dist/ is NOT rebuilt by ordinary checkpoint pushes (those are a
+         deliberate data-only fast path). So the skew lay dormant until the first real rebuild, which
+         happened to be the HoloKernel-to-Prism migration deploy. The migration got the blame; it was
+         innocent. Bump these packages whenever `dotnet --list-runtimes` moves.
+         Trimming is ON below, but that is NOT what fixed this. It is on because it is simply better
+         here: 60 assemblies and 3.6 MB brotli against 208 and 6.2 MB untrimmed. -->
+
     <PublishTrimmed>true</PublishTrimmed>
     <RunAOTCompilation>false</RunAOTCompilation>
     <!-- -O2 (the Release default) makes the emcc/wasm-opt link step OOM-fail on this dev machine whenever
@@ -111,8 +120,8 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly" Version="10.0.8" />
-    <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly.DevServer" Version="10.0.8" PrivateAssets="all" />
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly" Version="10.0.11" />
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly.DevServer" Version="10.0.11" PrivateAssets="all" />
   </ItemGroup>
 
   <!-- HoloKernel: a sibling project IN THIS SAME REPO (AboutUs\HoloKernel), not MonoRepo — a ProjectReference
