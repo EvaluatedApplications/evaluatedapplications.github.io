@@ -14,8 +14,28 @@
          PublishTrimmed=true, so also testing whether the old "EvalApp step factory reflection" trim
          blocker is actually still true: EvalApp was fixed to be trim-safe (a `new()` constraint on
          its step-builder generics) earlier THIS session, so the comment this replaces may be stale. -->
-    <PublishTrimmed>true</PublishTrimmed>
-    <RunAOTCompilation>true</RunAOTCompilation>
+    <!-- TRIM + AOT DISABLED 2026-09-06 to restore a DOWN site, deliberately and temporarily.
+         Symptom: /tools/prism loaded every assembly, compiled the WebAssembly module in 156ms, then
+         froze on the boot screen forever. Prism.razor's own checkpoint-fetch narration never printed,
+         so the app died between Blazor.start() and the first component rendering, i.e. before any
+         model code ran. Bundle delivery was ruled out: every assembly present, correct size, all 200
+         from the live host, nothing zero-length.
+         That leaves a startup-time runtime failure, and trimming/AOT is by far the largest source of
+         those, because both fail at RUN time rather than build time and nothing in a green build tells
+         you. This app's own csproj comment (above) records that trimming was only ever enabled as an
+         EXPERIMENT, on the assumption a since-fixed EvalApp reflection blocker no longer applied.
+         EvalApp still emits real IL2026/IL2087/IL2090 trim warnings (JsonSerializer,
+         Activator.CreateInstance, Type.GetProperties) that the trimmer cannot see through, and the
+         dependency graph changed twice recently (HoloKernel onto the Prism package, then ILGPU
+         removed), which is exactly what reshapes a trim graph.
+         Cost of turning it off is real but bounded: a bigger download and slower numeric loops. The
+         benefit is that a non-trimmed, non-AOT WASM build runs the same code path as `dotnet run`,
+         which has never exhibited this. A working slow tool beats a fast broken one.
+         RunAOTCompilation REQUIRES PublishTrimmed, so both move together.
+         RE-ENABLE only after reproducing the failure in a browser and fixing the real root cause,
+         with a trim descriptor or an explicit root, not by flipping this back and hoping. -->
+    <PublishTrimmed>false</PublishTrimmed>
+    <RunAOTCompilation>false</RunAOTCompilation>
     <!-- -O2 (the Release default) makes the emcc/wasm-opt link step OOM-fail on this dev machine whenever
          PrismStudio is also running its own live training (which holds about 15 GB resident): confirmed
          reproducible across four failed attempts, always dying at the identical wasm-opt invocation, and
