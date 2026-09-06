@@ -76,16 +76,29 @@ public sealed record ModelSpec
     /// <summary>
     /// True when this shape can actually be SERVED at its own K.
     ///
-    /// VERIFIED CONSTRAINT (AlgFormer 1.5.0, measured): the weight-tied K-pass is single-layer only.
-    /// With <c>Layers &gt; 1</c> and <c>K &gt; 1</c>, both <c>LogitsFor</c> and <c>IterAccumulate</c>
-    /// throw <c>NotSupportedException("Iter oracle: L=1 only.")</c>.
+    /// OBSOLETE CONSTRAINT, kept as a property only so existing callers still compile: this now
+    /// always returns true.
     ///
-    /// The nasty part is the asymmetry: <c>StackIterAccumulateAllPos</c> with K&gt;1 works fine on a
-    /// multi-layer model. So a deep model can be TRAINED at K&gt;1 and then fail the moment you try
-    /// to serve it — a trap that would only surface at inference time, long after the training run.
-    /// Caught here at construction instead.
+    /// It WAS real and measured against AlgFormer 1.5.0: with <c>Layers &gt; 1</c> and <c>K &gt; 1</c>,
+    /// <c>LogitsFor</c> and <c>IterAccumulate</c> threw <c>NotSupportedException("Iter oracle: L=1
+    /// only.")</c>, while <c>StackIterAccumulateAllPos</c> trained such a model perfectly well — so a
+    /// deep model could be TRAINED at K&gt;1 and then fail the instant you served it. This type
+    /// rejected that shape up front rather than letting it surface at inference time.
+    ///
+    /// AlgFormer FIXED it on 2026-08-28 (we are on 2.4.0). <c>HoloFormer.IterAwareForward</c> now
+    /// dispatches <c>Layers &gt; 1 &amp;&amp; Iters &gt; 1</c> to <c>StackIterForward</c> with a uniform
+    /// per-layer alpha array, and that comment names closing this exact gap as its purpose. So the
+    /// guard below had become a stale rule that would REJECT a genuinely servable model.
+    ///
+    /// Found 2026-09-06 the practical way: the live PrismStudio checkpoint grew a second layer at
+    /// round 372,612 while still training at StackK=2, producing precisely the shape this used to
+    /// forbid. It serves correctly. Prism was never affected, because <c>HoloSession.FromCheckpoint</c>
+    /// passes <c>spec: null</c> and so never runs <see cref="Validate"/> at all; only the
+    /// build-from-spec path did, which is why nothing broke. Left as a permanently-true property
+    /// rather than deleted, so any caller reading it gets the corrected answer instead of a
+    /// compile error pointing nowhere.
     /// </summary>
-    public bool SupportsKPassServing => Layers == 1 || KPass <= 1;
+    public bool SupportsKPassServing => true;
 
     /// <summary>Throws if the shape is internally inconsistent. Called by <see cref="Build"/>.</summary>
     public void Validate()
