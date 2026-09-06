@@ -14,12 +14,23 @@
   </ItemGroup>
 
   <!-- NuGet ONLY, never a MonoRepo ProjectReference — same hard boundary Showroom keeps.
-       AlgFormer 2.2.0 is the version Showroom already ships (bumped from 1.5.0, 2026-09-04 —
-       see Showroom/CLAUDE.md's "Checkpoint refresh + AlgFormer 2.2.0 bump"); every signature
-       this project calls was verified by reflection against THIS exact DLL, not assumed. -->
+       AlgFormer 2.3.0 (bumped from 2.2.0, transitively required by Prism 1.0.0's own dependency —
+       both real, already-published nuget.org versions, verified 2026-09-05); every signature this
+       project calls was verified by reflection against THIS exact DLL, not assumed.
+
+       EvaluatedApplications.Prism 1.0.0 (added 2026-09-05, first consumer migration) — Decoding.cs's
+       DecodePolicy/Gate/GateDecision/DegenGuard hand-copies are GONE; InspectorTrace.cs and Showroom's
+       call sites now use Prism.Inference directly. NOT YET ON NUGET.ORG (Prism.csproj stays
+       IsPackable=false by design, see Prism/CLAUDE.md) — this reference only resolves once a REAL
+       Prism NuGet source is registered (a local `dotnet pack -p:IsPackable=true` plus a temporary
+       `dotnet nuget add source` restore was how this migration was build-verified; no
+       nuget.config was added to this repo, see Showroom/CLAUDE.md's Prism-migration section for the
+       exact commands) until a real publish happens. Do not `dotnet restore`/build this project on a
+       machine without that feed configured. -->
   <ItemGroup>
     <PackageReference Include="Microsoft.AspNetCore.Components.Web" Version="10.0.8" />
-    <PackageReference Include="EvaluatedApplications.AlgFormer" Version="2.2.0" />
+    <PackageReference Include="EvaluatedApplications.AlgFormer" Version="2.3.0" />
+    <PackageReference Include="EvaluatedApplications.Prism" Version="1.0.0" />
   </ItemGroup>
 
 </Project>

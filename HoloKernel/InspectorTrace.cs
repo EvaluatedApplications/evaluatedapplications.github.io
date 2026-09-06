@@ -1,4 +1,5 @@
 using PrismFormer;
+using Prism.Inference;
 
 namespace HoloKernel;
 
@@ -8,6 +9,10 @@ public sealed record PassSnapshot(int Pass, double[] Face, double[] Logits, int 
 /// <summary>
 /// Everything observable about a single emission: how the answer firmed up across the K passes,
 /// what the model was resonating with, and why the gate chose what it chose.
+///
+/// <see cref="Gate"/>'s type is <c>Prism.Inference.GateDecision</c> (migrated 2026-09-05, replacing
+/// this package's own hand-copy) — see HoloKernel.csproj's own comment for why this only builds
+/// against a local Prism feed today.
 /// </summary>
 public sealed record PositionTrace(
     IReadOnlyList<PassSnapshot> Passes,

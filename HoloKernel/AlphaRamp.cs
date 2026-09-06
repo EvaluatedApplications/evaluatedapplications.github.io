@@ -27,20 +27,14 @@ public sealed class AlphaRamp
 
     public void Reset() => Steps = 0;
 
-    /// <summary>
-    /// Reconstruct the alpha a persisted checkpoint was actually trained at.
-    ///
-    /// This matters because <c>HoloFormer.Iters</c> / <c>IterAlphaServe</c> are NOT persisted by
-    /// <c>Serialize()</c> (verified by round-tripping a real checkpoint — they always read back 1),
-    /// so a loaded model cannot tell you its own K or alpha. They have to come from sidecar
-    /// metadata, and alpha has to be recomputed from the training-round counter.
-    ///
-    /// Valid for SINGLE-LAYER checkpoints (addRound is per-layer); callers with Layers > 1 or
-    /// missing metadata should fall back to 1.0 rather than trusting this.
-    /// </summary>
-    public static double Reconstruct(long trainedRounds, long addRound, int iterWarm)
-    {
-        if (iterWarm <= 0) return 1.0;
-        return Math.Clamp((double)(trainedRounds - addRound) / iterWarm, 0.0, 1.0);
-    }
+    // Reconstruct(trainedRounds, addRound, iterWarm) used to live here as a hand-copy of the pure
+    // ramp formula (`clamp((trainedRounds-addRound)/iterWarm, 0, 1)`) — REMOVED 2026-09-05, migrated
+    // to Prism: `Prism.Lineage.LineageJournal.AlphaFor(round, addRound, iterWarm)` is the byte-
+    // identical static formula (confirmed against source, not assumed), so callers reconstructing a
+    // checkpoint's mid-ramp alpha from sidecar metadata (Prism.razor, Analyst.razor's novelty scan)
+    // now call that directly instead of a second copy of the same math living here. This class's
+    // remaining members (WarmSteps/Steps/Alpha/Advance/Reset/Complete) are a DIFFERENT concept — a
+    // live, stateful, per-step ramp driver `RefinementLoop` advances during training — and have no
+    // Prism equivalent (Prism.Lineage is a stamped-history journal, not a live ramp object), so they
+    // stay here unchanged.
 }

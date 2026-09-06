@@ -10,6 +10,9 @@
 @using HoloDb
 @using PrismFormer
 @using HoloKernel
+@* global:: required — see Prism.razor's own @using comment: Showroom.Pages.Prism (the Prism tool's
+   page class) shadows the "Prism" NuGet package's root namespace in this app's generated namespace. *@
+@using global::Prism.Lineage
 
 <PageTitle>The Analyst — free in-browser data analytics</PageTitle>
 
@@ -1326,8 +1329,9 @@
 
     // Lazy checkpoint load: only ever runs from RunNoveltyScan, never from OnInitialized — the whole point of
     // making this opt-in. Mirrors Prism.razor's own OnInitializedAsync sequence (same sidecar files, same
-    // FromCheckpoint(bytes, kPass, alpha) call, same AlphaRamp.Reconstruct call for a mid-ramp snapshot) rather
-    // than re-deriving it differently. Sidecar metadata (rounds/stackK/iterWarm) is fetched fresh here even when
+    // FromCheckpoint(bytes, kPass, alpha) call, same LineageJournal.AlphaFor call for a mid-ramp snapshot —
+    // migrated 2026-09-05 off HoloKernel's own AlphaRamp.Reconstruct hand-copy) rather than re-deriving it
+    // differently. Sidecar metadata (rounds/stackK/iterWarm) is fetched fresh here even when
     // Prism already loaded the model, because SessionHost's factory only ever runs ONCE per key — if Prism (or
     // Creature/Forecaster) got there first, GetOrCreateAsync below just returns their already-built session and
     // this method's own locally-fetched K/alpha are discarded in favour of the real session's ground truth.
@@ -1359,7 +1363,7 @@
                 var peek = HoloFormer.Deserialize(bytes);
                 var kPass = stackK ?? 1;
                 var alpha = (peek.Layers == 1 && rounds is not null && iterWarm is > 0)
-                    ? AlphaRamp.Reconstruct(rounds.Value, addRound: 0, iterWarm.Value)
+                    ? LineageJournal.AlphaFor((int)rounds.Value, addRound: 0, iterWarm.Value)
                     : 1.0;
                 return HoloSession.FromCheckpoint(bytes, kPass, alpha);
             });
@@ -1374,8 +1378,8 @@
     }
 
     // Softmax-and-look-up the TRUE next token's probability — the same numerically-stable pattern
-    // (subtract the max before exponentiating) HoloKernel.Gate.Evaluate/TopK already use, just reading one
-    // specific index back out instead of the top-1 or top-K. No sampling, no Gate.Pick, nothing generated.
+    // (subtract the max before exponentiating) Prism.Inference.Gate.Evaluate/TopK already use, just reading
+    // one specific index back out instead of the top-1 or top-K. No sampling, no Gate.Pick, nothing generated.
     static double SurprisalBits(double[] logits, int vocab, int trueId)
     {
         double max = logits[0];

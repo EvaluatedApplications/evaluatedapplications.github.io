@@ -4,6 +4,13 @@
 @using System.Text
 @using PrismFormer
 @using HoloKernel
+@* global:: required — this page's own generated class is Showroom.Pages.Prism (route "/prism"),
+   which shadows the "Prism" NuGet package's root namespace in this exact scope (CS0426 without it,
+   confirmed by trying the plain form first: the razor codegen emits @using directives INSIDE the
+   generated Showroom.Pages namespace block, where the sibling Prism page class takes precedence
+   over the global Prism namespace of the same simple name). *@
+@using global::Prism.Inference
+@using global::Prism.Lineage
 
 <PageTitle>Prism — autocomplete with a live holographic-transformer checkpoint</PageTitle>
 
@@ -112,10 +119,23 @@
 </div>
 
 @code {
-    // ---- decode policy — ported onto HoloKernel's DecodePolicy 2026-08-28 (was 4 local consts + a hand-rolled
-    // GateInfo/PickToken pair; DecodePolicy.Default carries the exact same thresholds, ported verbatim from
-    // PrismStudio's HoloEngine originally, so these numbers are unchanged, just centralised now).
-    static readonly DecodePolicy Policy = DecodePolicy.Default;   // ConfidentThreshold=0.60, Temperature=0.80, FloorK=3.0, DegenRepeat=4
+    // ---- decode policy — migrated onto Prism.Inference.DecodePolicy 2026-09-05 (was HoloKernel's own
+    // hand-copy of the same type, ported from PrismStudio's HoloEngine originally 2026-08-28; the
+    // numbers are unchanged, just single-sourced in Prism now). ConfidentThreshold=0.60, Temperature=
+    // 0.80, Floor=ResonanceSigma, FloorK=3.0, DegenRepeat=4 — all confirmed identical to the values
+    // this page ran before the migration.
+    //
+    // DegenNonGreedyRun explicitly ZEROED, not left at Prism's own Default (5): Prism.Inference.
+    // DegenGuard fires on TWO independent triggers (repeat-count AND a non-greedy-pick streak);
+    // HoloKernel's now-removed DegenGuard only ever implemented the repeat trigger. Adopting the
+    // second trigger at its live default would make generation on this deployed page stop EARLIER
+    // than it does today — a real, visible behaviour change nobody asked for. `DegenGuard.Observe`
+    // treats a threshold <= 0 as "disabled" (see Prism.Inference.DegenGuard's own doc), so this `with`
+    // keeps every other field at Prism's real production default while making the new trigger inert —
+    // net effect: byte-for-byte the same decode as before this migration. Enabling it for real (a
+    // second, separate degeneracy signal — see DegenGuard's own doc for the "ABAB" blind spot it
+    // would help with) is a deliberate follow-on decision for the user, not taken here.
+    static readonly DecodePolicy Policy = DecodePolicy.Default with { DegenNonGreedyRun = 0 };
     // The real stop condition is CharVocab.End (the model's own stop token) or DegenGuard catching a
     // collapsed repeat run — those are unchanged and still fire first when they fire at all.
     //
@@ -129,15 +149,22 @@
     // instruction (2026-09-04): "clip the prism output to its context length. So it doesn't ramble
     // on" — ties directly to a separately-verified finding the same day that raw autoregressive
     // generation gets visibly more garbled the further it runs past its trained context.
-    // Cap is now read LIVE off the loaded checkpoint's own context window, not hardcoded. Widened
-    // 2026-09-04 (direct instruction) from a 1x multiple to a 2x multiple of the model's real context
-    // window: at 1x, generation stopped the instant the ENTIRE window BuildContext feeds back into the
-    // model was something it wrote itself — a real anchor point, but tighter than needed. 2x still ties
-    // the cap to the model's own real context window rather than an arbitrary constant (the old flat 600
-    // let a run wander ~18x past the one window the model can actually see, which is the problem this
-    // whole live-read mechanism exists to avoid) — it just allows one extra full window's worth of
-    // unanchored drift past that point before the outer backstop cuts in, instead of zero.
-    int MaxReplyChars => (_stats?.Context ?? 32) * 2;
+    // Cap is now read LIVE off the loaded checkpoint's own context window, not hardcoded.
+    //
+    // MULTIPLIER REMOVED 2026-09-05 (direct instruction: "only have prism generate its context length
+    // again, no multiplier") — back to a straight 1x, i.e. the r143,776 behaviour. History, so nobody
+    // re-widens it by accident: 1x was the original clip, widened to 2x on 2026-09-04 on the reasoning
+    // that stopping the instant the ENTIRE visible window is self-written was "tighter than needed" and
+    // one extra window of unanchored drift was acceptable. That call is now reversed. 1x is the honest
+    // anchor point: past exactly one context window, every token BuildContext feeds back into the model
+    // is something the model wrote itself, with none of the visitor's prompt still in view — so anything
+    // generated beyond that is drift by construction, which is the whole thing this live-read cap exists
+    // to stop. This matters MORE at context 48 than it did at 32, since 2x now meant 96 characters of
+    // which the back half was structurally unanchored.
+    //
+    // CharVocab.End and DegenGuard still fire first when they fire at all; this only tightens the outer
+    // backstop.
+    int MaxReplyChars => _stats?.Context ?? 32;
 
     HoloSession? _session;
     ModelStats? _stats;
@@ -175,8 +202,9 @@
     // hand-editing these files).
     int? _trainedStackK;
     int? _trainedIterWarm;
-    double _trainedAlpha = 1.0;   // reconstructed below via HoloKernel's AlphaRamp.Reconstruct (the SAME formula
-    // HoloEngine.AlphaFor uses) — a mid-ramp snapshot deserves a mid-ramp alpha, not a flat 1.0 guess (that would
+    double _trainedAlpha = 1.0;   // reconstructed below via Prism.Lineage.LineageJournal.AlphaFor (migrated
+    // 2026-09-05 off HoloKernel's own AlphaRamp.Reconstruct hand-copy — byte-identical formula, confirmed
+    // against source, single-sourced in Prism now) — a mid-ramp snapshot deserves a mid-ramp alpha, not a flat 1.0 guess (that would
     // ALSO misrepresent it, just in the opposite direction). Only valid for a single-layer checkpoint (layer 0's
     // real add-round is 0 by construction — it's present from round 0); falls back to 1.0 (fully composed) if the
     // checkpoint ever ships with >1 layer, or if either metadata file is missing. ALWAYS served (no "what if"
@@ -262,7 +290,7 @@
                 // can be built.
                 Finish(sb, $"{gzLen:N0} B gzip → {bytes.Length:N0} B → {peek.ParamCount:N0} params deserialized");
                 var alpha = (peek.Layers == 1 && _rounds is not null && _trainedIterWarm is > 0)
-                    ? AlphaRamp.Reconstruct(_rounds.Value, addRound: 0, _trainedIterWarm.Value)
+                    ? LineageJournal.AlphaFor((int)_rounds.Value, addRound: 0, _trainedIterWarm.Value)
                     : 1.0;
                 // HoloSession.FromCheckpoint requires K/alpha as explicit ctor args — the kernel enforces the
                 // "checkpoint doesn't carry them" gotcha by construction rather than a footnote (see field comment).
@@ -273,7 +301,7 @@
             // Recomputed from the session actually in hand (not the factory's local "peek"/"alpha", which don't
             // exist on the reused-cache path) — same formula, so identical on a first-ever visit either way.
             _trainedAlpha = (_stats.Layers == 1 && _rounds is not null && _trainedIterWarm is > 0)
-                ? AlphaRamp.Reconstruct(_rounds.Value, addRound: 0, _trainedIterWarm.Value)
+                ? LineageJournal.AlphaFor((int)_rounds.Value, addRound: 0, _trainedIterWarm.Value)
                 : 1.0;
 
             // Real example round, seeded into _history BEFORE _loaded=true (2026-08-28) — REPLACES two
@@ -303,10 +331,14 @@
                 {
                     var ctx = BuildContext(seq, _stats.Context);
                     var logits = _session.Logits(ctx);
+                    // Evaluate before Pick to get the real greedy flag DegenGuard.Observe now needs (Prism.Inference's
+                    // second trigger) — Evaluate draws nothing from rng, so Pick's own draw/result is byte-identical
+                    // to calling Pick alone, same decode as before this migration.
+                    var decision = Gate.Evaluate(logits, vocabLimit, Policy);
                     var t = Gate.Pick(logits, vocabLimit, Policy, Random.Shared);
                     if (t == CharVocab.End) break;
                     outIds.Add(t); seq.Add(t);
-                    if (guard.Observe(t)) { trailedOff = true; break; }
+                    if (guard.Observe(t, decision.Greedy)) { trailedOff = true; break; }
                 }
                 var shown = _vocab.Decode(outIds).TrimEnd();
                 var continuationText = shown.Length > 0 ? shown : "(blank — this checkpoint is still very early in training)";
@@ -429,7 +461,8 @@
             var outIds = new List<int>();
             var revealed = new List<int>();
             var vocabLimit = _vocab.Size;
-            var guard = new DegenGuard(Policy);   // HoloKernel port of HoloEngine's ProbeDegenRepeat=4 —
+            var guard = new DegenGuard(Policy);   // Prism.Inference.DegenGuard (migrated 2026-09-05), repeat
+            // trigger only — see the Policy field comment above for why the non-greedy trigger is kept inert.
             // a known behaviour this early in training (the confidence gate still reads GREEDY on a
             // collapsed distribution), surfaced honestly rather than silently padded with spaces
             var trailedOff = false;
@@ -442,12 +475,17 @@
                 // full-recompute Inspector path did (removed 2026-08-28, see Showroom\CLAUDE.md). This
                 // call's own real latency IS the visible cadence now — see method comment.
                 var logits = _session.Logits(ctx);
+                // Evaluate before Pick for the real greedy flag (see the OnInitializedAsync example-run
+                // comment for why this is safe: Evaluate draws nothing from rng, so Pick's own draw/result
+                // is unchanged). One more O(vocab) pass here is negligible next to the ~100ms+ LogitsFor
+                // call this method's own comment already measures as the real cost.
+                var decision = Gate.Evaluate(logits, vocabLimit, Policy);
                 var t = Gate.Pick(logits, vocabLimit, Policy, Random.Shared);
 
                 if (t == CharVocab.End) break;   // stop marker — see tokenizer field comment for why this id doubles as "\n"
                 outIds.Add(t); seq.Add(t);
                 revealed.Add(t);
-                var stopping = guard.Observe(t);
+                var stopping = guard.Observe(t, decision.Greedy);
                 if (stopping) trailedOff = true;
 
                 // Batch the RENDER, not the compute (see method comment above): every token above is

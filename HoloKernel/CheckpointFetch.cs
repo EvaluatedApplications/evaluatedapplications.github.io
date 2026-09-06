@@ -22,8 +22,8 @@ namespace HoloKernel;
 /// Two real call sites share this (Prism.razor's own checkpoint load, and Analyst.razor's
 /// independent lazy load for its novelty-scan feature — same checkpoint, same file, loaded from a
 /// second place if Prism itself hasn't run yet) — same reasoning HoloKernel already centralises
-/// <see cref="AlphaRamp"/>/<see cref="Decoding.Gate"/> for: one real behaviour, not two copies that
-/// can silently drift apart.
+/// <see cref="AlphaRamp"/> for (and, since 2026-09-05, <c>Prism.Inference.Gate</c>): one real
+/// behaviour, not two copies that can silently drift apart.
 /// </summary>
 public static class CheckpointFetch
 {

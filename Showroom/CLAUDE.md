@@ -220,6 +220,44 @@ train at full K-pass composition from the first move/tick regardless of K's magn
 "is 300/40 steps still a gentle-enough ease-in at the real K=8" open question no longer applies;
 there is no ease-in to retune.
 
+**Prism-package migration proof (2026-09-05, BUILD-VERIFIED, NOT LANDED)**: `HoloKernel/Decoding.cs`
+(`DecodePolicy`/`Gate`/`GateDecision`/`DegenGuard`, hand-copies of `HoloEngine.PickToken`) is DELETED
+— those types now come straight from `EvaluatedApplications.Prism`'s `Prism.Inference` namespace
+(`InspectorTrace.cs` and all 4 tool pages updated to `@using global::Prism.Inference` — the `global::`
+is REQUIRED because `Showroom.Pages.Prism`, the Prism tool's own page class, shadows the `Prism`
+package's root namespace in the generated `Showroom.Pages` scope; a plain `@using Prism.Inference`
+fails CS0426). `HoloKernel/AlphaRamp.cs` kept its live stateful ramp (`WarmSteps`/`Advance`/`Alpha`/
+`Complete` — no Prism equivalent, a different concept from a stamped-history journal) but dropped its
+`Reconstruct` static formula; the 3 call sites (`Prism.razor` x2, `Analyst.razor`'s novelty-scan) now
+call `Prism.Lineage.LineageJournal.AlphaFor(round, addRound, iterWarm)` — confirmed the byte-identical
+formula, not assumed. **The one behavioural risk, handled deliberately**: Prism's `DegenGuard` adds a
+SECOND trigger (non-greedy-pick streak, default threshold 5) HoloKernel's port never had; `Prism.razor`'s
+`Policy` is `DecodePolicy.Default with { DegenNonGreedyRun = 0 }` (0 disables a trigger, per
+`DegenGuard`'s own doc) so live generation behaviour is UNCHANGED — enabling the second trigger for
+real is flagged as available, not taken here. `DegenGuard.Observe` also gained a required `greedy`
+parameter; both call sites now call `Gate.Evaluate` immediately before `Gate.Pick` to get it (`Evaluate`
+draws nothing from `rng`, so `Pick`'s own draw/result is unaffected — confirmed by a parity harness, not
+assumed). **Measured, not asserted**: a throwaway console harness reproducing the deleted HoloKernel
+`Gate.Pick`/`DegenGuard` verbatim found `Gate.Pick` 1000/1000 identical to `Prism.Inference.Gate.Pick`
+across 5 vocab sizes x 200 trials (paired seeded `Random`), `DegenGuard`'s collapse-step 50/50 identical
+across a 30-step token/greedy stream, and `AlphaRamp.Reconstruct` vs `LineageJournal.AlphaFor` identical
+on 8 boundary cases (rounds=0/mid-ramp/complete/past-complete, iterWarm=0). Verified builds: `dotnet
+build HoloKernel/HoloKernel.csproj -c Release` and `dotnet build Showroom.csproj -c Release` both green
+(0/0) against a LOCAL `dotnet pack` of `Prism.csproj` (`-p:IsPackable=true`, Prism's own file stays
+`IsPackable=false`) — required bumping `HoloKernel.csproj`'s and `Showroom.csproj`'s own AlgFormer
+`PackageReference` 2.2.0->2.3.0 (a real NU1605 downgrade error otherwise: Prism's own nupkg depends on
+AlgFormer >= 2.3.0, already published on nuget.org, so this is a real, not experimental, bump once
+Prism ships). **NOT LANDABLE YET, and deliberately not committed**: `EvaluatedApplications.Prism` is
+NOT published (`Prism.csproj` stays `IsPackable=false` by design, see `Prism/CLAUDE.md`) — CI's
+`deploy.yml` never builds Showroom (see "Deploy" in `AboutUs/CLAUDE.md`) so this doesn't block a normal
+site deploy, but nobody (including this working tree, right now) can restore `HoloKernel.csproj`/
+`Showroom.csproj` without a local Prism feed. Landing this needs: a coordinator decision to actually
+publish Prism (flip `IsPackable`, set a real version, push), then this same diff restores/builds clean
+against nuget.org with no local feed. **Flagged for the coordinator**: `Prism/CLAUDE.md`'s own
+"Consumers: None yet" line and `AboutUs/CLAUDE.md`'s separate HoloKernel section are now stale w.r.t.
+this proof — route to `prism-owner`/`website-owner` respectively rather than edited from here (out of
+this agent's package boundary).
+
 ## Boot screen — `wwwroot/index.html` + `wwwroot/css/boot.css`
 Retro-terminal boot log, authentically real not decorative: real file names as the WASM host fetches
 them (`loadBootResource` hook, pure observation, always returns `undefined` — zero added latency)
