@@ -76,7 +76,9 @@
          10.0.11 at some point, and dist/ is NOT rebuilt by ordinary checkpoint pushes (those are a
          deliberate data-only fast path). So the skew lay dormant until the first real rebuild, which
          happened to be the HoloKernel-to-Prism migration deploy. The migration got the blame; it was
-         innocent. Bump these packages whenever `dotnet --list-runtimes` moves.
+         innocent. Bump these packages whenever the installed runtime moves (check with the dotnet CLI's
+         list-runtimes command; its flag is spelled with two dashes, which cannot be written inside an
+         XML comment, hence this wording).
          Trimming is ON below, but that is NOT what fixed this. It is on because it is simply better
          here: 60 assemblies and 3.6 MB brotli against 208 and 6.2 MB untrimmed. -->
 
