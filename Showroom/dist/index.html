@@ -18,7 +18,7 @@
     <script type="importmap">{
   "imports": {
     "./_framework/blazor.webassembly.js": "./_framework/blazor.webassembly.w3qd1tpl0e.js",
-    "./_framework/dotnet.js": "./_framework/dotnet.ahg4qkzd7w.js",
+    "./_framework/dotnet.js": "./_framework/dotnet.4jeb62l7yp.js",
     "./_framework/dotnet.native.js": "./_framework/dotnet.native.awrvmeevr0.js",
     "./_framework/dotnet.runtime.js": "./_framework/dotnet.runtime.zbexyp8zrs.js"
   },
@@ -26,8 +26,8 @@
   "integrity": {
     "./_framework/blazor.webassembly.js": "sha256-lDXsDYFgm62F+YUvxES7IOTCXYpiHpU3uR45YdC6mq4=",
     "./_framework/blazor.webassembly.w3qd1tpl0e.js": "sha256-lDXsDYFgm62F+YUvxES7IOTCXYpiHpU3uR45YdC6mq4=",
-    "./_framework/dotnet.ahg4qkzd7w.js": "sha256-kjl+klbf863exfIMAUAddFxeIu3m2+Q1h7Pl7RVKBoM=",
-    "./_framework/dotnet.js": "sha256-kjl+klbf863exfIMAUAddFxeIu3m2+Q1h7Pl7RVKBoM=",
+    "./_framework/dotnet.4jeb62l7yp.js": "sha256-UDztVbGvWLI9ItN8asZpVzckT1l7k/nr+tTw8/QRfVU=",
+    "./_framework/dotnet.js": "sha256-UDztVbGvWLI9ItN8asZpVzckT1l7k/nr+tTw8/QRfVU=",
     "./_framework/dotnet.native.awrvmeevr0.js": "sha256-+gznh9JFMqQFphxR5y+zz28mAYmK2+BmCkoMpOyHizs=",
     "./_framework/dotnet.native.js": "sha256-+gznh9JFMqQFphxR5y+zz28mAYmK2+BmCkoMpOyHizs=",
     "./_framework/dotnet.runtime.js": "sha256-MZMguyke9CroSQl+L/SHIGFkPTD+LtYGXkXjAvwWx40=",
@@ -110,6 +110,14 @@
         <span class="dismiss">🗙</span>
     </div>
     <script>
+      // Prism chat auto-scroll. STICKY, not unconditional: a forced scroll happens when YOU send (you always
+      // want to see your own turn land), but during Prism's streaming reply it only scrolls if you were already
+      // near the bottom. That way scrolling up to re-read earlier turns mid-reply doesn't yank you back down.
+      window.prismScrollToBottom = function (el, force) {
+        if (!el) return;
+        if (!force && el.scrollHeight - el.scrollTop - el.clientHeight > 80) return;   // user has scrolled away — leave them alone
+        el.scrollTop = el.scrollHeight;
+      };
       // client-side file download for The Analyst's CSV export — nothing leaves the device
       window.analystDownload = function (name, text, mime) {
         var blob = new Blob([text], { type: mime || 'text/csv;charset=utf-8' });

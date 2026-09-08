@@ -92,6 +92,14 @@
         <span class="dismiss">🗙</span>
     </div>
     <script>
+      // Prism chat auto-scroll. STICKY, not unconditional: a forced scroll happens when YOU send (you always
+      // want to see your own turn land), but during Prism's streaming reply it only scrolls if you were already
+      // near the bottom. That way scrolling up to re-read earlier turns mid-reply doesn't yank you back down.
+      window.prismScrollToBottom = function (el, force) {
+        if (!el) return;
+        if (!force && el.scrollHeight - el.scrollTop - el.clientHeight > 80) return;   // user has scrolled away — leave them alone
+        el.scrollTop = el.scrollHeight;
+      };
       // client-side file download for The Analyst's CSV export — nothing leaves the device
       window.analystDownload = function (name, text, mime) {
         var blob = new Blob([text], { type: mime || 'text/csv;charset=utf-8' });

@@ -1,6 +1,7 @@
 @page "/prism"
 @inject HttpClient Http
 @inject HoloKernel.SessionHost Sessions
+@inject Microsoft.JSInterop.IJSRuntime JS
 @using System.Text
 @using PrismFormer
 @using HoloKernel
@@ -66,7 +67,9 @@
         </div>
 
         <div class="or-runs">
-            <div class="or-run-list">
+            @* the ref goes on .or-run-list, not .or-runs: the outer box is overflow:hidden, the inner list is
+               the one with max-height + overflow-y:auto, so it is the element that actually scrolls *@
+            <div class="or-run-list" @ref="_scrollBox">
                 @if (_turns.Count == 0)
                 {
                     <p class="hint">Say hi — this is a real turn-based chat, not one-shot autocomplete. Prism only
@@ -482,6 +485,17 @@
     // `await Task.Yield()` calls below add zero artificial wait; they exist only so the browser actually gets a
     // chance to paint the just-computed batch before the next real compute call blocks the UI thread again.
     const int RenderBatch = 4;
+
+    // The chat scroll container. Auto-scroll is STICKY rather than unconditional: forced when you send, and
+    // during Prism's streaming reply only if you were already near the bottom (see window.prismScrollToBottom
+    // in index.html). Scrolling up to re-read an earlier turn mid-reply therefore doesn't drag you back down.
+    ElementReference _scrollBox;
+    async Task ScrollToBottom(bool force)
+    {
+        try { await JS.InvokeVoidAsync("prismScrollToBottom", _scrollBox, force); }
+        catch { /* interop unavailable (prerender / torn-down circuit) — scrolling is cosmetic, never fail a reply over it */ }
+    }
+
     async Task Ask()
     {
         if (_session is null || _vocab is null || string.IsNullOrWhiteSpace(_prompt) || _generating) return;
@@ -492,6 +506,7 @@
         _generating = true; _error = null;
         StateHasChanged();
         await Task.Yield();   // let the user's own turn paint before the first real (~100ms+) compute call blocks the thread
+        await ScrollToBottom(force: true);   // your own turn always pulls the view down, whatever you were reading
 
         try
         {
@@ -502,11 +517,16 @@
                 _pendingReply = partial;
                 StateHasChanged();
                 await Task.Yield();
+                await ScrollToBottom(force: false);   // follow the stream, but only if the reader hasn't scrolled away
             });
             AddTurn(new ChatTurn(IsUser: false, Text: text, Reason: reason));
         }
         catch (Exception ex) { _error = "Prism stumbled: " + ex.Message; }
-        finally { _generating = false; _pendingReply = ""; StateHasChanged(); }
+        finally
+        {
+            _generating = false; _pendingReply = ""; StateHasChanged();
+            await ScrollToBottom(force: false);
+        }
     }
 
     void ClearChat()
