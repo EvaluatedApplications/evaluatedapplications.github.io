@@ -1007,6 +1007,40 @@ user should confirm `/tools/prism` loads the current (r253,570) checkpoint, the 
 empty, generation stops within two context-windows' worth of characters (the seventh pass's 2x cap,
 not the earlier 1x), and Ask/Continue works with the 192-vocab shape, on a fresh `dist/` deploy.
 
+**Turn-based chat rework (2026-09-08) — Prism went from one-shot autocomplete to a real chat with
+rolling context, matching how the model is trained.** Wire format is `PrismFormer.GroupChat`'s own
+tags (`MonoRepo\AlgFormer\PairSource.cs`): `HumanTag="user: "`, `AiTag="prism: "`, newline-separated
+turns — not invented, and not identity-swapped at serve time (`GroupChat.Pairs`'s human<->prism swap
+lives ONLY in ingestion; confirmed against its own doc comment). `Prism.razor` now: (1) keeps a
+`List<ChatTurn>` (bounded `TurnCap=60`, supersedes the old `HistoryCap=40`); (2) on every Send,
+builds the full transcript (`tag+text+"\n"` per turn, one line = one turn), caps it to the loaded
+checkpoint's own `_stats.Context` TOKENS via a ported `StudioModel.CapRecent` (drops whole leading
+turns, never mid-turn, so a capped context always starts at a turn boundary — measured through this
+checkpoint's OWN vocab, not a generic default table); (3) primes it exactly like
+`StudioModel.Serve`: `(t.EndsWith("\n") ? t : t+"\n") + GroupChat.AiTag`, no swap, model answers as
+itself; (4) generation now STOPS on `CharVocab.End` (id 95) as a token-id check before appending —
+never decoded/shown/fed back — with a `StopReason` (`Stop`/`DegenLoop`/`Cap`) recorded per Prism turn
+and surfaced in the UI (only `DegenLoop`/`Cap` get a visible note; a clean `Stop` needs none). One
+`GenerateReplyAsync` helper now serves both the boot-time seed exchange and every real Send click
+(previously two independent loops) — a real de-duplication, not just a rename. `DegenGuard`
+(`Prism.Inference`, still `DegenNonGreedyRun=0`, unchanged from the prior migration) stays in the
+loop; a short first turn ("Hello!", "hi") is the checkpoint's known hardest case (greedy decode can
+collapse to a repeated-space loop on short prompts — measured, not assumed, on this exact family of
+model) and is left to surface honestly as `StopReason.DegenLoop`, not papered over with padding or a
+canned opener. **L6/K2 serving confirmed, not assumed**: read `HoloKernel/ModelSpec.cs` directly —
+`SupportsKPassServing` is now permanently `true` (AlgFormer 2.4.0 fixed the old L=1-only K-pass
+serving gap on 2026-08-28, and this was independently confirmed live in production on 2026-09-06
+against a real checkpoint that grew a SECOND layer mid-training at `StackK=2` — it served correctly).
+Irrelevant to `HoloSession.FromCheckpoint` either way, since that path passes `spec:null` and never
+runs `ModelSpec.Validate()` at all — `HoloFormer.LogitsFor` itself dispatches any `Layers>1` shape to
+`StackIterForward`. So a future `d96 S16 L6 ctx192 V256 K=2` checkpoint needs zero code changes here
+to serve; this task did not build or test that specific checkpoint (out of scope — data refresh is a
+separate, deliberate step per this section's own standing discipline). Build-verified only (`dotnet
+build Showroom.csproj -c Release`, 0/0) — **not verified live** (no browser here): the user should
+open `/tools/prism`, send a short message first (watch for the honest degenerate-loop flag rather
+than a hang), then a longer one, and confirm the rolling window actually drops old turns once a
+conversation runs past `_stats.Context` tokens.
+
 ## Unlisted: RecycleDAO marketplace prototype — `Pages/RecycleDaoDemo.razor` (`/recycledao-demo`)
 NOT a package-capability demo and NOT in the public gallery — a private, share-by-link-only client
 preview for the RecycleDAO PoC (`C:\Users\dongy\RecycleDAO`, separate repo, owned by

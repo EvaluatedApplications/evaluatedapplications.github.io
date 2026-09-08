@@ -398,23 +398,29 @@ table.result th.sortable:hover[b-d09k4y4jhw] { color: var(--accent-ink); }
 .stat .l[b-gmkja4afg6] { color: var(--ink-soft); font-size: 0.86rem; margin-top: 0.2rem; }
 .or-shape[b-gmkja4afg6] { margin: 0 0 1.4rem; }
 
-/* autocomplete runs — each run is one independent prompt-in/continuation-out pass, not a chat turn */
+/* turn-based chat — each .or-turn is one real message, "you" or "prism", rendered in order; the
+   rolling context cap (what the model actually sees) is computed in C# (Prism.razor), not here */
 .or-runs[b-gmkja4afg6] { border: 1px solid var(--border); border-radius: 14px; background: var(--bg-2); overflow: hidden; }
-.or-run-list[b-gmkja4afg6] { max-height: 320px; overflow-y: auto; padding: 0.9rem 1rem; display: flex; flex-direction: column; gap: 0.7rem; }
-.or-run[b-gmkja4afg6] { font-size: 0.95rem; line-height: 1.6; }
-.or-prompt[b-gmkja4afg6] { color: var(--ink); }
-.or-cont[b-gmkja4afg6] { color: var(--accent-ink); }
-.or-run.pending .or-cont[b-gmkja4afg6] { opacity: 0.85; }
+.or-run-list[b-gmkja4afg6] { max-height: 420px; overflow-y: auto; padding: 0.9rem 1rem; display: flex; flex-direction: column; gap: 0.6rem; }
+.or-turn[b-gmkja4afg6] { font-size: 0.95rem; line-height: 1.6; max-width: 88%; padding: 0.55rem 0.8rem; border-radius: 12px; border: 1px solid var(--border-2); }
+.or-turn.user[b-gmkja4afg6] { align-self: flex-end; background: var(--surface); color: var(--ink); border-bottom-right-radius: 3px; }
+.or-turn.prism[b-gmkja4afg6] { align-self: flex-start; background: var(--bg); color: var(--ink); border-bottom-left-radius: 3px; }
+.or-who[b-gmkja4afg6] { display: block; font-family: var(--mono); font-size: 0.7rem; letter-spacing: 0.04em; text-transform: uppercase; color: var(--ink-faint); margin-bottom: 0.15rem; }
+.or-turn.prism .or-text[b-gmkja4afg6] { color: var(--accent-ink); }
+.or-turn.pending .or-text[b-gmkja4afg6] { opacity: 0.9; }
 .car[b-gmkja4afg6] { display: inline-block; width: 0.5em; height: 1em; margin-left: 1px; vertical-align: -0.15em; background: var(--accent-ink); animation: car-blink-b-gmkja4afg6 0.9s steps(1) infinite; }
 @keyframes car-blink-b-gmkja4afg6 { 0%, 49% { opacity: 1; } 50%, 100% { opacity: 0; } }
 @media (prefers-reduced-motion: reduce) { .car[b-gmkja4afg6] { animation: none; opacity: 0.6; } }
-.or-note[b-gmkja4afg6] { display: block; font-size: 0.78rem; color: var(--ink-faint); margin-top: 0.15rem; }
+.or-note[b-gmkja4afg6] { display: block; font-size: 0.78rem; color: var(--ink-faint); margin-top: 0.3rem; }
 .or-input-row[b-gmkja4afg6] { display: flex; gap: 0.6rem; padding: 0.8rem 1rem; border-top: 1px solid var(--border); background: var(--surface); }
 .or-input[b-gmkja4afg6] { flex: 1; background: var(--bg-2); border: 1px solid var(--border-2); border-radius: 9px; padding: 0.55rem 0.8rem; color: var(--ink); font-size: 0.95rem; }
 .or-input:focus[b-gmkja4afg6] { outline: none; border-color: var(--accent); }
 .go[b-gmkja4afg6] { background: var(--accent); color: #fff; border: none; border-radius: 10px; padding: 0.55rem 1.2rem; font-size: 0.95rem; font-weight: 600; cursor: pointer; transition: filter 0.15s; }
 .go:hover:not(:disabled)[b-gmkja4afg6] { filter: brightness(1.08); }
 .go:disabled[b-gmkja4afg6] { opacity: 0.5; cursor: default; }
+.ghost[b-gmkja4afg6] { background: transparent; color: var(--ink-soft); border: 1px solid var(--border-2); border-radius: 10px; padding: 0.55rem 1rem; font-size: 0.9rem; cursor: pointer; }
+.ghost:hover:not(:disabled)[b-gmkja4afg6] { border-color: var(--accent); color: var(--ink); }
+.ghost:disabled[b-gmkja4afg6] { opacity: 0.4; cursor: default; }
 
 .outro[b-gmkja4afg6] { margin-top: 2.4rem; padding-top: 1.2rem; border-top: 1px solid var(--border); }
 .outro p[b-gmkja4afg6] { color: var(--ink-soft); font-size: 0.92rem; line-height: 1.55; margin: 0 0 1rem; }

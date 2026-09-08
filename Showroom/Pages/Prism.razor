@@ -12,17 +12,18 @@
 @using global::Prism.Inference
 @using global::Prism.Lineage
 
-<PageTitle>Prism — autocomplete with a live holographic-transformer checkpoint</PageTitle>
+<PageTitle>Prism — a live chat with a holographic-transformer checkpoint</PageTitle>
 
 <div class="room" data-cat="algformer">
     <header class="room-head">
         <nav class="crumb"><a href="/">Evaluated Applications</a> <span>/</span> Prism</nav>
         <h1>Prism</h1>
         <p class="lede">A real, trained <strong>HoloFormer</strong> checkpoint, downloaded once and run entirely in
-            this browser tab — nothing you type ever leaves this page. This is a <strong>technical demo, not a
-            finished product</strong>: what's deployed here is just the last checkpoint we bothered to push, to see
-            how training is going, not a curated "best" result — its behaviour will shift as the real model keeps
-            changing underneath it.</p>
+            this browser tab — nothing you type ever leaves this page. Chat with it turn by turn: it keeps a
+            rolling window of the conversation so far, the same shape it was actually trained on. This is a
+            <strong>technical demo, not a finished product</strong>: what's deployed here is just the last
+            checkpoint we bothered to push, to see how training is going, not a curated "best" result — its
+            behaviour will shift as the real model keeps changing underneath it.</p>
         <div class="badges">
             <span>Runs on your device, not our servers</span><span>Real trained checkpoint</span><span>Holographic-transformer brain</span>
         </div>
@@ -56,7 +57,7 @@
             <div class="stat"><div class="n">@_stats!.ParamCount.ToString("N0")</div><div class="l">real stored parameters</div></div>
             <div class="stat"><div class="n">@_stats.EquivCompute.ToString("N0")</div><div class="l">dense-transformer-equivalent compute / token</div></div>
             <div class="stat"><div class="n">@(_stats.ComputePerStoredParam.ToString("F0"))×</div><div class="l">compute bought per stored parameter</div></div>
-            <div class="stat"><div class="n">@_stats.Context</div><div class="l">tokens of context</div></div>
+            <div class="stat"><div class="n">@_stats.Context</div><div class="l">tokens of rolling chat memory</div></div>
         </div>
         <div class="badges or-shape">
             <span>d=@_stats.Dim</span><span>@_stats.Layers layer(s)</span><span>K=@_k pass(es)</span>
@@ -66,29 +67,48 @@
 
         <div class="or-runs">
             <div class="or-run-list">
-                @if (_history.Count == 0)
+                @if (_turns.Count == 0)
                 {
-                    <p class="hint">Type the start of a sentence — a word or two — and hit Continue. Each run starts
-                        fresh from only what's in the box; the context window above is small on purpose, and this
-                        checkpoint is early in training. No chat memory: nothing you typed in a previous run carries
-                        into the next one. Don't take our word for it that this is local: open your browser's dev
-                        tools, switch to the Network tab, then hit Continue — no new request fires. The checkpoint
-                        you already downloaded above is doing all the work, on your own CPU.</p>
+                    <p class="hint">Say hi — this is a real turn-based chat, not one-shot autocomplete. Prism only
+                        ever sees the last @_stats.Context tokens of the conversation (its trained context window):
+                        once you go past that, the oldest turns quietly fall off the front, dropped whole, never
+                        mid-sentence. Nothing is saved anywhere — close this tab and the conversation is gone. This
+                        checkpoint is early in training, so a short opener ("hi", "hello") is its hardest case:
+                        watch for a reply that never settles into words at all (flagged below as
+                        <em>settled into a repeat loop</em>) rather than something being quietly padded out for you.</p>
                 }
-                @foreach (var run in _history)
+                @foreach (var turn in _turns)
                 {
-                    <div class="or-run">
-                        <span class="or-prompt">@run.Prompt</span><span class="or-cont">@run.Continuation</span>
-                        @if (run.TrailedOff) { <span class="or-note">⋯ settled into a repeat loop (a known behaviour this early in training, not a bug)</span> }
+                    <div class="or-turn @(turn.IsUser ? "user" : "prism")">
+                        <span class="or-who">@(turn.IsUser ? "you" : "prism")</span>
+                        <span class="or-text">@DisplayText(turn)</span>
+                        @if (turn.Reason == StopReason.DegenLoop)
+                        {
+                            <span class="or-note">⋯ settled into a repeat loop (a known behaviour this early in training, not a bug)</span>
+                        }
+                        else if (turn.Reason == StopReason.Cap)
+                        {
+                            <span class="or-note">⋯ hit its reply-length limit without ever emitting its own stop token</span>
+                        }
                     </div>
                 }
-                @if (_generating) { <div class="or-run pending"><span class="or-prompt">@_pendingPrompt</span><span class="or-cont">@_pendingContinuation<span class="car" aria-hidden="true"></span></span></div> }
+                @if (_generating)
+                {
+                    <div class="or-turn prism pending">
+                        <span class="or-who">prism</span>
+                        <span class="or-text">@_pendingReply<span class="car" aria-hidden="true"></span></span>
+                    </div>
+                }
             </div>
             <div class="or-input-row">
                 <input class="or-input" @bind="_prompt" @bind:event="oninput" @onkeydown="OnKeyDown" disabled="@_generating"
-                       placeholder="Hello!" maxlength="60" />
+                       placeholder="Say hi to Prism" maxlength="140" />
                 <button class="go" @onclick="Ask" disabled="@(_generating || string.IsNullOrWhiteSpace(_prompt))">
-                    @(_generating ? "continuing…" : "Continue")
+                    @(_generating ? "thinking…" : "Send")
+                </button>
+                <button class="ghost" @onclick="ClearChat" disabled="@(_generating || _turns.Count == 0)"
+                        title="Forget this conversation — the checkpoint itself is untouched">
+                    Clear
                 </button>
             </div>
         </div>
@@ -96,20 +116,28 @@
         @if (_error is not null) { <p class="err">@_error</p> }
 
         <div class="outro">
-            <p><strong>What's happening when you hit Continue.</strong> Each prompt is bound into the model's
-                holographic memory as phase-and-magnitude patterns, then read back out by <em>resonance</em> — which
-                stored pattern rings loudest against the current context. Depth here isn't stacked layers: it's the
-                same small transformation re-run <strong>K=@_k</strong> times over its own output, weight-tied,
-                letting the pattern reinforce itself before a token is picked. All of it — tokenizing, binding,
-                resonance — runs as plain C# in this tab, on your own CPU.</p>
+            <p><strong>What's happening when you hit Send.</strong> Your message is added to the conversation as a
+                <code>user:</code> turn; the whole transcript — capped to the last @_stats.Context tokens, dropped
+                in whole turns so it never starts mid-sentence — is bound into the model's holographic memory as
+                phase-and-magnitude patterns, then read back out by <em>resonance</em>: which stored pattern rings
+                loudest against that context. Prism answers as itself, under its own <code>prism:</code> turn — it
+                isn't playing a role or reversing identities, it's just continuing the transcript in its own trained
+                voice. Depth here isn't stacked layers: it's the same small transformation re-run
+                <strong>K=@_k</strong> times over its own output, weight-tied, letting the pattern reinforce itself
+                before a token is picked. Generation stops the instant it emits its own trained stop token — every
+                bit of this (tokenizing, binding, resonance, the stop check) runs as plain C# in this tab, on your
+                own CPU.</p>
 
-            <p><strong>Where it stands, plainly.</strong> This is <strong>raw text continuation, not a chatbot</strong>:
-                trained on plain text with no notion of turns or "who's speaking," so every run starts fresh with
-                nothing carried over from an earlier one. Right now: @_stats!.ParamCount.ToString("N0") real stored
-                parameters, a @_stats.Vocab-token vocabulary, @_stats.Context tokens of context — early in an
-                ongoing training run, not a finished result. Expect short, rough continuations: real words and
-                near-grammatical fragments next to invented non-words, occasionally trailing into a repeated
-                character (flagged above as <em>settled into a repeat loop</em>, not hidden).</p>
+            <p><strong>Where it stands, plainly.</strong> This is a <strong>real chat with rolling memory</strong>,
+                not scripted: trained on "user: … / prism: …" transcripts, so it has some notion of a conversation —
+                but it is still early in an ongoing training run, not a finished result. Right now:
+                @_stats!.ParamCount.ToString("N0") real stored parameters, a @_stats.Vocab-token vocabulary,
+                @_stats.Context tokens of rolling context. Expect short, rough replies: real words and
+                near-grammatical fragments next to invented non-words, sometimes trailing into a repeated character
+                (flagged above as <em>settled into a repeat loop</em>, not hidden), and sometimes running all the
+                way to its own reply-length limit without ever emitting a stop token (flagged separately, above —
+                that token is only ever a training target on a small slice of what this checkpoint has seen, so
+                skipping it isn't unusual this early).</p>
 
             <p>The brain is <code>AlgFormer</code>'s holographic transformer — the same substrate behind
                 <a href="/creature">The Creature</a> and <a href="/forecaster">The Forecaster</a>. Pure managed
@@ -134,49 +162,31 @@
     // keeps every other field at Prism's real production default while making the new trigger inert —
     // net effect: byte-for-byte the same decode as before this migration. Enabling it for real (a
     // second, separate degeneracy signal — see DegenGuard's own doc for the "ABAB" blind spot it
-    // would help with) is a deliberate follow-on decision for the user, not taken here.
+    // would help with) is a deliberate follow-on decision for the user, not taken here. Unchanged by
+    // the 2026-09-08 turn-based-chat rework below — same policy, now applied once per CHAT TURN
+    // instead of once per one-shot completion.
     static readonly DecodePolicy Policy = DecodePolicy.Default with { DegenNonGreedyRun = 0 };
     // The real stop condition is CharVocab.End (the model's own stop token) or DegenGuard catching a
     // collapsed repeat run — those are unchanged and still fire first when they fire at all.
-    //
-    // SUPERSEDES the 2026-08-30 instruction below (kept for the record, no longer the live policy):
-    // "let it run until it actually stops, don't truncate mid-thought." That was a flat 600-char cap
-    // totally decoupled from the model's real context window (`_stats.Context` — 32 tokens on the
-    // live checkpoint as of this change). `BuildContext(seq, _stats.Context)` already trims the
-    // model's INPUT to only its last `Context` tokens every step — nothing capped how many NEW
-    // tokens got generated, so a run could wander up to ~18x past the one window the model can
-    // actually see at once, with everything before that window structurally invisible to it. Direct
-    // instruction (2026-09-04): "clip the prism output to its context length. So it doesn't ramble
-    // on" — ties directly to a separately-verified finding the same day that raw autoregressive
-    // generation gets visibly more garbled the further it runs past its trained context.
-    // Cap is now read LIVE off the loaded checkpoint's own context window, not hardcoded.
-    //
-    // MULTIPLIER REMOVED 2026-09-05 (direct instruction: "only have prism generate its context length
-    // again, no multiplier") — back to a straight 1x, i.e. the r143,776 behaviour. History, so nobody
-    // re-widens it by accident: 1x was the original clip, widened to 2x on 2026-09-04 on the reasoning
-    // that stopping the instant the ENTIRE visible window is self-written was "tighter than needed" and
-    // one extra window of unanchored drift was acceptable. That call is now reversed. 1x is the honest
-    // anchor point: past exactly one context window, every token BuildContext feeds back into the model
-    // is something the model wrote itself, with none of the visitor's prompt still in view — so anything
-    // generated beyond that is drift by construction, which is the whole thing this live-read cap exists
-    // to stop. This matters MORE at context 48 than it did at 32, since 2x now meant 96 characters of
-    // which the back half was structurally unanchored.
-    //
-    // CharVocab.End and DegenGuard still fire first when they fire at all; this only tightens the outer
-    // backstop.
     int MaxReplyChars => _stats?.Context ?? 32;
+    // ^ Per-reply token-step cap (one HoloFormer step, not one character — subwords can emit 2-4 chars
+    // per step). Read LIVE off the loaded checkpoint's own context window, never hardcoded: past
+    // exactly one context window of self-written text, every token BuildContext feeds back into the
+    // model is something the model wrote itself, with none of the human's own words still in view —
+    // so anything generated beyond that is drift by construction. This is now also the backstop for
+    // the turn-based chat below (see StopReason.Cap): a reply that neither emits the stop token nor
+    // triggers DegenGuard still can't run forever.
 
     HoloSession? _session;
     ModelStats? _stats;
-    SubwordVocab? _vocab;   // published PrismFormer.SubwordVocab — replaces this file's own hand-rolled greedy-
-                             // longest-match tokenizer (2026-08-28, verified safe against MonoRepo\AlgFormer\
-                             // SubwordVocab.cs before swapping, not assumed): CharN=>CharVocab.N=96 already treats
-                             // id 95 (CharVocab.End) as "\n" internally (Symbol(95)=="\n"), matching this file's
-                             // OWN "id 95 is both newline and the stop marker" quirk exactly — the ctor takes ONLY
-                             // the merges list (2-4 char strings), NOT the base chars (those are handled inside
-                             // the class), and Encode() folds non-printable input to space internally too, same
-                             // as this file's old Normalize() did by hand. Confirmed byte-for-byte equivalent
-                             // greedy-longest-match semantics, not just "close enough."
+    SubwordVocab? _vocab;   // published PrismFormer.SubwordVocab — the checkpoint's OWN vocab, loaded
+                             // from oracle-vocab.txt below (NOT the studio's shared default table —
+                             // this matters for CapRecent, which measures token counts through this
+                             // exact vocab). CharN=>CharVocab.N=96 already treats id 95 (CharVocab.End)
+                             // as "\n" internally (Symbol(95)=="\n"), matching this file's OWN "id 95 is
+                             // both newline and the stop marker" quirk exactly — the ctor takes ONLY the
+                             // merges list (2-4 char strings), NOT the base chars (handled internally),
+                             // and Encode() folds non-printable input (including '\n') to space.
     bool _loaded; string? _loadError; string? _error;
     long? _rounds;   // optional: only shown if data/oracle-rounds.txt was published alongside the checkpoint
 
@@ -198,45 +208,147 @@
     // live from `oracle-stackk.txt`/`oracle-iterwarm.txt` (same hand-off pattern as `oracle-rounds.txt`) carrying
     // PrismStudio's live `OneShotStackK`/`OneShotIterWarm` AT THE MOMENT this checkpoint snapshot was taken —
     // never hardcoded here, since both are the user's own live-hand-edited training knobs and change between
-    // snapshots (verified live 2026-08-28: StackK=8, IterWarm=20000 — re-check `HoloEngine.cs` again before ever
-    // hand-editing these files).
+    // snapshots.
     int? _trainedStackK;
     int? _trainedIterWarm;
-    double _trainedAlpha = 1.0;   // reconstructed below via Prism.Lineage.LineageJournal.AlphaFor (migrated
-    // 2026-09-05 off HoloKernel's own AlphaRamp.Reconstruct hand-copy — byte-identical formula, confirmed
-    // against source, single-sourced in Prism now) — a mid-ramp snapshot deserves a mid-ramp alpha, not a flat 1.0 guess (that would
-    // ALSO misrepresent it, just in the opposite direction). Only valid for a single-layer checkpoint (layer 0's
-    // real add-round is 0 by construction — it's present from round 0); falls back to 1.0 (fully composed) if the
-    // checkpoint ever ships with >1 layer, or if either metadata file is missing. ALWAYS served (no "what if"
-    // branch — K is fixed, so there's only ever the one real alpha to serve at); passed to HoloSession.
-    // FromCheckpoint as a MANDATORY argument (the kernel enforces this by construction — see field comment above).
+    double _trainedAlpha = 1.0;   // reconstructed below via Prism.Lineage.LineageJournal.AlphaFor — a mid-ramp
+    // snapshot deserves a mid-ramp alpha, not a flat 1.0 guess (that would ALSO misrepresent it, just in the
+    // opposite direction). Only valid for a single-layer checkpoint (layer 0's real add-round is 0 by
+    // construction — it's present from round 0); falls back to 1.0 (fully composed) if the checkpoint ever ships
+    // with >1 layer, or if either metadata file is missing. Multi-layer/K>1 serving itself is NOT gated by this —
+    // see the HoloSession.FromCheckpoint call below for why a deeper checkpoint (e.g. L6/K2) still serves
+    // correctly through the same call.
 
     int _k = 1;   // the model's one real trained depth — set once at load, never mutated (no slider, see field comments above)
     bool _generating;
     string _prompt = "";
-    string _pendingPrompt = "";   // shown in the "in progress" run while _generating — the prompt is cleared from the input immediately
-    string _pendingContinuation = "";   // streamed live, re-decoded after every emitted token while _generating —
-    // this is what makes generation render as a typewriter: the markup binds to THIS field, so the per-character
-    // StateHasChanged() call in the loop below actually has new text to paint (before this field existed, the
-    // pending run showed a static "…" placeholder the whole time, so those per-character renders painted nothing new).
-    // one entry per submission. Each run is INDEPENDENT — no prior run's prompt/continuation is ever fed back into the
-    // next one's context, so there is no accumulated "chat history"; this is autocomplete, not dialogue memory.
-    sealed record RunEntry(string Prompt, string Continuation, bool TrailedOff);
-    // Capped 2026-08-30 (real Arg_OutOfMemoryException report, "after some period of use" — i.e. many
-    // submissions in one session, not one giant submission). This list previously grew without bound for
-    // the life of the page: every submission appended one more entry forever. Blazor rebuilds + diffs this
-    // component's ENTIRE render tree on every StateHasChanged() call (there is no @key/virtualization here),
-    // so an unbounded _history means the per-render diff cost itself grows across a session — combined with
-    // the render-frequency fix in Ask() below (up to MaxReplyChars renders per submission — was a flat 600
-    // at the time this comment was written, now the live checkpoint's own context length, see MaxReplyChars'
-    // own field comment), this compounds: total render-diff work across a session was effectively unbounded
-    // on both axes at once. Fixed with the same "drop oldest" spirit Creature's `_log`/`_curve` and
-    // Forecaster's `_log`/`_accCurve` already use (see Showroom/CLAUDE.md) — HistoryCap is lower than those
-    // (40 vs 200-250) because each entry here can hold up to MaxReplyChars chars of real text plus its own
-    // DOM subtree, not a single short log line.
-    const int HistoryCap = 40;
-    readonly List<RunEntry> _history = new();
-    void AddHistory(RunEntry entry) { _history.Add(entry); if (_history.Count > HistoryCap) _history.RemoveAt(0); }
+    string _pendingReply = "";   // the in-flight reply, streamed live and re-decoded after every emitted batch of
+    // tokens while _generating — this is what makes generation render as a typewriter: the markup binds to THIS
+    // field, so the per-batch StateHasChanged() call in GenerateReplyAsync actually has new text to paint.
+
+    // ---- turn-based chat, rolling context (2026-09-08 rework — was one independent prompt-in/continuation-out
+    // pass per submission, no memory between runs; see git history for that shape). Wire format is NOT invented
+    // here: it's PrismFormer.GroupChat's own tags (MonoRepo\AlgFormer\PairSource.cs), the exact strings every
+    // training pair was built from — HumanTag="user: ", AiTag="prism: ", newline-separated turns. Framing is
+    // NATURAL, not identity-swapped: PairSource.cs's GroupChat.Pairs performs a human<->prism identity swap, but
+    // that swap lives ONLY in ingestion (turning a saved chat/group log into training pairs) — confirmed against
+    // GroupChat.Pairs' own doc comment and PairSource.cs:203 ("the swap lives only here (training) and in
+    // generation priming" — the "generation priming" half refers to StudioModel.GroupReply's own Swap()-based
+    // path, which this page does not use). At serve time Prism just answers as itself under its own "prism: "
+    // turn, matching StudioModel.Serve line-for-line (verified against source):
+    //     var primed = (t0.Length == 0 || t0.EndsWith("\n") ? t0 : t0 + "\n") + GroupChat.AiTag;
+    // The model does NOT emit its own "prism: " tag — Prime() below supplies it as part of the prime, and
+    // generation continues from there. The "prism"/"you" role label is rendered once per turn in the markup
+    // above; it is never part of the model's own output text.
+    sealed record ChatTurn(bool IsUser, string Text, StopReason? Reason = null);
+
+    enum StopReason
+    {
+        Stop,       // the model emitted its own trained stop token (CharVocab.End, id 95) — the clean case
+        DegenLoop,  // Prism.Inference.DegenGuard caught a repetition/low-confidence collapse and cut it short
+        Cap,        // ran to MaxReplyChars without either of the above. STOP (id 95) is only ever a training
+                    // TARGET on PAIR data — PairSource appends it after the answer — never on plain corpus
+                    // text, and pairs are a small minority of the live training mix (HoloEngine's own mix
+                    // comment puts them at roughly 1.5% of signal at the current MixAlpha). So this case is
+                    // real and expected this early in training, not a bug — flagged honestly in the UI rather
+                    // than silently truncated.
+    }
+
+    // Bounds the DOM/render-diff cost across a long session — supersedes the old one-shot page's HistoryCap
+    // (real Arg_OutOfMemoryException report, "after some period of use": Blazor rediffs this component's whole
+    // render tree on every StateHasChanged(), so an unbounded list compounds an unbounded render count). Higher
+    // than the old HistoryCap=40 since one chat turn's own markup is lighter than the old prompt+continuation run.
+    const int TurnCap = 60;
+    readonly List<ChatTurn> _turns = new();
+    void AddTurn(ChatTurn t) { _turns.Add(t); while (_turns.Count > TurnCap) _turns.RemoveAt(0); }
+
+    static string CleanTurnText(string s) => s.Replace('\r', ' ').Replace('\n', ' ').Trim();
+
+    // One line per turn — tag + text + "\n" — exactly StudioModel.AppendGroup's own shape. This is what keeps
+    // CapRecent's "split on '\n', drop leading lines" trick valid: every '\n' in the transcript IS a turn
+    // boundary, never a line break inside one turn's own text (CleanTurnText above guarantees that on the way in).
+    static string BuildTranscript(IEnumerable<ChatTurn> turns)
+    {
+        var sb = new StringBuilder();
+        foreach (var t in turns) sb.Append(t.IsUser ? GroupChat.HumanTag : GroupChat.AiTag).Append(t.Text).Append('\n');
+        return sb.ToString();
+    }
+
+    // Ported from StudioModel.CapRecent (PrismFormer\studio\PrismGym\StudioModel.cs) — roll a transcript to the
+    // model's own context window, measured in TOKENS through THIS checkpoint's own vocab (never a generic/
+    // default one). Drops whole leading TURNS — never a mid-turn character cut — until the tail fits, so a
+    // capped context always starts at a turn boundary, the shape the model actually trains to reload cleanly at.
+    static string CapRecent(SubwordVocab vocab, string transcript, int maxTokens)
+    {
+        if (string.IsNullOrEmpty(transcript)) return transcript;
+        if (vocab.Encode(transcript).Length <= maxTokens) return transcript;
+        var lines = transcript.Split('\n');
+        for (var start = 1; start < lines.Length; start++)
+        {
+            var tail = string.Join("\n", lines[start..]);
+            if (vocab.Encode(tail).Length <= maxTokens) return tail;
+        }
+        return lines[^1];   // even the newest turn alone exceeds the budget — BuildContext windows it in tokens anyway
+    }
+
+    // StudioModel.Serve's own priming line, verbatim (verified against source, not assumed) — see the field-group
+    // comment above for why there is no identity swap here.
+    static string Prime(string capped) => (capped.Length == 0 || capped.EndsWith("\n") ? capped : capped + "\n") + GroupChat.AiTag;
+
+    static string DisplayText(ChatTurn t) => t.Text.Length > 0 ? t.Text : "(blank — this checkpoint is still very early in training)";
+
+    // The one generation loop, shared by the boot-time seed exchange (below) and every real Send click — unified
+    // 2026-09-08, previously duplicated as two independent loops that could quietly drift apart. `onPartial`,
+    // when supplied, is invoked (and awaited, so the browser actually gets to paint) every RenderBatch tokens for
+    // a live typewriter effect; pass null for a silent, straight-through run — the boot-time seed doesn't need to
+    // stream, since it renders as an already-complete turn the first time the chat UI paints at all.
+    async Task<(string Text, StopReason Reason)> GenerateReplyAsync(Func<string, Task>? onPartial)
+    {
+        var transcript = BuildTranscript(_turns);                       // includes the turn the caller just added
+        var capped = CapRecent(_vocab!, transcript, _stats!.Context);   // rolling window, turn-boundary safe
+        var primed = Prime(capped);
+        var seq = new List<int>(_vocab!.Encode(primed));
+        var outIds = new List<int>();
+        var revealed = new List<int>();
+        var vocabLimit = _vocab.Size;
+        var guard = new DegenGuard(Policy);
+        var reason = StopReason.Cap;   // default — overwritten the moment either real stop condition fires below
+
+        for (var step = 0; step < MaxReplyChars; step++)
+        {
+            var ctx = BuildContext(seq, _stats.Context);
+
+            // lean serving path — a single LogitsFor pass, honouring Iters/K exactly like the full-recompute
+            // Inspector path did (removed 2026-08-28). This call's own real latency IS the visible cadence.
+            var logits = _session!.Logits(ctx);
+            // Evaluate before Pick to get the real greedy flag DegenGuard.Observe needs — Evaluate draws
+            // nothing from rng, so Pick's own draw/result is byte-identical to calling Pick alone.
+            var decision = Gate.Evaluate(logits, vocabLimit, Policy);
+            var t = Gate.Pick(logits, vocabLimit, Policy, Random.Shared);
+
+            if (t == CharVocab.End) { reason = StopReason.Stop; break; }   // the model's own stop token — never
+            // appended to the visible reply or fed back into the context; compute stops here rather than
+            // throwing away a token that was never meant to be seen.
+
+            outIds.Add(t); seq.Add(t); revealed.Add(t);
+            var stopping = guard.Observe(t, decision.Greedy);
+            if (stopping) reason = StopReason.DegenLoop;
+
+            if (onPartial is not null)
+            {
+                // Batch the RENDER, not the compute (2026-08-30 OOM fix, still load-bearing here): every token
+                // is computed and appended to `revealed` unconditionally; the DOM only actually repaints once
+                // every RenderBatch tokens, or on the stopping/final token so the visitor never sees stale state.
+                var isLastStep = step == MaxReplyChars - 1;
+                if (stopping || isLastStep || revealed.Count % RenderBatch == 0)
+                    await onPartial(_vocab.Decode(revealed));
+            }
+            if (stopping) break;
+        }
+
+        var text = _vocab.Decode(outIds).TrimEnd();
+        return (text, reason);
+    }
 
     protected override async Task OnInitializedAsync()
     {
@@ -268,21 +380,25 @@
             _k = _trainedStackK ?? 1;
 
             // SessionHost dedupes by MODEL key ("prism"): the FIRST visit to this page in a page load fetches
-            // + deserializes the ~2.9 MB checkpoint exactly as before. A LATER visit reuses that same in-memory
+            // + deserializes the checkpoint exactly as before. A LATER visit reuses that same in-memory
             // HoloSession instead of re-downloading/re-parsing it — the factory below (and its boot-log step)
             // simply never runs a second time.
+            //
+            // NOTE on deeper/K>1 checkpoints (e.g. an L6/K2 shape): FromCheckpoint passes spec:null, so
+            // ModelSpec.Validate() (which used to reject Layers>1 && KPass>1) never runs on this path at all —
+            // HoloSession.Logits() below dispatches straight to HoloFormer.LogitsFor, which itself now routes
+            // any Layers>1 shape to StackIterForward with a uniform per-layer alpha (AlgFormer 2.4.0, fixed
+            // 2026-08-28, confirmed serving correctly in production against a real checkpoint that grew a
+            // second layer while training at StackK=2 — see HoloKernel/ModelSpec.cs's own SupportsKPassServing
+            // doc). Nothing here needs to change for a deeper checkpoint to serve; the chat rework above doesn't
+            // touch model shape at all, only how the model is prompted.
             bool reused = Sessions.IsLoaded("prism");
             _session = await Sessions.GetOrCreateAsync("prism", async () =>
             {
                 var sb = Begin("data/oracle-brain.bin.gz");
-                // gzip-precompressed at rest (2026-08-31 — was a raw uncompressed fetch; the checkpoint keeps
-                // growing every training round and a visitor reported it "stuck downloading"). GitHub Pages
-                // serves this byte-for-byte with no Content-Encoding/on-the-fly compression, so shipping a
-                // pre-gzipped sidecar + decompressing it here (HoloKernel.CheckpointFetch, see its own doc
-                // comment) is the only way to actually shrink the transfer — decompression happens entirely
-                // client-side, nothing about the fetched byte COUNT below misrepresents what crossed the wire.
-                // Measured on the 2026-08-31 checkpoint: 3,638,308 B raw -> 1,985,514 B gzip (~55% of raw) —
-                // real weight data doesn't compress as aggressively as text, but it's a real, meaningful cut.
+                // gzip-precompressed at rest — GitHub Pages serves this byte-for-byte with no on-the-fly
+                // compression, so shipping a pre-gzipped sidecar + decompressing it here
+                // (HoloKernel.CheckpointFetch) is the only way to actually shrink the transfer.
                 var (bytes, gzLen) = await CheckpointFetch.FetchAndDecompressGzipAsync(Http, "data/oracle-brain.bin.gz");
                 var peek = HoloFormer.Deserialize(bytes);   // one-time peek at Layers/ParamCount for the boot log +
                 // the alpha-reconstruction guard below — HoloSession.FromCheckpoint needs K/alpha as ctor args
@@ -304,45 +420,19 @@
                 ? LineageJournal.AlphaFor((int)_rounds.Value, addRound: 0, _trainedIterWarm.Value)
                 : 1.0;
 
-            // Real example round, seeded into _history BEFORE _loaded=true (2026-08-28) — REPLACES two
-            // earlier attempts that both tried to pre-pay WASM's cold-start cost (no AOT here, so the
-            // first real invocation of a given code path — compute OR render — is measurably slower
-            // than every call after it) without keeping anything: a throwaway compute-only LogitsFor
-            // call, then a synthetic _generating-flip render warm-up. Both were fragile — the render
-            // warm-up in particular depended on catching Blazor's render batching at exactly the right
-            // moment, and even after fixing a missing-yield bug it still didn't reliably work live
-            // (confirmed by the user). This is simpler and more robust: run one REAL generation now,
-            // against a fixed example prompt, and KEEP the result as _history's first entry — a
-            // permanent piece of UI state that renders through the component's completely ordinary
-            // initial render (the same `.or-run` markup a real user round uses), no special timing
-            // tricks needed. It pays the LogitsFor/render cold-start cost as a side effect of doing
-            // real work, and unlike a hardcoded placeholder string, it stays honest with this site's
-            // "no mocked output" rule — what a visitor sees on load really did come out of the model,
-            // just one page-load earlier than their own first click.
+            // Seeds the very first chat exchange AND pays WASM's cold-start cost (no AOT-free path here — the
+            // first real invocation of a given code path is measurably slower than every call after it) — same
+            // reasoning as the one-shot page's old warm-up, now going through the EXACT SAME
+            // GenerateReplyAsync() every real Send click uses, so there is only one generation code path to keep
+            // correct rather than two that can quietly drift apart. Renders as an ordinary already-complete
+            // exchange via the chat's own `.or-turn` markup the first time the page paints — no special timing
+            // tricks, and (per this site's "no mocked output" rule) it really did come out of the model, just
+            // one page-load earlier than the visitor's own first message.
             try
             {
-                const string examplePrompt = "Hello!";
-                var seq = new List<int>(_vocab.Encode(examplePrompt));
-                var outIds = new List<int>();
-                var vocabLimit = _vocab.Size;
-                var guard = new DegenGuard(Policy);
-                var trailedOff = false;
-                for (var step = 0; step < MaxReplyChars; step++)
-                {
-                    var ctx = BuildContext(seq, _stats.Context);
-                    var logits = _session.Logits(ctx);
-                    // Evaluate before Pick to get the real greedy flag DegenGuard.Observe now needs (Prism.Inference's
-                    // second trigger) — Evaluate draws nothing from rng, so Pick's own draw/result is byte-identical
-                    // to calling Pick alone, same decode as before this migration.
-                    var decision = Gate.Evaluate(logits, vocabLimit, Policy);
-                    var t = Gate.Pick(logits, vocabLimit, Policy, Random.Shared);
-                    if (t == CharVocab.End) break;
-                    outIds.Add(t); seq.Add(t);
-                    if (guard.Observe(t, decision.Greedy)) { trailedOff = true; break; }
-                }
-                var shown = _vocab.Decode(outIds).TrimEnd();
-                var continuationText = shown.Length > 0 ? shown : "(blank — this checkpoint is still very early in training)";
-                AddHistory(new RunEntry(examplePrompt, continuationText, trailedOff));
+                AddTurn(new ChatTurn(IsUser: true, Text: "Hello!"));
+                var (seedText, seedReason) = await GenerateReplyAsync(onPartial: null);
+                AddTurn(new ChatTurn(IsUser: false, Text: seedText, Reason: seedReason));
             }
             catch { /* example generation only — never user-visible as an error, never blocks page load */ }
 
@@ -372,12 +462,9 @@
     // degrades to a true-but-vaguer phrase rather than rendering a blank/null when it's missing.
     string RoundsPhrase => _rounds is not null ? $"{_rounds.Value:N0} rounds" : "a long time";
 
-    // Shared by OnInitializedAsync's example generation and Ask() below (was duplicated LINQ
-    // `seq.Skip(seq.Count - take).ToArray()`, called once per token — up to MaxReplyChars times per
-    // submission). `Skip().ToArray()` allocates an iterator object AND the destination array on every call;
-    // this does the same slice with one allocation (the array only) via List<T>.CopyTo. A real, confirmed
-    // minor contributor investigated alongside the OOM report — nowhere near as large as the render-count/
-    // history-size issues fixed elsewhere on this page, but free to remove while in here.
+    // Shared by GenerateReplyAsync's per-step context slice. `Skip().ToArray()` would allocate an iterator
+    // object AND the destination array on every call (up to MaxReplyChars times per reply); this does the same
+    // slice with one allocation via List<T>.CopyTo.
     static int[] BuildContext(List<int> seq, int maxContext)
     {
         var take = Math.Min(seq.Count, maxContext);
@@ -389,126 +476,47 @@
 
     async Task OnKeyDown(KeyboardEventArgs e) { if (e.Key == "Enter") await Ask(); }
 
-    // Genuinely live streaming (2026-08-30, direct instruction — replaces the earlier producer/
-    // consumer split over an unbounded Channel<int> described in the comment this replaces). That
-    // split ran the real LogitsFor/Gate.Pick loop with NO delay, writing every token to a channel the
-    // instant it was computed, while a separate loop drained the channel and revealed one token per a
-    // FIXED ~60ms Task.Delay tick — fully independent of how long compute actually took. That was a
-    // deliberate call from early in the project, when this checkpoint's context was tiny and a single
-    // LogitsFor call was likely near-instant; an artificial pacer was the only way to get ANY visible
-    // cadence at all back then. A real user caught the tell live: "its still being pre-generated then
-    // fake typed" — a fair complaint, since the two loops genuinely were decoupled exactly as
-    // described.
-    //
-    // The checkpoint has grown a lot since then, and it changes the calculus: measured with a
-    // throwaway console harness (native x64 JIT, NOT WASM — see below) against the real, currently
-    // shipped checkpoint (data/oracle-brain.bin as of this change: Dim=1536, K=8 weight-tied passes
-    // read live off data/oracle-stackk.txt, Context=52 tokens, ~245k rounds trained), one real
-    // LogitsFor call now costs mean=97ms / median=98ms / p90=107ms / range 72-114ms (N=60, JIT-warmed
-    // first). That's ALREADY inside typing-cadence territory running as fast native code — and the
-    // real deployment is WASM (AOT-compiled per Showroom.csproj's RunAOTCompilation, still measurably
-    // slower than native JIT for numeric hot loops like this one), so genuine in-browser per-token
-    // compute is at least that slow, plausibly slower, never faster. Real compute now serves as its
-    // own honest pacer, so the fake one is gone: this loop computes one token, reveals it immediately,
-    // computes the next. No Channel anywhere in this path, no Task.Delay(60), no artificial pacing of
-    // any kind. Simpler code too, not just more honest.
-    //
-    // The one `await Task.Yield()` below is NOT a pacer — it adds zero artificial wait. Blazor only
-    // SCHEDULES a render on StateHasChanged(); without yielding to the sync context afterward, the
-    // browser never gets a chance to actually paint the just-computed token before the next (real,
-    // ~100ms+) LogitsFor call blocks the UI thread again — remove the yield and every token would
-    // still take exactly as long to compute, you'd just never see the intermediate frames land.
-    //
-    // RENDER BATCHING (2026-08-30, real Arg_OutOfMemoryException report investigated — see
-    // Showroom/CLAUDE.md's Prism section for the full write-up). Calling StateHasChanged() after every
-    // single real token — which is exactly what "genuinely live streaming" above landed — means a full
-    // MaxReplyChars reply costs up to that many Blazor render+diff cycles in ONE submission (was up to
-    // 600 at the time this was written, now the live checkpoint's own context length — see
-    // MaxReplyChars' own field comment), where the old fake-typing pacer bounded render count to
-    // whatever a fixed ~60ms tick produced. WASM's linear memory is documented to grow but rarely
-    // shrink back down (allocations accumulate; the runtime doesn't reliably hand freed pages back to
-    // the OS) — hundreds of render cycles per submission, repeated over many submissions in one sitting
-    // ("some period of use"), is a real slow-growth path
-    // to the reported OOM, especially compounding with the (now-capped, see _history above) render-tree
-    // size Blazor re-diffs on every one of those calls.
-    //
-    // Fix: batch the RENDER, not the compute — RenderBatch tokens are computed and appended to
-    // `revealed` exactly as before (compute is NEVER throttled, no delay was added anywhere in this
-    // method), but the DOM only actually repaints once every RenderBatch tokens (plus always on the
-    // stopping/final token, so the visitor never waits past what they'd already see land). This is a
-    // different thing from the fake-typing pacer this method's own history describes: that pacer set
-    // the PACE of REVEAL independent of compute; this only reduces how often an already-computed,
-    // already-revealed token gets painted, cutting render-diff work by ~RenderBatch times per
-    // submission without changing when a token is computed or how fast the reply grows.
+    // Genuinely live streaming (2026-08-30, still true here): one real LogitsFor() call per token, revealed
+    // immediately, no artificial pacer of any kind — real compute latency (measured ~100ms+ at this
+    // checkpoint's shape, native-JIT floor; WASM is at least that slow) IS the visible cadence. The one
+    // `await Task.Yield()` calls below add zero artificial wait; they exist only so the browser actually gets a
+    // chance to paint the just-computed batch before the next real compute call blocks the UI thread again.
     const int RenderBatch = 4;
     async Task Ask()
     {
         if (_session is null || _vocab is null || string.IsNullOrWhiteSpace(_prompt) || _generating) return;
-        var promptText = _prompt.Trim();
+        var userText = CleanTurnText(_prompt.Trim());
         _prompt = "";
-        _pendingPrompt = promptText;
-        _pendingContinuation = "";
+        AddTurn(new ChatTurn(IsUser: true, Text: userText));
+        _pendingReply = "";
         _generating = true; _error = null;
         StateHasChanged();
-        await Task.Yield();   // let the prompt echo paint before the first real (~100ms+) compute call blocks the thread
+        await Task.Yield();   // let the user's own turn paint before the first real (~100ms+) compute call blocks the thread
 
         try
         {
-            // fresh context every run (seeded ONLY from this submission's own tokens — nothing from a
-            // prior run's prompt/continuation ever gets folded in, so there's no cross-run "memory" to
-            // leak — autocomplete, not chat).
-            var seq = new List<int>(_vocab.Encode(promptText));
-            var outIds = new List<int>();
-            var revealed = new List<int>();
-            var vocabLimit = _vocab.Size;
-            var guard = new DegenGuard(Policy);   // Prism.Inference.DegenGuard (migrated 2026-09-05), repeat
-            // trigger only — see the Policy field comment above for why the non-greedy trigger is kept inert.
-            // a known behaviour this early in training (the confidence gate still reads GREEDY on a
-            // collapsed distribution), surfaced honestly rather than silently padded with spaces
-            var trailedOff = false;
-
-            for (var step = 0; step < MaxReplyChars; step++)
+            var (text, reason) = await GenerateReplyAsync(async partial =>
             {
-                var ctx = BuildContext(seq, _stats!.Context);
-
-                // lean serving path — a single LogitsFor pass, honouring Iters/K exactly like the
-                // full-recompute Inspector path did (removed 2026-08-28, see Showroom\CLAUDE.md). This
-                // call's own real latency IS the visible cadence now — see method comment.
-                var logits = _session.Logits(ctx);
-                // Evaluate before Pick for the real greedy flag (see the OnInitializedAsync example-run
-                // comment for why this is safe: Evaluate draws nothing from rng, so Pick's own draw/result
-                // is unchanged). One more O(vocab) pass here is negligible next to the ~100ms+ LogitsFor
-                // call this method's own comment already measures as the real cost.
-                var decision = Gate.Evaluate(logits, vocabLimit, Policy);
-                var t = Gate.Pick(logits, vocabLimit, Policy, Random.Shared);
-
-                if (t == CharVocab.End) break;   // stop marker — see tokenizer field comment for why this id doubles as "\n"
-                outIds.Add(t); seq.Add(t);
-                revealed.Add(t);
-                var stopping = guard.Observe(t, decision.Greedy);
-                if (stopping) trailedOff = true;
-
-                // Batch the RENDER, not the compute (see method comment above): every token above is
-                // computed and appended to `revealed` unconditionally; the DOM paint + the (relatively
-                // cheap but still O(n)) full Decode(revealed) rebuild only happen every RenderBatch
-                // tokens, or on the very last/stopping token so the final state is never stale.
-                var isLastStep = step == MaxReplyChars - 1;
-                if (stopping || isLastStep || revealed.Count % RenderBatch == 0)
-                {
-                    // NOT trimmed — trimming mid-stream would make trailing spaces flicker in and out as
-                    // later characters land; the final decode below trims once.
-                    _pendingContinuation = _vocab.Decode(revealed);
-                    StateHasChanged();
-                    await Task.Yield();   // paint this batch now — not a delay, see method comment
-                }
-                if (stopping) break;
-            }
-
-            var shown = _vocab.Decode(outIds).TrimEnd();
-            var continuationText = shown.Length > 0 ? shown : "(blank — this checkpoint is still very early in training)";
-            AddHistory(new RunEntry(promptText, continuationText, trailedOff));
+                // NOT trimmed mid-stream — trimming would make trailing spaces flicker in and out as later
+                // tokens land; GenerateReplyAsync's own final Decode(outIds).TrimEnd() trims once, at the end.
+                _pendingReply = partial;
+                StateHasChanged();
+                await Task.Yield();
+            });
+            AddTurn(new ChatTurn(IsUser: false, Text: text, Reason: reason));
         }
         catch (Exception ex) { _error = "Prism stumbled: " + ex.Message; }
-        finally { _generating = false; _pendingContinuation = ""; StateHasChanged(); }
+        finally { _generating = false; _pendingReply = ""; StateHasChanged(); }
+    }
+
+    void ClearChat()
+    {
+        // Forgets the CONVERSATION only — the checkpoint's own weights are untouched (visitors here never
+        // train; see HoloKernel's browser contract). Nothing was ever persisted in the first place (WASM has
+        // no filesystem, and this page never writes to local storage), so this is really just "start a new
+        // rolling window" rather than a real reset of anything durable.
+        if (_generating) return;
+        _turns.Clear();
+        _error = null;
     }
 }
