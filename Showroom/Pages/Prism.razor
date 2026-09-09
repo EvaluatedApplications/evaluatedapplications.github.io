@@ -349,8 +349,57 @@
             if (stopping) break;
         }
 
+        // HARD CUT, not a hide: a degenerate tail is REMOVED from outIds before it is decoded, so it never
+        // reaches the visible turn AND never reaches BuildTranscript — the next turn's rolling context is
+        // built from the surviving prefix only. This matters more than the cosmetics: a 192-token window
+        // filled with "ERE ERE ERE" both crowds out real conversation and teaches the model, from its own
+        // context, that a "prism: " turn looks like that.
+        var cut = DegenerateTailStart(outIds);
+        if (cut < outIds.Count)
+        {
+            outIds.RemoveRange(cut, outIds.Count - cut);
+            reason = StopReason.DegenLoop;   // surfaced in the UI, so a cut is visible rather than silent
+        }
+
         var text = _vocab.Decode(outIds).TrimEnd();
         return (text, reason);
+    }
+
+    // Index where a repeating tail begins, or ids.Count when there isn't one.
+    //
+    // This deliberately does NOT key off DegenGuard. DegenGuard fires only on consecutive IDENTICAL tokens
+    // (its RepeatThreshold; the non-greedy trigger is disabled here via DegenNonGreedyRun = 0), and its own
+    // doc records the blind spot: "A B A B A B" trips neither trigger. That period>1 case is exactly what
+    // this checkpoint produces — a run like "ERE ERE ERE" stops on Cap, not DegenLoop — so a cut driven by
+    // the guard would have missed the very output that prompted this. Scanning the emitted tokens closes
+    // that gap at the consumer without changing the guard, which still does its own (earlier) job of
+    // stopping compute.
+    //
+    // Smallest period wins, so "ERE ERE ERE" cuts at p=3 rather than reporting p=6. MinReps=3 and MinSpan=6
+    // together keep real text safe: an ordinary doubled word is 2 reps and survives, and a 1-token period
+    // needs 6 in a row, which is past DegenRepeat=4 anyway.
+    const int DegenMaxPeriod = 12, DegenMinReps = 3, DegenMinSpan = 6;
+
+    static int DegenerateTailStart(List<int> ids)
+    {
+        for (var p = 1; p <= DegenMaxPeriod; p++)
+        {
+            var reps = 1;
+            while (TailRepeats(ids, p, reps + 1)) reps++;
+            if (reps >= DegenMinReps && reps * p >= DegenMinSpan) return ids.Count - reps * p;
+        }
+        return ids.Count;
+    }
+
+    // Is the final block of `p` tokens repeated `reps` times back-to-back at the tail?
+    static bool TailRepeats(List<int> ids, int p, int reps)
+    {
+        var len = ids.Count;
+        if (p * reps > len) return false;
+        for (var r = 1; r < reps; r++)
+            for (var i = 0; i < p; i++)
+                if (ids[len - p + i] != ids[len - (r + 1) * p + i]) return false;
+        return true;
     }
 
     protected override async Task OnInitializedAsync()
