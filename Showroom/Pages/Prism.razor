@@ -19,37 +19,28 @@
     <header class="room-head">
         <nav class="crumb"><a href="/">Evaluated Applications</a> <span>/</span> Prism</nav>
         <h1>Prism</h1>
-        <p class="lede">A real, trained <strong>HoloFormer</strong> checkpoint, downloaded once and run entirely in
-            this browser tab — nothing you type ever leaves this page. Chat with it turn by turn: it keeps a
-            rolling window of the conversation so far, the same shape it was actually trained on. This is a
-            <strong>technical demo, not a finished product</strong>: what's deployed here is just the last
-            checkpoint we bothered to push, to see how training is going, not a curated "best" result — its
-            behaviour will shift as the real model keeps changing underneath it.</p>
+        <p class="lede">A real <strong>HoloFormer</strong> checkpoint, downloaded once and run entirely in this
+            tab. Still early in training — expect rough output.</p>
         <div class="badges">
-            <span>Runs on your device, not our servers</span><span>Real trained checkpoint</span><span>Holographic-transformer brain</span>
+            <span>Runs on your device</span><span>Real trained checkpoint</span>
         </div>
     </header>
 
     @if (_loadError is not null)
     {
         <p class="err">@_loadError</p>
-        <p class="hint">This tool runs off a snapshot of an ongoing training run, taken at one point in time —
-            if the checkpoint files aren't available right now, please check back later.</p>
     }
     else if (!_loaded)
     {
         <div class="boot-crt ck-boot">
             <div class="boot-head"><span class="boot-dot" aria-hidden="true"></span>fetching the trained checkpoint</div>
-            <div class="boot-sub">real files, downloading once to THIS device — cached by your browser after the first visit.</div>
+            <div class="boot-sub">downloads once, then cached by your browser.</div>
             <div class="boot-log">
                 @foreach (var s in _loadSteps)
                 {
                     <span class="l @s.Cls"><span class="p">&gt;</span> @s.Label <span class="boot-status">@s.Status</span></span>
                 }
             </div>
-            <p class="boot-note">This download is the whole trick. Once it finishes, the model lives in this tab's
-                own memory — there is no server behind Prism from here on, no API to call. Every character it
-                generates below is computed by your device, not ours.</p>
         </div>
     }
     else
@@ -72,13 +63,8 @@
             <div class="or-run-list" @ref="_scrollBox">
                 @if (_turns.Count == 0)
                 {
-                    <p class="hint">Say hi — this is a real turn-based chat, not one-shot autocomplete. Prism only
-                        ever sees the last @_stats.Context tokens of the conversation (its trained context window):
-                        once you go past that, the oldest turns quietly fall off the front, dropped whole, never
-                        mid-sentence. Nothing is saved anywhere — close this tab and the conversation is gone. This
-                        checkpoint is early in training, so a short opener ("hi", "hello") is its hardest case:
-                        watch for a reply that never settles into words at all (flagged below as
-                        <em>settled into a repeat loop</em>) rather than something being quietly padded out for you.</p>
+                    <p class="hint">Say hi. It sees the last @_stats.Context tokens; older turns drop off the
+                        front. Nothing is saved.</p>
                 }
                 @foreach (var turn in _turns)
                 {
@@ -87,11 +73,11 @@
                         <span class="or-text">@DisplayText(turn)</span>
                         @if (turn.Reason == StopReason.DegenLoop)
                         {
-                            <span class="or-note">⋯ settled into a repeat loop (a known behaviour this early in training, not a bug)</span>
+                            <span class="or-note">⋯ repeat loop, cut</span>
                         }
                         else if (turn.Reason == StopReason.Cap)
                         {
-                            <span class="or-note">⋯ hit its reply-length limit without ever emitting its own stop token</span>
+                            <span class="or-note">⋯ hit the length limit</span>
                         }
                     </div>
                 }
@@ -119,29 +105,6 @@
         @if (_error is not null) { <p class="err">@_error</p> }
 
         <div class="outro">
-            <p><strong>What's happening when you hit Send.</strong> Your message is added to the conversation as one
-                more line; the whole transcript — capped to the last @_stats.Context tokens, dropped
-                in whole turns so it never starts mid-sentence — is bound into the model's holographic memory as
-                phase-and-magnitude patterns, then read back out by <em>resonance</em>: which stored pattern rings
-                loudest against that context. The speaker labels you see beside each turn are this page's, not the
-                model's: it is handed the bare lines, one per turn, and simply continues the transcript — every
-                token of that window is conversation rather than bookkeeping. Depth here isn't stacked layers: it's the same small transformation re-run
-                <strong>K=@_k</strong> times over its own output, weight-tied, letting the pattern reinforce itself
-                before a token is picked. Generation stops the instant it emits its own trained stop token — every
-                bit of this (tokenizing, binding, resonance, the stop check) runs as plain C# in this tab, on your
-                own CPU.</p>
-
-            <p><strong>Where it stands, plainly.</strong> This is a <strong>real chat with rolling memory</strong>,
-                not scripted: trained on "user: … / prism: …" transcripts, so it has some notion of a conversation —
-                but it is still early in an ongoing training run, not a finished result. Right now:
-                @_stats!.ParamCount.ToString("N0") real stored parameters, a @_stats.Vocab-token vocabulary,
-                @_stats.Context tokens of rolling context. Expect short, rough replies: real words and
-                near-grammatical fragments next to invented non-words, sometimes trailing into a repeated character
-                (flagged above as <em>settled into a repeat loop</em>, not hidden), and sometimes running all the
-                way to its own reply-length limit without ever emitting a stop token (flagged separately, above —
-                that token is only ever a training target on a small slice of what this checkpoint has seen, so
-                skipping it isn't unusual this early).</p>
-
             <p>The brain is <code>AlgFormer</code>'s holographic transformer — the same substrate behind
                 <a href="/creature">The Creature</a> and <a href="/forecaster">The Forecaster</a>. Pure managed
                 .NET, running entirely client-side. <code>dotnet add package EvaluatedApplications.AlgFormer</code></p>
