@@ -265,16 +265,13 @@
         @if (_textCols.Count > 0)
         {
             <h2>Novelty scan <span class="beta-tag">experimental</span></h2>
-            <p class="repl-intro">Score a free-text column against a real, trained <strong>HoloFormer</strong> checkpoint's
-                own predictions &mdash; running entirely in your browser, same as everything else on this page. For each
-                value, it walks the text through the model token by token and reads back the probability the model
-                itself predicted for what actually came next. Low predicted probability = the model found this
-                surprising = <strong>novel relative to what it's learned so far</strong>. Nothing is generated or
-                sampled here &mdash; this only ever reads the model's own predictions against text that's already there.</p>
-            <p class="hint novelty-caveat"><strong>Being honest about it:</strong> this checkpoint is very early in
-                training, with a small vocabulary and a short context window. Right now a high score mostly reflects
-                <em>unusual character sequences for a small, undertrained model</em> &mdash; not genuine semantic
-                novelty. Read it as an honest, rough signal, not a mature capability.</p>
+            <p class="repl-intro">Score a free-text column against a real, trained language model &mdash; running
+                entirely in your browser, same as everything else on this page. For each value, it reads the text
+                and reports how surprised it was by what came next: a low predicted probability means the text was
+                unusual to the model, i.e. more novel relative to what it's learned so far. Nothing is generated
+                here, only read.</p>
+            <p class="hint novelty-caveat">This model is still early in its training, so treat a high score as a
+                rough signal rather than a precise one.</p>
             <div class="cb-controls">
                 <label>column
                     <select @bind="_novCol">@foreach (var c in _textCols) { <option value="@c.Name">@c.Name</option> }</select>
@@ -387,16 +384,10 @@
         }
 
         <div class="outro">
-            <p><strong>Why the profile is instant — and unlike any other database.</strong> HoloDb doesn't keep rows and
-                scan them. Every value is folded into one <em>holographic</em> associative store, and a column's running
-                total <em>is</em> a single vector — a residue-phase encoding read straight back. So <code>SUM</code>,
-                <code>COUNT</code> and single-column <code>GROUP BY</code> return a <em>maintained</em> total instead of
-                scanning the rows, which is why the whole-dataset profile you just saw resolved in microseconds and holds
-                its speed from a thousand rows to tens of millions. And one copy answers three ways: exact SQL by key,
-                similarity by content (<code>NEAREST</code>), and constant-time aggregates — relational, vector and
-                analytical in a single store. It's the same holographic idea that powers our
-                <a href="/creature">holographic-transformer creature</a>: superpose everything into one distributed
-                vector, then read it back many ways.</p>
+            <p>Why it's instant: HoloDb doesn't scan rows one by one to answer a count or a sum — those totals stay
+                maintained as data loads, so they come back already computed instead of being worked out on demand.
+                That's why the whole-dataset profile you just saw resolved in microseconds and holds its speed from
+                a thousand rows to tens of millions.</p>
             <p>The Analyst runs on <a href="/holodb/">HoloDb</a> — the same embeddable .NET SQL engine, compiled to
                 WebAssembly. Want it in your own app? <code>dotnet add package EvaluatedApplications.HoloDb</code></p>
         </div>

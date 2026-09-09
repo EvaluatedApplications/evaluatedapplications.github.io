@@ -13,17 +13,14 @@
 @using global::Prism.Inference
 @using global::Prism.Lineage
 
-<PageTitle>Prism — a live chat with a holographic-transformer checkpoint</PageTitle>
+<PageTitle>Prism — a tiny AI that runs in your browser</PageTitle>
 
 <div class="room" data-cat="algformer">
     <header class="room-head">
         <nav class="crumb"><a href="/">Evaluated Applications</a> <span>/</span> Prism</nav>
         <h1>Prism</h1>
-        <p class="lede">A real <strong>HoloFormer</strong> checkpoint, downloaded once and run entirely in this
-            tab. Still early in training — expect rough output.</p>
-        <div class="badges">
-            <span>Runs on your device</span><span>Real trained checkpoint</span>
-        </div>
+        <p class="lede">A tiny AI, running in your browser. Say something and it replies. It is still learning,
+            so the replies are rough.</p>
     </header>
 
     @if (_loadError is not null)
@@ -33,8 +30,8 @@
     else if (!_loaded)
     {
         <div class="boot-crt ck-boot">
-            <div class="boot-head"><span class="boot-dot" aria-hidden="true"></span>fetching the trained checkpoint</div>
-            <div class="boot-sub">downloads once, then cached by your browser.</div>
+            <div class="boot-head"><span class="boot-dot" aria-hidden="true"></span>downloading the model</div>
+            <div class="boot-sub">one time only — your browser keeps it after this.</div>
             <div class="boot-log">
                 @foreach (var s in _loadSteps)
                 {
@@ -46,15 +43,14 @@
     else
     {
         <div class="cr-stats">
-            <div class="stat"><div class="n">@_stats!.ParamCount.ToString("N0")</div><div class="l">real stored parameters</div></div>
-            <div class="stat"><div class="n">@_stats.EquivCompute.ToString("N0")</div><div class="l">dense-transformer-equivalent compute / token</div></div>
-            <div class="stat"><div class="n">@(_stats.ComputePerStoredParam.ToString("F0"))×</div><div class="l">compute bought per stored parameter</div></div>
-            <div class="stat"><div class="n">@_stats.Context</div><div class="l">tokens of rolling chat memory</div></div>
-        </div>
-        <div class="badges or-shape">
-            <span>d=@_stats.Dim</span><span>@_stats.Layers layer(s)</span><span>K=@_k pass(es)</span>
-            <span>shifts=@_stats.Shifts@(_stats.Golden ? " golden" : "")</span>
-            <span>vocab=@_stats.Vocab subwords</span>@if (_rounds is not null) { <span>@_rounds.Value.ToString("N0") rounds trained</span> }
+            <div class="stat"><div class="n">@_stats!.ParamCount.ToString("N0")</div><div class="l">things it has learned</div></div>
+            @* 8 bytes per parameter (they are doubles) — this lands on the real prism-holo.bin size, 862,244 B
+               for 107,776 params, so the figure a visitor reads matches the file that was actually downloaded. *@
+            <div class="stat"><div class="n">@((_stats.ParamCount * 8 / 1024).ToString("N0"))&nbsp;KB</div><div class="l">how big it is, in total</div></div>
+            @if (_rounds is not null)
+            {
+                <div class="stat"><div class="n">@_rounds.Value.ToString("N0")</div><div class="l">practice rounds so far</div></div>
+            }
         </div>
 
         <div class="or-runs">
@@ -63,8 +59,7 @@
             <div class="or-run-list" @ref="_scrollBox">
                 @if (_turns.Count == 0)
                 {
-                    <p class="hint">Say hi. It sees the last @_stats.Context tokens; older turns drop off the
-                        front. Nothing is saved.</p>
+                    <p class="hint">Say hi. It remembers the last few turns, and nothing is saved.</p>
                 }
                 @foreach (var turn in _turns)
                 {
@@ -73,11 +68,11 @@
                         <span class="or-text">@DisplayText(turn)</span>
                         @if (turn.Reason == StopReason.DegenLoop)
                         {
-                            <span class="or-note">⋯ repeat loop, cut</span>
+                            <span class="or-note">⋯ got stuck repeating itself</span>
                         }
                         else if (turn.Reason == StopReason.Cap)
                         {
-                            <span class="or-note">⋯ hit the length limit</span>
+                            <span class="or-note">⋯ ran on until it was stopped</span>
                         }
                     </div>
                 }
@@ -96,7 +91,7 @@
                     @(_generating ? "thinking…" : "Send")
                 </button>
                 <button class="ghost" @onclick="ClearChat" disabled="@(_generating || _turns.Count == 0)"
-                        title="Forget this conversation — the checkpoint itself is untouched">
+                        title="Start a new conversation">
                     Clear
                 </button>
             </div>
@@ -105,9 +100,7 @@
         @if (_error is not null) { <p class="err">@_error</p> }
 
         <div class="outro">
-            <p>The brain is <code>AlgFormer</code>'s holographic transformer — the same substrate behind
-                <a href="/creature">The Creature</a> and <a href="/forecaster">The Forecaster</a>. Pure managed
-                .NET, running entirely client-side. <code>dotnet add package EvaluatedApplications.AlgFormer</code></p>
+            <p>Also here: <a href="/creature">The Creature</a> and <a href="/forecaster">The Forecaster</a>.</p>
         </div>
     }
 </div>

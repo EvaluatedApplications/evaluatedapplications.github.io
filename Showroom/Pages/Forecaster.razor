@@ -88,7 +88,7 @@
         @if (_log.Count > 0)
         {
             <div class="cr-log">
-                <div class="log-head">training log <span class="log-sub">newest first · loss backpropped through the @_kPass weight-tied passes</span></div>
+                <div class="log-head">training log <span class="log-sub">newest first</span></div>
                 <div class="log-body">
                     @foreach (var line in _log) { <div class="log-line">@line</div> }
                 </div>
@@ -98,40 +98,26 @@
         @if (_showInspector && _lastTrace is not null && _lastCtx is not null)
         {
             <div class="cr-log">
-                <div class="log-head">last prediction <span class="log-sub">direction confidence, pass by pass — the same per-pass view as <a href="/creature">The Creature</a> and <a href="/prism">Prism</a></span></div>
+                <div class="log-head">last prediction <span class="log-sub">direction confidence, step by step — the same view <a href="/creature">The Creature</a> and <a href="/prism">Prism</a> use</span></div>
                 <div class="log-body">
                     @for (int p = 0; p < _lastTrace.Passes.Count; p++)
                     {
-                        <div class="log-line">pass @p @(p == _lastTrace.Passes.Count - 1 ? "(final)" : "") — @TopDirText(_lastTrace.Passes[p].Logits)</div>
+                        <div class="log-line">step @p @(p == _lastTrace.Passes.Count - 1 ? "(final)" : "") — @TopDirText(_lastTrace.Passes[p].Logits)</div>
                     }
-                    <div class="log-line">attends → @AttentionText(_lastCtx, _lastTrace.Attention[^1])</div>
+                    <div class="log-line">looking back at → @AttentionText(_lastCtx, _lastTrace.Attention[^1])</div>
                 </div>
             </div>
         }
 
         <div class="outro">
-            <p><strong>What it's actually predicting.</strong> Every hourly tick becomes two tokens — an hour-of-day
-                bucket and a return bucket (how big the move was and which way) — read off tight-deadband edges
-                sized so a real move registers as up or down instead of collapsing to "flat". The brain reads the
-                recent tape and predicts the <em>next</em> return bucket; it scores as right when it calls the
-                right <em>direction</em>. It uses the same live-training approach as <a href="/creature">The
-                Creature</a> — one holographic layer applied twice, weight-tied, composed fully from the very
-                first tick. Each candle is revealed as a two-step beat: the brain's guess appears first (the
-                dashed strip above the chart, with a countdown bar), then the real candle lands and you see
-                whether it called it — same order the brain itself experiences it in, just slowed down enough
-                to watch.</p>
-            <p><strong>Where the data comes from.</strong> The bulk of the tape (~2 years of real hourly AAPL
-                candles) is pulled from Yahoo Finance's public chart API at build time — that endpoint has no
-                CORS headers at all, so it can only ever be fetched server-side, not from your browser, which is
-                why it ships as a bundled file rather than a live call. @(_liveNote is not null ? _liveNote + " " : "")
-                When available, one genuinely live tick is layered on top from a CORS-open real-time quote API,
-                fetched once when this page loads.</p>
-            <p><strong>Being honest about it:</strong> this is a demo, not investment advice — even a couple of
-                thousand hourly ticks of one stock is a small, noisy sample, and "right direction" is a
-                coin-flip-adjacent bar. Watch the accuracy curve rather than trusting any single prediction.</p>
-            <p>The brain is <code>AlgFormer</code>'s holographic transformer, the very same substrate that lets
-                <a href="/analyst">The Analyst</a>'s database hold a running total as one vector. Pure managed .NET,
-                running entirely client-side. <code>dotnet add package EvaluatedApplications.AlgFormer</code></p>
+            <p>Each hourly tick becomes two pieces of information: the time of day, and how big the move was and
+                which way. The brain reads the recent tape and guesses the next move's direction — the guess
+                appears first, then the real candle lands and you see whether it called it. This is a demo, not
+                investment advice: a couple of thousand hourly ticks of one stock is a small, noisy sample, so
+                watch the accuracy curve rather than trusting any single prediction.</p>
+            <p>The brain is <code>AlgFormer</code>'s holographic transformer, the same one behind
+                <a href="/creature">The Creature</a>. Pure managed .NET, running entirely client-side.
+                <code>dotnet add package EvaluatedApplications.AlgFormer</code></p>
         </div>
     }
 </div>
@@ -377,8 +363,8 @@
         _session.ApplyServe(AlphaRamp.Complete);
         _loop = new RefinementLoop(_session, AlphaRamp.Complete, Lr);
         Log(reused
-            ? $"brain reused from earlier this visit · L={Layers} · K={_kPass} weight-tied passes · ctx={MaxContext} tokens (~{CandleContext} candles) · shifts={spec.Shifts} golden · d={Dim} · vocab={Vocab} · {_session.Model.ParamCount:N0} params"
-            : $"brain ready · L={Layers} · K={_kPass} weight-tied passes · ctx={MaxContext} tokens (~{CandleContext} candles) · shifts={spec.Shifts} golden · d={Dim} · vocab={Vocab} · {_session.Model.ParamCount:N0} params");
+            ? $"picking up the brain from earlier this visit · {_session.Model.ParamCount:N0} parameters"
+            : $"new brain ready to learn · {_session.Model.ParamCount:N0} parameters");
     }
 
     // One full predict -> countdown -> reveal+train beat. Replaces the old synchronous TrainOnceStep: the
@@ -418,7 +404,7 @@
         await Task.Delay(_revealMs);   // the literal countdown — same duration the CSS bar's animation-duration uses
 
         // ---- REVEAL + TRAIN phase ----
-        double loss = _loop!.Observe(ctx, PriceBase + c.Bucket);   // NewGrads->IterAccumulate->Step
+        _loop!.Observe(ctx, PriceBase + c.Bucket);   // NewGrads->IterAccumulate->Step
 
         int actualDir = Dir(c.Bucket);
         bool correct = predDir == actualDir;
@@ -441,7 +427,7 @@
         _lastResult = correct ? "win" : "lose";
 
         if (_trained <= 5 || _trained % 10 == 0)
-            Log($"tick {_trained,4}   pred {DirGlyph(predDir)}   actual {DirGlyph(actualDir)}   {(correct ? "hit" : "miss")}   recent {_recentAcc:F0}%   loss {loss:F3}");
+            Log($"tick {_trained,4}   guessed {DirGlyph(predDir)}   actual {DirGlyph(actualDir)}   {(correct ? "hit" : "miss")}   recent {_recentAcc:F0}%");
 
         StateHasChanged();
     }

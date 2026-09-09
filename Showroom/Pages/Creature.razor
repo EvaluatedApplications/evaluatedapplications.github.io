@@ -98,7 +98,7 @@
     @if (_log.Count > 0)
     {
         <div class="cr-log">
-            <div class="log-head">training log <span class="log-sub">newest first · loss backpropped through the @_kPass weight-tied passes · episodes run ahead of training, batched and queued@(_trainChannel is not null && _trainChannel.Reader.Count > 0 ? $" · {_trainChannel.Reader.Count} queued" : "")</span></div>
+            <div class="log-head">training log <span class="log-sub">newest first · training runs a little behind what you see, catching up in the background@(_trainChannel is not null && _trainChannel.Reader.Count > 0 ? $" · {_trainChannel.Reader.Count} queued" : "")</span></div>
             <div class="log-body">
                 @foreach (var line in _log) { <div class="log-line">@line</div> }
             </div>
@@ -108,29 +108,22 @@
     @if (_showInspector && _lastTrace is not null && _lastCtx is not null)
     {
         <div class="cr-log">
-            <div class="log-head">last decision <span class="log-sub">confidence in each of the 8 directions, pass by pass — the same per-pass view as <a href="/prism">Prism</a></span></div>
+            <div class="log-head">last decision <span class="log-sub">confidence in each of the 8 directions, step by step — the same view <a href="/prism">Prism</a> uses</span></div>
             <div class="log-body">
                 @for (int p = 0; p < _lastTrace.Passes.Count; p++)
                 {
-                    <div class="log-line">pass @p @(p == _lastTrace.Passes.Count - 1 ? "(final)" : "") — @TopActionsText(_lastTrace.Passes[p].Logits)</div>
+                    <div class="log-line">step @p @(p == _lastTrace.Passes.Count - 1 ? "(final)" : "") — @TopActionsText(_lastTrace.Passes[p].Logits)</div>
                 }
-                <div class="log-line">attends → @AttentionText(_lastCtx, _lastTrace.Attention[^1])</div>
+                <div class="log-line">looking back at → @AttentionText(_lastCtx, _lastTrace.Attention[^1])</div>
             </div>
         </div>
     }
 
     <div class="outro">
-        <p><strong>What makes the brain unusual.</strong> A conventional transformer scores every token against every
-            other through softmax attention — an N×N matrix. <code>AlgFormer</code> is <em>holographic</em>: it
-            <em>binds</em> each step to a role vector and <em>bundles</em> the whole trajectory into one fixed-size
-            hologram, then <em>unbinds</em> that hologram to read it back — phase carries the meaning, magnitude carries
-            the confidence. Attention becomes vector algebra: O(context), not O(context²), and small enough to learn
-            <em>online, in a browser tab</em>. It is the very same holographic idea that lets
-            <a href="/holodb/">HoloDb</a> hold a database's running total as a single vector — one substrate, whether it
-            is storing data or thinking.</p>
-        <p>The brain is <code>AlgFormer</code>'s holographic transformer — one layer applied twice weight-tied, learning
-            online through the recurrence; the distance field is <code>Tracer</code>. Both are pure managed .NET running
-            client-side. <code>dotnet add package EvaluatedApplications.AlgFormer</code></p>
+        <p>The brain is <code>AlgFormer</code>'s holographic transformer, learning live through the recurrence; the
+            distance field is <code>Tracer</code>. Both are pure managed .NET running client-side.
+            <code>dotnet add package EvaluatedApplications.AlgFormer</code></p>
+        <p>Also here: <a href="/prism">Prism</a> and <a href="/forecaster">The Forecaster</a>.</p>
     </div>
 </div>
 
@@ -440,7 +433,7 @@
         }
         else if (_session is not null)
         {
-            Log($"ep {epNo,3}   ate {_eaten,2}/{_applesInit.Count,-2}   no scent to learn from      ε {epsAtRun * 100:F0}%");
+            Log($"episode {epNo,3}   ate {_eaten,2}/{_applesInit.Count,-2}   nothing to learn from this run");
         }
 
         _episode = epNo;
@@ -469,17 +462,17 @@
                 if (best) _bestEaten = batch.Eaten;
                 double baseLr = best ? 4e-3 : 2.5e-3;
                 double maxW = 1e-9; foreach (var e in batch.Exp) if (e.weight > maxW) maxW = e.weight;
-                double sum = 0; int n = 0;
+                int n = 0;
                 foreach (var (ctx, target, weight) in batch.Exp)
                 {
                     double w = Math.Clamp(weight / maxW, 0.2, 1.0);   // advantage-normalized learning rate per step
                     _loop.LearningRate = baseLr * w;
-                    sum += _loop.Observe(ctx, _actionBase + target);   // NewGrads->IterAccumulate->Step
+                    _loop.Observe(ctx, _actionBase + target);   // NewGrads->IterAccumulate->Step
                     n++;
                 }
 
                 _curve.Add(batch.Eaten); if (_curve.Count > 60) _curve.RemoveAt(0);
-                Log($"ep {batch.EpisodeNo,3}   ate {batch.Eaten,2}/{batch.ApplesTotal,-2}   advantage-trained {n,3} steps   loss {(n > 0 ? sum / n : 0):F3}   lr {baseLr:F4}   ε {batch.Eps * 100:F0}%{(best ? "   ★ best haul" : "")}");
+                Log($"episode {batch.EpisodeNo,3}   ate {batch.Eaten,2}/{batch.ApplesTotal,-2}   learned from {n,3} moves{(best ? "   ★ best haul yet" : "")}");
             }
             catch (Exception ex)
             {
@@ -516,8 +509,8 @@
             _trainerTask = RunTrainer(_trainChannel.Reader);
 
             Log(reused
-                ? $"brain reused from earlier this visit · L=1 · K={_kPass} weight-tied passes · ctx={MaxCtx} · shifts={spec.Shifts} golden · d={DModel} · vocab={W * H + 8} · {_session.Model.ParamCount:N0} params"
-                : $"brain ready · L=1 · K={_kPass} weight-tied passes · ctx={MaxCtx} · shifts={spec.Shifts} golden · d={DModel} · vocab={W * H + 8} · {_session.Model.ParamCount:N0} params");
+                ? $"picking up the brain from earlier this visit · {_session.Model.ParamCount:N0} parameters"
+                : $"new brain ready to learn · {_session.Model.ParamCount:N0} parameters");
         }
         _running = true;
         _apples.Clear(); foreach (var a in _applesInit) _apples.Add(a); ComputeDist();
