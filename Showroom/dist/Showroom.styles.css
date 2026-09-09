@@ -402,7 +402,14 @@ table.result th.sortable:hover[b-d09k4y4jhw] { color: var(--accent-ink); }
    rolling context cap (what the model actually sees) is computed in C# (Prism.razor), not here */
 .or-runs[b-gmkja4afg6] { border: 1px solid var(--border); border-radius: 14px; background: var(--bg-2); overflow: hidden; }
 .or-run-list[b-gmkja4afg6] { max-height: 420px; overflow-y: auto; padding: 0.9rem 1rem; display: flex; flex-direction: column; gap: 0.6rem; }
-.or-turn[b-gmkja4afg6] { font-size: 0.95rem; line-height: 1.6; max-width: 88%; padding: 0.55rem 0.8rem; border-radius: 12px; border: 1px solid var(--border-2); }
+/* overflow-wrap:anywhere is load-bearing, not defensive. A degenerate reply is one unbroken run with no
+   spaces ("ANTANTERERERERE..."), so there is NO break opportunity in it: max-width can't cap a box whose
+   content refuses to wrap, and .or-run-list sets overflow-y:auto, which per spec computes overflow-x to
+   auto as well — so the whole chat column scrolled sideways on mobile instead of the text wrapping.
+   `anywhere` (not break-word) is the right keyword: it also shrinks the box's min-content size, which is
+   what a flex item's width is actually resolved against. min-width:0 removes the flex-item auto minimum
+   for the same reason. Reported from a real phone, 2026-09-09. */
+.or-turn[b-gmkja4afg6] { font-size: 0.95rem; line-height: 1.6; max-width: 88%; min-width: 0; overflow-wrap: anywhere; padding: 0.55rem 0.8rem; border-radius: 12px; border: 1px solid var(--border-2); }
 .or-turn.user[b-gmkja4afg6] { align-self: flex-end; background: var(--surface); color: var(--ink); border-bottom-right-radius: 3px; }
 .or-turn.prism[b-gmkja4afg6] { align-self: flex-start; background: var(--bg); color: var(--ink); border-bottom-left-radius: 3px; }
 .or-who[b-gmkja4afg6] { display: block; font-family: var(--mono); font-size: 0.7rem; letter-spacing: 0.04em; text-transform: uppercase; color: var(--ink-faint); margin-bottom: 0.15rem; }
