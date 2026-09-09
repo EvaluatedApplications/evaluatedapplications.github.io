@@ -119,13 +119,13 @@
         @if (_error is not null) { <p class="err">@_error</p> }
 
         <div class="outro">
-            <p><strong>What's happening when you hit Send.</strong> Your message is added to the conversation as a
-                <code>user:</code> turn; the whole transcript — capped to the last @_stats.Context tokens, dropped
+            <p><strong>What's happening when you hit Send.</strong> Your message is added to the conversation as one
+                more line; the whole transcript — capped to the last @_stats.Context tokens, dropped
                 in whole turns so it never starts mid-sentence — is bound into the model's holographic memory as
                 phase-and-magnitude patterns, then read back out by <em>resonance</em>: which stored pattern rings
-                loudest against that context. Prism answers as itself, under its own <code>prism:</code> turn — it
-                isn't playing a role or reversing identities, it's just continuing the transcript in its own trained
-                voice. Depth here isn't stacked layers: it's the same small transformation re-run
+                loudest against that context. The speaker labels you see beside each turn are this page's, not the
+                model's: it is handed the bare lines, one per turn, and simply continues the transcript — every
+                token of that window is conversation rather than bookkeeping. Depth here isn't stacked layers: it's the same small transformation re-run
                 <strong>K=@_k</strong> times over its own output, weight-tied, letting the pattern reinforce itself
                 before a token is picked. Generation stops the instant it emits its own trained stop token — every
                 bit of this (tokenizing, binding, resonance, the stop check) runs as plain C# in this tab, on your
@@ -229,20 +229,30 @@
     // tokens while _generating — this is what makes generation render as a typewriter: the markup binds to THIS
     // field, so the per-batch StateHasChanged() call in GenerateReplyAsync actually has new text to paint.
 
-    // ---- turn-based chat, rolling context (2026-09-08 rework — was one independent prompt-in/continuation-out
-    // pass per submission, no memory between runs; see git history for that shape). Wire format is NOT invented
-    // here: it's PrismFormer.GroupChat's own tags (MonoRepo\AlgFormer\PairSource.cs), the exact strings every
-    // training pair was built from — HumanTag="user: ", AiTag="prism: ", newline-separated turns. Framing is
-    // NATURAL, not identity-swapped: PairSource.cs's GroupChat.Pairs performs a human<->prism identity swap, but
-    // that swap lives ONLY in ingestion (turning a saved chat/group log into training pairs) — confirmed against
-    // GroupChat.Pairs' own doc comment and PairSource.cs:203 ("the swap lives only here (training) and in
-    // generation priming" — the "generation priming" half refers to StudioModel.GroupReply's own Swap()-based
-    // path, which this page does not use). At serve time Prism just answers as itself under its own "prism: "
-    // turn, matching StudioModel.Serve line-for-line (verified against source):
-    //     var primed = (t0.Length == 0 || t0.EndsWith("\n") ? t0 : t0 + "\n") + GroupChat.AiTag;
-    // The model does NOT emit its own "prism: " tag — Prime() below supplies it as part of the prime, and
-    // generation continues from there. The "prism"/"you" role label is rendered once per turn in the markup
-    // above; it is never part of the model's own output text.
+    // ---- turn-based chat, rolling context. UNTAGGED WIRE FORMAT (2026-09-09, direct instruction: drop the
+    // speaker tags under the hood, keep the chat display and the rolling context exactly as they are).
+    //
+    // The transcript the model sees is now just the turn texts, one per line, newline-separated:
+    //     Hello there\nHi, how are you\n
+    // and Prime() appends nothing but the separating newline. Nothing about the DISPLAY changed — the "you"/
+    // "prism" labels are markup (.or-who), rendered per turn, and never were part of the model's text. Nothing
+    // about the rolling context changed either: CapRecent still splits on '\n' and drops whole leading turns,
+    // which still works because one line is still exactly one turn.
+    //
+    // What this trades, stated plainly because it is a real trade and not a free win. AGAINST: the pairs lane
+    // is trained as "user: X\nprism: " -> answer (MonoRepo\AlgFormer\PairSource.cs, GroupChat.HumanTag =
+    // "user: ", AiTag = "prism: "), so serving without them is serving a framing the pair data never used, and
+    // the model must now infer the speaker change from the newline alone. The corpus lane is untagged plain
+    // text, and all-positions loss scores whole sequences either way, so it is not unseen territory — just not
+    // the pair-trained one. FOR: at ctx=192 every tag is real budget, and the cost is bigger than it looks.
+    // Measured through THIS checkpoint's own vocab (not estimated): "user: " is 4 tokens and "prism: " is 5, so
+    // every exchange spent 9 tokens on labels. A representative ten-turn transcript came to 157 tokens tagged
+    // against 113 untagged — 44 tokens saved, 23% of everything the model can see. In window terms that is
+    // roughly 12 turns of history before, about 17 now.
+    //
+    // To revert, restore the two GroupChat calls: BuildTranscript prefixed each line with
+    // (t.IsUser ? GroupChat.HumanTag : GroupChat.AiTag), and Prime appended + GroupChat.AiTag, which matched
+    // StudioModel.Serve line-for-line. Both are one-liners; see git history for the tagged version.
     sealed record ChatTurn(bool IsUser, string Text, StopReason? Reason = null);
 
     enum StopReason
@@ -267,13 +277,15 @@
 
     static string CleanTurnText(string s) => s.Replace('\r', ' ').Replace('\n', ' ').Trim();
 
-    // One line per turn — tag + text + "\n" — exactly StudioModel.AppendGroup's own shape. This is what keeps
-    // CapRecent's "split on '\n', drop leading lines" trick valid: every '\n' in the transcript IS a turn
-    // boundary, never a line break inside one turn's own text (CleanTurnText above guarantees that on the way in).
+    // One line per turn — text + "\n", untagged (see the wire-format note above). The newline is doing ALL the
+    // turn-boundary work now that the tags are gone, which is what keeps CapRecent's "split on '\n', drop
+    // leading lines" trick valid: every '\n' in the transcript IS a turn boundary, never a line break inside one
+    // turn's own text (CleanTurnText above guarantees that on the way in, and is now load-bearing rather than
+    // merely tidy — a stray newline in a turn would silently split it into two turns for the capper).
     static string BuildTranscript(IEnumerable<ChatTurn> turns)
     {
         var sb = new StringBuilder();
-        foreach (var t in turns) sb.Append(t.IsUser ? GroupChat.HumanTag : GroupChat.AiTag).Append(t.Text).Append('\n');
+        foreach (var t in turns) sb.Append(t.Text).Append('\n');
         return sb.ToString();
     }
 
@@ -294,9 +306,11 @@
         return lines[^1];   // even the newest turn alone exceeds the budget — BuildContext windows it in tokens anyway
     }
 
-    // StudioModel.Serve's own priming line, verbatim (verified against source, not assumed) — see the field-group
-    // comment above for why there is no identity swap here.
-    static string Prime(string capped) => (capped.Length == 0 || capped.EndsWith("\n") ? capped : capped + "\n") + GroupChat.AiTag;
+    // Untagged prime: guarantee the transcript ends at a turn boundary and generate straight from there. The
+    // trailing newline is the only marker the model gets that a new turn starts, so it is not optional padding
+    // — BuildTranscript always emits one, and this is the belt-and-braces for a caller that ever doesn't.
+    // (Was: + GroupChat.AiTag, matching StudioModel.Serve. See the wire-format note above for the revert.)
+    static string Prime(string capped) => capped.Length == 0 || capped.EndsWith("\n") ? capped : capped + "\n";
 
     static string DisplayText(ChatTurn t) => t.Text.Length > 0 ? t.Text : "(blank — this checkpoint is still very early in training)";
 
