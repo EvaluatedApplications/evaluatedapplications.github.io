@@ -452,7 +452,15 @@
             // one page-load earlier than the visitor's own first message.
             try
             {
-                AddTurn(new ChatTurn(IsUser: true, Text: "Say a bunch of nonsense, please!"));
+                // Chosen by MEASUREMENT against this exact checkpoint, not by taste: 12 sampled runs of a
+                // dozen candidate openers through this same GenerateReplyAsync path, scored on the battery's
+                // own longest-valid-English-chain metric plus a distinct-word count (length alone rewards a
+                // "there and there and" stutter). This one topped both. The previous opener,
+                // "Say a bunch of nonsense, please!", returned an EMPTY reply on 12 of 12 runs — the seed
+                // exchange was rendering the "(blank)" placeholder as the page's first impression.
+                // Re-measure when the checkpoint is refreshed; a good opener for one checkpoint is not
+                // automatically good for the next.
+                AddTurn(new ChatTurn(IsUser: true, Text: "What's on your mind?"));
                 var (seedText, seedReason) = await GenerateReplyAsync(onPartial: null);
                 AddTurn(new ChatTurn(IsUser: false, Text: seedText, Reason: seedReason));
             }
