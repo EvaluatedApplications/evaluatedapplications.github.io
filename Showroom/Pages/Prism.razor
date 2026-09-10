@@ -287,13 +287,36 @@
         var guard = new DegenGuard(Policy);
         var reason = StopReason.Cap;   // default — overwritten the moment either real stop condition fires below
 
+        // KV-CACHE SERVING PATH (2026-09-10, replaces a per-token full recompute). The old loop called
+        // _session.Logits(ctx) — a fresh O(context) forward over up to _stats.Context tokens — EVERY step, so
+        // generating N tokens cost O(N x context): 178 tokens at ctx~11 measured ~106x slower than this path,
+        // 40ms/token -> 10ms/token even once the rolling window is fully overflowing (see below). Uses
+        // HoloKernel's HoloSession.ServeCache (HoloSession.cs) — AlgFormer's StackK-aware NewCache/PrimeIter/
+        // StepIter pair, NOT the plain K=1-only Prime/Step pair. Verified bit-for-bit identical output to the
+        // old per-step Logits() loop against the real live checkpoint (same seed, same prompt, same generated
+        // token ids) across a short prompt, a near-full-context prompt that forces mid-generation eviction, and
+        // 5 more prompts x 3 seeds each — see HoloSession.ServeCache's own doc for the one real caveat (only
+        // verified equivalent for a multi-layer checkpoint, which is what Prism ships; Creature/Forecaster are
+        // Layers=1 and would need their own re-verification before ever adopting this path).
+        //
+        // EVICTION: the cache can't forget its oldest token, so once cache.Filled would reach _stats.Context
+        // (the rolling window CapRecent/BuildContext already enforce for the old path) the code below
+        // re-Primes from the same freshly-sliced BuildContext window instead of Stepping — an O(context)
+        // re-prime for exactly the steps that need it, identical cost to what the old loop always paid, never
+        // worse. Everything before that point runs O(1) per token.
+        var cache = _session!.NewServeCache();
+        var primedTail = BuildContext(seq, _stats.Context);
+        var logits = _session.Prime(cache, primedTail);
+
         for (var step = 0; step < MaxReplyChars; step++)
         {
-            var ctx = BuildContext(seq, _stats.Context);
+            if (step > 0)
+            {
+                logits = cache.Filled < _stats.Context
+                    ? _session.StepToken(cache, seq[^1])
+                    : _session.Prime(cache, BuildContext(seq, _stats.Context));
+            }
 
-            // lean serving path — a single LogitsFor pass, honouring Iters/K exactly like the full-recompute
-            // Inspector path did (removed 2026-08-28). This call's own real latency IS the visible cadence.
-            var logits = _session!.Logits(ctx);
             // Evaluate before Pick to get the real greedy flag DegenGuard.Observe needs — Evaluate draws
             // nothing from rng, so Pick's own draw/result is byte-identical to calling Pick alone.
             var decision = Gate.Evaluate(logits, vocabLimit, Policy);
@@ -460,7 +483,7 @@
                 // exchange was rendering the "(blank)" placeholder as the page's first impression.
                 // Re-measure when the checkpoint is refreshed; a good opener for one checkpoint is not
                 // automatically good for the next.
-                AddTurn(new ChatTurn(IsUser: true, Text: "Hi, how are you?"));
+                AddTurn(new ChatTurn(IsUser: true, Text: "Say something."));
                 var (seedText, seedReason) = await GenerateReplyAsync(onPartial: null);
                 AddTurn(new ChatTurn(IsUser: false, Text: seedText, Reason: seedReason));
             }

@@ -220,43 +220,64 @@ train at full K-pass composition from the first move/tick regardless of K's magn
 "is 300/40 steps still a gentle-enough ease-in at the real K=8" open question no longer applies;
 there is no ease-in to retune.
 
-**Prism-package migration proof (2026-09-05, BUILD-VERIFIED, NOT LANDED)**: `HoloKernel/Decoding.cs`
-(`DecodePolicy`/`Gate`/`GateDecision`/`DegenGuard`, hand-copies of `HoloEngine.PickToken`) is DELETED
-— those types now come straight from `EvaluatedApplications.Prism`'s `Prism.Inference` namespace
-(`InspectorTrace.cs` and all 4 tool pages updated to `@using global::Prism.Inference` — the `global::`
-is REQUIRED because `Showroom.Pages.Prism`, the Prism tool's own page class, shadows the `Prism`
-package's root namespace in the generated `Showroom.Pages` scope; a plain `@using Prism.Inference`
-fails CS0426). `HoloKernel/AlphaRamp.cs` kept its live stateful ramp (`WarmSteps`/`Advance`/`Alpha`/
-`Complete` — no Prism equivalent, a different concept from a stamped-history journal) but dropped its
-`Reconstruct` static formula; the 3 call sites (`Prism.razor` x2, `Analyst.razor`'s novelty-scan) now
-call `Prism.Lineage.LineageJournal.AlphaFor(round, addRound, iterWarm)` — confirmed the byte-identical
-formula, not assumed. **The one behavioural risk, handled deliberately**: Prism's `DegenGuard` adds a
-SECOND trigger (non-greedy-pick streak, default threshold 5) HoloKernel's port never had; `Prism.razor`'s
-`Policy` is `DecodePolicy.Default with { DegenNonGreedyRun = 0 }` (0 disables a trigger, per
-`DegenGuard`'s own doc) so live generation behaviour is UNCHANGED — enabling the second trigger for
-real is flagged as available, not taken here. `DegenGuard.Observe` also gained a required `greedy`
-parameter; both call sites now call `Gate.Evaluate` immediately before `Gate.Pick` to get it (`Evaluate`
-draws nothing from `rng`, so `Pick`'s own draw/result is unaffected — confirmed by a parity harness, not
-assumed). **Measured, not asserted**: a throwaway console harness reproducing the deleted HoloKernel
-`Gate.Pick`/`DegenGuard` verbatim found `Gate.Pick` 1000/1000 identical to `Prism.Inference.Gate.Pick`
-across 5 vocab sizes x 200 trials (paired seeded `Random`), `DegenGuard`'s collapse-step 50/50 identical
-across a 30-step token/greedy stream, and `AlphaRamp.Reconstruct` vs `LineageJournal.AlphaFor` identical
-on 8 boundary cases (rounds=0/mid-ramp/complete/past-complete, iterWarm=0). Verified builds: `dotnet
-build HoloKernel/HoloKernel.csproj -c Release` and `dotnet build Showroom.csproj -c Release` both green
-(0/0) against a LOCAL `dotnet pack` of `Prism.csproj` (`-p:IsPackable=true`, Prism's own file stays
-`IsPackable=false`) — required bumping `HoloKernel.csproj`'s and `Showroom.csproj`'s own AlgFormer
-`PackageReference` 2.2.0->2.3.0 (a real NU1605 downgrade error otherwise: Prism's own nupkg depends on
-AlgFormer >= 2.3.0, already published on nuget.org, so this is a real, not experimental, bump once
-Prism ships). **NOT LANDABLE YET, and deliberately not committed**: `EvaluatedApplications.Prism` is
-NOT published (`Prism.csproj` stays `IsPackable=false` by design, see `Prism/CLAUDE.md`) — CI's
-`deploy.yml` never builds Showroom (see "Deploy" in `AboutUs/CLAUDE.md`) so this doesn't block a normal
-site deploy, but nobody (including this working tree, right now) can restore `HoloKernel.csproj`/
-`Showroom.csproj` without a local Prism feed. Landing this needs: a coordinator decision to actually
-publish Prism (flip `IsPackable`, set a real version, push), then this same diff restores/builds clean
-against nuget.org with no local feed. **Flagged for the coordinator**: `Prism/CLAUDE.md`'s own
-"Consumers: None yet" line and `AboutUs/CLAUDE.md`'s separate HoloKernel section are now stale w.r.t.
-this proof — route to `prism-owner`/`website-owner` respectively rather than edited from here (out of
-this agent's package boundary).
+**Prism-package migration — LANDED (2026-09-05 proof, confirmed actually live 2026-09-10)**:
+`HoloKernel/Decoding.cs`'s hand-copies of `HoloEngine.PickToken` are gone; `DecodePolicy`/`Gate`/
+`DegenGuard` come from `EvaluatedApplications.Prism`'s `Prism.Inference` namespace
+(`@using global::Prism.Inference` — `global::` is REQUIRED, `Showroom.Pages.Prism` shadows the
+package's root namespace, CS0426 without it). `HoloKernel.csproj` pins `EvaluatedApplications.Prism
+1.0.2` + `AlgFormer 2.4.0`. **Ground truth checked 2026-09-10, not re-assumed from the 2026-09-05
+note**: `Prism` is REAL on nuget.org (`api.nuget.org/v3-flatcontainer/evaluatedapplications.prism/
+index.json` lists 1.0.0/1.0.1/1.0.2) and `dotnet build Showroom.csproj` restores clean from the
+plain public feed — no local `dotnet pack`/temporary feed needed anymore. `HoloKernel.csproj`'s own
+code comment used to say "NOT YET ON NUGET.ORG... do not restore without that feed configured" —
+corrected in place, same pass. Behavioural parity with the deleted HoloKernel port (DegenGuard's
+extra non-greedy trigger disabled via `DegenNonGreedyRun = 0`, `Gate.Evaluate`-before-`Pick` for the
+`greedy` flag, `AlphaRamp.Reconstruct` → `LineageJournal.AlphaFor`) was measured via a parity harness
+at the time and re-confirmed still correct by this pass's own KV-cache equivalence harness (below),
+which runs the exact same `Gate`/`DegenGuard` calls end to end against the real checkpoint.
+
+## Cached serving path — `HoloKernel/HoloSession.cs` (`ServeCache`) + `Pages/Prism.razor` (2026-09-10)
+
+**THE BUG (fixed)**: `GenerateReplyAsync` called `_session.Logits(ctx)` — a full forward recompute
+over up to `Context` tokens — once per generated token, so an N-token reply cost O(N x Context) when
+the engine ships an O(1)/token incremental path. **THE FIX**: `HoloSession` gained an ADDITIVE
+`ServeCache` type + `NewServeCache`/`Prime(cache, tokens)`/`StepToken(cache, tok)`, wrapping
+AlgFormer's StackK-aware pair (`HoloFormer.NewCache(stackK)`/`PrimeIter`/`StepIter` — NOT the plain
+K=1-only `Prime`/`Step`, which would silently under-serve a K>1 model). `HoloSession.Logits(int[])`
+is UNCHANGED (the Analyst's novelty scan still calls it). `GenerateReplyAsync` now primes a cache
+once with the initial context window, then `StepToken`s one new token at a time (O(1)) — until the
+rolling window would need to evict its oldest token (`cache.Filled == _stats.Context`), at which
+point it re-`Prime`s from a freshly-sliced `BuildContext(seq, Context)` window instead of stepping,
+exactly reproducing what the old per-step recompute always did over that same slice (an O(context)
+cost, but ONLY for the steps that actually need it, not every step).
+
+**Iters vs StackK, checked not assumed**: `HoloSession.Logits`'s own doc comment ("honours `Iters`,
+unlike the KV-cache `Prime`/`Step` path") refers to the PLAIN `Prime`/`Step` pair (K=1-only) —
+`ServeCache` deliberately wraps the OTHER pair, `PrimeIter`/`StepIter`, which IS StackK-aware.
+Reflected the real `HoloFormer.LogitsFor` dispatch (`HoloFormer.cs`): a `Layers>1` model (Prism's
+checkpoint is L=6/K=2) routes to `StackIterForward` with a uniform per-layer alpha — exactly what
+`ServeCache`'s `PrimeIter`/`StepIter` calls mirror. **One real caveat, documented on `ServeCache`
+itself**: a `Layers==1` model (Creature/Forecaster) instead dispatches to a DIFFERENT function,
+`IterForward` (the only one that also supports `IterClean`) — this cache is verified equivalent to
+`Logits` only for a multi-layer model; do not route an L=1 tool onto it without re-verifying.
+
+**VERIFIED, not asserted**: a throwaway console harness (`EvaluatedApplications.AlgFormer 2.4.0` +
+`Prism 1.0.2`, same packages Showroom itself uses) loaded the REAL live checkpoint
+(`wwwroot/data/oracle-brain.bin`, L=6/d=96/Shifts=16/Context=192/Vocab=256/K=2) and ran both the old
+per-step `LogitsFor` loop and the new cache loop through the exact same `BuildTranscript`/`CapRecent`/
+`Prime`/`Gate.Evaluate`/`Gate.Pick`/`DegenGuard` calls `Prism.razor` itself uses, same seeded `Random`
+per paired run. **Token sequences were IDENTICAL** across: a short prompt well inside the context
+window (178 generated tokens), a long/near-full prompt that forces mid-generation window eviction
+(107 tokens, re-prime path exercised), and 5 more prompts x 3 seeds each (15 more runs, incl. an
+empty prompt and a 192-token-cap run) — 17 runs, 17/17 exact id-sequence matches, zero divergence.
+**Measured per-token cost** (same harness, `Stopwatch.Elapsed`, JIT-warmed by the equivalence runs
+already having executed first): well inside the window (seq len 11, 178 tokens generated) — old
+15.06 ms/token, new 0.141 ms/token (~107x). Fully window-overflowing (seq len 141, generating past
+Context=192 so nearly every step re-primes) — old 40.09 ms/token, new 9.91 ms/token (~4x; even a
+"same O(context)" re-prime beats the old path, since `StackIterForward`'s full-window forward also
+materializes per-position training-shaped caches the lean `KvCache` step buffers never allocate).
+A mid-size prompt (seq len 31, 20 tokens/run x 5 runs) — old 3.59 ms/token, new 0.89 ms/token (~4x).
+Harness + reflection probe kept in the session scratchpad, not committed (throwaway, not a fixture).
 
 ## Boot screen — `wwwroot/index.html` + `wwwroot/css/boot.css`
 Retro-terminal boot log, authentically real not decorative: real file names as the WASM host fetches

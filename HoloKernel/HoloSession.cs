@@ -104,6 +104,96 @@ public sealed class HoloSession
     /// <summary>Serving logits. Honours <c>Iters</c>, unlike the KV-cache <c>Prime</c>/<c>Step</c> path.</summary>
     public double[] Logits(int[] context) => Model.LogitsFor(context);
 
+    /// <summary>
+    /// Cached serving state for the O(1)/token KV-cache path (<see cref="NewServeCache"/>/
+    /// <see cref="Prime(ServeCache,int[])"/>/<see cref="StepToken"/>) — additive alongside
+    /// <see cref="Logits"/>, which stays untouched for full-recompute callers (e.g. the Analyst's
+    /// novelty scan).
+    ///
+    /// Wraps AlgFormer's StackK-aware incremental pair, <c>HoloFormer.NewCache(stackK)</c> /
+    /// <c>PrimeIter</c> / <c>StepIter</c> — NOT the plain (K=1-only) <c>Prime</c>/<c>Step</c> pair
+    /// this type's own doc-comment warns about above, which would silently under-serve a K&gt;1
+    /// model. Per AlgFormer's own CLAUDE.md this pair is bit-identical to <c>StackIterLogitsCpu</c>;
+    /// measured directly against a real checkpoint (Prism's L=6/K=2/ctx=192 shape) to return the
+    /// EXACT SAME generated token sequence as calling <see cref="Logits"/> once per step, including
+    /// through a rolling-window overflow (see the caller-side eviction note below).
+    ///
+    /// ONE REAL GOTCHA: this mirrors <c>StackIterForward</c>, which <see cref="Logits"/> itself only
+    /// dispatches to when the model has MORE THAN ONE LAYER — <c>HoloFormer.IterAwareForward</c>
+    /// routes a single-layer model through a DIFFERENT function, <c>IterForward</c> (the only one
+    /// that also supports <c>IterClean</c> cleanup). So this cache is verified equivalent to
+    /// <see cref="Logits"/> for a multi-layer model (Prism) but was NOT verified for a single-layer
+    /// one (Creature/Forecaster are Layers=1 today) — don't route those onto this path without
+    /// re-verifying equivalence first.
+    ///
+    /// EVICTION: the cache is append-only and cannot forget its oldest token — a caller doing
+    /// rolling generation past the model's own context window must re-<see cref="Prime(ServeCache,int[])"/>
+    /// (not <see cref="StepToken"/>) with the freshly-sliced window the moment
+    /// <see cref="ServeCache.Filled"/> would reach <c>Stats().Context</c>, exactly reproducing what a
+    /// per-step <see cref="Logits"/> call already does over that same slice — see Prism.razor's
+    /// <c>GenerateReplyAsync</c> for the reference caller.
+    /// </summary>
+    public sealed class ServeCache
+    {
+        internal readonly HoloFormer.KvCache Cache;
+        internal readonly int StackK;
+        internal readonly double[] Alpha;
+
+        /// <summary>Tokens currently resident in the cache — compare against <c>Stats().Context</c> to
+        /// decide whether the next step needs a re-<see cref="Prime(ServeCache,int[])"/> instead of a
+        /// <see cref="StepToken"/>.</summary>
+        public int Filled { get; internal set; }
+
+        internal ServeCache(HoloFormer.KvCache cache, int stackK, double[] alpha)
+        {
+            Cache = cache; StackK = stackK; Alpha = alpha;
+        }
+    }
+
+    /// <summary>
+    /// Build a fresh cache sized to this session's own <see cref="KPass"/>, with the current
+    /// <see cref="ServeAlpha"/> captured once at creation time — call this again (not just
+    /// <see cref="Prime(ServeCache,int[])"/>) if <see cref="ApplyServe(double)"/> changes the served
+    /// alpha afterwards, since an existing cache won't pick that up. See <see cref="ServeCache"/>'s
+    /// own doc for what this path does and does not reproduce bit-for-bit.
+    /// </summary>
+    public ServeCache NewServeCache()
+    {
+        var alpha = new double[Model.Layers];
+        Array.Fill(alpha, ServeAlpha);
+        return new ServeCache(Model.NewCache(KPass), KPass, alpha);
+    }
+
+    /// <summary>
+    /// Reset <paramref name="cache"/> and run <paramref name="context"/> through it, returning
+    /// logits for the position right after the last token — the O(context) "cold start"/re-prime
+    /// step. Callers doing rolling generation (where the full conversation may exceed the model's
+    /// own context window) should slice to at most <c>Stats().Context</c> tokens first, exactly as
+    /// they would before calling <see cref="Logits"/>.
+    /// </summary>
+    public double[] Prime(ServeCache cache, int[] context)
+    {
+        ArgumentNullException.ThrowIfNull(cache);
+        var logits = Model.PrimeIter(cache.Cache, context, cache.StackK, cache.Alpha);
+        cache.Filled = context.Length;
+        return logits;
+    }
+
+    /// <summary>
+    /// Append one token, O(1) in context length, returning next-token logits. Only valid while
+    /// <see cref="ServeCache.Filled"/> is still under the model's own context window
+    /// (<c>Stats().Context</c>) — the cache cannot forget its oldest token on its own; once the
+    /// rolling window would need to evict one, re-<see cref="Prime(ServeCache,int[])"/> instead (see
+    /// the eviction note on <see cref="ServeCache"/>).
+    /// </summary>
+    public double[] StepToken(ServeCache cache, int token)
+    {
+        ArgumentNullException.ThrowIfNull(cache);
+        var logits = Model.StepIter(cache.Cache, token, cache.StackK, cache.Alpha);
+        cache.Filled++;
+        return logits;
+    }
+
     public byte[] Export() => Model.Serialize();
 
     public ModelStats Stats()
