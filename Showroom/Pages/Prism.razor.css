@@ -39,7 +39,12 @@
 @media (prefers-reduced-motion: reduce) { .car { animation: none; opacity: 0.6; } }
 .or-note { display: block; font-size: 0.78rem; color: var(--ink-faint); margin-top: 0.3rem; }
 .or-input-row { display: flex; gap: 0.6rem; padding: 0.8rem 1rem; border-top: 1px solid var(--border); background: var(--surface); }
-.or-input { flex: 1; background: var(--bg-2); border: 1px solid var(--border-2); border-radius: 9px; padding: 0.55rem 0.8rem; color: var(--ink); font-size: 0.95rem; }
+/* min-width:0 is load-bearing, not defensive. A flex item's automatic minimum size is its INTRINSIC
+   width, so `flex: 1` alone will not let this input shrink past the width its own padding + font
+   demand — the row then pushes wider than the viewport and the Clear button hangs off the right edge
+   on a phone (reported from a real device, 2026-09-10). Same failure as the site-wide .grid 330px
+   overflow already on record: the fix is always to let the item shrink, never to clip the parent. */
+.or-input { flex: 1; min-width: 0; background: var(--bg-2); border: 1px solid var(--border-2); border-radius: 9px; padding: 0.55rem 0.8rem; color: var(--ink); font-size: 0.95rem; }
 .or-input:focus { outline: none; border-color: var(--accent); }
 .go { background: var(--accent); color: #fff; border: none; border-radius: 10px; padding: 0.55rem 1.2rem; font-size: 0.95rem; font-weight: 600; cursor: pointer; transition: filter 0.15s; }
 .go:hover:not(:disabled) { filter: brightness(1.08); }
@@ -59,4 +64,11 @@
     .room { padding-left: 12px; padding-right: 12px; }
     .cr-stats { grid-template-columns: 1fr 1fr; gap: 0.55rem; }
     .stat { padding: 0.7rem 0.6rem; }
+
+    /* Even with min-width:0 the input becomes unusably narrow once two buttons share its row on a
+       360px phone. Give the input the full width and drop the buttons onto a second row, so nothing
+       has to shrink and nothing can overflow regardless of button label length. */
+    .or-input-row { flex-wrap: wrap; padding: 0.7rem 0.8rem; }
+    .or-input { flex: 1 1 100%; }
+    .go, .ghost { flex: 1 1 0; white-space: nowrap; padding-left: 0.8rem; padding-right: 0.8rem; }
 }
