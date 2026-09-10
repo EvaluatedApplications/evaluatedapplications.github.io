@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Smaller Than TinyStories</title>
+<meta name="description" content="A new HoloFormer checkpoint just crossed 107,776 parameters, already well under every published TinyStories model. On size that's a fact. On writing ability it's a bet, and I've included a real sample so nobody has to take my word for it.">
+<link rel="canonical" href="https://evaluatedapplications.github.io/articles/smaller-than-tinystories.html">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Smaller Than TinyStories">
+<meta property="og:description" content="A new HoloFormer checkpoint just crossed 107,776 parameters, already well under every published TinyStories model. On size that's a fact. On writing ability it's a bet, and I've included a real sample so nobody has to take my word for it.">
+<meta property="og:url" content="https://evaluatedapplications.github.io/articles/smaller-than-tinystories.html">
+<meta name="twitter:card" content="summary">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%23f0796a'/%3E%3Cstop offset='.166' stop-color='%23f0a15a'/%3E%3Cstop offset='.333' stop-color='%23e6c450'/%3E%3Cstop offset='.5' stop-color='%237bd86a'/%3E%3Cstop offset='.666' stop-color='%234aa3ff'/%3E%3Cstop offset='.833' stop-color='%237d7dff'/%3E%3Cstop offset='1' stop-color='%23c07dff'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='32' height='32' rx='7' fill='%23050608'/%3E%3Cpath d='M16 5L27 26H5Z' fill='none' stroke='url(%23g)' stroke-width='2' stroke-linejoin='round'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="/assets/site.css">
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"BlogPosting","headline":"Smaller Than TinyStories","description":"A new HoloFormer checkpoint just crossed 107,776 parameters, already well under every published TinyStories model. On size that's a fact. On writing ability it's a bet, and I've included a real sample so nobody has to take my word for it.","url":"https://evaluatedapplications.github.io/articles/smaller-than-tinystories.html","datePublished":"2026-09-10","author":{"@type":"Organization","name":"Evaluated Applications","url":"https://evaluatedapplications.github.io/"},"publisher":{"@type":"Organization","name":"Evaluated Applications","url":"https://evaluatedapplications.github.io/"}}
+</script>
+</head>
+<body class="os-chrome">
+<div class="beam"></div>
+
+<nav class="site-nav">
+  <div class="wrap">
+    <a class="brand" href="/">
+      <svg class="mark" viewBox="0 0 32 32" aria-hidden="true"><defs><linearGradient id="m" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#f0796a"/><stop offset=".166" stop-color="#f0a15a"/><stop offset=".333" stop-color="#e6c450"/><stop offset=".5" stop-color="#7bd86a"/><stop offset=".666" stop-color="#4aa3ff"/><stop offset=".833" stop-color="#7d7dff"/><stop offset="1" stop-color="#c07dff"/></linearGradient></defs><path d="M16 5L27 26H5Z" fill="none" stroke="url(#m)" stroke-width="2" stroke-linejoin="round"/></svg>
+      Evaluated Applications
+    </a>
+    <input type="checkbox" id="navtoggle" class="nav-toggle">
+    <label for="navtoggle" class="nav-burger" aria-label="Toggle menu"><span></span><span></span><span></span></label>
+    <div class="nav-links">
+      <a href="/">Home</a>
+      <a href="/packages.html">Packages</a>
+      <a href="https://www.nuget.org/profiles/evaluatedapplications" target="_blank" rel="noopener">NuGet</a>
+    </div>
+  </div>
+</nav>
+
+<main class="wrap">
+
+<article class="prose">
+
+  <nav class="crumb"><a href="/articles.html">Articles</a> <span>/</span> Smaller Than TinyStories</nav>
+  <h1>Smaller Than TinyStories</h1>
+  <p class="article-date" style="margin-top:12px">Evaluated Applications · Published <time datetime="2026-09-10">10 September 2026</time></p>
+  <p class="lede" style="margin-top:12px">A checkpoint in this lineage just crossed 107,776 real parameters, already smaller than every
+    published TinyStories reference model, the smallest of which is roughly ten times its size. On size, that's just true.
+    On writing ability, it isn't there yet, and the honest way to say this is that beating TinyStories on both counts is a
+    bet I'm making, not a result I'm reporting. Here's a real sample of what it currently writes, then the actual numbers
+    behind the size claim and the actual numbers behind why I think the bet is a reasonable one to make anyway.</p>
+
+  <div class="toc">
+    <h2>On this page</h2>
+    <ul>
+      <li><a href="#why">Why TinyStories is the comparison</a></li>
+      <li><a href="#size">The size, plainly</a></li>
+      <li><a href="#sample">What it currently writes</a></li>
+      <li><a href="#milestone">The actual milestone: spelling and bits per character</a></li>
+      <li><a href="#granularity">Why spelling here isn't the easy half</a></li>
+      <li><a href="#weights">What changed in the weights, not in the output</a></li>
+      <li><a href="#plateau">The plateau that was never actually stuck</a></li>
+      <li><a href="#honest">The part that went the wrong way</a></li>
+      <li><a href="#bet">The bet</a></li>
+    </ul>
+  </div>
+
+  <h2 id="why">Why TinyStories is the comparison</h2>
+  <p>TinyStories is a 2023 paper (Eldan and Li, arXiv 2305.07759) built around a simple, useful idea: train very small
+    language models on a synthetic corpus of simple children's stories and see how small a model can get while still
+    producing text that reads as coherent English. Their published reference models come in five sizes: 1M, 3M, 8M, 28M
+    and 33M parameters. It's a fair yardstick for what I'm building here, because the whole point of this lineage is the
+    same question from the opposite direction: how much can you make a model do at a size TinyStories never tried to go.</p>
+  <p>This checkpoint is real, weight-tied, and runs entirely in the browser on the <a href="/tools/prism">Prism tool
+    page</a> on this site — nothing server-side, nothing hidden. That's the same standard I'm holding it to here: if I
+    say a number about it, you can go pull the same checkpoint and check it.</p>
+
+  <h2 id="size">The size, plainly</h2>
+  <p>The current checkpoint is <strong>107,776 parameters</strong>. Shape: d=96, 6 layers, 16 shifts, a context window of
+    192 tokens, a 256-token vocabulary, and 2 weight-tied passes over the same weights per forward step. As a file it's
+    862,244 bytes raw, about 471KB gzipped, which is what actually ships to your browser when you load the tool.</p>
+  <p>Against TinyStories' own five sizes, that puts this model at roughly a tenth the size of their smallest published
+    model (1M parameters) and roughly three hundredth the size of their largest (33M parameters). That comparison is
+    solid and I'm comfortable stating it as a fact rather than a hope: on raw parameter count, this is already smaller
+    than anything in their lineup, by a wide margin, not a close one.</p>
+  <p>There's a second dimension to that size gap that isn't obvious from the parameter count alone, and it's worth
+    stating here before the sample below, because it changes how you should read everything that follows: this model
+    isn't just smaller, it's also working with a much finer-grained vocabulary than a typical TinyStories-style model,
+    which means it has to make more individual correct decisions to produce the same visible output. I'll come back to
+    that with real numbers further down.</p>
+
+  <h2 id="sample">What it currently writes</h2>
+  <p>Before anything else, here's an actual, unedited sample pulled from this checkpoint at a middling temperature. I'm
+    putting it before the good numbers on purpose, because this site's whole voice is candid about what isn't built yet,
+    and a milestone piece that let you infer more than this would be dishonest the moment anyone clicked through to the
+    live tool and generated their own sample:</p>
+  <blockquote>"One doging the saw the started to the started to the very. They w..."</blockquote>
+  <p>That is not TinyStories-quality prose. It isn't close. There's no subject that survives more than a couple of
+    words, "doging" isn't a word, and the whole thing decays into a repeat pattern ("the started to the started to")
+    that's exactly the kind of loop I've written about in earlier pieces in this lineage. I want that sample sitting
+    right here, not softened, not cherry-picked for a better run, because the rest of this piece is going to talk about
+    real, measured improvement, and none of that improvement means the model currently writes readable stories. It
+    doesn't. Not yet.</p>
+
+  <h2 id="milestone">The actual milestone: spelling and bits per character</h2>
+  <p>What did actually move, over the last stretch of training: bits per character, the measure of how much genuine
+    uncertainty the model still has about the next character, sat flat at 2.6 to 2.7 for days, through several internal
+    restructures of the architecture that didn't move it either way. It has now dropped to about 2.3, at roughly round
+    190,000 of continuous training. I want to flag immediately that this number isn't directly comparable to the bits
+    per character the TinyStories paper itself reports — different tokenizer, different measure entirely — so I'm not
+    claiming a benchmark win here, just describing a real drop in this model's own metric on its own terms.</p>
+  <p>The more legible number, to me, is spelling. Across a held-out sample, <strong>88.5% of words the model produces
+    are spelled correctly</strong>. Broken down by word length: 94.1% for 3-letter words, 87.4% for 4-letter words, and
+    49.5% for words of 5 letters or more. That last figure is the one I actually watch, because short words are easy to
+    get right by luck or by memorizing a small closed set, and long words aren't. Long-word spelling has roughly
+    tripled since the last time I measured it, from 16.6% to 49.5%.</p>
+  <p>Degenerate looping — the model falling into a short repeating cycle and staying there, the thing the sample above
+    does — has also fallen sharply. 59.0% of vocabulary-seeded generations now produce no repeating loop at all, up from
+    about 40% the last time I checked. That's real progress on the specific failure mode you can see in the sample
+    above, even though, as that sample shows, the failure mode is still common enough to be the first thing you'll hit.</p>
+
+  <h2 id="granularity">Why spelling here isn't the easy half</h2>
+  <p>I want to correct my own framing here, because I nearly wrote this piece treating "spells words correctly" as the
+    lesser achievement, the thing you get before the real work of stringing sentences together. That's wrong for this
+    specific model, and it's wrong for a measurable reason: I went and actually checked the vocabulary instead of
+    assuming it. This model's tokenizer has 256 entries, and it is a bigram vocabulary, not a word-level one. Mean
+    token length across the whole vocabulary is 1.63 characters. 95 tokens are a single character, 160 are two
+    characters, and the longest token in the entire 256-entry vocabulary is two characters. There is no token longer
+    than that.</p>
+  <p>What that means in practice is that every word this model produces is built a couple of characters at a time,
+    with no lookahead past the current token:</p>
+  <pre><code>Once   -&gt;  O | nc | e
+upon   -&gt;  u | po | n
+little -&gt;  li | tt | le
+named  -&gt;  na | me | d</code></pre>
+  <p>Measured across real prose, it takes an average of 2.84 tokens to produce one word at this granularity. A
+    TinyStories-style model, by contrast, typically uses a large word-level vocabulary where one token is roughly one
+    word. That difference compounds fast once you're stringing words together. Take a five-word phrase like "going to
+    there with them": at word granularity that's 5 correct decisions in a row. At this model's granularity, producing
+    that same five words correctly is <strong>15 correct token decisions in a row</strong>, three times as many,
+    each one made without being able to see past it to the token after.</p>
+  <p>So when I say 88.5% of words come out spelled correctly, and 49.5% of five-plus-letter words come out spelled
+    correctly, that's not the model doing the easy warm-up task before real composition starts. Correctly spelling a
+    five-letter word at this granularity typically takes two or three sequential, blind token decisions in a row, each
+    one consistent with the ones before it and none of them visible in advance. That's already the same kind of
+    multi-step composition a word-level model is doing when it strings a short phrase together, just measured at a
+    finer grain. It doesn't make the long-form sample above read any better today, and I'm not using this to talk that
+    sample up. But it does mean the size comparison earlier in this piece has a second axis worth stating plainly:
+    this model is roughly ten to three hundred times smaller in parameters than TinyStories' own range, and it's doing
+    that while working at a token granularity fine enough that matching the same visible output costs it about three
+    times as many sequential decisions.</p>
+
+  <h2 id="weights">What changed in the weights, not in the output</h2>
+  <p>The more interesting story, and the actual reason I think the ability bet is reasonable, is underneath the output
+    entirely. I compared six checkpoints spanning this whole stretch and looked at how the weights themselves moved, not
+    just what they produced. The finding is consistent across all 42 bank-and-layer combinations in the model: <strong>the
+    weights rotated, they did not grow.</strong> Every one of those 42 combinations moved 10 to 1,000 times more by
+    rotation (changing what direction a weight vector points) than by rescaling (changing how big it is), with cosine
+    similarity between the old and new direction sitting between 0.977 and 0.999 — barely different in raw angle, but
+    consistently, deliberately different, checkpoint after checkpoint, in the same direction.</p>
+  <p>Magnitudes, meanwhile, barely moved at all: under 1.5% change on every weight bank across the entire window, and
+    the share of the total work done by each layer stayed essentially flat throughout. Two other things stayed
+    essentially fixed the whole time: the token embeddings and the readout geometry. Effective dimensionality of the
+    embeddings held between 14.7 and 14.9 the entire window, and the readout geometry correlated between 0.996 and 0.998
+    across checkpoints. In plain terms: the model didn't relearn what tokens mean, and it didn't relearn how to read its
+    own internal state back out into a prediction. What it did was reorganise how it relates things to each other in
+    between those two fixed points. That's a genuinely different kind of change than "the model got bigger" or "the
+    model saw more examples of the same pattern" — it's restructuring, not accumulation.</p>
+
+  <h2 id="plateau">The plateau that was never actually stuck</h2>
+  <p>This is the single most interesting thing I found this pass, and I want to say it plainly because it runs against
+    what "plateau" usually implies. For days, bits per character sat flat at 2.6 to 2.7 and looked, from the loss curve
+    alone, exactly like a model that had stopped learning. It hadn't. When I measured the rotation rate specifically
+    during that flat stretch, it was <strong>0.0198 per round</strong> — faster than the <strong>0.0159 per round</strong>
+    average across the whole window that includes the actual jump down to 2.3. The model was rotating toward whatever it
+    eventually landed on faster during the plateau than it was on average overall. The loss just hadn't caught up to the
+    reorganisation yet. If I'd stopped training when the loss curve looked flat, I would have stopped exactly when the
+    underlying structure was moving fastest.</p>
+
+  <h2 id="honest">The part that went the wrong way</h2>
+  <p>I don't want to write a milestone piece that only lists the numbers that moved in the direction I wanted, so here
+    are the two that didn't, or that I can't yet be sure about.</p>
+  <ul>
+    <li><strong>Long-form coherence got worse over the same window, not better.</strong> The longest run of valid
+      English the model can sustain in one stretch actually shrank across these checkpoints, and a corruption test
+      (feeding the model a deliberately broken input and seeing how much it relies on the good context around the
+      break to recover) suggests it's leaning less on context than it used to, not more. I want to flag honestly that
+      this particular test only runs across 60 windows, which is too coarse a sample for me to call this conclusive
+      either way — it might be a real regression, or it might be noise at that sample size. I'd rather say that plainly
+      than quietly leave it out because it complicates the headline.</li>
+    <li><strong>The corpus changed on the same day as some of these measurements, which muddies attribution.</strong>
+      TinyStories' own dataset is now 55% of a 3.77GB training corpus this model trains against. The spelling gains
+      described above predate that corpus change, so I'm confident those aren't just an artifact of suddenly seeing more
+      TinyStories-shaped text. But a later, roughly six-fold acceleration in how fast the weights were rotating sits
+      entirely inside the window after that corpus change, and I can't yet separate how much of that acceleration is the
+      architecture doing something new versus the training mix simply changing underneath it. I'm noting it rather than
+      picking an answer I don't have evidence for yet.</li>
+  </ul>
+
+  <h2 id="bet">The bet</h2>
+  <p>So here's where this actually stands. On size, the claim is closed, and it's now two-dimensional: 107,776
+    parameters is roughly ten times smaller than TinyStories' own smallest published model and about three hundred
+    times smaller than their largest, and it's getting there on a bigram vocabulary that costs it roughly three
+    sequential token decisions for every one a word-level model spends on the same output. Both halves of that are
+    true today, not a projection. On long-form ability, nothing in this piece should read as "it writes like
+    TinyStories now." It doesn't. The sample near the top of this piece is what it actually produces stitched across a
+    full generation, and it's well short of readable prose.</p>
+  <p>What I do have is a specific, measured reason to think ability is catching up rather than stalled, and I'd
+    rather state it as what it actually is than round it up: this model is already sustaining long, blind runs of
+    correct multi-token spelling decisions (88.5% overall, with long words roughly tripling to 49.5%) at a granularity
+    where each one of those decisions is comparable in kind to a word-level model choosing its next word. Add to that
+    loop-free generations up from about 40% to 59.0%, bits per character finally breaking a days-long
+    plateau, and — the part I actually trust most — direct evidence that the weights kept reorganising fast the entire
+    time the loss curve looked stuck, so the plateau was never really a stall. Set against that, honestly, is long-form
+    coherence moving the wrong way over the same stretch and a corpus change I can't fully untangle from one of the
+    more dramatic recent numbers yet.</p>
+  <p>That's the actual position: already smaller on both parameter count and token granularity, not yet better at
+    stringing what it can already spell into something that reads as a sentence, with real evidence the underlying
+    structure is still doing productive work rather than sitting still. Surpassing TinyStories on both size and
+    ability is the bet this lineage is making. I'm not going to call it won before it's won — I'd rather publish the
+    sample above now and let the next piece in this series show whether the bet paid off.</p>
+
+  <p style="margin-top:2.5rem"><a href="/articles.html">&larr; Back to Articles</a></p>
+
+</article>
+</main>
+
+<footer class="site">
+  <div class="wrap">
+    <span>Evaluated Applications — .NET libraries, England.</span>
+    <span class="mono">© <span id="yr"></span> · <a href="/">Home</a> · <a href="/articles.html">Articles</a> · <a href="/packages.html">Packages</a> · <a href="https://www.nuget.org/profiles/evaluatedapplications" target="_blank" rel="noopener">NuGet</a></span>
+  </div>
+</footer>
+<script>document.getElementById('yr').textContent = new Date().getFullYear();</script>
+</body>
+</html>

@@ -762,7 +762,31 @@ no source-of-truth doc to pull facts from (there are no "facts," it's an essay).
   subset (it doesn't need to link to itself). No other page's nav/footer was touched — if Articles
   ever earns enough real content to be a primary destination, revisit the nav-item question then,
   don't preempt it now with zero published pieces.
-- **Published so far: three.** `ctx8-and-the-reverse-grow.html` ("Growing the Wrong Way," dated
+- **Published so far: four.** `smaller-than-tinystories.html` ("Smaller Than TinyStories," dated
+  2026-09-10) — the current lineage's size-vs-ability milestone piece: 107,776 real parameters
+  (d=96/6 layers/16 shifts/ctx192/vocab256/K=2 weight-tied), 862,244 bytes raw / ~471KB gzipped,
+  already ~10x smaller than TinyStories' smallest published reference model (1M) and ~300x smaller
+  than its largest (33M, arXiv 2305.07759) — a solid, closed size claim. Deliberately does NOT claim
+  a matching ability win: opens with a real unedited long-form sample ("One doging the saw the
+  started to the started to the very. They w...") so nobody infers coherent prose from the headline,
+  and states surpassing TinyStories on ability as a stated bet, not a result. Covers the measured
+  milestone (bits/char plateaued 2.6-2.7 for days then dropped to ~2.3 around round 190,000; spelling
+  88.5% overall, 94.1%/87.4%/49.5% by word length, long-word spelling roughly tripled from 16.6%;
+  degenerate looping down to 59.0% loop-free from ~40%), a late correction folded in mid-task (the
+  256-entry vocabulary is bigram-only, mean token length 1.63 chars, zero tokens 3+ chars — so
+  spelling here is already multi-token blind composition, ~2.84 tokens/word, e.g. "going to there
+  with them" = 15 correct sequential token decisions here vs. 5 for a word-level model — this is
+  framed as a SECOND size/cost axis, not used to talk up the unchanged long-form sample), the
+  weight-rotation-not-growth finding across 6 checkpoints (42/42 bank-layer combos rotated 10-1000x
+  more than they rescaled, cosine 0.977-0.999, magnitudes <1.5%, embeddings/readout geometry fixed
+  at eff-dim 14.7-14.9 / correlation 0.996-0.998), and the plateau-was-still-rotating-faster finding
+  (0.0198/round during the flat stretch vs. 0.0159/round average). Honest caveats kept, not buried:
+  long-form coherence got WORSE over the same window (shortest-longest-valid-run shrank, a 60-window
+  corruption test too coarse to be conclusive), and the corpus changed the same day (TinyStories now
+  55% of a 3.77GB corpus; spelling gains predate it, but a later 6x rotation-rate acceleration sits
+  entirely inside the post-change window and isn't yet separable from it). No benchmark-victory claim
+  (bits/char here isn't comparable to the TinyStories paper's own tokenizer/measure), nothing about a
+  paid tier. `ctx8-and-the-reverse-grow.html` ("Growing the Wrong Way," dated
   2026-09-02) — coordinator-authored follow-up to `ctx4-plateau.html`: the ctx=4→ctx=8 fork's
   ~96,000-round non-recovery, the debunked "hard-mine-first-then-grow" hunch (with the honest
   correction that the LR-starvation explanation was checked and ruled out), the pivot to fast
@@ -936,12 +960,15 @@ check the nav is compact on a narrow (≤640px) viewport — that was the failin
 got re-litigated. Do this walk any time the nav, page set, or card grid changes; record it in the
 task's return message. An href-audit alone is not this check (that was the 2026-08-26 mistake).
 
-**SEO/nav facts, re-verified against the real `sitemap.xml` this pass (2026-09-02 tidy-up, was stale
-at "17 pages")**: `sitemap.xml` lists **20 routable page URLs** (the homepage `/` + 19 named pages —
-11 package + 3 reference + `packages.html`/`articles.html` + the 3 real articles) + 4 live tool
-routes + `/tools/` = 25 `<url>` entries total. `404.html`, `recycledao-preview.html`, and
-`articles/_example.html` are correctly absent (deliberately non-routable — see "SiteKit — reconciled
-status & open decisions" above for the full 23-file breakdown this count is derived from).
+**SEO/nav facts, re-verified against the real `sitemap.xml` this pass (2026-09-10, was stale at "20
+pages" after the 4th article published)**: `sitemap.xml` lists **21 routable page URLs** (the
+homepage `/` + 20 named pages — 11 package + 3 reference + `packages.html`/`articles.html` + the 4
+real articles) + 4 live tool routes + `/tools/` = 26 `<url>` entries total. `404.html`,
+`recycledao-preview.html`, and `articles/_example.html` are correctly absent (deliberately
+non-routable — see "SiteKit — reconciled status & open decisions" above for the full 23-file
+breakdown this count is derived from; that section's own "3 real article pages"/"3 real articles"
+counts are dated batch-log text from 2026-09-02, left verbatim as history per its own stated
+convention, not updated here — they predate this 4th article by over a week).
 Every page's `footer.site` carries a second internal-link path beyond the top nav. JSON-LD on every
 page (`Organization`+`WebSite` on the index, `SoftwareApplication` on all 11 package pages,
 `TechArticle` on the 3 explainer pages). Forward cross-links exist base→extension
