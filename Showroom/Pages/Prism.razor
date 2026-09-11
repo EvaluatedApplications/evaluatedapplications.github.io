@@ -170,6 +170,14 @@
     // snapshots.
     int? _trainedStackK;
     int? _trainedIterWarm;
+
+    // The seed exchange's opening prompt, loaded from data/oracle-opener.txt so changing it is a DATA refresh
+    // (raw copy + regzip, no publish) rather than a source change that needs the whole AOT/trim pipeline
+    // rebuilt. It has to be re-measured against every new checkpoint — a good opener for one set of weights is
+    // not automatically good for the next — so it changes far more often than this page's code does, and
+    // making it a compiled constant meant a ~5-minute publish to change a sentence. The literal below is only
+    // the fallback for a checkpoint published without the sidecar.
+    string _opener = "Once upon a time";
     double _trainedAlpha = 1.0;   // reconstructed below via Prism.Lineage.LineageJournal.AlphaFor — a mid-ramp
     // snapshot deserves a mid-ramp alpha, not a flat 1.0 guess (that would ALSO misrepresent it, just in the
     // opposite direction). Only valid for a single-layer checkpoint (layer 0's real add-round is 0 by
@@ -420,6 +428,15 @@
             try { _trainedIterWarm = int.Parse((await Http.GetStringAsync("data/oracle-iterwarm.txt")).Trim()); Finish(s, $"{_trainedIterWarm:N0}-round ramp"); }
             catch { Finish(s, "not shipped (optional)", "fail"); _trainedIterWarm = null; }
 
+            s = Begin("data/oracle-opener.txt");
+            try
+            {
+                var o = (await Http.GetStringAsync("data/oracle-opener.txt")).Replace("\r", "").Trim();
+                if (o.Length is > 0 and <= 140) { _opener = o; Finish(s, $"\"{_opener}\""); }
+                else Finish(s, "empty or over 140 chars, keeping the built-in", "fail");
+            }
+            catch { Finish(s, "not shipped (optional), keeping the built-in", "fail"); }
+
             // fixed to the REAL trained depth (falls back to the file's bare K=1 only if the metadata sidecar is
             // missing) — never adjusted after this; see the field comments above for why.
             _k = _trainedStackK ?? 1;
@@ -475,15 +492,18 @@
             // one page-load earlier than the visitor's own first message.
             try
             {
-                // Chosen by MEASUREMENT against this exact checkpoint, not by taste: 12 sampled runs of a
-                // dozen candidate openers through this same GenerateReplyAsync path, scored on the battery's
-                // own longest-valid-English-chain metric plus a distinct-word count (length alone rewards a
-                // "there and there and" stutter). This one topped both. The previous opener,
-                // "Say a bunch of nonsense, please!", returned an EMPTY reply on 12 of 12 runs — the seed
-                // exchange was rendering the "(blank)" placeholder as the page's first impression.
+                // Chosen by MEASUREMENT against the live checkpoint, not by taste. Re-scored 2026-09-11 at
+                // r250,331 across 25 candidate openers: greedy continuation of each, scored on longest
+                // unbroken run of real words, spelling rate against a 6,262-word dictionary built from the
+                // project's own story and dialogue corpora, and a degenerate-loop check. "Once upon a time"
+                // returned a 28-word chain at 96% spelling and, unlike the higher-chain candidates, its
+                // continuation actually reads as a story rather than a "They were sad and sad and sad" stutter
+                // — which is why it was picked over two candidates that scored a few words longer.
+                // The previous opener, "Say a bunch of nonsense, please!", returned an EMPTY reply on 12 of
+                // 12 runs and rendered the "(blank)" placeholder as the page's first impression.
                 // Re-measure when the checkpoint is refreshed; a good opener for one checkpoint is not
                 // automatically good for the next.
-                AddTurn(new ChatTurn(IsUser: true, Text: "Say something."));
+                AddTurn(new ChatTurn(IsUser: true, Text: _opener));
                 var (seedText, seedReason) = await GenerateReplyAsync(onPartial: null);
                 AddTurn(new ChatTurn(IsUser: false, Text: seedText, Reason: seedReason));
             }
