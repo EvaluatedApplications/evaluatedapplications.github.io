@@ -73,6 +73,38 @@ Root static pages (`site/*.html`), all built on the shared design system:
 - `algformer-gpu.html`, `evalapp.html`, `evalapp-neural.html`, `phasor.html`,
   `holodb-client.html`, `holodb-protocol.html`, `holovoxel.html`, `prose.html`, `tracer.html` —
   one page per remaining package, all built on the plain shared template (see below).
+  **`phasor.html` re-rendered 2026-09-12** for Phasor v1.3.0 (`Phasor/docs/site.md`'s new
+  "Hologram: readable algebra with operators" section — a hands-on GUIDE, not marketing copy,
+  the user's own words: "I need a guide on how to use the new phasor ... I wanna try out the
+  native hologram types"). New `<section id="hologram">` inserted between "Key features" and
+  "Get started" (What it is / the 5-op algebra list / a worked example with a verified
+  console-output block / arithmetic with numbers / the hot-path Bind-vs-BindInto before-after /
+  a gotchas list), wrapped in a new `.guide` typography scope (h3/ul/li rhythm, matches `.prose`'s
+  own values — reusable for the next product page that needs a guide-shaped section without the
+  full `.prose` article shell). Version bumped to v1.3.0 in both places the page shows it (hero
+  `.facts` pill, JSON-LD `softwareVersion`) — `sitemap.xml` carries no `lastmod` field site-wide,
+  nothing to bump there. Two new small, reusable `site.css` components, neither page-scoped:
+  **`.snip.out`+`.snip-tag`** (a printed-OUTPUT variant of the existing `.snip` code box — solid
+  `var(--ok)` left edge + a tinted fill + an in-flow uppercase "Output" label, so a reader can't
+  mistake the four correlation numbers for more C# to paste; the label is in normal flow, not
+  absolutely positioned, specifically so `.snip`'s own `overflow-x:auto` can never clip it) and
+  **`.guide`** (h3/ul/li rules for an embedded long-form walkthrough inside an ordinary `.sec`,
+  as opposed to `.prose`'s whole-page article shell). The hot-path before/after comparison reuses
+  the pre-existing bare `.cmp` pattern (inline `display:grid;grid-template-columns:1fr 1fr`, first
+  used by `algformer.html`'s two-core comparison) with two plain `.card`s, tinted `--cat:var(--bad)`
+  / `--cat:var(--ok)` for an intuitive slow/fast read, each containing a `.snip` instead of a
+  `.desc` — a new but low-risk combination (`.card` already hosts `.install`/`.desc`/`.snip`-shaped
+  children elsewhere). All prose is the owner's own words, verbatim — only markdown→HTML shape and
+  component placement are this agent's. Verified: `section`/`div`/`article`/`ul`/`li`/`h1`/`h2`/
+  `h3`/`p`/`code`/`span`/`a`/`nav`/`header`/`footer` tag counts all balanced programmatically after
+  the edit; every `<`/`>` inside a C# code block is `&lt;`/`&gt;`-escaped (matches the site's
+  existing convention, e.g. `evalapp.html`'s generic-type snippets); em dash/middle dot in the new
+  prose are literal UTF-8 characters, not `&mdash;`/`&middot;` entities, matching how the rest of
+  this page (and the whole site) already writes them. Also caught and fixed one stale cross-page
+  fact this same pass: `packages.html`'s Phasor gallery card still showed `v1.0.3` — bumped to
+  `v1.3.0` alongside it (confirmed via grep, zero remaining `1.0.3` anywhere under `site/**/*.html`
+  after both fixes). NOT deployed — rendered only, per the website-owner charter (§6,
+  coordinator/user push).
 - `articles.html` — **NEW (2026-08-30)**: the personal-writing index (NOT package docs — see the
   dedicated "Articles" section below, right after the page-template paragraph, for the full
   content model, the empty-state shape, and the exact per-article publishing workflow).

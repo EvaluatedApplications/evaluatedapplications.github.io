@@ -301,8 +301,27 @@ h1,h2,h3{margin:0; line-height:1.15; letter-spacing:-.02em; font-weight:650}
 /* ---- code snippet box (product pages) ---- */
 .snip{background:var(--bg-2); border:1px solid var(--border); border-radius:10px; padding:14px 16px; margin:14px 0; overflow-x:auto} /* margin half baseline, was 10 */
 .snip code{font-family:var(--mono); font-size:.84rem; color:var(--ink); line-height:21px; white-space:pre} /* 3/4 baseline (was inherited ~22.2px) */
+/* .snip.out — a printed-OUTPUT block, distinct from a C#-to-paste block at a glance (added
+   2026-09-12 for phasor.html's Hologram guide, first page needing the distinction; reusable
+   anywhere a guide shows console output next to code). Three simultaneous cues so it never reads
+   as more code to copy: a small uppercase label in normal flow (not absolutely positioned, so it
+   can't be clipped by the box's own overflow-x:auto), a solid accent left edge instead of the
+   plain 1px border, and a faint tint on the fill — text itself stays --ink for full readability. */
+.snip-tag{display:block; font-family:var(--mono); font-size:.68rem; text-transform:uppercase; letter-spacing:.07em; color:var(--ink-faint); margin:0 0 7px; line-height:14px}
+.snip.out{border-left:3px solid var(--ok); background:color-mix(in srgb,var(--ok) 7%,var(--bg-2))}
+.snip.out .snip-tag{color:var(--ok)}
 .lim{font-size:.85rem; color:var(--ink-faint); line-height:14px; margin-top:14px; border-top:1px dashed var(--border-2); padding-top:7px} /* margin-top 14px=half baseline (was 12), padding-top 7px=1/4 baseline (was 10) */
 .lim b{color:var(--warn)}
+
+/* ---- inline guide (long-form usage walkthrough embedded in a product-page .sec — distinct from
+   .prose, which is a whole standalone article page with its own 760px column/padding; a .guide is
+   just h3-sectioned prose+lists inside an ordinary .sec .wrap, added 2026-09-12 for phasor.html's
+   Hologram section). Same h3/list rhythm as .prose's own, values intentionally identical. */
+.guide h3{font-size:1.05rem; line-height:21px; margin:28px 0 7px; color:var(--ink)}
+.guide h3:first-child{margin-top:0}
+.guide ul,.guide ol{color:var(--ink-soft); padding-left:1.3rem; margin:14px 0}
+.guide li{margin:7px 0}
+.guide li b{color:var(--ink)}
 
 /* ---- footer ---- */
 footer.site{border-top:1px solid var(--border); margin-top:35px; padding:28px 0 49px; color:var(--ink-faint)} /* vertical rhythm: 35px=5*--rhythm-q (was 34), 28px=1 baseline (was 30), 49px=7*--rhythm-q (was 50) */

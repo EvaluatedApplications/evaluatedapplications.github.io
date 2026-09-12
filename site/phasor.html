@@ -14,7 +14,7 @@
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%23f0796a'/%3E%3Cstop offset='.166' stop-color='%23f0a15a'/%3E%3Cstop offset='.333' stop-color='%23e6c450'/%3E%3Cstop offset='.5' stop-color='%237bd86a'/%3E%3Cstop offset='.666' stop-color='%234aa3ff'/%3E%3Cstop offset='.833' stop-color='%237d7dff'/%3E%3Cstop offset='1' stop-color='%23c07dff'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='32' height='32' rx='7' fill='%23050608'/%3E%3Cpath d='M16 5L27 26H5Z' fill='none' stroke='url(%23g)' stroke-width='2' stroke-linejoin='round'/%3E%3C/svg%3E">
 <link rel="stylesheet" href="/assets/site.css">
 <script type="application/ld+json">
-{"@context":"https://schema.org","@type":"SoftwareApplication","name":"EvaluatedApplications.Phasor","description":"Phasor encodes numbers and symbols as phasor faces and composes them with one algebra — bind, unbind, bundle, correlate. Zero dependencies, AOT/trim-safe, the foundation the rest of Evaluated Applications is built on.","applicationCategory":"DeveloperApplication","operatingSystem":".NET 8.0+","softwareVersion":"1.0.3","url":"https://evaluatedapplications.github.io/phasor.html","downloadUrl":"https://www.nuget.org/packages/EvaluatedApplications.Phasor","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"author":{"@type":"Organization","name":"Evaluated Applications","url":"https://evaluatedapplications.github.io/"}}
+{"@context":"https://schema.org","@type":"SoftwareApplication","name":"EvaluatedApplications.Phasor","description":"Phasor encodes numbers and symbols as phasor faces and composes them with one algebra — bind, unbind, bundle, correlate. Zero dependencies, AOT/trim-safe, the foundation the rest of Evaluated Applications is built on.","applicationCategory":"DeveloperApplication","operatingSystem":".NET 8.0+","softwareVersion":"1.3.0","url":"https://evaluatedapplications.github.io/phasor.html","downloadUrl":"https://www.nuget.org/packages/EvaluatedApplications.Phasor","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"author":{"@type":"Organization","name":"Evaluated Applications","url":"https://evaluatedapplications.github.io/"}}
 </script>
 </head>
 <body class="os-chrome" data-cat="foundation">
@@ -67,7 +67,7 @@
           complete algebra: arithmetic is encoding, not calculation. It's the base package the rest of the
           Evaluated Applications stack (AlgFormer, HoloDb, HoloVoxel) is built on.</p>
         <div class="facts">
-          <span class="fact"><b>v1.0.3</b></span>
+          <span class="fact"><b>v1.3.0</b></span>
           <span class="fact">net<b>8.0</b>+</span>
           <span class="fact">zero dependencies</span>
           <span class="fact">AOT &amp; trim-safe</span>
@@ -158,6 +158,172 @@
         <p class="desc">Symbols encode to repeatable, salted phasor signatures — reproducible, not cryptographic.</p></article>
       <article class="card" style="--cat:var(--c-foundation)"><div class="card-top"><h3>Memoized decode cache</h3></div>
         <p class="desc"><code>HoloCodec</code> caches number faces to speed up repeated decodes.</p></article>
+    </div>
+  </div>
+</section>
+
+<section class="sec" id="hologram">
+  <div class="wrap">
+    <div class="sec-head"><span class="dot" style="background:var(--c-foundation)"></span><h2>Hologram: readable algebra with operators</h2><p>new in v1.3.0 · a guide to the type</p></div>
+    <p class="desc" style="max-width:74ch">The <code>Hologram</code> type wraps a phasor face (a <code>double[]</code>) and applies the algebra
+      through operators for clarity, correctness, and expressiveness. It is built for <b>readability and
+      prototyping</b>, making the phasor algebra feel natural without sacrificing its power.</p>
+
+    <div class="guide">
+      <h3>What it is</h3>
+      <p class="desc">A hologram is a single phasor face with its layout reference built in. Where
+        <code>PhasorCodec.Bind(a, b)</code> is a static method call, <code>(Hologram)a * (Hologram)b</code>
+        reads as "bind a and b," and the operator machinery ensures you are working in the right layout and
+        applying the right semantics. The type is a readonly struct wrapping a <code>double[]</code>, so it
+        converts freely to and from arrays without copying—use it for clarity, drop back to
+        <code>double[]</code> where raw performance matters.</p>
+
+      <h3>The algebra in plain language</h3>
+      <ul>
+        <li><b>Bind</b> (operator <code>*</code>) — per-component complex multiply. On the linear
+          band, two numbers bind and their values <em>add</em>; on the log band, they <em>multiply</em>. A
+          symbol's bind gives you a composed relationship, and unbinding retrieves it.</li>
+        <li><b>Bundle</b> (operator <code>+</code>) — component-wise sum. Merge multiple holograms into
+          one superposition: bind + unbind of constituents retrieves them losslessly (set-forming
+          operation).</li>
+        <li><b>Unbind</b> (operator <code>/</code>) — multiply by the conjugate, the inverse of bind.
+          Extract a component: <code>record / key</code> gives you what was bound with <code>key</code>.</li>
+        <li><b>Correlate</b> (method <code>.Correlate(other)</code>) — dot product. Measure how much of
+          one hologram is present in another: high correlation means strong association, near-zero means
+          unrelated.</li>
+        <li><b>Conjugate</b> (operator <code>~</code>) — flip the sign of imaginary parts. Undoes a
+          bind or unbind; <code>a * ~a</code> approximates identity.</li>
+      </ul>
+      <p class="desc">There is no separate arithmetic system—composition is how values and symbols are
+        combined. This is the algebra's power: one operator set works on numbers and text and their
+        mixtures.</p>
+
+      <h3>A worked example</h3>
+      <p class="desc">Here is a record—a superposition of field-value pairs—built, stored, and
+        retrieved:</p>
+      <div class="snip"><code>using Phasor;
+
+var dim = 256;  // Hologram default dimension
+
+// Create a record by binding roles (keys) to values and bundling
+var name_role = Hologram.FromSymbol("name", dim);
+var lily = Hologram.FromSymbol("Lily", dim);
+var name_lily = name_role * lily;  // bind: compose role and value
+
+var age_role = Hologram.FromSymbol("age", dim);
+var seven = Hologram.FromNumber(7, dim);
+var age_seven = age_role * seven;  // bind: compose role and numeric value
+
+var record = Hologram.Zero(dim) + name_lily + age_seven;  // bundle into superposition
+
+// Extract and correlate
+var name_extracted = record / name_role;  // unbind: divide out the role
+var age_extracted = record / age_role;
+
+double corr_lily = name_extracted.Correlate(lily);
+double corr_john = name_extracted.Correlate(Hologram.FromSymbol("John", dim));
+Console.WriteLine($"Name field has Lily:  {corr_lily:F2}");
+Console.WriteLine($"Name field has John:  {corr_john:F2}");
+
+double corr_seven = age_extracted.Correlate(seven);
+double corr_five = age_extracted.Correlate(Hologram.FromNumber(5, dim));
+Console.WriteLine($"Age field has 7:  {corr_seven:F2}");
+Console.WriteLine($"Age field has 5:  {corr_five:F2}");</code></div>
+      <div class="snip out"><span class="snip-tag">Output</span><code>Name field has Lily:  128.59
+Name field has John:  -1.96
+Age field has 7:  32.59
+Age field has 5:  13.39</code></div>
+      <p class="desc">Read those four numbers carefully, because the two fields behave differently and the
+        difference is the most useful thing on this page.</p>
+      <p class="desc">The <b>name</b> field separates completely: 128.59 for the right value against -1.96
+        for the wrong one. Two symbols get independent random signatures, so an unrelated symbol correlates
+        at the noise floor, near zero.</p>
+      <p class="desc">The <b>age</b> field separates by less than 3x: 32.59 for 7 against 13.39 for 5. That
+        is not a weaker implementation, it is the codec telling the truth. A number is not encoded as a
+        random signature, it is encoded as a phase proportional to its value, so 5 and 7 genuinely are
+        similar faces and 5 and 500 are not. Numbers carry a metric; symbols do not. If you want numbers to
+        behave like symbols, encode them with <code>FromSymbol("7")</code> instead of
+        <code>FromNumber(7)</code>, and you give up arithmetic to get it.</p>
+      <p class="desc">So the honest rule is that correlation separates signal from noise for symbols, and
+        separates signal from <em>nearby</em> signal only by distance for numbers. Design your readout
+        accordingly: take an argmax over candidate values rather than a threshold, which is exactly what
+        <code>DecodeSum</code> and <code>DecodeProduct</code> do.</p>
+
+      <h3>Arithmetic with numbers</h3>
+      <p class="desc">Numbers encode to holograms where the linear band encodes the value additively and the
+        log band encodes it multiplicatively. When you bind two numbers, their bands compose:</p>
+      <div class="snip"><code>var three = Hologram.FromNumber(3, dim);
+var five = Hologram.FromNumber(5, dim);
+var sum_encoded = three * five;  // bind: compose on both bands
+
+// Read out the linear band (addition)
+int decoded_sum = PhasorCodec.DecodeSum(sum_encoded, max: 20);
+Console.WriteLine(decoded_sum);  // Output: 8
+
+// On the log band, multiply
+var two = Hologram.FromNumber(2, dim);
+var four = Hologram.FromNumber(4, dim);
+var product_encoded = two * four;
+
+int decoded_product = PhasorCodec.DecodeProduct(product_encoded, max: 16);
+Console.WriteLine(decoded_product);  // Output: 8</code></div>
+      <p class="desc">Arithmetic is composition, not calculation. The face carries both operations
+        simultaneously, and you read out the band you care about.</p>
+
+      <h3>Hot-path rule: use in-place operations in loops</h3>
+      <p class="desc">The operators (<code>*</code>, <code>+</code>, <code>/</code>) are for clarity and
+        testing—they allocate a new array per operation. <b>In tight loops or accumulation, use the
+        in-place static methods</b> instead:</p>
+      <div class="cmp" style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:14px">
+        <article class="card" style="--cat:var(--bad)">
+          <div class="card-top"><h3>Slow (allocates 100 times)</h3></div>
+          <div class="snip"><code>var result = Hologram.Zero(dim);
+for (int i = 0; i &lt; 100; i++)
+{
+    var val = Hologram.FromNumber(i, dim);
+    result = result + val;
+}</code></div>
+        </article>
+        <article class="card" style="--cat:var(--ok)">
+          <div class="card-top"><h3>Fast (no allocation, reuses buffer)</h3></div>
+          <div class="snip"><code>double[] accumulator = new double[dim];
+for (int i = 0; i &lt; 100; i++)
+{
+    var val = Hologram.FromNumber(i, dim);
+    Hologram.BundleInto(accumulator, val.Reals);
+}</code></div>
+        </article>
+      </div>
+      <p class="desc"><b>Measured performance:</b> at typical dimensions (d=64 to d=96), the allocating
+        <code>Bind</code> operator is approximately 1.7x slower than the in-place <code>BindInto</code>
+        static method. For bundling (<code>+</code>), use <code>BundleInto</code>. For unbinding
+        (<code>/</code>), use <code>UnbindInto</code>. Pre-allocate your accumulator once and reuse it.</p>
+      <p class="desc">A real example: <code>HoloRouter.cs</code> (a four-way swarm router) uses only bind,
+        bundle, and unbind with in-place methods to route arithmetic flows, accumulating into pre-allocated
+        buffers. It achieves 57.7% correctness at a 25% chance baseline with zero trained parameters—the
+        algebra alone provides the routing logic.</p>
+
+      <h3>Gotchas</h3>
+      <ul>
+        <li><b>Layouts do not mix.</b> <code>Hologram</code> uses the interleaved (cos, sin, cos, sin, ...)
+          layout, same as <code>PhasorCodec</code>. Do not pass a hologram's face to <code>HoloCodec</code>'s
+          operators—<code>HoloCodec</code> is planar (all reals, then all imags) and will produce
+          garbage. Use the one that matches your workload: <code>Hologram</code> for clarity,
+          <code>HoloCodec</code> for SIMD and large-scale similarity search.</li>
+        <li><b>Dimension floor.</b> <code>PhasorCodec</code> requires a dimension that is even and &gt;= 128
+          (64 reals frozen + &gt;= 64 orbital). <code>Hologram</code> inherits this constraint. Odd
+          dimensions align down; anything below 128 throws <code>ArgumentException</code>.</li>
+        <li><b>Operators allocate; in-place methods don't.</b> Every operator (<code>*</code>,
+          <code>+</code>, <code>/</code>, <code>~</code>) returns a new <code>Hologram</code> with a freshly
+          allocated <code>double[]</code>. Inside a loop or tight accumulation, the allocation overhead
+          dominates. Reach for <code>BindInto</code>, <code>BundleInto</code>, <code>UnbindInto</code> or
+          work directly with <code>double[]</code>.</li>
+        <li><b><code>.Reals</code> is a live reference.</b> The hologram's <code>.Reals</code> property
+          returns the internal array directly (not a copy). Modifying it mutates the hologram. This is by
+          design—it lets you call the in-place methods directly on a hologram's reals without an extra
+          copy—but it means a hologram is not truly immutable if you hand its reals out. In practice,
+          use it read-only or pass it to in-place methods; do not mutate it yourself.</li>
+      </ul>
     </div>
   </div>
 </section>
