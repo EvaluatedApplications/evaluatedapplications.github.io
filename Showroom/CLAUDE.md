@@ -1062,6 +1062,48 @@ open `/tools/prism`, send a short message first (watch for the honest degenerate
 than a hang), then a longer one, and confirm the rolling window actually drops old turns once a
 conversation runs past `_stats.Context` tokens.
 
+**The turn newline was the stray-junk-token bug — REVERSED 2026-09-12 (coordinator, direct user
+instruction "remove the new lines yes"; source change, real AOT publish + `robocopy /MIR`, live at
+r338,837).** The rework above added a trailing `\n` before generating, on the untested reasoning that
+"the newline is the only marker the model gets that a new turn starts." It is in fact the direct
+cause of the stray junk token every reply opened with — the thing that made the page's first
+impression read as broken. `Prime()` now STRIPS the trailing newline (`capped.TrimEnd('\n')`) instead
+of appending one. Measured at r338,291, greedy, four contexts differing ONLY in the terminator:
+
+| prompt ends with | continuation |
+|---|---|
+| `,` (bare) | ` there was a little girl named Lily...` **clean** |
+| `, ` (space) | `Joy loved to play with his friends...` junk |
+| `,\n` (what the page sent) | `Joy loved to play with his friends...` junk, **byte-identical to the row above** |
+| `,\n ` | `Once upon a time, there was a little...` restarts the line |
+
+Rows two and three being byte-identical is the load-bearing observation: the model is NOT reacting to
+a newline as such, it reacts to "a token boundary has already been crossed, begin a fresh word," and
+in that state its top token is junk. Left alone after the comma it emits the separating space itself.
+Row four confirms it from the other side (newline + space ⇒ treated as a new line ⇒ restates the
+opener). **INTERNAL newlines are untouched** — `BuildTranscript` still separates turns with `'\n'`,
+which is what keeps `CapRecent`'s "split on `'\n'`, drop whole leading turns" valid; only the ONE
+trailing newline at the very end of the prompt is removed, at generation time. Consequence, accepted
+deliberately: the model now CONTINUES the last turn rather than replying to a closed one.
+
+**`MaxReplyChars` halved to `Context / 2`, same pass, from a measurement not a taste call.** The old
+full-window cap's reasoning ("past one window of self-written text none of the human's words are in
+view, so anything beyond is drift") is right as a CEILING and wrong as a working cap: drift begins
+where the model's own output starts DOMINATING the window, half a window earlier. Measured at
+r338,501 in 16-step chunks by share of real words: steps 0-96 clean 100% (`"a little girl named Lily.
+She loved to play with her mom."`), steps 96-160 still 100% but visibly looping (`"They were had a big
+scared."` twice over), steps 160-192 collapsed to 0-50% (`"TheZtty!uly ugbem* nt"`). Half the window
+keeps every clean chunk and cuts both the repetition and the garbage tail. **Re-measure against a new
+checkpoint rather than assuming it carries** — the session scratchpad's `arith-probe taper` mode does
+exactly this (generates the full ceiling-length reply and scores it in chunks).
+
+**Probe discipline this cost two rounds to learn, worth carrying:** a probe MUST reproduce the
+production input path byte for byte. The opener probe had been scoring the bare string (a context the
+page can never send, since every turn is newline-terminated), and then a trailing-space variant (which
+the page's own `Trim()` makes unreachable). Read the call path from the stored value to the model and
+reproduce every transform on it — trim, concatenation, terminator, windowing — before trusting a
+number from it.
+
 ## Unlisted: RecycleDAO marketplace prototype — `Pages/RecycleDaoDemo.razor` (`/recycledao-demo`)
 NOT a package-capability demo and NOT in the public gallery — a private, share-by-link-only client
 preview for the RecycleDAO PoC (`C:\Users\dongy\RecycleDAO`, separate repo, owned by
