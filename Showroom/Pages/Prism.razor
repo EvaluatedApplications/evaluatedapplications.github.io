@@ -127,14 +127,28 @@
     static readonly DecodePolicy Policy = DecodePolicy.Default with { DegenNonGreedyRun = 0 };
     // The real stop condition is CharVocab.End (the model's own stop token) or DegenGuard catching a
     // collapsed repeat run — those are unchanged and still fire first when they fire at all.
-    int MaxReplyChars => _stats?.Context ?? 32;
+    int MaxReplyChars => (_stats?.Context ?? 32) / 2;
     // ^ Per-reply token-step cap (one HoloFormer step, not one character — subwords can emit 2-4 chars
-    // per step). Read LIVE off the loaded checkpoint's own context window, never hardcoded: past
-    // exactly one context window of self-written text, every token BuildContext feeds back into the
-    // model is something the model wrote itself, with none of the human's own words still in view —
-    // so anything generated beyond that is drift by construction. This is now also the backstop for
-    // the turn-based chat below (see StopReason.Cap): a reply that neither emits the stop token nor
-    // triggers DegenGuard still can't run forever.
+    // per step). Read LIVE off the loaded checkpoint's own context window, never hardcoded.
+    //
+    // HALVED 2026-09-12, from one full context window to half of one, because the full window was
+    // measured to be well past where this checkpoint's output survives. The old reasoning — "a full
+    // window of self-written text is the point where none of the human's words are still in view, so
+    // anything past it is drift by construction" — is correct as a CEILING and wrong as a working cap:
+    // drift does not begin where the human's last word leaves the window, it begins where the model's
+    // own output starts dominating it, which is half a window earlier.
+    //
+    // Measured at r338501 (d=96 L=6 ctx=192), greedy, scored in 16-step chunks by the share of emitted
+    // words that are real words, for two different openers:
+    //     steps   0-96    100% real words   "a little girl named Lily. She loved to play with her mom."
+    //     steps  96-160   100% real words   but visibly looping: "They were had a big scared." twice over
+    //     steps 160-192   0-50%             collapsed: "TheZtty!uly ugbem* nt"
+    // So the final sixth is garbage and the third quarter is repetition. Half the window keeps every
+    // clean chunk and cuts both. This is a measured value, not a taste call — re-measure it against a
+    // new checkpoint rather than assuming it carries over (scratchpad `arith-probe taper` does this).
+    //
+    // Still also the backstop for the turn-based chat below (see StopReason.Cap): a reply that neither
+    // emits the stop token nor trips DegenGuard cannot run forever.
 
     HoloSession? _session;
     ModelStats? _stats;
@@ -270,11 +284,32 @@
         return lines[^1];   // even the newest turn alone exceeds the budget — BuildContext windows it in tokens anyway
     }
 
-    // Untagged prime: guarantee the transcript ends at a turn boundary and generate straight from there. The
-    // trailing newline is the only marker the model gets that a new turn starts, so it is not optional padding
-    // — BuildTranscript always emits one, and this is the belt-and-braces for a caller that ever doesn't.
-    // (Was: + GroupChat.AiTag, matching StudioModel.Serve. See the wire-format note above for the revert.)
-    static string Prime(string capped) => capped.Length == 0 || capped.EndsWith("\n") ? capped : capped + "\n";
+    // Untagged prime: generate straight from the end of the transcript, with NO trailing newline.
+    //
+    // REVERSED 2026-09-12. This used to APPEND a newline if one was missing, on the reasoning that the
+    // newline is the only marker the model gets that a new turn starts. That reasoning was never tested,
+    // and when it finally was, it turned out to be the direct cause of the stray junk token every reply
+    // opened with — the thing that made the public page's first impression read as broken.
+    //
+    // Measured at r338291 (greedy, four contexts differing ONLY in what terminates the prompt):
+    //     "Once upon a time,"      -> " there was a little girl named Lily..."     clean
+    //     "Once upon a time, "     -> "Joy loved to play with his friends..."      stray token
+    //     "Once upon a time,\n"    -> "Joy loved to play with his friends..."      stray token, IDENTICAL
+    //     "Once upon a time,\n "   -> "Once upon a time, there was a little..."    restarts the line
+    // Rows two and three being byte-identical is the load-bearing observation: the model is not reacting
+    // to a newline as such, it is reacting to "a token boundary has already been crossed, so begin a
+    // fresh word" — and in that state its top token here is junk. Left alone after the comma it emits the
+    // separating space itself and continues correctly. Row four confirms it from the other side: given a
+    // newline AND a space, it treats the line as new and restates the opener from scratch.
+    //
+    // So the model continues the last turn rather than replying to a completed one. That is a real change
+    // to how every turn is framed, made on the user's explicit instruction, not a silent tidy-up.
+    //
+    // INTERNAL newlines are untouched and still load-bearing: BuildTranscript still separates turns with
+    // '\n', which is what keeps CapRecent's "split on '\n', drop whole leading turns" valid. Only the ONE
+    // trailing newline at the very end of the prompt is removed, and only here at generation time.
+    // (Was also: + GroupChat.AiTag, matching StudioModel.Serve. See the wire-format note above.)
+    static string Prime(string capped) => capped.TrimEnd('\n');
 
     static string DisplayText(ChatTurn t) => t.Text.Length > 0 ? t.Text : "(blank — this checkpoint is still very early in training)";
 
