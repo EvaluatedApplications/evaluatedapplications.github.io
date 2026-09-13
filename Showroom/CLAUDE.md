@@ -236,8 +236,13 @@ tagged `.mk-tag` "mockup".
   IL from a mismatched native runtime, died silently at boot). Check `dotnet --list-runtimes` when
   the SDK moves.
 - `EvaluatedApplications.HoloDb` **1.10.0** — Analyst, Prose.
-- `EvaluatedApplications.AlgFormer` **2.7.0** — Creature, Forecaster, Prism, Prose (`PrismFormer`
-  namespace: `HoloFormer`/`HoloShape`/`CharVocab`/`SubwordVocab`).
+- `EvaluatedApplications.AlgFormer` **2.8.0** — Creature, Forecaster, Prism, Prose (`PrismFormer`
+  namespace: `HoloFormer`/`HoloShape`/`CharVocab`/`SubwordVocab`). 2.8.0 raised
+  `SubwordVocab.MaxLen` 4 -> 16 to match what PrismStudio actually mints with; before it, a
+  freshly-minted checkpoint threw `ArgumentException` in the `SubwordVocab` ctor and simply could
+  not be deployed here. Verified against the published package with the live 928-subword vocab
+  (301 entries over the old limit, longest 11): loads and round-trips. **A Prism checkpoint refresh
+  minted after 2026-09-14 needs this version or newer.**
 - `EvaluatedApplications.Tracer` 1.1.0 — Creature (`Tracer.Helpers.GridTactics`).
 - `EvaluatedApplications.Prose` **1.3.0** — Prose (`Prose` namespace: `ProseEngine`/`QaPair`/
   `ParsedSentence`/`Pos`/`Tok`) — ground-truth-checked against the real package before wiring; API
