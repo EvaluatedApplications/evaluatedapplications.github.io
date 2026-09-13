@@ -1,0 +1,749 @@
+@page "/prose"
+@inject HttpClient Http
+@inject HoloKernel.SessionHost Sessions
+@inject Microsoft.JSInterop.IJSRuntime JS
+@using System.Diagnostics
+@using System.Text
+@using PrismFormer
+@using HoloKernel
+@* global:: required — same reason as Prism.razor/Analyst.razor: Showroom.Pages.Prose (this page's own
+   generated class) shadows the "Prose" NuGet package's root namespace, so an unqualified @using Prose
+   would resolve to this component instead of the package. *@
+@using global::Prose
+@using global::Prism.Lineage
+
+<PageTitle>Prose — turn any text into training data, in your browser</PageTitle>
+
+<div class="room" data-cat="holodb-algformer">
+    <header class="room-head">
+        <nav class="crumb"><a href="/">Tools</a> <span>/</span> Prose</nav>
+        <h1>Prose</h1>
+        <p class="lede">Paste in a body of text — a book, a transcript, your own notes — and a real
+            <strong>rules-first English grammar</strong> mines it, right here in your browser tab, then
+            recombines what it learned into new sentences and question/answer pairs. Copy the result
+            straight into a training corpus.</p>
+        <div class="badges">
+            <span>Free, no sign-up</span><span>Runs entirely in your browser</span><span>Real grammar, not templates</span><span>Copy-paste into <code>data/pairs</code> or <code>data/text</code></span>
+        </div>
+    </header>
+
+    <ol class="steps">
+        <li><b>1</b> Paste or drop your text</li>
+        <li><b>2</b> Mine it</li>
+        <li><b>3</b> Tick what to generate</li>
+        <li><b>4</b> Copy or download</li>
+    </ol>
+
+    <div class="dropzone @(_busy ? "busy" : "")">
+        <InputFile OnChange="OnFile" class="file-input" accept=".txt,.md,.text,.log" disabled="@_busy" />
+        <div class="dz-inner">
+            <svg viewBox="0 0 24 24" width="34" height="34" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M12 16V4" /><path d="M7 9l5-5 5 5" /><path d="M4 16v3a1 1 0 001 1h14a1 1 0 001-1v-3" />
+            </svg>
+            <strong>Drop a plain-text file</strong>
+            <span>or click to browse — up to @MaxUploadMb&nbsp;MB, and it never leaves your device</span>
+            @if (_fileName is not null) { <span class="dz-file">@_fileName · @_charCount.ToString("N0") chars</span> }
+        </div>
+    </div>
+
+    <details class="paste-wrap" open="@(_fileName is null)">
+        <summary>…or paste text instead</summary>
+        <textarea class="paste" @bind="Text" @bind:event="oninput" rows="9" disabled="@_busy"
+                  placeholder="Paste a book chapter, a transcript, your own writing — the bigger the better…"></textarea>
+    </details>
+
+    <div class="controls">
+        <button class="go" @onclick="Mine" disabled="@(_busy || string.IsNullOrWhiteSpace(_text))">@(_busy ? "Mining…" : "Mine it")</button>
+        <button class="ghost" @onclick="LoadSample" disabled="@_busy" type="button">Load sample</button>
+        <span class="hint @(_overCap ? "warn" : "")">@_charCount.ToString("N0") characters (@FmtBytes(_byteCount)) ready@(_overCap ? $" — over the {MaxUploadMb} MB cap, trim it down" : "")</span>
+    </div>
+
+    @if (_busy)
+    {
+        <div class="progress-wrap">
+            <div class="progress-track"><div class="progress-fill" style="width:@Pct(_progress)"></div></div>
+            <span class="progress-label">@_phase</span>
+        </div>
+    }
+
+    @if (_error is not null)
+    {
+        <p class="err">@_error</p>
+    }
+
+    @if (_mined && _engine is not null)
+    {
+        <div class="pr-panel speed">
+            Mined <strong>@_sentencesMined.ToString("N0")</strong> sentences from <strong>@_minedChars.ToString("N0")</strong>
+            characters in <strong>@Secs(_mineMs)</strong>.
+        </div>
+
+        @if (_explainSamples.Count > 0)
+        {
+            <details class="pr-panel pr-explain">
+                <summary>What the parser understood <span class="hint">(the first few sentences, tagged and role-assigned)</span></summary>
+                @foreach (var s in _explainSamples)
+                {
+                    <pre class="pr-explain-block">@s</pre>
+                }
+            </details>
+        }
+
+        <h2>What to generate</h2>
+        <p class="repl-intro">Only what's ticked gets generated — an unticked generator costs nothing.
+            Each one maps straight onto Prose's own API, and each gets its own copyable block below.</p>
+
+        <div class="pr-opts">
+            <label class="pr-opt">
+                <input type="checkbox" @bind="_optSentences" disabled="@_genBusy" />
+                <span class="pr-opt-name">Sentences</span>
+                <span class="pr-opt-fmt">plain corpus, one per line — for <code>data/text</code></span>
+                <span class="pr-opt-n">n <input type="number" min="1" max="20000" @bind="_nSentences" disabled="@(_genBusy || !_optSentences)" /></span>
+            </label>
+            <label class="pr-opt">
+                <input type="checkbox" @bind="_optQa" disabled="@_genBusy" />
+                <span class="pr-opt-name">Q&amp;A pairs</span>
+                <span class="pr-opt-fmt">prompt&lt;TAB&gt;target — for <code>data/pairs</code></span>
+                <span class="pr-opt-n">n <input type="number" min="1" max="20000" @bind="_nQa" disabled="@(_genBusy || !_optQa)" /></span>
+            </label>
+            <label class="pr-opt">
+                <input type="checkbox" @bind="_optPassages" disabled="@_genBusy" />
+                <span class="pr-opt-name">Q&amp;A passages</span>
+                <span class="pr-opt-fmt">multi-sentence context, back-references — for <code>data/pairs</code></span>
+                <span class="pr-opt-n">n <input type="number" min="1" max="20000" @bind="_nPassages" disabled="@(_genBusy || !_optPassages)" />
+                    <span class="pr-opt-sub">sentences/passage <input type="number" min="2" max="12" @bind="_sentencesPerPassage" disabled="@(_genBusy || !_optPassages)" /></span></span>
+            </label>
+            <label class="pr-opt">
+                <input type="checkbox" @bind="_optTwoTurn" disabled="@_genBusy" />
+                <span class="pr-opt-name">Two-turn pairs</span>
+                <span class="pr-opt-fmt">self-referential follow-up — for <code>data/pairs</code></span>
+                <span class="pr-opt-n">n <input type="number" min="1" max="20000" @bind="_nTwoTurn" disabled="@(_genBusy || !_optTwoTurn)" /></span>
+            </label>
+            <label class="pr-opt">
+                <input type="checkbox" @bind="_optConvos" disabled="@_genBusy" />
+                <span class="pr-opt-name">Conversations (packed)</span>
+                <span class="pr-opt-fmt">many random Q&amp;A turns packed per window, all-positions-loss-friendly — for <code>data/text</code></span>
+                <span class="pr-opt-n">blocks <input type="number" min="1" max="20000" @bind="_nConvos" disabled="@(_genBusy || !_optConvos)" />
+                    <span class="pr-opt-sub">target size <input type="number" min="200" max="20000" step="100" @bind="_convoTargetChars" disabled="@(_genBusy || !_optConvos)" /> chars</span></span>
+            </label>
+        </div>
+        @if (_optConvos)
+        {
+            <p class="hint pr-convo-hint">"Chars" not tokens — this tool can't know your eventual vocabulary.
+                Measured across this project's own vocabularies, bytes-per-token runs roughly 1.8&ndash;3.9, so
+                ~1,000&ndash;2,000 chars is a reasonable target for a 512-token window. Each block draws
+                <strong>different</strong> Q&amp;A pairs in random order until one more would overflow the target
+                (never padded) — unrelated turns, simulated topic-hopping, not a coherent thread, on purpose.
+                Formatted exactly as <code>user: </code>/<code>prism: </code> (AlgFormer's real group-chat tags) so
+                it matches how the model is actually served. This is a <code>data/text</code> format, not
+                <code>data/pairs</code> — dropping it in a pairs folder would score only the final target and
+                throw the packing away.</p>
+        }
+
+        <div class="pr-seed">
+            <label>shared seed <input type="number" @bind="_seed" disabled="@_genBusy" /></label>
+            <span class="hint">same seed, same input → the same output, every time.</span>
+        </div>
+
+        <h2>Plausibility scoring <span class="beta-tag">optional</span></h2>
+        <p class="repl-intro">Prose's grammar guarantees every line is <em>grammatical</em> — it says nothing about
+            which lines <em>read best</em>. A small HoloFormer language model can rank candidates by how plausible
+            they sound, and even filter down to the best of them. Off by default: Prose's own output is already
+            the real result, this is an optional extra opinion layered on top.</p>
+
+        <div class="pr-panel pr-plaus">
+            <div class="pr-plaus-modes">
+                <label class="pr-radio"><input type="radio" name="plausMode" checked="@(_plausMode == PlausMode.None)" @onchange="() => SetPlausMode(PlausMode.None)" disabled="@_genBusy" /> None — just Prose's grammar output</label>
+                <label class="pr-radio"><input type="radio" name="plausMode" checked="@(_plausMode == PlausMode.Prism)" @onchange="() => SetPlausMode(PlausMode.Prism)" disabled="@_genBusy" /> Score with Prism <span class="hint">(the deployed checkpoint — a small model's opinion on plain English, not trained on your text, not a quality guarantee)</span></label>
+                <label class="pr-radio"><input type="radio" name="plausMode" checked="@(_plausMode == PlausMode.Train)" @onchange="() => SetPlausMode(PlausMode.Train)" disabled="@_genBusy" /> Train one on my text <span class="hint">(judges "does this sound like MY source" — real training, real time)</span></label>
+            </div>
+
+            @if (_plausMode == PlausMode.Prism)
+            {
+                <div class="pr-plaus-sub">
+                    <span class="hint">Fetches a ~1&ndash;4&nbsp;MB checkpoint the first time this radio is used this visit (instant if you've already opened Prism, Creature, Forecaster, or The Analyst's novelty scan) — nothing is fetched until you click Generate below.</span>
+                    <label>keep best <input type="number" min="0" max="20000" @bind="_keepBest" disabled="@_genBusy" /> <span class="hint">(0 = keep all, just ranked — most plausible first)</span></label>
+                </div>
+            }
+            else if (_plausMode == PlausMode.Train)
+            {
+                <div class="pr-plaus-sub">
+                    <label>train on the first <input type="number" min="1000" max="500000" @bind="_trainSliceChars" @bind:event="oninput" @bind:after="OnTrainParamsChanged" disabled="@_genBusy" /> characters of your text</label>
+                    <label>epochs <input type="number" min="1" max="20" @bind="_trainEpochs" @bind:event="oninput" @bind:after="OnTrainParamsChanged" disabled="@_genBusy" /></label>
+                    <label>learning rate <input type="number" step="0.001" min="0.0001" max="0.05" @bind="_trainLr" @bind:event="oninput" @bind:after="OnTrainParamsChanged" disabled="@_genBusy" /></label>
+                    @if (_estimating)
+                    {
+                        <span class="hint">Measuring on a small sample of your own text…</span>
+                    }
+                    else if (_trainEstimateMs is double est)
+                    {
+                        <span class="hint pr-estimate">Measured on a sample of your own text: about <strong>@Secs(est)</strong> to train, single-threaded, on this device
+                            — clicking Generate below will train for real and the tab will be busy for roughly that long (no way to show progress mid-training; Prose's own API trains in one call). A whole conversation, not a lag.</span>
+                    }
+                    <span class="hint">Prose can't run partway-trained — this is a real, single, blocking call, so keep the slice/epochs modest unless you're prepared to wait.</span>
+                </div>
+            }
+        </div>
+
+        <div class="controls">
+            <button class="go" @onclick="GenerateOutputs" disabled="@_genBusy">@(_genBusy ? (string.IsNullOrEmpty(_genPhase) ? "Working…" : _genPhase) : "Generate output")</button>
+            @if (!AnyTicked()) { <span class="hint warn">Tick at least one generator above.</span> }
+        </div>
+
+        @if (_genBusy)
+        {
+            <div class="progress-wrap">
+                <div class="progress-track"><div class="progress-fill" style="width:@Pct(_genProgress)"></div></div>
+                <span class="progress-label">@_genPhase</span>
+            </div>
+        }
+
+        @if (_genError is not null)
+        {
+            <p class="err">@_genError</p>
+        }
+
+        @if (_outputs.Count > 0)
+        {
+            <h2>Your training data</h2>
+            @if (_plausMode == PlausMode.Train && _trainLoss is double loss)
+            {
+                <p class="hint">Trained a small HoloFormer on the first @Math.Min(_trainSliceChars, _text.Length).ToString("N0")
+                    characters of your text, @_trainEpochs epoch(s) — mean training loss @loss.ToString("F3"). Every generator
+                    above already used it to pick its best-of-several candidate for each line; nothing further was filtered.</p>
+            }
+            @foreach (var b in _outputs)
+            {
+                <div class="pr-panel pr-out">
+                    <div class="pr-out-head">
+                        <h3>@b.Title</h3>
+                        <span class="pr-out-fmt">@b.FormatLabel</span>
+                    </div>
+                    <div class="pr-out-stats">
+                        <span>@b.Lines.ToString("N0") lines</span>
+                        <span>@FmtBytes(b.Bytes)</span>
+                        @if (!string.IsNullOrEmpty(b.Note)) { <span class="pr-out-note">@b.Note</span> }
+                    </div>
+                    <textarea class="pr-out-text" readonly rows="9" spellcheck="false">@b.Text</textarea>
+                    <div class="pr-out-actions">
+                        <button class="ghost" type="button" @onclick="() => CopyBlock(b)">@(_copiedTitle == b.Title ? "Copied!" : "Copy")</button>
+                        <button class="ghost" type="button" @onclick="() => DownloadBlock(b)">↓ Download .txt</button>
+                    </div>
+                </div>
+            }
+        }
+
+        <div class="outro">
+            <p>Prose reads real text through the rules of English grammar — no training, no black box — mines
+                what it learns into a lexicon of nouns, verbs, adjectives and the patterns that connect them, then
+                recombines that knowledge into new, grammatical sentences. Everything above ran in this tab.</p>
+            <p>Want it in your own pipeline? <code>dotnet add package EvaluatedApplications.Prose</code></p>
+        </div>
+    }
+</div>
+
+@code {
+    const long MaxUpload = 64L * 1024 * 1024;
+    const int MaxUploadMb = 64;
+    // Mining chunk size: MineText itself has no chunking hook, so cooperative yielding is done by US,
+    // splitting the input at whitespace/newline boundaries near this many chars and calling MineText
+    // once per chunk (ProseStore.Mine accumulates additively — see Prose/CLAUDE.md — so this changes
+    // nothing about the mined result, only how often control returns to the browser).
+    const int ChunkTargetChars = 200_000;
+    const int ExplainSampleChars = 1500;
+    const int ExplainSampleCount = 5;
+    // Prism-scoring cap per generator block — same order of magnitude as Analyst's own novelty-scan
+    // cap (NoveltyCellCap=120 / NoveltyMaxTokensPerCell=32), this app's own established precedent for
+    // "opt-in in-browser LM scoring over real text, capped for responsiveness."
+    const int PlausPrismCapPerBlock = 150;
+    const int PlausPrismMaxTokensPerLine = 24;
+
+    enum PlausMode { None, Prism, Train }
+    record OutputBlock(string Title, string FormatLabel, string Text, int Lines, long Bytes, string Note);
+
+    // sample corpus — invented, not copyrighted text, just varied enough (several subjects/verbs/
+    // objects/adjectives) to give a real, non-trivial demo without asking a visitor to find their own.
+    const string SampleText =
+        "The old fisherman lived in a small village by the sea. Every morning he walked to the harbor " +
+        "and prepared his boat. His grandson often watched him work and asked many questions. The boy " +
+        "loved the smell of salt and the sound of gulls. One summer the fisherman taught the boy how to " +
+        "mend a net. The boy learned quickly and soon helped every day. The village grew proud of the " +
+        "young helper. A merchant from the city visited the harbor and admired the boat. He offered the " +
+        "fisherman a fair price for his catch. The fisherman thanked the merchant for his kindness. The " +
+        "grandson dreamed of sailing across the wide ocean. The old man told him that patience was the " +
+        "sailor's greatest gift. Years later the boy became a skilled fisherman himself. He remembered " +
+        "his grandfather's lessons every single day. The sea gave the village food, work, and quiet wonder.";
+
+    string _text = SampleText;
+    string Text { get => _text; set { _text = value; _charCount = value.Length; _byteCount = Encoding.UTF8.GetByteCount(value); } }
+    int _charCount = SampleText.Length;
+    long _byteCount = Encoding.UTF8.GetByteCount(SampleText);
+    bool _overCap => _byteCount > MaxUpload;
+    string? _fileName;
+
+    bool _busy; string? _error; double _progress; string _phase = "";
+    bool _mined; double _mineMs; long _sentencesMined; long _minedChars;
+    ProseEngine? _engine;
+    readonly List<string> _explainSamples = new();
+
+    bool _optSentences = false, _optQa = false, _optPassages = false, _optTwoTurn = true, _optConvos = false;
+    int _nSentences = 200, _nQa = 200, _nPassages = 100, _sentencesPerPassage = 4, _nTwoTurn = 200;
+    int _nConvos = 50, _convoTargetChars = 1500;
+    int _seed = 1;
+
+    PlausMode _plausMode = PlausMode.None;
+    int _keepBest = 0;
+    int _trainSliceChars = 30_000;
+    int _trainEpochs = 6;
+    double _trainLr = 0.005;
+    bool _estimating; double? _trainEstimateMs;
+    double? _trainLoss;
+    // True once TrainPlausibilityText has actually run against _engine this mining session. Prose's
+    // Plausibility has no public setter/reset, so an engine that has EVER trained a plausibility model
+    // keeps using it for every later Generate/GenerateQa* best-of-K call regardless of what this page's
+    // own radio group is currently set to — a real contamination risk for "None"/"Score with Prism"
+    // both promising an unmodified/model-free base generation. Guarded in GenerateOutputs.
+    bool _enginePlausTrained;
+
+    bool _genBusy; double _genProgress; string _genPhase = ""; string? _genError;
+    readonly List<OutputBlock> _outputs = new();
+    string? _copiedTitle;
+
+    HoloSession? _prismSession; SubwordVocab? _prismVocab;
+
+    static string Pct(double f) => (f * 100).ToString("F0") + "%";
+    static string Secs(double ms) => ms < 1000 ? ms.ToString("F0") + " ms" : ms < 60_000 ? (ms / 1000).ToString("F1") + " s" : (ms / 60_000).ToString("F1") + " min";
+    static string FmtBytes(long b) => b >= 1_000_000 ? (b / 1_000_000.0).ToString("F2") + " MB" : b >= 1000 ? (b / 1000.0).ToString("F1") + " KB" : b + " B";
+
+    void LoadSample() { Text = SampleText; _fileName = null; ResetMined(); }
+
+    void ResetMined() { _mined = false; _engine = null; _explainSamples.Clear(); _outputs.Clear(); _error = null; _genError = null; _trainEstimateMs = null; _enginePlausTrained = false; }
+
+    async Task OnFile(InputFileChangeEventArgs e)
+    {
+        var file = e.File;
+        if (file is null) return;
+        _busy = true; _error = null; ResetMined(); _phase = "Reading file…"; _progress = 0; StateHasChanged(); await Task.Yield();
+        try
+        {
+            using var stream = file.OpenReadStream(MaxUpload);
+            using var reader = new StreamReader(stream);
+            Text = await reader.ReadToEndAsync();
+            _fileName = file.Name;
+        }
+        catch (Exception ex)
+        {
+            _error = $"Couldn't read that file: {ex.Message}. It may be over the {MaxUploadMb} MB cap.";
+            _busy = false; StateHasChanged();
+            return;
+        }
+        _busy = false;
+        await Mine();
+    }
+
+    // Splits text into pieces near `target` chars, extending each cut forward to the next newline (or
+    // failing that, the next space) within a short lookahead so a sentence is never sliced mid-word —
+    // MineText re-splits into sentences internally per chunk, so a clean word/line boundary is all that
+    // matters here, not a sentence boundary.
+    static IEnumerable<string> ChunkText(string text, int target)
+    {
+        int n = text.Length, i = 0;
+        while (i < n)
+        {
+            int end = Math.Min(i + target, n);
+            if (end < n)
+            {
+                int lookahead = Math.Min(2000, n - end);
+                int cut = text.IndexOf('\n', end, lookahead);
+                if (cut < 0) cut = text.IndexOf(' ', end, lookahead);
+                if (cut >= 0) end = cut + 1;
+            }
+            yield return text[i..end];
+            i = end;
+        }
+    }
+
+    // Shared chunked/yielded mining loop — used both by Mine() (the initial load) and by
+    // GenerateOutputs' own contamination guard (see there): a fresh ProseEngine, mined the exact same
+    // way, whenever a prior Train-mode run's Plausibility model must not leak into a later None/Prism
+    // run. Reports progress through the caller-supplied setters so each caller can drive its own
+    // busy/progress UI (Mine's top-level bar vs. Generate's own phase line).
+    async Task<ProseEngine> MineFreshEngineAsync(Action<double, string> report)
+    {
+        var engine = new ProseEngine();
+        int done = 0; int total = _text.Length;
+        foreach (var chunk in ChunkText(_text, ChunkTargetChars))
+        {
+            engine.MineText(chunk);
+            done += chunk.Length;
+            report(total > 0 ? (double)done / total : 1, $"Mining… {done:N0} / {total:N0} chars");
+            StateHasChanged();
+            await Task.Yield();
+        }
+        return engine;
+    }
+
+    async Task Mine()
+    {
+        _busy = true; _error = null; ResetMined(); _progress = 0; _phase = "Reading…"; StateHasChanged(); await Task.Yield();
+        try
+        {
+            if (string.IsNullOrWhiteSpace(_text)) { _error = "Paste or drop some text first."; return; }
+            if (_overCap) { _error = $"That's {FmtBytes(_byteCount)} — over the {MaxUploadMb} MB cap. Trim it down and try again."; return; }
+
+            var sw = Stopwatch.StartNew();
+            var engine = await MineFreshEngineAsync((p, msg) => { _progress = p; _phase = msg; });
+            sw.Stop();
+            _mineMs = sw.Elapsed.TotalMilliseconds;
+            _minedChars = _text.Length;
+            _engine = engine;
+            _sentencesMined = engine.Store.SentencesMined;
+
+            // cheap, independent of the chunked mining above — a small prefix, parsed once, just to
+            // show what the grammar actually saw.
+            var prefix = _text.Length > ExplainSampleChars ? _text[..ExplainSampleChars] : _text;
+            foreach (var p in ProseEngine.Parse(prefix).Take(ExplainSampleCount))
+                _explainSamples.Add(ProseEngine.Explain(p));
+
+            _mined = true;
+        }
+        catch (Exception ex) { _error = "Mining failed: " + ex.Message; }
+        finally { _busy = false; StateHasChanged(); }
+    }
+
+    bool AnyTicked() => _optSentences || _optQa || _optPassages || _optTwoTurn || _optConvos;
+
+    void SetPlausMode(PlausMode m)
+    {
+        _plausMode = m;
+        _trainEstimateMs = null;
+        if (m == PlausMode.Train) _ = EstimateTrainTime();
+    }
+
+    async Task OnTrainParamsChanged()
+    {
+        if (_plausMode == PlausMode.Train) await EstimateTrainTime();
+    }
+
+    // Measures real throughput on a SMALL sample of the visitor's own text (one real epoch over at
+    // most 8,000 chars) and extrapolates to the requested slice x epochs — an honest, device-real
+    // number instead of a guessed constant, per the standing "measure, don't invent" discipline.
+    // Deliberately trains a THROWAWAY probe engine, never `_engine` itself — TrainPlausibilityText
+    // has no reset, so calibrating against the real engine would silently contaminate a later
+    // None/Prism run the moment this mode is merely SELECTED, before Generate is ever clicked.
+    async Task EstimateTrainTime()
+    {
+        if (_engine is null || _text.Length == 0) { _trainEstimateMs = null; return; }
+        _estimating = true; StateHasChanged(); await Task.Yield();
+        try
+        {
+            int probeChars = Math.Min(8000, Math.Min(_trainSliceChars, _text.Length));
+            if (probeChars < 200) { _trainEstimateMs = null; return; }
+            var probe = _text[..probeChars];
+            var probeEngine = new ProseEngine();
+            probeEngine.MineText(probe);
+            var sw = Stopwatch.StartNew();
+            probeEngine.TrainPlausibilityText(probe, epochs: 1, lr: _trainLr);
+            sw.Stop();
+            double msPerCharPerEpoch = sw.Elapsed.TotalMilliseconds / probeChars;
+            int sliceChars = Math.Min(_trainSliceChars, _text.Length);
+            _trainEstimateMs = msPerCharPerEpoch * sliceChars * _trainEpochs;
+        }
+        catch { _trainEstimateMs = null; }
+        finally { _estimating = false; StateHasChanged(); }
+    }
+
+    static string Clean(string s) => s.Replace('\t', ' ').Replace('\n', ' ').Replace('\r', ' ').Trim();
+
+    record PackStats(int BlockCount, double AvgTurns, double AvgChars, int TotalTurns);
+
+    // Packs random Q&A turns into `nBlocks` conversation-shaped windows, wire format verified against
+    // PrismFormer.GroupChat (AlgFormer/PairSource.cs) — HumanTag="user: "/AiTag="prism: ", newline-
+    // terminated per turn, NOT invented. Each block draws DIFFERENT pairs in a fresh random order
+    // (reshuffling the pool if a block needs more turns than the pool has left) until one more turn
+    // would exceed targetChars — never padded, and a block always gets at least one turn even if that
+    // turn alone exceeds the target, so no block is ever empty. Turns are deliberately unrelated to
+    // each other ("random ... to simulate conversation", the user's own framing) — simulated topic-
+    // hopping dialogue, not a coherent thread. Blocks are separated by one blank line, the corpus
+    // convention the plain-text path already reads. A single seeded Random drives every block's
+    // shuffle, so the same seed reproduces the same packing.
+    static (string Text, PackStats Stats) PackConversations(List<QaPair> pool, int nBlocks, int targetChars, int seed)
+    {
+        if (pool.Count == 0 || nBlocks <= 0) return ("", new PackStats(0, 0, 0, 0));
+        var rng = new Random(seed);
+        List<int> Shuffled()
+        {
+            var idx = Enumerable.Range(0, pool.Count).ToList();
+            for (int i = idx.Count - 1; i > 0; i--) { int j = rng.Next(i + 1); (idx[i], idx[j]) = (idx[j], idx[i]); }
+            return idx;
+        }
+        var stream = Shuffled(); int pos = 0;
+        int NextIdx() { if (pos >= stream.Count) { stream = Shuffled(); pos = 0; } return stream[pos++]; }
+
+        var blocks = new List<string>(nBlocks);
+        int totalTurns = 0; long totalChars = 0;
+        for (int b = 0; b < nBlocks; b++)
+        {
+            var sb = new StringBuilder();
+            int chars = 0, turns = 0;
+            while (true)
+            {
+                var p = pool[NextIdx()];
+                var turnText = $"{GroupChat.HumanTag}{Clean(p.Context + " " + p.Question)}\n{GroupChat.AiTag}{Clean(p.Answer)}\n";
+                if (turns > 0 && chars + turnText.Length > targetChars) break;   // never pad; always keep >=1 turn
+                sb.Append(turnText); chars += turnText.Length; turns++;
+                if (chars >= targetChars) break;
+            }
+            blocks.Add(sb.ToString());
+            totalTurns += turns; totalChars += chars;
+        }
+        return (string.Join("\n", blocks), new PackStats(nBlocks, totalTurns / (double)nBlocks, totalChars / (double)nBlocks, totalTurns));
+    }
+
+    async Task GenerateOutputs()
+    {
+        if (_engine is null || !AnyTicked()) return;
+        _genBusy = true; _genError = null; _genProgress = 0; _outputs.Clear(); _copiedTitle = null;
+        StateHasChanged(); await Task.Yield();
+        try
+        {
+            var engine = _engine;
+
+            // Contamination guard: Prose's Plausibility has no public setter/reset, so an engine that
+            // has EVER trained one (a prior Train-mode run this mining session) keeps using it inside
+            // Generate/GenerateQa*'s own best-of-K selection forever after — even if this radio group
+            // is now set to None/Prism. Re-mine a fresh engine first so those two modes stay honestly
+            // model-free, exactly as their own UI copy promises. Costs a real re-mine (same chunked/
+            // yielded loop as the initial Mine()) only in this specific switch-back case, never on a
+            // plain repeat Generate click with the same mode.
+            if (_plausMode != PlausMode.Train && _enginePlausTrained)
+            {
+                _genPhase = "A previous run trained a plausibility model — re-mining fresh so this mode stays unmodified…";
+                StateHasChanged(); await Task.Yield();
+                engine = await MineFreshEngineAsync((p, msg) => { _genProgress = p * 0.5; _genPhase = msg; });
+                _engine = engine; _enginePlausTrained = false;
+                _genProgress = 0; StateHasChanged(); await Task.Yield();
+            }
+
+            // Train mode: a real, single, blocking call (Prose exposes no incremental/epoch-callback
+            // hook — see this task's own Flagged note). Once trained, engine.Generate/GenerateQa*
+            // already thread the trained scorer into their own best-of-K selection internally, so
+            // nothing else here needs to change for the Train path.
+            if (_plausMode == PlausMode.Train)
+            {
+                int sliceChars = Math.Min(_trainSliceChars, _text.Length);
+                _genPhase = $"Training on {sliceChars:N0} chars, {_trainEpochs} epoch(s) — this blocks the tab, no progress mid-call…";
+                StateHasChanged(); await Task.Yield();
+                _trainLoss = engine.TrainPlausibilityText(_text[..sliceChars], _trainEpochs, _trainLr);
+                _enginePlausTrained = true;
+                await Task.Yield();
+            }
+
+            // Prism mode: load lazily, ONLY now that Generate was actually clicked — never speculatively.
+            if (_plausMode == PlausMode.Prism)
+            {
+                _genPhase = "Loading Prism checkpoint…"; StateHasChanged(); await Task.Yield();
+                if (!await EnsurePrismLoadedAsync())
+                {
+                    _genError = "Couldn't load Prism for scoring — continuing without it.";
+                }
+            }
+
+            int steps = (_optSentences ? 1 : 0) + (_optQa ? 1 : 0) + (_optPassages ? 1 : 0) + (_optTwoTurn ? 1 : 0) + (_optConvos ? 1 : 0);
+            int step = 0;
+
+            if (_optSentences)
+            {
+                _genPhase = $"Generating {_nSentences:N0} sentences…"; StateHasChanged(); await Task.Yield();
+                var lines = engine.Generate(_nSentences, _seed);
+                var (final, note) = await MaybeRankAndKeep(lines, lines, "sentence");
+                AddBlock("Sentences", "plain corpus — one per line, for data/text", string.Join("\n", final), final.Count, note);
+                step++; _genProgress = (double)step / steps; StateHasChanged(); await Task.Yield();
+            }
+            if (_optQa)
+            {
+                _genPhase = $"Generating {_nQa:N0} Q&A pairs…"; StateHasChanged(); await Task.Yield();
+                var pairs = engine.GenerateQa(_nQa, _seed);
+                var formatted = pairs.Select(p => Clean(p.Context + " " + p.Question) + "\t" + Clean(p.Answer)).ToList();
+                var scoreText = pairs.Select(p => p.Answer).ToList();
+                var (final, note) = await MaybeRankAndKeep(formatted, scoreText, "answer");
+                AddBlock("Q&A pairs", "pairs — prompt<TAB>target, for data/pairs", string.Join("\n", final), final.Count, note);
+                step++; _genProgress = (double)step / steps; StateHasChanged(); await Task.Yield();
+            }
+            if (_optPassages)
+            {
+                _genPhase = $"Generating {_nPassages:N0} Q&A passages…"; StateHasChanged(); await Task.Yield();
+                var pairs = engine.GenerateQaPassages(_nPassages, Math.Max(2, _sentencesPerPassage), _seed);
+                var formatted = pairs.Select(p => Clean(p.Context + " " + p.Question) + "\t" + Clean(p.Answer)).ToList();
+                var scoreText = pairs.Select(p => p.Answer).ToList();
+                var (final, note) = await MaybeRankAndKeep(formatted, scoreText, "answer");
+                AddBlock("Q&A passages", $"pairs — prompt<TAB>target, {_sentencesPerPassage} sentences/passage, for data/pairs", string.Join("\n", final), final.Count, note);
+                step++; _genProgress = (double)step / steps; StateHasChanged(); await Task.Yield();
+            }
+            if (_optTwoTurn)
+            {
+                _genPhase = $"Generating {_nTwoTurn:N0} two-turn pairs…"; StateHasChanged(); await Task.Yield();
+                var pairs = engine.GenerateTwoTurnQa(_nTwoTurn, _seed);
+                var formatted = pairs.Select(p => Clean(p.Prompt) + "\t" + Clean(p.Target)).ToList();
+                var scoreText = pairs.Select(p => p.Target).ToList();
+                var (final, note) = await MaybeRankAndKeep(formatted, scoreText, "target");
+                AddBlock("Two-turn pairs", "pairs — prompt<TAB>target, for data/pairs", string.Join("\n", final), final.Count, note);
+                step++; _genProgress = (double)step / steps; StateHasChanged(); await Task.Yield();
+            }
+            if (_optConvos)
+            {
+                _genPhase = $"Packing {_nConvos:N0} conversations…"; StateHasChanged(); await Task.Yield();
+                // Draws turns from a pool of ordinary Q&A pairs (same source as "Q&A pairs" above) —
+                // a modest pool is enough since blocks reuse it (reshuffled) rather than needing
+                // nBlocks*turnsPerBlock unique pairs; capped so an enormous block count doesn't demand
+                // an enormous one-shot pool.
+                int poolSize = Math.Clamp(_nConvos * 8, 300, 6000);
+                var pool = engine.GenerateQa(poolSize, _seed);
+                if (pool.Count == 0)
+                {
+                    _genError = (_genError is null ? "" : _genError + " ") + "Couldn't generate any Q&A pairs to pack into conversations — try a bigger source text.";
+                }
+                else
+                {
+                    var (text, stats) = PackConversations(pool, _nConvos, Math.Max(200, _convoTargetChars), _seed);
+                    int realLines = text.Length == 0 ? 0 : text.Count(c => c == '\n') + 1;
+                    string note = $"{stats.BlockCount:N0} blocks · avg {stats.AvgTurns:F1} turns/block · " +
+                        $"avg {stats.AvgChars:F0} chars/block (target {_convoTargetChars:N0}) · {stats.TotalTurns:N0} turns total";
+                    AddBlock("Conversations (packed)", $"plain corpus — {GroupChat.HumanTag.Trim()}/{GroupChat.AiTag.Trim()} turns packed per block, blank-line separated, for data/text", text, realLines, note);
+                }
+                step++; _genProgress = (double)step / steps; StateHasChanged(); await Task.Yield();
+            }
+        }
+        catch (Exception ex) { _genError = "Generation failed: " + ex.Message; }
+        finally { _genBusy = false; _genPhase = ""; StateHasChanged(); }
+    }
+
+    void AddBlock(string title, string formatLabel, string text, int lines, string extraNote)
+    {
+        long bytes = Encoding.UTF8.GetByteCount(text);
+        string ratio = _sentencesMined > 0 ? $"{lines:N0} lines from {_sentencesMined:N0} mined sentences" : $"{lines:N0} lines";
+        string note = string.IsNullOrEmpty(extraNote) ? ratio : $"{ratio} · {extraNote}";
+        _outputs.Add(new OutputBlock(title, formatLabel, text, lines, bytes, note));
+    }
+
+    // Only does real work in Prism mode (rank raw text by the deployed checkpoint's own surprisal) —
+    // None and Train both return the formatted lines unchanged: None because there's nothing to score
+    // with, Train because engine.Generate/GenerateQa* already used the trained scorer to pick each
+    // BEST-of-K candidate internally, so a second external re-rank of the already-best picks isn't
+    // needed here.
+    async Task<(List<string> Lines, string Note)> MaybeRankAndKeep(List<string> formatted, List<string> scoreText, string unitLabel)
+    {
+        if (_plausMode != PlausMode.Prism || _prismSession is null || _prismVocab is null)
+            return (formatted, "");
+
+        var session = _prismSession; var vocab = _prismVocab;
+        int ctxCap = session.Stats().Context;
+        int cap = Math.Min(formatted.Count, PlausPrismCapPerBlock);
+        var scored = new List<(int Idx, double Bits)>(cap);
+        for (int i = 0; i < cap; i++)
+        {
+            var text = scoreText[i];
+            var ids = vocab.Encode(text).ToList();
+            if (ids.Count < 2) continue;
+            var window = new List<int> { ids[0] };
+            double sum = 0; int scoredTok = 0;
+            int limit = Math.Min(ids.Count, PlausPrismMaxTokensPerLine + 1);
+            for (int t = 1; t < limit; t++)
+            {
+                var take = Math.Min(window.Count, ctxCap);
+                var ctx = window.Skip(window.Count - take).ToArray();
+                var logits = session.Logits(ctx);
+                sum += SurprisalBits(logits, vocab.Size, ids[t]);
+                scoredTok++;
+                window.Add(ids[t]);
+                if (scoredTok % 8 == 0) await Task.Yield();
+            }
+            if (scoredTok > 0) scored.Add((i, sum / scoredTok));
+        }
+        var ranked = scored.OrderBy(s => s.Bits).ToList();
+        var rankedIdx = new HashSet<int>(ranked.Select(r => r.Idx));
+        var unscored = Enumerable.Range(0, formatted.Count).Where(i => !rankedIdx.Contains(i)).ToList();
+
+        List<int> keptOrder;
+        string note;
+        if (_keepBest > 0)
+        {
+            keptOrder = ranked.Take(_keepBest).Select(r => r.Idx).ToList();
+            note = $"kept the {keptOrder.Count} most plausible {unitLabel}s of {ranked.Count} scored by Prism (lower surprisal = more plausible; not a correctness check)";
+        }
+        else
+        {
+            keptOrder = ranked.Select(r => r.Idx).Concat(unscored).ToList();
+            note = $"sorted by Prism plausibility, most plausible {unitLabel} first ({ranked.Count} scored" + (unscored.Count > 0 ? $", {unscored.Count} left unscored/appended at the {PlausPrismCapPerBlock}-line cap)" : ")");
+        }
+        return (keptOrder.Select(i => formatted[i]).ToList(), note);
+    }
+
+    // Softmax-and-look-up the TRUE next token's probability — identical pattern to Analyst.razor's own
+    // novelty scan (Prism.Inference.Gate's own numerically-stable subtract-the-max approach), just
+    // reading one specific index back instead of the top-1/top-K.
+    static double SurprisalBits(double[] logits, int vocab, int trueId)
+    {
+        double max = logits[0];
+        for (int i = 1; i < vocab; i++) if (logits[i] > max) max = logits[i];
+        double sum = 0;
+        for (int i = 0; i < vocab; i++) sum += Math.Exp(logits[i] - max);
+        double p = Math.Exp(logits[trueId] - max) / sum;
+        return -Math.Log(Math.Max(p, 1e-12), 2);
+    }
+
+    // Mirrors Analyst.razor's own EnsurePrismLoadedAsync/RunNoveltyScan lazy-load exactly — same
+    // sidecar files, same SessionHost key ("prism"), so this reuses whichever tool loaded it first
+    // this page load instead of re-fetching.
+    async Task<bool> EnsurePrismLoadedAsync()
+    {
+        if (_prismSession is not null && _prismVocab is not null) return true;
+        try
+        {
+            var vocabBytes = await Http.GetByteArrayAsync("data/oracle-vocab.txt");
+            var merges = Encoding.UTF8.GetString(vocabBytes).Replace("\r\n", "\n").Split('\n').Where(l => l.Length > 0).ToList();
+            _prismVocab = new SubwordVocab(merges);
+
+            long? rounds = null; int? stackK = null; int? iterWarm = null;
+            try { rounds = long.Parse((await Http.GetStringAsync("data/oracle-rounds.txt")).Trim()); } catch { }
+            try { stackK = int.Parse((await Http.GetStringAsync("data/oracle-stackk.txt")).Trim()); } catch { }
+            try { iterWarm = int.Parse((await Http.GetStringAsync("data/oracle-iterwarm.txt")).Trim()); } catch { }
+
+            _prismSession = await Sessions.GetOrCreateAsync("prism", async () =>
+            {
+                var (bytes, _) = await CheckpointFetch.FetchAndDecompressGzipAsync(Http, "data/oracle-brain.bin.gz");
+                var peek = HoloFormer.Deserialize(bytes);
+                var kPass = stackK ?? 1;
+                var alpha = (peek.Layers == 1 && rounds is not null && iterWarm is > 0)
+                    ? LineageJournal.AlphaFor((int)rounds.Value, addRound: 0, iterWarm.Value)
+                    : 1.0;
+                return HoloSession.FromCheckpoint(bytes, kPass, alpha);
+            });
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _genError = "Couldn't load the Prism checkpoint: " + ex.Message;
+            return false;
+        }
+    }
+
+    async Task CopyBlock(OutputBlock b)
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("copyText", b.Text);
+            _copiedTitle = b.Title; StateHasChanged();
+            await Task.Delay(1500);
+            if (_copiedTitle == b.Title) { _copiedTitle = null; StateHasChanged(); }
+        }
+        catch (Exception ex) { _genError = "Couldn't copy: " + ex.Message; StateHasChanged(); }
+    }
+
+    async Task DownloadBlock(OutputBlock b)
+    {
+        var slug = new string(b.Title.ToLowerInvariant().Select(c => char.IsLetterOrDigit(c) ? c : '-').ToArray());
+        while (slug.Contains("--")) slug = slug.Replace("--", "-");
+        await JS.InvokeVoidAsync("analystDownload", $"prose-{slug.Trim('-')}.txt", b.Text, "text/plain;charset=utf-8");
+    }
+}

@@ -1,8 +1,10 @@
 @page "/prism"
+@implements IDisposable
 @inject HttpClient Http
 @inject HoloKernel.SessionHost Sessions
 @inject Microsoft.JSInterop.IJSRuntime JS
 @using System.Text
+@using System.Globalization
 @using PrismFormer
 @using HoloKernel
 @* global:: required — this page's own generated class is Showroom.Pages.Prism (route "/prism"),
@@ -42,6 +44,21 @@
     }
     else
     {
+        <div class="sound-row">
+            <button type="button" class="sound-toggle @(_soundOn ? "on" : "")" @onclick="ToggleSound"
+                    aria-pressed="@_soundOn" title="@(_soundOn ? "Mute Prism's voice" : "Hear Prism's voice")">
+                <span aria-hidden="true">@(_soundOn ? "🔊" : "🔇")</span> @(_soundOn ? "Sound on" : "Sound off")
+            </button>
+            <label class="sound-vol">
+                volume
+                <input type="range" min="0" max="1" step="0.05" value="@_soundVolume" disabled="@(!_soundOn)"
+                       @oninput="OnVolumeInput" />
+            </label>
+        </div>
+        <p class="sound-note hint">Each reply token is turned into a short tone straight from that token's own
+            phasor face (the same numbers the model itself reasons with) — not a recording, not decoration.
+            Off by default.</p>
+
         <div class="cr-stats">
             <div class="stat"><div class="n">@_stats!.ParamCount.ToString("N0")</div><div class="l">parameters</div></div>
             @* 8 bytes per parameter (they are doubles) — this lands on the real prism-holo.bin size, 862,244 B
@@ -149,6 +166,16 @@
     //
     // Still also the backstop for the turn-based chat below (see StopReason.Cap): a reply that neither
     // emits the stop token nor trips DegenGuard cannot run forever.
+
+    // ---- Audible tokens (2026-09-13). OFF by default, opt-in via _soundOn below — a page that makes
+    // noise unannounced is hostile. Persisted in localStorage (window.prismAudio.getPref/setPref in
+    // index.html) so a visitor who muted it once doesn't have to mute it again every visit.
+    bool _soundOn;
+    double _soundVolume = 0.6;                 // 0..1, UI-facing; see VolumeCeiling below for the real cap
+    const double VolumeCeiling = 0.32;          // "clamp the master gain low by default" — even a visitor
+    // dragging the slider to 100% only ever reaches this, genuinely quiet, ceiling.
+    const int ToneMs = 110;                     // one note per token, inside the requested ~80-150ms window
+    const string SoundOnKey = "prism-sound-on", SoundVolKey = "prism-sound-volume";
 
     HoloSession? _session;
     ModelStats? _stats;
@@ -370,6 +397,9 @@
             // throwing away a token that was never meant to be seen.
 
             outIds.Add(t); seq.Add(t); revealed.Add(t);
+            PlayTokenTone(t);   // one short note per real emitted token — see method below. Fires on
+            // EVERY token (not just every RenderBatch reveal), so a 4-token render batch still makes 4
+            // distinct sounds rather than one.
             var stopping = guard.Observe(t, decision.Greedy);
             if (stopping) reason = StopReason.DegenLoop;
 
@@ -442,6 +472,20 @@
     {
         try
         {
+            // Restore the sound preference BEFORE anything else — cheap, and reading localStorage is
+            // not itself a user gesture, so even if this restores _soundOn=true from an earlier visit
+            // the AudioContext may still start suspended until the visitor's first real click on this
+            // page (see ToggleSound below for where the actual unlock happens). Never blocks page load.
+            try
+            {
+                _soundOn = await JS.InvokeAsync<string>("prismAudio.getPref", SoundOnKey, "0") == "1";
+                var volPref = await JS.InvokeAsync<string>("prismAudio.getPref", SoundVolKey, "0.6");
+                if (double.TryParse(volPref, NumberStyles.Float, CultureInfo.InvariantCulture, out var v))
+                    _soundVolume = Math.Clamp(v, 0, 1);
+                if (_soundOn) await JS.InvokeVoidAsync("prismAudio.setVolume", _soundVolume * VolumeCeiling);
+            }
+            catch { _soundOn = false; }
+
             var s = Begin("data/oracle-vocab.txt");
             var vocabBytes = await Http.GetByteArrayAsync("data/oracle-vocab.txt");
             var merges = Encoding.UTF8.GetString(vocabBytes).Replace("\r\n", "\n").Split('\n').Where(l => l.Length > 0).ToList();
@@ -580,6 +624,92 @@
         var ctx = new int[take];
         seq.CopyTo(seq.Count - take, ctx, 0, take);
         return ctx;
+    }
+
+    // A phasor face is Dim doubles, INTERLEAVED (cos, sin) pairs — literally a Fourier series
+    // specification — so splitting it into even/odd indices feeds directly into Web Audio's
+    // createPeriodicWave(real, imag), no further transform. HoloFormer.Face(id) is a free, read-only
+    // lookup keyed only on the token id (no forward pass, deterministic), so this is the FREE default
+    // source: "each token makes its own unique sound" at zero extra compute — the same face every
+    // time this same id is ever emitted, on this checkpoint. (The richer, context-sensitive option —
+    // the forward pass's own hidden face at this position, HoloFormer.LayerFaces — was deliberately
+    // NOT wired in: it costs a genuine extra O(context) recompute per token on top of the already-live
+    // O(1) KV-cache step above, which would double the visible per-token cadence on a page whose whole
+    // feel depends on that cadence. Flagged as a possible secondary mode, not built.)
+    //
+    // Fire-and-forget: a synth glitch (or JS interop being torn down mid-navigation) must never fail a
+    // reply or add latency to the generation loop that triggered it — see index.html's own tone()
+    // implementation for why calling this on a muted/never-unlocked player does zero work.
+    void PlayTokenTone(int tokenId)
+    {
+        if (!_soundOn || _session is null) return;
+        try
+        {
+            var face = _session.Model.Face(tokenId);
+            var n = face.Length / 2;
+            if (n < 2) return;   // createPeriodicWave needs at least 2 matched coefficients
+            var real = new double[n];
+            var imag = new double[n];
+            for (var i = 0; i < n; i++) { real[i] = face[2 * i]; imag[i] = face[2 * i + 1]; }
+            _ = JS.InvokeVoidAsync("prismAudio.tone", real, imag, BaseFrequency(tokenId), ToneMs, 1.0);
+        }
+        catch { /* audio is decoration, never let a synth glitch touch generation */ }
+    }
+
+    // Deterministic base pitch per token id, via a cheap integer hash rather than the raw id — subword
+    // merge ids are assigned in table order, so neighbouring ids would otherwise cluster at
+    // near-identical pitches. Same id -> same hash -> same frequency, forever: "the same token always
+    // sounds the same" holds by construction, not by caching anything.
+    static double BaseFrequency(int tokenId)
+    {
+        var x = (uint)tokenId * 2654435761u;
+        x ^= x >> 15; x *= 0x2c1b3c6du;
+        x ^= x >> 12; x *= 0x297a2d39u;
+        x ^= x >> 15;
+        return 150.0 + (x % 6501) / 10.0;   // 150-800 Hz
+    }
+
+    async Task ToggleSound()
+    {
+        _soundOn = !_soundOn;
+        try
+        {
+            if (_soundOn)
+            {
+                // This click IS the user gesture — unlock/create the AudioContext here, inside a real
+                // synchronous click handler, rather than hoping one arrives later during generation.
+                await JS.InvokeVoidAsync("prismAudio.unlock");
+                await JS.InvokeVoidAsync("prismAudio.setVolume", _soundVolume * VolumeCeiling);
+            }
+            else
+            {
+                await JS.InvokeVoidAsync("prismAudio.stopAll");
+            }
+            await JS.InvokeVoidAsync("prismAudio.setPref", SoundOnKey, _soundOn ? "1" : "0");
+        }
+        catch { /* audio is decoration, never let it fail the page */ }
+    }
+
+    async Task OnVolumeInput(ChangeEventArgs e)
+    {
+        if (double.TryParse(Convert.ToString(e.Value), NumberStyles.Float, CultureInfo.InvariantCulture, out var v))
+        {
+            _soundVolume = Math.Clamp(v, 0, 1);
+            try
+            {
+                await JS.InvokeVoidAsync("prismAudio.setVolume", _soundVolume * VolumeCeiling);
+                await JS.InvokeVoidAsync("prismAudio.setPref", SoundVolKey, _soundVolume.ToString(CultureInfo.InvariantCulture));
+            }
+            catch { /* audio is decoration, never let it fail the page */ }
+        }
+    }
+
+    // Navigating away mid-reply must not leave a note ringing behind in this single-page app (the
+    // AudioContext lives on window, not on this component, so it otherwise would). Does not touch the
+    // sound-on/volume preference — only the currently-sounding notes.
+    public void Dispose()
+    {
+        try { _ = JS.InvokeVoidAsync("prismAudio.stopAll"); } catch { /* JS runtime may already be torn down */ }
     }
 
     async Task OnKeyDown(KeyboardEventArgs e) { if (e.Key == "Enter") await Ask(); }

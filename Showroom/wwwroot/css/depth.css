@@ -70,6 +70,22 @@
 .room[data-cat="holodb"]{ --glow-near:var(--c-holodb, #66c1aa); --glow-mid:var(--c-holodb, #66c1aa); }
 .room[data-cat="algformer"]{ --glow-near:var(--c-algformer, #5998ff); --glow-mid:var(--c-algformer, #5998ff); }
 
+/* Prose's chord: HoloDb (mined-knowledge store) + AlgFormer (optional plausibility HoloFormer), both
+   real dependencies (Prose.csproj ProjectReferences both; ProseEngine.Store is a ProseStore backed by
+   HoloDb, TrainPlausibilityText/Plausibility is a PrismFormer.HoloFormer.Mini) — same genuine two-
+   package composite situation as Creature (above) and the static site's own prose.html chord
+   (body[data-cat="holodb-algformer"] there). HoloDb sits before AlgFormer here to match the site's own
+   canonical Foundation->Data->ML domain order (packages.html's own section order), same convention
+   Creature's algformer-tracer chord above follows. */
+.room[data-cat="holodb-algformer"]{
+  --glow-near:var(--c-holodb, #66c1aa);
+  --glow-mid:var(--c-holodb, #66c1aa);
+  --glow-near-a:var(--c-holodb, #66c1aa);
+  --glow-near-b:var(--c-algformer, #5998ff);
+  --glow-mid-a:var(--c-holodb, #66c1aa);
+  --glow-mid-b:var(--c-algformer, #5998ff);
+}
+
 /* Creature's chord: AlgFormer (brain) + Tracer (pathfinding), both real dependencies (see
    Creature.razor's own @using PrismFormer / @using Tracer.Helpers + GridTactics.Reachable call).
    --glow-near/--glow-mid still get a plain single-tone fallback (AlgFormer) here, same role
@@ -166,7 +182,8 @@ main{
        above; every other animation-* property still cascades from the base rule, only animation-name
        changes here). Higher specificity ([data-cat=...] + .room-head vs. bare .room-head) means this
        doesn't need !important or to come after the base rule in source order, though it does anyway. */
-    .room[data-cat="algformer-tracer"] .room-head{
+    .room[data-cat="algformer-tracer"] .room-head,
+    .room[data-cat="holodb-algformer"] .room-head{
       animation-name: sr-parallax-near-chord;
     }
 
@@ -183,7 +200,7 @@ main{
        settles a few px as it individually scrolls into view (animation-range caps it to the first 45%
        of its own entry — a quick settle, not a long drift), same as site.css's own tier "mid". */
     .stat, .cr-curve, .cr-log, .cr-stage, .fc-stage, .or-runs,
-    .chart-card, .col-card, .chip{
+    .chart-card, .col-card, .chip, .pr-panel, .pr-out{
       animation-name: sr-parallax-mid;
       animation-timing-function: linear;
       animation-fill-mode: both;
@@ -199,7 +216,9 @@ main{
     .room[data-cat="algformer-tracer"] .stat,
     .room[data-cat="algformer-tracer"] .cr-curve,
     .room[data-cat="algformer-tracer"] .cr-log,
-    .room[data-cat="algformer-tracer"] .cr-stage{
+    .room[data-cat="algformer-tracer"] .cr-stage,
+    .room[data-cat="holodb-algformer"] .pr-panel,
+    .room[data-cat="holodb-algformer"] .pr-out{
       animation-name: sr-parallax-mid-chord;
     }
   }

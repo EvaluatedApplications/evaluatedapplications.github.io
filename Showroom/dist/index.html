@@ -18,18 +18,18 @@
     <script type="importmap">{
   "imports": {
     "./_framework/blazor.webassembly.js": "./_framework/blazor.webassembly.w3qd1tpl0e.js",
-    "./_framework/dotnet.js": "./_framework/dotnet.bkv3zyf2xw.js",
-    "./_framework/dotnet.native.js": "./_framework/dotnet.native.awrvmeevr0.js",
+    "./_framework/dotnet.js": "./_framework/dotnet.c4t00zt5qx.js",
+    "./_framework/dotnet.native.js": "./_framework/dotnet.native.l07z25v5bk.js",
     "./_framework/dotnet.runtime.js": "./_framework/dotnet.runtime.zbexyp8zrs.js"
   },
   "scopes": {},
   "integrity": {
     "./_framework/blazor.webassembly.js": "sha256-lDXsDYFgm62F+YUvxES7IOTCXYpiHpU3uR45YdC6mq4=",
     "./_framework/blazor.webassembly.w3qd1tpl0e.js": "sha256-lDXsDYFgm62F+YUvxES7IOTCXYpiHpU3uR45YdC6mq4=",
-    "./_framework/dotnet.bkv3zyf2xw.js": "sha256-i/2scEnpFbFzzRfYmfvhiCCyf6OBCuJL+wZHyFLjUj0=",
-    "./_framework/dotnet.js": "sha256-i/2scEnpFbFzzRfYmfvhiCCyf6OBCuJL+wZHyFLjUj0=",
-    "./_framework/dotnet.native.awrvmeevr0.js": "sha256-+gznh9JFMqQFphxR5y+zz28mAYmK2+BmCkoMpOyHizs=",
-    "./_framework/dotnet.native.js": "sha256-+gznh9JFMqQFphxR5y+zz28mAYmK2+BmCkoMpOyHizs=",
+    "./_framework/dotnet.c4t00zt5qx.js": "sha256-bA9/SZbOJdMbXbjS+jQ2B6XaikN8xclLaWbtjfxsuJk=",
+    "./_framework/dotnet.js": "sha256-bA9/SZbOJdMbXbjS+jQ2B6XaikN8xclLaWbtjfxsuJk=",
+    "./_framework/dotnet.native.js": "sha256-u0spWTGI0sbzMty6E04vVnovxdgydwGC8wBA80p/u1Q=",
+    "./_framework/dotnet.native.l07z25v5bk.js": "sha256-u0spWTGI0sbzMty6E04vVnovxdgydwGC8wBA80p/u1Q=",
     "./_framework/dotnet.runtime.js": "sha256-MZMguyke9CroSQl+L/SHIGFkPTD+LtYGXkXjAvwWx40=",
     "./_framework/dotnet.runtime.zbexyp8zrs.js": "sha256-MZMguyke9CroSQl+L/SHIGFkPTD+LtYGXkXjAvwWx40="
   }
@@ -126,6 +126,121 @@
         a.href = url; a.download = name; document.body.appendChild(a); a.click();
         document.body.removeChild(a); setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
       };
+      // Generic clipboard copy — used by Prose's per-block "Copy" buttons (and reusable by any future
+      // tool). navigator.clipboard requires a secure context, which this app always is (GitHub Pages
+      // is https, and localhost dev is exempt) — no fallback path is built, a rejected promise just
+      // surfaces as a real, visible error in the caller, same "no silent failure" discipline as
+      // analystDownload above.
+      window.copyText = function (text) {
+        return navigator.clipboard.writeText(text);
+      };
+
+      // Prism's per-token tone synth (2026-09-13). Each generated token is rendered as a short note
+      // built DIRECTLY from that token's own phasor face: a face is Dim doubles interleaved as
+      // (cos, sin) pairs — literally a Fourier series specification — so splitting it into even/odd
+      // indices and handing them to AudioContext.createPeriodicWave(real, imag) is a faithful,
+      // non-metaphorical rendering of that exact vector as sound, not a sonification convention.
+      //
+      // ONE HONEST LIMIT (per the Web Audio spec, not measured — no browser here): createPeriodicWave
+      // treats coefficient index k as the amplitude of the k-th HARMONIC of the oscillator's own base
+      // frequency — EXCEPT index 0, which the spec defines as a DC offset, not a "0th harmonic". The
+      // codec's own component frequencies (Phasor's LinTheta/LogTheta bands) are fixed, non-harmonic
+      // frequencies, not multiples of one fundamental, and the face's own component 0 is not a DC
+      // term by construction either. So this plays the face faithfully AS A VECTOR of coefficients —
+      // unique and deterministic per token, real math, not decoration — but it is not a literal
+      // reproduction of the codec's internal frequencies, and the browser's own harmonic (and DC)
+      // reinterpretation of index 0 is a real, disclosed mismatch between "the vector" and "the
+      // codec's own tones", not a bug in this code.
+      //
+      // OFF BY DEFAULT, opt-in only (see Prism.razor's own toggle) — this object does no work at all,
+      // not even creating an AudioContext, until unlock()/tone() is first called from a real click.
+      window.prismAudio = (function () {
+        var ctx = null, master = null, active = [];
+        function ensureCtx() {
+          if (ctx) return ctx;
+          var AC = window.AudioContext || window.webkitAudioContext;
+          if (!AC) return null;
+          ctx = new AC();
+          master = ctx.createGain();
+          master.gain.value = 0; // real level is set by setVolume() before any tone is ever audible
+          master.connect(ctx.destination);
+          return ctx;
+        }
+        return {
+          // Call this from the mute/unmute toggle's OWN click handler — that click IS the user
+          // gesture browsers require before audio can play; creating/resuming the context anywhere
+          // else (e.g. quietly on page load from a persisted "sound was on last time" preference)
+          // would just start it suspended and go on being silent regardless.
+          unlock: function () {
+            var c = ensureCtx();
+            if (c && c.state === 'suspended') { c.resume().catch(function () {}); }
+          },
+          // v is 0..1 from the UI slider — the caller (Prism.razor) has already multiplied it through
+          // its own low ceiling before this ever arrives, so this sets the raw value as given.
+          setVolume: function (v) {
+            ensureCtx();
+            if (master) master.gain.value = Math.max(0, Math.min(1, v));
+          },
+          // real/imag: plain number arrays (marshalled from a C# double[]) of equal length — this
+          // player's own even/odd split of a phasor face. freqHz: the note's base pitch. ms: total
+          // note length including release. gain: local peak BEFORE the master volume bus (Prism.razor
+          // always passes 1.0 today; kept as a real parameter, not hardcoded, for a future caller that
+          // wants per-note dynamics). Fire-and-forget by design — a synth glitch must never touch the
+          // generation loop that triggered it.
+          tone: function (real, imag, freqHz, ms, gain) {
+            var c = ctx; // never call ensureCtx() here — a muted/never-unlocked player does zero work
+            if (!c || !master || master.gain.value <= 0 || !real || !imag) return;
+            try {
+              var n = Math.min(real.length, imag.length);
+              if (n < 2) return; // createPeriodicWave needs at least 2 matched coefficients
+              var re = new Float32Array(n), im = new Float32Array(n);
+              for (var i = 0; i < n; i++) { re[i] = real[i]; im[i] = imag[i]; }
+              var wave = c.createPeriodicWave(re, im, { disableNormalization: false });
+              var osc = c.createOscillator();
+              osc.setPeriodicWave(wave);
+              osc.frequency.value = Math.max(20, freqHz || 220);
+              var g = c.createGain();
+              var now = c.currentTime;
+              var dur = Math.max(0.03, (ms || 110) / 1000);
+              var peak = Math.max(0, gain == null ? 1 : gain);
+              var attack = Math.min(0.008, dur * 0.2);
+              var release = Math.min(0.02, dur * 0.3);
+              g.gain.setValueAtTime(0, now);
+              g.gain.linearRampToValueAtTime(peak, now + attack);
+              g.gain.setValueAtTime(peak, Math.max(now + attack, now + dur - release));
+              g.gain.linearRampToValueAtTime(0, now + dur);
+              osc.connect(g); g.connect(master);
+              osc.start(now);
+              osc.stop(now + dur + 0.02);
+              var entry = { osc: osc, gain: g };
+              active.push(entry);
+              osc.onended = function () {
+                try { osc.disconnect(); g.disconnect(); } catch (e) { }
+                var idx = active.indexOf(entry);
+                if (idx >= 0) active.splice(idx, 1);
+              };
+            } catch (e) { /* never let a synth glitch break generation */ }
+          },
+          // Hard-stops every currently-sounding note immediately, without touching master volume (so
+          // returning to the page — or re-enabling sound — doesn't need the slider re-set). Called on
+          // component teardown (navigating away from /prism) — see Prism.razor's Dispose().
+          stopAll: function () {
+            active.forEach(function (e) {
+              try { e.gain.gain.cancelScheduledValues(0); e.gain.gain.value = 0; e.osc.stop(0); } catch (err) { }
+            });
+            active = [];
+          },
+          // Tiny localStorage wrappers, both fail-soft (private-mode/disabled storage throws) — a
+          // visitor who muted this once should not have to mute it again every visit, but losing that
+          // preference silently is fine; failing the page over it is not.
+          getPref: function (key, def) {
+            try { var v = window.localStorage.getItem(key); return v === null ? def : v; } catch (e) { return def; }
+          },
+          setPref: function (key, val) {
+            try { window.localStorage.setItem(key, val); } catch (e) { }
+          }
+        };
+      })();
     </script>
     <script>
       // Real boot-log narration: observes the ACTUAL resources Blazor's WASM host fetches (runtime,

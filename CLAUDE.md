@@ -12,10 +12,12 @@ content to the owner instead. You never commit/push (coordinator commits, user p
 
 Root static pages (`site/*.html`), all built on the shared design system:
 - `index.html` — **tools-first homepage (2026-08-28 pivot, see "Tools-first pivot" below)**: company
-  pitch, then the 4-card tool gallery (Analyst/Creature/Forecaster/Prism) as the entire top-level
-  content, then a slim "Powered by" package-chip strip (`.pkg-strip`, no cards/descriptions) linking
-  to `/packages.html`. The 11-package gallery and the "how it fits together" flow diagram used to
-  live here inline — they now live on `packages.html` (below), not duplicated on the homepage.
+  pitch, then the 5-card tool gallery (Prism/Creature/Forecaster/Prose/Analyst, in that order — see
+  "Homepage #tools reorder by technical achievement" below for Prose's 2026-09-13 placement
+  reasoning) as the entire top-level content, then a slim "Powered by" package-chip strip
+  (`.pkg-strip`, no cards/descriptions) linking to `/packages.html`. The 11-package gallery and the
+  "how it fits together" flow diagram used to live here inline — they now live on `packages.html`
+  (below), not duplicated on the homepage.
 - `packages.html` — **NEW (2026-08-28)**: the relocated 11-package gallery in 4 categories
   (Foundation / Data / Machine learning / Spatial & games) + the "how it fits together" flow
   diagram, near-verbatim from the old `index.html#packages` section, wrapped in the standard plain
@@ -992,10 +994,13 @@ check the nav is compact on a narrow (≤640px) viewport — that was the failin
 got re-litigated. Do this walk any time the nav, page set, or card grid changes; record it in the
 task's return message. An href-audit alone is not this check (that was the 2026-08-26 mistake).
 
-**SEO/nav facts, re-verified against the real `sitemap.xml` this pass (2026-09-10, was stale at "20
-pages" after the 4th article published)**: `sitemap.xml` lists **21 routable page URLs** (the
-homepage `/` + 20 named pages — 11 package + 3 reference + `packages.html`/`articles.html` + the 4
-real articles) + 4 live tool routes + `/tools/` = 26 `<url>` entries total. `404.html`,
+**SEO/nav facts, re-verified against the real `sitemap.xml` this pass (2026-09-13, updated for the
+Prose tool route, and re-counted fresh by grepping `<url>` directly rather than carried forward —
+the prior "21 routable / 26 total" text was itself off by one, undercounting the non-tool pages by
+1)**: `sitemap.xml` lists **22 routable non-tool page URLs** (the homepage `/` + 21 named pages — 11
+package + 3 reference + `packages.html`/`articles.html` + the 4 real articles) + **5 live tool
+routes** (`analyst`/`creature`/`forecaster`/`prism`/`prose`) + `/tools/` = **28** `<url>` entries
+total, confirmed by direct count (`Select-String "<url>"` = 28, of which 6 contain `/tools`). `404.html`,
 `recycledao-preview.html`, and `articles/_example.html` are correctly absent (deliberately
 non-routable — see "SiteKit — reconciled status & open decisions" above for the full 23-file
 breakdown this count is derived from; that section's own "3 real article pages"/"3 real articles"
@@ -1884,6 +1889,51 @@ model/training involved), and the user's own framing ("Prism should be first obv
 by the neural/transformer-depth axis specifically. Flagged for the user to redirect if they intended
 Analyst to rank differently. Verified: `data-initial` attributes moved with each card (mobile icon-tile
 marks stay correct), tag/div balance re-checked on `index.html` (27/27 divs, 1/1 nav, 1/1 body).
+
+**Prose added to the `#tools` gallery (2026-09-13)**: a 5th card, inserted 4th (Prism, Creature,
+Forecaster, **Prose**, Analyst) rather than appended. Reasoning: Prose's optional plausibility model
+(score against the deployed Prism checkpoint, or fit a small model on the visitor's own pasted text)
+puts it on the same neural axis as the top 3, but that path is optional and secondary to its real
+job — mining grammar and generating a corpus, a data/storage-engine task closer to Analyst's axis
+(no training required at all). Ranked just above Analyst (which has zero neural involvement) and
+below the three tools whose core loop IS a live-trained transformer. Per §per-package-palette, Prose
+is a genuine multi-package composite (HoloDb + AlgFormer, exactly like Creature is AlgFormer +
+Tracer) — its card copies Creature's exact hard-edged two-stop chord shape:
+`--cat:linear-gradient(90deg, var(--c-holodb) 0%, var(--c-holodb) 50%, var(--c-algformer) 50%,
+var(--c-algformer) 100%); --cat-root:var(--c-holodb)`, same order (HoloDb first) as `prose.html`'s
+own `.card`s and `packages.html`'s Prose card already use — the chord order is canonical per
+composite, not re-derived per hosting page (confirmed by checking Creature's own chord, which is
+algformer-first/tracer-second identically on both `index.html` and `algformer.html`). `data-initial="Ps"`
+— checked against `packages.html`'s own Prose card (already `Ps`, no drift) and against every other
+`data-initial` on `index.html` itself (`Pm`/`Cr`/`Fc`/`An`, no collision); note `#tools` was pulled
+OUT of the mobile icon-grid-tile treatment on 2026-08-28 (see the dedicated CSS comment in
+`site.css` near `#packages .grid`), so `data-initial` is currently inert for every `#tools` card on
+mobile, Prose included — carried anyway purely for consistency with its 4 siblings and in case
+`#tools` is ever folded back into that treatment. `.powered` pills → `/holodb/` + `/algformer.html`,
+same pattern as Creature's → AlgFormer + Tracer. Also added, for the same cohesion reason (Prose
+depends on AlgFormer, and this section enumerates every AlgFormer-consuming live tool):
+`algformer.html`'s "Try it live" grid gained a 4th plain `<a class="card tool">` (no `.powered`
+pill, matching that section's existing simpler shape, same chord/`--cat-root`), and `prose.html`'s
+own hero `cta-row` gained a `btn-primary` "Try it live →" CTA to `/tools/prose` ahead of the NuGet
+ghost link — `/tools/prose` demos the Prose *product* directly (stronger case than Prism's generic
+AlgFormer demo), so its own product page linking to its own live tool closes a real reachability
+gap that existed before this pass. `holodb/index.html`'s single-card "The Analyst" section was
+deliberately LEFT UNTOUCHED — it's a documented one-card, `omitGridWrapper:true` shape framed
+singularly around Analyst ("The engine, running in a browser tab... the Analyst"); adding Prose
+there would mean rewriting that section's own heading/copy, a bigger structural call out of scope
+for this pass, flagged instead of done. Tool count bumped 4→5 in `index.html`'s `<meta
+name="description">`, `og:description`, hero `<p class="lede">`, and the `.facts` `<b>4</b>` pill.
+`/tools/prose` added to `sitemap.xml` (weekly/0.6, same tier as Creature/Forecaster/Prism).
+Reachability walk re-run: Home → `#tools` → Prose = 1 click (same as every other tool card);
+`algformer.html` → "Try it live" grid → Prose = 1 click; `prose.html` → hero CTA → Prose = 1 click;
+`packages.html` → Prose card → `prose.html` → hero CTA → tool = still ≤2 clicks to the live tool
+from anywhere, same invariant as before. No nav item was added on any page (nav stayed the
+existing 3-6 item shape everywhere), so narrow-viewport (≤640px) compactness is unaffected
+structurally — not independently re-screenshotted (no browser here, same disclosed limitation as
+every other CSS-only change in this doc). Tag/div balance re-checked programmatically on all 3
+edited files (`index.html`, `algformer.html`, `prose.html`) post-edit: div/article/a/section/nav/
+header/footer/span/p/h1/h2/h3 all matched. NOT deployed — rendered only, per charter §6 (coordinator
+batches this with the Showroom Prose publish into one push).
 
 ### `HoloKernel/` — the shared model kernel (Phase 1, landed 2026-08-28 — **ported into all three
 live-brain tools by showroom-owner the same day**, status correction from showroom-owner with
