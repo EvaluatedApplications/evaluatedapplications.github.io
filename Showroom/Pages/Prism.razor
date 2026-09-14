@@ -650,18 +650,26 @@
             var n = face.Length / 2;
             if (n < 2) return;   // createPeriodicWave needs at least 2 matched coefficients
 
-            // Index 0 of createPeriodicWave's arrays is the DC offset PER SPEC, not the first harmonic.
-            // Passing the face straight through (as this did until 2026-09-14) therefore dumped comp 0 —
-            // one real component of the token's own frozen identity — into an INAUDIBLE constant, and
-            // shifted every remaining comp down one harmonic. Writing an explicit zero DC and starting the
-            // face at index 1 costs one array slot and makes comp k sound as harmonic k+1, so all 128
-            // components are actually heard and none is silently discarded.
-            var real = new double[n + 1];
-            var imag = new double[n + 1];
-            for (var i = 0; i < n; i++) { real[i + 1] = face[2 * i]; imag[i + 1] = face[2 * i + 1]; }
-
-            _ = JS.InvokeVoidAsync("prismAudio.tone", real, imag,
-                BaseFrequency(face, _session.Model.FrozenPrefix / 2), ToneMs, 1.0);
+            // One partial per component, at that component's OWN frequency — not at harmonic multiples
+            // of one fundamental. See PartialSpread for why, and for the one thing still imposed.
+            var f0 = BaseFrequency(face, _session.Model.FrozenPrefix / 2);
+            var freqs = new double[n];
+            var amps = new double[n];
+            var phases = new double[n];
+            for (var c = 0; c < n; c++)
+            {
+                var re = face[2 * c];
+                var im = face[2 * c + 1];
+                var phase = Math.Atan2(im, re);                               // -pi..pi, the component itself
+                amps[c] = Math.Sqrt(re * re + im * im);                       // the component's own magnitude
+                phases[c] = phase;
+                // Frequency from the same phase, spread logarithmically so equal phase differences are
+                // equal musical intervals. The component's two numbers have to cover three synthesis
+                // parameters, so this one does double duty as frequency AND starting phase; stating that
+                // plainly beats hashing a third number into existence.
+                freqs[c] = f0 * Math.Pow(2, (phase + Math.PI) / (2 * Math.PI) * PartialSpread);
+            }
+            _ = JS.InvokeVoidAsync("prismAudio.partials", freqs, amps, phases, ToneMs, 1.0);
         }
         catch { /* audio is decoration, never let a synth glitch touch generation */ }
     }
@@ -692,6 +700,22 @@
     // range. MEASURED over all 1,024 tokens of the live vocabulary: evenly spread, 91-123 tokens per
     // tenth of the range against 102 expected, full span 150.0-799.7 Hz.
     const double PitchLowHz = 150.0, PitchHighHz = 800.0;
+
+    // How many octaves the 128 partials are spread across above the base frequency (2026-09-14).
+    //
+    // This number, and the 150-800 Hz window above, are now the ONLY imposed quantities left in the
+    // synth — everything else is read off the face. The previous version imposed something far larger
+    // without looking like it: handing the face to createPeriodicWave forces partial k to sit at
+    // exactly k x the fundamental, i.e. a harmonic series, which is the physical basis of tonality.
+    // That is why the output sounded like it was in a key while the pitches themselves measured at
+    // CHANCE against 12-tone equal temperament (22.6 cents mean error, 25.0 expected from random).
+    // The face has no harmonic structure to justify it: the codec's real component frequencies run
+    // 1.00, 24.66, 34.43, 44.70, ... where a harmonic series would run 1, 2, 3, 4.
+    //
+    // 5 octaves puts the top partial at 32x the base, so the spectrum spans roughly 150 Hz to 25 kHz
+    // across the pitch range and the JS side drops whatever lands above Nyquist rather than letting it
+    // alias back down as a phantom partial.
+    const double PartialSpread = 5.0;
     static double BaseFrequency(double[] face, int idComps)
     {
         double sumCos = 0, sumSin = 0;

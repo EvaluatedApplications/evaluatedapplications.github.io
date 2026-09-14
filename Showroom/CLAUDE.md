@@ -159,15 +159,28 @@ now written explicitly as zero and the face starts at index 1** — `createPerio
 0 as DC per spec, so passing the face straight through used to dump comp 0 into an inaudible
 constant and shift every other comp down one harmonic. Volume slider is hard-capped via `VolumeCeiling=0.32`
 before it ever reaches the audio graph. Persisted via `localStorage` (`prismAudio.getPref/setPref`).
-The DC half of that old "disclosed mismatch" note is now FIXED (see above). What remains, and stays
-disclosed: rendering the face as a harmonic series puts its components at integer multiples of one
-fundamental, while the codec's own internal frequencies are not harmonic multiples of anything (see
-`Phasor`'s `LinTheta`/`LogTheta`). That remapping is what makes each note internally consonant, and
-it is the reason the output reads as tonal even though the pitches themselves are not in any
-temperament — measured against 12-TET they sit at chance, 22.6 cents mean error against 25.0
-expected from random. Do not "fix" that by quantising pitches to a scale: explicitly refused by the
-user 2026-09-14 ("I wanna hear the authentic sound") — snapping would paint structure onto the
-model that the model does not have.
+**Synthesis is ADDITIVE and INHARMONIC as of 2026-09-14** (`window.prismAudio.partials`), replacing
+`createPeriodicWave` the same day. The user heard that it "still sounds musical" after the pitch fix
+and was right: `createPeriodicWave` can only place coefficient k at k x the fundamental, i.e. it
+FORCES a harmonic series, and the harmonic series is the physical basis of tonality — so that one
+API choice, not the pitch, was manufacturing the musicality. Proof it was the mapping and not the
+notes: the pitches measured at CHANCE against 12-TET (22.6 cents mean error, 25.0 expected from
+random) while the output still read as tonal. The face has no harmonic structure to justify it;
+`Phasor`'s real `LinTheta` ratios run 1.00, 24.66, 34.43, 44.70 where a harmonic series runs 1, 2,
+3, 4. Now each of the 128 components contributes ONE partial at its own frequency (derived from that
+component's phase, log-spread `PartialSpread`=5 octaves above the base), its own magnitude, and its
+own starting phase. MEASURED after the change: inharmonicity 0.239-0.255 where 0 is a pure harmonic
+series and 0.25 is random, partials spanning ~250 Hz to ~17 kHz, nothing above 20 kHz. Rendered as
+ONE `AudioBuffer` via a two-term sinusoid recurrence, NOT 128 oscillator nodes per note and NOT
+`Math.sin` per sample (that would be ~675k sin calls per note on the generation thread); recurrence
+verified numerically to 3.3e-11 worst-case error over a full note, ~3,600x below float32 storage
+precision. The buffer is peak-normalised, which is level only and cannot touch the spectrum.
+**Two things stay imposed and are stated in the code**: the 150-800 Hz base window and
+`PartialSpread`. A phasor face has no time axis at all — its components are phases, not frequencies
+— so any audification must invent the frequency axis; the point is that the invented part is now one
+range mapping rather than an imposed harmonic structure. Do NOT "fix" the sound by quantising
+pitches to a scale or going back to a harmonic render: explicitly refused by the user 2026-09-14
+("I wanna hear the authentic sound"), both would paint structure onto the model that it does not have.
 
 ## Prose — `Pages/Prose.razor` (route `/prose`)
 Paste or drop a body of text; **Prose** (`ProseEngine`) mines it through a real rules-first English
