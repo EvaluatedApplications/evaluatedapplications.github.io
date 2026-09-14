@@ -100,14 +100,26 @@ decode greedily; under the real gate repetition never fired inside 400 chars. Th
 model emitted its own STOP token in **0 of 90 runs**, so every reply runs to the cap and ends
 mid-sentence. Do NOT paper over that with a sentence-boundary heuristic (`feedback-no-chat-bandaids`).
 
-**Opener** (`data/oracle-opener.txt`, a DATA refresh): **"Hello, say something nice."** as of
-2026-09-14 (was "Once upon a time,"; user asked for a greeting that works). Chosen by MEASUREMENT
-over 24 candidates x 12 seeds at the live 56-step cap, scored on real-word rate against a
-78,796-word dictionary built from the model's own corpus, plus loop and blank rates: 92.9% real
-words, 0% loops, 0% blanks, ~176 chars. "Hello! Tell me a story." scored marginally higher (93.4%)
-but two of five sampled draws were the worst of any candidate, and the page shows ONE random draw
-per visitor, so consistency beat the mean. **Re-measure on every checkpoint refresh** — a good
-opener for one set of weights is not automatically good for the next.
+**Opener** (`data/oracle-opener.txt`, a DATA refresh): **"What's happening?"** as of 2026-09-14,
+set on the user's explicit instruction ("have it be, What's happening?"). **Shipped against the
+measurement, deliberately — this is the user's call, don't silently "fix" it back.** Measured at the
+live 56-step cap over 12 seeds, scored on real-word rate against a 78,796-word dictionary built from
+the model's own corpus: it returns **75.7%** real words, the WORST of every candidate tested, and
+drifts into transcript/subtitle register ("Hivice, Santral's wayve latefferet"). The two predecessors
+scored 90.1% ("Hello, say something nice.", chosen by a 24-candidate x 12-seed sweep) and the best
+question-form alternative measured is **"How are you today?" at 91.7%** — offered to the user, not
+applied. Same-form control: "What is happening?" also measured poorly, so it is the phrasing, not
+the apostrophe.
+
+**ASCII apostrophe ONLY in the opener** (U+0027, byte 39) — never the typographic U+2019 the user
+naturally types. `SubwordVocab.Fold` maps anything outside `CharVocab.Lo..Hi` (32..126) to a SPACE,
+so a curly apostrophe would reach the model as "What s happening?" while the page still DISPLAYED
+the curly form: a silent mismatch between what the visitor reads and what the model was given.
+Verified byte-for-byte on the deployed file. Same trap applies to any smart quote, en/em dash or
+ellipsis character in this file.
+
+**Re-measure the opener on every checkpoint refresh** — a good opener for one set of weights is not
+automatically good for the next.
 
 **Checkpoint refresh** (Prism's `oracle-brain.bin`+`-vocab/-rounds/-stackk/-iterwarm.txt`, a
 point-in-time copy from PrismStudio): a **data-only** refresh needs no `dotnet publish` — raw-copy
