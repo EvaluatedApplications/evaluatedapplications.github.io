@@ -88,6 +88,27 @@ A sibling RCL (`AboutUs\HoloKernel`), itself NuGet-only against AlgFormer + the 
   at construction for the session; `GrowLayers`/`GrowShifts` are real but PrismStudio/server-side
   only — a better model reaches visitors via a new checkpoint, never runtime shape mutation.
 
+**Reply cap** — `MaxReplySteps` (renamed off `MaxReplyChars` 2026-09-14, the old name lied: the loop
+always counted token STEPS). **Pinned to a measured constant, 56, NOT `Context/2` any more.** The
+fraction silently broke on a checkpoint swap: context grew 192->512 (cap 96->256 steps) AND the
+re-minted vocab emits far more per step (1.8 -> a MEASURED 3.13 bytes/token), so replies went ~170
+-> ~800 chars. 56 steps ~= 175 chars, the length the previous checkpoint shipped at. **Re-measure on
+every re-mint** (bytes/token changes). What the measurement showed, because it kills the obvious
+theory: over 90 gated-decode runs the real-word rate is FLAT at 88-91% across all 256 steps — no
+decay with length, so there is no "good portion" to cut at. Greedy loops early but the page does not
+decode greedily; under the real gate repetition never fired inside 400 chars. The real defect is the
+model emitted its own STOP token in **0 of 90 runs**, so every reply runs to the cap and ends
+mid-sentence. Do NOT paper over that with a sentence-boundary heuristic (`feedback-no-chat-bandaids`).
+
+**Opener** (`data/oracle-opener.txt`, a DATA refresh): **"Hello, say something nice."** as of
+2026-09-14 (was "Once upon a time,"; user asked for a greeting that works). Chosen by MEASUREMENT
+over 24 candidates x 12 seeds at the live 56-step cap, scored on real-word rate against a
+78,796-word dictionary built from the model's own corpus, plus loop and blank rates: 92.9% real
+words, 0% loops, 0% blanks, ~176 chars. "Hello! Tell me a story." scored marginally higher (93.4%)
+but two of five sampled draws were the worst of any candidate, and the page shows ONE random draw
+per visitor, so consistency beat the mean. **Re-measure on every checkpoint refresh** — a good
+opener for one set of weights is not automatically good for the next.
+
 **Checkpoint refresh** (Prism's `oracle-brain.bin`+`-vocab/-rounds/-stackk/-iterwarm.txt`, a
 point-in-time copy from PrismStudio): a **data-only** refresh needs no `dotnet publish` — raw-copy
 into `wwwroot/data` and `dist/data`, regenerate `oracle-brain.bin.gz` via a plain `GZipStream`
