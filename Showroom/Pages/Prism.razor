@@ -144,9 +144,36 @@
     static readonly DecodePolicy Policy = DecodePolicy.Default with { DegenNonGreedyRun = 0 };
     // The real stop condition is CharVocab.End (the model's own stop token) or DegenGuard catching a
     // collapsed repeat run — those are unchanged and still fire first when they fire at all.
-    int MaxReplyChars => (_stats?.Context ?? 32) / 2;
-    // ^ Per-reply token-step cap (one HoloFormer step, not one character — subwords can emit 2-4 chars
-    // per step). Read LIVE off the loaded checkpoint's own context window, never hardcoded.
+    int MaxReplySteps => MaxReplyStepsConst;
+
+    // Per-reply token-step cap — one HoloFormer step, NOT one character (a subword emits several chars
+    // per step). Renamed off `MaxReplyChars` on 2026-09-14: the old name said characters, the loop
+    // always counted steps, and that gap is what hid the regression below.
+    //
+    // PINNED TO A MEASURED CONSTANT (2026-09-14, user: "limit the model response to the good portion
+    // again like we did before"). It used to be `Context / 2`, which quietly broke when the checkpoint
+    // was replaced. Two multipliers compounded: context grew 192 -> 512, so the cap went 96 -> 256
+    // steps, AND the re-minted vocabulary emits far more text per step (1.8 -> a MEASURED 3.13 bytes
+    // per token on generated text). Replies went from roughly 170 characters to roughly 800. Nothing
+    // about the model got worse; the reply just got six times longer.
+    //
+    // 56 steps x 3.13 bytes/token is about 175 characters, which reproduces the reading length the
+    // previous checkpoint actually shipped at. Deliberately NOT a fraction of the context window any
+    // more: that coupling is what caused this, and a bigger window is not a reason to talk longer.
+    //
+    // WHAT THE MEASUREMENT ACTUALLY SHOWED, because it contradicts the obvious theory. Scored over 90
+    // gated-decode runs (15 openers x 6 seeds) against a 78,796-word dictionary built from the model's
+    // OWN training corpus, the real-word rate is FLAT at 88-91% across all 256 steps — it does not
+    // decay with length, so there is no "good portion" to cut at. Greedy decoding DOES loop early, but
+    // the page does not decode greedily; under the real gate, repetition never fired inside 400
+    // characters. The actual defect is that the model emitted its own STOP token in 0 of 90 runs, so
+    // every reply runs to whatever this cap is and then stops mid-sentence. Shortening it does not
+    // raise quality per word, it just stops handing the visitor 800 characters of it.
+    //
+    // Re-measure this against every new checkpoint: it depends on the vocabulary's bytes/token, which
+    // changes on every re-mint. Do NOT "fix" the mid-sentence ending with a sentence-boundary
+    // heuristic — chat quality gets fixed by training, not by trimming (see AboutUs CLAUDE.md).
+    const int MaxReplyStepsConst = 56;
     //
     // HALVED 2026-09-12, from one full context window to half of one, because the full window was
     // measured to be well past where this checkpoint's output survives. The old reasoning — "a full
@@ -264,7 +291,7 @@
     {
         Stop,       // the model emitted its own trained stop token (CharVocab.End, id 95) — the clean case
         DegenLoop,  // Prism.Inference.DegenGuard caught a repetition/low-confidence collapse and cut it short
-        Cap,        // ran to MaxReplyChars without either of the above. STOP (id 95) is only ever a training
+        Cap,        // ran to MaxReplySteps without either of the above. STOP (id 95) is only ever a training
                     // TARGET on PAIR data — PairSource appends it after the answer — never on plain corpus
                     // text, and pairs are a small minority of the live training mix (HoloEngine's own mix
                     // comment puts them at roughly 1.5% of signal at the current MixAlpha). So this case is
@@ -378,7 +405,7 @@
         var primedTail = BuildContext(seq, _stats.Context);
         var logits = _session.Prime(cache, primedTail);
 
-        for (var step = 0; step < MaxReplyChars; step++)
+        for (var step = 0; step < MaxReplySteps; step++)
         {
             if (step > 0)
             {
@@ -408,7 +435,7 @@
                 // Batch the RENDER, not the compute (2026-08-30 OOM fix, still load-bearing here): every token
                 // is computed and appended to `revealed` unconditionally; the DOM only actually repaints once
                 // every RenderBatch tokens, or on the stopping/final token so the visitor never sees stale state.
-                var isLastStep = step == MaxReplyChars - 1;
+                var isLastStep = step == MaxReplySteps - 1;
                 if (stopping || isLastStep || revealed.Count % RenderBatch == 0)
                     await onPartial(_vocab.Decode(revealed));
             }
@@ -615,7 +642,7 @@
     string RoundsPhrase => _rounds is not null ? $"{_rounds.Value:N0} rounds" : "a long time";
 
     // Shared by GenerateReplyAsync's per-step context slice. `Skip().ToArray()` would allocate an iterator
-    // object AND the destination array on every call (up to MaxReplyChars times per reply); this does the same
+    // object AND the destination array on every call (up to MaxReplySteps times per reply); this does the same
     // slice with one allocation via List<T>.CopyTo.
     static int[] BuildContext(List<int> seq, int maxContext)
     {
