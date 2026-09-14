@@ -627,8 +627,9 @@
     }
 
     // A phasor face is Dim doubles, INTERLEAVED (cos, sin) pairs — literally a Fourier series
-    // specification — so splitting it into even/odd indices feeds directly into Web Audio's
-    // createPeriodicWave(real, imag), no further transform. HoloFormer.Face(id) is a free, read-only
+    // specification — so splitting it into even/odd indices feeds Web Audio's
+    // createPeriodicWave(real, imag) with no transform, only a one-slot shift past the spec's DC
+    // position (see below). HoloFormer.Face(id) is a free, read-only
     // lookup keyed only on the token id (no forward pass, deterministic), so this is the FREE default
     // source: "each token makes its own unique sound" at zero extra compute — the same face every
     // time this same id is ever emitted, on this checkpoint. (The richer, context-sensitive option —
@@ -648,25 +649,58 @@
             var face = _session.Model.Face(tokenId);
             var n = face.Length / 2;
             if (n < 2) return;   // createPeriodicWave needs at least 2 matched coefficients
-            var real = new double[n];
-            var imag = new double[n];
-            for (var i = 0; i < n; i++) { real[i] = face[2 * i]; imag[i] = face[2 * i + 1]; }
-            _ = JS.InvokeVoidAsync("prismAudio.tone", real, imag, BaseFrequency(tokenId), ToneMs, 1.0);
+
+            // Index 0 of createPeriodicWave's arrays is the DC offset PER SPEC, not the first harmonic.
+            // Passing the face straight through (as this did until 2026-09-14) therefore dumped comp 0 —
+            // one real component of the token's own frozen identity — into an INAUDIBLE constant, and
+            // shifted every remaining comp down one harmonic. Writing an explicit zero DC and starting the
+            // face at index 1 costs one array slot and makes comp k sound as harmonic k+1, so all 128
+            // components are actually heard and none is silently discarded.
+            var real = new double[n + 1];
+            var imag = new double[n + 1];
+            for (var i = 0; i < n; i++) { real[i + 1] = face[2 * i]; imag[i + 1] = face[2 * i + 1]; }
+
+            _ = JS.InvokeVoidAsync("prismAudio.tone", real, imag,
+                BaseFrequency(face, _session.Model.FrozenPrefix / 2), ToneMs, 1.0);
         }
         catch { /* audio is decoration, never let a synth glitch touch generation */ }
     }
 
-    // Deterministic base pitch per token id, via a cheap integer hash rather than the raw id — subword
-    // merge ids are assigned in table order, so neighbouring ids would otherwise cluster at
-    // near-identical pitches. Same id -> same hash -> same frequency, forever: "the same token always
-    // sounds the same" holds by construction, not by caching anything.
-    static double BaseFrequency(int tokenId)
+    // Base pitch read OFF THE FACE, not off the token id (2026-09-14, user: "make it fully authentic").
+    //
+    // What this replaced, and why it was wrong: the pitch used to be an integer hash of the token id
+    // mapped linearly onto 150-800 Hz. That number is not the model's. Subword ids are assigned in
+    // vocabulary-table order, so the same word in a different vocabulary got a different pitch, and a
+    // re-mint changed every note on the page. The timbre was the model's; the note was mine.
+    //
+    // What this is instead: the circular mean phase of the face's FROZEN IDENTITY band. A phasor face is
+    // interleaved (cos, sin) pairs, and across the frozen prefix every component is unit modulus (measured
+    // 1.000 exactly, every band, every token, on the live checkpoint), so summing the raw pairs IS the
+    // circular mean — no normalisation needed, and no magnitude term that would make this drift as the
+    // model trains. That band is `PhasorCodec`'s deterministic signature for the token's TEXT, which is
+    // why this is the authentic choice: " the" now sounds at the same pitch on any checkpoint with any
+    // vocabulary, and a token's pitch is fixed for the life of the model while its TIMBRE keeps evolving
+    // as the learned orbital tail trains. Pitch = what the token is; timbre = what the model has made of
+    // it. Comp count comes from the model's own `FrozenPrefix` rather than `PhasorLayout.IdComps`, so a
+    // checkpoint with a different frozen width stays correct and this needs no Phasor dependency.
+    //
+    // Honest limit: a Fourier coefficient list has no fundamental of its own — f0 is the one free
+    // parameter, so SOME rule has to supply it. The rule is ours; every number it reads is the model's.
+    //
+    // Mapping is logarithmic over the same audible 150-800 Hz window the hash used, not linear in Hz, so
+    // equal phase differences are equal musical intervals rather than being squashed at the bottom of the
+    // range. MEASURED over all 1,024 tokens of the live vocabulary: evenly spread, 91-123 tokens per
+    // tenth of the range against 102 expected, full span 150.0-799.7 Hz.
+    const double PitchLowHz = 150.0, PitchHighHz = 800.0;
+    static double BaseFrequency(double[] face, int idComps)
     {
-        var x = (uint)tokenId * 2654435761u;
-        x ^= x >> 15; x *= 0x2c1b3c6du;
-        x ^= x >> 12; x *= 0x297a2d39u;
-        x ^= x >> 15;
-        return 150.0 + (x % 6501) / 10.0;   // 150-800 Hz
+        double sumCos = 0, sumSin = 0;
+        var n = Math.Min(idComps, face.Length / 2);
+        if (n <= 0) return PitchLowHz;
+        for (var c = 0; c < n; c++) { sumCos += face[2 * c]; sumSin += face[2 * c + 1]; }
+        var theta = Math.Atan2(sumSin, sumCos);                       // -pi..pi
+        var octaves = Math.Log2(PitchHighHz / PitchLowHz);            // 2.415 octaves
+        return PitchLowHz * Math.Pow(2, (theta + Math.PI) / (2 * Math.PI) * octaves);
     }
 
     async Task ToggleSound()

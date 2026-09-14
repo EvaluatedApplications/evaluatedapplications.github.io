@@ -144,13 +144,30 @@ lazily created — `.unlock()` is called from the mute toggle's own click, the g
 browser audio). Face is a free read-only lookup (no forward pass) — the deliberately NOT-built
 richer mode is `LayerFaces`/the forward pass's own hidden state, skipped because it costs a real
 extra O(context) recompute per token on top of the live KV-cache step, which would double the
-visible per-token cadence. Pitch is a deterministic hash of the token id (150-800Hz), not the raw
-id (avoids adjacent-id pitch clustering). Volume slider is hard-capped via `VolumeCeiling=0.32`
+visible per-token cadence. **Pitch comes off the FACE, not the token id (2026-09-14, user:
+"make it fully authentic")** — the circular mean phase of the frozen identity band
+(`FrozenPrefix/2` comps; every frozen component is unit modulus, measured 1.000 exactly on the live
+checkpoint, so summing raw (cos,sin) pairs IS the circular mean), mapped LOGARITHMICALLY over
+150-800Hz. That band is `PhasorCodec`'s signature for the token's TEXT, so a word keeps its pitch
+across checkpoints and vocabularies, and pitch stays fixed for the life of a model while timbre
+evolves with the learned tail. It replaced an integer hash of the token id mapped linearly in Hz,
+which was arbitrary (subword ids are vocabulary-table order, so a re-mint re-pitched the whole
+page). Measured over 1,024 tokens: even spread, 91-123 per tenth of the range against 102 expected.
+The honest limit, stated in the code: a Fourier coefficient list has no fundamental of its own, so
+some rule must supply f0; the rule is ours, every number it reads is the model's. **The DC slot is
+now written explicitly as zero and the face starts at index 1** — `createPeriodicWave` treats index
+0 as DC per spec, so passing the face straight through used to dump comp 0 into an inaudible
+constant and shift every other comp down one harmonic. Volume slider is hard-capped via `VolumeCeiling=0.32`
 before it ever reaches the audio graph. Persisted via `localStorage` (`prismAudio.getPref/setPref`).
-Real spec nuance found while wiring this, not a bug: `createPeriodicWave` treats index 0 as a DC
-offset per spec, not a "0th harmonic" — a real, disclosed mismatch between "the face as a vector"
-and "the codec's own internal frequencies" (which aren't harmonic multiples of one fundamental
-either way — see `Phasor`'s `LinTheta`/`LogTheta`).
+The DC half of that old "disclosed mismatch" note is now FIXED (see above). What remains, and stays
+disclosed: rendering the face as a harmonic series puts its components at integer multiples of one
+fundamental, while the codec's own internal frequencies are not harmonic multiples of anything (see
+`Phasor`'s `LinTheta`/`LogTheta`). That remapping is what makes each note internally consonant, and
+it is the reason the output reads as tonal even though the pitches themselves are not in any
+temperament — measured against 12-TET they sit at chance, 22.6 cents mean error against 25.0
+expected from random. Do not "fix" that by quantising pitches to a scale: explicitly refused by the
+user 2026-09-14 ("I wanna hear the authentic sound") — snapping would paint structure onto the
+model that the model does not have.
 
 ## Prose — `Pages/Prose.razor` (route `/prose`)
 Paste or drop a body of text; **Prose** (`ProseEngine`) mines it through a real rules-first English
