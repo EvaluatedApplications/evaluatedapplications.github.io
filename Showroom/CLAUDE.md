@@ -100,26 +100,7 @@ decode greedily; under the real gate repetition never fired inside 400 chars. Th
 model emitted its own STOP token in **0 of 90 runs**, so every reply runs to the cap and ends
 mid-sentence. Do NOT paper over that with a sentence-boundary heuristic (`feedback-no-chat-bandaids`).
 
-**Opener** (`data/oracle-opener.txt`, a DATA refresh): **"What's happening?"** as of 2026-09-14,
-set on the user's explicit instruction ("have it be, What's happening?"). **Shipped against the
-measurement, deliberately — this is the user's call, don't silently "fix" it back.** Measured at the
-live 56-step cap over 12 seeds, scored on real-word rate against a 78,796-word dictionary built from
-the model's own corpus: it returns **75.7%** real words, the WORST of every candidate tested, and
-drifts into transcript/subtitle register ("Hivice, Santral's wayve latefferet"). The two predecessors
-scored 90.1% ("Hello, say something nice.", chosen by a 24-candidate x 12-seed sweep) and the best
-question-form alternative measured is **"How are you today?" at 91.7%** — offered to the user, not
-applied. Same-form control: "What is happening?" also measured poorly, so it is the phrasing, not
-the apostrophe.
-
-**ASCII apostrophe ONLY in the opener** (U+0027, byte 39) — never the typographic U+2019 the user
-naturally types. `SubwordVocab.Fold` maps anything outside `CharVocab.Lo..Hi` (32..126) to a SPACE,
-so a curly apostrophe would reach the model as "What s happening?" while the page still DISPLAYED
-the curly form: a silent mismatch between what the visitor reads and what the model was given.
-Verified byte-for-byte on the deployed file. Same trap applies to any smart quote, en/em dash or
-ellipsis character in this file.
-
-**Re-measure the opener on every checkpoint refresh** — a good opener for one set of weights is not
-automatically good for the next.
+**No example exchange on load** (removed 2026-09-15, user: "remove the first prompt"): the chat opens empty on the "Say hi" hint. The old seed exchange (an opener from `data/oracle-opener.txt` plus the model's reply, last opener "What's happening?") is gone, along with the code that fetched the opener; `oracle-opener.txt` may still sit in `wwwroot/data` and `dist/data` but nothing reads it. Its cold-start job survives as a silent warm-up (one prime + one step through the serve cache, result discarded) so the first real reply is not slower. If an example exchange is ever wanted back, re-measure the opener against that checkpoint first, and use an ASCII apostrophe: `SubwordVocab.Fold` maps a typographic one to a space.
 
 **"How Prism works, as sound" section** (2026-09-15, user request): a condensed version of the site's
 "Meaning as chords" page (`site/holoformer.html`, website-owner's, linked not copied) under the chat, plus a
