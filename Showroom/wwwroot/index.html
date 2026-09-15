@@ -143,7 +143,13 @@
       // OFF BY DEFAULT, opt-in only (see Prism.razor's own toggle) — this object does no work at all,
       // not even creating an AudioContext, until unlock()/tone() is first called from a real click.
       window.prismAudio = (function () {
-        var ctx = null, master = null, active = [];
+        var ctx = null, master = null, active = [], lastFreqs = null;
+        // A stereo decaying-noise impulse response: the cheapest believable small room, generated on the spot.
+        function roomImpulse(c, seconds, decay) {
+          var n = Math.max(1, Math.round(c.sampleRate * seconds)), ir = c.createBuffer(2, n, c.sampleRate);
+          for (var ch = 0; ch < 2; ch++) { var data = ir.getChannelData(ch); for (var i = 0; i < n; i++) data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / n, decay); }
+          return ir;
+        }
         function ensureCtx() {
           if (ctx) return ctx;
           var AC = window.AudioContext || window.webkitAudioContext;
@@ -151,7 +157,17 @@
           ctx = new AC();
           master = ctx.createGain();
           master.gain.value = 0; // real level is set by setVolume() before any tone is ever audible
-          master.connect(ctx.destination);
+          // Output chain (2026-09-15, user: "a compressor or something to make the sound a bit nicer"): master -> soft
+          // high-cut -> compressor -> speakers, plus a short generated room reverb fed from the high-cut into the
+          // compressor. None of it moves any partial's frequency: the high-cut tames the piercing top end of 128
+          // equal-strength inharmonic partials, the compressor evens loud and quiet notes, and the reverb lets
+          // overlapping notes bloom into each other.
+          var hiCut = ctx.createBiquadFilter(); hiCut.type = 'lowpass'; hiCut.frequency.value = 5200; hiCut.Q.value = 0.5;
+          var comp = ctx.createDynamicsCompressor();
+          comp.threshold.value = -22; comp.knee.value = 18; comp.ratio.value = 4; comp.attack.value = 0.004; comp.release.value = 0.22;
+          var verb = ctx.createConvolver(); verb.buffer = roomImpulse(ctx, 1.6, 2.8);
+          var wet = ctx.createGain(); wet.gain.value = 0.22;
+          master.connect(hiCut); hiCut.connect(comp); hiCut.connect(verb); verb.connect(wet); wet.connect(comp); comp.connect(ctx.destination);
           return ctx;
         }
         return {
@@ -191,6 +207,7 @@
               var sr = c.sampleRate, nyq = sr / 2;
               var dur = Math.max(0.03, (ms || 110) / 1000);
               var len = Math.max(1, Math.round(sr * dur));
+              var glideLen = Math.min(len, Math.round(sr * 0.045));   // 45ms slide from the previous note, see GLIDE below
               var buf = c.createBuffer(1, len, sr);
               var d = buf.getChannelData(0);
               var peakAbs = 0;
@@ -205,10 +222,25 @@
                 // thread that is driving generation — enough to visibly stutter the per-token cadence the
                 // whole page's feel depends on. Double-precision drift over a buffer this short is
                 // inaudible; it would only matter for a note orders of magnitude longer.
-                var w = 2 * Math.PI * f / sr, ph = phases[k];
+                // GLIDE (2026-09-15, user: "something that tweens the notes between each token"): the first glideLen
+                // samples slide this component from the SAME component's frequency in the previous token's note (same
+                // face component, so the pairing means something) into its own, on an eased curve with a phase
+                // accumulator; the cheap recurrence then takes over, seeded from the phase the glide ended on, so the
+                // hand-off has no click. No previous note (first token, or after stopAll) means no glide.
+                var ph = phases[k], start = 0;
+                var fPrev = (lastFreqs && k < lastFreqs.length && lastFreqs[k] > 0 && lastFreqs[k] < nyq) ? lastFreqs[k] : f;
+                if (fPrev !== f && glideLen > 0) {
+                  for (; start < glideLen; start++) {
+                    var u = start / glideLen, e = u * u * (3 - 2 * u);
+                    d[start] += a * Math.sin(ph);
+                    ph += 2 * Math.PI * (fPrev + (f - fPrev) * e) / sr;
+                  }
+                }
+                var w = 2 * Math.PI * f / sr;
                 var k1 = 2 * Math.cos(w), y1 = Math.sin(ph - w), y2 = Math.sin(ph - 2 * w);
-                for (var s = 0; s < len; s++) { var y = k1 * y1 - y2; d[s] += a * y; y2 = y1; y1 = y; }
+                for (var s = start; s < len; s++) { var y = k1 * y1 - y2; d[s] += a * y; y2 = y1; y1 = y; }
               }
+              lastFreqs = Array.prototype.slice.call(freqs);   // the next note glides from these
               for (var s2 = 0; s2 < len; s2++) { var v = d[s2] < 0 ? -d[s2] : d[s2]; if (v > peakAbs) peakAbs = v; }
               // Level normalisation only — divides every sample by one constant, so it cannot change the
               // spectrum or the relative weight of any partial. Without it 128 summed partials clip hard.
@@ -219,8 +251,9 @@
               var g = c.createGain();
               var now = c.currentTime;
               var peak = Math.max(0, gain == null ? 1 : gain);
-              var attack = Math.min(0.008, dur * 0.2);
-              var release = Math.min(0.02, dur * 0.3);
+              // Softer edges than the old 8ms/20ms click guard, so overlapping notes (ToneMs is longer than the beat) cross-fade.
+              var attack = Math.min(0.025, dur * 0.15);
+              var release = Math.min(0.16, dur * 0.5);
               g.gain.setValueAtTime(0, now);
               g.gain.linearRampToValueAtTime(peak, now + attack);
               g.gain.setValueAtTime(peak, Math.max(now + attack, now + dur - release));
@@ -244,7 +277,7 @@
             active.forEach(function (e) {
               try { e.gain.gain.cancelScheduledValues(0); e.gain.gain.value = 0; e.osc.stop(0); } catch (err) { }
             });
-            active = [];
+            active = []; lastFreqs = null;
           },
           // Tiny localStorage wrappers, both fail-soft (private-mode/disabled storage throws) — a
           // visitor who muted this once should not have to mute it again every visit, but losing that

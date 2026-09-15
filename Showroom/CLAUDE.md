@@ -130,6 +130,7 @@ the face, frequency derived from it, base pitch from the frozen identity band, t
 learned tail, and the hearing-range placement as our one imposed choice. Never let it drift into "you are
 hearing the model think": the sound is the token's face, not the forward pass.
 
+**Chat context and sound, 2026-09-15 (user requests)**: `BuildContextTokens` replaced the text transcript: each finished exchange is `Encode("user: Q\nprism: ") + Encode(A) + [STOP]` back to back, the pending question is its prompt run alone, and capping drops whole leading exchanges. This mirrors PrismGym's `PackedPairSource` (`PackPairWindows`), so the context matches packed training token for token, including the STOP between turns. Sound: `NoteIntervalMs`=210 base beat swayed by `NextBeatMs()` (+-14% slow sine over 16 notes, +-6% jitter, always 0.8-1.2x), `ToneMs`=300 so notes overlap, a 45ms per-component frequency GLIDE from the previous token's note in `prismAudio.partials` (phase accumulator, then the recurrence seeded from the glide's end phase), softer 25ms/160ms edges, and an output chain of 5.2kHz lowpass, compressor (-22dB, 4:1) and a generated 1.6s room reverb at 0.22 wet. None of the effects move a partial's frequency.
 **Checkpoint refresh** (Prism's `oracle-brain.bin`+`-vocab/-rounds/-stackk/-iterwarm.txt`, a
 point-in-time copy from PrismStudio): a **data-only** refresh needs no `dotnet publish` — raw-copy
 into `wwwroot/data` and `dist/data`, regenerate `oracle-brain.bin.gz` via a plain `GZipStream`

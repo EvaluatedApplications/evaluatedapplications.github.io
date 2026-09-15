@@ -228,21 +228,32 @@
     double _soundVolume = 0.6;                 // 0..1, UI-facing; see VolumeCeiling below for the real cap
     const double VolumeCeiling = 0.32;          // "clamp the master gain low by default" — even a visitor
     // dragging the slider to 100% only ever reaches this, genuinely quiet, ceiling.
-    const int ToneMs = 90;                      // note length: short and detached inside each 125ms beat, so a run of tokens sounds like a melody line rather than held notes
-    // Sound on: one note per token on a steady beat instead of as fast as compute allows (2026-09-15, user: "slow down
-    // the text generation, so that the notes sound a bit more musical rather than fast as possible"), then sped up the same day (user: "Make the notes faster, it's like full notes, make it quartets or 8th for the melody"). 125ms is 480 notes
-    // a minute, eighth notes at 240 BPM or sixteenths at 120; a 56-step reply takes about 7 seconds. The wait is measured from the previous
-    // note, so compute time is absorbed into the beat rather than added on top, and if a step ever takes longer than
-    // the beat the next note plays as soon as it is ready instead of trying to catch up. Sound OFF (the default) is not
-    // paced at all: a visitor who never turns sound on sees exactly the old full-speed streaming.
-    const int NoteIntervalMs = 125;
+    const int ToneMs = 300;                     // note length ~1.4x the 210ms base beat, so each note is still sounding as the next one glides in
+    // Sound on: one note per token, paced to a beat instead of as fast as compute allows. History (2026-09-15, all the
+    // user's own calls): 240ms first ("slow down the text generation... more musical"), then 125ms with short 90ms notes
+    // ("make it quartets or 8th for the melody"), now a 210ms base with overlapping 300ms notes, a glide between notes
+    // and sway ("slow down the token generation, have a bit of sway on the timing... something that tweens the notes").
+    // The wait is measured from the previous note, so compute time is absorbed into the beat, and a step slower than the
+    // beat plays as soon as it is ready instead of catching up. Sound OFF (the default) is not paced at all.
+    const int NoteIntervalMs = 210;
+    // SWAY: each beat is the base stretched or squeezed by a slow wander plus a little jitter, like a player pushing
+    // and pulling the tempo rather than a metronome. A sine over ~16 notes (+-14%) carries the phrase-level push and
+    // pull, and +-6% uniform jitter keeps neighbouring notes from sounding quantised; every beat stays 0.8x-1.2x base.
+    double _swayPhase;
+    readonly Random _swayRng = new();
+    int NextBeatMs()
+    {
+        _swayPhase += 2 * Math.PI / 16.0;
+        var factor = 1.0 + 0.14 * Math.Sin(_swayPhase) + 0.06 * (_swayRng.NextDouble() * 2 - 1);
+        return (int)Math.Round(NoteIntervalMs * factor);
+    }
     const string SoundOnKey = "prism-sound-on", SoundVolKey = "prism-sound-volume";
 
     HoloSession? _session;
     ModelStats? _stats;
     SubwordVocab? _vocab;   // published PrismFormer.SubwordVocab — the checkpoint's OWN vocab, loaded
                              // from oracle-vocab.txt below (NOT the studio's shared default table —
-                             // this matters for CapRecent, which measures token counts through this
+                             // this matters for BuildContextTokens, which measures token counts through this
                              // exact vocab). CharN=>CharVocab.N=96 already treats id 95 (CharVocab.End)
                              // as "\n" internally (Symbol(95)=="\n"), matching this file's OWN "id 95 is
                              // both newline and the stop marker" quirk exactly — the ctor takes ONLY the
@@ -300,7 +311,7 @@
     //
     // The transcript the model sees is one tagged line per turn, exactly what StudioModel.Serve builds in the studio:
     //     user: Hello there\nprism: Hi, how are you\nuser: What's up\n
-    // and Prime() appends "prism: " so the model writes the next reply. This is the framing the pairs lane trains on:
+    // and the question being answered ends in "prism: " so the model writes the next reply; every FINISHED exchange ends in STOP (see BuildContextTokens). This is the framing the pairs lane trains on:
     // HoloEngine wraps every raw "Q\tA" pair through GroupChat.AsChat into "user: Q\nprism: " -> A, then PairSource
     // appends CharVocab.End (id 95) after the answer. Train and serve now agree token for token.
     //
@@ -309,7 +320,7 @@
     // "user: Q\nprism: " reaches the model as "user: Q prism: " in training and here alike. (2) Id 95 is the STOP
     // token, and it is the only id that DECODES as "\n" (Symbol(95)), but nothing ever ENCODES to it: it only exists
     // because PairSource appends it after each answer. So the model learns to end a reply by emitting STOP, and the
-    // "\n" separators below never become STOP; they are turn boundaries for CapRecent and spaces for the model.
+    // "\n" separators below never become STOP; they are turn boundaries for BuildContextTokens and spaces for the model.
     //
     // Why the tags are affordable again: the untagged format was a context-budget trade made at ctx=192, where "user: "
     // (4 tokens) + "prism: " (5) cost 23% of a ten-turn window. At ctx=512 that is ~9 tokens per exchange out of 512.
@@ -337,42 +348,40 @@
 
     static string CleanTurnText(string s) => s.Replace('\r', ' ').Replace('\n', ' ').Trim();
 
-    // One tagged line per turn: GroupChat.HumanTag ("user: ") or GroupChat.AiTag ("prism: ") + text + "\n". The "\n" is
-    // still the turn boundary CapRecent splits on (CleanTurnText guarantees no newline inside a turn's own text); the
-    // model sees it as a space, see the wire-format note above.
-    static string BuildTranscript(IEnumerable<ChatTurn> turns)
+    // PACKED-TURN CONTEXT (2026-09-15, user: "fix the website so it handles the stop tokens right"). The studio now trains
+    // pairs PACKED (PrismGym PackedPairSource, PackPairWindows): whole turns back to back, each exactly PairSource's own run,
+    //     Encode("user: Q\nprism: ") + Encode(A) + [STOP]
+    // with nothing between one turn's STOP and the next "user: ". This builds the model's context the same way: every
+    // FINISHED exchange is its prompt run + answer run + STOP, and the question being answered is its prompt run alone, so
+    // the model's next token is the first word of its reply and the trained way to end that reply is STOP. Prompt and
+    // answer are encoded SEPARATELY, exactly as PairSource does, so the seam tokenises identically. A "\n" inside the text
+    // still encodes to a space; STOP (CharVocab.End) is only ever appended here as an id, Encode never produces it.
+    // Capping drops whole leading EXCHANGES until the rest fits the window, so the context always starts on a turn
+    // boundary, which is where packed training windows start.
+    static List<int> BuildContextTokens(SubwordVocab vocab, IReadOnlyList<ChatTurn> turns, int maxTokens)
     {
-        var sb = new StringBuilder();
-        foreach (var t in turns) sb.Append(t.IsUser ? GroupChat.HumanTag : GroupChat.AiTag).Append(t.Text).Append('\n');
-        return sb.ToString();
-    }
-
-    // Ported from StudioModel.CapRecent (PrismFormer\studio\PrismGym\StudioModel.cs) — roll a transcript to the
-    // model's own context window, measured in TOKENS through THIS checkpoint's own vocab (never a generic/
-    // default one). Drops whole leading TURNS — never a mid-turn character cut — until the tail fits, so a
-    // capped context always starts at a turn boundary, the shape the model actually trains to reload cleanly at.
-    static string CapRecent(SubwordVocab vocab, string transcript, int maxTokens)
-    {
-        if (string.IsNullOrEmpty(transcript)) return transcript;
-        if (vocab.Encode(transcript).Length <= maxTokens) return transcript;
-        var lines = transcript.Split('\n');
-        for (var start = 1; start < lines.Length; start++)
+        var chunks = new List<List<int>>();
+        List<int>? open = null;
+        foreach (var t in turns)
         {
-            var tail = string.Join("\n", lines[start..]);
-            if (vocab.Encode(tail).Length <= maxTokens) return tail;
+            if (t.IsUser)
+            {
+                open = new List<int>(vocab.Encode(GroupChat.HumanTag + t.Text.Trim() + "\n" + GroupChat.AiTag));
+                chunks.Add(open);
+            }
+            else if (open is not null)   // a reply closes the exchange it answers; a reply with no question in view is dropped
+            {
+                open.AddRange(vocab.Encode(t.Text));
+                open.Add(CharVocab.End);
+                open = null;
+            }
         }
-        return lines[^1];   // even the newest turn alone exceeds the budget — BuildContext windows it in tokens anyway
+        var start = 0; var total = 0; foreach (var c in chunks) total += c.Count;
+        while (start < chunks.Count - 1 && total > maxTokens) { total -= chunks[start].Count; start++; }
+        var seq = new List<int>(total);
+        for (var i = start; i < chunks.Count; i++) seq.AddRange(chunks[i]);
+        return seq;
     }
-
-    // Tagged prime, line for line what StudioModel.Serve does: make sure the transcript ends on a turn boundary, then
-    // open the reply slot with "prism: ". That trailing "prism: " is exactly where every trained pair's answer begins
-    // (PairSource guarantees the prompt ends in a space), so the model's first token is the first word of its reply.
-    //
-    // Supersedes the 2026-09-12 untagged prime, which stripped the trailing newline because an UNTAGGED prompt ending
-    // in "\n" made every reply open with a stray junk token (measured at r338291). That failure was specific to
-    // continuing a bare line with no slot to answer into; ending on "prism: " gives the model the slot the pairs
-    // trained, which is the case that problem never covered. Re-measure the opener if replies start oddly.
-    static string Prime(string capped) => (capped.Length == 0 || capped.EndsWith("\n") ? capped : capped + "\n") + GroupChat.AiTag;
 
     static string DisplayText(ChatTurn t) => t.Text.Length > 0 ? t.Text : "(blank — this checkpoint is still very early in training)";
 
@@ -383,13 +392,10 @@
     // stream, since it renders as an already-complete turn the first time the chat UI paints at all.
     async Task<(string Text, StopReason Reason)> GenerateReplyAsync(Func<string, Task>? onPartial)
     {
-        var transcript = BuildTranscript(_turns);                       // includes the turn the caller just added
-        var capped = CapRecent(_vocab!, transcript, _stats!.Context);   // rolling window, turn-boundary safe
-        var primed = Prime(capped);
-        var seq = new List<int>(_vocab!.Encode(primed));
+        var seq = BuildContextTokens(_vocab!, _turns, _stats!.Context);   // packed-turn context: finished exchanges end in STOP, see BuildContextTokens
         var outIds = new List<int>();
         var revealed = new List<int>();
-        var vocabLimit = _vocab.Size;
+        var vocabLimit = _vocab!.Size;
         var guard = new DegenGuard(Policy);
         var reason = StopReason.Cap;   // default — overwritten the moment either real stop condition fires below
 
@@ -406,7 +412,7 @@
         // Layers=1 and would need their own re-verification before ever adopting this path).
         //
         // EVICTION: the cache can't forget its oldest token, so once cache.Filled would reach _stats.Context
-        // (the rolling window CapRecent/BuildContext already enforce for the old path) the code below
+        // (the rolling window BuildContextTokens/BuildContext already enforce for the old path) the code below
         // re-Primes from the same freshly-sliced BuildContext window instead of Stepping — an O(context)
         // re-prime for exactly the steps that need it, identical cost to what the old loop always paid, never
         // worse. Everything before that point runs O(1) per token.
@@ -438,7 +444,7 @@
             {
                 var wait = nextBeat - beat.ElapsedMilliseconds;
                 if (wait > 0) await Task.Delay((int)wait);
-                nextBeat = Math.Max(nextBeat, beat.ElapsedMilliseconds) + NoteIntervalMs;
+                nextBeat = Math.Max(nextBeat, beat.ElapsedMilliseconds) + NextBeatMs();   // swayed beat, see NextBeatMs
             }
             var stopping = guard.Observe(t, decision.Greedy);
             if (stopping) reason = StopReason.DegenLoop;
@@ -460,7 +466,7 @@
         }
 
         // HARD CUT, not a hide: a degenerate tail is REMOVED from outIds before it is decoded, so it never
-        // reaches the visible turn AND never reaches BuildTranscript — the next turn's rolling context is
+        // reaches the visible turn AND never reaches BuildContextTokens — the next turn's rolling context is
         // built from the surviving prefix only. This matters more than the cosmetics: a 192-token window
         // filled with "ERE ERE ERE" both crowds out real conversation and teaches the model, from its own
         // context, that a "prism: " turn looks like that.
