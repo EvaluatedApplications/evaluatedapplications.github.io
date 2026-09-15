@@ -201,14 +201,14 @@
     double _soundVolume = 0.6;                 // 0..1, UI-facing; see VolumeCeiling below for the real cap
     const double VolumeCeiling = 0.32;          // "clamp the master gain low by default" — even a visitor
     // dragging the slider to 100% only ever reaches this, genuinely quiet, ceiling.
-    const int ToneMs = 180;                     // note length: 180 of each 240ms beat, so every token is heard as its own note with a short breath before the next
+    const int ToneMs = 90;                      // note length: short and detached inside each 125ms beat, so a run of tokens sounds like a melody line rather than held notes
     // Sound on: one note per token on a steady beat instead of as fast as compute allows (2026-09-15, user: "slow down
-    // the text generation, so that the notes sound a bit more musical rather than fast as possible"). 240ms is 250 notes
-    // a minute, eighth notes at 125 BPM; a 56-step reply takes about 13 seconds. The wait is measured from the previous
+    // the text generation, so that the notes sound a bit more musical rather than fast as possible"), then sped up the same day (user: "Make the notes faster, it's like full notes, make it quartets or 8th for the melody"). 125ms is 480 notes
+    // a minute, eighth notes at 240 BPM or sixteenths at 120; a 56-step reply takes about 7 seconds. The wait is measured from the previous
     // note, so compute time is absorbed into the beat rather than added on top, and if a step ever takes longer than
     // the beat the next note plays as soon as it is ready instead of trying to catch up. Sound OFF (the default) is not
     // paced at all: a visitor who never turns sound on sees exactly the old full-speed streaming.
-    const int NoteIntervalMs = 240;
+    const int NoteIntervalMs = 125;
     const string SoundOnKey = "prism-sound-on", SoundVolKey = "prism-sound-volume";
 
     HoloSession? _session;
@@ -438,9 +438,6 @@
                 if (wait > 0) await Task.Delay((int)wait);
                 nextBeat = Math.Max(nextBeat, beat.ElapsedMilliseconds) + NoteIntervalMs;
             }
-            PlayTokenTone(t);   // one short note per real emitted token — see method below. Fires on
-            // EVERY token (not just every RenderBatch reveal), so a 4-token render batch still makes 4
-            // distinct sounds rather than one.
             var stopping = guard.Observe(t, decision.Greedy);
             if (stopping) reason = StopReason.DegenLoop;
 
@@ -453,6 +450,10 @@
                 if (stopping || isLastStep || _soundOn || revealed.Count % RenderBatch == 0)
                     await onPartial(_vocab.Decode(revealed));
             }
+            PlayTokenTone(t);   // AFTER the paint above: while sound is on every token repaints first, so each note starts
+            // as its token appears at the end of the reply, and the last printed token is always the one sounding
+            // (2026-09-15, user: "The last one printed gives the sound"). No highlight or animation, by request. A no-op
+            // while sound is off; every token gets its own note, never one per render batch.
             if (stopping) break;
         }
 
