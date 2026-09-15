@@ -18,18 +18,18 @@
     <script type="importmap">{
   "imports": {
     "./_framework/blazor.webassembly.js": "./_framework/blazor.webassembly.w3qd1tpl0e.js",
-    "./_framework/dotnet.js": "./_framework/dotnet.ftn5tqee1c.js",
     "./_framework/dotnet.native.js": "./_framework/dotnet.native.l07z25v5bk.js",
+    "./_framework/dotnet.js": "./_framework/dotnet.q9w1cq19mb.js",
     "./_framework/dotnet.runtime.js": "./_framework/dotnet.runtime.zbexyp8zrs.js"
   },
   "scopes": {},
   "integrity": {
     "./_framework/blazor.webassembly.js": "sha256-lDXsDYFgm62F+YUvxES7IOTCXYpiHpU3uR45YdC6mq4=",
     "./_framework/blazor.webassembly.w3qd1tpl0e.js": "sha256-lDXsDYFgm62F+YUvxES7IOTCXYpiHpU3uR45YdC6mq4=",
-    "./_framework/dotnet.ftn5tqee1c.js": "sha256-00ybSlXNZn1cH6QkwER88N6Jj+9o98PuMAaiReqwMaQ=",
-    "./_framework/dotnet.js": "sha256-00ybSlXNZn1cH6QkwER88N6Jj+9o98PuMAaiReqwMaQ=",
+    "./_framework/dotnet.js": "sha256-YiI1V2ti3z3n/Nsannt9fwPzoJzxvkeoHh8Vi1a9Xa4=",
     "./_framework/dotnet.native.js": "sha256-u0spWTGI0sbzMty6E04vVnovxdgydwGC8wBA80p/u1Q=",
     "./_framework/dotnet.native.l07z25v5bk.js": "sha256-u0spWTGI0sbzMty6E04vVnovxdgydwGC8wBA80p/u1Q=",
+    "./_framework/dotnet.q9w1cq19mb.js": "sha256-YiI1V2ti3z3n/Nsannt9fwPzoJzxvkeoHh8Vi1a9Xa4=",
     "./_framework/dotnet.runtime.js": "sha256-MZMguyke9CroSQl+L/SHIGFkPTD+LtYGXkXjAvwWx40=",
     "./_framework/dotnet.runtime.zbexyp8zrs.js": "sha256-MZMguyke9CroSQl+L/SHIGFkPTD+LtYGXkXjAvwWx40="
   }
@@ -180,7 +180,7 @@
           // compressor. None of it moves any partial's frequency: the high-cut tames the piercing top end of 128
           // equal-strength inharmonic partials, the compressor evens loud and quiet notes, and the reverb lets
           // overlapping notes bloom into each other.
-          var hiCut = ctx.createBiquadFilter(); hiCut.type = 'lowpass'; hiCut.frequency.value = 2600; hiCut.Q.value = 0.5;   // 2026-09-16 mid-bass pass: was 5200, halved to match the lowered note band and narrower partial spread
+          var hiCut = ctx.createBiquadFilter(); hiCut.type = 'lowpass'; hiCut.frequency.value = 1800; hiCut.Q.value = 0.5;   // 2026-09-16: 5200 -> 2600 (mid bass) -> 1800 (robot), each step tracking the note band down so the top end never outruns the fundamental
           var comp = ctx.createDynamicsCompressor();
           comp.threshold.value = -22; comp.knee.value = 18; comp.ratio.value = 4; comp.attack.value = 0.004; comp.release.value = 0.22;
           var verb = ctx.createConvolver(); verb.buffer = roomImpulse(ctx, 1.6, 2.8);
@@ -269,9 +269,13 @@
               var g = c.createGain();
               var now = c.currentTime;
               var peak = Math.max(0, gain == null ? 1 : gain);
-              // Softer edges than the old 8ms/20ms click guard, so overlapping notes (ToneMs is longer than the beat) cross-fade.
-              var attack = Math.min(0.025, dur * 0.15);
-              var release = Math.min(0.16, dur * 0.5);
+              // GATED EDGES (2026-09-16, user: "Deeper, like a robot"). Was a soft 25ms/160ms cross-fade, which is what a bowed
+              // or breathed note does; a machine voice switches on and off instead. 4ms/45ms is abrupt enough to read as
+              // switched rather than played, while still long enough to stay clear of the hard click an instant edge causes.
+              // The 45ms pitch GLIDE above is untouched, so notes still slide into each other -- the step is in the level, not
+              // the frequency, which is exactly the vocoder-ish combination (steady sliding tone, gated articulation).
+              var attack = Math.min(0.004, dur * 0.15);
+              var release = Math.min(0.045, dur * 0.5);
               g.gain.setValueAtTime(0, now);
               g.gain.linearRampToValueAtTime(peak, now + attack);
               g.gain.setValueAtTime(peak, Math.max(now + attack, now + dur - release));

@@ -162,7 +162,7 @@
           // compressor. None of it moves any partial's frequency: the high-cut tames the piercing top end of 128
           // equal-strength inharmonic partials, the compressor evens loud and quiet notes, and the reverb lets
           // overlapping notes bloom into each other.
-          var hiCut = ctx.createBiquadFilter(); hiCut.type = 'lowpass'; hiCut.frequency.value = 2600; hiCut.Q.value = 0.5;   // 2026-09-16 mid-bass pass: was 5200, halved to match the lowered note band and narrower partial spread
+          var hiCut = ctx.createBiquadFilter(); hiCut.type = 'lowpass'; hiCut.frequency.value = 1800; hiCut.Q.value = 0.5;   // 2026-09-16: 5200 -> 2600 (mid bass) -> 1800 (robot), each step tracking the note band down so the top end never outruns the fundamental
           var comp = ctx.createDynamicsCompressor();
           comp.threshold.value = -22; comp.knee.value = 18; comp.ratio.value = 4; comp.attack.value = 0.004; comp.release.value = 0.22;
           var verb = ctx.createConvolver(); verb.buffer = roomImpulse(ctx, 1.6, 2.8);
@@ -251,9 +251,13 @@
               var g = c.createGain();
               var now = c.currentTime;
               var peak = Math.max(0, gain == null ? 1 : gain);
-              // Softer edges than the old 8ms/20ms click guard, so overlapping notes (ToneMs is longer than the beat) cross-fade.
-              var attack = Math.min(0.025, dur * 0.15);
-              var release = Math.min(0.16, dur * 0.5);
+              // GATED EDGES (2026-09-16, user: "Deeper, like a robot"). Was a soft 25ms/160ms cross-fade, which is what a bowed
+              // or breathed note does; a machine voice switches on and off instead. 4ms/45ms is abrupt enough to read as
+              // switched rather than played, while still long enough to stay clear of the hard click an instant edge causes.
+              // The 45ms pitch GLIDE above is untouched, so notes still slide into each other -- the step is in the level, not
+              // the frequency, which is exactly the vocoder-ish combination (steady sliding tone, gated articulation).
+              var attack = Math.min(0.004, dur * 0.15);
+              var release = Math.min(0.045, dur * 0.5);
               g.gain.setValueAtTime(0, now);
               g.gain.linearRampToValueAtTime(peak, now + attack);
               g.gain.setValueAtTime(peak, Math.max(now + attack, now + dur - release));
