@@ -201,7 +201,14 @@
     double _soundVolume = 0.6;                 // 0..1, UI-facing; see VolumeCeiling below for the real cap
     const double VolumeCeiling = 0.32;          // "clamp the master gain low by default" — even a visitor
     // dragging the slider to 100% only ever reaches this, genuinely quiet, ceiling.
-    const int ToneMs = 110;                     // one note per token, inside the requested ~80-150ms window
+    const int ToneMs = 180;                     // note length: 180 of each 240ms beat, so every token is heard as its own note with a short breath before the next
+    // Sound on: one note per token on a steady beat instead of as fast as compute allows (2026-09-15, user: "slow down
+    // the text generation, so that the notes sound a bit more musical rather than fast as possible"). 240ms is 250 notes
+    // a minute, eighth notes at 125 BPM; a 56-step reply takes about 13 seconds. The wait is measured from the previous
+    // note, so compute time is absorbed into the beat rather than added on top, and if a step ever takes longer than
+    // the beat the next note plays as soon as it is ready instead of trying to catch up. Sound OFF (the default) is not
+    // paced at all: a visitor who never turns sound on sees exactly the old full-speed streaming.
+    const int NoteIntervalMs = 240;
     const string SoundOnKey = "prism-sound-on", SoundVolKey = "prism-sound-volume";
 
     HoloSession? _session;
@@ -405,6 +412,7 @@
         var primedTail = BuildContext(seq, _stats.Context);
         var logits = _session.Prime(cache, primedTail);
 
+        var beat = System.Diagnostics.Stopwatch.StartNew(); long nextBeat = 0;   // NoteIntervalMs pacing, used only while sound is on
         for (var step = 0; step < MaxReplySteps; step++)
         {
             if (step > 0)
@@ -424,6 +432,12 @@
             // throwing away a token that was never meant to be seen.
 
             outIds.Add(t); seq.Add(t); revealed.Add(t);
+            if (onPartial is not null && _soundOn)   // re-read every step, so toggling sound mid-reply takes effect on the next note
+            {
+                var wait = nextBeat - beat.ElapsedMilliseconds;
+                if (wait > 0) await Task.Delay((int)wait);
+                nextBeat = Math.Max(nextBeat, beat.ElapsedMilliseconds) + NoteIntervalMs;
+            }
             PlayTokenTone(t);   // one short note per real emitted token — see method below. Fires on
             // EVERY token (not just every RenderBatch reveal), so a 4-token render batch still makes 4
             // distinct sounds rather than one.
@@ -436,7 +450,7 @@
                 // is computed and appended to `revealed` unconditionally; the DOM only actually repaints once
                 // every RenderBatch tokens, or on the stopping/final token so the visitor never sees stale state.
                 var isLastStep = step == MaxReplySteps - 1;
-                if (stopping || isLastStep || revealed.Count % RenderBatch == 0)
+                if (stopping || isLastStep || _soundOn || revealed.Count % RenderBatch == 0)
                     await onPartial(_vocab.Decode(revealed));
             }
             if (stopping) break;
@@ -800,7 +814,7 @@
     async Task OnKeyDown(KeyboardEventArgs e) { if (e.Key == "Enter") await Ask(); }
 
     // Genuinely live streaming (2026-08-30, still true here): one real LogitsFor() call per token, revealed
-    // immediately, no artificial pacer of any kind — real compute latency (measured ~100ms+ at this
+    // immediately, no artificial pacer unless sound is on (see NoteIntervalMs) — real compute latency (measured ~100ms+ at this
     // checkpoint's shape, native-JIT floor; WASM is at least that slow) IS the visible cadence. The one
     // `await Task.Yield()` calls below add zero artificial wait; they exist only so the browser actually gets a
     // chance to paint the just-computed batch before the next real compute call blocks the UI thread again.

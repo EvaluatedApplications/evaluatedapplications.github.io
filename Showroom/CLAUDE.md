@@ -190,7 +190,7 @@ The honest limit, stated in the code: a Fourier coefficient list has no fundamen
 some rule must supply f0; the rule is ours, every number it reads is the model's. **The DC slot is
 now written explicitly as zero and the face starts at index 1** — `createPeriodicWave` treats index
 0 as DC per spec, so passing the face straight through used to dump comp 0 into an inaudible
-constant and shift every other comp down one harmonic. Volume slider is hard-capped via `VolumeCeiling=0.32`
+constant and shift every other comp down one harmonic. **Paced to a beat while sound is on (2026-09-15, user: "slow down the text generation, so that the notes sound a bit more musical rather than fast as possible")**: each token's note waits for the next `NoteIntervalMs`=240 beat (eighth notes at 125 BPM, ~13s for a 56-step reply), measured from the previous note so compute time is absorbed into the beat, never added on top; a slow step plays as soon as it's ready rather than catching up. While paced, every token is revealed (not every `RenderBatch`), so text lands on its note. `ToneMs` went 110 -> 180 to fill most of the beat. Sound OFF, the default, is completely unpaced: visitors who never enable sound see the old full-speed stream. `_soundOn` is re-read every step, so toggling mid-reply takes effect on the next note. Volume slider is hard-capped via `VolumeCeiling=0.32`
 before it ever reaches the audio graph. Persisted via `localStorage` (`prismAudio.getPref/setPref`).
 **Synthesis is ADDITIVE and INHARMONIC as of 2026-09-14** (`window.prismAudio.partials`), replacing
 `createPeriodicWave` the same day. The user heard that it "still sounds musical" after the pitch fix
