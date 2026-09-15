@@ -117,7 +117,7 @@
 
         @* Condensed from the site's "Meaning as chords" page (site/holoformer.html), 2026-09-15, on the user's request, plus
            an honest account of what the audible tokens are. Keep the "What you're hearing" claims in lockstep with
-           PlayTokenTone/BaseFrequency: 128 tones = this checkpoint's Dim/2, "twice" = its StackK of 2. If either changes on a
+           PlayTokenTone/BaseFrequency: 32 tones = this checkpoint's FrozenPrefix/2 (the codec band), "twice" = its StackK of 2. If either changes on a
            new checkpoint, update this copy too. *@
         <section class="explain" aria-labelledby="explain-title">
             <h2 id="explain-title">How Prism works, as sound</h2>
@@ -135,11 +135,12 @@
             </ul>
             <h3>What you're hearing</h3>
             <p>Turn sound on and every piece of a word Prism writes plays its own chord, right as it appears. That chord is not
-                a sound effect someone picked. It is built from the model's own numbers for that word piece: 128 tones, each
+                a sound effect someone picked. It is built from the model's own numbers for that word piece: 32 tones, each
                 taking its loudness and starting point from the model, with its frequency worked out from those same numbers.</p>
-            <p>The base pitch comes from the part of the chord that never changes in training, the word's fixed identity, so a
-                word always lands on the same note. The rest of the chord comes from what the model has learned, so the tone
-                colour shifts as Prism keeps training. The one choice we made is where the chord sits in your hearing range.</p>
+            <p>The note and the tone colour come from opposite halves of the model's numbers for that word. The note comes from
+                what Prism has learned about the word, so its pitch moves as Prism keeps training. The tone colour comes from the
+                word's fixed identity, which never changes, so every word keeps its own sound. The one choice we made is where the
+                chord sits in your hearing range.</p>
             <p>That is also why it doesn't sound like an ordinary instrument. The model's tones aren't tuned to any musical
                 scale, and we left them that way rather than dress them up.</p>
         </section>
@@ -668,12 +669,17 @@
         try
         {
             var face = _session.Model.Face(tokenId);
-            var n = face.Length / 2;
-            if (n < 2) return;   // createPeriodicWave needs at least 2 matched coefficients
+            var comps = face.Length / 2;
+            var codec = Math.Min(_session.Model.FrozenPrefix / 2, comps);
+            if (codec < 1 || codec >= comps) return;   // needs both a codec band and a learned tail to play
 
-            // One partial per component, at that component's OWN frequency — not at harmonic multiples
-            // of one fundamental. See PartialSpread for why, and for the one thing still imposed.
-            var f0 = BaseFrequency(face, _session.Model.FrozenPrefix / 2);
+            // REVERSED 2026-09-15 (user: "reverse the sound generation too, make the learned tail be the note and the codec
+            // be the flavour"). NOTE = the learned tail: the base pitch is BaseFrequency over the tail components. FLAVOUR =
+            // the codec: one partial per FROZEN codec component, each at its own frequency (from its phase, spread above the
+            // note) with its own loudness and starting phase, never at harmonic multiples. See PartialSpread for the one thing
+            // still imposed.
+            var f0 = BaseFrequency(face, codec, comps);
+            var n = codec;
             var freqs = new double[n];
             var amps = new double[n];
             var phases = new double[n];
@@ -695,34 +701,26 @@
         catch { /* audio is decoration, never let a synth glitch touch generation */ }
     }
 
-    // Base pitch read OFF THE FACE, not off the token id (2026-09-14, user: "make it fully authentic").
+    // Base pitch read OFF THE FACE (2026-09-14), and since 2026-09-15 off the LEARNED TAIL rather than the codec (user: "make
+    // the learned tail be the note and the codec be the flavour").
     //
-    // What this replaced, and why it was wrong: the pitch used to be an integer hash of the token id
-    // mapped linearly onto 150-800 Hz. That number is not the model's. Subword ids are assigned in
-    // vocabulary-table order, so the same word in a different vocabulary got a different pitch, and a
-    // re-mint changed every note on the page. The timbre was the model's; the note was mine.
+    // History: first an integer hash of the token id (not the model's number at all), then the circular mean phase of the
+    // frozen codec band (fixed per token for life, while the learned tail coloured the timbre). Now reversed: the pitch is
+    // the circular mean of the learned TAIL components, and the codec band supplies the timbre (see PlayTokenTone). Tail
+    // components are not unit modulus (trained magnitudes spread roughly 0.4-1.6), so summing the raw (cos, sin) pairs
+    // gives a MAGNITUDE-WEIGHTED circular mean: strongly learned components pull the note harder than faint ones.
     //
-    // What this is instead: the circular mean phase of the face's FROZEN IDENTITY band. A phasor face is
-    // interleaved (cos, sin) pairs, and across the frozen prefix every component is unit modulus (measured
-    // 1.000 exactly, every band, every token, on the live checkpoint), so summing the raw pairs IS the
-    // circular mean — no normalisation needed, and no magnitude term that would make this drift as the
-    // model trains. That band is `PhasorCodec`'s deterministic signature for the token's TEXT, which is
-    // why this is the authentic choice: " the" now sounds at the same pitch on any checkpoint with any
-    // vocabulary, and a token's pitch is fixed for the life of the model while its TIMBRE keeps evolving
-    // as the learned orbital tail trains. Pitch = what the token is; timbre = what the model has made of
-    // it. Comp count comes from the model's own `FrozenPrefix` rather than `PhasorLayout.IdComps`, so a
-    // checkpoint with a different frozen width stays correct and this needs no Phasor dependency.
+    // Consequence, measured on the live checkpoint rather than assumed: a token's note MOVES as the model trains. Between
+    // r10,804 and r36,664 the tail pitch shifted by a median 199 cents (2 semitones), 90th percentile 1,243 cents (an
+    // octave), max 2,879. The spread across the vocabulary stays even: 91-126 tokens per tenth of the range against ~102
+    // expected, all 29 semitone-wide slots used. The codec flavour, by contrast, is fixed for the life of the model.
     //
-    // Honest limit: a Fourier coefficient list has no fundamental of its own — f0 is the one free
-    // parameter, so SOME rule has to supply it. The rule is ours; every number it reads is the model's.
-    //
-    // Mapping is logarithmic over the same audible 150-800 Hz window the hash used, not linear in Hz, so
-    // equal phase differences are equal musical intervals rather than being squashed at the bottom of the
-    // range. MEASURED over all 1,024 tokens of the live vocabulary: evenly spread, 91-123 tokens per
-    // tenth of the range against 102 expected, full span 150.0-799.7 Hz.
+    // Honest limit: a Fourier coefficient list has no fundamental of its own, so SOME rule has to supply f0. The rule is
+    // ours; every number it reads is the model's. The mapping is logarithmic over 150-800 Hz, so equal phase differences
+    // are equal musical intervals.
     const double PitchLowHz = 150.0, PitchHighHz = 800.0;
 
-    // How many octaves the 128 partials are spread across above the base frequency (2026-09-14).
+    // How many octaves the codec partials are spread across above the base frequency (2026-09-14).
     //
     // This number, and the 150-800 Hz window above, are now the ONLY imposed quantities left in the
     // synth — everything else is read off the face. The previous version imposed something far larger
@@ -737,12 +735,12 @@
     // across the pitch range and the JS side drops whatever lands above Nyquist rather than letting it
     // alias back down as a phantom partial.
     const double PartialSpread = 5.0;
-    static double BaseFrequency(double[] face, int idComps)
+    static double BaseFrequency(double[] face, int fromComp, int toComp)
     {
         double sumCos = 0, sumSin = 0;
-        var n = Math.Min(idComps, face.Length / 2);
-        if (n <= 0) return PitchLowHz;
-        for (var c = 0; c < n; c++) { sumCos += face[2 * c]; sumSin += face[2 * c + 1]; }
+        var end = Math.Min(toComp, face.Length / 2);
+        if (end <= fromComp) return PitchLowHz;
+        for (var c = fromComp; c < end; c++) { sumCos += face[2 * c]; sumSin += face[2 * c + 1]; }
         var theta = Math.Atan2(sumSin, sumCos);                       // -pi..pi
         var octaves = Math.Log2(PitchHighHz / PitchLowHz);            // 2.415 octaves
         return PitchLowHz * Math.Pow(2, (theta + Math.PI) / (2 * Math.PI) * octaves);
