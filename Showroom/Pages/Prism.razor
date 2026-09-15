@@ -716,9 +716,13 @@
     // expected, all 29 semitone-wide slots used. The codec flavour, by contrast, is fixed for the life of the model.
     //
     // Honest limit: a Fourier coefficient list has no fundamental of its own, so SOME rule has to supply f0. The rule is
-    // ours; every number it reads is the model's. The mapping is logarithmic over 150-800 Hz, so equal phase differences
+    // ours; every number it reads is the model's. The mapping is logarithmic over 65-260 Hz, so equal phase differences
     // are equal musical intervals.
-    const double PitchLowHz = 150.0, PitchHighHz = 800.0;
+    // MID BASS 2026-09-16 (user: "make prism deeper sounding ... like a mid bass"). Was 150-800 Hz, which sat in the
+    // middle of the voice range. Now 65-260 Hz: C2 to C4, exactly 2 octaves, so the notes land where a bass line lives.
+    // Two octaves rather than the old 2.415 costs a little pitch resolution between tokens and buys a band that stays
+    // bass throughout; the top of the old range was an octave and a half above anything anyone would call bass.
+    const double PitchLowHz = 65.0, PitchHighHz = 260.0;
 
     // How many octaves the codec partials are spread across above the base frequency (2026-09-14).
     //
@@ -731,10 +735,12 @@
     // The face has no harmonic structure to justify it: the codec's real component frequencies run
     // 1.00, 24.66, 34.43, 44.70, ... where a harmonic series would run 1, 2, 3, 4.
     //
-    // 5 octaves puts the top partial at 32x the base, so the spectrum spans roughly 150 Hz to 25 kHz
-    // across the pitch range and the JS side drops whatever lands above Nyquist rather than letting it
-    // alias back down as a phantom partial.
-    const double PartialSpread = 5.0;
+    // 3.5 octaves puts the top partial at ~11x the base, so the spectrum spans roughly 65 Hz to 2.9 kHz across
+    // the pitch range and the JS side drops whatever lands above Nyquist rather than letting it alias back down
+    // as a phantom partial. Was 5 octaves (top partial 32x) when the base sat at 150-800 Hz; carrying that spread
+    // down onto a 65-260 Hz base would have left the same bright top end ringing over a bass note, which reads as
+    // a buzz on a low note rather than as a deep sound (2026-09-16, same mid-bass request as the band above).
+    const double PartialSpread = 3.5;
     static double BaseFrequency(double[] face, int fromComp, int toComp)
     {
         double sumCos = 0, sumSin = 0;
@@ -742,7 +748,7 @@
         if (end <= fromComp) return PitchLowHz;
         for (var c = fromComp; c < end; c++) { sumCos += face[2 * c]; sumSin += face[2 * c + 1]; }
         var theta = Math.Atan2(sumSin, sumCos);                       // -pi..pi
-        var octaves = Math.Log2(PitchHighHz / PitchLowHz);            // 2.415 octaves
+        var octaves = Math.Log2(PitchHighHz / PitchLowHz);            // 2 octaves
         return PitchLowHz * Math.Pow(2, (theta + Math.PI) / (2 * Math.PI) * octaves);
     }
 

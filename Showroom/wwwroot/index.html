@@ -162,7 +162,7 @@
           // compressor. None of it moves any partial's frequency: the high-cut tames the piercing top end of 128
           // equal-strength inharmonic partials, the compressor evens loud and quiet notes, and the reverb lets
           // overlapping notes bloom into each other.
-          var hiCut = ctx.createBiquadFilter(); hiCut.type = 'lowpass'; hiCut.frequency.value = 5200; hiCut.Q.value = 0.5;
+          var hiCut = ctx.createBiquadFilter(); hiCut.type = 'lowpass'; hiCut.frequency.value = 2600; hiCut.Q.value = 0.5;   // 2026-09-16 mid-bass pass: was 5200, halved to match the lowered note band and narrower partial spread
           var comp = ctx.createDynamicsCompressor();
           comp.threshold.value = -22; comp.knee.value = 18; comp.ratio.value = 4; comp.attack.value = 0.004; comp.release.value = 0.22;
           var verb = ctx.createConvolver(); verb.buffer = roomImpulse(ctx, 1.6, 2.8);
