@@ -295,30 +295,24 @@
     // tokens while _generating — this is what makes generation render as a typewriter: the markup binds to THIS
     // field, so the per-batch StateHasChanged() call in GenerateReplyAsync actually has new text to paint.
 
-    // ---- turn-based chat, rolling context. UNTAGGED WIRE FORMAT (2026-09-09, direct instruction: drop the
-    // speaker tags under the hood, keep the chat display and the rolling context exactly as they are).
+    // ---- turn-based chat, rolling context. TAGGED WIRE FORMAT (2026-09-15, user: "set up the user prism and the new line
+    // framing on website", once the model started training on pairs). Reverses the 2026-09-09 untagged format.
     //
-    // The transcript the model sees is now just the turn texts, one per line, newline-separated:
-    //     Hello there\nHi, how are you\n
-    // and Prime() appends nothing but the separating newline. Nothing about the DISPLAY changed — the "you"/
-    // "prism" labels are markup (.or-who), rendered per turn, and never were part of the model's text. Nothing
-    // about the rolling context changed either: CapRecent still splits on '\n' and drops whole leading turns,
-    // which still works because one line is still exactly one turn.
+    // The transcript the model sees is one tagged line per turn, exactly what StudioModel.Serve builds in the studio:
+    //     user: Hello there\nprism: Hi, how are you\nuser: What's up\n
+    // and Prime() appends "prism: " so the model writes the next reply. This is the framing the pairs lane trains on:
+    // HoloEngine wraps every raw "Q\tA" pair through GroupChat.AsChat into "user: Q\nprism: " -> A, then PairSource
+    // appends CharVocab.End (id 95) after the answer. Train and serve now agree token for token.
     //
-    // What this trades, stated plainly because it is a real trade and not a free win. AGAINST: the pairs lane
-    // is trained as "user: X\nprism: " -> answer (MonoRepo\AlgFormer\PairSource.cs, GroupChat.HumanTag =
-    // "user: ", AiTag = "prism: "), so serving without them is serving a framing the pair data never used, and
-    // the model must now infer the speaker change from the newline alone. The corpus lane is untagged plain
-    // text, and all-positions loss scores whole sequences either way, so it is not unseen territory — just not
-    // the pair-trained one. FOR: at ctx=192 every tag is real budget, and the cost is bigger than it looks.
-    // Measured through THIS checkpoint's own vocab (not estimated): "user: " is 4 tokens and "prism: " is 5, so
-    // every exchange spent 9 tokens on labels. A representative ten-turn transcript came to 157 tokens tagged
-    // against 113 untagged — 44 tokens saved, 23% of everything the model can see. In window terms that is
-    // roughly 12 turns of history before, about 17 now.
+    // TWO FACTS ABOUT NEWLINES THAT ARE EASY TO GET WRONG. (1) A newline in the TEXT is not a token: SubwordVocab and
+    // the studio's MintTokenizer both fold every non-printable character, "\n" included, to a SPACE when encoding, so
+    // "user: Q\nprism: " reaches the model as "user: Q prism: " in training and here alike. (2) Id 95 is the STOP
+    // token, and it is the only id that DECODES as "\n" (Symbol(95)), but nothing ever ENCODES to it: it only exists
+    // because PairSource appends it after each answer. So the model learns to end a reply by emitting STOP, and the
+    // "\n" separators below never become STOP; they are turn boundaries for CapRecent and spaces for the model.
     //
-    // To revert, restore the two GroupChat calls: BuildTranscript prefixed each line with
-    // (t.IsUser ? GroupChat.HumanTag : GroupChat.AiTag), and Prime appended + GroupChat.AiTag, which matched
-    // StudioModel.Serve line-for-line. Both are one-liners; see git history for the tagged version.
+    // Why the tags are affordable again: the untagged format was a context-budget trade made at ctx=192, where "user: "
+    // (4 tokens) + "prism: " (5) cost 23% of a ten-turn window. At ctx=512 that is ~9 tokens per exchange out of 512.
     sealed record ChatTurn(bool IsUser, string Text, StopReason? Reason = null);
 
     enum StopReason
@@ -343,15 +337,13 @@
 
     static string CleanTurnText(string s) => s.Replace('\r', ' ').Replace('\n', ' ').Trim();
 
-    // One line per turn — text + "\n", untagged (see the wire-format note above). The newline is doing ALL the
-    // turn-boundary work now that the tags are gone, which is what keeps CapRecent's "split on '\n', drop
-    // leading lines" trick valid: every '\n' in the transcript IS a turn boundary, never a line break inside one
-    // turn's own text (CleanTurnText above guarantees that on the way in, and is now load-bearing rather than
-    // merely tidy — a stray newline in a turn would silently split it into two turns for the capper).
+    // One tagged line per turn: GroupChat.HumanTag ("user: ") or GroupChat.AiTag ("prism: ") + text + "\n". The "\n" is
+    // still the turn boundary CapRecent splits on (CleanTurnText guarantees no newline inside a turn's own text); the
+    // model sees it as a space, see the wire-format note above.
     static string BuildTranscript(IEnumerable<ChatTurn> turns)
     {
         var sb = new StringBuilder();
-        foreach (var t in turns) sb.Append(t.Text).Append('\n');
+        foreach (var t in turns) sb.Append(t.IsUser ? GroupChat.HumanTag : GroupChat.AiTag).Append(t.Text).Append('\n');
         return sb.ToString();
     }
 
@@ -372,32 +364,15 @@
         return lines[^1];   // even the newest turn alone exceeds the budget — BuildContext windows it in tokens anyway
     }
 
-    // Untagged prime: generate straight from the end of the transcript, with NO trailing newline.
+    // Tagged prime, line for line what StudioModel.Serve does: make sure the transcript ends on a turn boundary, then
+    // open the reply slot with "prism: ". That trailing "prism: " is exactly where every trained pair's answer begins
+    // (PairSource guarantees the prompt ends in a space), so the model's first token is the first word of its reply.
     //
-    // REVERSED 2026-09-12. This used to APPEND a newline if one was missing, on the reasoning that the
-    // newline is the only marker the model gets that a new turn starts. That reasoning was never tested,
-    // and when it finally was, it turned out to be the direct cause of the stray junk token every reply
-    // opened with — the thing that made the public page's first impression read as broken.
-    //
-    // Measured at r338291 (greedy, four contexts differing ONLY in what terminates the prompt):
-    //     "Once upon a time,"      -> " there was a little girl named Lily..."     clean
-    //     "Once upon a time, "     -> "Joy loved to play with his friends..."      stray token
-    //     "Once upon a time,\n"    -> "Joy loved to play with his friends..."      stray token, IDENTICAL
-    //     "Once upon a time,\n "   -> "Once upon a time, there was a little..."    restarts the line
-    // Rows two and three being byte-identical is the load-bearing observation: the model is not reacting
-    // to a newline as such, it is reacting to "a token boundary has already been crossed, so begin a
-    // fresh word" — and in that state its top token here is junk. Left alone after the comma it emits the
-    // separating space itself and continues correctly. Row four confirms it from the other side: given a
-    // newline AND a space, it treats the line as new and restates the opener from scratch.
-    //
-    // So the model continues the last turn rather than replying to a completed one. That is a real change
-    // to how every turn is framed, made on the user's explicit instruction, not a silent tidy-up.
-    //
-    // INTERNAL newlines are untouched and still load-bearing: BuildTranscript still separates turns with
-    // '\n', which is what keeps CapRecent's "split on '\n', drop whole leading turns" valid. Only the ONE
-    // trailing newline at the very end of the prompt is removed, and only here at generation time.
-    // (Was also: + GroupChat.AiTag, matching StudioModel.Serve. See the wire-format note above.)
-    static string Prime(string capped) => capped.TrimEnd('\n');
+    // Supersedes the 2026-09-12 untagged prime, which stripped the trailing newline because an UNTAGGED prompt ending
+    // in "\n" made every reply open with a stray junk token (measured at r338291). That failure was specific to
+    // continuing a bare line with no slot to answer into; ending on "prism: " gives the model the slot the pairs
+    // trained, which is the case that problem never covered. Re-measure the opener if replies start oddly.
+    static string Prime(string capped) => (capped.Length == 0 || capped.EndsWith("\n") ? capped : capped + "\n") + GroupChat.AiTag;
 
     static string DisplayText(ChatTurn t) => t.Text.Length > 0 ? t.Text : "(blank — this checkpoint is still very early in training)";
 

@@ -169,8 +169,7 @@ REVEAL+TRAIN (win/lose flash), paced by the speed slider.
 
 ## Prism — `Pages/Prism.razor` (route `/prism`)
 A real chat REPL over a point-in-time copy of the user's live PrismStudio checkpoint. Rolling
-turn-based context, **untagged wire format** (2026-09-09: dropped `GroupChat`'s `"user: "`/`"prism: "`
-tags to buy back the ~23% of the context window they cost at ctx=192), capped to the checkpoint's
+turn-based context, **tagged wire format** (2026-09-15, user request once the model trained on pairs; reverses the 2026-09-09 untagged format): `user: X\nprism: Y\n` per turn and `prism: ` appended by `Prime`, line for line `StudioModel.Serve`, matching `HoloEngine`'s `GroupChat.AsChat` pair wrapping. A text `\n` encodes to a SPACE (both tokenizers fold it); id 95 STOP only DECODES as `\n` and is only ever appended after a trained answer, so turn separators never become STOP. Tags cost ~9 tokens/exchange at ctx=512 (the 23% cost that justified untagged was at ctx=192), capped to the checkpoint's
 `Stats().Context` tokens via `CapRecent` (drops whole leading turns, never mid-turn). Generation:
 `ServeCache`-based O(1)/token stepping, stops on `CharVocab.End`, `Prism.Inference.Gate`/`DegenGuard`
 for confidence-gated decoding. `MaxReplyChars = Context/2` (measured: drift starts a half-window
