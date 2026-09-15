@@ -55,9 +55,8 @@
                        @oninput="OnVolumeInput" />
             </label>
         </div>
-        <p class="sound-note hint">Each reply token is turned into a short tone straight from that token's own
-            phasor face (the same numbers the model itself reasons with) — not a recording, not decoration.
-            Off by default.</p>
+        <p class="sound-note hint">Each piece of a reply plays a short chord built from the model's own numbers for that
+            word piece. Off by default. <a href="#explain-title">What you're hearing</a> is explained below the chat.</p>
 
         <div class="cr-stats">
             <div class="stat"><div class="n">@_stats!.ParamCount.ToString("N0")</div><div class="l">parameters</div></div>
@@ -116,6 +115,34 @@
 
         @if (_error is not null) { <p class="err">@_error</p> }
 
+        @* Condensed from the site's "Meaning as chords" page (site/holoformer.html), 2026-09-15, on the user's request, plus
+           an honest account of what the audible tokens are. Keep the "What you're hearing" claims in lockstep with
+           PlayTokenTone/BaseFrequency: 128 tones = this checkpoint's Dim/2, "twice" = its StackK of 2. If either changes on a
+           new checkpoint, update this copy too. *@
+        <section class="explain" aria-labelledby="explain-title">
+            <h2 id="explain-title">How Prism works, as sound</h2>
+            <p>Prism is a holographic transformer, and the easiest way to understand one is as music. This is the short
+                version of <a href="/holoformer.html">Meaning as chords</a>.</p>
+            <ul>
+                <li><strong>Every word is a chord.</strong> Prism stores each piece of a word as a chord, a stack of pure tones
+                    played together. Chords that sound alike mean alike, so related ideas end up close to each other.</li>
+                <li><strong>Ideas combine by playing chords together.</strong> To link two things it plays both chords at once and
+                    they merge into a new one. Number chords are tuned so that merging them is the arithmetic itself.</li>
+                <li><strong>It remembers like a radio.</strong> Everything it has read folds into one running sound. To recall
+                    something it tunes to that frequency, and the match rings out while the rest cancels to silence.</li>
+                <li><strong>It thinks by replaying.</strong> Each layer plays its part twice before handing the sound on. The
+                    first pass sketches, the second turns the sketch into the answer.</li>
+            </ul>
+            <h3>What you're hearing</h3>
+            <p>Turn sound on and every piece of a word Prism writes plays its own chord, right as it appears. That chord is not
+                a sound effect someone picked. It is built from the model's own numbers for that word piece: 128 tones, each
+                taking its loudness and starting point from the model, with its frequency worked out from those same numbers.</p>
+            <p>The base pitch comes from the part of the chord that never changes in training, the word's fixed identity, so a
+                word always lands on the same note. The rest of the chord comes from what the model has learned, so the tone
+                colour shifts as Prism keeps training. The one choice we made is where the chord sits in your hearing range.</p>
+            <p>That is also why it doesn't sound like an ordinary instrument. The model's tones aren't tuned to any musical
+                scale, and we left them that way rather than dress them up.</p>
+        </section>
         <div class="outro">
             <p>Also here: <a href="/creature">The Creature</a> and <a href="/forecaster">The Forecaster</a>.</p>
         </div>

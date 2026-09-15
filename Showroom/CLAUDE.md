@@ -121,6 +121,15 @@ ellipsis character in this file.
 **Re-measure the opener on every checkpoint refresh** — a good opener for one set of weights is not
 automatically good for the next.
 
+**"How Prism works, as sound" section** (2026-09-15, user request): a condensed version of the site's
+"Meaning as chords" page (`site/holoformer.html`, website-owner's, linked not copied) under the chat, plus a
+"What you're hearing" part tying the audible tokens to the model. Its specifics are checkpoint-bound: "128
+tones" = Dim/2 and "plays its part twice" = StackK 2, so a new shape or K means updating that copy. It
+deliberately claims only what `PlayTokenTone`/`BaseFrequency` do: loudness and starting phase straight from
+the face, frequency derived from it, base pitch from the frozen identity band, timbre shifting with the
+learned tail, and the hearing-range placement as our one imposed choice. Never let it drift into "you are
+hearing the model think": the sound is the token's face, not the forward pass.
+
 **Checkpoint refresh** (Prism's `oracle-brain.bin`+`-vocab/-rounds/-stackk/-iterwarm.txt`, a
 point-in-time copy from PrismStudio): a **data-only** refresh needs no `dotnet publish` — raw-copy
 into `wwwroot/data` and `dist/data`, regenerate `oracle-brain.bin.gz` via a plain `GZipStream`
