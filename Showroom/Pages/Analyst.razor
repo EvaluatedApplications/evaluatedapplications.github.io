@@ -1409,7 +1409,7 @@
                 var text = Cell(r[_novCol]);
                 if (text.Length > 0)
                 {
-                    var ids = vocab.Encode(text).ToList();
+                    var ids = vocab.Encode(HoloKernel.AsciiPunctuation.Fold(text)).ToList();
                     if (ids.Count >= 2)
                     {
                         var window = new List<int> { ids[0] };

@@ -350,6 +350,9 @@
     // the model's next token is the first word of its reply and the trained way to end that reply is STOP. Prompt and
     // answer are encoded SEPARATELY, exactly as PairSource does, so the seam tokenises identically. A "\n" inside the text
     // still encodes to a space; STOP (CharVocab.End) is only ever appended here as an id, Encode never produces it.
+    // Typed text is folded through AsciiPunctuation.Fold first (2026-09-16): phone keyboards autocorrect the plain
+    // apostrophe to U+2019, which SubwordVocab.Fold turns into a SPACE, so "what" + curly + "s this" reached the model
+    // as "what s this" and the model answered the damaged question. Mirrors MintTokenizer.AsciiTwin in the trainer.
     // Capping drops whole leading EXCHANGES until the rest fits the window, so the context always starts on a turn
     // boundary, which is where packed training windows start.
     static List<int> BuildContextTokens(SubwordVocab vocab, IReadOnlyList<ChatTurn> turns, int maxTokens)
@@ -360,12 +363,12 @@
         {
             if (t.IsUser)
             {
-                open = new List<int>(vocab.Encode(GroupChat.HumanTag + t.Text.Trim() + "\n" + GroupChat.AiTag));
+                open = new List<int>(vocab.Encode(HoloKernel.AsciiPunctuation.Fold(GroupChat.HumanTag + t.Text.Trim() + "\n" + GroupChat.AiTag)));
                 chunks.Add(open);
             }
             else if (open is not null)   // a reply closes the exchange it answers; a reply with no question in view is dropped
             {
-                open.AddRange(vocab.Encode(t.Text));
+                open.AddRange(vocab.Encode(HoloKernel.AsciiPunctuation.Fold(t.Text)));
                 open.Add(CharVocab.End);
                 open = null;
             }

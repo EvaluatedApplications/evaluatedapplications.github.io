@@ -643,7 +643,7 @@
         for (int i = 0; i < cap; i++)
         {
             var text = scoreText[i];
-            var ids = vocab.Encode(text).ToList();
+            var ids = vocab.Encode(HoloKernel.AsciiPunctuation.Fold(text)).ToList();
             if (ids.Count < 2) continue;
             var window = new List<int> { ids[0] };
             double sum = 0; int scoredTok = 0;
