@@ -716,14 +716,18 @@
     // expected, all 29 semitone-wide slots used. The codec flavour, by contrast, is fixed for the life of the model.
     //
     // Honest limit: a Fourier coefficient list has no fundamental of its own, so SOME rule has to supply f0. The rule is
-    // ours; every number it reads is the model's. The mapping is logarithmic over 40-160 Hz, so equal phase differences
+    // ours; every number it reads is the model's. The mapping is logarithmic over 32-128 Hz, so equal phase differences
     // are equal musical intervals.
-    // ROBOT 2026-09-16 (user: "make prism deeper sounding ... like a mid bass", then "Deeper, like a robot"). The band has
-    // come down twice today: 150-800 Hz (mid voice) -> 65-260 (mid bass) -> 40-160 now, E1 to E3, still exactly 2 octaves.
-    // 40 Hz is about as low as a small laptop speaker reproduces at all; going under it would trade audible pitch for a
-    // rumble most listeners would not hear as a note. The robot character is not from the band alone -- see PartialSpread,
-    // and the lowpass plus the gated envelope in wwwroot/index.html, which carry the machine-voice half of it.
-    const double PitchLowHz = 40.0, PitchHighHz = 160.0;
+    // 80s ARCADE ROBOT 2026-09-16 (user, in three steps the same day: "like a mid bass", "Deeper, like a robot", "Deeper,
+    // like 80s arcade robot"). The band has come down 150-800 (mid voice) -> 65-260 -> 40-160 -> 32-128 Hz now, C1 to C3,
+    // still exactly 2 octaves.
+    //
+    // 32 Hz is BELOW what a laptop speaker reproduces, and that is deliberate rather than an oversight. The bit-crush and
+    // decimation added in wwwroot/index.html throw off a dense ladder of harmonics of whatever fundamental is playing, and
+    // the ear infers the missing fundamental from that ladder -- the same reason a phone earpiece can carry a male voice it
+    // physically cannot reproduce. So on small speakers this reads DEEPER than the 40 Hz version did, not thinner, even
+    // though less of the actual fundamental survives. On headphones the real 32 Hz is there too.
+    const double PitchLowHz = 32.0, PitchHighHz = 128.0;
 
     // How many octaves the codec partials are spread across above the base frequency (2026-09-14).
     //
