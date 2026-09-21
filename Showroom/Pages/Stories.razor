@@ -159,13 +159,14 @@
     //
     //     FloorK   median nucleus   positions forced to greedy
     //     0.5           353                 0.0%
-    //     1.0           162                 0.0%      <- Wild
-    //     1.5            42                 0.0%      <- Balanced (default)
-    //     2.0             7                14.7%      <- Focused
-    //     2.5             1                55.3%
+    //     1.0           162                 0.0%      (too loose: live output drifted into invented
+    //                                                  words - promirtys, uolentfish)
+//     1.5            42                 0.0%      <- Wild
+    //     2.0             7                14.7%      <- Balanced (default)
+//     2.5             1                55.3%      <- Focused
     //     3.0             1                78.7%   <- Prism's own chat policy, unchanged
     //
-    // Skipped 2.5/3.0 (median nucleus 1 — indistinguishable from greedy, defeats a tool whose whole
+    // Skipped 3.0 (the production chat value, 78.7% forced greedy - near-deterministic) and 0.5
     // point is variety) and 0.5 (median nucleus 353 — more than half this checkpoint's own vocabulary,
     // likely to read as noise rather than variety on a model this small). Balanced sits at the LOW end
     // of the "1.5 to 2.0" range expected for chat, on purpose: a story generator should skew lower than
@@ -204,6 +205,9 @@
     // rather than a chat-turn length. Re-measure alongside Prism's own constant on the next checkpoint
     // refresh, since both depend on the same vocab's bytes/token.
     const int MaxStorySteps = 128;
+
+    // Consumed by the sentence-boundary trim at the end of GenerateStoryAsync — see that comment.
+    static readonly char[] SentenceEnders = { '.', '!', '?' };
 
     TokenVoice? _voice;
     HoloSession? _session;
@@ -374,7 +378,20 @@
             reason = "loop";
         }
 
-        return (_vocab.Decode(outIds).TrimEnd(), reason);
+        var text = _vocab.Decode(outIds).TrimEnd();
+
+        // SENTENCE-BOUNDARY TRIM — applied AFTER the DegenerateTail cut above, not instead of it:
+        // the two catch different failure modes. This checkpoint never emits its own stop token
+        // (see MaxStorySteps's own comment / Showroom/CLAUDE.md's "Reply cap" note), so every story
+        // runs to MaxStorySteps and ends wherever the drift happened to land — often mid-word, in a
+        // run of NOVEL non-words rather than a repeat (a live example ended on "Onhvedemerdm"), which
+        // DegenerateTail can't see since nothing there repeats. Keep everything up to the LAST
+        // sentence-ending punctuation and drop the trailing fragment. Guard: if there's no
+        // sentence-ending punctuation at all, keep the untrimmed text rather than emit nothing.
+        var lastEnd = text.LastIndexOfAny(SentenceEnders);
+        if (lastEnd >= 0) text = text[..(lastEnd + 1)];
+
+        return (text, reason);
     }
 
     async Task TellStory(bool reuseSeed)
