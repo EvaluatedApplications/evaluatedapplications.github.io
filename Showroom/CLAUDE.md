@@ -1,6 +1,6 @@
 # Showroom — CLAUDE.md (showroom-owner)
 
-**Last verified:** 2026-09-13
+**Last verified:** 2026-09-21
 
 Blazor WebAssembly app at `C:\Users\dongy\AboutUs\Showroom`, published under `/tools` on the public
 site (`AboutUs` repo, base href `/tools/`). Every tool runs entirely client-side: no server, no
@@ -9,9 +9,10 @@ upload, the compute happens in the visitor's own browser tab. Charter:
 *consumes* MonoRepo packages via published NuGet, never source.
 
 **Purpose**: each tool is a real, working demo of a published `EvaluatedApplications.*` package's
-capability, driven live by the visitor — no smoke and mirrors. Five tools: **The Analyst** (HoloDb),
+capability, driven live by the visitor — no smoke and mirrors. Six tools: **The Analyst** (HoloDb),
 **The Creature** (AlgFormer/HoloFormer + Tracer), **The Forecaster** (AlgFormer/HoloFormer),
-**Prism** (AlgFormer/HoloFormer, trained-checkpoint chat REPL), **Prose** (HoloDb + AlgFormer,
+**Prism** (AlgFormer/HoloFormer, trained-checkpoint chat REPL), **Nano Stories** (AlgFormer/HoloFormer,
+the SAME checkpoint as Prism asked to write instead of chat), **Prose** (HoloDb + AlgFormer,
 grammar-mining corpus generator). Plus one **unlisted** page (below), a client preview.
 
 **§3 note**: compacted 2026-09-13 (was ~1,215 lines of dated incident logs) to current-state facts
@@ -40,6 +41,10 @@ only — operational memory, not a changelog. Keep future additions terse; prune
   `.room-head h1`/`.lede`/`.badges`/`.err`/`.hint`/`.controls`/`.go`/`.ghost`/`.progress-*`/`.speed`/
   `.outro`, plus `.steps`/`.dropzone`/`.dz-*`/`.paste-wrap`/`.paste` for a text/file-input tool) before
   its own classes. Copy from `Prose.razor.css` or `Analyst.razor.css` rather than inventing it fresh.
+  **Exception (2026-09-21)**: `wwwroot/css/voice.css` is a real shared GLOBAL stylesheet (not
+  component-scoped), styling `HoloKernel.TokenVoiceControls` — since that component lives in the
+  HoloKernel RCL rather than under `Pages/`, the usual per-page duplication doesn't apply; both
+  `Prism.razor.css` and `Stories.razor.css` correctly carry NO `.sound-*` rules of their own anymore.
 - **Parallax depth/glow** (`wwwroot/css/depth.css`): 3 scroll-driven tiers (far = `<main>` wallpaper,
   near = `.room-head`, mid = the tool's panel classes), zero JS, `prefers-reduced-motion`-gated.
   Tinted per tool via `[data-cat]` on the outer `.room`: one package name (`"holodb"`) sets
@@ -79,11 +84,26 @@ A sibling RCL (`AboutUs\HoloKernel`), itself NuGet-only against AlgFormer + the 
   with the BCL's own `GZipStream` (works inside WASM, no JS interop). GitHub Pages serves data files
   byte-for-byte uncompressed, so a raw checkpoint dropped in `wwwroot/data/` needs a hand-shipped
   `.gz` sibling to download small.
+- `PrismCheckpoint` (2026-09-21) — `SessionKey` (`"prism"`, the canonical `SessionHost` key) plus the
+  two formulas (`ResolveK`, `ReconstructAlpha`) Prism and Nano Stories both need IDENTICALLY to
+  correctly serve the shared checkpoint — a mismatch here would silently serve a crippled model.
 - `SessionHost.GetOrCreateAsync(key, factory)` — keyed by **model**, not tool. Every consumer of
-  Prism's checkpoint (Prism, Analyst's novelty scan, Prose's "Score with Prism" mode) passes key
-  `"prism"`, so whichever loads it first this page load, the rest reuse it instantly.
-  `IsLoaded`/`Forget`/`Clear` round it out. **Ephemeral** — a reload drops everything, no
-  persistence; WASM has no filesystem and none is wanted here.
+  Prism's checkpoint (Prism, Nano Stories, Analyst's novelty scan, Prose's "Score with Prism" mode)
+  passes key `"prism"` (`PrismCheckpoint.SessionKey`), so whichever loads it first this page load, the
+  rest reuse it instantly. `IsLoaded`/`Forget`/`Clear` round it out. **Ephemeral** — a reload drops
+  everything, no persistence; WASM has no filesystem and none is wanted here.
+- `TokenVoice` / `TokenVoiceControls.razor` (2026-09-21) — Prism's per-token voice (face→tone synth,
+  swayed beat pacing, render-batch cadence), lifted out of `Prism.razor` so Nano Stories shares it
+  byte-for-byte instead of re-deriving it. `TokenVoiceControls` is this RCL's first Razor component,
+  styled by the global `wwwroot/css/voice.css` (not component-scoped CSS) so both consuming pages
+  render it identically. Persists mute/volume under the SAME localStorage keys Prism always used —
+  deliberately one shared preference, not per-tool. The full tuning history (mid-bass -> robot -> 80s
+  arcade robot, the additive/inharmonic rewrite, the reversed note/flavour mapping) now lives in this
+  type's own doc comment, including the two standing rules ("never quantise to a scale", "don't retune
+  per tool") — not duplicated here or per-page anymore.
+- `DegenerateTail.Start(ids)` (2026-09-21, lifted out of `Prism.razor`) — trims a repeating tail (e.g.
+  "ERE ERE ERE") a generated sequence ends on; covers the period>1 gap `Prism.Inference.DegenGuard`
+  itself doesn't catch. Shared by Prism and Nano Stories.
 - **Browser contract**: visitors **train**, never **reshape**. A tool's `HoloFormer` shape is fixed
   at construction for the session; `GrowLayers`/`GrowShifts` are real but PrismStudio/server-side
   only — a better model reaches visitors via a new checkpoint, never runtime shape mutation.
@@ -99,28 +119,37 @@ decay with length, so there is no "good portion" to cut at. Greedy loops early b
 decode greedily; under the real gate repetition never fired inside 400 chars. The real defect is the
 model emitted its own STOP token in **0 of 90 runs**, so every reply runs to the cap and ends
 mid-sentence. Do NOT paper over that with a sentence-boundary heuristic (`feedback-no-chat-bandaids`).
+**Nano Stories has its own separate cap, `MaxStorySteps`=128** (same vocab, roughly double this one,
+since a short story reads longer than a chat turn) — intentionally a different constant on a different
+page, not a shared value; re-measure both together on the next checkpoint refresh, not just this one.
 
 **No example exchange on load** (removed 2026-09-15, user: "remove the first prompt"): the chat opens empty on the "Say hi" hint. The old seed exchange (an opener from `data/oracle-opener.txt` plus the model's reply, last opener "What's happening?") is gone, along with the code that fetched the opener; `oracle-opener.txt` may still sit in `wwwroot/data` and `dist/data` but nothing reads it. Its cold-start job survives as a silent warm-up (one prime + one step through the serve cache, result discarded) so the first real reply is not slower. If an example exchange is ever wanted back, re-measure the opener against that checkpoint first, and use an ASCII apostrophe: `SubwordVocab.Fold` maps a typographic one to a space.
 
 **"How Prism works, as sound" section** (2026-09-15, user request): a condensed version of the site's
 "Meaning as chords" page (`site/holoformer.html`, website-owner's, linked not copied) under the chat, plus a
 "What you're hearing" part tying the audible tokens to the model. Its specifics are checkpoint-bound: "128
-tones" = Dim/2 and "plays its part twice" = StackK 2, so a new shape or K means updating that copy. It
-deliberately claims only what `PlayTokenTone`/`BaseFrequency` do: loudness and starting phase straight from
-the face, frequency derived from it, base pitch from the frozen identity band, timbre shifting with the
-learned tail, and the hearing-range placement as our one imposed choice. Never let it drift into "you are
-hearing the model think": the sound is the token's face, not the forward pass.
+tones" = Dim/2 and "plays its part twice" = StackK 2, so a new shape or K means updating that copy AND Nano
+Stories' own copy of the same claim (it shares the voice, not the copy block). Never let it drift into "you
+are hearing the model think": the sound is the token's face, not the forward pass.
 
-**Chat context and sound, 2026-09-15 (user requests)**: `BuildContextTokens` replaced the text transcript: each finished exchange is `Encode("user: Q\nprism: ") + Encode(A) + [STOP]` back to back, the pending question is its prompt run alone, and capping drops whole leading exchanges. This mirrors PrismGym's `PackedPairSource` (`PackPairWindows`), so the context matches packed training token for token, including the STOP between turns. Sound: `NoteIntervalMs`=210 base beat swayed by `NextBeatMs()` (+-14% slow sine over 16 notes, +-6% jitter, always 0.8-1.2x), `ToneMs`=300 so notes overlap, a 45ms per-component frequency GLIDE from the previous token's note in `prismAudio.partials` (phase accumulator, then the recurrence seeded from the glide's end phase), softer 25ms/160ms edges, and an output chain of 5.2kHz lowpass, compressor (-22dB, 4:1) and a generated 1.6s room reverb at 0.22 wet. None of the effects move a partial's frequency.
-**Smart-punctuation input fix 2026-09-16** (new `HoloKernel/AsciiPunctuation.cs`, applied at every tokenizer entry point: `Prism.razor` BuildContextTokens x2, `Analyst.razor` novelty scan, `Prose.razor` plausibility scoring). `SubwordVocab.Fold` maps every char outside printable ASCII to a SPACE, so a visitor typing on a phone (iOS/Android autocorrect the plain apostrophe to U+2019) was asking the model "what s this", and the model answered the damaged question -- it read as the model being bad at contractions when the input was broken before it arrived. `AsciiPunctuation.Fold` maps curly quotes/primes/dashes/nbsp/ellipsis to ASCII twins first. Deliberately a NO-OP on ASCII (verified: 0 of the 95 printable chars altered, and the fast path returns the SAME string instance when there is nothing to fold), so no existing checkpoint or corpus changes meaning. KEEP IT IDENTICAL to `MintTokenizer.AsciiTwin` in the PrismFormer studio, which got the same table the same day -- train-time and serve-time tokenisation disagreeing is what caused the underlying mess (the live chat.tsv had 30,639 stripped contractions over 25.8% of its lines, which is why the site kept answering "I m not sure"), and these two types have silently diverged before over MaxLen. NOTE the serving-side `SubwordVocab.Fold` in MonoRepo AlgFormer still folds straight to space; fixing it there needs a NuGet publish, so this Showroom-side fold is the layer that actually protects the site today.
+**Chat context, 2026-09-15**: `BuildContextTokens` replaced the text transcript: each finished exchange is
+`Encode("user: Q\nprism: ") + Encode(A) + [STOP]` back to back, the pending question is its prompt run alone,
+and capping drops whole leading exchanges. This mirrors PrismGym's `PackedPairSource` (`PackPairWindows`), so
+the context matches packed training token for token, including the STOP between turns. (The voice/sound
+tuning that used to be logged here now lives in `HoloKernel/TokenVoice.cs`'s own doc comment — see the
+HoloKernel section above — since it's shared by Prism and Nano Stories, not Prism-only history anymore.)
 
-**80s arcade robot 2026-09-16, supersedes the robot numbers below** (user: "Deeper, like 80s arcade robot"): `PitchLowHz=32`/`PitchHighHz=128` (C1-C3, 2 octaves), and a new ARCADE CRUSH step in `wwwroot/index.html`'s `partials()`, applied AFTER peak normalisation -- sample-and-hold decimation to ~8 kHz, then 6-bit amplitude quantisation (32 levels). Order and placement both matter: the hardware imposed the low clock first, and crushing after normalisation is what makes the 32 levels get spanned instead of crowded into a corner. Two supporting moves: the output lowpass went back UP 1800 -> 3000 Hz (the only upward step of the day -- the crush artefacts live in the top end and an 1800 cut smooths them straight off), and reverb wet 0.22 -> 0.10 (a cabinet was a dry speaker in a box; a wet tail blurs the sample-and-hold steps). 32 Hz is deliberately below laptop-speaker reproduction: the crush throws a harmonic ladder off the fundamental and the ear infers the missing fundamental from it, so small speakers read this as DEEPER than the 40 Hz version, not thinner. NOTE for anyone reading the standing "never quantise the sound" rule: that rule is about PITCH being snapped to a musical scale. This is AMPLITUDE quantisation; no partial is moved, every frequency is still the face's own.
-
-**Robot 2026-09-16, supersedes the mid-bass numbers below** (user: "Deeper, like a robot"): `PitchLowHz=40`/`PitchHighHz=160` (E1-E3, still 2 octaves; 40 Hz is about the floor a laptop speaker reproduces as a note at all), output lowpass 2600 -> 1800 Hz, and the amplitude envelope in `wwwroot/index.html` gated from 25ms/160ms to 4ms/45ms. The envelope is the part that carries "robot" rather than just "deep": a soft cross-fade reads as bowed or breathed, an abrupt one as switched. The 45ms pitch GLIDE is deliberately untouched, so the step is in the level while the frequency still slides -- sliding tone plus gated articulation is the vocoder-ish combination. `PartialSpread` stays 3.5: once the base drops to 40-160 Hz the same spread already packs every partial into the low-mid, which is where the buzz comes from.
-
-**Mid bass 2026-09-16** (user: "make prism deeper sounding ... like a mid bass"): the imposed pitch window dropped from 150-800 Hz to `PitchLowHz=65`/`PitchHighHz=260` (C2-C4, exactly 2 octaves, down from 2.415), `PartialSpread` 5 -> 3.5 octaves (top partial ~11x the base instead of 32x), and `wwwroot/index.html`'s output-chain lowpass 5200 -> 2600 Hz. The spread and filter moved WITH the band on purpose: a 5-octave spread over a 65 Hz base keeps the same bright top end ringing over a low note, which reads as a buzz rather than as depth. Nothing about WHICH numbers are read off the face changed, only the window they are mapped into.
-
-**Sound mapping REVERSED 2026-09-15** (user: "make the learned tail be the note and the codec be the flavour"; supersedes the pitch-from-codec / timbre-from-tail mapping described above): base pitch = magnitude-weighted circular mean of the LEARNED TAIL components (`BaseFrequency(face, codec, comps)`), timbre = one partial per FROZEN codec component (32 at this shape, so "32 tones" in the explainer = FrozenPrefix/2). A token's note now MOVES with training (measured r10,804 -> r36,664: median 199 cents, 90th pct 1,243, max 2,879) while its flavour is fixed for life; vocabulary spread stays even (91-126 per tenth of range, 29/29 semitone slots).
+**Smart-punctuation input fix 2026-09-16** (`HoloKernel/AsciiPunctuation.cs`, applied at every tokenizer entry
+point: `Prism.razor`/`Stories.razor`, `Analyst.razor` novelty scan, `Prose.razor` plausibility scoring).
+`SubwordVocab.Fold` maps every char outside printable ASCII to a SPACE, so a visitor typing on a phone
+(iOS/Android autocorrect the plain apostrophe to U+2019) was asking the model "what s this", and the model
+answered the damaged question — it read as the model being bad at contractions when the input was broken
+before it arrived. `AsciiPunctuation.Fold` maps curly quotes/primes/dashes/nbsp/ellipsis to ASCII twins
+first, a NO-OP on ASCII (0 of 95 printable chars altered, returns the SAME string instance when nothing
+folds). KEEP IT IDENTICAL to `MintTokenizer.AsciiTwin` in the PrismFormer studio — train-time and serve-time
+tokenisation disagreeing is what caused the underlying mess (30,639 stripped contractions over 25.8% of the
+live chat.tsv). The serving-side `SubwordVocab.Fold` in MonoRepo AlgFormer still folds straight to space;
+fixing it there needs a NuGet publish, so this Showroom-side fold is the layer protecting the site today.
 
 **Checkpoint refresh** (Prism's `oracle-brain.bin`+`-vocab/-rounds/-stackk/-iterwarm.txt`, a
 point-in-time copy from PrismStudio): a **data-only** refresh needs no `dotnet publish` — raw-copy
@@ -128,7 +157,8 @@ into `wwwroot/data` and `dist/data`, regenerate `oracle-brain.bin.gz` via a plai
 one-liner. Only a **source** change needs a full publish + `dist/` refresh. Cross-check
 `-stackk`/`-iterwarm` against PrismStudio's live consts fresh every time. Write sidecars via
 `[System.IO.File]::WriteAllText(path, text, new UTF8Encoding(false))`, never PowerShell
-`Set-Content -Encoding utf8` (silently prepends a BOM).
+`Set-Content -Encoding utf8` (silently prepends a BOM). Covers Nano Stories too — same checkpoint, same
+sidecars, zero extra steps (it reads them itself on a cold load, or reuses Prism's already-loaded session).
 
 ## The Analyst — `Pages/Analyst.razor` (route `/analyst`)
 In-browser data profiler + live SQL REPL over **HoloDb** (`Database.Open(null)`, in-memory). Sniffs
@@ -169,51 +199,51 @@ before the full ceiling). `Prime()` **strips** the trailing newline rather than 
 (appending was the measured cause of a stray junk token opening every reply). `_turns` capped +
 render-batched (an earlier unbounded version was a real, fixed OOM).
 
-**Audible tokens** (2026-09-13, OFF by default): each real generated token plays one short tone
-(~110ms) synthesised straight from `HoloFormer.Face(id)` — a face is Dim doubles interleaved as
-(cos, sin) pairs, i.e. a literal Fourier series, so even/odd indices feed `AudioContext.
-createPeriodicWave(real, imag)` with no transform (JS helper: `window.prismAudio` in `index.html`,
-lazily created — `.unlock()` is called from the mute toggle's own click, the gesture that unlocks
-browser audio). Face is a free read-only lookup (no forward pass) — the deliberately NOT-built
-richer mode is `LayerFaces`/the forward pass's own hidden state, skipped because it costs a real
-extra O(context) recompute per token on top of the live KV-cache step, which would double the
-visible per-token cadence. **Pitch comes off the FACE, not the token id (2026-09-14, user:
-"make it fully authentic")** — the circular mean phase of the frozen identity band
-(`FrozenPrefix/2` comps; every frozen component is unit modulus, measured 1.000 exactly on the live
-checkpoint, so summing raw (cos,sin) pairs IS the circular mean), mapped LOGARITHMICALLY over
-150-800Hz. That band is `PhasorCodec`'s signature for the token's TEXT, so a word keeps its pitch
-across checkpoints and vocabularies, and pitch stays fixed for the life of a model while timbre
-evolves with the learned tail. It replaced an integer hash of the token id mapped linearly in Hz,
-which was arbitrary (subword ids are vocabulary-table order, so a re-mint re-pitched the whole
-page). Measured over 1,024 tokens: even spread, 91-123 per tenth of the range against 102 expected.
-The honest limit, stated in the code: a Fourier coefficient list has no fundamental of its own, so
-some rule must supply f0; the rule is ours, every number it reads is the model's. **The DC slot is
-now written explicitly as zero and the face starts at index 1** — `createPeriodicWave` treats index
-0 as DC per spec, so passing the face straight through used to dump comp 0 into an inaudible
-constant and shift every other comp down one harmonic. **Paced to a beat while sound is on (2026-09-15, user: "slow down the text generation, so that the notes sound a bit more musical rather than fast as possible")**: each token's note waits for the next `NoteIntervalMs`=125 beat (sped up from 240 the same day: the user heard 240 with 180ms notes as held whole notes and asked for quarter/eighth-note melody speed; ~7s for a 56-step reply), measured from the previous note so compute time is absorbed into the beat, never added on top; a slow step plays as soon as it's ready rather than catching up. While paced, every token is revealed (not every `RenderBatch`), so text lands on its note. `ToneMs` is 90, a short detached note inside each beat (180 read as legato held notes). The note fires AFTER its token's repaint, so the last printed token is always the one sounding; deliberately NO highlight or animation (user: "No need to animate the tokens. The last one printed gives the sound"). Sound OFF, the default, is completely unpaced: visitors who never enable sound see the old full-speed stream. `_soundOn` is re-read every step, so toggling mid-reply takes effect on the next note. Volume slider is hard-capped via `VolumeCeiling=0.32`
-before it ever reaches the audio graph. Persisted via `localStorage` (`prismAudio.getPref/setPref`).
-**Synthesis is ADDITIVE and INHARMONIC as of 2026-09-14** (`window.prismAudio.partials`), replacing
-`createPeriodicWave` the same day. The user heard that it "still sounds musical" after the pitch fix
-and was right: `createPeriodicWave` can only place coefficient k at k x the fundamental, i.e. it
-FORCES a harmonic series, and the harmonic series is the physical basis of tonality — so that one
-API choice, not the pitch, was manufacturing the musicality. Proof it was the mapping and not the
-notes: the pitches measured at CHANCE against 12-TET (22.6 cents mean error, 25.0 expected from
-random) while the output still read as tonal. The face has no harmonic structure to justify it;
-`Phasor`'s real `LinTheta` ratios run 1.00, 24.66, 34.43, 44.70 where a harmonic series runs 1, 2,
-3, 4. Now each of the 128 components contributes ONE partial at its own frequency (derived from that
-component's phase, log-spread `PartialSpread`=5 octaves above the base), its own magnitude, and its
-own starting phase. MEASURED after the change: inharmonicity 0.239-0.255 where 0 is a pure harmonic
-series and 0.25 is random, partials spanning ~250 Hz to ~17 kHz, nothing above 20 kHz. Rendered as
-ONE `AudioBuffer` via a two-term sinusoid recurrence, NOT 128 oscillator nodes per note and NOT
-`Math.sin` per sample (that would be ~675k sin calls per note on the generation thread); recurrence
-verified numerically to 3.3e-11 worst-case error over a full note, ~3,600x below float32 storage
-precision. The buffer is peak-normalised, which is level only and cannot touch the spectrum.
-**Two things stay imposed and are stated in the code**: the 150-800 Hz base window and
-`PartialSpread`. A phasor face has no time axis at all — its components are phases, not frequencies
-— so any audification must invent the frequency axis; the point is that the invented part is now one
-range mapping rather than an imposed harmonic structure. Do NOT "fix" the sound by quantising
-pitches to a scale or going back to a harmonic render: explicitly refused by the user 2026-09-14
-("I wanna hear the authentic sound"), both would paint structure onto the model that it does not have.
+**Audible tokens** — LIFTED into `HoloKernel.TokenVoice`/`TokenVoiceControls.razor` (2026-09-21), see
+the HoloKernel section above. Off by default; each generated token plays a short chord straight from
+`HoloFormer.Face(id)` (additive/inharmonic synthesis — NOT `createPeriodicWave`, which would force a
+harmonic series onto data that has none), paced to a swayed beat while sound is on. The full tuning
+history (mid-bass -> robot -> 80s arcade robot pitch window, the note/flavour reversal, the measured
+inharmonicity/spread numbers) now lives in `TokenVoice.cs`'s own doc comment, not here — this page's
+own `GenerateReplyAsync` just calls `_voice.WaitForBeatAsync()`/`.PlayTone()`/`TokenVoice.ShouldRepaint`.
+Standing rule, unchanged: never quantise a partial's frequency to a musical scale, and don't retune
+this voice per tool — Nano Stories shares it exactly, not a retuned copy.
+
+## Nano Stories — `Pages/Stories.razor` (route `/stories`)
+The literal pitch, stated plainly because it's true: THE SAME MODEL as Prism — same `oracle-brain.bin`,
+same weights, same single training run, not a fine-tune, not a sibling. `SessionHost` key `"prism"` (via
+`PrismCheckpoint.SessionKey`) — whichever of the two tools a visitor opens first pays the real download,
+the other reuses that in-memory `HoloSession` instantly. Shares `HoloKernel.TokenVoice`/
+`TokenVoiceControls` with Prism byte-for-byte (see the HoloKernel section above) — same sound, same
+swayed-beat cadence, token-by-token reveal, nothing retuned per tool.
+
+**Generation is a plain one-shot continuation, not a chat turn** — deliberately NOT
+`Prism.razor`'s `user:`/`prism:` tagged wire format: this checkpoint's corpus is mostly plain narrative
+text (TinyStories), so a story prompt is encoded as ordinary continuation text, the shape that slice of
+training data actually looked like. `MaxStorySteps`=128 (own constant, see the Reply cap note above).
+
+**The decode gate, not the model, is why a generator reads as deterministic** — the diagnosed root cause
+this tool was built to work around: production's `FloorK`=3.0 (`mean + 3*sigma`) overshoots this
+checkpoint's own argmax at 67% of positions (argmax sits only 2.73 sigma above the logit bulk on
+average), so `Gate.ResonanceFloor` caps the floor AT the max and exactly one token clears it — sampling
+from a one-token nucleus is deterministic by accident, ~95-98% of the time, despite only 22.2% of
+positions being genuinely confident enough to be legitimately greedy. **Its own `DecodePolicy`,
+constructed explicitly** (not `Prism.razor`'s `Policy`, never touched) — three named presets (Focused
+FloorK=2.0 / Balanced FloorK=1.5, default / Wild FloorK=1.0), each an exact MEASURED point from the
+FloorK sweep the diagnosis was built from (see `Stories.razor`'s own `PolicyFor`/`FloorKFor` comment for
+the full table) — not interpolated or guessed. Tuned by reasoning from that table, not by generating and
+listening (this agent cannot open a browser — Showroom charter boundary); flagged for the user to try
+live and retune the three FloorK values if a round of listening says otherwise.
+
+**Reproducible by seed** — `Random(seed)` feeds `Gate.Pick`; "Tell me another" always draws a fresh
+`Random.Shared.Next()` seed, "Replay this seed" reruns the exact same prompt/variety/seed and reproduces
+the same story. **Skip to the end** (visible only while generating) drops pacing and per-token sound for
+the REST of that one generation — chosen over speeding the cadence up, since the cadence is part of the
+character (explicit brief instruction); the story still streams to completion, just without the wait.
+
+**Honesty, by design**: the caveat paragraph under the story states the real param count and an actual
+generated sentence with weak semantics, so a visitor understands what a ~370K-parameter model can (and
+can't) do — never oversold as a coherent storyteller.
 
 ## Prose — `Pages/Prose.razor` (route `/prose`)
 Paste or drop a body of text; **Prose** (`ProseEngine`) mines it through a real rules-first English
@@ -362,10 +392,14 @@ behaviour is the user's to check (`dotnet run`, or the deployed `/tools/` URL).
   `HoloFormer`/`HoloShape`/`SubwordVocab` live.
 - Any `.razor` page whose generated class name COLLIDES with a package's bare root namespace
   (`Showroom.Pages.Prism` vs. the `Prism` package; `.Prose` vs. `Prose`) needs `@using
-  global::<Namespace>` — a plain `@using` resolves to the page's own class instead. Affects:
-  `Prism.razor` (`global::Prism.Inference`/`.Lineage`), `Prose.razor` (`global::Prose`/
-  `Prism.Lineage`), `Analyst.razor` (`global::Prism.Lineage`). A future tool named after any package
-  needs the same check.
+  global::<Namespace>` — a plain `@using` resolves to the page's own class instead. **This is NOT
+  scoped to the colliding page itself** — every page compiles into the same `Showroom.Pages`
+  namespace, so ANY page referencing `Prism.*`/`Prose.*` needs the `global::` form once ANY sibling
+  page is named `Prism`/`Prose`, even if its own name doesn't collide (`Stories.razor` needs
+  `global::Prism.Inference` for exactly this reason). Affects: `Prism.razor` (`global::Prism.
+  Inference`), `Stories.razor` (`global::Prism.Inference`), `Prose.razor` (`global::Prose`/
+  `Prism.Lineage`), `Analyst.razor` (`global::Prism.Lineage`). A future tool referencing either
+  package's namespace needs the same check, regardless of its own name.
 - A new tool page gets the parallax/glow treatment free by reusing the house `.room`/`.room-head`/
   panel shape — it just needs its own `data-cat="<pkg>"` (or chord) on the outer `.room`.
 - Multi-package tools force a real dependency-version bump for every tool in this one `.csproj`

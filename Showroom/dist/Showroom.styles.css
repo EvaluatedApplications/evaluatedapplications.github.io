@@ -391,15 +391,9 @@ table.result th.sortable:hover[b-d09k4y4jhw] { color: var(--accent-ink); }
 .hint[b-gmkja4afg6] { color: var(--ink-faint); font-size: 0.9rem; }
 .boot-note[b-gmkja4afg6] { margin: 0.8rem 0 0; padding: 0.7rem 0.9rem; border: 1px solid var(--border-2); border-left: 3px solid var(--accent); border-radius: 8px; background: var(--surface); color: var(--ink-soft); font-size: 0.84rem; line-height: 1.5; }
 
-/* sound toggle — off by default, see Prism.razor's own field comments */
-.sound-row[b-gmkja4afg6] { display: flex; flex-wrap: wrap; align-items: center; gap: 0.9rem; margin: 0 0 0.5rem; }
-.sound-toggle[b-gmkja4afg6] { display: inline-flex; align-items: center; gap: 0.45rem; background: var(--surface); border: 1px solid var(--border-2); color: var(--ink-soft); border-radius: 999px; padding: 0.45rem 1rem; font-size: 0.88rem; font-weight: 600; cursor: pointer; }
-.sound-toggle:hover[b-gmkja4afg6] { border-color: var(--accent); color: var(--ink); }
-.sound-toggle.on[b-gmkja4afg6] { border-color: var(--accent); color: var(--ink); background: color-mix(in srgb, var(--accent) 12%, var(--surface)); }
-.sound-vol[b-gmkja4afg6] { display: flex; align-items: center; gap: 0.5rem; font-size: 0.85rem; color: var(--ink-soft); font-family: var(--mono); }
-.sound-vol input[b-gmkja4afg6] { accent-color: var(--accent); }
-.sound-vol input:disabled[b-gmkja4afg6] { opacity: 0.4; }
-.sound-note[b-gmkja4afg6] { margin: 0 0 1.2rem; }
+/* sound toggle — moved to wwwroot/css/voice.css 2026-09-21 (shared with Nano Stories via
+   HoloKernel's TokenVoiceControls component; see that file's own header comment). .sound-note stays
+   there too since it styles the same component's trailing hint line. */
 
 /* stats */
 .cr-stats[b-gmkja4afg6] { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 0.8rem; margin: 0 0 0.6rem; }
@@ -1005,4 +999,72 @@ h2[b-v560z1yp0o] { font-size: 1.15rem; font-weight: 650; margin: 2rem 0 0.6rem; 
     .mk-actions[b-i8eo33h4qb] { justify-content: space-between; }
     .lgrid[b-i8eo33h4qb] { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
     .bar[b-i8eo33h4qb] { grid-template-columns: 1fr; gap: 0.15rem; }
+}
+/* /Pages/Stories.razor.rz.scp.css */
+/* Shared base block — duplicated verbatim from Prism.razor.css/Analyst.razor.css, per this repo's
+   own CSS-isolation convention (Blazor can't share a partial .razor.css across components; see
+   Showroom/CLAUDE.md's "CSS pattern" note). Keep in lockstep with Prism.razor.css's own copy of the
+   same block if either is retuned. */
+.room[b-abzrasu2bo] { max-width: 880px; margin: 0 auto; padding: 3rem 24px 4rem; }
+.crumb[b-abzrasu2bo] { font-family: var(--mono); font-size: 0.82rem; color: var(--ink-faint); margin-bottom: 0.75rem; }
+.crumb a[b-abzrasu2bo] { color: var(--ink-soft); }
+.crumb span[b-abzrasu2bo] { margin: 0 0.4rem; opacity: 0.6; }
+.room-head h1[b-abzrasu2bo] { font-size: clamp(2rem, 4.5vw, 2.6rem); font-weight: 700; letter-spacing: -0.02em; margin: 0 0 0.5rem; }
+.lede[b-abzrasu2bo] { font-size: 1.08rem; line-height: 1.55; color: var(--ink-soft); margin: 0 0 1.2rem; max-width: 64ch; }
+.err[b-abzrasu2bo] { color: var(--bad); margin: 0.6rem 0 0; }
+.hint[b-abzrasu2bo] { color: var(--ink-faint); font-size: 0.9rem; }
+
+/* stats — same shape as Prism.razor's .cr-stats/.stat */
+.cr-stats[b-abzrasu2bo] { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 0.8rem; margin: 0 0 1.4rem; }
+.stat[b-abzrasu2bo] { background: var(--surface); border: 1px solid var(--border); border-left: 3px solid var(--accent); border-radius: 12px; padding: 0.9rem 1rem; }
+.stat .n[b-abzrasu2bo] { font-size: 1.7rem; font-weight: 800; letter-spacing: -0.02em; color: var(--ink); font-variant-numeric: tabular-nums; }
+.stat .l[b-abzrasu2bo] { color: var(--ink-soft); font-size: 0.86rem; margin-top: 0.2rem; }
+
+.go[b-abzrasu2bo] { background: var(--accent); color: #fff; border: none; border-radius: 10px; padding: 0.55rem 1.2rem; font-size: 0.95rem; font-weight: 600; cursor: pointer; transition: filter 0.15s; }
+.go:hover:not(:disabled)[b-abzrasu2bo] { filter: brightness(1.08); }
+.go:disabled[b-abzrasu2bo] { opacity: 0.5; cursor: default; }
+.ghost[b-abzrasu2bo] { background: transparent; color: var(--ink-soft); border: 1px solid var(--border-2); border-radius: 10px; padding: 0.55rem 1rem; font-size: 0.9rem; cursor: pointer; }
+.ghost:hover:not(:disabled)[b-abzrasu2bo] { border-color: var(--accent); color: var(--ink); }
+.ghost:disabled[b-abzrasu2bo] { opacity: 0.4; cursor: default; }
+
+/* the blinking write-caret — same .car Prism.razor.css defines, duplicated per the CSS-isolation
+   convention above */
+.car[b-abzrasu2bo] { display: inline-block; width: 0.5em; height: 1em; margin-left: 1px; vertical-align: -0.15em; background: var(--accent-ink); animation: car-blink-b-abzrasu2bo 0.9s steps(1) infinite; }
+@keyframes car-blink-b-abzrasu2bo { 0%, 49% { opacity: 1; } 50%, 100% { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .car[b-abzrasu2bo] { animation: none; opacity: 0.6; } }
+
+.outro[b-abzrasu2bo] { margin-top: 2.4rem; padding-top: 1.2rem; border-top: 1px solid var(--border); }
+.outro p[b-abzrasu2bo] { color: var(--ink-soft); font-size: 0.92rem; line-height: 1.55; margin: 0 0 1rem; }
+.outro code[b-abzrasu2bo] { font-family: var(--mono); font-size: 0.85rem; color: var(--accent-ink); background: var(--bg-2); padding: 0.1rem 0.4rem; border-radius: 5px; }
+
+/* ---- Nano Stories' own shape ---- */
+
+.ns-panel[b-abzrasu2bo] { border: 1px solid var(--border); border-radius: 14px; background: var(--bg-2); padding: 1rem 1.1rem 1.2rem; margin: 0 0 1rem; }
+
+.prompt-field[b-abzrasu2bo] { display: block; font-family: var(--mono); font-size: 0.78rem; letter-spacing: 0.04em; text-transform: uppercase; color: var(--ink-faint); margin: 0 0 0.9rem; }
+.prompt-input[b-abzrasu2bo] { display: block; width: 100%; margin-top: 0.4rem; background: var(--bg); border: 1px solid var(--border-2); border-radius: 9px; padding: 0.6rem 0.8rem; color: var(--ink); font-size: 1rem; font-family: var(--font); text-transform: none; letter-spacing: normal; }
+.prompt-input:focus[b-abzrasu2bo] { outline: none; border-color: var(--accent); }
+.prompt-input:disabled[b-abzrasu2bo] { opacity: 0.6; }
+
+.variety-row[b-abzrasu2bo] { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; margin: 0 0 1rem; }
+.variety-label[b-abzrasu2bo] { font-family: var(--mono); font-size: 0.78rem; letter-spacing: 0.04em; text-transform: uppercase; color: var(--ink-faint); margin-right: 0.2rem; }
+.variety-btn[b-abzrasu2bo] { background: var(--surface); border: 1px solid var(--border-2); color: var(--ink-soft); border-radius: 999px; padding: 0.35rem 0.85rem; font-size: 0.85rem; cursor: pointer; }
+.variety-btn:hover:not(:disabled)[b-abzrasu2bo] { border-color: var(--accent); color: var(--ink); }
+.variety-btn.on[b-abzrasu2bo] { border-color: var(--accent); color: var(--ink); background: color-mix(in srgb, var(--accent) 14%, var(--surface)); font-weight: 600; }
+.variety-btn:disabled[b-abzrasu2bo] { opacity: 0.5; cursor: default; }
+
+.ns-controls[b-abzrasu2bo] { display: flex; flex-wrap: wrap; gap: 0.6rem; margin: 0 0 1rem; }
+
+.story-text[b-abzrasu2bo] { font-size: 1.05rem; line-height: 1.65; color: var(--ink); background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 1rem 1.1rem; margin: 0 0 0.5rem; overflow-wrap: anywhere; }
+.story-prompt[b-abzrasu2bo] { color: var(--accent-ink); font-weight: 600; }
+.seed-line[b-abzrasu2bo] { font-family: var(--mono); margin: 0; }
+
+.story-caveat[b-abzrasu2bo] { max-width: 64ch; margin: 1.2rem 0 0; line-height: 1.55; }
+
+@media (max-width: 640px) {
+    .room[b-abzrasu2bo] { padding-left: 12px; padding-right: 12px; }
+    .cr-stats[b-abzrasu2bo] { grid-template-columns: 1fr 1fr; gap: 0.55rem; }
+    .stat[b-abzrasu2bo] { padding: 0.7rem 0.6rem; }
+    .ns-controls[b-abzrasu2bo] { flex-direction: column; }
+    .ns-controls .go[b-abzrasu2bo], .ns-controls .ghost[b-abzrasu2bo] { width: 100%; }
 }

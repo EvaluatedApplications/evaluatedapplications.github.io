@@ -1,0 +1,31 @@
+@namespace HoloKernel
+@* The sound toggle + volume slider, shared verbatim between Prism and Nano Stories (2026-09-21) so
+   the two tools render and behave IDENTICALLY — same markup driving the same TokenVoice instance
+   shape, not two hand-copies that can drift. Styled by the shared, global wwwroot/css/voice.css
+   (not component-scoped CSS), specifically so a plain, non-isolated class name is enough for both
+   Showroom pages to pick up the exact same look with zero page-local CSS of their own. *@
+
+<div class="sound-row">
+    <button type="button" class="sound-toggle @(Voice.SoundOn ? "on" : "")" @onclick="Toggle"
+            aria-pressed="@Voice.SoundOn" title="@(Voice.SoundOn ? "Mute the voice" : "Hear the voice")">
+        <span aria-hidden="true">@(Voice.SoundOn ? "🔊" : "🔇")</span> @(Voice.SoundOn ? "Sound on" : "Sound off")
+    </button>
+    <label class="sound-vol">
+        volume
+        <input type="range" min="0" max="1" step="0.05" value="@Voice.Volume" disabled="@(!Voice.SoundOn)"
+               @oninput="OnVolumeInput" />
+    </label>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public TokenVoice Voice { get; set; } = default!;
+
+    async Task Toggle() => await Voice.ToggleAsync();
+
+    async Task OnVolumeInput(ChangeEventArgs e)
+    {
+        if (double.TryParse(Convert.ToString(e.Value), System.Globalization.NumberStyles.Float,
+                System.Globalization.CultureInfo.InvariantCulture, out var v))
+            await Voice.SetVolumeAsync(v);
+    }
+}

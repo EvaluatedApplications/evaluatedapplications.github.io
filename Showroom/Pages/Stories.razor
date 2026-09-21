@@ -1,0 +1,429 @@
+@page "/stories"
+@implements IDisposable
+@inject HttpClient Http
+@inject HoloKernel.SessionHost Sessions
+@inject Microsoft.JSInterop.IJSRuntime JS
+@using System.Text
+@using PrismFormer
+@using HoloKernel
+@* global:: required — same reason as Prism.razor/Prose.razor: this page's own generated class,
+   Showroom.Pages.Stories, is compiled into the SAME Showroom.Pages namespace as Showroom.Pages.Prism
+   (the sibling page), and that sibling class shadows the "Prism" NuGet package's root namespace for
+   every file in Showroom.Pages, not just Prism.razor itself — an unqualified @using Prism.Inference
+   here would resolve "Prism" to the page class instead of the package. *@
+@using global::Prism.Inference
+
+<PageTitle>Nano Stories — the same tiny AI, telling a story</PageTitle>
+
+<div class="room" data-cat="algformer">
+    <header class="room-head">
+        <nav class="crumb"><a href="/">Evaluated Applications</a> <span>/</span> Nano Stories</nav>
+        <h1>Nano Stories</h1>
+        <p class="lede"><a href="/prism">Prism</a>'s exact model — same weights, same single training run —
+            asked to write a story instead of hold a conversation. Give it an opening line and watch it
+            continue, live, one word piece at a time, right here in your browser.</p>
+    </header>
+
+    @if (_loadError is not null)
+    {
+        <p class="err">@_loadError</p>
+    }
+    else if (!_loaded)
+    {
+        <div class="boot-crt ck-boot">
+            <div class="boot-head"><span class="boot-dot" aria-hidden="true"></span>downloading the model</div>
+            <div class="boot-sub">one time only — your browser keeps it after this. Already opened
+                <a href="/prism">Prism</a> in this tab? This reuses that same download, not a second one.</div>
+            <div class="boot-log">
+                @foreach (var s in _loadSteps)
+                {
+                    <span class="l @s.Cls"><span class="p">&gt;</span> @s.Label <span class="boot-status">@s.Status</span></span>
+                }
+            </div>
+        </div>
+    }
+    else
+    {
+        <TokenVoiceControls Voice="_voice!" />
+        <p class="sound-note hint">Each word piece plays a short chord as it's written — the exact same voice
+            as <a href="/prism">Prism</a>, same tuning, nothing retuned for this page. Off by default.</p>
+
+        <div class="cr-stats">
+            <div class="stat"><div class="n">@_stats!.ParamCount.ToString("N0")</div><div class="l">parameters</div></div>
+            @* 8 bytes per parameter (they are doubles) — same figure Prism.razor shows, for the same checkpoint. *@
+            <div class="stat"><div class="n">@((_stats.ParamCount * 8 / 1024).ToString("N0"))&nbsp;KB</div><div class="l">how big it is, in total</div></div>
+            @if (_rounds is not null)
+            {
+                <div class="stat"><div class="n">@_rounds.Value.ToString("N0")</div><div class="l">practice rounds so far</div></div>
+            }
+        </div>
+
+        <div class="ns-panel">
+            <label class="prompt-field">
+                opening line
+                <input class="prompt-input" @bind="_promptInput" @bind:event="oninput" maxlength="120"
+                       placeholder="@DefaultPrompt" disabled="@_generating" />
+            </label>
+
+            <div class="variety-row" role="group" aria-label="Variety">
+                <span class="variety-label">variety</span>
+                @foreach (var opt in VarietyOptions)
+                {
+                    <button type="button" class="variety-btn @(_variety == opt.Value ? "on" : "")"
+                            title="@opt.Hint" disabled="@_generating" @onclick="() => _variety = opt.Value">@opt.Label</button>
+                }
+            </div>
+
+            <div class="ns-controls">
+                <button class="go" @onclick="() => TellStory(reuseSeed: false)"
+                        disabled="@(_generating || string.IsNullOrWhiteSpace(_promptInput))">
+                    @(_generating ? "writing…" : _story is null ? "Tell me a story" : "Tell me another")
+                </button>
+                @if (_generating)
+                {
+                    <button class="ghost" @onclick="SkipToEnd" disabled="@_skipRequested">
+                        @(_skipRequested ? "finishing…" : "Skip to the end")
+                    </button>
+                }
+                else if (_story is not null)
+                {
+                    <button class="ghost" @onclick="() => TellStory(reuseSeed: true)"
+                            title="Same prompt, same variety, same seed — reproduces this exact story">
+                        Replay this seed
+                    </button>
+                }
+            </div>
+
+            @if (_generating || _story is not null)
+            {
+                <p class="story-text">
+                    <span class="story-prompt">@_activePrompt</span>@(_generating ? _pendingContinuation : _story)@if (_generating)
+                    {
+                        <span class="car" aria-hidden="true"></span>
+                    }
+                </p>
+                @if (_lastSeed is not null && !_generating)
+                {
+                    <p class="seed-line hint">seed @_lastSeed.Value · @VarietyLabel(_lastVariety) variety@(_lastStopReason == "loop" ? " · stopped early, it started repeating" : _lastStopReason == "cap" ? " · ran on until it was stopped" : "")</p>
+                }
+            }
+            else
+            {
+                <p class="hint">Write an opening line above, or keep the one already there, and press
+                    Tell me a story.</p>
+            }
+
+            @if (_error is not null) { <p class="err">@_error</p> }
+        </div>
+
+        <p class="hint story-caveat">This is a @_stats!.ParamCount.ToString("N0")-parameter model — remarkable
+            for that size, not remarkable in absolute terms. Expect sentence-shaped output with weak semantics
+            ("Tim loved his mom and his mom and dad." is a real sentence this checkpoint has written), not a
+            coherent plot.</p>
+
+        <div class="outro">
+            <p>This is the exact same model as <a href="/prism">Prism</a> — same <code>oracle-brain.bin</code>,
+                same weights, the same single training run, not a fine-tune and not a sibling. Its training text
+                is mostly TinyStories plus a smaller mix of chat, reasoning, maths and Q&amp;A pairs, so one
+                small model learned to both hold a conversation and tell a story — <a href="/prism">Prism</a> is
+                this checkpoint asked to do the first; this page is the same checkpoint asked to do the second.</p>
+        </div>
+    }
+</div>
+
+@code {
+    // ---- decode policy — deliberately its OWN DecodePolicy, constructed explicitly rather than via
+    // `Prism.Inference.DecodePolicy.Default with {...}` (which is how Prism.razor builds its own),
+    // per the diagnosis this tool shipped with: HoloEngine's decode GATE, not the model, is why a
+    // generator reads as deterministic. Measured on this exact checkpoint: the argmax sits only
+    // 2.73 sigma above the logit bulk on average, so the production FloorK of 3.0 (mean + 3*sigma)
+    // OVERSHOOTS the max at 67% of positions — Gate.ResonanceFloor then caps the floor AT the max, so
+    // exactly one token (the argmax) clears it, and sampling from a one-token nucleus is deterministic
+    // by accident. Only 22.2% of positions are genuinely confident enough to be legitimately greedy,
+    // but the gate behaves greedily ~95-98% of the time. NEVER change Prism.razor's own Policy to fix
+    // this — that would change Prism's live chat behaviour, which nobody asked for. This is a
+    // per-tool policy, scoped to this page only.
+    static DecodePolicy PolicyFor(double floorK) => new()
+    {
+        ConfidentThreshold = 0.60,   // unchanged production gate — still commit greedily above 60% confidence
+        Temperature = 0.80,          // unchanged production sampling temperature
+        Floor = FloorMode.ResonanceSigma,
+        FloorK = floorK,
+        DegenRepeat = 4,
+        DegenNonGreedyRun = 0,       // same reasoning as Prism.razor: preserve the site's existing stop behaviour
+    };
+
+    // Three named presets rather than a raw FloorK slider — a visitor doesn't know what a resonance
+    // floor is, so the control is "Focused / Balanced / Wild", not a number. Values are exactly three
+    // MEASURED points from the user's own FloorK sweep on this checkpoint (not interpolated/guessed):
+    //
+    //     FloorK   median nucleus   positions forced to greedy
+    //     0.5           353                 0.0%
+    //     1.0           162                 0.0%      <- Wild
+    //     1.5            42                 0.0%      <- Balanced (default)
+    //     2.0             7                14.7%      <- Focused
+    //     2.5             1                55.3%
+    //     3.0             1                78.7%   <- Prism's own chat policy, unchanged
+    //
+    // Skipped 2.5/3.0 (median nucleus 1 — indistinguishable from greedy, defeats a tool whose whole
+    // point is variety) and 0.5 (median nucleus 353 — more than half this checkpoint's own vocabulary,
+    // likely to read as noise rather than variety on a model this small). Balanced sits at the LOW end
+    // of the "1.5 to 2.0" range expected for chat, on purpose: a story generator should skew lower than
+    // chat, per the brief this tool was built from. Tuned by reasoning from the measured table, not by
+    // generating and listening — this agent cannot open a browser (Showroom charter boundary) — flagged
+    // in the hand-off for the user to try live and retune the three presets' FloorK values below if a
+    // round of listening says otherwise.
+    enum Variety { Focused, Balanced, Wild }
+    static double FloorKFor(Variety v) => v switch
+    {
+        Variety.Focused => 2.0,
+        Variety.Wild => 1.0,
+        _ => 1.5,
+    };
+    sealed record VarietyOption(Variety Value, string Label, string Hint);
+    static readonly VarietyOption[] VarietyOptions =
+    {
+        new(Variety.Focused, "Focused", "Closest to Prism's own chat behaviour — occasional variety"),
+        new(Variety.Balanced, "Balanced", "The default — real variety without drifting into noise"),
+        new(Variety.Wild, "Wild", "The widest spread this checkpoint's own ranking still supports"),
+    };
+    static string VarietyLabel(Variety v) => v switch { Variety.Focused => "Focused", Variety.Wild => "Wild", _ => "Balanced" };
+    Variety _variety = Variety.Balanced;
+
+    const string DefaultPrompt = "Once upon a time,";
+    // The strongest opening this checkpoint has, per the user's own testing — not guessed. Held as the
+    // input's actual (editable) value, not just a placeholder, per the brief.
+    string _promptInput = DefaultPrompt;
+    string _activePrompt = DefaultPrompt;   // frozen at the start of a generation, so editing the input
+    // mid-story (or after) never retroactively relabels a story already on screen.
+
+    // "A few hundred characters" (brief). Same checkpoint/vocab as Prism, whose own measured bytes/token
+    // on generated text is 3.13 (see Prism.razor's MaxReplyStepsConst comment) — not re-measured here
+    // (no browser to run it in), carried forward since it is the identical vocabulary. 128 steps x 3.13
+    // bytes/token is roughly 400 characters, about double Prism's own reply cap — a short-story length
+    // rather than a chat-turn length. Re-measure alongside Prism's own constant on the next checkpoint
+    // refresh, since both depend on the same vocab's bytes/token.
+    const int MaxStorySteps = 128;
+
+    TokenVoice? _voice;
+    HoloSession? _session;
+    ModelStats? _stats;
+    SubwordVocab? _vocab;
+    bool _loaded; string? _loadError; string? _error;
+    long? _rounds;
+    int? _trainedStackK;
+    int? _trainedIterWarm;
+    int _k = 1;
+
+    bool _generating;
+    bool _skipRequested;   // set by "Skip to the end" — read inside GenerateStoryAsync's loop to drop
+                            // pacing/sound for the rest of THIS generation only; cleared at the start of
+                            // the next one. Chosen over speeding the cadence up: the cadence is part of
+                            // the character (per the brief), so a long story gets an escape hatch rather
+                            // than a faster voice.
+    string? _story;                 // the finished continuation (not including the prompt); null until
+                                     // the first generation completes.
+    string _pendingContinuation = "";   // the in-flight continuation, streamed live — same pattern as
+                                         // Prism.razor's _pendingReply.
+    int? _lastSeed;
+    Variety _lastVariety;
+    string? _lastStopReason;   // "stop" | "loop" | "cap" — same three outcomes Prism.razor's StopReason
+                                // names, kept as plain strings here since there's no chat-turn record to
+                                // hang an enum member off.
+
+    sealed class LoadStep { public string Label = ""; public string Status = "fetching…"; public string Cls = ""; }
+    readonly List<LoadStep> _loadSteps = new();
+    LoadStep Begin(string label) { var s = new LoadStep { Label = label }; _loadSteps.Add(s); StateHasChanged(); return s; }
+    void Finish(LoadStep s, string status, string cls = "core") { s.Status = status; s.Cls = cls; StateHasChanged(); }
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _voice = new TokenVoice(JS);
+            await _voice.InitializeAsync();
+
+            var s = Begin("data/oracle-vocab.txt");
+            var vocabBytes = await Http.GetByteArrayAsync("data/oracle-vocab.txt");
+            var merges = Encoding.UTF8.GetString(vocabBytes).Replace("\r\n", "\n").Split('\n').Where(l => l.Length > 0).ToList();
+            _vocab = new SubwordVocab(merges);
+            Finish(s, $"{vocabBytes.Length:N0} B → {_vocab.Size:N0}-symbol vocab");
+
+            s = Begin("data/oracle-rounds.txt");
+            try { _rounds = long.Parse((await Http.GetStringAsync("data/oracle-rounds.txt")).Trim()); Finish(s, $"{_rounds:N0} rounds trained"); }
+            catch { Finish(s, "not shipped (optional)", "fail"); _rounds = null; }
+
+            s = Begin("data/oracle-stackk.txt");
+            try { _trainedStackK = int.Parse((await Http.GetStringAsync("data/oracle-stackk.txt")).Trim()); Finish(s, $"K={_trainedStackK}"); }
+            catch { Finish(s, "not shipped (optional)", "fail"); _trainedStackK = null; }
+
+            s = Begin("data/oracle-iterwarm.txt");
+            try { _trainedIterWarm = int.Parse((await Http.GetStringAsync("data/oracle-iterwarm.txt")).Trim()); Finish(s, $"{_trainedIterWarm:N0}-round ramp"); }
+            catch { Finish(s, "not shipped (optional)", "fail"); _trainedIterWarm = null; }
+
+            _k = PrismCheckpoint.ResolveK(_trainedStackK);
+
+            // SessionHost keys by MODEL, not tool ("prism", the same key Prism.razor uses) — whichever of
+            // the two tools a visitor opens first pays the real download; the other reuses that same
+            // in-memory HoloSession instantly. This is the entire mechanism; nothing else here needs to
+            // know or care which tool loaded it first.
+            bool reused = Sessions.IsLoaded(PrismCheckpoint.SessionKey);
+            _session = await Sessions.GetOrCreateAsync(PrismCheckpoint.SessionKey, async () =>
+            {
+                var sb = Begin("data/oracle-brain.bin.gz");
+                var (bytes, gzLen) = await CheckpointFetch.FetchAndDecompressGzipAsync(Http, "data/oracle-brain.bin.gz");
+                var peek = HoloFormer.Deserialize(bytes);
+                Finish(sb, $"{gzLen:N0} B gzip → {bytes.Length:N0} B → {peek.ParamCount:N0} params deserialized");
+                var alpha = PrismCheckpoint.ReconstructAlpha(peek.Layers, _rounds, _trainedIterWarm);
+                return HoloSession.FromCheckpoint(bytes, _k, alpha);
+            });
+            if (reused) Finish(Begin("data/oracle-brain.bin.gz"), "reused from earlier this visit (no re-download)");
+            _stats = _session.Stats();
+
+            // Silent warm-up — same reasoning as Prism.razor: pay WASM's cold-start cost for the
+            // generation path before the visitor's first real click, discard the result, show nothing.
+            try
+            {
+                var warm = _session.NewServeCache();
+                var warmTokens = _vocab!.Encode(DefaultPrompt);
+                var warmCtx = BuildContext(new List<int>(warmTokens.Length > 0 ? warmTokens : new[] { 0 }), _stats.Context);
+                _ = _session.Prime(warm, warmCtx);
+                _ = _session.StepToken(warm, warmCtx[^1]);
+            }
+            catch { /* warm-up only, never user-visible, never blocks page load */ }
+
+            _loaded = true;
+        }
+        catch (Exception ex) { _loadError = "Couldn't load the checkpoint: " + ex.Message; }
+    }
+
+    static int[] BuildContext(List<int> seq, int maxContext)
+    {
+        var take = Math.Min(seq.Count, maxContext);
+        if (take == 0) return new[] { 0 };
+        var ctx = new int[take];
+        seq.CopyTo(seq.Count - take, ctx, 0, take);
+        return ctx;
+    }
+
+    // One-shot continuation from a plain prompt — deliberately NOT the "user: .../prism: ..." chat wire
+    // format Prism.razor's BuildContextTokens builds. This model's corpus is mostly plain narrative text
+    // (TinyStories), so a story prompt is encoded as ordinary continuation text, exactly the shape that
+    // slice of training data actually looked like — tagging it as a chat turn would be asking the wrong
+    // half of the same model.
+    async Task<(string Text, string StopReason)> GenerateStoryAsync(string prompt, int seed, Variety variety, Func<string, Task>? onPartial)
+    {
+        var policy = PolicyFor(FloorKFor(variety));
+        var promptTokens = _vocab!.Encode(HoloKernel.AsciiPunctuation.Fold(prompt));
+        var seq = new List<int>(promptTokens.Length > 0 ? promptTokens : new[] { 0 });
+        var outIds = new List<int>();
+        var revealed = new List<int>();
+        var vocabLimit = _vocab.Size;
+        var guard = new DegenGuard(policy);
+        // Seeded per generation (per the brief): "tell me another" gets a genuinely different Random
+        // instance each time, and replaying the SAME seed (the "Replay this seed" button) reproduces the
+        // exact same draws from Gate.Pick, hence the exact same story, for the same prompt/variety.
+        var rng = new Random(seed);
+        var reason = "cap";
+
+        var cache = _session!.NewServeCache();
+        var logits = _session.Prime(cache, BuildContext(seq, _stats!.Context));
+
+        _voice!.ResetBeat();
+        for (var step = 0; step < MaxStorySteps; step++)
+        {
+            if (step > 0)
+            {
+                logits = cache.Filled < _stats.Context
+                    ? _session.StepToken(cache, seq[^1])
+                    : _session.Prime(cache, BuildContext(seq, _stats.Context));
+            }
+
+            var decision = Gate.Evaluate(logits, vocabLimit, policy);
+            var t = Gate.Pick(logits, vocabLimit, policy, rng);
+
+            if (t == CharVocab.End) { reason = "stop"; break; }
+
+            outIds.Add(t); seq.Add(t); revealed.Add(t);
+
+            // SKIP TO THE END: once requested, drop pacing and per-token sound for the REST of this
+            // generation — the story still streams to completion (just without the wait or the notes),
+            // rather than jumping straight to a finished block. See _skipRequested's own field comment
+            // for why this was chosen over speeding the cadence up.
+            var skipping = _skipRequested;
+            if (onPartial is not null && _voice.SoundOn && !skipping)
+                await _voice.WaitForBeatAsync();
+
+            var stopping = guard.Observe(t, decision.Greedy);
+            if (stopping) reason = "loop";
+
+            if (onPartial is not null)
+            {
+                var isLastStep = step == MaxStorySteps - 1;
+                if (skipping || TokenVoice.ShouldRepaint(revealed.Count, stopping, isLastStep, _voice.SoundOn))
+                    await onPartial(_vocab.Decode(revealed));
+            }
+            if (!skipping) _voice.PlayTone(_session, t);
+            if (stopping) break;
+        }
+
+        var cut = DegenerateTail.Start(outIds);
+        if (cut < outIds.Count)
+        {
+            outIds.RemoveRange(cut, outIds.Count - cut);
+            reason = "loop";
+        }
+
+        return (_vocab.Decode(outIds).TrimEnd(), reason);
+    }
+
+    async Task TellStory(bool reuseSeed)
+    {
+        if (_session is null || _vocab is null || _generating) return;
+
+        string prompt; int seed; Variety variety;
+        if (reuseSeed && _lastSeed is not null)
+        {
+            // Exact reproduction: the prompt/variety the LAST story actually used, not whatever the
+            // prompt box or variety buttons currently show — those may have changed since, and the
+            // "Replay this seed" button's whole promise is reproducing that specific story.
+            prompt = _activePrompt; seed = _lastSeed.Value; variety = _lastVariety;
+        }
+        else
+        {
+            prompt = string.IsNullOrWhiteSpace(_promptInput) ? DefaultPrompt : _promptInput.Trim();
+            seed = Random.Shared.Next();
+            variety = _variety;
+        }
+
+        _skipRequested = false;
+        _activePrompt = prompt;
+        _pendingContinuation = "";
+        _generating = true; _error = null;
+        StateHasChanged();
+        await Task.Yield();   // let the disabled/"writing…" state paint before the first real compute call blocks the thread
+
+        try
+        {
+            var (text, reason) = await GenerateStoryAsync(prompt, seed, variety, async partial =>
+            {
+                _pendingContinuation = partial;
+                StateHasChanged();
+                await Task.Yield();
+            });
+            _story = text;
+            _lastSeed = seed;
+            _lastVariety = variety;
+            _lastStopReason = reason;
+        }
+        catch (Exception ex) { _error = "Nano Stories stumbled: " + ex.Message; }
+        finally
+        {
+            _generating = false; _pendingContinuation = ""; StateHasChanged();
+        }
+    }
+
+    void SkipToEnd() => _skipRequested = true;
+
+    public void Dispose() => _voice?.Dispose();
+}

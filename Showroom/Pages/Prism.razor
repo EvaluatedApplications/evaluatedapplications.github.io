@@ -13,7 +13,8 @@
    generated Showroom.Pages namespace block, where the sibling Prism page class takes precedence
    over the global Prism namespace of the same simple name). *@
 @using global::Prism.Inference
-@using global::Prism.Lineage
+@* global::Prism.Lineage's LineageJournal is no longer called directly here — the alpha-reconstruction
+   formula moved into HoloKernel.PrismCheckpoint.ReconstructAlpha (2026-09-21), shared with Stories.razor. *@
 
 <PageTitle>Prism — a tiny AI that runs in your browser</PageTitle>
 
@@ -44,19 +45,10 @@
     }
     else
     {
-        <div class="sound-row">
-            <button type="button" class="sound-toggle @(_soundOn ? "on" : "")" @onclick="ToggleSound"
-                    aria-pressed="@_soundOn" title="@(_soundOn ? "Mute Prism's voice" : "Hear Prism's voice")">
-                <span aria-hidden="true">@(_soundOn ? "🔊" : "🔇")</span> @(_soundOn ? "Sound on" : "Sound off")
-            </button>
-            <label class="sound-vol">
-                volume
-                <input type="range" min="0" max="1" step="0.05" value="@_soundVolume" disabled="@(!_soundOn)"
-                       @oninput="OnVolumeInput" />
-            </label>
-        </div>
+        <TokenVoiceControls Voice="_voice!" />
         <p class="sound-note hint">Each piece of a reply plays a short chord built from the model's own numbers for that
-            word piece. Off by default. <a href="#explain-title">What you're hearing</a> is explained below the chat.</p>
+            word piece. Off by default. <a href="#explain-title">What you're hearing</a> is explained below the chat.
+            <a href="/stories">Nano Stories</a> shares this exact voice — same model, same sound.</p>
 
         <div class="cr-stats">
             <div class="stat"><div class="n">@_stats!.ParamCount.ToString("N0")</div><div class="l">parameters</div></div>
@@ -117,8 +109,8 @@
 
         @* Condensed from the site's "Meaning as chords" page (site/holoformer.html), 2026-09-15, on the user's request, plus
            an honest account of what the audible tokens are. Keep the "What you're hearing" claims in lockstep with
-           PlayTokenTone/BaseFrequency: 32 tones = this checkpoint's FrozenPrefix/2 (the codec band), "twice" = its StackK of 2. If either changes on a
-           new checkpoint, update this copy too. *@
+           HoloKernel.TokenVoice's PlayTone/BaseFrequency: 32 tones = this checkpoint's FrozenPrefix/2 (the codec band), "twice" = its StackK of 2. If either changes on a
+           new checkpoint, update this copy too — and Nano Stories' own copy of the same claim, since it shares this voice. *@
         <section class="explain" aria-labelledby="explain-title">
             <h2 id="explain-title">How Prism works, as sound</h2>
             <p>Prism is a holographic transformer, and the easiest way to understand one is as music. This is the short
@@ -145,7 +137,9 @@
                 scale, and we left them that way rather than dress them up.</p>
         </section>
         <div class="outro">
-            <p>Also here: <a href="/creature">The Creature</a> and <a href="/forecaster">The Forecaster</a>.</p>
+            <p><a href="/stories">Nano Stories</a> is this exact model — same weights, same training run — asked to
+                write a story instead of hold a conversation. Also here: <a href="/creature">The Creature</a> and
+                <a href="/forecaster">The Forecaster</a>.</p>
         </div>
     }
 </div>
@@ -222,33 +216,12 @@
     // Still also the backstop for the turn-based chat below (see StopReason.Cap): a reply that neither
     // emits the stop token nor trips DegenGuard cannot run forever.
 
-    // ---- Audible tokens (2026-09-13). OFF by default, opt-in via _soundOn below — a page that makes
-    // noise unannounced is hostile. Persisted in localStorage (window.prismAudio.getPref/setPref in
-    // index.html) so a visitor who muted it once doesn't have to mute it again every visit.
-    bool _soundOn;
-    double _soundVolume = 0.6;                 // 0..1, UI-facing; see VolumeCeiling below for the real cap
-    const double VolumeCeiling = 0.32;          // "clamp the master gain low by default" — even a visitor
-    // dragging the slider to 100% only ever reaches this, genuinely quiet, ceiling.
-    const int ToneMs = 300;                     // note length ~1.4x the 210ms base beat, so each note is still sounding as the next one glides in
-    // Sound on: one note per token, paced to a beat instead of as fast as compute allows. History (2026-09-15, all the
-    // user's own calls): 240ms first ("slow down the text generation... more musical"), then 125ms with short 90ms notes
-    // ("make it quartets or 8th for the melody"), now a 210ms base with overlapping 300ms notes, a glide between notes
-    // and sway ("slow down the token generation, have a bit of sway on the timing... something that tweens the notes").
-    // The wait is measured from the previous note, so compute time is absorbed into the beat, and a step slower than the
-    // beat plays as soon as it is ready instead of catching up. Sound OFF (the default) is not paced at all.
-    const int NoteIntervalMs = 210;
-    // SWAY: each beat is the base stretched or squeezed by a slow wander plus a little jitter, like a player pushing
-    // and pulling the tempo rather than a metronome. A sine over ~16 notes (+-14%) carries the phrase-level push and
-    // pull, and +-6% uniform jitter keeps neighbouring notes from sounding quantised; every beat stays 0.8x-1.2x base.
-    double _swayPhase;
-    readonly Random _swayRng = new();
-    int NextBeatMs()
-    {
-        _swayPhase += 2 * Math.PI / 16.0;
-        var factor = 1.0 + 0.14 * Math.Sin(_swayPhase) + 0.06 * (_swayRng.NextDouble() * 2 - 1);
-        return (int)Math.Round(NoteIntervalMs * factor);
-    }
-    const string SoundOnKey = "prism-sound-on", SoundVolKey = "prism-sound-volume";
+    // ---- Audible tokens (2026-09-13). OFF by default — a page that makes noise unannounced is
+    // hostile. LIFTED into HoloKernel.TokenVoice 2026-09-21 (see that type's own header comment) so
+    // Nano Stories can share the exact same sound and pacing rather than re-derive it — every tuning
+    // history comment that used to live here (the beat/sway/pitch/timbre rationale) now lives there;
+    // this page just owns one instance of it.
+    TokenVoice? _voice;
 
     HoloSession? _session;
     ModelStats? _stats;
@@ -417,7 +390,7 @@
         var primedTail = BuildContext(seq, _stats.Context);
         var logits = _session.Prime(cache, primedTail);
 
-        var beat = System.Diagnostics.Stopwatch.StartNew(); long nextBeat = 0;   // NoteIntervalMs pacing, used only while sound is on
+        _voice!.ResetBeat();   // fresh pacing beat for this reply — see TokenVoice.ResetBeat
         for (var step = 0; step < MaxReplySteps; step++)
         {
             if (step > 0)
@@ -437,12 +410,8 @@
             // throwing away a token that was never meant to be seen.
 
             outIds.Add(t); seq.Add(t); revealed.Add(t);
-            if (onPartial is not null && _soundOn)   // re-read every step, so toggling sound mid-reply takes effect on the next note
-            {
-                var wait = nextBeat - beat.ElapsedMilliseconds;
-                if (wait > 0) await Task.Delay((int)wait);
-                nextBeat = Math.Max(nextBeat, beat.ElapsedMilliseconds) + NextBeatMs();   // swayed beat, see NextBeatMs
-            }
+            if (onPartial is not null && _voice.SoundOn)   // re-read every step, so toggling sound mid-reply takes effect on the next note
+                await _voice.WaitForBeatAsync();
             var stopping = guard.Observe(t, decision.Greedy);
             if (stopping) reason = StopReason.DegenLoop;
 
@@ -452,10 +421,10 @@
                 // is computed and appended to `revealed` unconditionally; the DOM only actually repaints once
                 // every RenderBatch tokens, or on the stopping/final token so the visitor never sees stale state.
                 var isLastStep = step == MaxReplySteps - 1;
-                if (stopping || isLastStep || _soundOn || revealed.Count % RenderBatch == 0)
+                if (TokenVoice.ShouldRepaint(revealed.Count, stopping, isLastStep, _voice.SoundOn))
                     await onPartial(_vocab.Decode(revealed));
             }
-            PlayTokenTone(t);   // AFTER the paint above: while sound is on every token repaints first, so each note starts
+            _voice.PlayTone(_session, t);   // AFTER the paint above: while sound is on every token repaints first, so each note starts
             // as its token appears at the end of the reply, and the last printed token is always the one sounding
             // (2026-09-15, user: "The last one printed gives the sound"). No highlight or animation, by request. A no-op
             // while sound is off; every token gets its own note, never one per render batch.
@@ -466,8 +435,9 @@
         // reaches the visible turn AND never reaches BuildContextTokens — the next turn's rolling context is
         // built from the surviving prefix only. This matters more than the cosmetics: a 192-token window
         // filled with "ERE ERE ERE" both crowds out real conversation and teaches the model, from its own
-        // context, that a "prism: " turn looks like that.
-        var cut = DegenerateTailStart(outIds);
+        // context, that a "prism: " turn looks like that. HoloKernel.DegenerateTail (lifted out 2026-09-21,
+        // shared with Stories.razor) — see its own doc for why this isn't just DegenGuard again.
+        var cut = DegenerateTail.Start(outIds);
         if (cut < outIds.Count)
         {
             outIds.RemoveRange(cut, outIds.Count - cut);
@@ -478,60 +448,16 @@
         return (text, reason);
     }
 
-    // Index where a repeating tail begins, or ids.Count when there isn't one.
-    //
-    // This deliberately does NOT key off DegenGuard. DegenGuard fires only on consecutive IDENTICAL tokens
-    // (its RepeatThreshold; the non-greedy trigger is disabled here via DegenNonGreedyRun = 0), and its own
-    // doc records the blind spot: "A B A B A B" trips neither trigger. That period>1 case is exactly what
-    // this checkpoint produces — a run like "ERE ERE ERE" stops on Cap, not DegenLoop — so a cut driven by
-    // the guard would have missed the very output that prompted this. Scanning the emitted tokens closes
-    // that gap at the consumer without changing the guard, which still does its own (earlier) job of
-    // stopping compute.
-    //
-    // Smallest period wins, so "ERE ERE ERE" cuts at p=3 rather than reporting p=6. MinReps=3 and MinSpan=6
-    // together keep real text safe: an ordinary doubled word is 2 reps and survives, and a 1-token period
-    // needs 6 in a row, which is past DegenRepeat=4 anyway.
-    const int DegenMaxPeriod = 12, DegenMinReps = 3, DegenMinSpan = 6;
-
-    static int DegenerateTailStart(List<int> ids)
-    {
-        for (var p = 1; p <= DegenMaxPeriod; p++)
-        {
-            var reps = 1;
-            while (TailRepeats(ids, p, reps + 1)) reps++;
-            if (reps >= DegenMinReps && reps * p >= DegenMinSpan) return ids.Count - reps * p;
-        }
-        return ids.Count;
-    }
-
-    // Is the final block of `p` tokens repeated `reps` times back-to-back at the tail?
-    static bool TailRepeats(List<int> ids, int p, int reps)
-    {
-        var len = ids.Count;
-        if (p * reps > len) return false;
-        for (var r = 1; r < reps; r++)
-            for (var i = 0; i < p; i++)
-                if (ids[len - p + i] != ids[len - (r + 1) * p + i]) return false;
-        return true;
-    }
-
     protected override async Task OnInitializedAsync()
     {
         try
         {
-            // Restore the sound preference BEFORE anything else — cheap, and reading localStorage is
-            // not itself a user gesture, so even if this restores _soundOn=true from an earlier visit
-            // the AudioContext may still start suspended until the visitor's first real click on this
-            // page (see ToggleSound below for where the actual unlock happens). Never blocks page load.
-            try
-            {
-                _soundOn = await JS.InvokeAsync<string>("prismAudio.getPref", SoundOnKey, "0") == "1";
-                var volPref = await JS.InvokeAsync<string>("prismAudio.getPref", SoundVolKey, "0.6");
-                if (double.TryParse(volPref, NumberStyles.Float, CultureInfo.InvariantCulture, out var v))
-                    _soundVolume = Math.Clamp(v, 0, 1);
-                if (_soundOn) await JS.InvokeVoidAsync("prismAudio.setVolume", _soundVolume * VolumeCeiling);
-            }
-            catch { _soundOn = false; }
+            // Restore the sound preference BEFORE anything else — cheap, and TokenVoice.InitializeAsync
+            // reading localStorage is not itself a user gesture, so even a restored SoundOn=true from an
+            // earlier visit may still start suspended until the visitor's first real click on this page
+            // (see TokenVoiceControls' own toggle for where the actual unlock happens). Never blocks page load.
+            _voice = new TokenVoice(JS);
+            await _voice.InitializeAsync();
 
             var s = Begin("data/oracle-vocab.txt");
             var vocabBytes = await Http.GetByteArrayAsync("data/oracle-vocab.txt");
@@ -555,8 +481,9 @@
             catch { Finish(s, "not shipped (optional)", "fail"); _trainedIterWarm = null; }
 
             // fixed to the REAL trained depth (falls back to the file's bare K=1 only if the metadata sidecar is
-            // missing) — never adjusted after this; see the field comments above for why.
-            _k = _trainedStackK ?? 1;
+            // missing) — never adjusted after this; see the field comments above for why. PrismCheckpoint.ResolveK
+            // is shared with Stories.razor so the two tools can't disagree on this.
+            _k = PrismCheckpoint.ResolveK(_trainedStackK);
 
             // SessionHost dedupes by MODEL key ("prism"): the FIRST visit to this page in a page load fetches
             // + deserializes the checkpoint exactly as before. A LATER visit reuses that same in-memory
@@ -571,8 +498,8 @@
             // second layer while training at StackK=2 — see HoloKernel/ModelSpec.cs's own SupportsKPassServing
             // doc). Nothing here needs to change for a deeper checkpoint to serve; the chat rework above doesn't
             // touch model shape at all, only how the model is prompted.
-            bool reused = Sessions.IsLoaded("prism");
-            _session = await Sessions.GetOrCreateAsync("prism", async () =>
+            bool reused = Sessions.IsLoaded(PrismCheckpoint.SessionKey);
+            _session = await Sessions.GetOrCreateAsync(PrismCheckpoint.SessionKey, async () =>
             {
                 var sb = Begin("data/oracle-brain.bin.gz");
                 // gzip-precompressed at rest — GitHub Pages serves this byte-for-byte with no on-the-fly
@@ -584,9 +511,7 @@
                 // (see field comment above), which in turn need Layers, so this has to happen before the session
                 // can be built.
                 Finish(sb, $"{gzLen:N0} B gzip → {bytes.Length:N0} B → {peek.ParamCount:N0} params deserialized");
-                var alpha = (peek.Layers == 1 && _rounds is not null && _trainedIterWarm is > 0)
-                    ? LineageJournal.AlphaFor((int)_rounds.Value, addRound: 0, _trainedIterWarm.Value)
-                    : 1.0;
+                var alpha = PrismCheckpoint.ReconstructAlpha(peek.Layers, _rounds, _trainedIterWarm);
                 // HoloSession.FromCheckpoint requires K/alpha as explicit ctor args — the kernel enforces the
                 // "checkpoint doesn't carry them" gotcha by construction rather than a footnote (see field comment).
                 return HoloSession.FromCheckpoint(bytes, _k, alpha);
@@ -595,9 +520,7 @@
             _stats = _session.Stats();
             // Recomputed from the session actually in hand (not the factory's local "peek"/"alpha", which don't
             // exist on the reused-cache path) — same formula, so identical on a first-ever visit either way.
-            _trainedAlpha = (_stats.Layers == 1 && _rounds is not null && _trainedIterWarm is > 0)
-                ? LineageJournal.AlphaFor((int)_rounds.Value, addRound: 0, _trainedIterWarm.Value)
-                : 1.0;
+            _trainedAlpha = PrismCheckpoint.ReconstructAlpha(_stats.Layers, _rounds, _trainedIterWarm);
 
             // No example exchange on load (removed 2026-09-15, user: "remove the first prompt"): the chat opens empty on
             // the "Say hi" hint and the visitor's own message is the first thing the model answers. What the removed seed
@@ -651,166 +574,25 @@
         return ctx;
     }
 
-    // A phasor face is Dim doubles, INTERLEAVED (cos, sin) pairs — literally a Fourier series
-    // specification — so splitting it into even/odd indices feeds Web Audio's
-    // createPeriodicWave(real, imag) with no transform, only a one-slot shift past the spec's DC
-    // position (see below). HoloFormer.Face(id) is a free, read-only
-    // lookup keyed only on the token id (no forward pass, deterministic), so this is the FREE default
-    // source: "each token makes its own unique sound" at zero extra compute — the same face every
-    // time this same id is ever emitted, on this checkpoint. (The richer, context-sensitive option —
-    // the forward pass's own hidden face at this position, HoloFormer.LayerFaces — was deliberately
-    // NOT wired in: it costs a genuine extra O(context) recompute per token on top of the already-live
-    // O(1) KV-cache step above, which would double the visible per-token cadence on a page whose whole
-    // feel depends on that cadence. Flagged as a possible secondary mode, not built.)
-    //
-    // Fire-and-forget: a synth glitch (or JS interop being torn down mid-navigation) must never fail a
-    // reply or add latency to the generation loop that triggered it — see index.html's own tone()
-    // implementation for why calling this on a muted/never-unlocked player does zero work.
-    void PlayTokenTone(int tokenId)
-    {
-        if (!_soundOn || _session is null) return;
-        try
-        {
-            var face = _session.Model.Face(tokenId);
-            var comps = face.Length / 2;
-            var codec = Math.Min(_session.Model.FrozenPrefix / 2, comps);
-            if (codec < 1 || codec >= comps) return;   // needs both a codec band and a learned tail to play
-
-            // REVERSED 2026-09-15 (user: "reverse the sound generation too, make the learned tail be the note and the codec
-            // be the flavour"). NOTE = the learned tail: the base pitch is BaseFrequency over the tail components. FLAVOUR =
-            // the codec: one partial per FROZEN codec component, each at its own frequency (from its phase, spread above the
-            // note) with its own loudness and starting phase, never at harmonic multiples. See PartialSpread for the one thing
-            // still imposed.
-            var f0 = BaseFrequency(face, codec, comps);
-            var n = codec;
-            var freqs = new double[n];
-            var amps = new double[n];
-            var phases = new double[n];
-            for (var c = 0; c < n; c++)
-            {
-                var re = face[2 * c];
-                var im = face[2 * c + 1];
-                var phase = Math.Atan2(im, re);                               // -pi..pi, the component itself
-                amps[c] = Math.Sqrt(re * re + im * im);                       // the component's own magnitude
-                phases[c] = phase;
-                // Frequency from the same phase, spread logarithmically so equal phase differences are
-                // equal musical intervals. The component's two numbers have to cover three synthesis
-                // parameters, so this one does double duty as frequency AND starting phase; stating that
-                // plainly beats hashing a third number into existence.
-                freqs[c] = f0 * Math.Pow(2, (phase + Math.PI) / (2 * Math.PI) * PartialSpread);
-            }
-            _ = JS.InvokeVoidAsync("prismAudio.partials", freqs, amps, phases, ToneMs, 1.0);
-        }
-        catch { /* audio is decoration, never let a synth glitch touch generation */ }
-    }
-
-    // Base pitch read OFF THE FACE (2026-09-14), and since 2026-09-15 off the LEARNED TAIL rather than the codec (user: "make
-    // the learned tail be the note and the codec be the flavour").
-    //
-    // History: first an integer hash of the token id (not the model's number at all), then the circular mean phase of the
-    // frozen codec band (fixed per token for life, while the learned tail coloured the timbre). Now reversed: the pitch is
-    // the circular mean of the learned TAIL components, and the codec band supplies the timbre (see PlayTokenTone). Tail
-    // components are not unit modulus (trained magnitudes spread roughly 0.4-1.6), so summing the raw (cos, sin) pairs
-    // gives a MAGNITUDE-WEIGHTED circular mean: strongly learned components pull the note harder than faint ones.
-    //
-    // Consequence, measured on the live checkpoint rather than assumed: a token's note MOVES as the model trains. Between
-    // r10,804 and r36,664 the tail pitch shifted by a median 199 cents (2 semitones), 90th percentile 1,243 cents (an
-    // octave), max 2,879. The spread across the vocabulary stays even: 91-126 tokens per tenth of the range against ~102
-    // expected, all 29 semitone-wide slots used. The codec flavour, by contrast, is fixed for the life of the model.
-    //
-    // Honest limit: a Fourier coefficient list has no fundamental of its own, so SOME rule has to supply f0. The rule is
-    // ours; every number it reads is the model's. The mapping is logarithmic over 32-128 Hz, so equal phase differences
-    // are equal musical intervals.
-    // 80s ARCADE ROBOT 2026-09-16 (user, in three steps the same day: "like a mid bass", "Deeper, like a robot", "Deeper,
-    // like 80s arcade robot"). The band has come down 150-800 (mid voice) -> 65-260 -> 40-160 -> 32-128 Hz now, C1 to C3,
-    // still exactly 2 octaves.
-    //
-    // 32 Hz is BELOW what a laptop speaker reproduces, and that is deliberate rather than an oversight. The bit-crush and
-    // decimation added in wwwroot/index.html throw off a dense ladder of harmonics of whatever fundamental is playing, and
-    // the ear infers the missing fundamental from that ladder -- the same reason a phone earpiece can carry a male voice it
-    // physically cannot reproduce. So on small speakers this reads DEEPER than the 40 Hz version did, not thinner, even
-    // though less of the actual fundamental survives. On headphones the real 32 Hz is there too.
-    const double PitchLowHz = 32.0, PitchHighHz = 128.0;
-
-    // How many octaves the codec partials are spread across above the base frequency (2026-09-14).
-    //
-    // This number, and the 150-800 Hz window above, are now the ONLY imposed quantities left in the
-    // synth — everything else is read off the face. The previous version imposed something far larger
-    // without looking like it: handing the face to createPeriodicWave forces partial k to sit at
-    // exactly k x the fundamental, i.e. a harmonic series, which is the physical basis of tonality.
-    // That is why the output sounded like it was in a key while the pitches themselves measured at
-    // CHANCE against 12-tone equal temperament (22.6 cents mean error, 25.0 expected from random).
-    // The face has no harmonic structure to justify it: the codec's real component frequencies run
-    // 1.00, 24.66, 34.43, 44.70, ... where a harmonic series would run 1, 2, 3, 4.
-    //
-    // 3.5 octaves puts the top partial at ~11x the base, so the spectrum spans roughly 65 Hz to 2.9 kHz across
-    // the pitch range and the JS side drops whatever lands above Nyquist rather than letting it alias back down
-    // as a phantom partial. Was 5 octaves (top partial 32x) when the base sat at 150-800 Hz; carrying that spread
-    // down onto a 65-260 Hz base would have left the same bright top end ringing over a bass note, which reads as
-    // a buzz on a low note rather than as a deep sound (2026-09-16, same mid-bass request as the band above).
-    const double PartialSpread = 3.5;
-    static double BaseFrequency(double[] face, int fromComp, int toComp)
-    {
-        double sumCos = 0, sumSin = 0;
-        var end = Math.Min(toComp, face.Length / 2);
-        if (end <= fromComp) return PitchLowHz;
-        for (var c = fromComp; c < end; c++) { sumCos += face[2 * c]; sumSin += face[2 * c + 1]; }
-        var theta = Math.Atan2(sumSin, sumCos);                       // -pi..pi
-        var octaves = Math.Log2(PitchHighHz / PitchLowHz);            // 2 octaves
-        return PitchLowHz * Math.Pow(2, (theta + Math.PI) / (2 * Math.PI) * octaves);
-    }
-
-    async Task ToggleSound()
-    {
-        _soundOn = !_soundOn;
-        try
-        {
-            if (_soundOn)
-            {
-                // This click IS the user gesture — unlock/create the AudioContext here, inside a real
-                // synchronous click handler, rather than hoping one arrives later during generation.
-                await JS.InvokeVoidAsync("prismAudio.unlock");
-                await JS.InvokeVoidAsync("prismAudio.setVolume", _soundVolume * VolumeCeiling);
-            }
-            else
-            {
-                await JS.InvokeVoidAsync("prismAudio.stopAll");
-            }
-            await JS.InvokeVoidAsync("prismAudio.setPref", SoundOnKey, _soundOn ? "1" : "0");
-        }
-        catch { /* audio is decoration, never let it fail the page */ }
-    }
-
-    async Task OnVolumeInput(ChangeEventArgs e)
-    {
-        if (double.TryParse(Convert.ToString(e.Value), NumberStyles.Float, CultureInfo.InvariantCulture, out var v))
-        {
-            _soundVolume = Math.Clamp(v, 0, 1);
-            try
-            {
-                await JS.InvokeVoidAsync("prismAudio.setVolume", _soundVolume * VolumeCeiling);
-                await JS.InvokeVoidAsync("prismAudio.setPref", SoundVolKey, _soundVolume.ToString(CultureInfo.InvariantCulture));
-            }
-            catch { /* audio is decoration, never let it fail the page */ }
-        }
-    }
+    // Audible tokens (face -> tone) and the pacing beat both now live in HoloKernel.TokenVoice — see
+    // that type's own doc comment for the full tuning history (mid-bass -> robot -> 80s arcade robot,
+    // the reversed note/flavour mapping, the harmonic-series bug the additive rewrite fixed). Both
+    // GenerateReplyAsync's PlayTone/WaitForBeatAsync calls above go through `_voice`.
 
     // Navigating away mid-reply must not leave a note ringing behind in this single-page app (the
     // AudioContext lives on window, not on this component, so it otherwise would). Does not touch the
     // sound-on/volume preference — only the currently-sounding notes.
-    public void Dispose()
-    {
-        try { _ = JS.InvokeVoidAsync("prismAudio.stopAll"); } catch { /* JS runtime may already be torn down */ }
-    }
+    public void Dispose() => _voice?.Dispose();
 
     async Task OnKeyDown(KeyboardEventArgs e) { if (e.Key == "Enter") await Ask(); }
 
     // Genuinely live streaming (2026-08-30, still true here): one real LogitsFor() call per token, revealed
-    // immediately, no artificial pacer unless sound is on (see NoteIntervalMs) — real compute latency (measured ~100ms+ at this
-    // checkpoint's shape, native-JIT floor; WASM is at least that slow) IS the visible cadence. The one
-    // `await Task.Yield()` calls below add zero artificial wait; they exist only so the browser actually gets a
-    // chance to paint the just-computed batch before the next real compute call blocks the UI thread again.
-    const int RenderBatch = 4;
+    // immediately, no artificial pacer unless sound is on (paced via TokenVoice.WaitForBeatAsync above) —
+    // real compute latency (measured ~100ms+ at this checkpoint's shape, native-JIT floor; WASM is at least
+    // that slow) IS the visible cadence otherwise. The one `await Task.Yield()` calls below add zero
+    // artificial wait; they exist only so the browser actually gets a chance to paint the just-computed
+    // batch before the next real compute call blocks the UI thread again. RenderBatch itself now lives on
+    // TokenVoice (see TokenVoice.ShouldRepaint, used in GenerateReplyAsync above).
 
     // The chat scroll container. Auto-scroll is STICKY rather than unconditional: forced when you send, and
     // during Prism's streaming reply only if you were already near the bottom (see window.prismScrollToBottom

@@ -1,0 +1,15 @@
+/* Shared voice styling — the sound toggle + volume slider rendered by HoloKernel's
+   TokenVoiceControls component (see HoloKernel/TokenVoiceControls.razor). Moved out of
+   Prism.razor.css (2026-09-21) so Prism and Nano Stories, which both mount the same component,
+   render it identically without duplicating these rules per page — deliberately a plain global
+   stylesheet, not Blazor's per-page CSS isolation, since the component itself lives in a shared
+   RCL (HoloKernel) rather than under Showroom/Pages. */
+
+.sound-row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.9rem; margin: 0 0 0.5rem; }
+.sound-toggle { display: inline-flex; align-items: center; gap: 0.45rem; background: var(--surface); border: 1px solid var(--border-2); color: var(--ink-soft); border-radius: 999px; padding: 0.45rem 1rem; font-size: 0.88rem; font-weight: 600; cursor: pointer; }
+.sound-toggle:hover { border-color: var(--accent); color: var(--ink); }
+.sound-toggle.on { border-color: var(--accent); color: var(--ink); background: color-mix(in srgb, var(--accent) 12%, var(--surface)); }
+.sound-vol { display: flex; align-items: center; gap: 0.5rem; font-size: 0.85rem; color: var(--ink-soft); font-family: var(--mono); }
+.sound-vol input { accent-color: var(--accent); }
+.sound-vol input:disabled { opacity: 0.4; }
+.sound-note { margin: 0 0 1.2rem; }

@@ -1,0 +1,67 @@
+/* Shared base block — duplicated verbatim from Prism.razor.css/Analyst.razor.css, per this repo's
+   own CSS-isolation convention (Blazor can't share a partial .razor.css across components; see
+   Showroom/CLAUDE.md's "CSS pattern" note). Keep in lockstep with Prism.razor.css's own copy of the
+   same block if either is retuned. */
+.room { max-width: 880px; margin: 0 auto; padding: 3rem 24px 4rem; }
+.crumb { font-family: var(--mono); font-size: 0.82rem; color: var(--ink-faint); margin-bottom: 0.75rem; }
+.crumb a { color: var(--ink-soft); }
+.crumb span { margin: 0 0.4rem; opacity: 0.6; }
+.room-head h1 { font-size: clamp(2rem, 4.5vw, 2.6rem); font-weight: 700; letter-spacing: -0.02em; margin: 0 0 0.5rem; }
+.lede { font-size: 1.08rem; line-height: 1.55; color: var(--ink-soft); margin: 0 0 1.2rem; max-width: 64ch; }
+.err { color: var(--bad); margin: 0.6rem 0 0; }
+.hint { color: var(--ink-faint); font-size: 0.9rem; }
+
+/* stats — same shape as Prism.razor's .cr-stats/.stat */
+.cr-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 0.8rem; margin: 0 0 1.4rem; }
+.stat { background: var(--surface); border: 1px solid var(--border); border-left: 3px solid var(--accent); border-radius: 12px; padding: 0.9rem 1rem; }
+.stat .n { font-size: 1.7rem; font-weight: 800; letter-spacing: -0.02em; color: var(--ink); font-variant-numeric: tabular-nums; }
+.stat .l { color: var(--ink-soft); font-size: 0.86rem; margin-top: 0.2rem; }
+
+.go { background: var(--accent); color: #fff; border: none; border-radius: 10px; padding: 0.55rem 1.2rem; font-size: 0.95rem; font-weight: 600; cursor: pointer; transition: filter 0.15s; }
+.go:hover:not(:disabled) { filter: brightness(1.08); }
+.go:disabled { opacity: 0.5; cursor: default; }
+.ghost { background: transparent; color: var(--ink-soft); border: 1px solid var(--border-2); border-radius: 10px; padding: 0.55rem 1rem; font-size: 0.9rem; cursor: pointer; }
+.ghost:hover:not(:disabled) { border-color: var(--accent); color: var(--ink); }
+.ghost:disabled { opacity: 0.4; cursor: default; }
+
+/* the blinking write-caret — same .car Prism.razor.css defines, duplicated per the CSS-isolation
+   convention above */
+.car { display: inline-block; width: 0.5em; height: 1em; margin-left: 1px; vertical-align: -0.15em; background: var(--accent-ink); animation: car-blink 0.9s steps(1) infinite; }
+@keyframes car-blink { 0%, 49% { opacity: 1; } 50%, 100% { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .car { animation: none; opacity: 0.6; } }
+
+.outro { margin-top: 2.4rem; padding-top: 1.2rem; border-top: 1px solid var(--border); }
+.outro p { color: var(--ink-soft); font-size: 0.92rem; line-height: 1.55; margin: 0 0 1rem; }
+.outro code { font-family: var(--mono); font-size: 0.85rem; color: var(--accent-ink); background: var(--bg-2); padding: 0.1rem 0.4rem; border-radius: 5px; }
+
+/* ---- Nano Stories' own shape ---- */
+
+.ns-panel { border: 1px solid var(--border); border-radius: 14px; background: var(--bg-2); padding: 1rem 1.1rem 1.2rem; margin: 0 0 1rem; }
+
+.prompt-field { display: block; font-family: var(--mono); font-size: 0.78rem; letter-spacing: 0.04em; text-transform: uppercase; color: var(--ink-faint); margin: 0 0 0.9rem; }
+.prompt-input { display: block; width: 100%; margin-top: 0.4rem; background: var(--bg); border: 1px solid var(--border-2); border-radius: 9px; padding: 0.6rem 0.8rem; color: var(--ink); font-size: 1rem; font-family: var(--font); text-transform: none; letter-spacing: normal; }
+.prompt-input:focus { outline: none; border-color: var(--accent); }
+.prompt-input:disabled { opacity: 0.6; }
+
+.variety-row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; margin: 0 0 1rem; }
+.variety-label { font-family: var(--mono); font-size: 0.78rem; letter-spacing: 0.04em; text-transform: uppercase; color: var(--ink-faint); margin-right: 0.2rem; }
+.variety-btn { background: var(--surface); border: 1px solid var(--border-2); color: var(--ink-soft); border-radius: 999px; padding: 0.35rem 0.85rem; font-size: 0.85rem; cursor: pointer; }
+.variety-btn:hover:not(:disabled) { border-color: var(--accent); color: var(--ink); }
+.variety-btn.on { border-color: var(--accent); color: var(--ink); background: color-mix(in srgb, var(--accent) 14%, var(--surface)); font-weight: 600; }
+.variety-btn:disabled { opacity: 0.5; cursor: default; }
+
+.ns-controls { display: flex; flex-wrap: wrap; gap: 0.6rem; margin: 0 0 1rem; }
+
+.story-text { font-size: 1.05rem; line-height: 1.65; color: var(--ink); background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 1rem 1.1rem; margin: 0 0 0.5rem; overflow-wrap: anywhere; }
+.story-prompt { color: var(--accent-ink); font-weight: 600; }
+.seed-line { font-family: var(--mono); margin: 0; }
+
+.story-caveat { max-width: 64ch; margin: 1.2rem 0 0; line-height: 1.55; }
+
+@media (max-width: 640px) {
+    .room { padding-left: 12px; padding-right: 12px; }
+    .cr-stats { grid-template-columns: 1fr 1fr; gap: 0.55rem; }
+    .stat { padding: 0.7rem 0.6rem; }
+    .ns-controls { flex-direction: column; }
+    .ns-controls .go, .ns-controls .ghost { width: 100%; }
+}
