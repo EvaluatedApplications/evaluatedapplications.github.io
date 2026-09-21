@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The Model Learns Back To Front</title>
+<meta name="description" content="A snapshot of the six-layer HoloFormer lineage that died this week shows two of its six layers, plus most of a third, were a mathematically exact no-op the whole time — what growing past a model's real working size cost, and what its two-layer successor is doing instead.">
+<link rel="canonical" href="https://evaluatedapplications.github.io/articles/learns-back-to-front.html">
+<meta property="og:type" content="article">
+<meta property="og:title" content="The Model Learns Back To Front">
+<meta property="og:description" content="A snapshot of the six-layer HoloFormer lineage that died this week shows two of its six layers, plus most of a third, were a mathematically exact no-op the whole time — what growing past a model's real working size cost, and what its two-layer successor is doing instead.">
+<meta property="og:url" content="https://evaluatedapplications.github.io/articles/learns-back-to-front.html">
+<meta name="twitter:card" content="summary">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%23f0796a'/%3E%3Cstop offset='.166' stop-color='%23f0a15a'/%3E%3Cstop offset='.333' stop-color='%23e6c450'/%3E%3Cstop offset='.5' stop-color='%237bd86a'/%3E%3Cstop offset='.666' stop-color='%234aa3ff'/%3E%3Cstop offset='.833' stop-color='%237d7dff'/%3E%3Cstop offset='1' stop-color='%23c07dff'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='32' height='32' rx='7' fill='%23050608'/%3E%3Cpath d='M16 5L27 26H5Z' fill='none' stroke='url(%23g)' stroke-width='2' stroke-linejoin='round'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="/assets/site.css">
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"BlogPosting","headline":"The Model Learns Back To Front","description":"A snapshot of the six-layer HoloFormer lineage that died this week shows two of its six layers, plus most of a third, were a mathematically exact no-op the whole time — what growing past a model's real working size cost, and what its two-layer successor is doing instead.","url":"https://evaluatedapplications.github.io/articles/learns-back-to-front.html","datePublished":"2026-09-21","author":{"@type":"Organization","name":"Evaluated Applications","url":"https://evaluatedapplications.github.io/"},"publisher":{"@type":"Organization","name":"Evaluated Applications","url":"https://evaluatedapplications.github.io/"}}
+</script>
+</head>
+<body class="os-chrome">
+<div class="beam"></div>
+
+<nav class="site-nav">
+  <div class="wrap">
+    <a class="brand" href="/">
+      <svg class="mark" viewBox="0 0 32 32" aria-hidden="true"><defs><linearGradient id="m" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#f0796a"/><stop offset=".166" stop-color="#f0a15a"/><stop offset=".333" stop-color="#e6c450"/><stop offset=".5" stop-color="#7bd86a"/><stop offset=".666" stop-color="#4aa3ff"/><stop offset=".833" stop-color="#7d7dff"/><stop offset="1" stop-color="#c07dff"/></linearGradient></defs><path d="M16 5L27 26H5Z" fill="none" stroke="url(#m)" stroke-width="2" stroke-linejoin="round"/></svg>
+      Evaluated Applications
+    </a>
+    <input type="checkbox" id="navtoggle" class="nav-toggle">
+    <label for="navtoggle" class="nav-burger" aria-label="Toggle menu"><span></span><span></span><span></span></label>
+    <div class="nav-links">
+      <a href="/">Home</a>
+      <a href="/packages.html">Packages</a>
+      <a href="https://www.nuget.org/profiles/evaluatedapplications" target="_blank" rel="noopener">NuGet</a>
+    </div>
+  </div>
+</nav>
+
+<main class="wrap">
+
+<article class="prose">
+
+  <nav class="crumb"><a href="/articles.html">Articles</a> <span>/</span> The Model Learns Back To Front</nav>
+  <h1>The Model Learns Back To Front</h1>
+  <p class="article-date" style="margin-top:12px">Evaluated Applications · Published <time datetime="2026-09-21">21 September 2026</time></p>
+  <p class="lede" style="margin-top:12px">I lost a model this week. Not to a bug in the maths, and not to a bad idea, but to
+    growing it too fast. Working out exactly how it died led me to a measurement I should have been taking all
+    along, and that measurement says something I did not expect: for a long stretch of training, most of my model
+    was doing literally nothing.</p>
+
+  <div class="toc">
+    <h2>On this page</h2>
+    <ul>
+      <li><a href="#why-bigger">Why a model can be bigger and not better</a></li>
+      <li><a href="#reading">Reading a half-formed model</a></li>
+      <li><a href="#inert">Two thirds of it was inert</a></li>
+      <li><a href="#padding">Growing added padding, not capability</a></li>
+      <li><a href="#cost">What that cost me</a></li>
+      <li><a href="#front-layer">The front layer finally moved</a></li>
+      <li><a href="#wrong">Where I was wrong along the way</a></li>
+      <li><a href="#next">What I am doing about it</a></li>
+    </ul>
+  </div>
+
+  <h2 id="why-bigger">Why a model can be bigger and not better</h2>
+  <p>My models grow while they train. They start as a single layer and gain more as they go, each new layer
+    inserted at the front, initialised to be an exact mathematical no-op so it cannot disturb what is already
+    working. Over a long run one lineage went from one layer to six.</p>
+  <p>More layers should mean more capability. That is the whole reason to add them. What I never did was check
+    whether the layers I was adding were doing anything at all.</p>
+  <p>There is a reason that check is easy in this architecture and awkward in most others. Every intermediate
+    state in my model can be read against the vocabulary directly, because the thing that turns a state into a
+    prediction is the same table that turns a token into a state. So at any point mid-computation I can ask a
+    well-posed question: what does this state currently resonate with, and how strongly? In a conventional
+    transformer an intermediate activation has no privileged interpretation. Here it has one, and it is free to
+    read.</p>
+
+  <h2 id="reading">Reading a half-formed model</h2>
+  <p>Two numbers per checkpoint, taken at every step of the computation.</p>
+  <p>The first is how confident the state is about a single token. If it names one token at 100%, nothing has
+    been computed; the state is just a copy of its input wearing the model's colours. The second is the effective
+    number of candidates, which is two to the power of the entropy of that reading. One means pinned to a single
+    token. Three means genuinely weighing three. Several hundred means the state has fallen off the vocabulary
+    entirely and resolves to nothing useful.</p>
+  <p>Between them those two numbers separate the three things a state can be: a copy, a real computation, or
+    noise. That distinction is the whole point. A state that has drifted somewhere meaningless looks busy and
+    contributes nothing.</p>
+
+  <h2 id="inert">Two thirds of it was inert</h2>
+  <p>I ran this on a snapshot of the six-layer model, taken from the run that later died. There are thirteen
+    points to read: the raw embedding, then the state after each of the twelve passes.</p>
+
+  <table>
+    <thead><tr><th>point</th><th>confidence</th><th>effective candidates</th></tr></thead>
+    <tbody>
+      <tr><td>embedding</td><td>1.0000</td><td>1.00</td></tr>
+      <tr><td>layer 0, pass 0</td><td>1.0000</td><td>1.00</td></tr>
+      <tr><td>layer 0, pass 1</td><td>1.0000</td><td>1.00</td></tr>
+      <tr><td>layer 1, pass 0</td><td>1.0000</td><td>1.00</td></tr>
+      <tr><td>layer 1, pass 1</td><td>1.0000</td><td>1.00</td></tr>
+      <tr><td>layer 2, pass 0</td><td>0.9992</td><td>1.00</td></tr>
+      <tr><td>layer 2, pass 1</td><td>0.9999</td><td>1.00</td></tr>
+      <tr><td>layer 3, pass 0</td><td>0.9952</td><td>1.02</td></tr>
+      <tr><td>layer 3, pass 1</td><td>0.9916</td><td>1.03</td></tr>
+      <tr><td>layer 4, pass 0</td><td>0.9740</td><td>1.11</td></tr>
+      <tr><td>layer 4, pass 1</td><td>0.9622</td><td>1.20</td></tr>
+      <tr><td>layer 5, pass 0</td><td>0.4785</td><td>11.94</td></tr>
+      <tr><td>final</td><td>0.3124</td><td>27.14</td></tr>
+    </tbody>
+  </table>
+
+  <p>Four consecutive passes at 1.0000 to four decimal places. Not approximately a copy. A copy. Two entire
+    layers, plus most of a third, contributing nothing measurable to anything.</p>
+  <p>All of the work is in the last layer. Its two passes take the state from naming one token to weighing
+    twenty-seven, and everything before them is padding.</p>
+
+  <h2 id="padding">Growing added padding, not capability</h2>
+  <p>The four-layer snapshot from earlier in the same run tells the more uncomfortable half of the story. Line
+    its last four points up against the six-layer model's last four:</p>
+
+  <table>
+    <thead><tr><th>position from the end</th><th>four-layer</th><th>six-layer</th></tr></thead>
+    <tbody>
+      <tr><td>fourth from last</td><td>0.9774 / 1.11</td><td>0.9740 / 1.11</td></tr>
+      <tr><td>third from last</td><td>0.9592 / 1.22</td><td>0.9622 / 1.20</td></tr>
+      <tr><td>second from last</td><td>0.4771 / 12.35</td><td>0.4785 / 11.94</td></tr>
+      <tr><td>final</td><td>0.3135 / 27.03</td><td>0.3124 / 27.14</td></tr>
+    </tbody>
+  </table>
+
+  <p>Identical to two decimal places, across all four.</p>
+  <p>Going from four layers to six did not make the model deeper in any sense that mattered. It reproduced
+    exactly the same working window and prepended four more passes that did nothing. The part of the model that
+    was actually computing stayed the same size. What grew was the number of weight matrices taking gradient,
+    competing, and perturbing a stream they were not yet contributing to.</p>
+  <p>Counting the passes that carry real information:</p>
+
+  <table>
+    <thead><tr><th>model</th><th>passes doing work</th><th>total passes</th></tr></thead>
+    <tbody>
+      <tr><td>six layers</td><td>2</td><td>12</td></tr>
+      <tr><td>four layers</td><td>2</td><td>8</td></tr>
+      <tr><td>current, two layers</td><td>4</td><td>4</td></tr>
+    </tbody>
+  </table>
+
+  <p>The two-layer model I am training now uses every pass it has. The six-layer model used a sixth of itself.
+    By the measure that counts, the small one is the bigger model.</p>
+
+  <h2 id="cost">What that cost me</h2>
+  <p>The six-layer run did not merely stagnate. It destroyed itself.</p>
+  <p>Loss began spiking into the thousands and clawing back, over and over, for about 43,000 rounds. Then in a
+    single step every trainable parameter in the model became NaN: 764,288 values of 829,825. The 65,537 that
+    survived were exactly the frozen numeric identity band, 1024 tokens times 64 fixed dimensions, and they
+    survived only because nothing ever writes to them.</p>
+  <p>I had gradient clipping switched on the whole time. It did not fail to prevent this. It delivered it.</p>
+  <p>Clipping works by computing the size of the gradient and scaling it down if it is too big. The test is
+    whether that size exceeds the limit. If any part of the gradient is NaN then the size is NaN, and a NaN is
+    not greater than anything, so the test is false and the gradient is applied at full strength. And if the size
+    overflows to infinity, the scale factor becomes limit divided by infinity, which is zero, and multiplying an
+    infinite gradient by zero produces a fresh NaN that the usual skip-if-zero check does not catch either. The
+    safety mechanism manufactured the failure it existed to prevent.</p>
+  <p>Both paths are now closed. The step is refused outright when the gradient size is not a finite number, so a
+    bad batch is dropped and counted instead of being fatal, and the learning rate schedule no longer answers a
+    loss spike by going to maximum.</p>
+  <p>But the deeper cause was not the arithmetic. It was that half the model had never crystallised, and I kept
+    adding more.</p>
+
+  <h2 id="front-layer">The front layer finally moved</h2>
+  <p>The current lineage is two layers and has been left alone. Its front layer is doing something no front
+    layer of mine ever has.</p>
+
+  <table>
+    <thead><tr><th>model</th><th>front layer, second pass</th></tr></thead>
+    <tbody>
+      <tr><td>four-layer snapshot</td><td>1.0000 confidence, 1.00 candidates</td></tr>
+      <tr><td>six-layer snapshot</td><td>1.0000 confidence, 1.00 candidates</td></tr>
+      <tr><td>current two-layer</td><td>0.8692 confidence, 1.46 candidates</td></tr>
+    </tbody>
+  </table>
+
+  <p>One point zero zero zero zero is not a small number. It is zero information. The front layers of both older
+    models were mathematically absent. The current one is carrying a genuine candidate set.</p>
+  <p>It is better than the best early pass those models ever had anywhere in their stacks, not just better than
+    their front layers.</p>
+  <p>I want to be precise about what this is not. It is 1.46 candidates, not twelve. It has not moved since about
+    round 99,000, so whatever formed, formed early and has been holding steady since rather than climbing. And it
+    is nowhere near the point where adding another layer would be justified.</p>
+
+  <h2 id="wrong">Where I was wrong along the way</h2>
+  <p>Two mistakes are worth recording, because both produced confident wrong answers.</p>
+  <p>I measured how far into its context the model actually reads, using 25 sample windows, and got a clear
+    result: still improving at the edge of the window, more context would help. Re-running the identical
+    measurement with 220 windows reversed it completely. The model saturates at roughly 16 tokens and everything
+    past that carries nothing measurable. The first run was not noisy-looking. It was confidently wrong, and I
+    would have grown the context on the strength of it.</p>
+  <p>Then I tracked front-layer progress using the wrong quantity: how often its output names a different token
+    from its input. By that measure the front layer had more than doubled over 223,000 rounds, which looked like
+    steady progress. On the measure that separates computation from copying it had not moved at all. Both facts
+    are true. The front layer increasingly picks a different single token, and a single token carries no
+    alternatives to hand forward whichever token it is. I was counting motion and calling it work.</p>
+
+  <h2 id="next">What I am doing about it</h2>
+  <p>The rule I am training under now is that a layer has to finish before another one is allowed to start. Not a
+    round count, not a schedule. The front layer's candidate count has to stop climbing, and then the pair has to
+    settle together, and only then does a new front layer go in at zero to begin its own formation.</p>
+  <p>The model is at 320,000 rounds, two layers, 369,664 parameters. It answers in complete sentences now, with
+    correct punctuation and contractions, and it has no idea what it is talking about across more than about
+    fifty characters. Its context reach has not moved in three separate measurements. Whether patience is enough,
+    or whether something about the training data has to change before a front layer will ever crystallise, is the
+    thing this run is actually testing.</p>
+  <p>I will know which when the number stops being flat, in either direction.</p>
+
+  <p style="margin-top:2.5rem"><a href="/articles.html">&larr; Back to Articles</a></p>
+
+</article>
+</main>
+
+<footer class="site">
+  <div class="wrap">
+    <span>Evaluated Applications — .NET libraries, England.</span>
+    <span class="mono">© <span id="yr"></span> · <a href="/">Home</a> · <a href="/articles.html">Articles</a> · <a href="/packages.html">Packages</a> · <a href="https://www.nuget.org/profiles/evaluatedapplications" target="_blank" rel="noopener">NuGet</a></span>
+  </div>
+</footer>
+<script>document.getElementById('yr').textContent = new Date().getFullYear();</script>
+</body>
+</html>

@@ -333,6 +333,15 @@ footer.site a{color:var(--ink-soft)}
   .hero{padding:42px 0 21px} /* vertical rhythm: 42px=1.5 baseline (was 48), 21px=3/4 baseline (was 20) */
   .sec-head p{display:none}
   .toc ul{columns:1}
+  /* Narrow numeric .prose tables (added 2026-09-21, "The Model Learns Back To Front" — the first
+     article with several short numeric tables, not just the HoloDb manual's one 3-column type
+     table): shrink font/padding and let .prose th wrap instead of forcing white-space:nowrap, so a
+     narrow data table sizes to its DATA width instead of its widest header word and never needs
+     .prose table's own overflow-x:auto scroll at phone width. .prose td already defaults to
+     white-space:normal (only th opts into nowrap), so this is the one override needed. */
+  .prose table{font-size:.82rem}
+  .prose th{white-space:normal}
+  .prose th,.prose td{padding:6px .5rem}
 }
 @media (prefers-reduced-motion:reduce){*{transition:none!important; scroll-behavior:auto}}
 

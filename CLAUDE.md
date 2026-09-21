@@ -796,7 +796,53 @@ no source-of-truth doc to pull facts from (there are no "facts," it's an essay).
   subset (it doesn't need to link to itself). No other page's nav/footer was touched — if Articles
   ever earns enough real content to be a primary destination, revisit the nav-item question then,
   don't preempt it now with zero published pieces.
-- **Published so far: four.** `smaller-than-tinystories.html` ("Smaller Than TinyStories," dated
+- **Published so far: five.** `learns-back-to-front.html` ("The Model Learns Back To Front," dated
+  2026-09-21) — coordinator-authored fifth piece, same first-person voice as `ctx4-plateau.html`/
+  `ctx8-and-the-reverse-grow.html`: a per-pass confidence+effective-candidates reading (readable
+  because this architecture's intermediate states share the same vocabulary table the final
+  prediction does — a conventional transformer's activations have no such privileged reading) taken
+  against a snapshot of the six-layer HoloFormer lineage that died this week, showing 4 of its 12
+  passes read as an exact 1.0000-confidence copy (2 layers + most of a 3rd contributing nothing
+  measurable) and that growing 4→6 layers reproduced the SAME working window to 2 decimal places
+  rather than deepening it (four-layer vs six-layer last-4-points comparison table) — "passes doing
+  work" table: 2/12 (six-layer), 2/8 (four-layer), 4/4 (current two-layer, the smaller model using
+  100% of itself). Covers what killed the run (loss spikes over ~43,000 rounds then 764,288/829,825
+  params NaN in one step, only the frozen 65,537-value numeric-identity band survived; gradient
+  clipping's own NaN/Inf blind spot delivered the failure it existed to prevent — both paths now
+  closed: non-finite gradient norm refuses the step instead of applying it, LR schedule no longer
+  maxes out on a loss spike) and the current 2-layer/369,664-param run's front layer finally reading
+  a real candidate set (0.8692/1.46, vs 1.0000/1.00 on both dead lineages' front layers) under a new
+  "a layer must finish before the next starts" growth rule. Honest "where I was wrong" section kept,
+  house style: a 25-window context-reach measurement reversed completely under 220 windows (saturates
+  ~16 tokens, not "still improving"), and front-layer progress tracked by token-changed-rate looked
+  like real gain over 223,000 rounds while the copy-vs-compute measure showed zero movement the whole
+  time. No figures altered or added beyond the source `docs/site.md`-equivalent handoff (a scratchpad
+  markdown, not a package's own `docs/site.md` — this piece reports on the live lineage/training run
+  itself, not a NuGet package, same non-package-content precedent as the other 4 articles). Ground-
+  truth check on the task's own framing: the brief said "three markdown TABLES" naming a shared
+  `.prose table` rule as something to consider adding — the source markdown actually has FOUR (point/
+  confidence/candidates on the inert-layers table; the 4-vs-6-layer comparison; the passes-doing-work
+  count; the front-layer-moved comparison), and a shared `.prose table{...}`/`.prose th`/`.prose td`
+  rule already existed in `site.css` (added earlier for the HoloDb manual's 3-column type-mapping
+  table) — reused verbatim via bare `<table>` markup rather than a 4th bespoke inline-styled copy
+  (evalapp.html's fully inline table and `table.cmp`'s page-local `<style>` block, used by
+  `holodb.html`/`holodb/index.html`'s wide benchmark tables, are the OTHER two inline patterns this
+  piece deliberately did not add a third/fourth instance of). One real, deliberate `site.css` addition
+  this pass: a `@media (max-width:640px)` block gained `.prose table{font-size:.82rem}` +
+  `.prose th{white-space:normal}` (overriding the base rule's `nowrap`) + tighter `.prose th`/`.prose
+  td` padding — checked by hand that the widest header word (e.g. "effective candidates") no longer
+  forces `.prose table`'s existing `overflow-x:auto` to kick in on a ~327px-wide content column
+  (375px viewport minus `.wrap`'s 24px each-side padding): `.prose td` already defaults to
+  `white-space:normal` (only `th` opted into `nowrap`), so letting headers wrap too lets every column
+  size to its DATA width instead of its widest header word. Applies to every `.prose` table site-wide,
+  not just this article's 4 — the HoloDb manual's own type table benefits too, unverified in a live
+  browser (no browser in this environment) but structurally sound and a strict narrowing (smaller
+  font/padding/wrap only fires under 640px, desktop unaffected). Added to `articles.html`'s
+  `<div class="articles">` as the first child and to `sitemap.xml` (`monthly`/`0.5`, matching every
+  other one-off essay). Tag balance verified programmatically (see the dedicated note below the
+  numbered slug list). Reachability: `articles.html` is 1 click from `index.html`/`packages.html` via
+  the footer, and this piece is 1 click from `articles.html` (first list entry) — 2 clicks from either
+  top-level index page, matching every other article's depth. `smaller-than-tinystories.html` ("Smaller Than TinyStories," dated
   2026-09-10) — the current lineage's size-vs-ability milestone piece: 107,776 real parameters
   (d=96/6 layers/16 shifts/ctx192/vocab256/K=2 weight-tied), 862,244 bytes raw / ~471KB gzipped,
   already ~10x smaller than TinyStories' smallest published reference model (1M) and ~300x smaller
@@ -1572,42 +1618,7 @@ plus the palette work below, 619/619 → 637/637 parens) and a full re-read of b
 + both edited keyframes blocks. **Not verified on a real device** (no live browser here) — the
 coordinator/user should re-check the same phone screenshot's two panels before this is closed.
 
-### Per-package palette rollout (2026-08-28) — files touched + verification
-
-Full hex table + reasoning lives under Design system > "Per-package palette" above; this entry is
-just the sweep record. **`site.css`**: `:root` token block (8 new `--c-*` tokens replacing `--c-data`/
-`--c-ml`/`--c-spatial`, `--c-foundation`/`--c-foundation-solid` unchanged), the `body[data-cat="..."]`
-glow-tint rules (9 single-package rules + the renamed `"holodb-algformer"` chord rule), the chord
-`animation-name` override selector, the wallpaper's decorative blue stop (`--c-data`→`--spectrum-5`,
-not a package token — purely ambient, not per-page), and 3 historical comment blocks that would
-otherwise have gone stale (the Creature icon-tile bug trace, the glow mechanism doc, the chord-
-override doc) — left the OLD hex/token names inside dated bug-trace comments as written (accurate
-history of what was actually being debugged at the time) but added a pointer to where the live tokens
-now live. **13 HTML files swept**: 6 single-package pages via a straight `var(--c-X)`→`var(--c-Y)`
-substitution (`holodb-protocol.html`, `algformer-gpu.html`, `evalapp-neural.html`, `tracer.html`,
-`holodb-client.html`, `holovoxel.html` — each was already internally consistent, using only ONE
-bucket token throughout, confirmed by a per-file grep before touching it, not assumed); 3
-`data-cat`-only pages with no `--c-*` usage of their own (`holodb.html`, `holodb/manual/index.html`,
-plus the attribute on `holodb/index.html`); 3 mixed-usage pages requiring line-by-line judgement
-(`algformer.html` — the Creature mirror chord + the softmax/holographic comparison cards, see Design
-system for the reasoning; `holoformer.html` — the "ordinary transformer" cold-contrast metaphor
-repointed to neutral `--spectrum-5`; `holodb/index.html` — the DuckDB competitor bar to
-`--spectrum-5`, the Analyst tool card's real miscolouring fixed to `--c-holodb`, and 6 capability-grid
-cards that were cycling through all 4 old buckets purely for decorative variety, collapsed to the
-one honest `--c-holodb` since none of those 6 cards describe a different package); and 3 genuinely
-multi-package pages (`index.html` — Prism/Creature/Forecaster/Analyst tool cards + the `.pkg-strip`
-chips, both real miscolourings fixed here too since they're mirrored from the same source as
-`holodb/index.html`'s Analyst card; `packages.html` — all 11 cards + 3 family section-head dots;
-`prose.html` — every card promoted from flat `--c-ml` to the genuine HoloDb+AlgFormer two-tone
-hard-edged chord, not just the page's ambient glow attribute). **Verified**: a sitewide grep for
-`--c-data|--c-ml|--c-spatial` after the sweep returns hits ONLY inside `site.css`'s own dated
-historical-comment text (8 hits, all inside comments, none in a live rule/selector) — zero live
-references anywhere in `site/**/*.html`. `div`/`article`/`section`/`body` tag-balance re-checked on
-all 14 touched HTML files (all matched pre/post). `site.css` brace/paren parity 242/242 braces,
-637/637 parens. **Not verified in an actual browser** — same disclosed limitation as every other CSS
-pass in this file; the coordinator/user should eyeball `packages.html` (11 distinct card hues),
-`prose.html` (the two-tone chord), and `index.html`'s `#tools` grid (Prism blue vs Analyst teal-green,
-no longer collapsed together) on a real screen before this is considered closed.
+### Open flag for showroom-owner: palette retint (from the 2026-08-28 per-package palette rollout)
 
 **Flagged for `showroom-owner`** (own task, not touched from here): retint `Showroom/`'s Prism/
 Analyst/Creature/Forecaster to this same table (values in the Design system table above) so the two
