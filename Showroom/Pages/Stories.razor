@@ -209,10 +209,20 @@
     // Consumed by the sentence-boundary trim at the end of GenerateStoryAsync — see that comment.
     static readonly char[] SentenceEnders = { '.', '!', '?' };
 
-    // How many sentences this checkpoint stays coherent for before it starts inventing words. Six,
-    // counted by eye on live output — see the SENTENCE CAP comment in GenerateStoryAsync. Observed,
-    // not derived, and specific to these weights: re-count on a checkpoint refresh.
-    const int MaxSentences = 6;
+    // How many sentences this checkpoint stays coherent for before it starts inventing words.
+    // Counted by eye on live output — see the SENTENCE CAP comment in GenerateStoryAsync. The onset
+    // VARIES between generations (one Wild run held to 6 and degraded at 7; a Balanced run held to 5
+    // and degraded at 6), so no fixed number is right every time: too high ships a broken sentence,
+    // too low truncates a good one. Set to the MINIMUM observed good length, so the cap errs toward
+    // cutting a story short rather than ending it on garbage.
+    //
+    // The adaptive alternative, if this starts costing too much good text: the decode gate already
+    // computes P(top-1) per token, and a degenerate sentence is made of low-confidence sampled picks,
+    // so cutting at the first sentence whose mean confidence drops below a threshold would track the
+    // real onset and raise itself as the model improves. Not built — a constant was enough for now.
+    //
+    // Observed, not derived, and specific to these weights: re-count on a checkpoint refresh.
+    const int MaxSentences = 5;
 
     TokenVoice? _voice;
     HoloSession? _session;
