@@ -209,6 +209,11 @@
     // Consumed by the sentence-boundary trim at the end of GenerateStoryAsync — see that comment.
     static readonly char[] SentenceEnders = { '.', '!', '?' };
 
+    // How many sentences this checkpoint stays coherent for before it starts inventing words. Six,
+    // counted by eye on live output — see the SENTENCE CAP comment in GenerateStoryAsync. Observed,
+    // not derived, and specific to these weights: re-count on a checkpoint refresh.
+    const int MaxSentences = 6;
+
     TokenVoice? _voice;
     HoloSession? _session;
     ModelStats? _stats;
@@ -390,6 +395,23 @@
         // sentence-ending punctuation at all, keep the untrimmed text rather than emit nothing.
         var lastEnd = text.LastIndexOfAny(SentenceEnders);
         if (lastEnd >= 0) text = text[..(lastEnd + 1)];
+
+        // SENTENCE CAP. Trimming to the LAST sentence boundary still keeps every degenerate sentence
+        // that came before it, so a story that fell apart at sentence 7 and rambled to sentence 12
+        // just ends tidily on garbage. This checkpoint holds coherence for about six sentences and
+        // then starts emitting invented words — counted by eye on live output at Wild: sentences 1-6
+        // were clean ("Sam and Sue were playing about the kitchen."), sentence 7 introduced "pintry",
+        // and it was gone by sentence 8. So cut at MaxSentences rather than relying on the tail trim.
+        // This is an OBSERVED limit of the current weights, not a property of the tool: re-count it on
+        // a checkpoint refresh, and raise it when the model holds coherence longer.
+        var kept = 0;
+        for (var i = 0; i < text.Length; i++)
+        {
+            if (Array.IndexOf(SentenceEnders, text[i]) < 0) continue;
+            if (++kept < MaxSentences) continue;
+            text = text[..(i + 1)];
+            break;
+        }
 
         return (text, reason);
     }
