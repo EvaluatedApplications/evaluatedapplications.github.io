@@ -12,9 +12,10 @@ content to the owner instead. You never commit/push (coordinator commits, user p
 
 Root static pages (`site/*.html`), all built on the shared design system:
 - `index.html` — **tools-first homepage (2026-08-28 pivot, see "Tools-first pivot" below)**: company
-  pitch, then the 5-card tool gallery (Prism/Creature/Forecaster/Prose/Analyst, in that order — see
-  "Homepage #tools reorder by technical achievement" below for Prose's 2026-09-13 placement
-  reasoning) as the entire top-level content, then a slim "Powered by" package-chip strip
+  pitch, then the 6-card tool gallery (Prism/Nano Stories/Creature/Forecaster/Prose/Analyst, in that
+  order — see "Homepage #tools reorder by technical achievement" below for Prose's 2026-09-13
+  placement reasoning, and "Nano Stories added to the `#tools` gallery (2026-09-21)" below for Nano
+  Stories' placement) as the entire top-level content, then a slim "Powered by" package-chip strip
   (`.pkg-strip`, no cards/descriptions) linking to `/packages.html`. The 11-package gallery and the
   "how it fits together" flow diagram used to live here inline — they now live on `packages.html`
   (below), not duplicated on the homepage.
@@ -1945,6 +1946,52 @@ every other CSS-only change in this doc). Tag/div balance re-checked programmati
 edited files (`index.html`, `algformer.html`, `prose.html`) post-edit: div/article/a/section/nav/
 header/footer/span/p/h1/h2/h3 all matched. NOT deployed — rendered only, per charter §6 (coordinator
 batches this with the Showroom Prose publish into one push).
+
+**Nano Stories added to the `#tools` gallery (2026-09-21)**: a 6th card, inserted 2nd — immediately
+after Prism, before Creature (Prism, **Nano Stories**, Creature, Forecaster, Prose, Analyst) —
+because it is not a new model at all: `/tools/stories` runs the literal same `oracle-brain.bin`
+checkpoint and single training run as Prism, just aimed at a different prompt (write a short story
+vs. hold a conversation). Placed adjacent to Prism specifically so the "same brain, two prompts"
+relationship reads immediately, ahead of Creature/Forecaster/Prose/Analyst which are all genuinely
+separate trained models or composite systems. Single-package dependency, AlgFormer only, exactly
+like Prism — `style="--cat:var(--c-algformer)"`, `<span class="ver">AlgFormer</span>`, ONE
+`.powered` pill (`/algformer.html`), no chord. `data-initial="Ns"` — checked against every other
+`#tools`/`#packages` `data-initial` on `index.html` (`Pm`/`Cr`/`Fc`/`Ps`/`An`), no collision; same
+caveat as Prose's own entry above — `#tools` was pulled out of the mobile icon-grid-tile treatment
+2026-08-28, so `data-initial` is currently inert here on mobile, carried anyway for consistency.
+Card copy leads with the shared-weights claim (not a fine-tune, not a sibling model, one
+369,664-parameter model, one training run, no extra download since the two tools share one loaded
+model instance in the browser) and states the honest capability ceiling per the task's own guidance
+— complete punctuated sentences, holds a named character across a few of them, weak semantics — no
+benchmark claims, no comparison to other models. Tool count bumped 5→6 in `index.html`'s `<meta
+name="description">`, `og:description`, hero `<p class="lede">`, and the `.facts` `<b>5</b>` pill —
+these are the same 4 places the Prose entry above named, re-derived fresh rather than trusted (all 4
+checked directly in the live file before editing, not assumed from the Prose paragraph's list).
+`/tools/stories` added to `sitemap.xml` (weekly/0.6, same tier as every other tool route), inserted
+after `/tools/prose`. Also added, same reasoning as Prose's own AlgFormer cross-link:
+`algformer.html`'s "Try it live" grid gained a `<a class="card tool">` for Nano Stories right after
+Prism's card, matching that section's simpler plain-anchor shape (no `.powered` pill, no separate
+`.card-link` overlay — the `<a>` itself is the whole card, same as its Prism/Creature/Forecaster/
+Prose siblings there). No dedicated `site/*.html` product page was created — unlike Prose, Nano
+Stories isn't a separate NuGet package with its own `docs/site.md`; it's a second prompt into
+Prism's existing AlgFormer-powered checkpoint, so `algformer.html` (AlgFormer's own package page)
+and the homepage tool card are its full reachable footprint, consistent with how Prism itself has no
+separate product page either. Reachability walk re-run: Home → `#tools` → Nano Stories = 1 click
+(same as every other tool card); `algformer.html` → "Try it live" grid → Nano Stories = 1 click. No
+nav item added on any page, so narrow-viewport (≤640px) compactness is unaffected structurally — not
+independently re-screenshotted (no browser here, same disclosed limitation as every other CSS-only
+change in this doc). Tag/div balance re-checked programmatically on both edited files (`index.html`,
+`algformer.html`) post-edit: div/article/a/section/nav/header/footer/span/p/h1/h2/h3 all matched
+(index.html 40/40 div, 10/10 article, 35/35 a; algformer.html 52/52 div, 12/12 article, 25/25 a).
+`sitemap.xml` re-verified well-formed XML post-edit and re-counted fresh (not carried forward from
+any prior figure in this file, several of which were already stale before this pass): **30 total
+`<url>` entries, 7 of which contain `/tools`** (`/tools/` + analyst/creature/forecaster/prism/prose/
+stories) and 23 non-tool routable pages — this supersedes the 2026-09-13 entry's "28 total / 22
+non-tool" figures above, which were themselves already one article-page short of current
+(`sitemap.xml` now also carries `articles/learns-back-to-front.html`, `articles/
+smaller-than-tinystories.html`, and `evalapp/manual/` — none added by this pass, all pre-existing
+drift this count just happened to surface while re-deriving fresh per the task's own instruction not
+to trust the list). NOT deployed — rendered only, per charter §6 (coordinator/user commit + push).
 
 ### `HoloKernel/` — the shared model kernel (Phase 1, landed 2026-08-28 — **ported into all three
 live-brain tools by showroom-owner the same day**, status correction from showroom-owner with

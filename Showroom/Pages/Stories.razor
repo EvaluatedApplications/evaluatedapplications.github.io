@@ -19,7 +19,7 @@
     <header class="room-head">
         <nav class="crumb"><a href="/">Evaluated Applications</a> <span>/</span> Nano Stories</nav>
         <h1>Nano Stories</h1>
-        <p class="lede"><a href="/prism">Prism</a>'s exact model — same weights, same single training run —
+        <p class="lede"><a href="/tools/prism">Prism</a>'s exact model — same weights, same single training run —
             asked to write a story instead of hold a conversation. Give it an opening line and watch it
             continue, live, one word piece at a time, right here in your browser.</p>
     </header>
@@ -33,7 +33,7 @@
         <div class="boot-crt ck-boot">
             <div class="boot-head"><span class="boot-dot" aria-hidden="true"></span>downloading the model</div>
             <div class="boot-sub">one time only — your browser keeps it after this. Already opened
-                <a href="/prism">Prism</a> in this tab? This reuses that same download, not a second one.</div>
+                <a href="/tools/prism">Prism</a> in this tab? This reuses that same download, not a second one.</div>
             <div class="boot-log">
                 @foreach (var s in _loadSteps)
                 {
@@ -46,7 +46,7 @@
     {
         <TokenVoiceControls Voice="_voice!" />
         <p class="sound-note hint">Each word piece plays a short chord as it's written — the exact same voice
-            as <a href="/prism">Prism</a>, same tuning, nothing retuned for this page. Off by default.</p>
+            as <a href="/tools/prism">Prism</a>, same tuning, nothing retuned for this page. Off by default.</p>
 
         <div class="cr-stats">
             <div class="stat"><div class="n">@_stats!.ParamCount.ToString("N0")</div><div class="l">parameters</div></div>
@@ -122,10 +122,10 @@
             coherent plot.</p>
 
         <div class="outro">
-            <p>This is the exact same model as <a href="/prism">Prism</a> — same <code>oracle-brain.bin</code>,
+            <p>This is the exact same model as <a href="/tools/prism">Prism</a> — same <code>oracle-brain.bin</code>,
                 same weights, the same single training run, not a fine-tune and not a sibling. Its training text
                 is mostly TinyStories plus a smaller mix of chat, reasoning, maths and Q&amp;A pairs, so one
-                small model learned to both hold a conversation and tell a story — <a href="/prism">Prism</a> is
+                small model learned to both hold a conversation and tell a story — <a href="/tools/prism">Prism</a> is
                 this checkpoint asked to do the first; this page is the same checkpoint asked to do the second.</p>
         </div>
     }
@@ -176,9 +176,9 @@
     enum Variety { Focused, Balanced, Wild }
     static double FloorKFor(Variety v) => v switch
     {
-        Variety.Focused => 2.0,
-        Variety.Wild => 1.0,
-        _ => 1.5,
+        Variety.Focused => 2.5,
+        Variety.Wild => 1.5,
+        _ => 2.0,
     };
     sealed record VarietyOption(Variety Value, string Label, string Hint);
     static readonly VarietyOption[] VarietyOptions =
