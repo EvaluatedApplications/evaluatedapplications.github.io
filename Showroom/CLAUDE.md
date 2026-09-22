@@ -103,7 +103,16 @@ A sibling RCL (`AboutUs\HoloKernel`), itself NuGet-only against AlgFormer + the 
   per tool") — not duplicated here or per-page anymore.
 - `DegenerateTail.Start(ids)` (2026-09-21, lifted out of `Prism.razor`) — trims a repeating tail (e.g.
   "ERE ERE ERE") a generated sequence ends on; covers the period>1 gap `Prism.Inference.DegenGuard`
-  itself doesn't catch. Shared by Prism and Nano Stories.
+  itself doesn't catch. Shared by Prism and Nano Stories. **`DegenerateTail.SafePrefix(ids)`
+  (2026-09-22)** is the streaming companion: the same scan one repetition short of the real trigger, so
+  a repeat that is still FORMING is held back from the DOM instead of being painted and then yanked.
+  **Both pages now run the trims INSIDE the generation loop, not after it** (user: "have the cut happen
+  then, not at the end") — `Prism.razor`/`Stories.razor` call `DegenerateTail.Start` every step and
+  break on a hit, paint via their own `PaintPrefix` helper, and `Stories.razor` additionally counts
+  sentence-enders live and stops ON the capping sentence (so `MaxSentences` no longer costs ~70 wasted
+  steps per story). `Stories.razor`'s whole trim policy is one method, `Trim(List<int>)`, called both
+  for every story-ending paint and for the returned text, so the animation's last frame and the finished
+  story can't disagree.
 - **Browser contract**: visitors **train**, never **reshape**. A tool's `HoloFormer` shape is fixed
   at construction for the session; `GrowLayers`/`GrowShifts` are real but PrismStudio/server-side
   only — a better model reaches visitors via a new checkpoint, never runtime shape mutation.

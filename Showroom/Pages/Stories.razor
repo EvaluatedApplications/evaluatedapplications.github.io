@@ -336,7 +336,6 @@
         var promptTokens = _vocab!.Encode(HoloKernel.AsciiPunctuation.Fold(prompt));
         var seq = new List<int>(promptTokens.Length > 0 ? promptTokens : new[] { 0 });
         var outIds = new List<int>();
-        var revealed = new List<int>();
         var vocabLimit = _vocab.Size;
         var guard = new DegenGuard(policy);
         // Seeded per generation (per the brief): "tell me another" gets a genuinely different Random
@@ -349,6 +348,7 @@
         var logits = _session.Prime(cache, BuildContext(seq, _stats!.Context));
 
         _voice!.ResetBeat();
+        var sentences = 0;   // sentence-ending punctuation emitted so far, counted live for the cap below
         for (var step = 0; step < MaxStorySteps; step++)
         {
             if (step > 0)
@@ -361,9 +361,40 @@
             var decision = Gate.Evaluate(logits, vocabLimit, policy);
             var t = Gate.Pick(logits, vocabLimit, policy, rng);
 
-            if (t == CharVocab.End) { reason = "stop"; break; }
+            if (t == CharVocab.End)
+            {
+                reason = "stop";
+                if (onPartial is not null) await onPartial(Trim(outIds));   // leave the animation on the finished text
+                break;
+            }
 
-            outIds.Add(t); seq.Add(t); revealed.Add(t);
+            outIds.Add(t); seq.Add(t);
+
+            // DEGENERATE-TAIL CUT, live per step (2026-09-22, user request — it used to run only after
+            // the loop, so the repeat was typed out in full and then vanished when the finished story
+            // replaced the streaming one). Now it cuts the moment the repeat completes, and PaintPrefix
+            // holds a still-FORMING repeat back from the DOM, so the doomed tokens are normally never
+            // painted at all. See HoloKernel.DegenerateTail for why this isn't just DegenGuard again.
+            var cut = DegenerateTail.Start(outIds);
+            if (cut < outIds.Count)
+            {
+                outIds.RemoveRange(cut, outIds.Count - cut);
+                reason = "loop";
+                if (onPartial is not null) await onPartial(Trim(outIds));
+                break;
+            }
+
+            // SENTENCE CAP, live per step (same 2026-09-22 change). This checkpoint holds coherence for
+            // about six sentences and then starts emitting invented words — counted by eye on live output
+            // at Wild: sentences 1-6 were clean ("Sam and Sue were playing about the kitchen."), sentence 7
+            // introduced "pintry", and it was gone by sentence 8. This is an OBSERVED limit of the current
+            // weights, not a property of the tool: re-count it on a checkpoint refresh, and raise it when
+            // the model holds coherence longer. Counting the enders as they are emitted means generation
+            // STOPS on the capping sentence instead of running to MaxStorySteps and then throwing the
+            // surplus away in front of the visitor — the cap now costs compute it used to waste, too.
+            foreach (var ch in _vocab.Decode(new[] { t }))
+                if (Array.IndexOf(SentenceEnders, ch) >= 0) sentences++;
+            var capped = sentences >= MaxSentences;
 
             // SKIP TO THE END: once requested, drop pacing and per-token sound for the REST of this
             // generation — the story still streams to completion (just without the wait or the notes),
@@ -379,41 +410,36 @@
             if (onPartial is not null)
             {
                 var isLastStep = step == MaxStorySteps - 1;
-                if (skipping || TokenVoice.ShouldRepaint(revealed.Count, stopping, isLastStep, _voice.SoundOn))
-                    await onPartial(_vocab.Decode(revealed));
+                if (skipping || capped || stopping || isLastStep || TokenVoice.ShouldRepaint(outIds.Count, stopping, isLastStep, _voice.SoundOn))
+                    // On any step that ENDS the story, paint the trimmed text rather than the raw prefix, so
+                    // the last thing the animation shows is exactly what the finished story will say.
+                    await onPartial(capped || stopping || isLastStep ? Trim(outIds) : _vocab.Decode(PaintPrefix(outIds)));
             }
             if (!skipping) _voice.PlayTone(_session, t);
-            if (stopping) break;
+            if (stopping || capped) break;
         }
 
-        var cut = DegenerateTail.Start(outIds);
-        if (cut < outIds.Count)
-        {
-            outIds.RemoveRange(cut, outIds.Count - cut);
-            reason = "loop";
-        }
+        return (Trim(outIds), reason);
+    }
 
-        var text = _vocab.Decode(outIds).TrimEnd();
+    // The whole output-trimming policy in ONE place, so the live token-by-token reveal and the finished
+    // story can never disagree — the live loop above calls this on every story-ending step, and again for
+    // the value it returns.
+    //
+    // The sentence-boundary trim exists because this checkpoint never emits its own stop token (see
+    // MaxStorySteps's own comment / Showroom/CLAUDE.md's "Reply cap" note), so a story that runs out of
+    // steps ends wherever the drift happened to land — often mid-word, in a run of NOVEL non-words rather
+    // than a repeat (a live example ended on "Onhvedemerdm"), which DegenerateTail can't see since nothing
+    // there repeats. Guard: with no sentence-ending punctuation at all, keep the untrimmed text rather than
+    // emit nothing. The MaxSentences cap after it is belt-and-braces now that the loop stops on the capping
+    // sentence itself — it still matters for a story whose last token carried punctuation past the cap.
+    string Trim(List<int> ids)
+    {
+        var text = _vocab!.Decode(ids).TrimEnd();
 
-        // SENTENCE-BOUNDARY TRIM — applied AFTER the DegenerateTail cut above, not instead of it:
-        // the two catch different failure modes. This checkpoint never emits its own stop token
-        // (see MaxStorySteps's own comment / Showroom/CLAUDE.md's "Reply cap" note), so every story
-        // runs to MaxStorySteps and ends wherever the drift happened to land — often mid-word, in a
-        // run of NOVEL non-words rather than a repeat (a live example ended on "Onhvedemerdm"), which
-        // DegenerateTail can't see since nothing there repeats. Keep everything up to the LAST
-        // sentence-ending punctuation and drop the trailing fragment. Guard: if there's no
-        // sentence-ending punctuation at all, keep the untrimmed text rather than emit nothing.
         var lastEnd = text.LastIndexOfAny(SentenceEnders);
         if (lastEnd >= 0) text = text[..(lastEnd + 1)];
 
-        // SENTENCE CAP. Trimming to the LAST sentence boundary still keeps every degenerate sentence
-        // that came before it, so a story that fell apart at sentence 7 and rambled to sentence 12
-        // just ends tidily on garbage. This checkpoint holds coherence for about six sentences and
-        // then starts emitting invented words — counted by eye on live output at Wild: sentences 1-6
-        // were clean ("Sam and Sue were playing about the kitchen."), sentence 7 introduced "pintry",
-        // and it was gone by sentence 8. So cut at MaxSentences rather than relying on the tail trim.
-        // This is an OBSERVED limit of the current weights, not a property of the tool: re-count it on
-        // a checkpoint refresh, and raise it when the model holds coherence longer.
         var kept = 0;
         for (var i = 0; i < text.Length; i++)
         {
@@ -422,8 +448,16 @@
             text = text[..(i + 1)];
             break;
         }
+        return text;
+    }
 
-        return (text, reason);
+    // The tokens a streaming repaint is allowed to show: everything except a repeat that is still forming
+    // and might be cut a token or two from now. Held-back tokens are never lost — they paint on the next
+    // step as soon as the repeat breaks. See HoloKernel.DegenerateTail.SafePrefix.
+    static List<int> PaintPrefix(List<int> ids)
+    {
+        var n = DegenerateTail.SafePrefix(ids);
+        return n >= ids.Count ? ids : ids.GetRange(0, n);
     }
 
     async Task TellStory(bool reuseSeed)

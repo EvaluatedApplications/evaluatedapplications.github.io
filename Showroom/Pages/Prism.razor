@@ -364,7 +364,6 @@
     {
         var seq = BuildContextTokens(_vocab!, _turns, _stats!.Context);   // packed-turn context: finished exchanges end in STOP, see BuildContextTokens
         var outIds = new List<int>();
-        var revealed = new List<int>();
         var vocabLimit = _vocab!.Size;
         var guard = new DegenGuard(Policy);
         var reason = StopReason.Cap;   // default — overwritten the moment either real stop condition fires below
@@ -409,7 +408,29 @@
             // appended to the visible reply or fed back into the context; compute stops here rather than
             // throwing away a token that was never meant to be seen.
 
-            outIds.Add(t); seq.Add(t); revealed.Add(t);
+            outIds.Add(t); seq.Add(t);
+
+            // HARD CUT, not a hide: a degenerate tail is REMOVED from outIds before it is decoded, so it never
+            // reaches the visible turn AND never reaches BuildContextTokens — the next turn's rolling context is
+            // built from the surviving prefix only. This matters more than the cosmetics: a 192-token window
+            // filled with "ERE ERE ERE" both crowds out real conversation and teaches the model, from its own
+            // context, that a "prism: " turn looks like that. HoloKernel.DegenerateTail (lifted out 2026-09-21,
+            // shared with Stories.razor) — see its own doc for why this isn't just DegenGuard again.
+            //
+            // LIVE, per step (2026-09-22, user request) — this scan used to run only AFTER the loop, so the
+            // visitor watched the repeat get typed out and then watched it vanish when the finished turn
+            // replaced the streaming one. Now the cut lands the moment the repeat completes, and PaintPrefix
+            // below holds a still-FORMING repeat back from the DOM, so in the normal case the doomed tokens are
+            // never painted at all and there is nothing to take away.
+            var cut = DegenerateTail.Start(outIds);
+            if (cut < outIds.Count)
+            {
+                outIds.RemoveRange(cut, outIds.Count - cut);
+                reason = StopReason.DegenLoop;   // surfaced in the UI, so a cut is visible rather than silent
+                if (onPartial is not null) await onPartial(_vocab.Decode(outIds));
+                break;   // the cut tokens are never sounded and never re-enter the context
+            }
+
             if (onPartial is not null && _voice.SoundOn)   // re-read every step, so toggling sound mid-reply takes effect on the next note
                 await _voice.WaitForBeatAsync();
             var stopping = guard.Observe(t, decision.Greedy);
@@ -418,11 +439,11 @@
             if (onPartial is not null)
             {
                 // Batch the RENDER, not the compute (2026-08-30 OOM fix, still load-bearing here): every token
-                // is computed and appended to `revealed` unconditionally; the DOM only actually repaints once
+                // is computed and appended to `outIds` unconditionally; the DOM only actually repaints once
                 // every RenderBatch tokens, or on the stopping/final token so the visitor never sees stale state.
                 var isLastStep = step == MaxReplySteps - 1;
-                if (TokenVoice.ShouldRepaint(revealed.Count, stopping, isLastStep, _voice.SoundOn))
-                    await onPartial(_vocab.Decode(revealed));
+                if (TokenVoice.ShouldRepaint(outIds.Count, stopping, isLastStep, _voice.SoundOn))
+                    await onPartial(_vocab.Decode(PaintPrefix(outIds)));
             }
             _voice.PlayTone(_session, t);   // AFTER the paint above: while sound is on every token repaints first, so each note starts
             // as its token appears at the end of the reply, and the last printed token is always the one sounding
@@ -431,21 +452,17 @@
             if (stopping) break;
         }
 
-        // HARD CUT, not a hide: a degenerate tail is REMOVED from outIds before it is decoded, so it never
-        // reaches the visible turn AND never reaches BuildContextTokens — the next turn's rolling context is
-        // built from the surviving prefix only. This matters more than the cosmetics: a 192-token window
-        // filled with "ERE ERE ERE" both crowds out real conversation and teaches the model, from its own
-        // context, that a "prism: " turn looks like that. HoloKernel.DegenerateTail (lifted out 2026-09-21,
-        // shared with Stories.razor) — see its own doc for why this isn't just DegenGuard again.
-        var cut = DegenerateTail.Start(outIds);
-        if (cut < outIds.Count)
-        {
-            outIds.RemoveRange(cut, outIds.Count - cut);
-            reason = StopReason.DegenLoop;   // surfaced in the UI, so a cut is visible rather than silent
-        }
-
         var text = _vocab.Decode(outIds).TrimEnd();
         return (text, reason);
+    }
+
+    // The tokens a streaming repaint is allowed to show: everything except a repeat that is still forming
+    // and might be cut a token or two from now. Held-back tokens are never lost — they paint on the next
+    // step as soon as the repeat breaks. See HoloKernel.DegenerateTail.SafePrefix.
+    static List<int> PaintPrefix(List<int> ids)
+    {
+        var n = DegenerateTail.SafePrefix(ids);
+        return n >= ids.Count ? ids : ids.GetRange(0, n);
     }
 
     protected override async Task OnInitializedAsync()
