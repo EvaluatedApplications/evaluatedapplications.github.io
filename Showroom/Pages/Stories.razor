@@ -198,13 +198,26 @@
     string _activePrompt = DefaultPrompt;   // frozen at the start of a generation, so editing the input
     // mid-story (or after) never retroactively relabels a story already on screen.
 
-    // "A few hundred characters" (brief). Same checkpoint/vocab as Prism, whose own measured bytes/token
-    // on generated text is 3.13 (see Prism.razor's MaxReplyStepsConst comment) — not re-measured here
-    // (no browser to run it in), carried forward since it is the identical vocabulary. 128 steps x 3.13
-    // bytes/token is roughly 400 characters, about double Prism's own reply cap — a short-story length
-    // rather than a chat-turn length. Re-measure alongside Prism's own constant on the next checkpoint
-    // refresh, since both depend on the same vocab's bytes/token.
-    const int MaxStorySteps = 128;
+    // RAISED 128 -> 512 on 2026-09-22 (user: "let it go wild"), because 128 had become the thing doing
+    // the clipping. Once the 5-sentence cap came off and the r526,366 checkpoint landed with its final
+    // context position finally trained, a Balanced run produced TWELVE sentences with zero invented words
+    // and was still going cleanly when the step budget cut it off — so 128 was hiding the answer to the
+    // only question this tool is currently being used to ask, which is where the model actually gives out.
+    //
+    // At the ~10.7 steps/sentence that run measured, 512 is roughly 48 sentences, far past any plausible
+    // coherence limit, so the model should now break before the budget does. That is the point: this
+    // constant is deliberately NOT a quality judgement any more, just a bound that stops a browser tab
+    // looping forever, which is needed because this checkpoint almost never emits its own stop token.
+    // The real stops are DegenerateTail (cuts a repeating tail live, mid-animation) and the
+    // sentence-boundary trim in Trim().
+    //
+    // Cost is fine: past ctx (71) the serve cache re-primes each step, so 512 steps is ~4x the compute of
+    // 128, single-digit seconds in WASM, and the paced reveal dominates wall-clock anyway. "Skip to the
+    // end" is there for a visitor who does not want to wait out a long one.
+    //
+    // 512 x 3.13 measured bytes/token (Prism's figure, same vocab) is ~1,600 characters. Re-measure
+    // bytes/token alongside Prism's own MaxReplySteps on the next re-mint, since both depend on it.
+    const int MaxStorySteps = 512;
 
     // Consumed by the sentence-boundary trim at the end of GenerateStoryAsync — see that comment.
     static readonly char[] SentenceEnders = { '.', '!', '?' };
