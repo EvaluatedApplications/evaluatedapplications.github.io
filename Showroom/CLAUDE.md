@@ -108,11 +108,21 @@ A sibling RCL (`AboutUs\HoloKernel`), itself NuGet-only against AlgFormer + the 
   a repeat that is still FORMING is held back from the DOM instead of being painted and then yanked.
   **Both pages now run the trims INSIDE the generation loop, not after it** (user: "have the cut happen
   then, not at the end") — `Prism.razor`/`Stories.razor` call `DegenerateTail.Start` every step and
-  break on a hit, paint via their own `PaintPrefix` helper, and `Stories.razor` additionally counts
-  sentence-enders live and stops ON the capping sentence (so `MaxSentences` no longer costs ~70 wasted
-  steps per story). `Stories.razor`'s whole trim policy is one method, `Trim(List<int>)`, called both
-  for every story-ending paint and for the returned text, so the animation's last frame and the finished
-  story can't disagree.
+  break on a hit, painting via their own `PaintPrefix` helper. `Stories.razor`'s whole trim policy is one
+  method, `Trim(List<int>)`, called both for every story-ending paint and for the returned text, so the
+  animation's last frame and the finished story can't disagree.
+  **`MaxSentences` (was 5) REMOVED 2026-09-22 on user request**, along with the live sentence counting
+  that stopped generation on the capping sentence. It was counted honestly by eye, but it was almost
+  certainly fitted to an ENGINE BUG rather than to the model: the last position of a full context window
+  was structurally untrainable, so its prediction head decoded as confident noise (MEASURED on the
+  deployed checkpoint: 26.6 bits, P(top-1) 0.60, against ~5.7 bits at every other position), and with a
+  5-token prompt that window fills around token 66 of generation, which is about where a fifth sentence
+  lands. Fixed in AlgFormer 2.12.1 (scorer takes one token of overflow) + 2.12.2 (the corpus window draw
+  can reach its own ceiling; without it 2.12.1 never fired). **Until a post-fix checkpoint ships, stories
+  visibly degrade past ~5 sentences instead of being cut there — that is intended, so the real onset can
+  be re-counted honestly.** `MaxStorySteps` and the sentence-boundary trim (drops an incomplete trailing
+  fragment) both stay. Prism's own `MaxReplySteps = 56` is the same kind of constant and wants the same
+  scrutiny on the next refresh.
 - **Browser contract**: visitors **train**, never **reshape**. A tool's `HoloFormer` shape is fixed
   at construction for the session; `GrowLayers`/`GrowShifts` are real but PrismStudio/server-side
   only — a better model reaches visitors via a new checkpoint, never runtime shape mutation.

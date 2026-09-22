@@ -209,20 +209,28 @@
     // Consumed by the sentence-boundary trim at the end of GenerateStoryAsync — see that comment.
     static readonly char[] SentenceEnders = { '.', '!', '?' };
 
-    // How many sentences this checkpoint stays coherent for before it starts inventing words.
-    // Counted by eye on live output — see the SENTENCE CAP comment in GenerateStoryAsync. The onset
-    // VARIES between generations (one Wild run held to 6 and degraded at 7; a Balanced run held to 5
-    // and degraded at 6), so no fixed number is right every time: too high ships a broken sentence,
-    // too low truncates a good one. Set to the MINIMUM observed good length, so the cap errs toward
-    // cutting a story short rather than ending it on garbage.
+    // SENTENCE CAP REMOVED 2026-09-22 (user request), was MaxSentences = 5.
     //
-    // The adaptive alternative, if this starts costing too much good text: the decode gate already
-    // computes P(top-1) per token, and a degenerate sentence is made of low-confidence sampled picks,
-    // so cutting at the first sentence whose mean confidence drops below a threshold would track the
-    // real onset and raise itself as the model improves. Not built — a constant was enough for now.
+    // It was counted by eye on live output: stories held coherence for about five or six sentences
+    // and then started inventing words. The count was honest, but the cause was almost certainly not
+    // the model running out of ability. It was a genuine defect in the engine: the LAST position of a
+    // full context window was structurally untrainable, so its prediction head was never trained and
+    // decoded as confident noise (MEASURED on the deployed checkpoint, 26.6 bits with P(top-1) 0.60
+    // at that position against ~5.7 bits at every other one). With a five-token prompt this window
+    // fills around token 66 of generation, which is roughly where a fifth sentence lands. So the cap
+    // was very likely measuring where the bug bit, not where the model gives out.
     //
-    // Observed, not derived, and specific to these weights: re-count on a checkpoint refresh.
-    const int MaxSentences = 5;
+    // Fixed in AlgFormer 2.12.1 (the scorer now accepts one token of overflow so that position gets
+    // a loss) and 2.12.2 (the corpus window draw can now actually reach its own ceiling, without
+    // which 2.12.1 never fired). Both are training as of 2026-09-22.
+    //
+    // THE CURRENTLY DEPLOYED CHECKPOINT STILL HAS THE UNTRAINED POSITION, so until a post-fix
+    // checkpoint ships, stories will visibly degrade past roughly five sentences rather than being
+    // cut there. That is the point: it makes the real onset visible so it can be re-counted honestly
+    // on the next refresh instead of being hidden behind a constant that was fitted to a bug.
+    //
+    // MaxStorySteps still bounds generation, and the sentence-boundary trim in Trim() still drops an
+    // incomplete trailing fragment. Only the sentence COUNT cap is gone.
 
     TokenVoice? _voice;
     HoloSession? _session;
@@ -348,7 +356,6 @@
         var logits = _session.Prime(cache, BuildContext(seq, _stats!.Context));
 
         _voice!.ResetBeat();
-        var sentences = 0;   // sentence-ending punctuation emitted so far, counted live for the cap below
         for (var step = 0; step < MaxStorySteps; step++)
         {
             if (step > 0)
@@ -384,18 +391,6 @@
                 break;
             }
 
-            // SENTENCE CAP, live per step (same 2026-09-22 change). This checkpoint holds coherence for
-            // about six sentences and then starts emitting invented words — counted by eye on live output
-            // at Wild: sentences 1-6 were clean ("Sam and Sue were playing about the kitchen."), sentence 7
-            // introduced "pintry", and it was gone by sentence 8. This is an OBSERVED limit of the current
-            // weights, not a property of the tool: re-count it on a checkpoint refresh, and raise it when
-            // the model holds coherence longer. Counting the enders as they are emitted means generation
-            // STOPS on the capping sentence instead of running to MaxStorySteps and then throwing the
-            // surplus away in front of the visitor — the cap now costs compute it used to waste, too.
-            foreach (var ch in _vocab.Decode(new[] { t }))
-                if (Array.IndexOf(SentenceEnders, ch) >= 0) sentences++;
-            var capped = sentences >= MaxSentences;
-
             // SKIP TO THE END: once requested, drop pacing and per-token sound for the REST of this
             // generation — the story still streams to completion (just without the wait or the notes),
             // rather than jumping straight to a finished block. See _skipRequested's own field comment
@@ -410,13 +405,13 @@
             if (onPartial is not null)
             {
                 var isLastStep = step == MaxStorySteps - 1;
-                if (skipping || capped || stopping || isLastStep || TokenVoice.ShouldRepaint(outIds.Count, stopping, isLastStep, _voice.SoundOn))
+                if (skipping || stopping || isLastStep || TokenVoice.ShouldRepaint(outIds.Count, stopping, isLastStep, _voice.SoundOn))
                     // On any step that ENDS the story, paint the trimmed text rather than the raw prefix, so
                     // the last thing the animation shows is exactly what the finished story will say.
-                    await onPartial(capped || stopping || isLastStep ? Trim(outIds) : _vocab.Decode(PaintPrefix(outIds)));
+                    await onPartial(stopping || isLastStep ? Trim(outIds) : _vocab.Decode(PaintPrefix(outIds)));
             }
             if (!skipping) _voice.PlayTone(_session, t);
-            if (stopping || capped) break;
+            if (stopping) break;
         }
 
         return (Trim(outIds), reason);
@@ -431,8 +426,8 @@
     // steps ends wherever the drift happened to land — often mid-word, in a run of NOVEL non-words rather
     // than a repeat (a live example ended on "Onhvedemerdm"), which DegenerateTail can't see since nothing
     // there repeats. Guard: with no sentence-ending punctuation at all, keep the untrimmed text rather than
-    // emit nothing. The MaxSentences cap after it is belt-and-braces now that the loop stops on the capping
-    // sentence itself — it still matters for a story whose last token carried punctuation past the cap.
+    // emit nothing. The sentence COUNT cap that used to follow this was removed 2026-09-22 (user request) —
+    // see the block where MaxSentences used to be declared for why it was probably fitted to an engine bug.
     string Trim(List<int> ids)
     {
         var text = _vocab!.Decode(ids).TrimEnd();
@@ -440,14 +435,6 @@
         var lastEnd = text.LastIndexOfAny(SentenceEnders);
         if (lastEnd >= 0) text = text[..(lastEnd + 1)];
 
-        var kept = 0;
-        for (var i = 0; i < text.Length; i++)
-        {
-            if (Array.IndexOf(SentenceEnders, text[i]) < 0) continue;
-            if (++kept < MaxSentences) continue;
-            text = text[..(i + 1)];
-            break;
-        }
         return text;
     }
 
