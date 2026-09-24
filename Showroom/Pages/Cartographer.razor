@@ -1,0 +1,551 @@
+@page "/cartographer"
+@inject HttpClient Http
+@inject HoloKernel.SessionHost Sessions
+@using System.Text
+@using PrismFormer
+@using HoloKernel
+
+<PageTitle>The Cartographer — watch a model think, live</PageTitle>
+
+<div class="room" data-cat="algformer">
+    <header class="room-head">
+        <nav class="crumb"><a href="/">Evaluated Applications</a> <span>/</span> The Cartographer</nav>
+        <h1>The Cartographer</h1>
+        <p class="lede">Every word this model knows lives at a point in a real, high-dimensional space. Type a
+            prompt and watch the exact path its own next-word decision takes through that space — the same faces
+            <a href="/tools/prism">Prism</a> and <a href="/tools/stories">Nano Stories</a> compute, just watched
+            instead of spoken. Nothing here is simulated: every point is decoded straight off the model's own
+            forward pass with <code>DecodeFace</code>.</p>
+    </header>
+
+    @if (_loadError is not null)
+    {
+        <p class="err">@_loadError</p>
+    }
+    else if (!_loaded)
+    {
+        <div class="boot-crt ck-boot">
+            <div class="boot-head"><span class="boot-dot" aria-hidden="true"></span>downloading the model</div>
+            <div class="boot-sub">the same checkpoint Prism and Nano Stories use — shared, so this may already be loaded.</div>
+            <div class="boot-log">
+                @foreach (var s in _loadSteps)
+                {
+                    <span class="l @s.Cls"><span class="p">&gt;</span> @s.Label <span class="boot-status">@s.Status</span></span>
+                }
+            </div>
+        </div>
+    }
+    else
+    {
+        <div class="cg-stats">
+            <div class="stat"><div class="n">@_stats!.Layers</div><div class="l">layers</div></div>
+            <div class="stat"><div class="n">@_stats.KPass</div><div class="l">passes per layer</div></div>
+            <div class="stat"><div class="n">@_stats.Dim</div><div class="l">dimensions of the real space</div></div>
+            <div class="stat"><div class="n">@_stats.Vocab.ToString("N0")</div><div class="l">points in the cloud</div></div>
+        </div>
+
+        <div class="cg-form">
+            <input class="cg-input" @bind="_prompt" @bind:event="oninput" @onkeydown="OnKeyDown" maxlength="90"
+                   placeholder="Try: The cat sat on the" disabled="@_busy" />
+            <button class="go" @onclick="Visualize" disabled="@(_busy || string.IsNullOrWhiteSpace(_prompt))">
+                @(_busy ? "computing…" : "Visualize")
+            </button>
+        </div>
+        <p class="hint">One prompt, one decision — the token that comes right after it. Not a chat, not a story:
+            just the single next word and the path the model took to pick it.</p>
+
+        @if (_vizError is not null) { <p class="err">@_vizError</p> }
+
+        @if (_hasResult)
+        {
+            <div class="cg-answer">
+                <span class="cg-answer-label">Greedy next token</span>
+                <span class="cg-answer-word">"@_answerSymbol"</span>
+                <span class="cg-answer-meta">id @_answerId · @((_answerConfidence * 100).ToString("0.#"))% of the model's own probability mass</span>
+            </div>
+            <p class="hint">This is the model's single most confident continuation, not what Prism or Nano Stories
+                would actually say — those pick from a gated, sometimes-random shortlist so replies don't all read
+                identically. A picture needs one definite path, so this view always shows the greedy one.</p>
+            @if (_truncated)
+            {
+                <p class="hint">Your prompt tokenized longer than this view shows — using only the last @MaxPromptTokens tokens.</p>
+            }
+
+            <div class="cg-panel">
+                <div class="cg-honesty">
+                    <p>
+                        These two axes are the ones that spread <strong>this path</strong> out the most in 2D. They
+                        capture <strong>@((_varianceCaptured * 100).ToString("0.#"))%</strong> of how far apart the
+                        @(_trajPoints.Count) points on it really are, out of @_stats.Dim real dimensions. That is a
+                        shadow, not a map — <strong>two points that look close together here can still be far apart
+                        in the model's real space.</strong>
+                    </p>
+                    <div class="cg-basis">
+                        <label><input type="radio" name="basis" checked="@(_basisMode == "pca")" @onchange="@(() => SetBasis("pca"))" /> Max spread (fit to this path)</label>
+                        <label><input type="radio" name="basis" checked="@(_basisMode == "embed-final")" @onchange="@(() => SetBasis("embed-final"))" /> Embed → Final plane</label>
+                    </div>
+                </div>
+
+                <div class="cg-svg-wrap">
+                    <svg class="cg-svg" viewBox="0 0 @PlotW @PlotH" preserveAspectRatio="xMidYMid meet">
+                        @foreach (var c in _cloudDots)
+                        {
+                            <circle class="@CloudClass(c)" cx="@Fmt(c.Sx)" cy="@Fmt(c.Sy)" r="@(c.Label is not null ? 3 : 1.6)" />
+                        }
+                        @foreach (var a in _attnLinks)
+                        {
+                            <line class="cg-attn" x1="@Fmt(a.FromSx)" y1="@Fmt(a.FromSy)" x2="@Fmt(a.ToSx)" y2="@Fmt(a.ToSy)"
+                                  stroke-width="@Fmt(0.5 + a.Weight * 2.5)" opacity="@Fmt(0.12 + a.Weight * 0.55)" />
+                        }
+                        @foreach (var a in _attnLinks)
+                        {
+                            <circle class="cg-attn-pt" cx="@Fmt(a.ToSx)" cy="@Fmt(a.ToSy)" r="2.6" opacity="@Fmt(0.35 + a.Weight * 0.5)" />
+                        }
+                        <polyline class="cg-path" points="@PathPoints()" />
+                        @foreach (var t in _trajPoints)
+                        {
+                            @if (t.IsCrystal)
+                            {
+                                <polygon class="cg-crystal" points="@TrianglePoints(t.Sx, t.Sy)" />
+                            }
+                            else
+                            {
+                                <circle class="cg-traj @(t.IsFinal ? "final" : "")" cx="@Fmt(t.Sx)" cy="@Fmt(t.Sy)" r="@(t.IsFinal ? 5.5 : 4)" />
+                            }
+                            @SvgText("cg-traj-label", t.Sx + 7, t.Sy - 6, t.Label)
+                        }
+                        @foreach (var (lbl, dot) in LabeledCloudPairs())
+                        {
+                            @SvgText("cg-cloud-label", dot.Sx + 5, dot.Sy + 3, lbl)
+                        }
+                    </svg>
+                </div>
+
+                <div class="cg-legend">
+                    <span><i class="sw path"></i> the path this token's decision took</span>
+                    <span><i class="sw crystal"></i> first step already agreeing with the final answer</span>
+                    <span><i class="sw attn"></i> what that step looked back at (width = strength)</span>
+                    <span><i class="sw dot"></i> every other word this model knows</span>
+                </div>
+            </div>
+
+            <table class="cg-table">
+                <thead><tr><th>#</th><th>Step</th><th>Top guess there</th><th>Confidence</th><th></th></tr></thead>
+                <tbody>
+                    @foreach (var t in _trajPoints)
+                    {
+                        <tr class="@(t.IsCrystal ? "crystal" : "")">
+                            <td>@t.Boundary</td>
+                            <td>@t.Label</td>
+                            <td>"@t.TopSymbol"</td>
+                            <td>@((t.TopConfidence * 100).ToString("0.#"))%</td>
+                            <td>@(t.IsCrystal ? "crystallized here" : "")</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+
+        <div class="outro">
+            <p>This reads the exact same trained checkpoint as <a href="/tools/prism">Prism</a> and
+                <a href="/tools/stories">Nano Stories</a> — no separate download, no separate model. Nothing here
+                changes the model's weights; it only inspects one forward pass. See also
+                <a href="/tools/creature">The Creature</a> and <a href="/tools/forecaster">The Forecaster</a>.</p>
+        </div>
+    }
+</div>
+
+@code {
+    const int MaxPromptTokens = 24;
+    const int TopKPerBoundary = 3;
+    const int MaxAttendedPerBoundary = 4;
+    const double PlotW = 760, PlotH = 540;
+
+    sealed class LoadStep { public string Label = ""; public string Status = "fetching…"; public string Cls = ""; }
+    readonly List<LoadStep> _loadSteps = new();
+    LoadStep Begin(string label) { var s = new LoadStep { Label = label }; _loadSteps.Add(s); StateHasChanged(); return s; }
+    void Finish(LoadStep s, string status, string cls = "core") { s.Status = status; s.Cls = cls; StateHasChanged(); }
+
+    HoloSession? _session;
+    ModelStats? _stats;
+    SubwordVocab? _vocab;
+    bool _loaded; string? _loadError;
+
+    string _prompt = "";
+    bool _busy; string? _vizError; bool _hasResult;
+    string _basisMode = "pca";
+
+    // ---- basis-independent compute results, kept so toggling the basis never re-runs the forward pass ----
+    int[]? _capped; bool _truncated;
+    double[][][]? _grid;      // [boundary][position][d] — InspectStackIterFaces
+    double[][]? _attnRows;    // [boundary][position] — InspectAttention, boundary < grid.Length-1 only
+    int _answerId; string _answerSymbol = ""; double _answerConfidence;
+    string[]? _boundaryLabel;
+    string[]? _boundaryTopSymbol; double[]? _boundaryTopConfidence;
+    int _crystalBoundary;
+    HashSet<int>? _highlightIds;   // union of each boundary's top-K decode — what the vocab cloud labels
+
+    double[]? _mean;
+    double[]? _pcaU1, _pcaU2; double _pcaVar;
+    double[]? _altU1, _altU2; double _altVar;
+    double _varianceCaptured;
+
+    // ---- basis-dependent render results, rebuilt by RebuildProjection() ----
+    sealed class TrajPoint
+    {
+        public int Boundary; public string Label = ""; public double X, Y, Sx, Sy;
+        public string TopSymbol = ""; public double TopConfidence; public bool IsCrystal; public bool IsFinal;
+    }
+    sealed class AttnLink
+    {
+        public double FromX, FromY, ToX, ToY, FromSx, FromSy, ToSx, ToSy; public double Weight;
+    }
+    sealed class CloudDot
+    {
+        public int Id; public double X, Y, Sx, Sy; public string? Label; public bool IsPrompt; public bool IsAnswer;
+    }
+    List<TrajPoint> _trajPoints = new();
+    List<AttnLink> _attnLinks = new();
+    List<CloudDot> _cloudDots = new();
+
+    static string Fmt(double v) => v.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
+    string PathPoints() => string.Join(" ", _trajPoints.Select(t => $"{Fmt(t.Sx)},{Fmt(t.Sy)}"));
+    static string CloudClass(CloudDot c)
+    {
+        var cls = "cg-dot";
+        if (c.Label is not null) cls += " hl";
+        if (c.IsAnswer) cls += " answer";
+        if (c.IsPrompt) cls += " prompt";
+        return cls;
+    }
+    // SVG's own <text> element collides with Razor's reserved "<text>" pseudo-tag (used to emit raw
+    // text without a wrapping element), which refuses to let it carry attributes (RZ1023) — so every
+    // label is built as one raw, HTML-encoded string instead of literal SVG markup in the .razor file.
+    static MarkupString SvgText(string cssClass, double x, double y, string content) =>
+        (MarkupString)$"<text class=\"{cssClass}\" x=\"{Fmt(x)}\" y=\"{Fmt(y)}\">{System.Net.WebUtility.HtmlEncode(content)}</text>";
+    static string TrianglePoints(double cx, double cy)
+    {
+        // a small upward triangle, matching the studio inspector's own "crystallisation" marker
+        const double r = 6.5;
+        return $"{Fmt(cx)},{Fmt(cy - r)} {Fmt(cx - r)},{Fmt(cy + r * 0.7)} {Fmt(cx + r)},{Fmt(cy + r * 0.7)}";
+    }
+    IEnumerable<(string, CloudDot)> LabeledCloudPairs() => _cloudDots.Where(c => c.Label is not null).Select(c => (c.Label!, c));
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var s = Begin("data/oracle-vocab.txt");
+            var vocabBytes = await Http.GetByteArrayAsync("data/oracle-vocab.txt");
+            var merges = Encoding.UTF8.GetString(vocabBytes).Replace("\r\n", "\n").Split('\n').Where(l => l.Length > 0).ToList();
+            _vocab = new SubwordVocab(merges);
+            Finish(s, $"{vocabBytes.Length:N0} B → {_vocab.Size:N0}-symbol vocab");
+
+            s = Begin("data/oracle-rounds.txt");
+            long? rounds = null;
+            try { rounds = long.Parse((await Http.GetStringAsync("data/oracle-rounds.txt")).Trim()); Finish(s, $"{rounds:N0} rounds trained"); }
+            catch { Finish(s, "not shipped (optional)", "fail"); }
+
+            s = Begin("data/oracle-stackk.txt");
+            int? trainedStackK = null;
+            try { trainedStackK = int.Parse((await Http.GetStringAsync("data/oracle-stackk.txt")).Trim()); Finish(s, $"K={trainedStackK}"); }
+            catch { Finish(s, "not shipped (optional)", "fail"); }
+
+            s = Begin("data/oracle-iterwarm.txt");
+            int? trainedIterWarm = null;
+            try { trainedIterWarm = int.Parse((await Http.GetStringAsync("data/oracle-iterwarm.txt")).Trim()); Finish(s, $"{trainedIterWarm:N0}-round ramp"); }
+            catch { Finish(s, "not shipped (optional)", "fail"); }
+
+            var k = PrismCheckpoint.ResolveK(trainedStackK);
+
+            // SessionHost dedupes by MODEL key ("prism") — if Prism or Nano Stories already loaded this
+            // checkpoint this page load, this reuses it instantly instead of re-downloading ~2.9 MB.
+            var reused = Sessions.IsLoaded(PrismCheckpoint.SessionKey);
+            _session = await Sessions.GetOrCreateAsync(PrismCheckpoint.SessionKey, async () =>
+            {
+                var sb = Begin("data/oracle-brain.bin.gz");
+                var (bytes, gzLen) = await CheckpointFetch.FetchAndDecompressGzipAsync(Http, "data/oracle-brain.bin.gz");
+                var peek = HoloFormer.Deserialize(bytes);
+                Finish(sb, $"{gzLen:N0} B gzip → {bytes.Length:N0} B → {peek.ParamCount:N0} params deserialized");
+                var alpha = PrismCheckpoint.ReconstructAlpha(peek.Layers, rounds, trainedIterWarm);
+                return HoloSession.FromCheckpoint(bytes, k, alpha);
+            });
+            if (reused) Finish(Begin("data/oracle-brain.bin.gz"), "reused from earlier this visit (no re-download)");
+            _stats = _session.Stats();
+            _loaded = true;
+        }
+        catch (Exception ex) { _loadError = "Couldn't load the checkpoint: " + ex.Message; }
+    }
+
+    async Task OnKeyDown(KeyboardEventArgs e) { if (e.Key == "Enter") await Visualize(); }
+
+    async Task SetBasis(string mode)
+    {
+        if (_basisMode == mode) return;
+        _basisMode = mode;
+        if (_hasResult) { RebuildProjection(); StateHasChanged(); }
+        await Task.CompletedTask;
+    }
+
+    // ---- the one forward pass + its inspection. No training, no gradients — read-only, matching
+    // InspectStackIterFaces/InspectAttention/DecodeFace's own doc comments. ----
+    async Task Visualize()
+    {
+        if (_session is null || _vocab is null || _stats is null || string.IsNullOrWhiteSpace(_prompt) || _busy) return;
+        var folded = AsciiPunctuation.Fold(_prompt.Trim());
+        _vizError = null; _busy = true; _hasResult = false;
+        StateHasChanged();
+        await Task.Yield();   // let "computing…" paint before the (cheap, but not free) forward pass blocks the thread
+
+        try
+        {
+            var toks = _vocab.Encode(folded);
+            if (toks.Length == 0) { _vizError = "Couldn't tokenize that — try a normal sentence."; return; }
+
+            var capLen = Math.Max(1, Math.Min(MaxPromptTokens, _stats.Context));
+            _truncated = toks.Length > capLen;
+            var capped = _truncated ? toks[^capLen..] : toks;
+            _capped = capped;
+
+            // HoloFormer.Map defaults to SequentialMap (verified: nothing in this app ever sets it to a
+            // real parallel implementation), so this plain synchronous call never spins up a thread pool
+            // to deadlock — the one real risk this codebase has documented for a single-threaded WASM
+            // host. HoloFormer does not yet expose MapAsync-based twins of these inspector methods (see
+            // AlgFormer's own CLAUDE.md gotcha), so there is nothing async to call into here; the single
+            // Task.Yield() above is what keeps the tab responsive, the same pattern Prism.razor uses
+            // around its own per-token compute.
+            var K = _session.KPass;
+            var alpha = new double[_session.Model.Layers];
+            Array.Fill(alpha, _session.ServeAlpha);
+            var grid = _session.Model.InspectStackIterFaces(capped, K, alpha);
+            var attnRows = _session.Model.InspectAttention(capped, K, alpha);
+            _grid = grid; _attnRows = attnRows;
+
+            var last = capped.Length - 1;
+            var total = grid.Length;   // Layers*KPass + 1
+
+            var finalLogits = _session.Model.DecodeFace(grid[total - 1][last]);
+            _answerId = Argmax(finalLogits);
+            var finalProbs = Softmax(finalLogits);
+            _answerSymbol = _vocab.Symbol(_answerId);
+            _answerConfidence = finalProbs[_answerId];
+
+            _boundaryLabel = BuildBoundaryLabels(_session.Model.Layers, K);
+            _boundaryTopSymbol = new string[total];
+            _boundaryTopConfidence = new double[total];
+            var highlight = new HashSet<int>();
+            _crystalBoundary = total - 1;
+            var crystalFound = false;
+            for (var b = 0; b < total; b++)
+            {
+                var probs = Softmax(_session.Model.DecodeFace(grid[b][last]));
+                var topIds = Enumerable.Range(0, probs.Length).OrderByDescending(i => probs[i]).Take(TopKPerBoundary).ToList();
+                var top1 = topIds[0];
+                _boundaryTopSymbol[b] = _vocab.Symbol(top1);
+                _boundaryTopConfidence[b] = probs[top1];
+                foreach (var id in topIds) highlight.Add(id);
+                if (!crystalFound && top1 == _answerId) { _crystalBoundary = b; crystalFound = true; }
+            }
+            _highlightIds = highlight;
+
+            // PCA fit on the TRAJECTORY ONLY (a handful of points — this maximises the spread of the
+            // path itself, the "x, y with the most differentiation" the tool exists to show; fitting on
+            // the whole vocabulary instead would make the path collapse toward a single dot).
+            var trajRaw = new List<double[]>(total);
+            for (var b = 0; b < total; b++) trajRaw.Add(grid[b][last]);
+            var mean = Mean(trajRaw);
+            _mean = mean;
+            var centered = trajRaw.Select(v => Sub(v, mean)).ToList();
+            var totalVar = centered.Count > 0 ? centered.Average(y => Dot(y, y)) : 0.0;
+
+            var pc1 = PowerIterate(centered, mean.Length, seed: 1);
+            var centered2 = centered.Select(y => Sub(y, Scale(pc1, Dot(y, pc1)))).ToList();
+            var pc2 = PowerIterate(centered2, mean.Length, seed: 2);
+            _pcaU1 = pc1; _pcaU2 = pc2;
+            _pcaVar = VarianceCaptured(centered, pc1, pc2, totalVar);
+
+            // Alternate, non-variance-maximizing basis so a suspicious-looking PCA layout can be
+            // cross-checked: the plane spanned by the (centered) embed and FINAL states, via Gram-Schmidt.
+            var embedC = centered[0]; var finalC = centered[^1];
+            var fallback2 = NormalizeCopy(Sub(pc2, Scale(pc1, Dot(pc2, pc1)))) ?? pc2;
+            var u1alt = NormalizeCopy(embedC) ?? pc1;
+            var w = Sub(finalC, Scale(u1alt, Dot(finalC, u1alt)));
+            var u2alt = NormalizeCopy(w) ?? fallback2;
+            _altU1 = u1alt; _altU2 = u2alt;
+            _altVar = VarianceCaptured(centered, u1alt, u2alt, totalVar);
+
+            RebuildProjection();
+            _hasResult = true;
+        }
+        catch (Exception ex) { _vizError = "Couldn't visualize that: " + ex.Message; }
+        finally { _busy = false; StateHasChanged(); }
+    }
+
+    // Recomputes only the 2D projection (mean/basis already fixed by Visualize()) — cheap enough to run
+    // on every basis-toggle click without touching the model again.
+    void RebuildProjection()
+    {
+        if (_grid is null || _mean is null || _capped is null || _vocab is null || _session is null || _boundaryLabel is null) return;
+        var (u1, u2) = _basisMode == "embed-final" ? (_altU1!, _altU2!) : (_pcaU1!, _pcaU2!);
+        _varianceCaptured = _basisMode == "embed-final" ? _altVar : _pcaVar;
+
+        var total = _grid.Length;
+        var last = _capped.Length - 1;
+
+        _trajPoints = new List<TrajPoint>(total);
+        for (var b = 0; b < total; b++)
+        {
+            var (x, y) = Project(_grid[b][last], _mean, u1, u2);
+            _trajPoints.Add(new TrajPoint
+            {
+                Boundary = b, Label = _boundaryLabel[b], X = x, Y = y,
+                TopSymbol = _boundaryTopSymbol![b], TopConfidence = _boundaryTopConfidence![b],
+                IsCrystal = b == _crystalBoundary, IsFinal = b == total - 1,
+            });
+        }
+
+        _attnLinks = new List<AttnLink>();
+        if (_attnRows is not null)
+        {
+            for (var b = 0; b < _attnRows.Length; b++)
+            {
+                var row = _attnRows[b];
+                var cand = Enumerable.Range(0, row.Length).Where(j => j != last)
+                    .OrderByDescending(j => Math.Abs(row[j])).Take(MaxAttendedPerBoundary).ToList();
+                if (cand.Count == 0) continue;
+                var maxAbs = cand.Max(j => Math.Abs(row[j]));
+                if (maxAbs < 1e-12) continue;
+                var fromPt = _trajPoints[b];
+                foreach (var j in cand)
+                {
+                    var wgt = Math.Abs(row[j]) / maxAbs;
+                    // the attended position's CURRENT state at this exact depth — not its raw
+                    // embedding — matching InspectStackIterFaces's own doc: grid[b][j] is exactly what
+                    // this row's resonance at column j was computed from.
+                    var (px, py) = Project(_grid[b][j], _mean, u1, u2);
+                    _attnLinks.Add(new AttnLink { FromX = fromPt.X, FromY = fromPt.Y, ToX = px, ToY = py, Weight = wgt });
+                }
+            }
+        }
+
+        // Bounded by the SMALLER of the two vocab counts on purpose: the subword table (oracle-vocab.txt)
+        // and the checkpoint's own embedding rows are deployed together and expected to agree, but
+        // EmbRow throws on an out-of-range id where SubwordVocab.Symbol degrades gracefully — guard the
+        // riskier side rather than assume the sidecar file can never drift from the checkpoint that
+        // shipped alongside it.
+        var cloudVocab = Math.Min(_vocab.Size, _session.Model.Vocab);
+        _cloudDots = new List<CloudDot>(cloudVocab);
+        var promptIds = new HashSet<int>(_capped);
+        for (var id = 0; id < cloudVocab; id++)
+        {
+            var (x, y) = Project(_session.Model.EmbRow(id), _mean, u1, u2);
+            string? label = null;
+            if (id == _answerId || promptIds.Contains(id) || (_highlightIds?.Contains(id) ?? false)) label = _vocab.Symbol(id);
+            _cloudDots.Add(new CloudDot { Id = id, X = x, Y = y, Label = label, IsPrompt = promptIds.Contains(id), IsAnswer = id == _answerId });
+        }
+
+        ComputeViewBoxAndCoords();
+    }
+
+    void ComputeViewBoxAndCoords()
+    {
+        var xs = new List<double>(); var ys = new List<double>();
+        foreach (var t in _trajPoints) { xs.Add(t.X); ys.Add(t.Y); }
+        foreach (var a in _attnLinks) { xs.Add(a.ToX); ys.Add(a.ToY); }
+        if (xs.Count == 0) { xs.Add(0); ys.Add(0); }
+        var minX = xs.Min(); var maxX = xs.Max(); var minY = ys.Min(); var maxY = ys.Max();
+        var cx = (minX + maxX) / 2; var cy = (minY + maxY) / 2;
+        var half = Math.Max(Math.Max(maxX - minX, maxY - minY), 1e-6) / 2 * 1.4;   // equal-aspect + 40% padding
+        double Sx(double x) => (x - (cx - half)) / (2 * half) * PlotW;
+        double Sy(double y) => PlotH - (y - (cy - half)) / (2 * half) * PlotH;   // flip so +Y reads as "up"
+        foreach (var t in _trajPoints) { t.Sx = Sx(t.X); t.Sy = Sy(t.Y); }
+        foreach (var a in _attnLinks) { a.FromSx = Sx(a.FromX); a.FromSy = Sy(a.FromY); a.ToSx = Sx(a.ToX); a.ToSy = Sy(a.ToY); }
+        foreach (var c in _cloudDots) { c.Sx = Sx(c.X); c.Sy = Sy(c.Y); }
+    }
+
+    // ---- small linear-algebra helpers, hand-written on purpose (charter: no numerics package for a
+    // PCA over a handful of points) ----
+    static int Argmax(double[] v) { var bi = 0; for (var i = 1; i < v.Length; i++) if (v[i] > v[bi]) bi = i; return bi; }
+    static double[] Softmax(double[] logits)
+    {
+        var max = logits.Max(); var exp = new double[logits.Length]; double sum = 0;
+        for (var i = 0; i < logits.Length; i++) { exp[i] = Math.Exp(logits[i] - max); sum += exp[i]; }
+        for (var i = 0; i < logits.Length; i++) exp[i] /= sum;
+        return exp;
+    }
+    static double[] Mean(IReadOnlyList<double[]> pts)
+    {
+        var d = pts[0].Length; var m = new double[d];
+        foreach (var p in pts) for (var i = 0; i < d; i++) m[i] += p[i];
+        for (var i = 0; i < d; i++) m[i] /= pts.Count;
+        return m;
+    }
+    static double[] Sub(double[] a, double[] b) { var r = new double[a.Length]; for (var i = 0; i < a.Length; i++) r[i] = a[i] - b[i]; return r; }
+    static double[] Scale(double[] a, double s) { var r = new double[a.Length]; for (var i = 0; i < a.Length; i++) r[i] = a[i] * s; return r; }
+    static double Dot(double[] a, double[] b) { double s = 0; for (var i = 0; i < a.Length; i++) s += a[i] * b[i]; return s; }
+    static double[]? NormalizeCopy(double[] v)
+    {
+        var n = Math.Sqrt(Dot(v, v));
+        if (n < 1e-9) return null;
+        var r = new double[v.Length]; for (var i = 0; i < v.Length; i++) r[i] = v[i] / n; return r;
+    }
+    static (double x, double y) Project(double[] raw, double[] mean, double[] u1, double[] u2)
+    {
+        double px = 0, py = 0;
+        for (var i = 0; i < raw.Length; i++) { var c = raw[i] - mean[i]; px += c * u1[i]; py += c * u2[i]; }
+        return (px, py);
+    }
+    // Power iteration on the covariance of the (few, e.g. under a hundred) centered trajectory points,
+    // via the O(N·d) "data-side" matvec (Cov·v = (1/N)·Σ yᵢ·(yᵢ·v)) rather than ever forming a d×d
+    // matrix — cheap even at d in the hundreds. Deflation for the 2nd component is done by removing the
+    // 1st component from the DATA before iterating again (see call site), which makes the result
+    // orthogonal to it by construction, no extra re-orthogonalization step needed inside the loop.
+    static double[] PowerIterate(IReadOnlyList<double[]> centered, int d, int seed)
+    {
+        var rng = new Random(seed);
+        var v0 = new double[d]; for (var i = 0; i < d; i++) v0[i] = rng.NextDouble() - 0.5;
+        var v = NormalizeCopy(v0) ?? v0;
+        for (var iter = 0; iter < 64; iter++)
+        {
+            var w = new double[d];
+            foreach (var y in centered)
+            {
+                var dp = Dot(y, v);
+                if (dp == 0) continue;
+                for (var i = 0; i < d; i++) w[i] += dp * y[i];
+            }
+            var wn = NormalizeCopy(w);
+            if (wn is null) break;   // degenerate (fewer than 2 distinct points) — keep the last valid v
+            v = wn;
+        }
+        return v;
+    }
+    // Fraction of the trajectory's own spread (sum of squared centered norms) that lands inside the
+    // 2D plane spanned by an orthonormal (u1,u2) — for PCA's own basis this is exactly the classic
+    // (λ1+λ2)/trace(Cov) variance-explained ratio; for the alternate embed→final basis it is the same
+    // honest quantity against a basis chosen for a different reason, not variance-maximizing.
+    static double VarianceCaptured(IReadOnlyList<double[]> centered, double[] u1, double[] u2, double totalVar)
+    {
+        if (totalVar < 1e-12 || centered.Count == 0) return 1.0;
+        double sum = 0;
+        foreach (var y in centered) { var p1 = Dot(y, u1); var p2 = Dot(y, u2); sum += p1 * p1 + p2 * p2; }
+        return Math.Clamp(sum / centered.Count / totalVar, 0, 1);
+    }
+    // Boundary b's label, matching InspectStackIterFaces's own ordering: b=0 is the raw input embedding
+    // ("embed"); for 0<b<total-1, b is the state right after iteration (l,it) finished, where the
+    // flattened iteration index is b-1; b=total-1 is the model's final output face ("FINAL").
+    static string[] BuildBoundaryLabels(int layers, int kpass)
+    {
+        var total = layers * kpass + 1;
+        var labels = new string[total];
+        labels[0] = "embed";
+        for (var b = 1; b < total; b++)
+        {
+            if (b == total - 1) { labels[b] = "FINAL"; continue; }
+            var iterFlat = b - 1;
+            var l = iterFlat / kpass; var it = iterFlat % kpass;
+            labels[b] = $"L{l} p{it}";
+        }
+        return labels;
+    }
+}

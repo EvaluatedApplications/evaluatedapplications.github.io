@@ -1,0 +1,84 @@
+/* Shared base block — copied verbatim per the house convention (see CLAUDE.md's "CSS pattern"
+   note), Blazor CSS isolation means it can't be a shared partial. Source: Analyst.razor.css /
+   Prism.razor.css. */
+.room { max-width: 880px; margin: 0 auto; padding: 3rem 24px 4rem; }
+.crumb { font-family: var(--mono); font-size: 0.82rem; color: var(--ink-faint); margin-bottom: 0.75rem; }
+.crumb a { color: var(--ink-soft); }
+.crumb span { margin: 0 0.4rem; opacity: 0.6; }
+.room-head h1 { font-size: clamp(2rem, 4.5vw, 2.6rem); font-weight: 700; letter-spacing: -0.02em; margin: 0 0 0.5rem; }
+.lede { font-size: 1.08rem; line-height: 1.55; color: var(--ink-soft); margin: 0 0 1.2rem; max-width: 68ch; }
+.lede code { font-family: var(--mono); font-size: 0.92em; color: var(--accent-ink); background: var(--bg-2); padding: 0.05rem 0.35rem; border-radius: 5px; }
+.hint { color: var(--ink-faint); font-size: 0.88rem; margin: 0.5rem 0 0; }
+.err { color: var(--bad); margin: 0.6rem 0 0; }
+.go { background: var(--accent); color: #fff; border: none; border-radius: 10px; padding: 0.6rem 1.4rem; font-size: 1rem; font-weight: 600; cursor: pointer; transition: filter 0.15s; }
+.go:hover:not(:disabled) { filter: brightness(1.08); }
+.go:disabled { opacity: 0.55; cursor: default; }
+.outro { margin-top: 2.4rem; padding-top: 1.2rem; border-top: 1px solid var(--border); }
+.outro p { color: var(--ink-soft); font-size: 0.92rem; line-height: 1.55; margin: 0; }
+.outro a { color: var(--accent-ink); }
+
+/* ---- stats row (same shape as Prism's .cr-stats/.stat) ---- */
+.cg-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 0.8rem; margin: 0 0 1.4rem; }
+.stat { background: var(--surface); border: 1px solid var(--border); border-left: 3px solid var(--accent); border-radius: 12px; padding: 0.9rem 1rem; }
+.stat .n { font-size: 1.5rem; font-weight: 800; letter-spacing: -0.02em; color: var(--ink); font-variant-numeric: tabular-nums; }
+.stat .l { color: var(--ink-soft); font-size: 0.82rem; margin-top: 0.2rem; }
+
+/* ---- prompt form ---- */
+.cg-form { display: flex; gap: 0.6rem; flex-wrap: wrap; }
+.cg-input { flex: 1; min-width: 220px; background: var(--bg-2); border: 1px solid var(--border-2); border-radius: 9px; padding: 0.6rem 0.85rem; color: var(--ink); font-size: 0.95rem; }
+.cg-input:focus { outline: none; border-color: var(--accent); }
+.cg-input::placeholder { color: var(--ink-faint); }
+
+/* ---- the greedy-answer banner ---- */
+.cg-answer { margin: 1.2rem 0 0.2rem; padding: 0.8rem 1rem; border-radius: 12px; background: var(--surface); border: 1px solid var(--border); border-left: 3px solid var(--ok); display: flex; align-items: baseline; gap: 0.6rem; flex-wrap: wrap; }
+.cg-answer-label { font-family: var(--mono); font-size: 0.72rem; letter-spacing: 0.04em; text-transform: uppercase; color: var(--ink-faint); }
+.cg-answer-word { font-size: 1.15rem; font-weight: 700; color: var(--accent-ink); }
+.cg-answer-meta { font-size: 0.84rem; color: var(--ink-soft); font-variant-numeric: tabular-nums; }
+
+/* ---- the main plot panel ---- */
+.cg-panel { margin-top: 1.4rem; border: 1px solid var(--border); border-radius: 14px; background: var(--bg-2); padding: 1rem 1.1rem 1.2rem; }
+.cg-honesty p { margin: 0 0 0.7rem; font-size: 0.88rem; line-height: 1.55; color: var(--ink-soft); }
+.cg-honesty strong { color: var(--ink); }
+.cg-basis { display: flex; gap: 1.2rem; flex-wrap: wrap; margin: 0 0 0.9rem; font-size: 0.85rem; color: var(--ink-soft); }
+.cg-basis label { display: flex; align-items: center; gap: 0.4rem; cursor: pointer; }
+
+.cg-svg-wrap { width: 100%; border: 1px solid var(--border-2); border-radius: 10px; background: var(--bg); overflow: hidden; }
+.cg-svg { width: 100%; height: auto; aspect-ratio: 760 / 540; display: block; overflow: hidden; }
+
+.cg-dot { fill: var(--ink-faint); opacity: 0.4; }
+.cg-dot.hl { fill: var(--ink-soft); opacity: 0.85; }
+.cg-dot.prompt { fill: var(--spectrum-5, #4aa3ff); opacity: 0.95; }
+.cg-dot.answer { fill: var(--ok); opacity: 1; }
+.cg-cloud-label { font-family: var(--mono); font-size: 8.5px; fill: var(--ink-soft); pointer-events: none; }
+
+.cg-attn { stroke: var(--warn, #e6c450); }
+.cg-attn-pt { fill: var(--warn, #e6c450); }
+
+.cg-path { fill: none; stroke: var(--accent-ink); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; opacity: 0.9; }
+.cg-traj { fill: var(--accent-ink); stroke: var(--bg); stroke-width: 1.5; }
+.cg-traj.final { fill: var(--ok); }
+.cg-crystal { fill: var(--ok); stroke: var(--bg); stroke-width: 1.2; }
+.cg-traj-label { font-family: var(--mono); font-size: 10px; fill: var(--ink); font-weight: 600; pointer-events: none; }
+
+.cg-legend { display: flex; flex-wrap: wrap; gap: 1rem; margin-top: 0.8rem; font-size: 0.8rem; color: var(--ink-soft); }
+.cg-legend span { display: flex; align-items: center; gap: 0.4rem; }
+.cg-legend .sw { width: 0.85rem; height: 0.85rem; border-radius: 50%; display: inline-block; flex: 0 0 auto; }
+.cg-legend .sw.path { background: var(--accent-ink); }
+.cg-legend .sw.crystal { background: var(--ok); }
+.cg-legend .sw.attn { background: var(--warn, #e6c450); }
+.cg-legend .sw.dot { background: var(--ink-faint); }
+
+/* ---- boundary table ---- */
+.cg-table { width: 100%; border-collapse: collapse; margin-top: 1.2rem; font-size: 0.86rem; }
+.cg-table th, .cg-table td { text-align: left; padding: 0.45rem 0.6rem; border-bottom: 1px solid var(--border); }
+.cg-table th { color: var(--ink-faint); font-family: var(--mono); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.03em; }
+.cg-table td { color: var(--ink-soft); font-variant-numeric: tabular-nums; }
+.cg-table tr.crystal td { color: var(--ok); font-weight: 600; }
+
+@media (max-width: 640px) {
+    .room { padding-left: 12px; padding-right: 12px; }
+    .cg-stats { grid-template-columns: 1fr 1fr; gap: 0.55rem; }
+    .cg-form { flex-direction: column; }
+    .cg-table { font-size: 0.78rem; }
+    .cg-table th, .cg-table td { padding: 0.35rem 0.4rem; }
+}

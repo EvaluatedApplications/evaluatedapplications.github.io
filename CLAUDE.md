@@ -12,10 +12,12 @@ content to the owner instead. You never commit/push (coordinator commits, user p
 
 Root static pages (`site/*.html`), all built on the shared design system:
 - `index.html` — **tools-first homepage (2026-08-28 pivot, see "Tools-first pivot" below)**: company
-  pitch, then the 6-card tool gallery (Prism/Nano Stories/Creature/Forecaster/Prose/Analyst, in that
-  order — see "Homepage #tools reorder by technical achievement" below for Prose's 2026-09-13
-  placement reasoning, and "Nano Stories added to the `#tools` gallery (2026-09-21)" below for Nano
-  Stories' placement) as the entire top-level content, then a slim "Powered by" package-chip strip
+  pitch, then the 7-card tool gallery (Prism/Nano Stories/**The Cartographer**/Creature/Forecaster/
+  Prose/Analyst, in that order — see "Homepage #tools reorder by technical achievement" below for
+  Prose's 2026-09-13 placement reasoning, "Nano Stories added to the `#tools` gallery (2026-09-21)"
+  below for Nano Stories' placement, and "The Cartographer added to the `#tools` gallery
+  (2026-09-24)" below for Cartographer's) as the entire top-level content, then a slim "Powered by"
+  package-chip strip
   (`.pkg-strip`, no cards/descriptions) linking to `/packages.html`. The 11-package gallery and the
   "how it fits together" flow diagram used to live here inline — they now live on `packages.html`
   (below), not duplicated on the homepage.
@@ -1992,6 +1994,52 @@ non-tool" figures above, which were themselves already one article-page short of
 smaller-than-tinystories.html`, and `evalapp/manual/` — none added by this pass, all pre-existing
 drift this count just happened to surface while re-deriving fresh per the task's own instruction not
 to trust the list). NOT deployed — rendered only, per charter §6 (coordinator/user commit + push).
+
+**The Cartographer added to the `#tools` gallery (2026-09-24)**: a 7th card, inserted 3rd —
+immediately after Nano Stories, before Creature (Prism, Nano Stories, **The Cartographer**,
+Creature, Forecaster, Prose, Analyst) — same "shares Prism's checkpoint" adjacency reasoning as Nano
+Stories' own placement one entry up, and matching the order `showroom-owner`'s `Home.razor` (already
+built, this agent did not touch it) placed it in relative to Prism/Stories. Tool built and
+build-verified entirely by `showroom-owner` at `Showroom/Pages/Cartographer.razor` (route
+`/tools/cartographer`) — this pass is the static-site side only: a 2D visualiser of ONE next-token
+decision (not a chat, not a generation loop), plotting the real forward-pass trajectory (embed, every
+layer's weight-tied pass, FINAL) as a path through the vocabulary cloud, with real attention links to
+the context positions attended at each step and a marker where the decode decision crystallises;
+honestly states on screen what fraction of the real 128-dimensional variance its two plotted axes
+capture, since a 2D plot is a lossy shadow of that space. Single-package dependency, AlgFormer only,
+exactly like Prism — `style="--cat:var(--c-algformer)"`, `<span class="ver">AlgFormer</span>`, ONE
+`.powered` pill (`/algformer.html`), no chord. `data-initial="Ct"` — checked against every other
+`#tools` `data-initial` on `index.html` (`Pm`/`Ns`/`Cr`/`Fc`/`Ps`/`An`), no collision; `#tools` is
+still pulled out of the mobile icon-grid-tile treatment (2026-08-28), so `data-initial` remains inert
+here on mobile, carried anyway for consistency, same caveat as every prior tool-card entry above.
+Card copy written fresh in the site's own voice (not pasted from the dispatching task's own
+description) — leads with "type a prompt, watch the decision take shape," names the path/embed/
+layer-pass/FINAL/attention/crystallisation shape, and states outright that the 2D plot is a slice of
+128 real dimensions with the on-screen number naming how much it actually captures, matching the
+tool's own on-page honesty paragraph rather than only describing the visual. Tool count bumped 6→7
+in the same 4 places the Prose/Nano Stories entries above both name and re-derived fresh rather than
+trusted this time too (all 4 checked directly in the live file before editing): `index.html`'s `<meta
+name="description">`, `og:description`, hero `<p class="lede">`, and the `.facts` `<b>7</b>` pill.
+`/tools/cartographer` added to `sitemap.xml`, inserted alphabetically between `/tools/analyst` and
+`/tools/creature` (weekly/0.6, same tier as every other tool route) — **31 total `<url>` entries now,
+8 of which contain `/tools`**, superseding the entry above's "30 total / 7 tools" figures, which are
+now one short. Also added, same reasoning as Prose's and Nano Stories' own AlgFormer cross-links:
+`algformer.html`'s "Try it live" grid gained a `<a class="card tool">` for The Cartographer right
+after Nano Stories' card, matching that section's simpler plain-anchor shape (no `.powered` pill, no
+separate `.card-link` overlay). No dedicated `site/*.html` product page was created — same reasoning
+as Prism/Nano Stories: not a separate NuGet package with its own `docs/site.md`, so `algformer.html`
+and the homepage tool card are its full reachable footprint. Reachability walk: Home → `#tools` → The
+Cartographer = 1 click; `algformer.html` → "Try it live" grid → The Cartographer = 1 click; no nav
+item added anywhere. Tag/div balance re-checked programmatically on both edited files (`index.html`,
+`algformer.html`): div/article/a/section/nav/header/footer/span/p/h1/h2/h3 all matched, 0 mismatches.
+`sitemap.xml` re-verified as well-formed XML via `[xml]` parse post-edit. **Flagged, not fixed this
+pass** (out of the task's named scope — 3 spots, index.html gallery / fact pills / sitemap.xml — so
+left for the coordinator to decide, not silently touched): `site/404.html`'s "try it live" example
+line still only names The Analyst (`<a href="/tools/analyst">The Analyst</a>`), unchanged since it
+was written long before Nano Stories/Cartographer existed — a minor, pre-existing single-example
+staleness, not a broken link. NOT deployed — rendered only, per charter §6 (coordinator/user commit +
+push); the coordinator is also handling the `dotnet publish`/`Showroom/dist/` refresh this task was
+explicitly told not to touch.
 
 ### `HoloKernel/` — the shared model kernel (Phase 1, landed 2026-08-28 — **ported into all three
 live-brain tools by showroom-owner the same day**, status correction from showroom-owner with
