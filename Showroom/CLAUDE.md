@@ -125,11 +125,27 @@ strips (not appends) the trailing newline. `_turns` capped + render-batched. **A
 ## Nano Stories — `Pages/Stories.razor` (route `/stories`)
 THE SAME MODEL as Prism — same weights, same training run, not a fine-tune. Shares the `"prism"`
 `SessionHost` key and `HoloKernel.TokenVoice` byte-for-byte. Generation is a plain one-shot
-continuation (not Prism's tagged chat format). Its own `DecodePolicy` (Focused/Balanced/Wild FloorK
-presets) — production's decode gate overshoots this checkpoint's own argmax at most positions, so
-sampling reads as near-deterministic by construction, not because the model itself is deterministic.
-Reproducible by seed (`Random(seed)` feeds `Gate.Pick`). Honesty paragraph under the story states the
-real (~370K) parameter count so nobody reads a generated sample as more capable than it is.
+continuation (not Prism's tagged chat format). Its own `DecodePolicy` (Focused/Balanced/Wild P
+presets, since the 2026-09-24 TopP retightening below). Reproducible by seed (`Random(seed)` feeds
+`Gate.Pick`). Honesty paragraph under the story states the real (~370K) parameter count so nobody
+reads a generated sample as more capable than it is.
+
+**Decode gate: TopP, not ResonanceSigma (RETIGHTENED 2026-09-24, both Prism and Stories, matching a
+fix in the PrismStudio host)**. `FloorMode.ResonanceSigma` (mean + `FloorK`*sigma over the FULL
+vocab, incl. every suppressed token) degenerates to an effective top-1 filter at 78-84% of positions
+on this checkpoint and makes `Temperature` inert there — the real cause of Stories' old
+"near-deterministic" note, not the model itself. Both pages now build `Floor = FloorMode.TopP`;
+`FloorK` is vestigial once `Floor=TopP` (verified against real `Gate.Evaluate`). **`P` is
+checkpoint-specific, re-measure on every re-mint** — as of r84,639 (first EVE-trained model,
+refreshed 2026-09-24, NOT the prior r635,618 one), cumulative softmax mass to admit N candidates at
+the FINAL face: `N=3→0.303, N=5→0.390, N=8→0.466, N=12→0.539, N=20→0.635, N=40→0.752`, P(top1)=0.199
+(~57 effective candidates). Prism's chat uses `P=0.30` (~3). Stories' presets read off the same
+table: Focused `P=0.30` (now literally == Prism's chat), Balanced `P=0.466` (~8), Wild `P=0.635`
+(~20) — never a conventional `p=0.9` (`Default`'s own value): it admits 200-300 tokens here and
+produces word salad. Re-measure the table (reconsider every P) if a future P(top1) moves off ~0.2.
+`ConfidentThreshold=0.60` unchanged on both pages, matches PrismStudio's host value. Required bumping
+`HoloKernel.csproj`'s `EvaluatedApplications.Prism` 1.0.2→1.3.0 (`FloorMode.TopP`/`DecodePolicy.P`
+don't exist before 1.3.0, reflection-verified against 1.0.2/1.1.0/1.3.0 directly).
 
 ## The Cartographer — `Pages/Cartographer.razor` (route `/cartographer`, added 2026-09-24)
 A 2D visualiser for **one** next-token decision — not a chat, not a generation loop. Reuses Prism's
@@ -183,6 +199,10 @@ increases `_totalMinted`.
 - `EvaluatedApplications.AlgFormer` **2.16.0** (bumped from 2.8.0, 2026-09-24, routine latest-NuGet
   bump; `HoloKernel.csproj` bumped alongside it to avoid an NU1605 downgrade). `SubwordVocab.MaxLen`
   must be ≥16 to load a freshly-minted checkpoint (fixed at 2.8.0; still true at 2.16.0).
+- `EvaluatedApplications.Prism` **1.3.0**, via `HoloKernel.csproj`'s own `PackageReference` (bumped
+  from 1.0.2, 2026-09-24 — load-bearing this time, not just routine: `FloorMode.TopP`/`DecodePolicy.P`
+  don't exist before 1.3.0, needed for the decode-gate retightening above; depends on AlgFormer
+  >=2.15.0 per its nuspec, already satisfied by this project's 2.16.0).
 - `EvaluatedApplications.HoloDb` **1.10.0** — Analyst, Prose.
 - `EvaluatedApplications.Tracer` **1.1.0** — Creature.
 - `EvaluatedApplications.Prose` **1.3.0** — Prose. A multi-package tool's version bump ripples to

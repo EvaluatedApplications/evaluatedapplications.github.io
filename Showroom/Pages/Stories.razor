@@ -134,52 +134,62 @@
 @code {
     // ---- decode policy — deliberately its OWN DecodePolicy, constructed explicitly rather than via
     // `Prism.Inference.DecodePolicy.Default with {...}` (which is how Prism.razor builds its own),
-    // per the diagnosis this tool shipped with: HoloEngine's decode GATE, not the model, is why a
-    // generator reads as deterministic. Measured on this exact checkpoint: the argmax sits only
-    // 2.73 sigma above the logit bulk on average, so the production FloorK of 3.0 (mean + 3*sigma)
-    // OVERSHOOTS the max at 67% of positions — Gate.ResonanceFloor then caps the floor AT the max, so
-    // exactly one token (the argmax) clears it, and sampling from a one-token nucleus is deterministic
-    // by accident. Only 22.2% of positions are genuinely confident enough to be legitimately greedy,
-    // but the gate behaves greedily ~95-98% of the time. NEVER change Prism.razor's own Policy to fix
-    // this — that would change Prism's live chat behaviour, which nobody asked for. This is a
+    // per the diagnosis this tool originally shipped with: HoloEngine's decode GATE, not the model, is
+    // why a generator reads as deterministic. This page used to run FloorMode.ResonanceSigma with a
+    // per-preset FloorK (see the retired table below, kept for history) — RETIGHTENED 2026-09-24
+    // (matches the same fix in PrismStudio's host and in Prism.razor here): ResonanceSigma is mean +
+    // FloorK*sigma computed over the FULL vocab INCLUDING every suppressed token, which degenerates to
+    // an effective top-1 filter at 78-84% of positions on this checkpoint and makes Temperature inert
+    // there — FloorK stopped meaning what the old table said it meant. Switched to FloorMode.TopP;
+    // FloorK is now vestigial once Floor=TopP (confirmed by direct test against the real Prism 1.3.0
+    // Gate.Evaluate: identical GateDecision for FloorK=0/3/99 under TopP), no longer passed at all.
+    //
+    // Nucleus mass re-measured directly against the CURRENTLY deployed checkpoint (r84,639, wwwroot/
+    // data + dist/data refreshed 2026-09-24 — the first EVE-trained model, NOT the prior r635,618 one;
+    // re-measure this table if the checkpoint is re-minted). Cumulative softmax mass needed at the
+    // FINAL face to admit N candidates:
+    //
+    //     N=3 -> 0.303   N=5 -> 0.390   N=8 -> 0.466   N=12 -> 0.539   N=20 -> 0.635   N=40 -> 0.752
+    //
+    // P(top1) is 0.199 (~57 effective candidates). Re-measure this table (and reconsider every P below)
+    // if P(top1) ever moves off ~0.2 on a future checkpoint. NEVER change Prism.razor's own Policy to
+    // fix this — that would change Prism's live chat behaviour, which nobody asked for. This is a
     // per-tool policy, scoped to this page only.
-    static DecodePolicy PolicyFor(double floorK) => new()
+    static DecodePolicy PolicyFor(double p) => new()
     {
         ConfidentThreshold = 0.60,   // unchanged production gate — still commit greedily above 60% confidence
         Temperature = 0.80,          // unchanged production sampling temperature
-        Floor = FloorMode.ResonanceSigma,
-        FloorK = floorK,
+        Floor = FloorMode.TopP,
+        P = p,
         DegenRepeat = 4,
         DegenNonGreedyRun = 0,       // same reasoning as Prism.razor: preserve the site's existing stop behaviour
     };
 
-    // Three named presets rather than a raw FloorK slider — a visitor doesn't know what a resonance
-    // floor is, so the control is "Focused / Balanced / Wild", not a number. Values are exactly three
-    // MEASURED points from the user's own FloorK sweep on this checkpoint (not interpolated/guessed):
+    // Three named presets rather than a raw P slider -- a visitor doesn't know what nucleus mass is, so
+    // the control is "Focused / Balanced / Wild", not a number. RETIGHTENED 2026-09-24 -- this used to
+    // be a FloorK sweep against FloorMode.ResonanceSigma; that table is meaningless now Floor=TopP (see
+    // git history if it's ever wanted). Values read directly off the SAME measured table Prism.razor's
+    // own comment carries, cumulative softmax mass needed at the FINAL face to admit N candidates on
+    // the currently deployed checkpoint (r84,639):
     //
-    //     FloorK   median nucleus   positions forced to greedy
-    //     0.5           353                 0.0%
-    //     1.0           162                 0.0%      (too loose: live output drifted into invented
-    //                                                  words - promirtys, uolentfish)
-//     1.5            42                 0.0%      <- Wild
-    //     2.0             7                14.7%      <- Balanced (default)
-//     2.5             1                55.3%      <- Focused
-    //     3.0             1                78.7%   <- Prism's own chat policy, unchanged
+    //     N=3 -> 0.303   N=5 -> 0.390   N=8 -> 0.466   N=12 -> 0.539   N=20 -> 0.635   N=40 -> 0.752
     //
-    // Skipped 3.0 (the production chat value, 78.7% forced greedy - near-deterministic) and 0.5
-    // point is variety) and 0.5 (median nucleus 353 — more than half this checkpoint's own vocabulary,
-    // likely to read as noise rather than variety on a model this small). Balanced sits at the LOW end
-    // of the "1.5 to 2.0" range expected for chat, on purpose: a story generator should skew lower than
-    // chat, per the brief this tool was built from. Tuned by reasoning from the measured table, not by
-    // generating and listening — this agent cannot open a browser (Showroom charter boundary) — flagged
-    // in the hand-off for the user to try live and retune the three presets' FloorK values below if a
-    // round of listening says otherwise.
+    // P(top1) is 0.199 (~57 effective candidates). Focused = N~3 (P=0.30, the SAME value Prism.razor's
+    // own chat policy now uses -- "closest to Prism's own chat behaviour" was already this preset's own
+    // description, and it is now literally true). Balanced = N~8 (P=0.466, real everyday variety
+    // without the old policy's word-salad risk). Wild = N~20 (P=0.635, the widest spread still
+    // comfortably short of N=40's 0.752, which starts admitting enough of the tail to read as noise on
+    // a model this small). Tuned by reasoning from the measured table, not by generating and
+    // listening -- this agent cannot open a browser (Showroom charter boundary) -- flagged in the
+    // hand-off for the user to try live and retune the three presets' P values below if a round of
+    // listening says otherwise. Re-measure the whole table if the checkpoint is re-minted or P(top1)
+    // moves off ~0.2.
     enum Variety { Focused, Balanced, Wild }
-    static double FloorKFor(Variety v) => v switch
+    static double PFor(Variety v) => v switch
     {
-        Variety.Focused => 2.5,
-        Variety.Wild => 1.5,
-        _ => 2.0,
+        Variety.Focused => 0.30,
+        Variety.Wild => 0.635,
+        _ => 0.466,
     };
     sealed record VarietyOption(Variety Value, string Label, string Hint);
     static readonly VarietyOption[] VarietyOptions =
@@ -353,7 +363,7 @@
     // half of the same model.
     async Task<(string Text, string StopReason)> GenerateStoryAsync(string prompt, int seed, Variety variety, Func<string, Task>? onPartial)
     {
-        var policy = PolicyFor(FloorKFor(variety));
+        var policy = PolicyFor(PFor(variety));
         var promptTokens = _vocab!.Encode(HoloKernel.AsciiPunctuation.Fold(prompt));
         var seq = new List<int>(promptTokens.Length > 0 ? promptTokens : new[] { 0 });
         var outIds = new List<int>();

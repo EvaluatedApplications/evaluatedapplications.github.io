@@ -148,8 +148,7 @@
     // ---- decode policy — migrated onto Prism.Inference.DecodePolicy 2026-09-05 (was HoloKernel's own
     // hand-copy of the same type, ported from PrismStudio's HoloEngine originally 2026-08-28; the
     // numbers are unchanged, just single-sourced in Prism now). ConfidentThreshold=0.60, Temperature=
-    // 0.80, Floor=ResonanceSigma, FloorK=3.0, DegenRepeat=4 — all confirmed identical to the values
-    // this page ran before the migration.
+    // 0.80, DegenRepeat=4 — all confirmed identical to the values this page ran before the migration.
     //
     // DegenNonGreedyRun explicitly ZEROED, not left at Prism's own Default (5): Prism.Inference.
     // DegenGuard fires on TWO independent triggers (repeat-count AND a non-greedy-pick streak);
@@ -163,7 +162,29 @@
     // would help with) is a deliberate follow-on decision for the user, not taken here. Unchanged by
     // the 2026-09-08 turn-based-chat rework below — same policy, now applied once per CHAT TURN
     // instead of once per one-shot completion.
-    static readonly DecodePolicy Policy = DecodePolicy.Default with { DegenNonGreedyRun = 0 };
+    //
+    // Floor RETIGHTENED 2026-09-24 (matches the same fix in PrismStudio's host): ResonanceSigma
+    // (mean + FloorK*sigma over the FULL vocab, including every suppressed token) degenerates to an
+    // effective top-1 filter at 78-84% of positions and makes Temperature inert there — see Stories.
+    // razor's own decode-policy comment, same checkpoint, same measured diagnosis. Switched to
+    // FloorMode.TopP, P=0.30, re-measured directly against the CURRENTLY deployed checkpoint
+    // (r84,639, wwwroot/data + dist/data refreshed 2026-09-24 — this is the first EVE-trained model,
+    // NOT the prior r635,618 one; re-measure this table if the checkpoint is re-minted). Cumulative
+    // softmax mass needed at the FINAL face to admit N candidates:
+    //
+    //     N=3 -> 0.303   N=5 -> 0.390   N=8 -> 0.466   N=12 -> 0.539   N=20 -> 0.635   N=40 -> 0.752
+    //
+    // P(top1) is 0.199 (~57 effective candidates) — p=0.45 would admit ~8, p=0.30 targets ~3. A
+    // conventional p=0.9 default (Prism.Inference.DecodePolicy.Default's own P) admits 200-300 tokens
+    // on this distribution and produces word salad — do not carry that default over, that mistake has
+    // already been made once on this stack. Re-measure this table (and reconsider P) if P(top1) ever
+    // moves off ~0.2 on a future checkpoint.
+    static readonly DecodePolicy Policy = DecodePolicy.Default with
+    {
+        Floor = FloorMode.TopP,
+        P = 0.30,
+        DegenNonGreedyRun = 0,
+    };
     // The real stop condition is CharVocab.End (the model's own stop token) or DegenGuard catching a
     // collapsed repeat run — those are unchanged and still fire first when they fire at all.
     int MaxReplySteps => MaxReplyStepsConst;
