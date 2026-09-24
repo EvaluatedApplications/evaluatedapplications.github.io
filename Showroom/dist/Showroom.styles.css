@@ -260,7 +260,14 @@ table.result th.sortable:hover[b-d09k4y4jhw] { color: var(--accent-ink); }
 .cg-dot.hl[b-pamodh3vzd] { fill: var(--ink-soft); opacity: 0.85; }
 .cg-dot.prompt[b-pamodh3vzd] { fill: var(--spectrum-5, #4aa3ff); opacity: 0.95; }
 .cg-dot.answer[b-pamodh3vzd] { fill: var(--ok); opacity: 1; }
-.cg-cloud-label[b-pamodh3vzd] { font-family: var(--mono); font-size: 8.5px; fill: var(--ink-soft); pointer-events: none; }
+/* .cg-cloud-label / .cg-traj-label below are emitted by SvgText() as a raw MarkupString (SVG <text>
+   collides with Razor's reserved <text> pseudo-tag, see the .cs comment on SvgText) — that markup
+   never receives Blazor CSS isolation's scope attribute (only elements the Razor compiler statically
+   sees in this file's own markup do), so a normal scoped rule here would silently never match and the
+   <text> would fall back to SVG's own default fill (black — invisible on this page's dark background).
+   ::deep opts these two rules out of scoping entirely, matching the exact pattern Analyst.razor.css /
+   Forecaster.razor.css already use for their own MarkupString-built <text>/shape elements. */
+[b-pamodh3vzd] .cg-cloud-label { font-family: var(--mono); font-size: 8.5px; fill: var(--ink-soft); pointer-events: none; }
 
 .cg-attn[b-pamodh3vzd] { stroke: var(--warn, #e6c450); }
 .cg-attn-pt[b-pamodh3vzd] { fill: var(--warn, #e6c450); }
@@ -269,7 +276,7 @@ table.result th.sortable:hover[b-d09k4y4jhw] { color: var(--accent-ink); }
 .cg-traj[b-pamodh3vzd] { fill: var(--accent-ink); stroke: var(--bg); stroke-width: 1.5; }
 .cg-traj.final[b-pamodh3vzd] { fill: var(--ok); }
 .cg-crystal[b-pamodh3vzd] { fill: var(--ok); stroke: var(--bg); stroke-width: 1.2; }
-.cg-traj-label[b-pamodh3vzd] { font-family: var(--mono); font-size: 10px; fill: var(--ink); font-weight: 600; pointer-events: none; }
+[b-pamodh3vzd] .cg-traj-label { font-family: var(--mono); font-size: 10px; fill: var(--ink); font-weight: 600; pointer-events: none; }
 
 .cg-legend[b-pamodh3vzd] { display: flex; flex-wrap: wrap; gap: 1rem; margin-top: 0.8rem; font-size: 0.8rem; color: var(--ink-soft); }
 .cg-legend span[b-pamodh3vzd] { display: flex; align-items: center; gap: 0.4rem; }
@@ -320,9 +327,14 @@ table.result th.sortable:hover[b-d09k4y4jhw] { color: var(--accent-ink); }
 .cell[b-cvw2s78mjf] { fill: var(--bg-2); stroke: color-mix(in srgb, var(--border) 55%, transparent); stroke-width: 1; cursor: crosshair; }
 .cell.wall[b-cvw2s78mjf] { fill: color-mix(in srgb, var(--ink) 32%, var(--bg-2)); stroke: color-mix(in srgb, var(--ink) 40%, var(--bg-2)); }
 .startmark[b-cvw2s78mjf] { fill: none; stroke: var(--c-spatial, #35d0c0); stroke-width: 2; stroke-dasharray: 3 2; pointer-events: none; }
-.scent[b-cvw2s78mjf] { fill: var(--accent); pointer-events: none; }
-.food[b-cvw2s78mjf] { font-size: 18px; pointer-events: none; }
-.critter[b-cvw2s78mjf] { font-size: 18px; pointer-events: none; }
+/* .scent/.food/.critter are emitted by ScentTint()/Glyph() as raw MarkupString <rect>/<text> — that
+   markup never carries Blazor CSS isolation's scope attribute (same gap documented in
+   Cartographer.razor.css's own comment), so a bare scoped rule here silently never matched: .scent
+   rendered SVG's default black fill instead of the accent tint, and .food/.critter's font-size never
+   applied. ::deep opts these three out of scoping, same fix as Cartographer/Analyst/Forecaster. */
+[b-cvw2s78mjf] .scent { fill: var(--accent); pointer-events: none; }
+[b-cvw2s78mjf] .food { font-size: 18px; pointer-events: none; }
+[b-cvw2s78mjf] .critter { font-size: 18px; pointer-events: none; }
 .trail[b-cvw2s78mjf] { fill: none; stroke: var(--accent); stroke-width: 2.5; stroke-linejoin: round; stroke-linecap: round; opacity: 0.85; pointer-events: none; }
 
 /* controls */

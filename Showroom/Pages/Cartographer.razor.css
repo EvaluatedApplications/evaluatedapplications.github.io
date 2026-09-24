@@ -49,7 +49,14 @@
 .cg-dot.hl { fill: var(--ink-soft); opacity: 0.85; }
 .cg-dot.prompt { fill: var(--spectrum-5, #4aa3ff); opacity: 0.95; }
 .cg-dot.answer { fill: var(--ok); opacity: 1; }
-.cg-cloud-label { font-family: var(--mono); font-size: 8.5px; fill: var(--ink-soft); pointer-events: none; }
+/* .cg-cloud-label / .cg-traj-label below are emitted by SvgText() as a raw MarkupString (SVG <text>
+   collides with Razor's reserved <text> pseudo-tag, see the .cs comment on SvgText) — that markup
+   never receives Blazor CSS isolation's scope attribute (only elements the Razor compiler statically
+   sees in this file's own markup do), so a normal scoped rule here would silently never match and the
+   <text> would fall back to SVG's own default fill (black — invisible on this page's dark background).
+   ::deep opts these two rules out of scoping entirely, matching the exact pattern Analyst.razor.css /
+   Forecaster.razor.css already use for their own MarkupString-built <text>/shape elements. */
+::deep .cg-cloud-label { font-family: var(--mono); font-size: 8.5px; fill: var(--ink-soft); pointer-events: none; }
 
 .cg-attn { stroke: var(--warn, #e6c450); }
 .cg-attn-pt { fill: var(--warn, #e6c450); }
@@ -58,7 +65,7 @@
 .cg-traj { fill: var(--accent-ink); stroke: var(--bg); stroke-width: 1.5; }
 .cg-traj.final { fill: var(--ok); }
 .cg-crystal { fill: var(--ok); stroke: var(--bg); stroke-width: 1.2; }
-.cg-traj-label { font-family: var(--mono); font-size: 10px; fill: var(--ink); font-weight: 600; pointer-events: none; }
+::deep .cg-traj-label { font-family: var(--mono); font-size: 10px; fill: var(--ink); font-weight: 600; pointer-events: none; }
 
 .cg-legend { display: flex; flex-wrap: wrap; gap: 1rem; margin-top: 0.8rem; font-size: 0.8rem; color: var(--ink-soft); }
 .cg-legend span { display: flex; align-items: center; gap: 0.4rem; }
