@@ -14,7 +14,7 @@
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%23f0796a'/%3E%3Cstop offset='.166' stop-color='%23f0a15a'/%3E%3Cstop offset='.333' stop-color='%23e6c450'/%3E%3Cstop offset='.5' stop-color='%237bd86a'/%3E%3Cstop offset='.666' stop-color='%234aa3ff'/%3E%3Cstop offset='.833' stop-color='%237d7dff'/%3E%3Cstop offset='1' stop-color='%23c07dff'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='32' height='32' rx='7' fill='%23050608'/%3E%3Cpath d='M16 5L27 26H5Z' fill='none' stroke='url(%23g)' stroke-width='2' stroke-linejoin='round'/%3E%3C/svg%3E">
 <link rel="stylesheet" href="/assets/site.css">
 <script type="application/ld+json">
-{"@context":"https://schema.org","@type":"SoftwareApplication","name":"EvaluatedApplications.HoloDb.Client","description":"HoloDb.Client connects your .NET app to a HoloDb server over TLS. Same API as the embedded engine, columnar results stay columnar on the wire, and opt-in resilience: exponential backoff, a circuit breaker, and per-operation deadlines.","applicationCategory":"DeveloperApplication","operatingSystem":".NET 8.0+","softwareVersion":"1.4.0","url":"https://evaluatedapplications.github.io/holodb-client.html","downloadUrl":"https://www.nuget.org/packages/EvaluatedApplications.HoloDb.Client","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"author":{"@type":"Organization","name":"Evaluated Applications","url":"https://evaluatedapplications.github.io/"}}
+{"@context":"https://schema.org","@type":"SoftwareApplication","name":"EvaluatedApplications.HoloDb.Client","description":"HoloDb.Client connects your .NET app to a HoloDb server over TLS. Same API as the embedded engine, columnar results stay columnar on the wire, and opt-in resilience: exponential backoff, a circuit breaker, and per-operation deadlines.","applicationCategory":"DeveloperApplication","operatingSystem":".NET 8.0+","softwareVersion":"1.4.0","url":"https://evaluatedapplications.github.io/holodb-client.html","downloadUrl":"https://www.nuget.org/packages/EvaluatedApplications.HoloDb.Client","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"author":{"@type":"Organization","name":"Evaluated Applications","url":"https://evaluatedapplications.github.io/","contactPoint":{"@type":"ContactPoint","email":"dongyang.stephen.chen@gmail.com","contactType":"business development"}}}
 </script>
 </head>
 <body class="os-chrome" data-cat="holodb-client">
@@ -71,6 +71,25 @@
     </div>
   </div>
 </header>
+
+<main>
+<section class="sec" id="quick-start">
+  <div class="wrap">
+    <div class="sec-head"><span class="dot" style="background:var(--c-holodb-client)"></span><h2>Quick start</h2><p>install, then this</p></div>
+    <div class="install" style="max-width:520px"><code>dotnet add package EvaluatedApplications.HoloDb.Client</code><button class="copy" type="button">copy</button></div>
+    <div class="snip" style="margin-top:14px"><code>using HoloDb.Client;
+
+// Connect to server
+var client = await HoloDbClient.ConnectAsync("db.example.com", 5433);
+try {
+    var result = await client.ExecuteAsync("SELECT id, value FROM data LIMIT 10");
+    foreach (var row in result.Rows)
+        Console.WriteLine($"id={row[0]}, value={row[1]}");
+} finally {
+    await client.DisposeAsync();
+}</code></div>
+  </div>
+</section>
 
 <section class="sec">
   <div class="wrap">
@@ -149,6 +168,7 @@ var client = await HoloDbClient.ConnectAsync("localhost", 5433, options);</code>
     <p class="lim"><b>Version history:</b> v1.2.0 added exponential backoff, v1.3.0 added the circuit breaker, v1.4.0 (current) adds operation deadline budgets across retries. <b>Requires:</b> .NET 8.0+, a HoloDb server v1.4.0+ (wire-protocol compatible), network connectivity with TLS support. <b>License:</b> proprietary, part of Evaluated Applications.</p>
   </div>
 </section>
+</main>
 
 <footer class="site">
   <div class="wrap">

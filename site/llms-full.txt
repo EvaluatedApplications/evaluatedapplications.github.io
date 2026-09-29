@@ -1,0 +1,575 @@
+# Evaluated Applications — full package docs
+
+This file concatenates the plain-text content of every published Evaluated Applications package's
+owner-authored source doc (`MonoRepo/<Pkg>/docs/site.md`), verbatim except for markdown-to-plain
+reflow. It exists so an AI system can read every package's own words in one request instead of
+crawling eleven pages. Each package's own page (linked below) may present this same content with
+additional design/rendering; the words below are the package owner's source of truth. Everything
+described below is free on NuGet — no paid tier, no license gate on any capability named here.
+
+See https://evaluatedapplications.github.io/llms.txt for the short summary, tool list, and our
+partnership offer (we pay third parties to build on this stack).
+
+================================================================================
+# Phasor — EvaluatedApplications.Phasor
+Page: https://evaluatedapplications.github.io/phasor.html
+Install: dotnet add package EvaluatedApplications.Phasor
+================================================================================
+
+Encode numbers and symbols as phasor faces, then compose them with one algebra instead of a
+calculator.
+
+Phasor is a Vector Symbolic Architecture (VSA) codec for .NET. It represents tokens (numbers and
+text) as bundles of unit complex numbers called phasors. Composition (bind), decomposition
+(unbind), superposition (bundle), and readout (correlation) form the complete algebra; arithmetic
+is encoding, not calculation.
+
+The problem it solves: symbolic and numeric data are usually kept separate — numbers flow through
+arithmetic circuits, symbols through lookup tables. Phasor bridges them. Bind two numbers on the
+linear band and you add them; bind on the log band and you multiply them. A symbol encodes to a
+fixed random phasor. Now both live in the same algebra: you can store them together, mix them, and
+read values back by correlation. This is the substrate for exact storage (no floating-point error
+in bundle/delete), similarity search at scale, and models that reason over both values and symbols
+with the same composition operators.
+
+How it works: Encode — a number becomes a face with its value encoded as phase (deterministic); a
+symbol gets a salted hash-based random signature. Compose — bind (complex multiply per component)
+builds relationships; bundle (sum) collects sets or superpositions; unbind (conjugate) extracts
+parts exactly; readout by correlation gives a dot-product score. On the linear band, bind is
+addition; on the log band, it's multiplication — arithmetic IS the composition.
+
+Two profiles: PhasorCodec is fixed-width (256 reals) with a frozen identity prefix and a learned
+orbital tail, built for neural models. HoloCodec is configurable width, SIMD (Vector<double>), a
+planar layout, and a memoized number cache, built for holographic storage and similarity search at
+scale. Do not mix faces between the two.
+
+The Hologram type wraps a phasor face and applies the algebra through operators (*, +, /, ~) for
+readability and prototyping; in-place static methods (BindInto, BundleInto, UnbindInto) are for hot
+loops (operators allocate; measured ~1.7x slower at d=64-96).
+
+Version: 1.3.0.
+
+Minimal example:
+```csharp
+using Phasor;
+
+double[] five = PhasorCodec.Encode("5");
+double[] greeting = PhasorCodec.Encode("hello");
+double[] five_plus_three = PhasorCodec.Bind(five, PhasorCodec.Encode("3"));
+int sum = PhasorCodec.DecodeSum(five_plus_three, max: 10); // sum == 8
+double[] pair = PhasorCodec.Bundle(greeting, five);
+double[] extracted = PhasorCodec.Unbind(pair, greeting);  // extracted is close to five
+```
+
+Key features: one algebra with no special cases; exact composition (bundle/unbind are exact,
+subtraction removes a contribution with no floating-point error); two profiles for different
+workloads; no dependencies beyond System/System.Numerics; AOT and trim compatible; deterministic
+(not cryptographic) hashing; a memoized decode cache.
+
+Compatibility: .NET 8.0 and 10.0, Windows/Linux/macOS, no platform-specific code, dependency-free.
+License: source-available; every capability is free to use.
+
+================================================================================
+# EvalApp — EvaluatedApplications.EvalApp
+Page: https://evaluatedapplications.github.io/evalapp.html
+Install: dotnet add package EvaluatedApplications.EvalApp
+================================================================================
+
+A self-tuning, resource-gated async pipeline runtime for .NET — describe a process as data and
+steps, and stop hand-writing concurrency coordination.
+
+What it does: EvalApp replaces the plumbing every real async .NET codebase ends up writing by
+hand — a SemaphoreSlim to stop a flood of requests hammering a database, a guessed constant for
+"how many things run at once," a Task.WhenAll wrapped in try/catch to aggregate failures, a
+rollback path bolted on after something breaks halfway through. You describe a process as a plain
+data record and a sequence of steps; EvalApp compiles that into a single, reusable execution path,
+gates every resource it touches (CPU, network, disk, database, or a custom pool) at a real bound,
+and — when you turn tuning on — discovers the concurrency that actually works on the hardware it's
+running on. It's the shared runtime under every Evaluated Applications product, and it works
+standalone: no broker, no external service, no config store.
+
+Why it's useful: one in-process dependency instead of a stack (DI container + MediatR + Polly + TPL
+Dataflow); the tuner is proactive, continuously probing for the operating point that keeps things
+from breaking rather than reacting after something breaks; whole categories of coordination bugs
+don't compile (a saga must close before the pipeline builds; a side-effecting step can't be added
+without declaring its resource); the builder chain reads like the process it describes; nothing to
+stand up first.
+
+Current version: 1.7.0 — targets net8.0 and net10.0, binary-only, zero dependencies.
+
+Key features: fluent pipeline builder; resource-gated concurrency; adaptive and Bayesian tuning;
+parallel ForEach and parallel branches; sagas with compensation; middleware (retry, timeout,
+circuit breaker, timing, audit, validation); results as data (PipelineResult<T>), not exceptions;
+an offline licensing facade (ECDsa P-256, no network call, ever).
+
+Useful to know: everything in EvalApp is free to use today — nothing is license-gated, and no
+capability is capped by tier. Compatibility: .NET 8 and .NET 10, no third-party package references.
+
+Minimal example:
+```csharp
+using EvalApp.Consumer;
+
+public sealed record OrderData(string CustomerName, decimal Total, string Status = "New");
+
+Eval.App("Orders")
+    .DefineDomain("Orders")
+        .DefineTask<OrderData>("ProcessOrder")
+            .AddStep("Validate", d => d with { Status = "Validated" })
+            .AddStep("ApplyDiscount", d => d with { Total = d.Total * 0.9m })
+            .AddStep("Complete", d => d with { Status = "Complete" })
+        .Run(out ICompiledPipeline<OrderData> pipeline)
+    .Build(); // no license key needed — nothing is license-gated today
+
+var result = await pipeline.RunAsync(new OrderData("Alice", 99.99m));
+```
+Build the pipeline once (e.g. at startup); call RunAsync many times.
+
+Design first, code second: decide the data record before touching the builder. Where it doesn't
+fit: long-running workflows that must survive a process restart over hours/days are Temporal's job;
+purely reactive resilience is what Polly is for. EvalApp is for throughput-sensitive work with no
+infrastructure to stand up and concurrency that should tune itself.
+
+================================================================================
+# EvalApp.Neural — EvaluatedApplications.EvalApp.Neural
+Page: https://evaluatedapplications.github.io/evalapp-neural.html
+Install: dotnet add package EvaluatedApplications.EvalApp.Neural
+================================================================================
+
+Real-time neural tuning for data-parallel pipelines.
+
+Problem: EvalApp's built-in concurrency tuner works well on clean, predictable workloads but falls
+flat when conditions shift or gates couple (database racing CPU racing disk). You either tune once
+and hope, or freeze the tuning and regret it later.
+
+Solution: EvalApp.Neural plugs a tiny, always-learning neural policy into EvalApp in place of the
+heuristic. It trains on a real workload's own experience, so it adapts live as conditions change.
+Ships warm (pre-trained on diverse scenarios) and keeps learning from every decision. Fast (about
+0.4ms per decision) and low overhead.
+
+Why it works: online learning reacts to real-time shifts a frozen heuristic can't; matches the
+built-in heuristic on lean/obvious pipelines (no edge there) but beats it roughly 25% on coupled
+multi-gate benchmarks; opt-in with no refactor — add .WithNeuralTuning() to the app builder.
+
+Version: v1.0.1.
+
+How to use:
+```csharp
+var app = Eval.App(...).WithResource(...).WithNeuralTuning().DefineDomain(...);
+```
+Install it globally for every app:
+```csharp
+using var _ = NeuralTuning.UseGlobally(NeuralTuning.NewModel());
+```
+Or train on your own workload by pointing a shared model file at every runner:
+```csharp
+using var _ = NeuralTuning.UseGloballyPersisted("model.bin");
+```
+
+Key features: warm-start (ships pre-trained, nothing to configure); always learning (real-time
+adaptation, no manual retuning); tiny footprint (a small holographic model via AlgFormer, roughly
+0.4ms/decision); no license gate — runs at full effect regardless of license tier; production ready
+(coordinate descent for multi-gate coupling, deterministic under a repeated seed).
+
+What you need to know: best on coupled/noisy workloads — clean single-gate CPU-bound pipelines
+won't see much gain. Depends on EvalApp and AlgFormer (bundled, no separate install). Compatible
+with .NET 8.0+, Windows/Linux.
+
+================================================================================
+# AlgFormer — EvaluatedApplications.AlgFormer
+Page: https://evaluatedapplications.github.io/algformer.html
+Install: dotnet add package EvaluatedApplications.AlgFormer
+================================================================================
+
+A transformer engine with two interchangeable attention cores — one classic, one holographic — in
+pure managed code, no external ML runtime.
+
+AlgFormer is a .NET library for defining, training, and running transformer-style language models.
+Give it a vocabulary and a shape, train it on your own token sequences through a data-parallel
+pipeline, and run inference (single prediction, full logits, or streaming generation with a KV
+cache).
+
+The problem it solves: most transformer tooling means either binding into a native runtime (ONNX,
+PyTorch/libtorch, CUDA) or hand-rolling matrix code with no attention research behind it. AlgFormer
+sits in between: a real, gradient-trained transformer architecture, written entirely in C# as
+double[] arrays with SIMD, that runs anywhere .NET runs, with no GPU, no Python, and no native
+binary to ship. It also lets you compare two ideas of what "attention" should cost. Standard
+softmax attention scores every token against every other token — quadratic in sequence length.
+AlgFormer ships a second, holographic attention core alongside it that composes context through
+bind/bundle/unbind operations instead — linear in sequence length, with constant-time-per-token
+serving.
+
+Why it's useful: two real cores (AlgFormer softmax, HoloFormer holographic) sharing the same model
+shape, training loop, checkpoint format, and serving API; no external ML runtime; attention that
+scales differently (HoloFormer is O(T·d) to train, effectively O(1) per token to serve, versus
+O(T²·d) for standard attention); a subword tokenizer, data-parallel trainer, streaming generation
+with a KV cache, checkpoint save/load with format versioning, and helpers to grow a trained model
+to a longer context or bigger vocabulary; distributed/swarm training over MQTT.
+
+Current version: 2.13.0 (per package CLAUDE.md as of this writing; check the package page's own
+version pill for the exact live figure).
+
+Minimal example:
+```csharp
+using PrismFormer;
+
+var model = new AlgFormer(vocab: 16, shifts: 4, layers: 2, maxContext: 6, dModel: 32, frozenPrefix: 0);
+
+var data = new List<(int[] Ctx, int Target)>
+{
+    (new[] { 1, 2, 3 }, 4),
+    (new[] { 2, 3, 4 }, 5),
+};
+var trainer = new PrismTrainer(model); // data-parallel via EvalApp
+double loss = trainer.TrainEpoch(data, batchSize: 2, lr: 5e-2, shuffleSeed: 1);
+
+var context = new[] { 1, 2, 3 };
+int next = model.Predict(context);
+double[] logits = model.LogitsFor(context);
+int[] generated = model.Generate(context, maxNewTokens: 5, temperature: 0.8, seed: 1);
+```
+Swapping in the holographic core is the same shape — construct a HoloFormer instead of an
+AlgFormer with matching dimensions.
+
+Compatibility: .NET 8 and .NET 10, pure managed code, no native dependencies. Depends on the
+Phasor codec package and the EvalApp pipeline runtime; swarm relay components use MQTTnet.
+License: proprietary, compiled library only; every capability described is free to use today.
+
+================================================================================
+# AlgFormer.Gpu — EvaluatedApplications.AlgFormer.Gpu
+Page: https://evaluatedapplications.github.io/algformer-gpu.html
+Install: dotnet add package EvaluatedApplications.AlgFormer.Gpu
+================================================================================
+
+Optional GPU acceleration for AlgFormer's HoloFormer engine — same model, same weights, just
+faster.
+
+What it does: AlgFormer.Gpu adds ILGPU/CUDA-backed training and inference for the HoloFormer
+(resonator/holographic attention) engine from the core AlgFormer package. It builds GPU kernels
+straight from a CPU HoloFormer's serialized weights — no separate model format, no retraining to
+switch devices. Backward passes, the fused on-device Adam optimizer step, and batched forward
+inference all run on the GPU when one is present, with the CPU engine automatically taking over
+when it isn't.
+
+Why it's useful: drop-in, not a rewrite (point it at an existing CPU HoloFormer, it trains/serves
+against the same serialized weights); automatic fallback (the same build works on a machine with a
+CUDA GPU and one without); correctness-checked against the CPU engine (every GPU kernel is
+gradient-checked against the CPU HoloFormer's double-precision math as the reference oracle — GPU
+runs in float32 for speed, so results are float-close, not bit-identical); fused on-device Adam
+avoiding a CPU round trip on every training batch.
+
+Current version: 1.3.0 (NuGet: EvaluatedApplications.AlgFormer.Gpu).
+
+Key features: GPU-batched forward and backward training for HoloFormer, including per-layer
+weight-tied iterative refinement ("StackIter") and all-positions loss; fused on-device Adam
+optimizer step plus checkpoint/resume of the GPU-resident optimizer state; automatic device
+detection (GpuDevice.HasGpu) with silent, safe CPU fallback; standalone kernel verification
+utilities.
+
+Good to know: requires an ILGPU-supported CUDA device at runtime to actually use the GPU path,
+otherwise falls back to CPU automatically. Optional — the core AlgFormer package has no GPU
+dependency at all and stays dependency-free and AOT/trim-safe. Also includes GPU support for
+AlgFormer's earlier (non-HoloFormer) softmax-attention model, which is deprecated — new projects
+should use the HoloFormer path. Requires the core EvaluatedApplications.AlgFormer package
+alongside it.
+
+NOTE: this package's owner-authored site.md does not include a minimal code sample; none is
+invented here. See the API description above and the package's own CLAUDE.md for exact call
+shapes, or ask the package owner for one.
+
+================================================================================
+# HoloDb — EvaluatedApplications.HoloDb
+Page: https://evaluatedapplications.github.io/holodb/
+Install: dotnet add package EvaluatedApplications.HoloDb
+================================================================================
+
+One store. Query it by key, by content, or by aggregate.
+
+What it is: HoloDb is an embeddable, transactional SQL database for .NET that stores data as
+holograms in a single associative store. Every value is encoded as a phase vector, and a row's
+columns are bound into one hologram — so the same copy of the data can be retrieved three ways:
+exact lookup by primary key (ordinary SQL), similarity search by content (NEAREST), and
+constant-time analytics that read a maintained total instead of scanning. Most databases bolt a
+separate vector index and a separate analytical cube onto a row store and keep all three in sync.
+HoloDb keeps one copy and answers all three kinds of question against it.
+
+The problem it solves: applications that need relational storage, similarity/vector search, and
+fast dashboard rollups normally reach for three different systems and pay the integration cost of
+keeping them consistent. HoloDb collapses that into one embeddable .NET package with real ACID
+guarantees.
+
+Why it's useful: no separate vector index (NEAREST ranks rows by resemblance, in SQL, over the same
+table); aggregates don't scan (a column's running total is itself a maintained vector, so
+COUNT/SUM/MIN/MAX and single-column GROUP BY are constant time); real ACID (write-ahead logging,
+bounded crash recovery, reader/writer locking, atomic statements); survives partial loss by design
+(columns are the source of truth, holograms are always derivable from them); scales past RAM
+(paged tables with a buffer pool + write-ahead log); stays fast under live ingest (reads served from
+a snapshot republished after each write, without the write lock).
+
+Current version: 1.10.0 (EvaluatedApplications.HoloDb on NuGet).
+
+Minimal example:
+```csharp
+using HoloDb;
+
+var db = new HoloDbService(new HoloDbOptions { WalPath = "app.wal" });
+db.Execute("CREATE TABLE users (id INT PRIMARY KEY, age INT, name TEXT)");
+db.Execute("INSERT INTO users VALUES (1, 30, 'Ada')");
+
+var result = await db.ExecuteAsync("SELECT name FROM users WHERE age >= 18");
+foreach (var row in result.Rows) Console.WriteLine(row["name"]);
+```
+Register with DI via services.AddHoloDb(), or attach to an EvalApp pipeline with
+builder.WithHoloDb(service).
+
+Anything else worth knowing: every capability is free to use, nothing gated behind a tier or a
+license key. No UPSERT (insert on an existing primary key always throws). One primary key per
+table, no outer joins yet. Ships as a compiled library only; source is proprietary. HoloDb is plain
+managed .NET with no native dependencies, so the exact same package runs unmodified inside a Blazor
+WebAssembly app in a visitor's browser tab.
+
+================================================================================
+# HoloDb.Client — EvaluatedApplications.HoloDb.Client
+Page: https://evaluatedapplications.github.io/holodb-client.html
+Install: dotnet add package EvaluatedApplications.HoloDb.Client
+================================================================================
+
+A .NET client library for remote HoloDb database servers over TLS.
+
+What it does: HoloDb.Client connects your .NET app to a HoloDb server over TCP with mandatory TLS
+encryption and token authentication. Run SQL queries and bulk-load data using the same API as the
+embedded in-process HoloDbService, so you can swap from embedded to networked by changing only how
+you create the handle. Columnar results stay columnar on the wire — no row buffering or JSON
+serialization overhead.
+
+The problem: building analytics or database-driven apps means choosing between speed (embed the
+database in-process) and scalability (run it on its own server). This library lets you have both.
+
+Why HoloDb.Client: same API embedded or networked (Execute, ExecuteAsync, BulkLoadAsync,
+GetStatsAsync, PingAsync); columnar over the wire (typed column arrays, matching the in-process
+engine's QueryResult shape); secure by default (TLS on, trust a self-signed server via a pinned
+thumbprint or skip it in dev only); built-in resilience (v1.4.0 — optional exponential backoff with
+full jitter, a circuit breaker, and a per-operation deadline budget); designed for concurrency (one
+client per worker, or pool clients with HoloDbClientPool).
+
+Version: 1.4.0 — adds operation deadline budgets across retries and circuit-breaker state; v1.3.0
+added a circuit breaker; v1.2.0 switched to exponential backoff.
+
+Minimal example:
+```csharp
+using HoloDb.Client;
+
+var client = await HoloDbClient.ConnectAsync("db.example.com", 5433);
+try {
+    var result = await client.ExecuteAsync("SELECT id, value FROM data LIMIT 10");
+    foreach (var row in result.Rows) {
+        Console.WriteLine($"id={row[0]}, value={row[1]}");
+    }
+} finally {
+    await client.DisposeAsync();
+}
+```
+
+Requirements: .NET 8.0 or .NET 10.0; a HoloDb server v1.4.0+ (wire-protocol compatible); network
+connectivity to the server with TLS support. One client = one session (requests serialize through
+an internal queue). License: proprietary, part of Evaluated Applications, free to use.
+
+================================================================================
+# HoloDb.Protocol — EvaluatedApplications.HoloDb.Protocol
+Page: https://evaluatedapplications.github.io/holodb-protocol.html
+Install: dotnet add package EvaluatedApplications.HoloDb.Protocol
+================================================================================
+
+A columnar wire protocol: the contract between HoloDb server and client, keeping column-oriented
+performance alive on the wire.
+
+What it does: HoloDb.Protocol defines how the HoloDb server and client communicate. Instead of
+sending results as JSON or row-by-row data structures, it preserves the columnar shape: a long[],
+double[], or string[] travels as a typed array over the wire. Handles length-prefixed TCP framing,
+a binary columnar codec, request/response dispatch (Hello/Exec/BulkLoad/Stats/Ping), version
+negotiation, and error semantics that distinguish protocol errors from query errors.
+
+Why it matters: most database protocols trade columnar performance for JSON or ORM convenience;
+this protocol keeps the columnar win alive all the way to the client, and encodes the wire format
+explicitly (predictable, versionable, testable).
+
+Current version: 1.0.2 (.NET 8.0 / 10.0, nullable-enabled).
+
+How to get it: normally pulled in transitively via EvaluatedApplications.HoloDb.Client. If you are
+implementing a server (or working on HoloDb's server code), depend on this package directly.
+
+Minimal example (server-side, using this package to build a server):
+```csharp
+var payload = await Wire.ReadFrameAsync(networkStream);
+var request = HoloProtocol.DecodeRequest(payload);
+
+if (request.Op == WireOp.Exec)
+{
+    var result = await engine.ExecuteAsync(request.Sql);
+    var response = HoloProtocol.Result(result);
+    await Wire.WriteFrameAsync(networkStream, response);
+}
+```
+Client-side, use HoloDb.Client instead, which wraps this protocol.
+
+Compatibility & wire stability: the wire format is frozen — opcode byte values never change,
+message field order and types are stable. Most consumers should depend on HoloDb.Client instead;
+depend on this package directly only if implementing a server.
+
+================================================================================
+# HoloVoxel — EvaluatedApplications.HoloVoxel
+Page: https://evaluatedapplications.github.io/holovoxel.html
+Install: dotnet add package EvaluatedApplications.HoloVoxel
+================================================================================
+
+A holographic voxel engine for .NET where level-of-detail isn't a mesh trick, it's how reading the
+world works.
+
+What it does: most voxel engines store a world as arrays of blocks and fake distant detail with
+mesh simplification, mipmaps, or LOD popping. HoloVoxel stores a chunk of the world as one
+holographic superposition instead: every voxel is bound (position ⊗ content) and summed into a
+single vector, using the Phasor VSA codec. Reading a voxel back is a correlation against that
+vector, and correlating with fewer components gives a cheaper, fuzzier answer — near stays crisp,
+far goes soft, with no discrete LOD tiers and no popping between them. The engine also exposes a
+decoded-confidence signal a renderer can map to visual solidity.
+
+Why it's different: LOD is free (no separate simplified mesh to generate, store, or stitch);
+memory scales with perceived detail, not world size (a chunk only stores as many components as its
+LOD will ever need, losslessly up to that budget); the blur is honest, not aesthetic (distant
+terrain looks soft because the engine genuinely has less information at that budget); engine only,
+plug into anything (no rendering or graphics dependency, verified headless).
+
+Current version: 1.5.0 (EvaluatedApplications.HoloVoxel on NuGet).
+
+Key features: holographic chunk storage (HoloWorld, Chunk) decodable at any component budget as a
+colour field or a triangulated surface mesh with analytic per-vertex normals; continuous, meshless
+LOD; field confidence for adaptive detail; spatial coarsening at distance; truncated holograms
+(storage cost tracks the LOD budget you plan to read at); fused SIMD bind/correlate; entities too
+(HoloModel stores a creature or prop the same holographic way); a built-in procedural world
+generator, or supply your own world source; a ringworld warp on top of the same flat chunk storage.
+
+Good to know: this is the engine, not the renderer — HoloVoxel has no graphics dependency and is
+verified headless, handing you decoded colour fields, meshes, and confidence values; drawing them
+is up to the consuming front end. Built on Phasor. No license gate — every capability is free to
+use, DLL-only distribution, proprietary license.
+
+NOTE: this package's owner-authored site.md does not include a minimal code sample; none is
+invented here. See the API description above and the package's own CLAUDE.md for exact call
+shapes, or ask the package owner for one.
+
+================================================================================
+# Prose — EvaluatedApplications.Prose
+Page: https://evaluatedapplications.github.io/prose.html
+Install: dotnet add package EvaluatedApplications.Prose
+================================================================================
+
+A grammar-driven synthetic corpus generator for .NET.
+
+What it is: Prose reads plain text through the rules of grammar, keeps what it learns in a HoloDb
+database, and recombines that knowledge into new sentences that are grammatical, use words suited
+to their slots, and read plausibly. It exists to grow a training corpus: mine the grammatical
+knowledge already in your text (which nouns, verbs and adjectives go together, and how), then
+generate more of it, along with question/answer pairs for reading-comprehension training data.
+
+The problem it solves: language models need volume and variety of grammatically correct text.
+Hand-writing or scraping more data doesn't scale, and most "data augmentation" either pastes
+fragments together ungrammatically or needs its own large model to run. Prose parses real text
+into its grammatical structure with deterministic rules, stores what nouns/verbs/adjectives
+actually co-occur with what, and recombines those attested pieces into fresh sentences guaranteed
+to parse correctly before they're ever written out.
+
+Why it's different: rules-first, not model-first (a small optional language model can rank
+candidates by plausibility, but Prose degrades gracefully to pure rules with no model at all); no
+word is locked to one role (the same surface form resolves to noun or verb by context, e.g. "the
+panda eats shoots and leaves" vs "the panda eats, shoots, and leaves" — punctuation and structure
+alone flip the reading, and Prose gets both right); nothing imaginary (every open-class word Prose
+emits is a form it actually observed in the source text); handles real grammatical structure
+(indirect objects, relative clauses, multi-sentence passages with coreference), not just word
+salad.
+
+Current version: 1.1.0 (NuGet package EvaluatedApplications.Prose).
+
+Key features: parse (sentence splitting, POS tagging, phrase chunking, role assignment, zero
+training, no external model); mine (builds a lexicon plus selectional tables in a HoloDb database);
+generate (samples a sentence shape, fills each slot with an attested agreement-correct word, keeps
+only sentences that re-parse validly); optional plausibility scoring; Q&A generation (single-
+sentence, multi-sentence passages with coreference, self-referential two-turn dialogues); corpus
+and TSV export.
+
+Minimal example:
+```csharp
+var prose = new ProseEngine();
+prose.Mine(@"C:\corpus\text");                 // parse every *.txt and mine it
+prose.Save(@"prose.wal");                       // persist the mined tables (optional)
+
+foreach (var sentence in prose.Generate(1000))  // new, grammatical, plausible sentences
+    Console.WriteLine(sentence);
+
+prose.WriteCorpus(@"C:\corpus\synthetic", 100_000);  // write sentences out as .txt for an LM
+prose.WriteQaPairs(@"C:\corpus\qa", 50_000);          // context+question -> answer TSV
+```
+Parse a single sentence directly, no mining or database required:
+```csharp
+var p = ProseEngine.ParseSentence("The panda eats, shoots, and leaves.");
+Console.WriteLine(ProseEngine.Explain(p));   // subject, verbs, objects, template
+```
+
+Good to know: depends on two other Evaluated Applications packages, HoloDb (storage engine) and
+AlgFormer (optional plausibility-scoring model) — installing this package pulls both in
+automatically. Ships as a compiled library; every capability is free to use under a proprietary
+license.
+
+================================================================================
+# Tracer — EvaluatedApplications.Tracer
+Page: https://evaluatedapplications.github.io/tracer.html
+Install: dotnet add package EvaluatedApplications.Tracer
+================================================================================
+
+Navmesh pathfinding and game AI for .NET: multi-agent path queries, dynamic obstacles,
+line-of-sight, and combat, all self-tuning to your frame budget.
+
+Tracer is a pathfinding and game-AI SDK for real-time simulations with many moving agents: crowds,
+RTS-style unit groups, tactical squads. It bakes triangle-based navmeshes, routes single agents and
+whole swarms across them, reacts to obstacles that appear or vanish mid-game, and layers the
+surrounding game-AI toolkit (line-of-sight, fog-of-war, influence maps, combat engagement) on top.
+
+The problem it solves: most pathfinding libraries stop at "find me a path." Real games need a lot
+more: hundreds of agents converging on the same goal without re-solving the same route hundreds of
+times; obstacles that block and unblock at runtime without a full re-bake; visibility and cover
+queries for AI perception; a frame-time budget the pathfinder has to live inside of. Tracer builds
+all of that in as one coherent SDK, running on a data-parallel pipeline (EvalApp) that tunes its
+own concurrency to the workload.
+
+What it does: navmesh baking (with obstacle-polygon exclusion, optional hierarchical bake); single-
+and multi-agent pathfinding (goal-sharing so agents converging on one point reuse the same solve);
+dynamic obstacles (block/unblock at runtime without a full re-bake); line-of-sight, fog-of-war,
+influence maps; combat engagement (spatial-hashed, pluggable damage/dodge/block formulas); steering
+behaviors (Seek, Wander, Patrol, Flee, Queue, FlowLane); grid tactics (a separate, bake-free lane
+for tile/square-grid tactics games); adaptive path budgeting under a tight frame budget.
+
+Version: current 1.2.0.
+
+Minimal example:
+```csharp
+using Tracer;
+
+var world = new PathfindingWorld();
+
+var baker = world.CreateNavMeshBakerService();
+var mesh = await baker.BakeAsync(vertices, triangleIndices);
+
+var single = world.CreateSingleAgentService();
+var waypoints = await single.QueryPathAsync(mesh, start, goal);
+
+var multi = world.CreateMultiAgentService();
+var result = await multi.TickAsync(agents, mesh, tickNumber: 0);
+```
+
+What you need to know: depends on EvalApp (self-tuning concurrency for every heavy tick) and
+Microsoft.Extensions.DependencyInjection.Abstractions. Target .NET 8.0 and .NET 10.0. License:
+proprietary; every capability is free to use today, nothing gated behind a tier or a license key.
+Proven in use building the Eden game project (navmesh movement, perception/fog, combat resolution,
+tactical squad control).
+
+================================================================================
+END OF FILE — https://evaluatedapplications.github.io/llms.txt has the short version, the tool
+list, and our partnership offer.

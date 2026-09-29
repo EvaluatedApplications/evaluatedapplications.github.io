@@ -64,7 +64,7 @@
   .shape li b{color:var(--ink);font-family:var(--mono);font-size:.86rem;font-variant-numeric:tabular-nums;white-space:nowrap}
 </style>
 <script type="application/ld+json">
-{"@context":"https://schema.org","@type":"SoftwareApplication","name":"EvaluatedApplications.HoloDb","description":"HoloDb stores data as holograms in one associative store, queried three ways over one copy: exact SQL by key, similarity search by content (NEAREST), and constant-time analytics. Relational, vector and analytical in one embeddable .NET package.","applicationCategory":"DeveloperApplication","operatingSystem":".NET 8.0+","softwareVersion":"1.7.7","url":"https://evaluatedapplications.github.io/holodb/","downloadUrl":"https://www.nuget.org/packages/EvaluatedApplications.HoloDb","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"author":{"@type":"Organization","name":"Evaluated Applications","url":"https://evaluatedapplications.github.io/"}}
+{"@context":"https://schema.org","@type":"SoftwareApplication","name":"EvaluatedApplications.HoloDb","description":"HoloDb stores data as holograms in one associative store, queried three ways over one copy: exact SQL by key, similarity search by content (NEAREST), and constant-time analytics. Relational, vector and analytical in one embeddable .NET package.","applicationCategory":"DeveloperApplication","operatingSystem":".NET 8.0+","softwareVersion":"1.7.7","url":"https://evaluatedapplications.github.io/holodb/","downloadUrl":"https://www.nuget.org/packages/EvaluatedApplications.HoloDb","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"author":{"@type":"Organization","name":"Evaluated Applications","url":"https://evaluatedapplications.github.io/","contactPoint":{"@type":"ContactPoint","email":"dongyang.stephen.chen@gmail.com","contactType":"business development"}}}
 </script>
 </head>
 <body class="os-chrome" data-cat="holodb">
@@ -132,6 +132,23 @@
     </div>
   </div>
 </header>
+
+<main>
+<!-- QUICK START -->
+<section class="sec" id="quick-start">
+  <div class="wrap">
+    <div class="sec-head"><span class="dot" style="background:var(--c-holodb)"></span><h2>Quick start</h2><p>install, then this</p></div>
+    <div class="install" style="max-width:520px"><code>dotnet add package EvaluatedApplications.HoloDb</code><button class="copy" type="button">copy</button></div>
+    <div class="snip" style="margin-top:14px"><code>using HoloDb;
+
+var db = new HoloDbService(new HoloDbOptions { WalPath = "app.wal" });
+db.Execute("CREATE TABLE users (id INT PRIMARY KEY, age INT, name TEXT)");
+db.Execute("INSERT INTO users VALUES (1, 30, 'Ada')");
+
+var result = await db.ExecuteAsync("SELECT name FROM users WHERE age >= 18");
+foreach (var row in result.Rows) Console.WriteLine(row["name"]);</code></div>
+  </div>
+</section>
 
 <!-- HOW IT WORKS -->
 <section class="sec" id="how">
@@ -346,6 +363,7 @@ var r = await db.ExecuteAsync("SELECT region, SUM(amount) FROM t GROUP BY region
     </div>
   </div>
 </section>
+</main>
 
 <footer class="site">
   <div class="wrap">

@@ -14,7 +14,7 @@
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%23f0796a'/%3E%3Cstop offset='.166' stop-color='%23f0a15a'/%3E%3Cstop offset='.333' stop-color='%23e6c450'/%3E%3Cstop offset='.5' stop-color='%237bd86a'/%3E%3Cstop offset='.666' stop-color='%234aa3ff'/%3E%3Cstop offset='.833' stop-color='%237d7dff'/%3E%3Cstop offset='1' stop-color='%23c07dff'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='32' height='32' rx='7' fill='%23050608'/%3E%3Cpath d='M16 5L27 26H5Z' fill='none' stroke='url(%23g)' stroke-width='2' stroke-linejoin='round'/%3E%3C/svg%3E">
 <link rel="stylesheet" href="/assets/site.css">
 <script type="application/ld+json">
-{"@context":"https://schema.org","@type":"SoftwareApplication","name":"EvaluatedApplications.Prose","description":"Prose reads text through the rules of grammar, mines what it learns into a HoloDb database, and recombines that knowledge into new, grammatical, plausible sentences and Q&A pairs — to grow a training corpus without a large model.","applicationCategory":"DeveloperApplication","operatingSystem":".NET 8.0+","softwareVersion":"1.0.2","url":"https://evaluatedapplications.github.io/prose.html","downloadUrl":"https://www.nuget.org/packages/EvaluatedApplications.Prose","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"author":{"@type":"Organization","name":"Evaluated Applications","url":"https://evaluatedapplications.github.io/"}}
+{"@context":"https://schema.org","@type":"SoftwareApplication","name":"EvaluatedApplications.Prose","description":"Prose reads text through the rules of grammar, mines what it learns into a HoloDb database, and recombines that knowledge into new, grammatical, plausible sentences and Q&A pairs — to grow a training corpus without a large model.","applicationCategory":"DeveloperApplication","operatingSystem":".NET 8.0+","softwareVersion":"1.0.2","url":"https://evaluatedapplications.github.io/prose.html","downloadUrl":"https://www.nuget.org/packages/EvaluatedApplications.Prose","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"author":{"@type":"Organization","name":"Evaluated Applications","url":"https://evaluatedapplications.github.io/","contactPoint":{"@type":"ContactPoint","email":"dongyang.stephen.chen@gmail.com","contactType":"business development"}}}
 </script>
 </head>
 <body class="os-chrome" data-cat="holodb-algformer">
@@ -72,6 +72,23 @@
     </div>
   </div>
 </header>
+
+<main>
+<section class="sec" id="quick-start">
+  <div class="wrap">
+    <div class="sec-head"><span class="dot" style="background:var(--c-algformer)"></span><h2>Quick start</h2><p>install, then this</p></div>
+    <div class="install" style="max-width:520px"><code>dotnet add package EvaluatedApplications.Prose</code><button class="copy" type="button">copy</button></div>
+    <div class="snip" style="margin-top:14px"><code>var prose = new ProseEngine();
+prose.Mine(@"C:\corpus\text");                  // parse every *.txt and mine it
+prose.Save(@"prose.wal");                        // persist the mined tables (optional)
+
+foreach (var sentence in prose.Generate(1000))   // new, grammatical, plausible sentences
+    Console.WriteLine(sentence);
+
+prose.WriteCorpus(@"C:\corpus\synthetic", 100_000);   // write sentences out as .txt for an LM
+prose.WriteQaPairs(@"C:\corpus\qa", 50_000);          // context+question -> answer TSV</code></div>
+  </div>
+</section>
 
 <section class="sec">
   <div class="wrap">
@@ -138,6 +155,7 @@ Console.WriteLine(ProseEngine.Explain(p));   // subject, verbs, objects, templat
     <p class="lim"><b>Depends on:</b> <a href="/holodb/">HoloDb</a> (the storage engine that holds mined grammar knowledge) and <a href="/algformer.html">AlgFormer</a> (supplies the optional plausibility-scoring model) — installing the NuGet package pulls both in automatically. <b>License:</b> proprietary, compiled library only; every capability is free to use.</p>
   </div>
 </section>
+</main>
 
 <footer class="site">
   <div class="wrap">

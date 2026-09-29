@@ -2214,3 +2214,87 @@ indefinitely — flagging that the deferral itself needs an actual trigger, not 
   also powers a live tool, add a `.powered` pill linking to it on that tool's homepage card too. Re-run
   the reachability walk (Navigation section, above) before calling it done, and check the nav is still
   compact on a narrow viewport.
+
+## Agent-first discoverability pass (2026-09-29)
+
+Coordinator brief: optimize the site for AI agents as the primary audience, with real partnerships
+(third parties paid to build on our stack) as the immediate goal — humans still comfortable. Changes,
+all additive, nothing hidden:
+
+- **`index.html` — "Build with our stack"** (`<section id="build-with-us">`, placed directly before
+  `#for-ai`): the coordinator-approved verbatim partnership offer (we pay for products built on the
+  stack, fees negotiable, support free, agents welcome to write in but only with their principal's
+  approval, contact `dongyang.stephen.chen@gmail.com`). Made the PRIMARY homepage CTA: a new hero
+  `.cta-row` ("Partner with us — we'll pay you to build on our stack →" as `btn-primary`, "See the tools
+  ↓" as secondary) and a new nav item (`Home · Partner with us · Packages · NuGet`) linking to
+  `/#build-with-us`. **Scoped to the homepage only** (nav/hero CTA), per the literal task — the same nav
+  link is NOT yet on the other ~20 pages; extending it sitewide is a flagged follow-up, not done here.
+  The existing `#for-ai` section's closing `.lim` line now also points at `/llms-full.txt` and
+  `#build-with-us`.
+- **`llms.txt`** (`site/llms.txt`) — rewritten to the llms.txt convention: H1 + one-paragraph summary,
+  the same "For AI readers" note, a verbatim **Partnership** section (same words as the homepage
+  section), then link lists: all 11 package pages with their `dotnet add package` line and a one-line
+  description, all 7 Showroom tool URLs (`/tools/*`) with what powers each, docs links, and an explicit
+  "Policy notes" section restating free/no-gate/no-unapproved-action. Prism (not yet on NuGet) is named
+  but explicitly marked "no install line applies."
+- **`llms-full.txt`** (`site/llms-full.txt`, NEW) — concatenates the plain-text content of all 11
+  published packages' `MonoRepo/<Pkg>/docs/site.md` (Phasor, EvalApp, EvalApp.Neural, AlgFormer,
+  AlgFormer.Gpu, HoloDb, HoloDb.Client, HoloDb.Protocol, HoloVoxel, Prose, Tracer), each under its own
+  `====` header with page URL + install line. **Two packages' own `site.md` carry no minimal code
+  sample** (AlgFormer.Gpu, HoloVoxel) — the file says so explicitly instead of inventing one; flagged to
+  those owners below. Ships automatically via the existing `cp -r site/. _site/` deploy step, same as
+  `llms.txt` — no `deploy.yml` change needed.
+- **JSON-LD** — `index.html`'s `@graph` gained `Organization.contactPoint` (email, `contactType:
+  "business development"`) and one `SoftwareApplication` entry per published package (11), each
+  `author` pointing at the `Organization` via `@id` instead of repeating it. All 11 package pages'
+  existing per-page `SoftwareApplication` JSON-LD (already present pre-task) had `contactPoint` added to
+  their inline `author` Organization object too, same shape. **Versions used on the homepage graph are
+  the CURRENT ones from each package's own `CLAUDE.md`/`docs/site.md`, not each page's own (sometimes
+  stale) JSON-LD `softwareVersion`** — see the drift flag below.
+- **`robots.txt`** — added explicit `Allow: /` blocks for `GPTBot`, `ChatGPT-User`, `ClaudeBot`,
+  `Claude-Web`, `anthropic-ai`, `PerplexityBot`, `Google-Extended`, `CCBot`, on top of the pre-existing
+  blanket `User-agent: * / Allow: /` (which already covered them — this makes the intent explicit and
+  discoverable rather than changing actual behavior) plus a pointer comment to `/llms.txt`.
+  `sitemap.xml` was checked against a fresh `Glob` of `site/**/*.html` and is already current (20
+  routable pages + 5 tool routes, 0 missing/0 extra) — not edited.
+- **Quick start near the top, 9 of 11 package pages** — a new `<section id="quick-start">` immediately
+  after `</header>` (before the page's first content section) on `phasor.html`, `evalapp.html`,
+  `evalapp-neural.html`, `algformer.html`, `holodb/index.html`, `holodb-client.html`,
+  `holodb-protocol.html`, `prose.html`, `tracer.html`: an `.install` chip + a `.snip` code block, reusing
+  the page's OWN already-published code sample (from its existing, further-down "Get started" section,
+  itself sourced from `docs/site.md`) rather than inventing anything new — this is a relocation/duplication
+  for earlier discoverability, not new content. **`algformer-gpu.html` and `holovoxel.html` got NO quick-start
+  section** — neither package's `docs/site.md` (nor the live page) carries a minimal code sample; flagged
+  to `algformer-gpu-owner`/`holovoxel-owner` to add one to their `site.md` rather than one being invented
+  here, per charter.
+- **Semantic `<main>`** — `index.html`, `packages.html`, and all 11 package pages now wrap their body
+  content (everything between `</header>` and `<footer class="site">`) in a single `<main>...</main>`.
+  Verified balanced (`<main>`/`</main>` count = 2 per file, i.e. one open one close) on every file
+  touched. The prose-template pages (`holoformer.html`, `holodb.html`, both manuals, all 5 real
+  articles) already used `<main class="wrap">` before this pass — untouched, already compliant.
+- **Hard constraints honored**: no mention of model sizes/parameter counts was ADDED (the AlgFormer
+  quick-start's `dModel: 32` etc. is the package's own pre-existing illustrative API-usage code, already
+  live further down that same page — not a claim about a production checkpoint's size); no pricing/
+  license-gate language added anywhere; no `--` introduced in any HTML/XML comment; every agent-facing
+  addition (`llms.txt`/`llms-full.txt`/the JSON-LD/the build-with-us section) is plainly visible, nothing
+  hidden or styled invisible; nothing tells an agent to act without its principal's approval (the
+  partnership copy says the opposite, verbatim, in three places: the homepage section, `llms.txt`, and
+  the pre-existing `#for-ai` section).
+
+**Flagged, not fixed this pass — real version drift between several package pages' own inline JSON-LD
+`softwareVersion` and their package's actual current version** (checked against each package's own
+`CLAUDE.md`, 2026-09-29): `evalapp.html` JSON-LD says 1.6.1, hero pill + real version is 1.7.0;
+`tracer.html` JSON-LD says 1.1.2, real is 1.2.0; `holodb/index.html` JSON-LD (and its hero `.eyebrow`)
+say 1.7.7, real is 1.10.0; `algformer.html` JSON-LD (and hero pill) say 1.5.0, real is 2.4.0 — the
+widest drift found; `holovoxel.html` JSON-LD says 1.3.0, real is 1.5.0; `prose.html` JSON-LD says 1.0.2,
+its own `docs/site.md` says 1.1.0. This is a pre-existing staleness this task's audit surfaced, not
+something this task caused — left alone per "change only the named value" rather than silently
+rewriting version pills mid-task; worth a dedicated version-refresh sweep across all 11 pages (source of
+truth: each package's own `.csproj <Version>`, per the coordinator's own versioning rule, not this
+agent's memory of a CLAUDE.md date). The homepage's new `SoftwareApplication` @graph entries use the
+CURRENT versions, not each page's stale figure, so they don't propagate the drift further.
+
+**Flagged — the `#build-with-us` nav link is homepage-only.** For full sitewide cohesion (every page
+sharing literally the same nav), the same `/#build-with-us` link could be added to all ~20 other pages'
+`.nav-links` in a follow-up; not done here since the task named the homepage specifically and the other
+pages' nav is otherwise identical/unchanged.
