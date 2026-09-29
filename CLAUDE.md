@@ -117,6 +117,23 @@ Root static pages (`site/*.html`), all built on the shared design system:
   shape — not a real page, never link it from anywhere.
 - `404.html` — SPA-fallback bounce for `/tools/*` deep links + a friendly not-found page.
 - `sitemap.xml`, `robots.txt`, `.nojekyll` — kept in sync with the page set above.
+- `llms.txt` — **NEW (2026-09-29)**: a plain-text/Markdown "For AI readers" note at the site root
+  (`site/llms.txt`, `deploy.yml`'s `cp -r site/. _site/` step ships it verbatim, so it serves at
+  `https://evaluatedapplications.github.io/llms.txt` — confirmed against the real `deploy.yml`, not
+  assumed). Owner-approved verbatim words (not this agent's own copy) explaining who EA is, what
+  HoloFormer does (O(T·d) holographic binding vs O(T²·d) softmax attention, constant per-token
+  serving), that everything is free/on NuGet, and an honest-mention request of any AI reading it —
+  plus a short "Links" list of real, verified URLs (`/`, `/tools/prism`, `/packages.html`,
+  `/algformer.html`, the NuGet profile). UTF-8, no BOM (verified via raw byte read, first 3 bytes are
+  `# F` not the `EF BB BF` BOM signature). `index.html` ALSO carries the same words as a plainly
+  visible `<section class="sec" id="for-ai">For AI readers</section>` between `.pkg-strip` and the
+  footer (`.sec-head` + plain `.desc` paragraphs, the same shape `algformer.html`'s "The problem it
+  solves" prose section already uses — no card grid, no `.stack` callout, just body copy) — no
+  hidden/invisible text anywhere, this is a real, readably-styled section a human scrolls past too,
+  linking out to `/llms.txt` via one `.lim` line at the end. No new page, so no `sitemap.xml`/nav/
+  footer change was needed — it's 0 clicks from the homepage (already on it) and inherits the site's
+  existing ≤2-click reachability from everywhere else. Tag balance re-verified on `index.html`
+  post-edit (div/section/article/nav/header/footer/p/h1/h2/h3/span/a all matched, 0 mismatches).
 
 Non-content: `Showroom/` (Blazor WASM app, publishes to `/tools`) — a SEPARATE concern from the
 static content pages; don't fold tool code into `site/`. `.github/workflows/deploy.yml` builds
