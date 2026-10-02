@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Prism — the AlgFormer/HoloFormer production standard</title>
+<meta name="description" content="Prism is a stamped, append-only lineage journal for a growing AlgFormer/HoloFormer model, plus the canonical confidence-gated decode policy a real production host runs — so a fact about what happened is captured once and never silently re-derived from current state.">
+<link rel="canonical" href="https://evaluatedapplications.github.io/prism-package.html">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Prism — the AlgFormer/HoloFormer production standard">
+<meta property="og:description" content="A stamped lineage journal and a canonical decode policy for a growing AlgFormer/HoloFormer model — one tested package instead of hand-copied training conventions.">
+<meta property="og:url" content="https://evaluatedapplications.github.io/prism-package.html">
+<meta name="twitter:card" content="summary">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%23f0796a'/%3E%3Cstop offset='.166' stop-color='%23f0a15a'/%3E%3Cstop offset='.333' stop-color='%23e6c450'/%3E%3Cstop offset='.5' stop-color='%237bd86a'/%3E%3Cstop offset='.666' stop-color='%234aa3ff'/%3E%3Cstop offset='.833' stop-color='%237d7dff'/%3E%3Cstop offset='1' stop-color='%23c07dff'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='32' height='32' rx='7' fill='%23050608'/%3E%3Cpath d='M16 5L27 26H5Z' fill='none' stroke='url(%23g)' stroke-width='2' stroke-linejoin='round'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="/assets/site.css">
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"SoftwareApplication","name":"EvaluatedApplications.Prism","description":"Prism is a stamped, append-only lineage journal for a growing AlgFormer/HoloFormer model, plus the canonical confidence-gated decode policy a real production host runs.","applicationCategory":"DeveloperApplication","operatingSystem":".NET 8.0+","url":"https://evaluatedapplications.github.io/prism-package.html","downloadUrl":"https://www.nuget.org/packages/EvaluatedApplications.Prism","author":{"@type":"Organization","name":"Evaluated Applications","url":"https://evaluatedapplications.github.io/","contactPoint":{"@type":"ContactPoint","email":"dongyang.stephen.chen@gmail.com","contactType":"business development"}}}
+</script>
+</head>
+<body class="os-chrome" data-cat="algformer">
+<div class="beam"></div>
+
+<nav class="site-nav">
+  <div class="wrap">
+    <a class="brand" href="/">
+      <svg class="mark" viewBox="0 0 32 32" aria-hidden="true"><defs><linearGradient id="m" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#f0796a"/><stop offset=".166" stop-color="#f0a15a"/><stop offset=".333" stop-color="#e6c450"/><stop offset=".5" stop-color="#7bd86a"/><stop offset=".666" stop-color="#4aa3ff"/><stop offset=".833" stop-color="#7d7dff"/><stop offset="1" stop-color="#c07dff"/></linearGradient></defs><path d="M16 5L27 26H5Z" fill="none" stroke="url(#m)" stroke-width="2" stroke-linejoin="round"/></svg>
+      Evaluated Applications
+    </a>
+    <input type="checkbox" id="navtoggle" class="nav-toggle">
+    <label for="navtoggle" class="nav-burger" aria-label="Toggle menu"><span></span><span></span><span></span></label>
+    <div class="nav-links">
+      <a href="/">Home</a>
+      <a href="/packages.html">Packages</a>
+      <a href="https://www.nuget.org/profiles/evaluatedapplications" target="_blank" rel="noopener">NuGet</a>
+    </div>
+  </div>
+</nav>
+
+<header class="hero">
+  <div class="wrap">
+    <div class="hero-bar" aria-hidden="true">
+      <span class="win-dots"><i></i><i></i><i></i></span>
+      <span class="hero-bar-title">prism.app</span>
+    </div>
+    <div class="hero-body">
+      <p class="crumb"><a href="/">Home</a><span>/</span><a href="/packages.html">Packages</a><span>/</span>Prism</p>
+      <span class="eyebrow">Prism · machine learning</span>
+      <h1>A fact about what happened, stamped once — never re-derived from now.</h1>
+      <p class="lede">Prism is the AlgFormer/HoloFormer production standard: a stamped, append-only lineage journal
+        that answers "what was true when this happened" without ever re-deriving history from current state,
+        plus the canonical confidence-gated decode policy a real HoloFormer/AlgFormer host runs in production.
+        It exists to stop one class of bug that has hit a real training hot path three times — a value
+        recomputed from a live constant or field instead of read from a fact stamped at the time it happened.</p>
+      <div class="facts">
+        <span class="fact">net<b>8.0</b>+</span>
+        <span class="fact">no feature gated</span>
+        <span class="fact">on <b>NuGet</b></span>
+      </div>
+      <div class="install" style="max-width:560px;margin-top:20px"><code>dotnet add package EvaluatedApplications.Prism</code><button class="copy" type="button">copy</button></div>
+      <div class="cta-row" style="margin-top:16px">
+        <a class="btn btn-ghost" href="https://www.nuget.org/packages/EvaluatedApplications.Prism" target="_blank" rel="noopener">NuGet →</a>
+        <a class="btn btn-ghost" href="/algformer.html">See AlgFormer →</a>
+      </div>
+      <p class="lim" style="margin-top:18px">Depends on <code>EvaluatedApplications.AlgFormer</code> only (resolved
+        automatically). Namespaces: <code>Prism.Lineage</code>, <code>Prism.Inference</code>, <code>Prism.Growth</code>.</p>
+      <div class="related">
+        <span class="related-label">Related</span>
+        <a href="/algformer.html">AlgFormer</a>
+        <a href="/holoformer.html">HoloFormer, explained</a>
+        <a class="related-all" href="/packages.html">All packages →</a>
+      </div>
+    </div>
+  </div>
+</header>
+
+<main>
+<section class="sec" id="quick-start">
+  <div class="wrap">
+    <div class="sec-head"><span class="dot" style="background:var(--c-algformer)"></span><h2>Quick start</h2><p>install, then this</p></div>
+    <div class="install" style="max-width:560px"><code>dotnet add package EvaluatedApplications.Prism</code><button class="copy" type="button">copy</button></div>
+    <div class="snip" style="margin-top:14px"><code>using Prism.Lineage;
+using Prism.Growth;
+using Prism.Inference;
+using PrismFormer;
+
+// A model and a lineage journal to go with it (JSONL on disk, or MemoryLineageStore for no filesystem).
+var model = new HoloFormer(vocab: 10, shifts: 3, layers: 1, maxContext: 6, dModel: 8, frozenPrefix: 0);
+var journal = new LineageJournal(new MemoryLineageStore());
+var inForce = new InForce(IterWarm: 8, StackK: 2, CtxCeiling: 64, LayerCeiling: 8);
+journal.AppendGenesis(round: 0, layers: model.Layers, inForce);
+
+// Grow it through Prism.Growth so the journal is stamped automatically.
+var grown = Grow.AddLayers(model, extra: 1, atRound: 10, journal, inForce);
+double rampedAlpha = journal.AlphaAt(round: 12, layerIndex: grown.Model.Layers - 1);
+
+// Decode with the canonical confidence gate instead of hand-rolling softmax + a threshold.
+double[] logits = grown.Model.LogitsFor(new[] { 1, 2, 3 });
+var decision = Gate.Evaluate(logits, vocab: model.Vocab, DecodePolicy.Holographic);
+int picked = Gate.Pick(logits, vocab: model.Vocab, DecodePolicy.Holographic, new Random(1));</code></div>
+    <p class="desc" style="max-width:74ch">Three separate jobs in one package: a stamped history of every structural
+      change to a growing model, a growth surface that stamps that history automatically, and the confidence-gated
+      decode a real host samples from.</p>
+  </div>
+</section>
+
+<section class="sec">
+  <div class="wrap">
+    <div class="sec-head"><span class="dot" style="background:var(--c-algformer)"></span><h2>Why it's useful</h2><p>three real bugs, one root cause</p></div>
+    <div class="grid">
+      <article class="card" style="--cat:var(--c-algformer)"><div class="card-top"><h3>Alpha computed live from a constant</h3></div>
+        <p class="desc">A per-layer ramp read the current warm-up constant instead of the constant that was in force when that layer was added — hand-bumping the constant as a stopgap, then reverting it, made every already-ramped layer's alpha jump discontinuously.</p></article>
+      <article class="card" style="--cat:var(--c-algformer)"><div class="card-top"><h3>A regrow-ramp boundary invented from a schedule</h3></div>
+        <p class="desc">A formula guess kept recomputing a "boundary" after growth had already stopped, crushing the learning rate forever.</p></article>
+      <article class="card" style="--cat:var(--c-algformer)"><div class="card-top"><h3>Serving depth read live from the wrong knob</h3></div>
+        <p class="desc">A diagnostic hardcoded an old depth value after the live value had moved on, silently evaluating a checkpoint at the wrong depth.</p></article>
+      <article class="card" style="--cat:var(--c-algformer)"><div class="card-top"><h3>A layer index is also state that moves</h3></div>
+        <p class="desc">Once front-insert growth exists, index <code>i</code> names a different layer after every later front grow. <code>LineageJournal</code> resolves indices by replaying stamped events, never by looking an index up against a range frozen at grow time.</p></article>
+    </div>
+  </div>
+</section>
+
+<section class="sec">
+  <div class="wrap">
+    <div class="sec-head"><span class="dot" style="background:var(--c-algformer)"></span><h2>Key features</h2><p>what you get</p></div>
+    <div class="grid">
+      <article class="card" style="--cat:var(--c-algformer)"><div class="card-top"><h3>Prism.Lineage</h3></div>
+        <p class="desc">An idempotent append-only journal (<code>LineageJournal</code>) with derivations — <code>AlphaAt</code>, <code>DepthAt</code>, <code>LastGrowthRound</code>, <code>AddRoundOf</code> — that always resolve against stamped history, including front-insert layer growth.</p></article>
+      <article class="card" style="--cat:var(--c-algformer)"><div class="card-top"><h3>Prism.Growth</h3></div>
+        <p class="desc"><code>Grow.AddLayers</code> / <code>Grow.ToShifts</code> / <code>Grow.ToContext</code> / <code>Grow.ToVocab</code> wrap <code>HoloFormer</code>'s own growth axes and stamp the journal automatically — growing a model and forgetting to record it is no longer possible.</p></article>
+      <article class="card" style="--cat:var(--c-algformer)"><div class="card-top"><h3>Prism.Inference</h3></div>
+        <p class="desc"><code>Gate</code>/<code>DecodePolicy</code>/<code>GateDecision</code> — commit greedily when confident, otherwise sample over a resonance-filtered subset (the holographic core) or the whole vocabulary (the plain-softmax core), with an explicit <code>FloorMode</code> for each.</p></article>
+      <article class="card" style="--cat:var(--c-algformer)"><div class="card-top"><h3>DegenGuard</h3></div>
+        <p class="desc">Fires on either of two independent triggers — a run of repeated tokens, or a run of non-greedy picks — the two triggers a production host's own probe uses together. Known blind spot, carried forward honestly: misses period&gt;1 cycles.</p></article>
+    </div>
+  </div>
+</section>
+
+<section class="sec">
+  <div class="wrap">
+    <div class="sec-head"><span class="dot" style="background:var(--c-algformer)"></span><h2>Status</h2><p>where this runs today</p></div>
+    <p class="desc" style="max-width:74ch">Consumed in production by two real hosts: an internal training studio routes decode through <code>Gate</code>
+      (30,400 parity checks against the pre-migration hand-rolled logic, zero mismatches), and the lineage + growth
+      journal runs there behind a boot-time equivalence gate against a legacy sidecar. This site's own browser-side
+      tools consume <code>Prism.Inference</code> by NuGet — never a source reference — and have retired their own
+      hand-rolled decode port entirely.</p>
+    <p class="lim"><b>Depends on:</b> <a href="/algformer.html">AlgFormer</a> only — resolved automatically when you install this package.
+      <b>License:</b> proprietary — evaluation and non-commercial use are permitted, commercial use requires a
+      <a href="/packages.html#license">commercial licence</a>; no feature on this page is gated behind a tier or a licence key.</p>
+  </div>
+</section>
+</main>
+
+<footer class="site">
+  <div class="wrap">
+    <span>Evaluated Applications — .NET libraries, England.</span>
+    <span class="mono">© <span id="yr"></span> · <a href="/">Home</a> · <a href="/packages.html">Packages</a> · <a href="/holodb/">HoloDb</a> · <a href="https://www.nuget.org/profiles/evaluatedapplications" target="_blank" rel="noopener">NuGet</a></span>
+  </div>
+</footer>
+<script>
+  document.getElementById('yr').textContent = new Date().getFullYear();
+  document.querySelectorAll('.copy').forEach(function(btn){
+    btn.addEventListener('click', function(){
+      var code = btn.parentElement.querySelector('code').textContent;
+      navigator.clipboard.writeText(code).then(function(){
+        var old = btn.textContent; btn.textContent = 'copied'; btn.classList.add('done');
+        setTimeout(function(){ btn.textContent = old; btn.classList.remove('done'); }, 1400);
+      });
+    });
+  });
+</script>
+</body>
+</html>

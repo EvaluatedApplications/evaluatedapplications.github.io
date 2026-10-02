@@ -19,11 +19,13 @@ namespace HoloKernel;
 /// WASM-specific workaround, and not the browser-native <c>DecompressionStream</c> API either;
 /// deliberately avoided that path since this needs zero JS to reach.
 ///
-/// Two real call sites share this (Prism.razor's own checkpoint load, and Analyst.razor's
-/// independent lazy load for its novelty-scan feature — same checkpoint, same file, loaded from a
-/// second place if Prism itself hasn't run yet) — same reasoning HoloKernel already centralises
-/// <see cref="AlphaRamp"/> for (and, since 2026-09-05, <c>Prism.Inference.Gate</c>): one real
-/// behaviour, not two copies that can silently drift apart.
+/// Five real call sites share this (Prism, Nano Stories, The Cartographer, Analyst's novelty scan,
+/// Prose's "score with Prism" — each an independent lazy load of the same checkpoint file, since
+/// whichever tool a visitor opens first is the one that actually pays the fetch) — same reasoning
+/// HoloKernel already centralises <see cref="AlphaRamp"/> for (and, since 2026-09-05,
+/// <c>Prism.Inference.Gate</c>): one real behaviour, not several copies that can silently drift
+/// apart. Also the one choke point <see cref="CheckpointF32.Unpack"/> hooks into, so every one of
+/// those five callers transparently accepts either checkpoint storage format with no page edits.
 /// </summary>
 public static class CheckpointFetch
 {
@@ -43,6 +45,12 @@ public static class CheckpointFetch
         using var gzip = new GZipStream(input, CompressionMode.Decompress);
         using var output = new MemoryStream(compressed.Length * 3);   // rough headroom guess; MemoryStream grows past it fine either way
         await gzip.CopyToAsync(output);
-        return (output.ToArray(), compressed.Length);
+        // Single choke point every checkpoint consumer shares (Prism, Nano Stories, The
+        // Cartographer, Analyst's novelty scan, Prose's "score with Prism") — transparently accepts
+        // both today's plain f64 buffer and a packed f32 one (see CheckpointF32), so callers never
+        // need to know or care which format shipped. A legacy f64 buffer passes through byte-for-byte
+        // unchanged; only a "PF32"-prefixed buffer is rewritten. Bytes.Length (used in every caller's
+        // boot-log narration) is therefore always the real f64 byte count either way.
+        return (CheckpointF32.Unpack(output.ToArray()), compressed.Length);
     }
 }

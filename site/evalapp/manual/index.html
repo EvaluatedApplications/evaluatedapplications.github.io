@@ -83,25 +83,27 @@
   <pre><code>dotnet add package EvaluatedApplications.EvalApp</code></pre>
   <p>Targets <code>net8.0</code> and has <strong>zero dependencies</strong> — adding the package reference is the
     whole installation. The package ships binary-only (no source, no XML docs): author against the
-    <code>EvalApp.Consumer</code> namespace and let IntelliSense on the public types be your reference.</p>
+    <code>EvalApp</code> namespace and let IntelliSense on the public types be your reference.</p>
   <blockquote>The fluent builder and <code>AddStep&lt;TStep&gt;()</code>/<code>AddBranch&lt;TStep&gt;()</code>
     step-construction path are verified trim- and AOT-safe (publish-trimmed smoke-tested).
     <code>WithTuning</code>'s JSON file persistence and a couple of internal reflection caches are not fully
     trim-clean yet — skip <code>WithTuning</code> if you're publishing trimmed and that matters to you.</blockquote>
-  <p>The current published version is <strong>v1.7.0</strong>; check NuGet for the latest.</p>
+  <p>This page tracks the root <code>EvalApp</code> namespace (2.0 and later) — check the live
+    <a href="https://www.nuget.org/packages/EvaluatedApplications.EvalApp" target="_blank" rel="noopener">NuGet listing</a>
+    for the exact current version.</p>
 
   <h2 id="import">The one import that matters</h2>
-  <pre><code>using EvalApp.Consumer;</code></pre>
+  <pre><code>using EvalApp;</code></pre>
   <p>Everything you need — <code>Eval</code>, <code>IAppBuilder</code>, <code>ResourceKind</code>,
     <code>Tunable</code>, <code>PipelineResult&lt;T&gt;</code>, <code>ICompiledPipeline&lt;T&gt;</code>, the step
-    base classes, licensing — lives in this one namespace. Root namespaces like <code>EvalApp.Fluent</code> or
-    <code>EvalApp.Core</code> are the internal engine: not part of the supported public surface, and not covered
-    here.</p>
+    base classes, licensing — lives in this one root namespace. The internal engine lives under a separate
+    <code>EvalAppEngine.*</code> root (e.g. <code>EvalAppEngine.Fluent</code>, <code>EvalAppEngine.Core</code>):
+    not part of the supported public surface, and not covered here.</p>
 
   <h2 id="first-pipeline">Your first pipeline</h2>
   <p>Design comes before code (see "Design before you build" below), but here's the shape you're working toward — a
     three-step order pipeline, built once and run many times:</p>
-  <pre><code>using EvalApp.Consumer;
+  <pre><code>using EvalApp;
 
 public sealed record OrderData(string CustomerName, decimal Total, string Status = "New");
 
@@ -207,7 +209,7 @@ public sealed class FetchPriceStep : AsyncStep&lt;OrderData&gt;
     subclass <code>SideEffectStep&lt;T&gt;</code> and declare the resource it touches:</p>
   <pre><code>public sealed class SendConfirmationEmailStep : SideEffectStep&lt;OrderData&gt;
 {
-    public override ResourceKind? ResourceKind =&gt; EvalApp.Consumer.ResourceKind.Network;
+    public override ResourceKind? ResourceKind =&gt; EvalApp.ResourceKind.Network;
 
     public override async ValueTask&lt;OrderData&gt; ExecuteAsync(OrderData data, CancellationToken ct)
     {
@@ -268,9 +270,9 @@ Eval.App("Orders")
       above.</li>
     <li><strong>There is no <code>StepContext</code> parameter, ever, on the public base classes</strong>, unlike
       the pipeline's internal engine. If you find yourself wanting to reference a type called
-      <code>StepContext</code> or a <code>ContextPureStep&lt;TGlobal,TDomain,T&gt;</code> NOT in the
-      <code>EvalApp.Consumer</code> namespace, that's the internal engine, not this facade — it won't compile
-      against the published package and never has, in any released version.</li>
+      <code>StepContext</code> or a <code>ContextPureStep&lt;TGlobal,TDomain,T&gt;</code> under the
+      <code>EvalAppEngine.*</code> root instead of root <code>EvalApp</code>, that's the internal engine, not this
+      facade — it won't compile against the published package and never has, in any released version.</li>
   </ul>
 
   <h2 id="gates">Gates and resource kinds</h2>
@@ -347,12 +349,15 @@ Eval.App("Orders")
     registered in the container.</p>
 
   <h2 id="licensing">Licensing</h2>
-  <p><strong>Everything in EvalApp is free to use today — nothing is license-gated, and that is intentional.</strong>
+  <p><strong>No feature in EvalApp is gated behind a tier or a license key — that is intentional.</strong>
     Every pipeline shape above runs at full declared concurrency whether or not you pass a license key. The
     adaptive/Bayesian tuner attaches whenever you call <code>WithTuning(...)</code>, independent of any license. So
     <code>Build(null)</code> and <code>Build(key)</code> behave identically at runtime; a license key changes no
     capability today. The license <em>system</em> below still exists — it's the sanctioned wiring every Evaluated
-    Applications product shares, kept ready for a possible future advanced tier — but it caps nothing now.</p>
+    Applications product shares, kept ready for a possible future advanced tier — but it caps nothing now. This is
+    a <a href="/packages.html#license">proprietary, commercial-licence</a> package: evaluation and non-commercial
+    use are permitted without a licence; commercial, production, or revenue-generating use requires a separate
+    commercial licence from the owner.</p>
   <pre><code>Eval.App("Orders")
     ...
     .Build(licenseKey);   // null/empty/invalid/expired key all degrade to Unlicensed — never throws</code></pre>
@@ -391,8 +396,8 @@ LicenseMode mode = validator.CheckPeriodic(licenseKey, TimeSpan.FromSeconds(5));
   <h2 id="inspecting">Inspecting a pipeline</h2>
   <p><code>ICompiledPipeline&lt;T&gt;</code> is intentionally opaque: its entire public surface is
     <code>Name</code> (the name given at build time) and <code>RunAsync(data, ct)</code>. There is no exposed
-    internal step tree and no visualization/export API in the <code>EvalApp.Consumer</code> facade — any tree/graph
-    rendering lives in the internal engine.</p>
+    internal step tree and no visualization/export API in the public <code>EvalApp</code> namespace — any tree/graph
+    rendering lives in the internal <code>EvalAppEngine.*</code> engine.</p>
   <blockquote>Known gap (does not block these docs): if a public visualizer surface
     (<code>ToTextTree</code>/<code>ToMermaid</code>/JSON export) is ever wanted, that's a deliberate facade
     <em>addition</em> to weigh — not a capability to assume exists today.</blockquote>
@@ -416,14 +421,14 @@ LicenseMode mode = validator.CheckPeriodic(licenseKey, TimeSpan.FromSeconds(5));
   </ul>
 
   <h2 id="architecture">Architecture note: the four public extension seams</h2>
-  <p>Beyond <code>Consumer.*</code> and <code>Licensing.*</code>, exactly four extension points in the internal
-    namespaces are deliberately kept public for advanced integration: <code>EvalApp.Context.GlobalContext</code> /
-    <code>DomainContext</code> (subclass for <code>WithContext</code>/<code>DefineDomain(..., context)</code>),
-    <code>EvalApp.Abstractions.IMergeStrategy&lt;T&gt;</code> (custom <code>AddParallelGroup</code> conflict
-    handling), and <code>EvalApp.Core.Pressure.IPressureResource</code> (a soft, non-blocking budget signal for
-    <code>.Pressure()</code>/<code>.WithPressure()</code>). Everything else outside
-    <code>Consumer</code>/<code>Licensing</code> is internal engine — don't reach for it; if something you need
-    isn't reachable from <code>Consumer</code>, that's a gap to report, not a reason to bypass the facade.</p>
+  <p>Beyond the fluent API and the step base classes, exactly four extension points are deliberately kept public
+    for advanced integration, all in the same root <code>EvalApp</code> namespace as everything else on this page:
+    <code>GlobalContext</code> / <code>DomainContext</code> (subclass for <code>WithContext</code>/
+    <code>DefineDomain(..., context)</code>), <code>IMergeStrategy&lt;T&gt;</code> (custom
+    <code>AddParallelGroup</code> conflict handling), and <code>IPressureResource</code> (a soft, non-blocking
+    budget signal for <code>.Pressure()</code>/<code>.WithPressure()</code>). Everything else lives under the
+    separate internal <code>EvalAppEngine.*</code> root — don't reach for it; if something you need isn't
+    reachable from root <code>EvalApp</code>, that's a gap to report, not a reason to bypass the facade.</p>
 
   <p style="margin-top:2.5rem"><a href="/evalapp.html">← Back to EvalApp</a> &nbsp;·&nbsp; <a href="/evalapp-neural.html">EvalApp.Neural →</a></p>
 

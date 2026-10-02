@@ -1,6 +1,64 @@
 # AboutUs — CLAUDE.md (website-owner)
 
-**Last verified:** 2026-09-02
+**Last verified:** 2026-10-02
+
+## 2026-10-02 — licence/pricing sweep, 12th package (Prism) added, EvalApp 2.0 namespace fixes
+Customer findings F-01 (blocker: site contradicted the proprietary licence by saying "free to use"/
+"Pricing: Free") and F-06 (stale content: packages.html versions, missing Prism, EvalApp.Consumer
+examples, HoloDb manual's wrong NEAREST/ALTER TABLE claims) both closed this pass.
+- **Licence sweep, every page.** Removed every "free to use"/"X free on NuGet"/`offers:{price:0}`
+  claim site-wide (`index.html`, `packages.html`, every per-package page, `holodb/index.html`,
+  `holodb/manual/index.html`, `evalapp/manual/index.html`, `llms.txt`, `llms-full.txt`,
+  `robots.txt`) — see canonical wording in `MonoRepo/Editorial/STYLE.md`. Added a single canonical
+  **License section, `packages.html#license`**, that every other page's `.lim`/closing paragraph
+  now links to instead of restating the full paragraph — one source of truth, not 20 near-copies.
+  Short-form fact-pill text standardised to **"no feature gated"** (never "free to use"). JSON-LD
+  `offers`/`price:0` and hardcoded `softwareVersion` removed from every `SoftwareApplication`/
+  `CollectionPage` block (12 pages) — a schema.org `price:0` is itself a pricing claim.
+- **Prism added as the 12th package** — was missing from `packages.html`/`index.html`/`llms.txt`/
+  `llms-full.txt`/`sitemap.xml` despite being published on NuGet (`EvaluatedApplications.Prism`,
+  depends on AlgFormer only). New page **`site/prism-package.html`** (plain shared template, no
+  `PageSpec` yet — same unattempted-by-SiteKit status as every other hand-authored page), content
+  from `Prism/docs/site.md` + `Prism/PACKAGE.md`, `data-cat="algformer"` reusing `--c-algformer`
+  (same precedent as `holoformer.html` — a single-dependency AlgFormer companion page, not its own
+  palette stop; see the "Per-package palette" table below, NOT re-derived to 13 stops this pass,
+  flagged as a future design decision if a true 13th independent-dependency package ever ships).
+  Wired into `packages.html`'s Machine-learning grid, `index.html`'s `.pkg-strip` + JSON-LD graph,
+  `llms.txt`/`llms-full.txt`, `sitemap.xml`. **Naming collision flagged, not resolved**: the
+  Showroom tool at `/tools/prism` (a chat demo powered by AlgFormer) is a DIFFERENT thing from the
+  `EvaluatedApplications.Prism` NuGet package — both now called "Prism" on this site. Called out
+  explicitly in `llms.txt`/`llms-full.txt`; renaming either is outside this agent's authority
+  (the tool is `showroom-owner`'s, the package name is `algformer-owner`'s).
+- **Stale versions**: per `STYLE.md`'s version rule, removed every hardcoded `<span class="ver">vX</span>`
+  badge from `packages.html`'s cards (each already links to NuGet) rather than updating them to
+  another number that will just go stale again; same treatment for hero `.facts` version pills
+  across every per-package page and the bare "Current version: X.Y.Z" lines in `llms-full.txt`
+  (now "check the live NuGet listing"). `holodb/index.html`'s hero dropped its stale `v1.7.7` tag.
+- **EvalApp 2.0 namespace migration reached the site**: every `using EvalApp.Consumer;` →
+  `using EvalApp;` in `evalapp.html` + `evalapp/manual/index.html` + `llms-full.txt`; the manual's
+  "one import" / "extension seams" / "inspecting a pipeline" sections rewritten for the real 2.0
+  shape (internal engine is `EvalAppEngine.*`, not `EvalApp.Fluent`/`EvalApp.Core`/`EvalApp.Context`/
+  `EvalApp.Abstractions` — those 1.x-era namespaces don't exist anymore).
+- **HoloDb manual + hub fixed against `HoloDb/PACKAGE.md` (the 2.0.0 ground truth)**: `NEAREST` DOES
+  combine with `WHERE`/`GROUP BY`/`ORDER BY`/`LIMIT` in the same query (the manual used to say it
+  couldn't); `ALTER TABLE t ADD COLUMN` has existed since v1.10 (the manual used to say there was no
+  `ALTER TABLE` at all) — fixed in both `holodb/manual/index.html` (`#similarity`, `#limits`) and
+  `holodb/index.html`'s capability-grid cards.
+- **Flagged for package owners, not fixed here** (out of this agent's write scope — `docs/site.md`
+  is owner-authored): `Phasor/docs/site.md` still says "License: source-available" (wrong — proprietary,
+  per the canonical paragraph); 7 packages' `docs/site.md` still carry "free to use"/"every capability
+  is free" wording that `llms-full.txt` concatenates verbatim (Phasor, EvalApp, AlgFormer, HoloDb,
+  HoloDb.Client, HoloVoxel, Prose, Tracer) — fixed in the RENDERED `llms-full.txt` this pass, but will
+  recur the next time this file is regenerated from source unless the owners fix their own
+  `docs/site.md`. Route to each package's owner agent.
+- **Not done this pass** (named, not silently dropped): `EvalApp.Neural`'s page kept version pill-free
+  but its `.lim` License line wasn't rewritten to link `#license` (it was already compliant, just
+  terser than the others — low priority); the 8-stop "Per-package palette" table (below) was not
+  re-derived to include Prism as its own stop (reused `--c-algformer` instead, see above); this
+  `CLAUDE.md` itself is still ~2300 lines, far over the charter's own "~<200 lines" guidance — a
+  structural cleanup (split dated SiteKit batch-log history into an archive file?) is flagged, not
+  attempted here; out of scope for a content-sweep task.
+
 
 Public site repo for `evaluatedapplications.github.io`. Static HTML content (indexable, instant)
 + a Blazor WebAssembly tools app under `/tools` (The Analyst, The Creature). You (website-owner)
@@ -465,10 +523,12 @@ this page has used, NOT a mechanical port of the existing (already-known-stale) 
 recycledao-preview.html` HTML into a `PageSpec`. Porting stale content faithfully into the new
 pipeline would just give the staleness a second, harder-to-notice home.
 
-**All 11 current MonoRepo packages have a page**: Phasor, EvalApp, EvalApp.Neural, AlgFormer
+**All 12 current MonoRepo packages have a page** (updated 2026-10-02, see the dated entry at the top
+of this file — Prism added, was missing): Phasor, EvalApp, EvalApp.Neural, AlgFormer
 (+HoloFormer deep-dive), AlgFormer.Gpu, HoloDb (+benchmarks), HoloDb.Protocol, HoloDb.Client,
-HoloVoxel, Prose, Tracer. All 11 are catalogued on `packages.html`; only 6 (HoloDb, AlgFormer,
-Tracer + transitively EvalApp/Phasor) currently power a live tool — see "Tools-first pivot" below.
+HoloVoxel, Prose, Tracer, Prism (`prism-package.html`). All 12 are catalogued on `packages.html`;
+only 6 (HoloDb, AlgFormer, Tracer + transitively EvalApp/Phasor) currently power a live tool — see
+"Tools-first pivot" below.
 
 **Unlisted client page (not part of the routable site — do not "fix" this by adding it anywhere)**:
 `site/recycledao-preview.html` — a private progress preview for the RecycleDAO client PoC

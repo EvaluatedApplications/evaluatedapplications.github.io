@@ -65,7 +65,18 @@ package — a `ProjectReference` here is the designed path, not a MonoRepo bound
   rule applies repo-wide, not just to the colliding page).
 - `CheckpointFetch.FetchAndDecompressGzipAsync(http, gzUrl)` — fetch+decompress a `.gz` sidecar via the
   BCL's `GZipStream` (no JS interop). GitHub Pages serves files byte-for-byte uncompressed, so a raw
-  checkpoint needs a hand-shipped `.gz` sibling to download small.
+  checkpoint needs a hand-shipped `.gz` sibling to download small. The ONE choke point every checkpoint
+  consumer shares (Prism, Nano Stories, The Cartographer, Analyst's novelty scan, Prose's "score with
+  Prism") — confirmed by grep, no page fetches `oracle-brain.bin*` any other way (Creature/Forecaster
+  only fetch small metadata sidecars, never the checkpoint bytes themselves).
+- **`CheckpointF32.Unpack`** (added 2026-09-29) runs inside `FetchAndDecompressGzipAsync` right after
+  gzip decompress — every caller above always gets a plain f64 `HoloFormer.Serialize()` buffer either
+  way. A "PF32"-magic buffer (4B magic + int32 formatVersion=1 + verbatim 28B header + n float32 LE +
+  verbatim 8B trailer, `n=(len-36)/8`) gets rebuilt to f64; a legacy f64 buffer passes through
+  unchanged. Lossless (GPU trains fp32, `(double)(float)x==x` for every stored value). `Pack` is the
+  inverse, oracle/verify-only, never called from a page. **Cross-repo byte-exact contract with
+  PrismStudio** — don't change the wire format here without changing it there. Data files themselves
+  are the coordinator's to deploy; this repo only had to be ready to accept one before it ships.
 - `TokenVoice`/`TokenVoiceControls.razor` — Prism's per-token voice (face→tone synth), shared
   byte-for-byte by Prism and Nano Stories; never quantise to a musical scale, never retune per tool.
 - `DegenerateTail.Start(ids)`/`.SafePrefix(ids)` — trims/holds back a repeating tail mid-generation

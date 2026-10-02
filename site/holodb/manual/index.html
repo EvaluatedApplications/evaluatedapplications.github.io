@@ -83,8 +83,9 @@
   <h2 id="install">Install</h2>
   <p>Add the package from NuGet:</p>
   <pre><code>dotnet add package EvaluatedApplications.HoloDb</code></pre>
-  <p>It targets .NET 8+ and is dependency-light. The package ships the compiled library only, and every capability is free
-    to use.</p>
+  <p>It targets .NET 8+ and is dependency-light. The package ships the compiled library only; it's proprietary —
+    evaluation and non-commercial use are permitted, commercial use needs a <a href="/packages.html#license">commercial
+    licence</a>, and no feature on this page is gated behind a tier or a licence key.</p>
 
   <h2 id="quickstart">Quick start</h2>
   <p>Create a service, run some SQL, read the rows back. This is the whole surface for most apps:</p>
@@ -245,7 +246,9 @@ LIMIT 5</code></pre>
   <p>This returns the five rows whose content is closest to the query, ordered by similarity — SQL and vector-style
     retrieval from the same engine, over the same rows.</p>
   <blockquote>Similarity is exact below a few thousand rows and uses a sublinear index above that (in-memory engine).
-    <code>NEAREST</code> can't yet be combined with <code>WHERE</code>, <code>GROUP BY</code>, or a join.</blockquote>
+    <code>NEAREST</code> can be combined with <code>WHERE</code>, <code>GROUP BY</code>, <code>ORDER BY</code> and
+    <code>LIMIT</code> in the same query. An <code>UPDATE</code>/<code>DELETE</code>/<code>ALTER TABLE</code> on the
+    table forces the next <code>NEAREST</code> to rebuild its index (removals aren't tracked incrementally).</blockquote>
 
   <h2 id="indexes">Indexes &amp; why aggregates are instant</h2>
   <p>Add a sorted index on a column to speed range and lookup queries:</p>
@@ -292,9 +295,10 @@ public class ReportService(HoloDbService db)
   <p>Kept here so nothing surprises you in production:</p>
   <ul>
     <li>Exactly one <code>PRIMARY KEY</code> per table (<code>INT</code> or <code>TEXT</code>, not <code>REAL</code>).</li>
-    <li>Joins are <code>INNER</code> only — no <code>OUTER</code> joins yet, and no <code>ALTER TABLE</code>.</li>
+    <li>Joins are <code>INNER</code> only — no <code>OUTER</code> joins yet.</li>
+    <li><code>ALTER TABLE t ADD COLUMN</code> is supported (with a mandatory <code>DEFAULT</code>) — there is still no
+      <code>DROP</code>, rename, or type change.</li>
     <li>Only integer <code>SUM</code>/<code>COUNT</code> are constant-time; real-number sums use a fast SIMD scan.</li>
-    <li><code>NEAREST</code> doesn't yet combine with <code>WHERE</code> / <code>GROUP BY</code> / joins.</li>
     <li>The paged engine doesn't do multi-way joins or <code>GROUP BY</code> over a join.</li>
   </ul>
 

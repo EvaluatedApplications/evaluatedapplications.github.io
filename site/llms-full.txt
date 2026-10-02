@@ -3,9 +3,11 @@
 This file concatenates the plain-text content of every published Evaluated Applications package's
 owner-authored source doc (`MonoRepo/<Pkg>/docs/site.md`), verbatim except for markdown-to-plain
 reflow. It exists so an AI system can read every package's own words in one request instead of
-crawling eleven pages. Each package's own page (linked below) may present this same content with
-additional design/rendering; the words below are the package owner's source of truth. Everything
-described below is free on NuGet — no paid tier, no license gate on any capability named here.
+crawling twelve pages. Each package's own page (linked below) may present this same content with
+additional design/rendering; the words below are the package owner's source of truth. Every package
+named here is on NuGet under a commercial licence — evaluation and non-commercial use are permitted
+without one, and no feature named in this file is gated behind a tier or a license key. See
+https://evaluatedapplications.github.io/packages.html#license for the full terms.
 
 See https://evaluatedapplications.github.io/llms.txt for the short summary, tool list, and our
 partnership offer (we pay third parties to build on this stack).
@@ -47,7 +49,7 @@ The Hologram type wraps a phasor face and applies the algebra through operators 
 readability and prototyping; in-place static methods (BindInto, BundleInto, UnbindInto) are for hot
 loops (operators allocate; measured ~1.7x slower at d=64-96).
 
-Version: 1.3.0.
+Check the live NuGet listing (EvaluatedApplications.Phasor) for the exact current version.
 
 Minimal example:
 ```csharp
@@ -67,7 +69,7 @@ workloads; no dependencies beyond System/System.Numerics; AOT and trim compatibl
 (not cryptographic) hashing; a memoized decode cache.
 
 Compatibility: .NET 8.0 and 10.0, Windows/Linux/macOS, no platform-specific code, dependency-free.
-License: source-available; every capability is free to use.
+License: proprietary — evaluation and non-commercial use are permitted; commercial use requires a commercial licence; no feature is gated in code.
 
 ================================================================================
 # EvalApp — EvaluatedApplications.EvalApp
@@ -95,19 +97,21 @@ don't compile (a saga must close before the pipeline builds; a side-effecting st
 without declaring its resource); the builder chain reads like the process it describes; nothing to
 stand up first.
 
-Current version: 1.7.0 — targets net8.0 and net10.0, binary-only, zero dependencies.
+Targets net8.0 and net10.0, binary-only, zero dependencies. Check the live NuGet listing
+(EvaluatedApplications.EvalApp) for the exact current version.
 
 Key features: fluent pipeline builder; resource-gated concurrency; adaptive and Bayesian tuning;
 parallel ForEach and parallel branches; sagas with compensation; middleware (retry, timeout,
 circuit breaker, timing, audit, validation); results as data (PipelineResult<T>), not exceptions;
 an offline licensing facade (ECDsa P-256, no network call, ever).
 
-Useful to know: everything in EvalApp is free to use today — nothing is license-gated, and no
-capability is capped by tier. Compatibility: .NET 8 and .NET 10, no third-party package references.
+Useful to know: no feature in EvalApp is gated behind a tier or a license key today. License:
+proprietary — evaluation and non-commercial use are permitted; commercial use requires a commercial
+licence. Compatibility: .NET 8 and .NET 10, no third-party package references.
 
 Minimal example:
 ```csharp
-using EvalApp.Consumer;
+using EvalApp;
 
 public sealed record OrderData(string CustomerName, decimal Total, string Status = "New");
 
@@ -205,8 +209,7 @@ O(T²·d) for standard attention); a subword tokenizer, data-parallel trainer, s
 with a KV cache, checkpoint save/load with format versioning, and helpers to grow a trained model
 to a longer context or bigger vocabulary; distributed/swarm training over MQTT.
 
-Current version: 2.13.0 (per package CLAUDE.md as of this writing; check the package page's own
-version pill for the exact live figure).
+Check the live NuGet listing (EvaluatedApplications.AlgFormer) for the exact current version.
 
 Minimal example:
 ```csharp
@@ -232,7 +235,7 @@ AlgFormer with matching dimensions.
 
 Compatibility: .NET 8 and .NET 10, pure managed code, no native dependencies. Depends on the
 Phasor codec package and the EvalApp pipeline runtime; swarm relay components use MQTTnet.
-License: proprietary, compiled library only; every capability described is free to use today.
+License: proprietary, compiled library only — evaluation and non-commercial use are permitted; commercial use requires a commercial licence; no feature is gated in code.
 
 ================================================================================
 # AlgFormer.Gpu — EvaluatedApplications.AlgFormer.Gpu
@@ -257,7 +260,7 @@ gradient-checked against the CPU HoloFormer's double-precision math as the refer
 runs in float32 for speed, so results are float-close, not bit-identical); fused on-device Adam
 avoiding a CPU round trip on every training batch.
 
-Current version: 1.3.0 (NuGet: EvaluatedApplications.AlgFormer.Gpu).
+Check the live NuGet listing (EvaluatedApplications.AlgFormer.Gpu) for the exact current version.
 
 Key features: GPU-batched forward and backward training for HoloFormer, including per-layer
 weight-tied iterative refinement ("StackIter") and all-positions loss; fused on-device Adam
@@ -275,6 +278,53 @@ alongside it.
 NOTE: this package's owner-authored site.md does not include a minimal code sample; none is
 invented here. See the API description above and the package's own CLAUDE.md for exact call
 shapes, or ask the package owner for one.
+
+================================================================================
+# Prism — EvaluatedApplications.Prism
+Page: https://evaluatedapplications.github.io/prism-package.html
+Install: dotnet add package EvaluatedApplications.Prism
+================================================================================
+
+The AlgFormer/HoloFormer production standard: a stamped, append-only lineage journal that answers
+"what was true when this happened" without ever re-deriving history from current state, plus the
+canonical confidence-gated decode policy a real AlgFormer/HoloFormer host runs in production.
+
+What it does: Prism packages two things. First, a lineage journal that records every structural
+change to a growing model — genesis, a context grow, a layer grow, a shift grow, or a runtime knob
+changing value — stamped with every parameter a later calculation might need, captured at the
+moment it happened. Second, a canonical decode policy: commit greedily when the model is
+confident, otherwise sample only from what clears a resonance floor (or, for the non-holographic
+core, from the whole vocabulary at temperature), plus a guard that catches a decode run collapsing
+into repetition.
+
+Why it's useful: three real production bugs in an AlgFormer/HoloFormer training host shared one
+root cause — a value re-derived from CURRENT state instead of read from a STAMPED fact about the
+past. Prism's lineage journal makes that whole category of bug structurally impossible: every
+derivation walks the stamped event history up to the round in question, never the ambient present.
+The decode side exists because the confidence-gated sampling logic that ships in production had
+been hand-copied multiple times across a codebase, with two genuinely different real behaviors
+never written down as a deliberate choice; Prism names both and ships them as one tested policy.
+
+Key features: Lineage.LineageJournal (idempotent append, derivations AlphaAt/DepthAt/
+LastGrowthRound/AddRoundOf that always resolve against stamped history, including front-insert
+layer growth); Lineage.ILineageStore (FileLineageStore, JSONL durable append, and
+MemoryLineageStore for a browser/WASM host with no filesystem); Growth.Grow (a growth surface over
+HoloFormer — context/layers/shifts/vocab — correct by construction, stamps the journal
+automatically); Inference.DecodePolicy/Gate/GateDecision (the confidence-gated decode with an
+explicit FloorMode: a resonance-sigma floor, no floor, or nucleus top-p sampling); Inference.
+DegenGuard (fires on either a repeat run or a non-greedy-picks run).
+
+Good to know: depends on EvaluatedApplications.AlgFormer only (resolved automatically). Namespaces:
+Prism.Lineage, Prism.Inference, Prism.Growth. Consumed in production by two real hosts — an
+internal training host routes decode through Gate (30,400 parity checks against the
+pre-migration hand-rolled logic, zero mismatches), and this site's own browser-side tools consume
+Prism.Inference by NuGet, never a source reference. License:
+proprietary, compiled library only — evaluation and non-commercial use are permitted; commercial
+use requires a commercial licence; no feature is gated behind a tier or a license key. Check the
+live NuGet listing (EvaluatedApplications.Prism) for the exact current version.
+
+NOTE: "Prism" is also the name of a separate, unrelated live chat demo under /tools/prism (a
+Showroom tool powered by the AlgFormer package, not this one) — don't conflate the two.
 
 ================================================================================
 # HoloDb — EvaluatedApplications.HoloDb
@@ -321,8 +371,9 @@ foreach (var row in result.Rows) Console.WriteLine(row["name"]);
 Register with DI via services.AddHoloDb(), or attach to an EvalApp pipeline with
 builder.WithHoloDb(service).
 
-Anything else worth knowing: every capability is free to use, nothing gated behind a tier or a
-license key. No UPSERT (insert on an existing primary key always throws). One primary key per
+Anything else worth knowing: no feature is gated behind a tier or a license key (proprietary
+licence — evaluation and non-commercial use are permitted; commercial use requires a commercial
+licence). No UPSERT (insert on an existing primary key always throws). One primary key per
 table, no outer joins yet. Ships as a compiled library only; source is proprietary. HoloDb is plain
 managed .NET with no native dependencies, so the exact same package runs unmodified inside a Blazor
 WebAssembly app in a visitor's browser tab.
@@ -351,7 +402,7 @@ thumbprint or skip it in dev only); built-in resilience (v1.4.0 — optional exp
 full jitter, a circuit breaker, and a per-operation deadline budget); designed for concurrency (one
 client per worker, or pool clients with HoloDbClientPool).
 
-Version: 1.4.0 — adds operation deadline budgets across retries and circuit-breaker state; v1.3.0
+Version history: v1.4.0 added operation deadline budgets across retries and circuit-breaker state; v1.3.0
 added a circuit breaker; v1.2.0 switched to exponential backoff.
 
 Minimal example:
@@ -371,7 +422,8 @@ try {
 
 Requirements: .NET 8.0 or .NET 10.0; a HoloDb server v1.4.0+ (wire-protocol compatible); network
 connectivity to the server with TLS support. One client = one session (requests serialize through
-an internal queue). License: proprietary, part of Evaluated Applications, free to use.
+an internal queue). License: proprietary, part of Evaluated Applications — evaluation and
+non-commercial use are permitted; commercial use requires a commercial licence.
 
 ================================================================================
 # HoloDb.Protocol — EvaluatedApplications.HoloDb.Protocol
@@ -392,7 +444,8 @@ Why it matters: most database protocols trade columnar performance for JSON or O
 this protocol keeps the columnar win alive all the way to the client, and encodes the wire format
 explicitly (predictable, versionable, testable).
 
-Current version: 1.0.2 (.NET 8.0 / 10.0, nullable-enabled).
+.NET 8.0 / 10.0, nullable-enabled. Check the live NuGet listing (EvaluatedApplications.HoloDb.Protocol)
+for the exact current version.
 
 How to get it: normally pulled in transitively via EvaluatedApplications.HoloDb.Client. If you are
 implementing a server (or working on HoloDb's server code), depend on this package directly.
@@ -438,7 +491,7 @@ LOD will ever need, losslessly up to that budget); the blur is honest, not aesth
 terrain looks soft because the engine genuinely has less information at that budget); engine only,
 plug into anything (no rendering or graphics dependency, verified headless).
 
-Current version: 1.5.0 (EvaluatedApplications.HoloVoxel on NuGet).
+Check the live NuGet listing (EvaluatedApplications.HoloVoxel) for the exact current version.
 
 Key features: holographic chunk storage (HoloWorld, Chunk) decodable at any component budget as a
 colour field or a triangulated surface mesh with analytic per-vertex normals; continuous, meshless
@@ -449,8 +502,9 @@ generator, or supply your own world source; a ringworld warp on top of the same 
 
 Good to know: this is the engine, not the renderer — HoloVoxel has no graphics dependency and is
 verified headless, handing you decoded colour fields, meshes, and confidence values; drawing them
-is up to the consuming front end. Built on Phasor. No license gate — every capability is free to
-use, DLL-only distribution, proprietary license.
+is up to the consuming front end. Built on Phasor. DLL-only distribution, proprietary license —
+evaluation and non-commercial use are permitted; commercial use requires a commercial licence; no
+feature is gated behind a tier or a license key.
 
 NOTE: this package's owner-authored site.md does not include a minimal code sample; none is
 invented here. See the API description above and the package's own CLAUDE.md for exact call
@@ -486,7 +540,7 @@ emits is a form it actually observed in the source text); handles real grammatic
 (indirect objects, relative clauses, multi-sentence passages with coreference), not just word
 salad.
 
-Current version: 1.1.0 (NuGet package EvaluatedApplications.Prose).
+Check the live NuGet listing (EvaluatedApplications.Prose) for the exact current version.
 
 Key features: parse (sentence splitting, POS tagging, phrase chunking, role assignment, zero
 training, no external model); mine (builds a lexicon plus selectional tables in a HoloDb database);
@@ -515,8 +569,9 @@ Console.WriteLine(ProseEngine.Explain(p));   // subject, verbs, objects, templat
 
 Good to know: depends on two other Evaluated Applications packages, HoloDb (storage engine) and
 AlgFormer (optional plausibility-scoring model) — installing this package pulls both in
-automatically. Ships as a compiled library; every capability is free to use under a proprietary
-license.
+automatically. Ships as a compiled library under a proprietary licence — evaluation and
+non-commercial use are permitted; commercial use requires a commercial licence; no feature is
+gated in code.
 
 ================================================================================
 # Tracer — EvaluatedApplications.Tracer
@@ -546,7 +601,7 @@ influence maps; combat engagement (spatial-hashed, pluggable damage/dodge/block 
 behaviors (Seek, Wander, Patrol, Flee, Queue, FlowLane); grid tactics (a separate, bake-free lane
 for tile/square-grid tactics games); adaptive path budgeting under a tight frame budget.
 
-Version: current 1.2.0.
+Check the live NuGet listing (EvaluatedApplications.Tracer) for the exact current version.
 
 Minimal example:
 ```csharp
@@ -566,7 +621,8 @@ var result = await multi.TickAsync(agents, mesh, tickNumber: 0);
 
 What you need to know: depends on EvalApp (self-tuning concurrency for every heavy tick) and
 Microsoft.Extensions.DependencyInjection.Abstractions. Target .NET 8.0 and .NET 10.0. License:
-proprietary; every capability is free to use today, nothing gated behind a tier or a license key.
+proprietary — evaluation and non-commercial use are permitted; commercial use requires a commercial
+licence; no feature is gated behind a tier or a license key.
 Proven in use building the Eden game project (navmesh movement, perception/fog, combat resolution,
 tactical squad control).
 
