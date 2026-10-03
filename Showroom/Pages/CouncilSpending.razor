@@ -7,7 +7,9 @@
 @using System.Text.Json
 @using CouncilAudit
 @using HoloDb
+@using Showroom.Components
 @using Showroom.Services
+@implements IDisposable
 
 <PageTitle>Council Spending Scanner — Evaluated Applications</PageTitle>
 
@@ -53,6 +55,12 @@
         error or wrongdoing.</strong> Councils publish corrections, instalments, and VAT treatments that
         can look like a mismatch until explained. If you intend to raise this with the council or its
         auditor, ask for the records and the reason, not for an admission.</p>
+
+    <WorkStatus @ref="_status" OnCancel="CancelWork" />
+    @if (_notice is not null)
+    {
+        <p class="note-callout" role="status">@_notice</p>
+    }
 
     @if (_mode == Mode.Pick)
     {
@@ -106,56 +114,7 @@
                         not that the payments are reconciled against each other the way exception tests 1 and 2
                         compare a single council's own invoice with its payments.</p>
                 }
-                <div class="cc-controls">
-                    <input type="text" @bind="_nearestSupplierQuery" @bind:event="oninput"
-                           placeholder="Type a supplier name to search everything loaded…" disabled="@_busy" />
-                    <select @bind="_searchMode" disabled="@_busy">
-                        <option value="@SearchMode.Graded">Graded match (ranked by similarity)</option>
-                        <option value="@SearchMode.ExactSubstring">Exact substring (LIKE)</option>
-                    </select>
-                    <button class="ghost" @onclick="RunNearestSupplierSearch"
-                            disabled="@(string.IsNullOrWhiteSpace(_nearestSupplierQuery) || _busy)" type="button">
-                        Search loaded suppliers
-                    </button>
-                </div>
-                @if (_searchMode == SearchMode.Graded)
-                {
-                    <p class="hint">Ranked by HoloDb's holographic <code>NEAREST</code> similarity search
-                        against the normalised supplier key — a council name change, merger, or small
-                        spelling difference ("ACME LTD" vs "ACME LTD.") still surfaces the real supplier
-                        near the top, ranked by the <b>score</b> column (cosine similarity, 1.0 = exact
-                        match). Graded closeness is a well-behaved local ranking, not a global guarantee
-                        that every distant pair orders strictly by distance — treat a low score as a weak
-                        match, not a confident one.</p>
-                }
-                else
-                {
-                    <p class="hint">An exact substring match on the normalised supplier name — only rows
-                        whose key literally contains what you typed. Use this when you want to be certain
-                        nothing beyond a literal substring is being matched.</p>
-                }
-                @if (_nearestResults.Count > 0)
-                {
-                    <div class="table-scroll table-scroll-fixed">
-                        <table class="exc-table">
-                            <thead>
-                                <tr>
-                                    <th>Supplier (as published)</th><th>Council</th>
-                                    @if (_searchMode == SearchMode.Graded) { <th>Score</th> }
-                                </tr>
-                            </thead>
-                            <tbody>
-                                @foreach (var r in _nearestResults)
-                                {
-                                    <tr>
-                                        <td>@r.Supplier</td><td>@r.Council</td>
-                                        @if (_searchMode == SearchMode.Graded) { <td>@r.Score.ToString("F3")</td> }
-                                    </tr>
-                                }
-                            </tbody>
-                        </table>
-                    </div>
-                }
+                <SupplierSearchBox Index="_suppliers" CouncilName="CouncilName" />
             </section>
         }
 
@@ -167,7 +126,9 @@
                     confirm the column mapping before anything runs; nothing here is pre-verified the way
                     Wokingham's own profile is.</p>
                 <label class="council-name-field">Council name (for the FOI letter)
-                    <input type="text" @bind="_ownCouncilName" @bind:event="oninput" placeholder="e.g. Example Borough Council" disabled="@_busy" />
+                    <input type="text" value="@_ownCouncilName" placeholder="e.g. Example Borough Council" disabled="@_busy"
+                           @oninput="e => Typed(() => _ownCouncilName = e.Value?.ToString() ?? string.Empty)"
+                           @onchange="e => _ownCouncilName = e.Value?.ToString() ?? string.Empty" />
                 </label>
                 <InputFile OnChange="OnOwnFile" accept=".csv,.tsv,.xlsx" disabled="@_busy" />
                 @if (_ownHeader.Count > 0)
@@ -216,6 +177,9 @@
                     <p class="hint warn-hint">The two dropdowns above cannot be guessed from the data —
                         confirm them against the council's own documentation or a multi-line example
                         before trusting Exception tests 1, 2 and 4.</p>
+                    <p class="hint">The checking engine runs your file in one go and cannot be paused part way, so the page may stop
+                        responding for a few seconds while it works: about half a second per 40,000 rows on a fast computer, several
+                        times that on a phone.@if (_ownRowsHint is > 30000) { <text> Your file looks like roughly @_ownRowsHint.Value.ToString("N0") rows, so it is better run on a computer.</text> }</p>
                     <button class="go" @onclick="RunOwnFile" disabled="@_busy" type="button">@(_busy ? _phase : "Run the checks")</button>
                 }
             </section>
@@ -241,8 +205,8 @@
 
         @if (_tests.Count > 0)
         {
-            var unexplainedSummary = DistinctSummary(unexplainedOnly: true);
-            var overallSummary = DistinctSummary(unexplainedOnly: false);
+            var unexplainedSummary = _sumUnexplained;   // worked out once per load (RefreshDerivedAsync), not on every render
+            var overallSummary = _sumAll;
             <section class="summary-bar">
                 <h2>Totals across everything loaded</h2>
                 <div class="summary-cards">
@@ -262,7 +226,7 @@
                     mechanical tests below — it is not money proven to be lost or wasted.</strong></p>
             </section>
 
-            var ranked = RankedUnexplained();
+            var ranked = _ranked;
             if (ranked.Count > 0)
             {
                 <section class="topunexplained">
@@ -303,15 +267,17 @@
                 <h2>Exception tests</h2>
                 @foreach (var t in _tests)
                 {
-                    var filtered = FilteredItems(t);
+                    // Everything here is read from values worked out once per load / per filter change (see RefreshDerivedAsync
+                    // and UpdateViewAsync): a render never scans the test's rows. A collapsed card costs a handful of reads.
+                    var filtered = t.View;
                     var totalPages = TotalPages(filtered.Count);
                     if (t.Page > totalPages) { t.Page = totalPages; }
-                    var pageItems = filtered.Skip((t.Page - 1) * PageSize).Take(PageSize).ToList();
+                    var testTotal = t.ViewTotal;
+                    var classTotals = t.ViewClasses;
+                    List<ExceptionItem> pageItems = t.Collapsed ? EmptyItems : filtered.Skip((t.Page - 1) * PageSize).Take(PageSize).ToList();
                     var startIdx = filtered.Count == 0 ? 0 : (t.Page - 1) * PageSize + 1;
                     var endIdx = Math.Min(t.Page * PageSize, filtered.Count);
-                    var testTotal = TestTotal(filtered);
-                    var selectedInTest = filtered.Where(i => i.Selected).ToList();
-                    var classTotals = ClassificationTotals(filtered);
+                    var sel = t.Collapsed ? (Count: 0, Total: 0m, All: false) : SelStats(t);
                     <div class="plain-explain">
                         @PlainIntroHtml(t)
                     </div>
@@ -360,19 +326,20 @@
                                     }
                                     <div class="panel-controls">
                                         <label class="select-all">
-                                            <input type="checkbox" checked="@AllFilteredSelected(filtered)" @onchange="e => SelectAllFiltered(filtered, (bool)e.Value!)" />
+                                            <input type="checkbox" checked="@(filtered.Count > 0 && sel.All)" @onchange="e => SelectAllFiltered(filtered, (bool)e.Value!)" />
                                             @SelectAllLabel(t, filtered.Count)
                                         </label>
-                                        <span class="selected-total">Selected: <b>@selectedInTest.Count.ToString("N0")</b> item@(selectedInTest.Count == 1 ? "" : "s"), <b>@Money(TestTotal(selectedInTest))</b></span>
-                                        <input type="text" class="filter-text" placeholder="Filter supplier / description…"
-                                               @bind="t.FilterText" @bind:event="oninput" @bind:after="() => OnFilterChanged(t)" />
-                                        <select class="filter-year" @bind="t.FilterYear" @bind:after="() => OnFilterChanged(t)">
+                                        <span class="selected-total">Selected: <b>@sel.Count.ToString("N0")</b> item@(sel.Count == 1 ? "" : "s"), <b>@Money(sel.Total)</b></span>
+                                        <input type="text" class="filter-text" placeholder="Filter supplier / description…" value="@t.PendingFilter"
+                                               @oninput="e => OnFilterInput(t, e.Value?.ToString() ?? string.Empty)" />
+                                        <select class="filter-year" value="@t.FilterYear" @onchange="e => OnYearChanged(t, e.Value?.ToString() ?? string.Empty)">
                                             <option value="">All years</option>
-                                            @foreach (var y in DistinctYears(t))
+                                            @foreach (var y in t.Years)
                                             {
                                                 <option value="@y">@y</option>
                                             }
                                         </select>
+                                        @if (t.Updating) { <span class="hint" role="status">Updating…</span> }
                                     </div>
                                     <div class="table-scroll table-scroll-fixed">
                                         <table class="exc-table">
@@ -576,13 +543,17 @@
 
                 <div class="foi-fields">
                     <label>Your name (required to generate)
-                        <input type="text" @bind="_foiName" @bind:event="oninput" placeholder="Jane Smith" />
+                        <input type="text" value="@_foiName" placeholder="Jane Smith"
+                               @oninput="e => Typed(() => _foiName = e.Value?.ToString() ?? string.Empty)"
+                               @onchange="e => _foiName = e.Value?.ToString() ?? string.Empty" />
                     </label>
                     <label><input type="checkbox" @bind="_foiElectronic" /> I'm happy to receive the reply electronically</label>
                     @if (_foiElectronic)
                     {
                         <label>Your email (optional, shown in the letter)
-                            <input type="email" @bind="_foiEmail" @bind:event="oninput" placeholder="jane@example.com" />
+                            <input type="email" value="@_foiEmail" placeholder="jane@example.com"
+                                   @oninput="e => Typed(() => _foiEmail = e.Value?.ToString() ?? string.Empty)"
+                                   @onchange="e => _foiEmail = e.Value?.ToString() ?? string.Empty" />
                         </label>
                     }
                 </div>
@@ -647,14 +618,13 @@
 @code {
     // Feature switch for the supplier-name search (see the note where it is used). Off until it is measured fast on a throttled phone-like run.
     static readonly bool SearchEnabled = false;
-    // "Use your own file" runs the vendored engine in single calls (about 0.5 s per 40,000 rows on a fast desktop, measured: parse 61-68 ms,
-    // MapRows 121-146 ms, AuditEngine.Run 450-462 ms for one Wokingham year), which freeze a phone's tab for seconds and cannot be cancelled,
-    // so it is off in this release, behind the same kind of switch as the search. The code stays.
+    // "Use your own file" runs the vendored engine in single calls that cannot be sliced (about 0.5 s per 40,000 rows on a fast desktop,
+    // several seconds on a phone, and it cannot be cancelled), so it is off in this release, same switch idea as the search. The code path
+    // stays (RunOwnFile) and is slice-friendly everywhere except AuditEngine.MapRows/Run.
     static readonly bool OwnFileEnabled = false;
 
     enum Mode { Pick, Hosted, OwnFile }
     enum ExceptionType { Discrepancy, Unreconciled, Anomaly }
-    enum SearchMode { Graded, ExactSubstring }
     // What kind of evidence comparison a row supports, for the highlighted "show the discrepancy"
     // panel — None (no evidence to show), AmountCompare (test 1/2: sum paid vs stated invoice),
     // GroupEvidence (test 3/4/5: sibling rows sharing GroupKey, with matching/differing columns).
@@ -704,7 +674,8 @@
         public bool Custom;
         public string SectionId = "", SectionTitle = "", SectionDefinition = "";
         public string Sentence = "";                   // what the data shows, in one plain sentence (facts only, no cause offered)
-        public List<string> Lines = new();             // the published lines the sentence rests on, listed in the letter
+        public List<string> Lines = NoLines;           // the published lines the sentence rests on, listed in the letter (shared empty list for the 100k+ plain rows)
+        static readonly List<string> NoLines = new();
         public string? Request;                        // what the letter asks for, for this item
         public string Key => Custom
             ? $"{SectionId}|{Council}|{TransactionId}|{SourceTag}"
@@ -725,6 +696,28 @@
         public string? SortColumn;
         public bool SortDesc;
         public int Page = 1;
+
+        // ---- worked out ONCE per load (RefreshDerivedAsync, in time slices), never inside a render ----
+        // A render used to filter, sort, total and group every row of every test (tens of thousands) each time anything
+        // changed, including each key typed into a search box. Now a render only reads these.
+        public int DerivedVersion = -1, Version;                       // Version bumps when Items changes
+        public decimal Total;                                           // value of every row (TestRowValue)
+        public List<string> Years = new();                              // distinct SourceTag values, ordinal order
+        public ExceptionItem? Example;                                  // the test's own highest-£ row (the worked example in the plain-English intro)
+        public Dictionary<string, List<ExceptionItem>> Groups = new();  // GroupKey -> the rows sharing it (evidence panels, FOI letter)
+        public List<(string Classification, int Count, decimal Total)> Classes = new();
+
+        // ---- the current filtered/sorted view of Items, worked out when the filter or sort CHANGES (UpdateViewAsync) ----
+        public List<ExceptionItem> View = new();
+        public decimal ViewTotal;
+        public List<(string Classification, int Count, decimal Total)> ViewClasses = new();
+        public string PendingFilter = "";                               // what is in the box (FilterText follows after a pause)
+        public bool Updating;
+        public int ViewStamp;                                           // bumps whenever View is replaced
+        public CancellationTokenSource? ViewCts;
+
+        // ---- how many of the view's rows are ticked, cached per selection version ----
+        public int SelSeen = -1, SelStampSeen = -1, SelCount; public decimal SelTotal; public bool SelAll;
     }
 
     // Neutral "what this label means" line per classification name, shown once per test (not
@@ -792,9 +785,80 @@
     int _spendRowsLoaded;
     HashSet<string> _exceptionsLoadedFor = new();
     int _exceptionsLoadedCount;
-    string _nearestSupplierQuery = "";
-    SearchMode _searchMode = SearchMode.Graded;
-    List<(string Supplier, string Council, double Score)> _nearestResults = new();
+
+    // ---- keeping the page responsive (see Services/Cooperative.cs) ----
+    // Blazor WebAssembly runs everything, rendering included, on the browser's one thread, so any long synchronous
+    // stretch freezes the page. Every long path below (fetching and parsing files, filling the database, the checks,
+    // building lists, the supplier search) runs in slices of ~12 ms that hand the thread back, reports progress to
+    // <WorkStatus>, and can be cancelled. Nothing the visitor types re-renders the whole page on every key.
+    WorkStatus? _status;
+    CancellationTokenSource? _workCts;
+    string? _notice;                       // a plain line shown when a job was stopped or needs a word of warning
+    bool _skipRender;                      // the render right after a keystroke is skipped (see ShouldRender)
+    int _selVer;                           // bumps when the ticked rows change; caches keyed on it
+    CancellationTokenSource? _renderTimer;
+    readonly Interner _interner = new();   // one shared instance of each repeated supplier / service area / label string
+    readonly SupplierIndex _suppliers = new();   // the name-search directory, filled as periods load
+    static readonly List<ExceptionItem> EmptyItems = new();
+
+    protected override bool ShouldRender()
+    {
+        if (_skipRender) { _skipRender = false; return false; }
+        return true;
+    }
+
+    // A keystroke in a text box only needs the page to catch up once the visitor pauses.
+    void Typed(Action set)
+    {
+        set();
+        _skipRender = true;
+        ScheduleRender(350);
+    }
+
+    void ScheduleRender(int ms)
+    {
+        _renderTimer?.Cancel();
+        var cts = _renderTimer = new CancellationTokenSource();
+        _ = RenderAfterAsync(ms, cts.Token);
+    }
+
+    async Task RenderAfterAsync(int ms, CancellationToken ct)
+    {
+        try { await Task.Delay(ms, ct); } catch (OperationCanceledException) { return; }
+        await InvokeAsync(StateHasChanged);
+    }
+
+    void CancelWork() => _workCts?.Cancel();
+
+    public void Dispose()
+    {
+        _workCts?.Cancel(); _renderTimer?.Cancel();
+        foreach (var t in _tests) t.ViewCts?.Cancel();
+    }
+
+    /// <summary>Runs one long job as time slices behind the status panel; only one at a time. Returns false if it was
+    /// stopped or failed (the reason is shown in plain words either way).</summary>
+    async Task<bool> RunWork(string startText, Func<Cooperative, Task> body, bool cancellable = true)
+    {
+        if (_busy) return false;
+        _busy = true; _error = null; _notice = null;
+        var cts = _workCts = new CancellationTokenSource();
+        var co = new Cooperative(cts.Token);
+        _status?.Begin(startText, cancellable);
+        await Task.Delay(1);   // let the browser paint the status panel before the first slice of work
+        bool ok = false;
+        try { await body(co); ok = true; }
+        catch (OperationCanceledException) { _notice = "Stopped. Anything that had finished loading is still loaded; nothing was changed by the part you stopped."; }
+        catch (Exception ex) { _error = "Something went wrong: " + ex.Message; }
+        finally
+        {
+            _busy = false; _status?.End();
+            if (ReferenceEquals(_workCts, cts)) _workCts = null;
+            cts.Dispose();
+            StateHasChanged();
+        }
+        return ok;
+    }
 
     // The four hosted councils (Wokingham, Reading, West Berkshire, RBWM), data-driven: everything council-specific the page
     // shows (periods, FOI contact, retrieval date) lives in the Hosted record built in CouncilSpending.Insights.cs from the
@@ -864,20 +928,29 @@
             "description TEXT, supplierkey TEXT, supplier TEXT)");
     }
 
-    async Task<byte[]> FetchGunzipAsync(string url)
+    /// <summary>Downloads a .gz file and unzips it in slices (a 1.3 MB download unzips to ~31 MB; one block of that would
+    /// stall a phone). Cancelling the cooperative's token also cancels the download.</summary>
+    async Task<byte[]> FetchGunzipAsync(string url, Cooperative? co = null)
     {
-        var compressed = await Http.GetByteArrayAsync(url);
+        co ??= new Cooperative(CancellationToken.None);
+        var compressed = await Http.GetByteArrayAsync(url, co.Ct);
         using var input = new MemoryStream(compressed, writable: false);
         using var gz = new GZipStream(input, CompressionMode.Decompress);
-        using var output = new MemoryStream(compressed.Length * 4);
-        await gz.CopyToAsync(output);
+        using var output = new MemoryStream(Math.Max(4096, compressed.Length * 4));
+        var buf = new byte[64 * 1024];
+        int n;
+        while ((n = await gz.ReadAsync(buf.AsMemory(), co.Ct)) > 0)
+        {
+            output.Write(buf, 0, n);
+            await co.YieldIfDueAsync();
+        }
         return output.ToArray();
     }
 
-    async Task LoadSelected(Hosted h) => await LoadSelectedPeriods(h.Key, h.Periods);
+    Task LoadSelected(Hosted h) => LoadSelectedPeriods(h);
 
     /// <summary>The one-tap "load every file for this council".</summary>
-    async Task LoadAll(Hosted h) { TickAll(h, true); await LoadSelected(h); }
+    Task LoadAll(Hosted h) { TickAll(h, true); return LoadSelectedPeriods(h); }
 
     // ---- download sizes, from manifest.json (written by CouncilDbBuilder), so the page says what a load costs BEFORE it starts ----
     readonly Dictionary<string, Dictionary<string, long>> _sizes = new();   // council -> period tag -> compressed bytes
@@ -924,75 +997,66 @@
     // SQL/NEAREST queries just work the moment a second council joins. Each council's own precomputed
     // exceptions file loads once, alongside its first period, rather than re-running AuditEngine client-side at
     // all. While a file is parsed its publication facts are taken for the in-browser checks (CouncilChecks).
-    async Task LoadSelectedPeriods(string councilKey, List<YearPick> periods)
+    async Task LoadSelectedPeriods(Hosted h)
     {
-        _error = null; _busy = true; _phase = "Loading…"; StateHasChanged(); await Task.Delay(1);
-        bool loadedAny = false;
-        try
+        var councilKey = h.Key; var periods = h.Periods;
+        var toLoad = periods.Where(y => y.Checked && !y.Loaded).ToList();
+        if (toLoad.Count == 0) return;
+        int councilIdx = _hosted.IndexOf(h);
+        _phase = "Loading…";
+        await RunWork($"Loading {toLoad.Count} {h.PeriodNoun}{(toLoad.Count == 1 ? "" : "s")} of {h.Short}…", async co =>
         {
-            EnsureDb();
-            var toLoad = periods.Where(y => y.Checked && !y.Loaded).ToList();
-            foreach (var y in toLoad)
+            bool loadedAny = false, cancelled = false;
+            try
             {
-                _phase = $"Fetching {y.Tag}…"; StateHasChanged(); await Task.Delay(1);
-                var bytes = await FetchGunzipAsync($"data/councils/{councilKey}/{y.Tag}.norm.csv.gz");
-                _phase = $"Loading {y.Tag} into HoloDb…"; StateHasChanged(); await Task.Delay(1);
-                var table = CsvReader.Parse(bytes); // plain UTF-8, no BOM — written by CouncilDbBuilder
-                int m = table.Count - 1;
-                int baseId = _spendRowsLoaded;
-                var id = new long[m]; var council = new string[m]; var year = new string[m];
-                var transid = new string[m]; var paydate = new string[m];
-                var net = new double[m]; var gross = new double[m];
-                var vattype = new string[m]; var servicearea = new string[m]; var costcentre = new string[m];
-                var description = new string[m]; var supplierkey = new string[m]; var supplier = new string[m];
-                for (int i = 1; i < table.Count; i++)
+                EnsureDb();
+                int done = 0;
+                foreach (var y in toLoad)
                 {
-                    var f = table[i]; int j = i - 1;
-                    id[j] = baseId + j;
-                    council[j] = f[0]; year[j] = f[1]; transid[j] = f[2]; paydate[j] = f[3];
-                    net[j] = double.Parse(f[4], CultureInfo.InvariantCulture);
-                    gross[j] = double.Parse(f[5], CultureInfo.InvariantCulture);
-                    vattype[j] = f[6]; servicearea[j] = f[7]; costcentre[j] = f[8]; description[j] = f[9];
-                    supplierkey[j] = f[10]; supplier[j] = f[11];
+                    _status?.Report($"Downloading {y.Tag} ({done + 1} of {toLoad.Count})", (double)done / toLoad.Count);
+                    var bytes = await FetchGunzipAsync($"data/councils/{councilKey}/{y.Tag}.norm.csv.gz", co);
+                    var lp = await PeriodLoader.LoadAsync(_db!, councilKey, councilIdx, y.Tag, periods.IndexOf(y), bytes,
+                        _interner, _suppliers.For(councilKey), co, _status!);
+                    // publication facts for this file (row ids are stable: council, period, row in file)
+                    _facts.RemoveAll(x => x.Council == councilKey && x.Tag == y.Tag);
+                    _facts.Add(lp.Facts);
+                    var prevRed = _redaction.GetValueOrDefault(councilKey);
+                    _redaction[councilKey] = (prevRed.Rows + lp.Rows, prevRed.Redacted + lp.Redacted);
+                    y.Loaded = true; y.Checked = false;
+                    _spendRowsLoaded += lp.Rows;
+                    _loadedCouncils.Add(councilKey);
+                    loadedAny = true; done++;
                 }
-                _db!.BulkLoad("spend",
-                    new[] { "id", "council", "year", "transid", "paydate", "net", "gross", "vattype",
-                            "servicearea", "costcentre", "description", "supplierkey", "supplier" },
-                    new Array[] { id, council, year, transid, paydate, net, gross, vattype,
-                                   servicearea, costcentre, description, supplierkey, supplier }, m);
-                // publication facts for this file (the page's row ids stand in for the rows themselves)
-                int order = periods.IndexOf(y);
-                _facts.RemoveAll(x => x.Council == councilKey && x.Tag == y.Tag);
-                _facts.Add(CouncilChecks.BuildFacts(councilKey, y.Tag, order,
-                    Enumerable.Range(0, m).Select(j => ((int)id[j], transid[j], paydate[j], supplierkey[j], Math.Round((decimal)net[j], 2)))));
-                int red = 0;
-                for (int j = 0; j < m; j++) if (IsRedactedText(transid[j]) || IsRedactedText(supplier[j])) red++;
-                var prevRed = _redaction.GetValueOrDefault(councilKey);
-                _redaction[councilKey] = (prevRed.Rows + m, prevRed.Redacted + red);
-                y.Loaded = true; y.Checked = false;
-                _spendRowsLoaded += m;
-                _loadedCouncils.Add(councilKey);
-                loadedAny = true;
-            }
 
-            if (!_exceptionsLoadedFor.Contains(councilKey))
-            {
-                _phase = "Loading precomputed exceptions…"; StateHasChanged(); await Task.Delay(1);
-                var excBytes = await FetchGunzipAsync($"data/councils/{councilKey}/exceptions.csv.gz");
-                var excTable = CsvReader.Parse(excBytes);
-                BuildTestsFromExceptionsRows(excTable);
-                _exceptionsLoadedFor.Add(councilKey);
-                _exceptionsLoadedCount += excTable.Count - 1;
-                loadedAny = true;
+                if (!_exceptionsLoadedFor.Contains(councilKey))
+                {
+                    _status?.Report($"Downloading {h.Short}'s precomputed exceptions", -1);
+                    var excBytes = await FetchGunzipAsync($"data/councils/{councilKey}/exceptions.csv.gz", co);
+                    var excTable = await SlicedCsv.ParseAsync(excBytes, co, _interner, ExceptionInternMask, _status, "Reading the exceptions");
+                    var batch = await ExceptionItemsFromRowsAsync(excTable, co);
+                    MergeExceptionItems(batch);                 // quick, all-or-nothing
+                    _exceptionsLoadedFor.Add(councilKey);
+                    _exceptionsLoadedCount += batch.Count;
+                    loadedAny = true;
+                }
             }
-        }
-        catch (Exception ex)
-        {
-            _error = "Something went wrong loading that data: " + ex.Message;
-        }
-        finally { _busy = false; StateHasChanged(); }
-        if (loadedAny) await RunChecksAsync(); // publication faults + correction pairs, over everything loaded so far
+            catch (OperationCanceledException) { cancelled = true; }
+
+            // Whatever DID load needs its totals and checks brought up to date. That takes a moment and must not be left half
+            // done, so a cancel waits for it (it runs in slices too, so the page stays usable meanwhile).
+            co.Cancellable = false;
+            if (loadedAny)
+            {
+                await RefreshDerivedAsync(co);
+                await RunChecksAsync(co);   // publication faults + correction pairs, over everything loaded so far
+            }
+            if (cancelled) throw new OperationCanceledException();
+        });
     }
+
+    // columns of exceptions.csv worth sharing one string instance across rows: council, testlabel, type, sourcetag, supplier,
+    // paydate, servicearea, description, classification, classificationdetail
+    const int ExceptionInternMask = (1 << 0) | (1 << 1) | (1 << 2) | (1 << 3) | (1 << 5) | (1 << 6) | (1 << 8) | (1 << 9) | (1 << 14) | (1 << 15);
     static readonly Dictionary<string, string> TestDescByLabel = new()
     {
         ["Exception test 1 - payments above the stated invoice amount"] =
@@ -1033,18 +1097,18 @@
     // CouncilDbBuilder — see that project's own header comment for the exact schema). No
     // AuditEngine.Run call in the browser for a hosted council; this file is a precomputed
     // snapshot of its output. Safe to call once per council, additively.
-    void BuildTestsFromExceptionsRows(List<string[]> table)
+    //
+    // In time slices: the rows become items in a staging list (cancelling discards it) and are merged into the test panels
+    // in one quick step afterwards (MergeExceptionItems), so a stopped load never leaves half a council behind.
+    async Task<List<ExceptionItem>> ExceptionItemsFromRowsAsync(List<string[]> table, Cooperative co)
     {
+        var items = new List<ExceptionItem>(Math.Max(0, table.Count - 1));
         for (int i = 1; i < table.Count; i++)
         {
+            if ((i & 255) == 0) await co.YieldIfDueAsync();
             var f = table[i];
             string councilKey = f[0];
             string label = f[1];
-            if (!_testsByLabel.TryGetValue(label, out var grp))
-            {
-                grp = new TestGroup { Label = label, Description = TestDescByLabel.GetValueOrDefault(label, "") };
-                _testsByLabel[label] = grp; _testOrder.Add(label);
-            }
             var type = Enum.TryParse<ExceptionType>(f[2], out var t) ? t : ExceptionType.Discrepancy;
             // Column layout (CouncilDbBuilder/Program.cs's exceptions.csv header): ...,description,
             // compareamount,groupkey,groupsize,oppositesign,classification,classificationdetail,linecount
@@ -1060,7 +1124,7 @@
             string? classificationDetail = f.Length > 15 ? NullIfEmpty(f[15]) : null;
             int lineCount = f.Length > 16 && int.TryParse(f[16], out var lc) ? lc : 1;
             decimal? lineNet = f.Length > 17 && decimal.TryParse(f[17], NumberStyles.Any, CultureInfo.InvariantCulture, out var ln) ? ln : null;
-            grp.Items.Add(new ExceptionItem
+            items.Add(new ExceptionItem
             {
                 TestLabel = label, Type = type, CouncilKey = councilKey, Net = lineNet,
                 Council = CouncilName(councilKey),
@@ -1083,8 +1147,24 @@
                 LineCount = lineCount,
             });
         }
+        return items;
+    }
+
+    // Adds a council's staged items to the shared test panels (by label), so a second council's exceptions MERGE into the
+    // same panels. Quick (list appends); the totals and views are brought up to date by RefreshDerivedAsync.
+    void MergeExceptionItems(List<ExceptionItem> items)
+    {
+        foreach (var it in items)
+        {
+            if (!_testsByLabel.TryGetValue(it.TestLabel, out var grp))
+            {
+                grp = new TestGroup { Label = it.TestLabel, Description = TestDescByLabel.GetValueOrDefault(it.TestLabel, "") };
+                _testsByLabel[it.TestLabel] = grp; _testOrder.Add(it.TestLabel);
+            }
+            grp.Items.Add(it);
+        }
+        foreach (var grp in _testsByLabel.Values) grp.Version++;
         _tests = _testOrder.OrderBy(l => l, StringComparer.Ordinal).Select(l => _testsByLabel[l]).ToList();
-        _standingCache = null; // new rows loaded: the standing-payment view is rebuilt from them
         SetDefaultCollapse();
     }
 
@@ -1095,17 +1175,176 @@
         foreach (var t in _tests) t.Collapsed = true;
     }
 
-    // Replaces any hand-picked "top items" list: a plain, stated, engine-computed ranking over
-    // whatever is actually loaded into _tests right now — every row currently marked Unexplained
-    // (IsUnexplained) by the tests below, sorted by the absolute £ amount published against it,
-    // highest first. Recomputed fresh every render; the same rule runs for every council, and
-    // nothing in this list is chosen by hand.
-    List<ExceptionItem> RankedUnexplained(int take = 20) =>
-        _tests.SelectMany(t => t.Items)
-            .Where(i => i.IsUnexplained)
-            .OrderByDescending(i => Math.Abs(i.Amount ?? 0m))
-            .Take(take)
-            .ToList();
+    // ---- everything the page shows about the loaded tests, worked out in time slices after each load ----
+    // (Used to be recomputed inside every render, over every row of every test, including on each key typed anywhere.)
+    (int Count, decimal Total) _sumAll, _sumUnexplained;
+    List<ExceptionItem> _ranked = new();
+
+    /// <summary>Per test: total, classification totals, distinct years, the worked example row, the group index and the default
+    /// view; then the page-wide totals, the top-20 ranking and the standing-payment groups. Runs after anything changes the
+    /// tests, hands the thread back every ~12 ms, and reads (never changes) the rows.</summary>
+    async Task RefreshDerivedAsync(Cooperative co)
+    {
+        foreach (var t in _tests.ToList())
+        {
+            if (t.DerivedVersion == t.Version) continue;
+            decimal total = 0m;
+            var classes = new Dictionary<string, (int Count, decimal Total)>();
+            var years = new HashSet<string>(StringComparer.Ordinal);
+            ExceptionItem? example = null;
+            var groups = new Dictionary<string, List<ExceptionItem>>();
+            int k = 0;
+            foreach (var it in t.Items)
+            {
+                var v = TestRowValue(it);
+                total += v;
+                classes[it.Classification] = classes.TryGetValue(it.Classification, out var c) ? (c.Count + 1, c.Total + v) : (1, v);
+                years.Add(it.SourceTag);
+                if (example is null || Math.Abs(it.Amount ?? 0m) > Math.Abs(example.Amount ?? 0m)) example = it;   // first of the largest, same as a stable sort
+                if (it.GroupKey is { } gk)
+                {
+                    if (!groups.TryGetValue(gk, out var list)) groups[gk] = list = new List<ExceptionItem>();
+                    list.Add(it);
+                }
+                if ((++k & 511) == 0) await co.YieldIfDueAsync();
+            }
+            t.Total = total; t.Example = example; t.Groups = groups;
+            t.Years = years.OrderBy(x => x, StringComparer.Ordinal).ToList();
+            t.Classes = OrderClasses(classes);
+            t.DerivedVersion = t.Version;
+            await UpdateViewAsync(t, co);
+        }
+
+        // page-wide: distinct-transaction totals (a transaction flagged by two tests counts once), and the top-20 unexplained
+        var seenAll = new HashSet<string>(); var seenUn = new HashSet<string>();
+        int nAll = 0, nUn = 0; decimal totAll = 0m, totUn = 0m;
+        var top = new List<ExceptionItem>(21);
+        int n = 0;
+        foreach (var t in _tests)
+            foreach (var it in t.Items)
+            {
+                var key = $"{it.Council}|{it.SourceTag}|{it.TransactionId}";
+                bool unexplained = it.IsUnexplained;
+                var v = TestRowValue(it);
+                if (seenAll.Add(key)) { nAll++; totAll += v; }
+                if (unexplained)
+                {
+                    if (seenUn.Add(key)) { nUn++; totUn += v; }
+                    // top 20 by |amount|, ties keep the earlier row (what a stable descending sort does)
+                    var a = Math.Abs(it.Amount ?? 0m);
+                    if (top.Count < 20 || a > Math.Abs(top[^1].Amount ?? 0m))
+                    {
+                        int pos = top.Count;
+                        while (pos > 0 && Math.Abs(top[pos - 1].Amount ?? 0m) < a) pos--;
+                        top.Insert(pos, it);
+                        if (top.Count > 20) top.RemoveAt(20);
+                    }
+                }
+                if ((++n & 511) == 0) await co.YieldIfDueAsync();
+            }
+        _sumAll = (nAll, totAll); _sumUnexplained = (nUn, totUn); _ranked = top;
+        await RebuildStandingAsync(co);
+    }
+
+    // Classification totals ranked as before: genuinely unexplained (Unreconciled/Unclear) first, then by value.
+    static List<(string Classification, int Count, decimal Total)> OrderClasses(Dictionary<string, (int Count, decimal Total)> d) =>
+        d.Select(kv => (Classification: kv.Key, kv.Value.Count, kv.Value.Total))
+         .OrderBy(x => x.Classification is "Unreconciled" or "Unclear" or "" ? 0 : 1)
+         .ThenByDescending(x => x.Total)
+         .ToList();
+
+    /// <summary>Works out one test's filtered, sorted view (and its total and classification totals) for its current
+    /// filter / year / sort. With none set the view IS the full list: no copy.</summary>
+    async Task UpdateViewAsync(TestGroup t, Cooperative co)
+    {
+        List<ExceptionItem> view; decimal total; List<(string Classification, int Count, decimal Total)> classes;
+        bool plain = string.IsNullOrWhiteSpace(t.FilterText) && string.IsNullOrWhiteSpace(t.FilterYear) && t.SortColumn is null;
+        if (plain) { view = t.Items; total = t.Total; classes = t.Classes; }
+        else
+        {
+            var list = new List<ExceptionItem>();
+            var f = t.FilterText.Trim(); bool hasF = f.Length > 0; var year = t.FilterYear; bool hasY = !string.IsNullOrWhiteSpace(year);
+            int k = 0;
+            foreach (var i in t.Items)
+            {
+                if (hasY && i.SourceTag != year) continue;
+                if (hasF && !((i.Supplier?.Contains(f, StringComparison.OrdinalIgnoreCase) ?? false)
+                              || (i.Description?.Contains(f, StringComparison.OrdinalIgnoreCase) ?? false))) continue;
+                list.Add(i);
+                if ((++k & 1023) == 0) await co.YieldIfDueAsync();
+            }
+            await co.YieldIfDueAsync();
+            // Same orderings as before (nulls first, ordinal text, stable), but sorted in slices.
+            Comparison<ExceptionItem>? cmp = t.SortColumn switch
+            {
+                "year" => (x, y) => string.CompareOrdinal(x.SourceTag, y.SourceTag),
+                "trans" => (x, y) => string.CompareOrdinal(x.TransactionId, y.TransactionId),
+                "paydate" => (x, y) => string.CompareOrdinal(x.PayDate, y.PayDate),
+                "amount" => (x, y) => Nullable.Compare(x.Amount, y.Amount),
+                "payee" => (x, y) => StringComparer.OrdinalIgnoreCase.Compare(x.Supplier, y.Supplier),
+                "service" => (x, y) => string.CompareOrdinal(x.ServiceArea, y.ServiceArea),
+                _ => null
+            };
+            if (cmp is not null && t.SortDesc) { var asc = cmp; cmp = (x, y) => asc(y, x); }
+            view = cmp is null ? list : await SlicedSort.SortAsync(list, cmp, co);
+            await co.YieldIfDueAsync();
+            total = 0m; var cd = new Dictionary<string, (int Count, decimal Total)>();
+            k = 0;
+            foreach (var i in view)
+            {
+                var v = TestRowValue(i); total += v;
+                cd[i.Classification] = cd.TryGetValue(i.Classification, out var c) ? (c.Count + 1, c.Total + v) : (1, v);
+                if ((++k & 1023) == 0) await co.YieldIfDueAsync();
+            }
+            classes = OrderClasses(cd);
+        }
+        t.View = view; t.ViewTotal = total; t.ViewClasses = classes; t.Updating = false; t.ViewStamp++;
+    }
+
+    /// <summary>Re-runs one test's view after its filter or sort changed. A newer change cancels an older one that is
+    /// still working; the panel keeps showing its previous rows (marked "Updating…") until the new ones are ready.</summary>
+    async Task RefreshViewAsync(TestGroup t)
+    {
+        t.ViewCts?.Cancel();
+        var cts = t.ViewCts = new CancellationTokenSource();
+        t.Updating = true;
+        await InvokeAsync(StateHasChanged);
+        try { await UpdateViewAsync(t, new Cooperative(cts.Token)); }
+        catch (OperationCanceledException) { return; }
+        await InvokeAsync(StateHasChanged);
+    }
+
+    void OnFilterInput(TestGroup t, string text)
+    {
+        t.PendingFilter = text;
+        _skipRender = true;                       // the keystroke itself costs nothing; the list catches up after a pause
+        _ = ApplyFilterAfterPauseAsync(t, text);
+    }
+
+    async Task ApplyFilterAfterPauseAsync(TestGroup t, string text)
+    {
+        t.ViewCts?.Cancel();
+        var pause = t.ViewCts = new CancellationTokenSource();
+        try { await Task.Delay(300, pause.Token); } catch (OperationCanceledException) { return; }
+        t.FilterText = text; t.Page = 1;
+        await RefreshViewAsync(t);
+    }
+
+    Task OnYearChanged(TestGroup t, string year) { t.FilterYear = year; t.Page = 1; return RefreshViewAsync(t); }
+
+    (int Count, decimal Total, bool All) SelStats(TestGroup t)
+    {
+        if (t.SelSeen != _selVer || t.SelStampSeen != t.ViewStamp)
+        {
+            int c = 0; decimal tot = 0m;
+            foreach (var i in t.View) if (i.Selected) { c++; tot += TestRowValue(i); }
+            t.SelCount = c; t.SelTotal = tot; t.SelAll = t.View.Count > 0 && c == t.View.Count;
+            t.SelSeen = _selVer; t.SelStampSeen = t.ViewStamp;
+        }
+        return (t.SelCount, t.SelTotal, t.SelAll);
+    }
+
+    static readonly List<StandingGroup> NoStanding = new();
 
     // "Exception test 3 — same supplier, ..." -> "Exception test 3", for a compact column in the
     // ranked-items table above.
@@ -1135,8 +1374,7 @@
     // The worked example is always the test's OWN highest-£-value item, by the same rule used for
     // the page-wide ranking above — never a hand-picked row, and it changes automatically as more
     // councils/years are loaded.
-    static ExceptionItem? WorkedExample(TestGroup t) =>
-        t.Items.Count == 0 ? null : t.Items.OrderByDescending(i => Math.Abs(i.Amount ?? 0m)).First();
+    static ExceptionItem? WorkedExample(TestGroup t) => t.Example;   // found once per load in RefreshDerivedAsync (first of the largest)
 
     static string Enc(string? s) => string.IsNullOrEmpty(s) ? "" :
         s.Replace("&", "&amp;").Replace("<", "&lt;").Replace(">", "&gt;");
@@ -1231,64 +1469,22 @@ evidence of anything wrong on its own. {EndsInFoiLine}</p>",
                $"of under £500 each{tail}";
     }
 
-    // Cross-council correlation search across EVERYTHING loaded this session (any council, any
-    // year). Two modes:
-    //  - Graded (default): HoloDb's own holographic NEAREST similarity search against the
-    //    normalised supplier key, ranked by the `score` pseudo-column. Originally shipped as
-    //    LIKE-only — tried NEAREST first against real Wokingham data and found it unreliable
-    //    (score column threw, truncated names didn't rank near their real match), flagged to
-    //    holodb-owner rather than guessed around. holodb-owner's F-04 fix (HoloDb 2.1.0, this repo
-    //    bumped to 2.1.0 2026-10-03) is re-verified against the real 42,405-row Wokingham dataset
-    //    (LSH regime, above the ~8,000-row exact-search cutover): a deliberately truncated query
-    //    ("A Wise Solution") now ranks the real supplier ("A Wise Solution Ltd") first with
-    //    score=0.856, on both the raw supplier column and this normalised key. Safe to turn on.
-    //  - Exact substring (LIKE): kept as a fallback for when a visitor wants to be certain nothing
-    //    beyond a literal substring is being matched — NEAREST's closeness is a well-behaved local
-    //    ranking, not a global total order (two far values can occasionally tie/swap rank), so an
-    //    exact mode stays useful alongside it, not merely as a historical relic.
-    async Task RunNearestSupplierSearch()
-    {
-        if (_db is null || string.IsNullOrWhiteSpace(_nearestSupplierQuery)) return;
-        _busy = true; StateHasChanged(); await Task.Delay(1);
-        try
-        {
-            var key = new string(_nearestSupplierQuery.Trim().ToUpperInvariant()
-                .Where(c => char.IsLetterOrDigit(c) || c == ' ').ToArray()).Replace("'", "''");
-            if (_searchMode == SearchMode.Graded)
-            {
-                var result = _db.Execute(
-                    $"SELECT supplier, council, score FROM spend NEAREST (supplierkey = '{key}') LIMIT 20");
-                _nearestResults = result.Rows
-                    .Select(r => (r.TryGetValue("supplier", out var s) ? s?.ToString() ?? "" : "",
-                                   r.TryGetValue("council", out var c) ? c?.ToString() ?? "" : "",
-                                   r.TryGetValue("score", out var sc) && sc is not null ? Convert.ToDouble(sc) : 0.0))
-                    .DistinctBy(x => (x.Item1, x.Item2))
-                    .ToList();
-            }
-            else
-            {
-                var result = _db.Execute($"SELECT supplier, council FROM spend WHERE supplierkey LIKE '%{key}%' LIMIT 20");
-                _nearestResults = result.Rows
-                    .Select(r => (r.TryGetValue("supplier", out var s) ? s?.ToString() ?? "" : "",
-                                   r.TryGetValue("council", out var c) ? c?.ToString() ?? "" : "", 0.0))
-                    .DistinctBy(x => (x.Item1, x.Item2))
-                    .ToList();
-            }
-        }
-        catch (Exception ex)
-        {
-            _error = "Supplier search failed: " + ex.Message;
-        }
-        finally { _busy = false; StateHasChanged(); }
-    }
+    // Supplier-name search now lives in Components/SupplierSearchBox.razor over Services/SupplierIndex.cs (a directory of
+    // distinct supplier names filled as periods load; trigram-cosine "closest names" and an exact-text mode, sliced and
+    // debounced). It replaced a HoloDb NEAREST query over the payment rows: that builds its index on the FIRST query at about
+    // a millisecond per row (368 s for Reading's 326,712 rows on a fast desktop, MonoRepo HoloDb todo
+    // nearest-first-build-in-browser.md), which is what froze phones when someone searched.
 
     const long MaxOwnFileUpload = 64L * 1024 * 1024;
 
+    // Only the HEADER is needed to offer the column mapping, so a CSV reads just its first 64 KB (up to the last whole line)
+    // rather than parsing the whole upload on the spot. A spreadsheet has to be opened whole (the vendored reader cannot
+    // stop early), which can pause the page for a few seconds on a phone, so it says so.
     async Task OnOwnFile(InputFileChangeEventArgs e)
     {
         var file = e.File;
         if (file is null) return;
-        _error = null; _ownHeader = new();
+        _error = null; _notice = null; _ownHeader = new();
         try
         {
             using var stream = file.OpenReadStream(MaxOwnFileUpload);
@@ -1296,7 +1492,23 @@ evidence of anything wrong on its own. {EndsInFoiLine}</p>",
             await stream.CopyToAsync(ms);
             _ownBytes = ms.ToArray();
             _ownFormat = file.Name.EndsWith(".xlsx", StringComparison.OrdinalIgnoreCase) ? SourceFormat.Xlsx : SourceFormat.Csv;
-            var table = _ownFormat == SourceFormat.Xlsx ? XlsxReader.Parse(_ownBytes) : CsvReader.Parse(_ownBytes);
+            _ownRowsHint = null;
+            List<string[]> table;
+            if (_ownFormat == SourceFormat.Xlsx)
+            {
+                _notice = "Opening the spreadsheet to read its column names. A large spreadsheet can make the page pause for a few seconds, especially on a phone.";
+                StateHasChanged(); await Task.Delay(50);
+                table = XlsxReader.Parse(_ownBytes);
+                _notice = null;
+                _ownRowsHint = table.Count - 1;
+            }
+            else
+            {
+                int len = Math.Min(_ownBytes.Length, 64 * 1024);
+                if (len < _ownBytes.Length) { int nl = Array.LastIndexOf(_ownBytes, (byte)'\n', len - 1); if (nl > 0) len = nl; }
+                table = CsvReader.Parse(_ownBytes.AsSpan(0, len).ToArray());
+                _ownRowsHint = (int)Math.Max(0, (long)(_ownBytes.Length / Math.Max(1.0, 110.0)));   // a rough row count (~110 bytes a row) for the warning below only
+            }
             if (table.Count == 0) { _error = "That file has no rows."; return; }
             var header = table[0].Select(h => h.Trim().TrimStart('﻿')).ToArray();
             _ownHeader = header.ToList();
@@ -1307,6 +1519,7 @@ evidence of anything wrong on its own. {EndsInFoiLine}</p>",
             _error = "Couldn't read that file: " + ex.Message;
         }
     }
+    int? _ownRowsHint;
 
     void UseGuessedMapping(string[] header)
     {
@@ -1331,30 +1544,34 @@ evidence of anything wrong on its own. {EndsInFoiLine}</p>",
         _showFoi = false;
     }
 
+    // The visitor's own file goes through the vendored engine (AuditEngine), which does its work in single calls that cannot be
+    // sliced from here (about half a second per 40,000 rows on a fast desktop, several seconds on a phone). So this path is
+    // honest about it: the status panel is painted before each step, the page says so beside the button, and it is the one path
+    // that cannot be cancelled mid-step. The hosted councils above use the sliced, cancellable path instead.
     async Task RunOwnFile()
     {
         ResetOwnFileResult();
         if (_ownBytes is null) { _error = "Load a file first."; return; }
-        _busy = true; _phase = "Parsing…"; StateHasChanged(); await Task.Delay(1);
-        try
+        _phase = "Checking…";
+        await RunWork("Reading your file…", async co =>
         {
+            co.Cancellable = false;   // see above: the engine's calls cannot be interrupted, so offering Cancel would be a lie
             List<string[]> table = _ownFormat == SourceFormat.Xlsx ? XlsxReader.Parse(_ownBytes) : CsvReader.Parse(_ownBytes);
             var mapping = new ColumnMapping(
                 _ownMapTrans, _ownMapSupplier, NullIfEmpty(_ownMapPayDate), NullIfEmpty(_ownMapDesc),
                 NullIfEmpty(_ownMapService), NullIfEmpty(_ownMapNet), _ownMapGross,
                 NullIfEmpty(_ownMapVatAmount), NullIfEmpty(_ownMapVatType));
             var warnings = new List<string>();
+            _status?.Report("Matching the columns", -1); await co.YieldAsync();
             var rows = AuditEngine.MapRows(table, mapping, "Your file", warnings);
+            _status?.Report($"Running the checks over {rows.Count:N0} rows (this step cannot be split up)", -1); await co.YieldAsync();
             var result = AuditEngine.Run(rows, _ownIdScope, _ownGrossMeaning, warnings);
             _warnings = warnings;
             _councilDisplayName = string.IsNullOrWhiteSpace(_ownCouncilName) ? "this council" : _ownCouncilName.Trim();
+            _status?.Report("Building the lists", -1); await co.YieldAsync();
             BuildTests(result, rows);
-        }
-        catch (Exception ex)
-        {
-            _error = "Something went wrong: " + ex.Message;
-        }
-        finally { _busy = false; StateHasChanged(); }
+            await RefreshDerivedAsync(co);
+        }, cancellable: false);
     }
 
     void BuildTests(AuditResult result, List<SpendRow> rawRows)
@@ -1502,7 +1719,9 @@ evidence of anything wrong on its own. {EndsInFoiLine}</p>",
         _ => ""
     };
 
-    const int PageSize = 50;
+    // 25 rows a page: a table page costs about 0.7 ms a row to draw on a fast desktop (36 ms for 50, ~500 ms at a 6x CPU slowdown),
+    // so a smaller page is the cheapest way to keep the first expansion of a test quick.
+    const int PageSize = 25;
 
     // ---- £ totals (added 2026-10-03) ----
     // A total here is "value involved" — the value of items that fail one of the mechanical tests
@@ -1543,40 +1762,19 @@ evidence of anything wrong on its own. {EndsInFoiLine}</p>",
         return total;
     }
 
-    // Per-classification breakdown within a test's currently FILTERED items — genuinely
-    // unexplained (Unreconciled/Unclear) ranked first, matching the row-ranking rule above.
-    static List<(string Classification, int Count, decimal Total)> ClassificationTotals(IReadOnlyList<ExceptionItem> items) =>
-        items.GroupBy(i => i.Classification)
-             .Select(g => (Classification: g.Key, Count: g.Count(), Total: TestTotal(g)))
-             .OrderBy(x => x.Classification is "Unreconciled" or "Unclear" or "" ? 0 : 1)
-             .ThenByDescending(x => x.Total)
-             .ToList();
+    // The session-wide summary bar (distinct transactions: one entry per Council+SourceTag+TransactionId, so a transaction flagged
+    // by more than one test is not double-counted; the first-encountered row's value is used) and the top-20 ranking are worked
+    // out once per load in RefreshDerivedAsync (_sumAll, _sumUnexplained, _ranked), not in the render.
 
-    // Session-wide summary bar: every loaded test's items, deduplicated to ONE entry per real
-    // transaction (Council+SourceTag+TransactionId) so a transaction flagged by more than one
-    // test (e.g. both test 1 and test 4) is not double-counted. Takes the first-encountered row's
-    // own value for that transaction — most transactions carry one consistent published amount
-    // across every test that names them, so this is a representative figure, not an undercount
-    // by construction.
-    (int Count, decimal Total) DistinctSummary(bool unexplainedOnly)
-    {
-        var seen = new HashSet<string>();
-        int count = 0; decimal total = 0m;
-        foreach (var t in _tests)
-            foreach (var it in t.Items)
-            {
-                if (unexplainedOnly && !it.IsUnexplained) continue;
-                var key = $"{it.Council}|{it.SourceTag}|{it.TransactionId}";
-                if (!seen.Add(key)) continue;
-                count++; total += TestRowValue(it);
-            }
-        return (count, total);
-    }
+    // Grand selected total for the FOI tray — same distinct-transaction dedup rule as the top summary bar, but over whatever is
+    // currently ticked across every test/page/filter. Cached until the ticks change.
+    int _selSummaryVer = -1;
+    (int Count, decimal Total) _selDistinct;
+    List<(ExceptionType Type, int Count, decimal Total)> _selBreakdown = new();
 
-    // Grand selected total for the FOI tray — same distinct-transaction dedup rule as the
-    // top summary bar, but over whatever is currently ticked across every test/page/filter.
-    (int Count, decimal Total) SelectedDistinctSummary()
+    void EnsureSelectionSummary()
     {
+        if (_selSummaryVer == _selVer) return;
         var seen = new HashSet<string>();
         int count = 0; decimal total = 0m;
         foreach (var it in _selected.Values)
@@ -1585,70 +1783,49 @@ evidence of anything wrong on its own. {EndsInFoiLine}</p>",
             if (!seen.Add(key)) continue;
             count++; total += TestRowValue(it);
         }
-        return (count, total);
-    }
-
-    List<(ExceptionType Type, int Count, decimal Total)> SelectedTypeBreakdown() =>
-        _selected.Values.GroupBy(i => i.Type)
+        _selDistinct = (count, total);
+        _selBreakdown = _selected.Values.GroupBy(i => i.Type)
             .Select(g => (g.Key, g.Count(), TestTotal(g)))
             .OrderByDescending(x => x.Item3)
             .ToList();
+        _selSummaryVer = _selVer;
+    }
+    (int Count, decimal Total) SelectedDistinctSummary() { EnsureSelectionSummary(); return _selDistinct; }
+    List<(ExceptionType Type, int Count, decimal Total)> SelectedTypeBreakdown() { EnsureSelectionSummary(); return _selBreakdown; }
 
     void ToggleCollapse(TestGroup t) => t.Collapsed = !t.Collapsed;
 
-    // Filter (and sort) a test's full item list — this runs over EVERY item in the test, not just
-    // the current page, since paging/"select all" both need to operate on the full matching set.
-    List<ExceptionItem> FilteredItems(TestGroup t)
-    {
-        IEnumerable<ExceptionItem> q = t.Items;
-        if (!string.IsNullOrWhiteSpace(t.FilterText))
-        {
-            var f = t.FilterText.Trim();
-            q = q.Where(i => (i.Supplier?.Contains(f, StringComparison.OrdinalIgnoreCase) ?? false)
-                           || (i.Description?.Contains(f, StringComparison.OrdinalIgnoreCase) ?? false));
-        }
-        if (!string.IsNullOrWhiteSpace(t.FilterYear))
-            q = q.Where(i => i.SourceTag == t.FilterYear);
-        q = t.SortColumn switch
-        {
-            "year" => t.SortDesc ? q.OrderByDescending(i => i.SourceTag, StringComparer.Ordinal) : q.OrderBy(i => i.SourceTag, StringComparer.Ordinal),
-            "trans" => t.SortDesc ? q.OrderByDescending(i => i.TransactionId, StringComparer.Ordinal) : q.OrderBy(i => i.TransactionId, StringComparer.Ordinal),
-            "paydate" => t.SortDesc ? q.OrderByDescending(i => i.PayDate, StringComparer.Ordinal) : q.OrderBy(i => i.PayDate, StringComparer.Ordinal),
-            "amount" => t.SortDesc ? q.OrderByDescending(i => i.Amount) : q.OrderBy(i => i.Amount),
-            "payee" => t.SortDesc ? q.OrderByDescending(i => i.Supplier, StringComparer.OrdinalIgnoreCase) : q.OrderBy(i => i.Supplier, StringComparer.OrdinalIgnoreCase),
-            "service" => t.SortDesc ? q.OrderByDescending(i => i.ServiceArea, StringComparer.Ordinal) : q.OrderBy(i => i.ServiceArea, StringComparer.Ordinal),
-            _ => q
-        };
-        return q.ToList();
-    }
-
-    List<string> DistinctYears(TestGroup t) => t.Items.Select(i => i.SourceTag).Distinct().OrderBy(x => x, StringComparer.Ordinal).ToList();
+    // Filtering and sorting a test's full item list (every item, not just the current page, since paging and "select all" both
+    // need the full matching set) is UpdateViewAsync above: it runs when the filter or sort CHANGES, in slices, and the render
+    // only reads the result (t.View).
 
     int TotalPages(int filteredCount) => Math.Max(1, (int)Math.Ceiling(filteredCount / (double)PageSize));
 
     void ChangePage(TestGroup t, int delta, int totalPages) => t.Page = Math.Clamp(t.Page + delta, 1, totalPages);
 
-    void OnFilterChanged(TestGroup t) => t.Page = 1;
-
-    void SetSort(TestGroup t, string col)
+    Task SetSort(TestGroup t, string col)
     {
         if (t.SortColumn == col) t.SortDesc = !t.SortDesc;
         else { t.SortColumn = col; t.SortDesc = false; }
         t.Page = 1;
+        return RefreshViewAsync(t);
     }
 
     string SortArrow(TestGroup t, string col) => t.SortColumn != col ? "" : (t.SortDesc ? " ▼" : " ▲");
 
     // "Select all" always operates on every FILTERED item, not just the page currently rendered —
-    // selection must cover everything matching the current filter, visible or not.
-    bool AllFilteredSelected(List<ExceptionItem> filtered) => filtered.Count > 0 && filtered.All(i => i.Selected);
-
-    void SelectAllFiltered(List<ExceptionItem> filtered, bool on)
+    // selection must cover everything matching the current filter, visible or not. In slices: ticking 60,000 rows builds 60,000
+    // keys, which is not something to do in one go on a phone.
+    async Task SelectAllFiltered(List<ExceptionItem> filtered, bool on)
     {
-        foreach (var it in filtered)
+        var list = filtered.ToList();          // the view can be replaced while this runs
+        var co = new Cooperative(CancellationToken.None) { Cancellable = false };
+        int k = 0;
+        foreach (var it in list)
         {
             it.Selected = on;
             if (on) _selected[it.Key] = it; else _selected.Remove(it.Key);
+            if ((++k & 255) == 0 && co.Due) await co.YieldAsync();
         }
         _selVer++;
     }
@@ -1685,8 +1862,10 @@ evidence of anything wrong on its own. {EndsInFoiLine}</p>",
     // Every sibling row sharing this item's GroupKey within the SAME test — pulled from the test's
     // full (unfiltered, unpaged) item list, so the evidence panel is always complete regardless of
     // which page or filter happens to be showing right now.
+    // (Read from the per-test group index built once per load, not by scanning the test's rows on every call.)
     List<ExceptionItem> GroupSiblings(TestGroup t, ExceptionItem it) =>
-        it.GroupKey is null ? new List<ExceptionItem> { it } : t.Items.Where(x => x.GroupKey == it.GroupKey).ToList();
+        it.GroupKey is null ? new List<ExceptionItem> { it }
+        : t.Groups.TryGetValue(it.GroupKey, out var g) ? g : new List<ExceptionItem> { it };
 
     // ---- plain-English per-item sentence (added 2026-10-03) ----
     // "each selected exception becomes a numbered item ... a plain-English sentence generated
@@ -1794,9 +1973,23 @@ evidence of anything wrong on its own. {EndsInFoiLine}</p>",
         _selVer++;
     }
 
-    // The letter is rebuilt only when something it is made from changes (it used to be rebuilt on EVERY render, and with many
-    // items selected one build took 20 s on a fast desktop: each item scanned every row of its test for its siblings).
-    int _selVer;
+    // Up to ~63,000 rows: built in slices with a progress line (and a Cancel), then handed to the browser's download.
+    Task DownloadTest(TestGroup t) => RunWork($"Preparing {ShortTestLabel(t.Label)} as a CSV file…", async co =>
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine("Year,TransactionNo,PayDate,Amount,Payee,ServiceArea,Description,ExceptionType");
+        int k = 0, n = t.Items.Count;
+        foreach (var it in t.Items)
+        {
+            sb.AppendLine(string.Join(",",
+                Csv(it.SourceTag), Csv(it.TransactionId), Csv(it.PayDate ?? ""), it.Amount?.ToString("F2") ?? "",
+                Csv(it.Supplier), Csv(it.ServiceArea ?? ""), Csv(it.Description ?? ""), it.Type.ToString()));
+            if ((++k & 255) == 0 && co.Due) { _status?.Report($"Preparing {ShortTestLabel(t.Label)}", (double)k / Math.Max(1, n)); await co.YieldAsync(); }
+        }
+        await JS.InvokeVoidAsync("analystDownload", SafeFileName(t.Label) + ".csv", sb.ToString(), "text/csv");
+    });
+
+    // The letter is rebuilt only when something it is made from changes (it used to be rebuilt on every render).
     const int MaxLetterItems = 100;
     int _letterTrimmedFrom;   // how many items were selected for this council when the letter had to be cut to MaxLetterItems (0 = not cut)
     string _letterKey = "", _letterText = "";
@@ -1805,19 +1998,6 @@ evidence of anything wrong on its own. {EndsInFoiLine}</p>",
         var key = $"{_selVer}|{_foiName}|{_foiEmail}|{_foiElectronic}|{FoiAddressee}|{_mode}|{DateTime.Now:yyyyMMdd}";
         if (key != _letterKey) { _letterText = BuildFoiLetter(); _letterKey = key; }
         return _letterText;
-    }
-
-    async Task DownloadTest(TestGroup t)
-    {
-        var sb = new StringBuilder();
-        sb.AppendLine("Year,TransactionNo,PayDate,Amount,Payee,ServiceArea,Description,ExceptionType");
-        foreach (var it in t.Items)
-        {
-            sb.AppendLine(string.Join(",",
-                Csv(it.SourceTag), Csv(it.TransactionId), Csv(it.PayDate ?? ""), it.Amount?.ToString("F2") ?? "",
-                Csv(it.Supplier), Csv(it.ServiceArea ?? ""), Csv(it.Description ?? ""), it.Type.ToString()));
-        }
-        await JS.InvokeVoidAsync("analystDownload", SafeFileName(t.Label) + ".csv", sb.ToString(), "text/csv");
     }
 
     static string Csv(string s) => s.Contains(',') || s.Contains('"') || s.Contains('\n')
@@ -1837,8 +2017,8 @@ evidence of anything wrong on its own. {EndsInFoiLine}</p>",
         var addressee = FoiAddressee;
         var addrEmail = FoiEmailFor(addressee);
         var chosen = _selected.Values.Where(i => _mode == Mode.OwnFile || i.Council == addressee).ToList();
-        // A letter listing tens of thousands of items (possible after "select all matching") is megabytes of text and took 20 s to build
-        // for 28,000 items (measured): keep the first MaxLetterItems and say so on the page.
+        // A letter listing tens of thousands of items (possible after "select all matching") is megabytes of text: it would stall the
+        // page while it is built and drawn, and no council can answer it. Keep the first MaxLetterItems and say so on the page.
         _letterTrimmedFrom = chosen.Count > MaxLetterItems ? chosen.Count : 0;
         if (chosen.Count > MaxLetterItems) chosen = chosen.Take(MaxLetterItems).ToList();
         sb.AppendLine($"To: {addressee} — Freedom of Information team");
@@ -2108,7 +2288,7 @@ evidence of anything wrong on its own. {EndsInFoiLine}</p>",
                 @if (TickedCount(h) > 0 && DownloadBytes(h, h.Periods.Where(y => y.Checked && !y.Loaded)) > BigLoadBytes)
                 {
                     <p class="hint warn-hint">That is a large download. On mobile data you may prefer to load only the years you need. A big load takes longer on a
-                        phone, and this version of the page can be unresponsive for a few seconds while each file loads.</p>
+                        phone; the page keeps working while it runs and the Cancel button stops it.</p>
                 }
                 @if (h.Grouped)
                 {

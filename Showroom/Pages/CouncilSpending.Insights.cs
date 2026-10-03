@@ -227,10 +227,11 @@ public partial class CouncilSpending
     static string Str(string[] f, Dictionary<string, int> h, string name) =>
         h.TryGetValue(name, out var i) && i < f.Length ? f[i] : "";
 
-    async Task<List<string[]>> FetchCsvAsync(string name)
+    async Task<List<string[]>> FetchCsvAsync(string name, Cooperative? co = null)
     {
-        var bytes = await FetchGunzipAsync($"data/councils/cross/{name}.csv.gz");
-        return CsvReader.Parse(bytes);
+        co ??= new Cooperative(CancellationToken.None) { Cancellable = false };
+        var bytes = await FetchGunzipAsync($"data/councils/cross/{name}.csv.gz", co);
+        return await SlicedCsv.ParseAsync(bytes, co);   // written by CouncilDbBuilder as UTF-8, so the sliced reader applies
     }
 
     /// <summary>Fetches the seven small cross-council files (about 30 KB gzipped in all) once per page load.</summary>
@@ -240,42 +241,43 @@ public partial class CouncilSpending
         _crossLoading = true; _crossError = null; StateHasChanged();
         try
         {
-            var flows = await FetchCsvAsync("flows"); var h = HeaderIndex(flows[0]);
+            var co = new Cooperative(CancellationToken.None) { Cancellable = false };
+            var flows = await FetchCsvAsync("flows", co); var h = HeaderIndex(flows[0]);
             _flows = flows.Skip(1).Where(f => f.Length >= 8).Select(f => new FlowLine(Str(f, h, "Payer"), Str(f, h, "Entity"), Str(f, h, "Verdict"),
                 Str(f, h, "SupplierKey"), Str(f, h, "SupplierName"), Int(f, h, "Rows"), Dec(f, h, "Net"), Str(f, h, "Years"),
                 Str(f, h, "InOldExactPass") == "True")).ToList();
 
-            var grades = await FetchCsvAsync("alias-grades"); h = HeaderIndex(grades[0]);
+            var grades = await FetchCsvAsync("alias-grades", co); h = HeaderIndex(grades[0]);
             _grades = grades.Skip(1).Where(f => f.Length >= 6).Select(f => new AliasGrade(Str(f, h, "Entity"), Str(f, h, "PayerSlug"), Str(f, h, "SupplierKey"),
                 Str(f, h, "SupplierName"), Dbl(f, h, "NearestScore"), Str(f, h, "Verdict"), Str(f, h, "Note"))).ToList();
 
-            var loans = await FetchCsvAsync("debt-ledger"); h = HeaderIndex(loans[0]);
+            var loans = await FetchCsvAsync("debt-ledger", co); h = HeaderIndex(loans[0]);
             _loans = loans.Skip(1).Where(f => f.Length >= 15 && Str(f, h, "Class") == "InterAuthority").Select(f => new LoanLine(Str(f, h, "Council"), Str(f, h, "Year"),
                 Str(f, h, "TransactionId"), Str(f, h, "Counterparty"), Str(f, h, "PayDate"), Dec(f, h, "Amount"), Dec(f, h, "Net"), Str(f, h, "Class"),
                 Str(f, h, "DecodeStatus"), Str(f, h, "DecodeKind"), DecN(f, h, "DecodedPrincipal"), DecN(f, h, "DecodedRateBp") is { } bp ? (int)bp : null,
                 DecN(f, h, "DecodedDays") is { } dd ? (int)dd : null, Int(f, h, "DecodeCandidates"), Str(f, h, "DecodeNote"))).ToList();
 
-            var sink = await FetchCsvAsync("debt-sink"); h = HeaderIndex(sink[0]);
+            var sink = await FetchCsvAsync("debt-sink", co); h = HeaderIndex(sink[0]);
             _sinks = sink.Skip(1).Where(f => f.Length >= 14).Select(f => new SinkLine(Str(f, h, "Payer"), Str(f, h, "Entity"), Int(f, h, "FirstYear"), Int(f, h, "LastYear"),
                 Int(f, h, "YearsActive"), Int(f, h, "Rows"), Dec(f, h, "NetOut"), Int(f, h, "CreditRows"), Dec(f, h, "CreditNet"), Dec(f, h, "SettleRatio"),
                 Int(f, h, "RisingStreakYears"), Int(f, h, "DebtLabelledRows"), Dec(f, h, "DebtLabelledNet"), Str(f, h, "YearSeries"), Str(f, h, "Flags"))).ToList();
 
-            var mis = await FetchCsvAsync("misfits"); h = HeaderIndex(mis[0]);
+            var mis = await FetchCsvAsync("misfits", co); h = HeaderIndex(mis[0]);
             _misfits = mis.Skip(1).Where(f => f.Length >= 8).Select(f => new MisfitLine(Str(f, h, "Payer"), Str(f, h, "Entity"), Str(f, h, "Month"), Dec(f, h, "MonthNet"),
                 Dec(f, h, "MedianMonthNet"), Dbl(f, h, "Ratio"), Int(f, h, "Rows"), Str(f, h, "LabelCheck"), Str(f, h, "TopDescription"))).ToList();
 
-            var dup = await FetchCsvAsync("file-duplication"); h = HeaderIndex(dup[0]);
+            var dup = await FetchCsvAsync("file-duplication", co); h = HeaderIndex(dup[0]);
             _fileDups = dup.Skip(1).Where(f => f.Length >= 8).Select(f => new FileDupLine(Str(f, h, "Council"), Str(f, h, "File"), Int(f, h, "Rows"), Int(f, h, "ExactRepeatRows"),
                 Dec(f, h, "RepeatNetAbs"), Dbl(f, h, "Rate"), Dbl(f, h, "NeighbourMedianRate"), Str(f, h, "Flagged") == "True")).ToList();
 
-            var wi = await FetchCsvAsync("within-txn"); h = HeaderIndex(wi[0]);
+            var wi = await FetchCsvAsync("within-txn", co); h = HeaderIndex(wi[0]);
             _withins = wi.Skip(1).Where(f => f.Length >= 12).Select(f => new WithinLine(Str(f, h, "Council"), Str(f, h, "Year"), Str(f, h, "TransactionId"), Str(f, h, "SupplierName"),
                 Str(f, h, "PayDate"), Dec(f, h, "Net"), Str(f, h, "Description"), Int(f, h, "Copies"), Dec(f, h, "ExtraValue"), Int(f, h, "DistinctLinesInTxn"),
                 Str(f, h, "EveryDistinctLineRepeatedSameK") == "True", Int(f, h, "OtherTransactionsSameSupplierAndNet"),
                 // the export's own last column ("Reading") says whether the same supplier+amount turns up in other transactions
                 Str(f, h, "Reading"))).OrderByDescending(x => x.ExtraValue).ToList();
 
-            BuildCrossItems();
+            await BuildCrossItemsAsync(co);
             _crossLoaded = true;
         }
         catch (Exception ex) { _crossError = "Couldn't load the cross-council files: " + ex.Message; }
@@ -354,9 +356,7 @@ public partial class CouncilSpending
     // Redacted rows (a payee or reference replaced by a placeholder such as REDACTED PERSONAL DATA) are excluded by the engine from
     // every exception test; the page counts them per council as the files load, so the exclusion is shown, not buried.
     // Same rule as AuditEngine's own (it is private there): contains "REDACT", or the split form RED...ACTED.
-    static bool IsRedactedText(string s) =>
-        s.Contains("REDACT", StringComparison.OrdinalIgnoreCase)
-        || (s.StartsWith("RED", StringComparison.OrdinalIgnoreCase) && s.EndsWith("ACTED", StringComparison.OrdinalIgnoreCase) && s.Length >= 8);
+    static bool IsRedactedText(string s) => Redaction.IsRedacted(s);
 
     readonly Dictionary<string, (int Rows, int Redacted)> _redaction = new();
 
@@ -386,7 +386,8 @@ public partial class CouncilSpending
     const string SecFlows = "flows", SecLoans = "loans", SecCorr = "corrections", SecPub = "pubfaults", SecDup = "filedup",
         SecWithin = "withintxn", SecSink = "sink", SecMisfit = "misfit", SecStanding = "standing";
 
-    void BuildCrossItems()
+    // In time slices: ~700 rows each get a sentence built from their values.
+    async Task BuildCrossItemsAsync(Cooperative co)
     {
         foreach (var f in _flows.Where(f => f.Verdict == "accept"))
         {
@@ -397,6 +398,7 @@ public partial class CouncilSpending
                 $"{payer}'s published spending files record {f.Rows:N0} payment{(f.Rows == 1 ? "" : "s")} totalling {Money(f.Net)} to a payee published as \"{f.SupplierName}\" ({f.Entity}), in {f.Years.Replace(" ", ", ")}.",
                 new[] { $"{payer}, payee \"{f.SupplierName}\", {f.Rows:N0} payments, {Money(f.Net)}, files {f.Years.Replace(" ", ", ")}" },
                 "a copy of the payment records for these payments, the agreement or invoice basis for them, and the supplier record(s) under which this payee is held.");
+            await co.YieldIfDueAsync();
         }
         foreach (var l in _loans.Where(l => l.Status != "NotApplicable"))
         {
@@ -410,6 +412,7 @@ public partial class CouncilSpending
                 $"Transaction {l.TransactionId} ({l.Year}) records a payment of {Money(l.Amount)} to {l.Counterparty} on {l.PayDate}, labelled in the published file as debt or interest. {result}",
                 new[] { $"{cn}, {l.Year}, transaction {l.TransactionId}, {l.PayDate}, {Money(l.Amount)}, {l.Counterparty}" },
                 "the loan agreement or deal record for this payment (principal, rate, start and end dates) and the calculation of the amount paid.");
+            await co.YieldIfDueAsync();
         }
         foreach (var s in _sinks)
         {
@@ -420,6 +423,7 @@ public partial class CouncilSpending
                 $"{payer}'s published files record {s.Rows:N0} payments to {s.Entity} totalling {Money(s.NetOut)} between {s.FirstYear} and {s.LastYear}, with {s.CreditRows:N0} credit row{(s.CreditRows == 1 ? "" : "s")} totalling {Money(Math.Abs(s.CreditNet))} in the same files.",
                 new[] { $"{payer}, payee {s.Entity}, {s.FirstYear} to {s.LastYear}, yearly totals {s.YearSeries}" },
                 "the agreement(s) under which these payments were made and the council's own record of amounts repaid or returned.");
+            await co.YieldIfDueAsync();
         }
         foreach (var m in _misfits)
         {
@@ -430,6 +434,7 @@ public partial class CouncilSpending
                 $"In {m.Month}, {payer}'s published files record {Money(m.MonthNet)} paid to {m.Entity} across {m.Rows:N0} row{(m.Rows == 1 ? "" : "s")}, against a usual month of {Money(m.MedianMonthNet)} ({m.Ratio:0.#} times). The largest row is labelled \"{m.TopDescription.Trim()}\".",
                 new[] { $"{payer}, payee {m.Entity}, {m.Month}, {Money(m.MonthNet)} over {m.Rows:N0} rows" },
                 "the records for the payments in that month and the reason the month's total differs from the usual month.");
+            await co.YieldIfDueAsync();
         }
         foreach (var d in _fileDups.Where(d => d.Flagged))
         {
@@ -440,6 +445,7 @@ public partial class CouncilSpending
                 $"The file {cn} published for {d.File} lists {d.Repeats:N0} of its {d.Rows:N0} rows a second time, with every published column identical ({Money(d.RepeatNet)} of Net).",
                 new[] { $"{cn}, file {d.File}, {d.Repeats:N0} repeated rows of {d.Rows:N0}, {Money(d.RepeatNet)}" },
                 "the source records for these rows and the reason they appear twice in the published file.");
+            await co.YieldIfDueAsync();
         }
         foreach (var w in _withins)
         {
@@ -451,6 +457,7 @@ public partial class CouncilSpending
                 $"Transaction {w.TransactionId} ({w.Year}) lists the same line {w.Copies:N0} times: {w.Supplier}, {Money(w.Net)}, \"{w.Description.Trim()}\", paid {date}.",
                 new[] { $"{cn}, {w.Year}, transaction {w.TransactionId}, {date}, {Money(w.Net)} x {w.Copies:N0}, {w.Supplier}" },
                 "the invoice(s) and payment record(s) for this transaction and the reason the line appears " + w.Copies.ToString("N0") + " times.");
+            await co.YieldIfDueAsync();
         }
     }
 
@@ -513,22 +520,31 @@ public partial class CouncilSpending
 
     List<StandingGroup>? _standingCache;
 
-    List<StandingGroup> StandingGroups()
+    /// <summary>The standing-payment view over the loaded test-3 groups. Built once per load by <see cref="RebuildStandingAsync"/>
+    /// (in slices); a render only reads it.</summary>
+    List<StandingGroup> StandingGroups() => _standingCache ?? NoStanding;
+
+    async Task RebuildStandingAsync(Cooperative co)
     {
-        if (_standingCache is not null) return _standingCache;
         var list = new List<StandingGroup>();
         if (_testsByLabel.TryGetValue(LabelT3, out var t3))
-            foreach (var g in t3.Items.Where(i => IsStanding(i.Classification) && i.GroupKey is not null).GroupBy(i => i.GroupKey))
+        {
+            int k = 0;
+            // t3.Groups already holds the rows of each GroupKey; a group's rows share one classification
+            foreach (var m in t3.Groups.Values)
             {
-                var m = g.ToList(); var first = m[0];
+                var first = m[0];
+                if (!IsStanding(first.Classification)) { if ((++k & 255) == 0) await co.YieldIfDueAsync(); continue; }
                 list.Add(new StandingGroup
                 {
                     Council = first.Council, Supplier = first.Supplier, Classification = first.Classification, Detail = first.ClassificationDetail ?? "",
                     Years = string.Join(", ", m.Select(x => x.SourceTag).Distinct().OrderBy(x => x, StringComparer.Ordinal)),
                     PayDate = first.PayDate ?? "", Each = first.Amount ?? 0m, Total = m.Sum(TestRowValue), Payments = m.Count, Rep = first, Members = m,
                 });
+                if ((++k & 255) == 0) await co.YieldIfDueAsync();
             }
-        return _standingCache = list.OrderByDescending(g => g.Total).ToList();
+        }
+        _standingCache = list.OrderByDescending(g => g.Total).ToList();
     }
 
     // ------------------------------------------------------------------ in-browser checks: publication faults and correction pairs (EvalApp pipeline)
@@ -540,23 +556,28 @@ public partial class CouncilSpending
     List<ExceptionItem> _pubItems = new();
     List<ExceptionItem> _corrItems = new();
 
-    async Task RunChecksAsync()
+    /// <summary>Publication faults and correction pairs over everything loaded, in time slices (see CouncilChecks.RunSlicedAsync
+    /// for why this does not go through the EvalApp pipeline in the browser). A failure shows as a plain error line.</summary>
+    async Task RunChecksAsync(Cooperative co)
     {
-        _checksRunning = true; _checksError = null; StateHasChanged(); await Task.Delay(1);
+        _checksRunning = true; _checksError = null;
         try
         {
             var groups = new List<GroupLines>();
             if (_testsByLabel.TryGetValue(LabelT4, out var t4))
-                foreach (var g in t4.Items.Where(i => i.GroupKey is not null && i.Net is not null).GroupBy(i => i.GroupKey))
+                foreach (var m0 in t4.Groups.Values)
                 {
-                    var m = g.ToList();
-                    groups.Add(new GroupLines(m[0].CouncilKey, m[0].SourceTag, m[0].TransactionId, m[0].Supplier, m.Select(x => x.Net!.Value).ToList()));
+                    var m = m0.Where(x => x.Net is not null).ToList();
+                    if (m.Count > 0)
+                        groups.Add(new GroupLines(m[0].CouncilKey, m[0].SourceTag, m[0].TransactionId, m[0].Supplier, m.Select(x => x.Net!.Value).ToList()));
+                    if (groups.Count % 256 == 0) await co.YieldIfDueAsync();
                 }
-            _checks = await CouncilChecks.RunAsync(_facts.ToList(), groups);
+            _checks = await CouncilChecks.RunSlicedAsync(_facts.ToList(), groups, co, _status);
             BuildCheckItems();
         }
+        catch (OperationCanceledException) { throw; }
         catch (Exception ex) { _checksError = "The in-browser checks could not run: " + ex.Message; }
-        finally { _checksRunning = false; StateHasChanged(); }
+        finally { _checksRunning = false; }
     }
 
     static string DigitPlace(int fromRightInPennies) => fromRightInPennies switch
@@ -656,7 +677,7 @@ public partial class CouncilSpending
         // the six exception tests first (one row each, over everything loaded), then the checks of this file
         foreach (var t in _tests)
             rows.Add(new(t.Label, ShortTestLabel(t.Label) + " — " + t.Label[(t.Label.IndexOfAny(new[] { '—', '-' }) + 1)..].Trim(),
-                $"{t.Items.Count:N0} exceptions", TestAmountLabel(t.Label), TestTotal(t.Items), ""));
+                $"{t.Items.Count:N0} exceptions", TestAmountLabel(t.Label), t.Total, ""));
         var st = StandingGroups();
         rows.Add(new("standing", "Standing payments paid late, then caught up", $"{st.Count:N0} groups ({st.Sum(g => g.Payments):N0} payments)",
             "value of the payments in those groups", st.Sum(g => g.Total), ""));

@@ -1,0 +1,118 @@
+@using System.Globalization
+@using Showroom.Services
+@implements IDisposable
+
+@* Supplier-name search. Its own component so typing here re-renders THIS box only (a few table rows), never the whole
+   page. It waits for a pause in typing (debounce), cancels a search that a newer keystroke has made stale, and runs the
+   comparison in time slices (Cooperative), so no keystroke can queue up a long task. *@
+<div class="cc-controls">
+    <input type="text" value="@_query" @oninput="OnInput" autocomplete="off" spellcheck="false"
+           placeholder="@Placeholder" aria-label="Supplier name to search for" />
+    <select @bind="_mode" @bind:after="Restart" aria-label="How to match the name">
+        <option value="@SupplierSearchMode.Closest">Closest names (ranked by similarity)</option>
+        <option value="@SupplierSearchMode.Substring">Exact text inside the name</option>
+    </select>
+    <button class="ghost" @onclick="RunNow" disabled="@(string.IsNullOrWhiteSpace(_query))" type="button">Search</button>
+</div>
+@if (_mode == SupplierSearchMode.Closest)
+{
+    <p class="hint">Ranked by how many three-letter chunks of the name the two names share (a score of 1.0 is the same
+        name, 0 is nothing in common). A small spelling difference or a name cut short ("ACME LTD" against "ACME LTD.")
+        still lands near the top. Treat a low score as a weak match, not a confident one.</p>
+}
+else
+{
+    <p class="hint">Names that contain exactly what you typed (letters, digits and spaces only), names that start with it
+        first, then by total paid. Use this when you want to be certain nothing beyond a literal match is shown.</p>
+}
+@if (_searching)
+{
+    <p class="hint" role="status">Searching @Index.Count.ToString("N0") supplier names…</p>
+}
+else if (_error is not null)
+{
+    <p class="err">@_error</p>
+}
+else if (_results.Count > 0)
+{
+    <div class="table-scroll table-scroll-fixed">
+        <table class="exc-table">
+            <thead>
+                <tr>
+                    <th>Supplier (as published)</th><th>Council</th><th>Payments</th><th>Total paid</th>
+                    @if (_shownMode == SupplierSearchMode.Closest) { <th>Score</th> }
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var r in _results)
+                {
+                    <tr>
+                        <td>@r.Name</td><td>@CouncilName(r.CouncilKey)</td><td class="num">@r.Rows.ToString("N0")</td>
+                        <td class="num">@r.Net.ToString("C2", GB)</td>
+                        @if (_shownMode == SupplierSearchMode.Closest) { <td class="num">@r.Score.ToString("F3", CultureInfo.InvariantCulture)</td> }
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+    <p class="hint">Payments and totals are the sums of the rows loaded so far, as published (credits are negative, so a total can be small next to a large payment).</p>
+}
+else if (_searched)
+{
+    <p class="hint">No supplier name in what you have loaded matches that.</p>
+}
+
+@code {
+    static readonly CultureInfo GB = CultureInfo.GetCultureInfo("en-GB");
+    const int DebounceMs = 280;
+
+    /// <summary>The directory to search: filled by the page as periods load.</summary>
+    [Parameter, EditorRequired] public SupplierIndex Index { get; set; } = null!;
+    [Parameter] public Func<string, string> CouncilName { get; set; } = s => s;
+    [Parameter] public string Placeholder { get; set; } = "Type a supplier name to search everything loaded…";
+
+    string _query = "";
+    SupplierSearchMode _mode = SupplierSearchMode.Closest, _shownMode = SupplierSearchMode.Closest;
+    List<SupplierHit> _results = new();
+    bool _searching, _searched;
+    string? _error;
+    CancellationTokenSource? _cts;
+
+    void OnInput(ChangeEventArgs e)
+    {
+        _query = e.Value?.ToString() ?? "";
+        _ = DebouncedSearchAsync();
+    }
+
+    Task RunNow() => SearchAsync();
+    Task Restart() => string.IsNullOrWhiteSpace(_query) ? Task.CompletedTask : SearchAsync();
+
+    async Task DebouncedSearchAsync()
+    {
+        _cts?.Cancel();
+        var cts = _cts = new CancellationTokenSource();
+        try { await Task.Delay(DebounceMs, cts.Token); }
+        catch (OperationCanceledException) { return; }
+        if (_query.Trim().Length < 2) { _results = new(); _searched = false; await InvokeAsync(StateHasChanged); return; }
+        await SearchAsync(cts);
+    }
+
+    async Task SearchAsync(CancellationTokenSource? mine = null)
+    {
+        if (mine is null) { _cts?.Cancel(); mine = _cts = new CancellationTokenSource(); }
+        var query = _query; var mode = _mode;
+        _searching = true; _error = null; await InvokeAsync(StateHasChanged);
+        try
+        {
+            var co = new Cooperative(mine.Token);
+            var hits = await Index.SearchAsync(query, mode, 20, co);
+            if (mine.IsCancellationRequested) return;
+            _results = hits; _shownMode = mode; _searched = true;
+        }
+        catch (OperationCanceledException) { return; }
+        catch (Exception ex) { _error = "Supplier search failed: " + ex.Message; }
+        finally { if (ReferenceEquals(_cts, mine)) { _searching = false; await InvokeAsync(StateHasChanged); } }
+    }
+
+    public void Dispose() { _cts?.Cancel(); _cts?.Dispose(); }
+}

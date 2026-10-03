@@ -19,6 +19,12 @@ namespace Showroom.Services;
 // (single thread) the pipeline simply runs its steps in order, which is the right behaviour there. It is built
 // once per page load and re-run each time the visitor loads more data.
 //
+// MEASURED 2026-10-03 (MonoRepo EvalApp todo/evalapp-native-apps.md, "Field report 2"): on EvalApp 2.0.0 a ForEach
+// stage on a single-thread host runs as ONE blocking loop (RunAsync returns an already-completed task, zero UI frames
+// serviced), so the BROWSER path does not use the pipeline: it calls the same per-file and per-group rules through
+// RunSlicedAsync, which yields to the browser between slices and can be cancelled. The pipeline (Pipeline()/RunAsync)
+// stays for hosts that may block (CouncilDbBuilder).
+//
 // Everything below is data in, data out: no file system, no network, no HoloDb. Rows are referred to by the
 // page's own row id (the id column of the in-browser `spend` table) so the page can show the source rows with
 // one SELECT, and this file never has to hold a second copy of a row's text.
@@ -169,30 +175,91 @@ public static class CouncilChecks
         }
     }
 
-    /// <summary>Builds one file's facts from its rows (page row id, transaction, pay date, supplier key, net).</summary>
+    /// <summary>Builds one file's facts from its rows (row id, transaction, pay date, supplier key, net). Row by row,
+    /// so a caller that must not hold the thread (the page, in the browser) can feed it a slice at a time.</summary>
+    public sealed class FactsBuilder
+    {
+        readonly string _council, _tag; readonly int _order;
+        readonly (int From, int To)? _period;
+        int _n, _dated, _inside; double _outsideNet;
+        readonly Dictionary<int, int> _byMonth = new();
+        readonly List<int> _outside = new();
+        readonly Dictionary<long, KeyInfo> _keys = new();
+
+        public FactsBuilder(string council, string tag, int order)
+        { _council = council; _tag = tag; _order = order; _period = PeriodOf(tag); }
+
+        public void Add(int id, string transactionId, string payDate, string supplierKey, decimal net)
+        {
+            _n++;
+            _keys.TryAdd(LineKey(transactionId, payDate, supplierKey, net), new KeyInfo(id, (double)Math.Abs(net)));
+            var d = AuditEngine.ParseDate(payDate);
+            if (d is null) return;
+            _dated++;
+            int m = MonthIndex(d.Value);
+            _byMonth[m] = _byMonth.GetValueOrDefault(m) + 1;
+            if (_period is { } p && m >= p.From && m <= p.To) _inside++;
+            else if (_period is not null) { _outsideNet += (double)Math.Abs(net); if (_outside.Count < IdCap) _outside.Add(id); }
+        }
+
+        public FileFacts Build() =>
+            // a file whose name is not a period (no way to say what it should contain) is not judged: treat every dated row as inside
+            new(_council, _tag, _order, _n, _dated, _period is null ? _dated : _inside, _period is null ? 0 : _outsideNet, _byMonth, _outside, _keys);
+    }
+
+    /// <summary>Builds one file's facts from its rows in one go (the build-time tool and tests; the page uses <see cref="FactsBuilder"/>).</summary>
     public static FileFacts BuildFacts(string council, string tag, int order,
         IEnumerable<(int Id, string TransactionId, string PayDate, string SupplierKey, decimal Net)> rows)
     {
-        var period = PeriodOf(tag);
-        int n = 0, dated = 0, inside = 0;
-        double outsideNet = 0;
-        var byMonth = new Dictionary<int, int>();
-        var outside = new List<int>();
-        var keys = new Dictionary<long, KeyInfo>();
-        foreach (var r in rows)
+        var b = new FactsBuilder(council, tag, order);
+        foreach (var r in rows) b.Add(r.Id, r.TransactionId, r.PayDate, r.SupplierKey, r.Net);
+        return b.Build();
+    }
+
+    /// <summary>The same check as the pipeline's per-file step, but it hands the thread back between earlier files,
+    /// so the browser stays responsive. The result is identical to <see cref="ComputeFault"/>.</summary>
+    public static async Task<FileFault> ComputeFaultAsync(FileFacts f, IReadOnlyList<FileFacts> files, Cooperative co)
+    {
+        var overlap = new List<(string, int)>();
+        var seen = new HashSet<long>();
+        var ids = new List<int>();
+        double overlapNet = 0;
+        foreach (var o in files)
         {
-            n++;
-            keys.TryAdd(LineKey(r.TransactionId, r.PayDate, r.SupplierKey, r.Net), new KeyInfo(r.Id, (double)Math.Abs(r.Net)));
-            var d = AuditEngine.ParseDate(r.PayDate);
-            if (d is null) continue;
-            dated++;
-            int m = MonthIndex(d.Value);
-            byMonth[m] = byMonth.GetValueOrDefault(m) + 1;
-            if (period is { } p && m >= p.From && m <= p.To) inside++;
-            else if (period is not null) { outsideNet += (double)Math.Abs(r.Net); if (outside.Count < IdCap) outside.Add(r.Id); }
+            if (ReferenceEquals(o, f) || o.Council != f.Council || o.Order >= f.Order) continue;
+            int shared = 0;
+            foreach (var (k, info) in f.LineKeys)
+                if (o.LineKeys.ContainsKey(k))
+                {
+                    shared++;
+                    if (seen.Add(k)) { overlapNet += info.Net; if (ids.Count < IdCap) ids.Add(info.Id); }
+                }
+            if (shared > 0) overlap.Add((o.Tag, shared));
+            await co.YieldIfDueAsync();
         }
-        // a file whose name is not a period (no way to say what it should contain) is not judged: treat every dated row as inside
-        return new FileFacts(council, tag, order, n, dated, period is null ? dated : inside, period is null ? 0 : outsideNet, byMonth, outside, keys);
+        return FinishFault(f, seen.Count, overlapNet, overlap, ids);
+    }
+
+    /// <summary>Both checks over every loaded file and group, in time slices and cancellable. The browser path.</summary>
+    public static async Task<ChecksJob> RunSlicedAsync(IReadOnlyList<FileFacts> files, IReadOnlyList<GroupLines> groups,
+        Cooperative co, IWorkProgress? progress = null)
+    {
+        var faults = new List<FileFault>(files.Count);
+        for (int i = 0; i < files.Count; i++)
+        {
+            progress?.Report($"Checking file {i + 1} of {files.Count}", (double)i / Math.Max(1, files.Count));
+            faults.Add(await ComputeFaultAsync(files[i], files, co));
+        }
+        var corrections = new List<CorrectionFinding>();
+        int examined = 0, sinceCheck = 0;
+        foreach (var g in groups)
+        {
+            if (g.Nets.Count > MaxLines) continue;
+            examined++;
+            if (FindCorrection(g) is { } hit) corrections.Add(hit);
+            if (++sinceCheck >= 64) { sinceCheck = 0; await co.YieldIfDueAsync(); }
+        }
+        return new ChecksJob(files, groups, faults, corrections, examined);
     }
 
     static FileFault ComputeFault(FileFacts f, IReadOnlyList<FileFacts> files)
@@ -214,13 +281,18 @@ public static class CouncilChecks
                 }
             if (shared > 0) overlap.Add((o.Tag, shared));
         }
+        return FinishFault(f, seen.Count, overlapNet, overlap, ids);
+    }
+
+    static FileFault FinishFault(FileFacts f, int seenCount, double overlapNet, List<(string, int)> overlap, List<int> ids)
+    {
         var period = PeriodOf(f.Tag);
         bool single = period is { } sp && sp.From == sp.To;
         double share = f.DatedRows == 0 ? 1.0 : (double)f.InsideRows / f.DatedRows;
         KeyValuePair<int, int> peak = f.RowsByPaidMonth.Count == 0 ? default : f.RowsByPaidMonth.MaxBy(kv => kv.Value);
         return new FileFault(f.Council, f.Tag, f.Rows, f.DatedRows, f.InsideRows, share, single, f.OutsideNetAbs,
             period is { } p ? (p.From == p.To ? MonthLabel(p.From) : $"{MonthLabel(p.From)} to {MonthLabel(p.To)}") : null,
-            peak.Key, peak.Value, seen.Count, overlapNet, overlap.OrderByDescending(x => x.Item2).ToList(), f.OutsideIds, ids);
+            peak.Key, peak.Value, seenCount, overlapNet, overlap.OrderByDescending(x => x.Item2).ToList(), f.OutsideIds, ids);
     }
 
     // ---------------------------------------------------------------- correction pairs

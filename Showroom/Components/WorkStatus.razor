@@ -1,0 +1,70 @@
+@using System.Globalization
+@using Showroom.Services
+@implements IWorkProgress
+
+@* The one place a long job shows what it is doing. It is its own small component on purpose: a progress tick calls
+   StateHasChanged on THIS component only, so it costs a fraction of a millisecond, whereas re-rendering the whole
+   council page on every tick would itself be the kind of long task this is here to prevent. *@
+@if (_visible)
+{
+    <div class="work-status" role="status" aria-live="polite">
+        <div class="work-status-line">
+            <span class="work-status-text">@_text</span>
+            @if (_fraction >= 0) { <span class="work-status-pct">@((int)Math.Round(_fraction * 100))%</span> }
+            @if (_cancellable)
+            {
+                <button type="button" class="work-cancel" @onclick="CancelClicked" disabled="@_cancelling">@(_cancelling ? "Stopping…" : "Cancel")</button>
+            }
+        </div>
+        @if (_fraction >= 0)
+        {
+            <progress max="1" value="@_fraction.ToString("0.###", CultureInfo.InvariantCulture)" aria-label="@_text"></progress>
+        }
+        @if (_cancellable)
+        {
+            <p class="work-status-note">The page stays usable while this runs. Cancel stops it at the next safe point; anything already finished stays loaded.</p>
+        }
+        else
+        {
+            <p class="work-status-note">This step is run by the checking engine in one go and cannot be paused or cancelled part way. On a phone a large file can take several seconds.</p>
+        }
+    </div>
+}
+
+@code {
+    [Parameter] public EventCallback OnCancel { get; set; }
+
+    bool _visible, _cancelling, _cancellable = true;
+    string _text = "";
+    double _fraction = -1;
+    long _lastDraw;
+
+    /// <summary>Show the panel. <paramref name="cancellable"/> false hides the Cancel button for a step that cannot be interrupted.</summary>
+    public void Begin(string text, bool cancellable = true)
+    {
+        _visible = true; _cancelling = false; _cancellable = cancellable; _text = text; _fraction = -1; _lastDraw = 0;
+        InvokeAsync(StateHasChanged);
+    }
+
+    public void End()
+    {
+        _visible = false; _cancelling = false;
+        InvokeAsync(StateHasChanged);
+    }
+
+    /// <summary>Called from the long loops, once per slice. Redraws at most about 10 times a second.</summary>
+    public void Report(string text, double fraction = -1)
+    {
+        long now = Environment.TickCount64;
+        bool changedText = text != _text;
+        if (!changedText && now - _lastDraw < 100) return;
+        _text = text; _fraction = fraction < 0 ? -1 : Math.Min(1, fraction); _lastDraw = now;
+        InvokeAsync(StateHasChanged);
+    }
+
+    async Task CancelClicked()
+    {
+        _cancelling = true;
+        await OnCancel.InvokeAsync();
+    }
+}
