@@ -1,6 +1,6 @@
 # Showroom — CLAUDE.md (showroom-owner)
 
-**Last verified:** 2026-10-03
+**Last verified:** 2026-10-03 (council engine re-sync)
 
 Blazor WebAssembly app at `C:\Users\dongy\AboutUs\Showroom`, published under `/tools` on the public
 site (`AboutUs` repo, base href `/tools/`). Every tool runs entirely client-side: no server, no
@@ -206,6 +206,19 @@ per group) so the actual duplicate rows pair up visually — this changed its re
 this is precomputed data, not reconstructed client-side; re-run it (`dotnet run -c Release` from
 `AboutUs/CouncilDbBuilder/`) and copy the regenerated `wwwroot/data/councils/wokingham/
 exceptions.csv.gz` into `dist/` whenever `AuditEngine`'s own evidence-relevant fields change.
+
+**Engine re-sync 2026-10-03 (DebtCharge fix) + full Reading**: `CouncilAudit/` re-vendored (AuditEngine
+reordered cascade + `HasDebtChargeEvidence`, Models `MemberRowIndexes`, CsvReader CP850 fallback, new
+`ReadingFixups.cs`; `HandCheckHelpers.cs` deliberately NOT vendored, CLI-only; SupportedCouncils' Bracknell
+entry condensed). `CouncilDbBuilder` now derives Reading's file list from `SupportedCouncils.Reading.Years`
+(minus `2021-05`, council-side export fault) and applies `ReadingFixups` per file; raw files in
+`wwwroot/data/reading/reading-<tag>.<ext>` (63 files, from `VirtualCustomer/inbox/reading`). Verified counts,
+Wokingham Schedule A: DebtCharge 22, NegativeNetSignFlip 3,026, Unreconciled 2,949, VatRoundingNoise 301,
+EarlyPaymentProgramme 200, DoubleListing 2,327. Engine source change needs a full AOT publish (not data-only).
+Page: `_readingMonths` is built from `SupportedCouncils.Reading.Years` minus `2021-05` (was a hardcoded 5-entry
+list, which kept the UI at 5 months despite the data), so it can't drift; each council's licence block has a
+collapsed per-file "retrieved" `<details>` (Wokingham 2 Oct, Reading 3 Oct 2026) and Reading's panel states the
+excluded 2021-05. Load is on demand: first Reading load = exceptions file ~1.2 MB gz + ~30-220 KB per ticked period.
 
 ## Unlisted: RecycleDAO marketplace prototype — `Pages/RecycleDaoDemo.razor` (`/recycledao-demo`)
 NOT a package-capability demo, NOT in the gallery — a private, link-only client preview

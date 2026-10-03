@@ -64,7 +64,7 @@
                 </button>
                 <button class="pick-card" @onclick="PickReading" type="button">
                     <h3>Reading Borough Council</h3>
-                    <p>Five sample months hosted here. Reading publishes one signed Amount column with
+                    <p>The full back-catalogue hosted here: 63 periods, April 2020 to March 2026. Reading publishes one signed Amount column with
                         no separate invoice/payment split, so the payment-vs-invoice test doesn't apply —
                         repeated-payment and multi-payee checks still run.</p>
                     <span class="go-in">Open →</span>
@@ -90,6 +90,15 @@
                     Borough Council</a>, used under the <a href="https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/" target="_blank" rel="noopener">Open
                     Government Licence v3.0</a>. Source: <a href="https://www.wokingham.gov.uk/council-and-meetings/open-data-and-transparency/data-sets-and-open-data?field_media_asset_browser_target_id=101" target="_blank" rel="noopener">the council's open-data page</a>.
                     Every file below was retrieved <b>2 October 2026</b>.</p>
+                <details class="retrieved">
+                    <summary>Files retrieved 2 October 2026 (@_wokinghamYears.Count)</summary>
+                    <ul>
+                        @foreach (var y in _wokinghamYears)
+                        {
+                            <li><span class="year-tag">@y.Tag</span> <span class="hint">@y.FileName — retrieved 2 October 2026 from the council's transparency page</span></li>
+                        }
+                    </ul>
+                </details>
             </section>
 
             <section class="loaded-stats">
@@ -127,7 +136,7 @@
                     <div class="council-add-head">
                         <b>Reading Borough Council</b>
                         <span class="hint">@(_loadedCouncils.Contains("reading")
-                            ? $"{_readingMonths.Count(y => y.Loaded)} of {_readingMonths.Count} months loaded"
+                            ? $"{_readingMonths.Count(y => y.Loaded)} of {_readingMonths.Count} periods loaded"
                             : "Go back and choose Reading from the picker to load it alongside Wokingham.")</span>
                     </div>
                 </div>
@@ -142,7 +151,20 @@
                     under the <a href="https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/" target="_blank" rel="noopener">Open
                     Government Licence</a>" (checked live against that page <b>3 October 2026</b>; the
                     page doesn't itself name a version, so this links the current v3.0 text, the same
-                    licence Wokingham publishes under). Every file below was retrieved <b>3 October 2026</b>.</p>
+                    licence Wokingham publishes under). Every file below was retrieved <b>3 October 2026</b>.
+                    One published file is <b>not</b> included: <b>2021-05</b> (the council's "May21-Revised"
+                    spreadsheet) has a council-side export fault, so its column headings don't match its own
+                    data and it can't be read reliably; that one month is missing from everything below.</p>
+                <details class="retrieved">
+                    <summary>Files retrieved 3 October 2026 (@_readingMonths.Count)</summary>
+                    <ul>
+                        @foreach (var y in _readingMonths)
+                        {
+                            <li><span class="year-tag">@y.Tag</span> <span class="hint"><a href="@y.Url" target="_blank" rel="noopener">@y.FileName</a> — retrieved 3 October 2026</span></li>
+                        }
+                        <li><span class="year-tag">2021-05</span> <span class="hint">retrieved 3 October 2026 but excluded (council-side export fault, see above)</span></li>
+                    </ul>
+                </details>
             </section>
 
             <p class="note-callout">Reading publishes one signed <b>Amount</b> column — there is no
@@ -159,14 +181,19 @@
 
             <section class="years">
                 <h2>Add council / month</h2>
-                <p class="hint">Reading republishes monthly, not annually — five representative months
-                    are hosted here. Each loads as a small, pre-normalised file and BulkLoads straight
-                    into the same in-browser database as Wokingham's own data, so the cross-council
-                    view below works the moment both are loaded.</p>
+                <p class="hint">Reading republishes monthly, not annually — all 63 available periods
+                    (four quarters for 2020-21, then every month to March 2026; 2021-05 is excluded,
+                    council-side export fault) are hosted here. <b>Nothing is downloaded until you tick
+                    periods and press Load</b>: the first Reading load fetches the precomputed
+                    exceptions file (about 1.2 MB compressed) plus about 30-220 KB for each period you
+                    ticked, so roughly 1.3 MB for one month. Periods you don't tick are never fetched.
+                    Each loads as a small, pre-normalised file and BulkLoads straight into the same
+                    in-browser database as Wokingham's own data, so the cross-council view below works
+                    the moment both are loaded.</p>
                 <div class="council-add">
                     <div class="council-add-head">
                         <b>@SupportedCouncils.Reading.Name</b>
-                        <span class="hint">@_readingMonths.Count(y => y.Loaded) of @_readingMonths.Count months loaded</span>
+                        <span class="hint">@_readingMonths.Count(y => y.Loaded) of @_readingMonths.Count periods loaded</span>
                     </div>
                     <div class="year-grid">
                         @foreach (var y in _readingMonths)
@@ -174,12 +201,12 @@
                             <label class="year-pick @(y.Loaded ? "loaded" : "")">
                                 <input type="checkbox" checked="@y.Checked" @onchange="e => y.Checked = (bool)e.Value!" disabled="@(_busy || y.Loaded)" />
                                 <span class="year-tag">@y.Tag</span>
-                                <span class="year-fmt">@(y.Loaded ? "loaded" : "csv source")</span>
+                                <span class="year-fmt">@(y.Loaded ? "loaded" : y.Format == SourceFormat.Xlsx ? "xlsx source" : "csv source")</span>
                             </label>
                         }
                     </div>
                     <button class="go" @onclick="LoadSelectedReadingMonths" disabled="@(_busy || !_readingMonths.Any(y => y.Checked && !y.Loaded))" type="button">
-                        @(_busy ? _phase : "Load selected months")
+                        @(_busy ? _phase : "Load selected periods")
                     </button>
                 </div>
                 <div class="council-add @(_loadedCouncils.Contains("wokingham") ? "" : "council-add-disabled")">
@@ -811,6 +838,7 @@
         public string Tag = "";
         public string FileName = "";
         public SourceFormat Format;
+        public string Url = "";
         public bool Checked;
         public bool Loaded;
     }
@@ -857,14 +885,20 @@
     // Reading publishes monthly, not annually — same YearPick shape, a month tag instead of a
     // financial-year tag. Reading has NO Schedule A (see HasScheduleA note on CouncilDbBuilder) —
     // its own picker-mode panel says so plainly rather than rendering an empty test 1/2 panel.
-    List<YearPick> _readingMonths = new()
-    {
-        new() { Tag = "2021-12", FileName = "reading-2021-12.csv", Format = SourceFormat.Csv },
-        new() { Tag = "2022-04", FileName = "reading-2022-04.csv", Format = SourceFormat.Csv },
-        new() { Tag = "2023-03", FileName = "reading-2023-03.csv", Format = SourceFormat.Csv },
-        new() { Tag = "2024-06", FileName = "reading-2024-06.csv", Format = SourceFormat.Csv },
-        new() { Tag = "2026-02", FileName = "reading-2026-02.csv", Format = SourceFormat.Csv },
-    };
+    // Full FY2020-21..FY2025-26 back-catalogue, driven off the vendored SupportedCouncils list so
+    // the page can't drift from CouncilDbBuilder's own file list: 63 periods (2020-21 is 4
+    // quarters, every later period a month). 2021-05 is excluded -- council-side export fault.
+    // Nothing here is fetched until the visitor ticks a period and presses Load.
+    List<YearPick> _readingMonths = SupportedCouncils.Reading.Years
+        .Where(y => y.Tag != "2021-05")
+        .Select(y => new YearPick
+        {
+            Tag = y.Tag,
+            FileName = $"reading-{y.Tag}.{(y.Format == SourceFormat.Xlsx ? "xlsx" : "csv")}",
+            Format = y.Format,
+            Url = y.Url,
+        })
+        .ToList();
 
     // Which hosted councils have actually been loaded into _db/_tests this session — drives the
     // cross-council correlation section's wording and the summary bar, independent of which
@@ -922,7 +956,7 @@
         if (_loadedCouncils.Contains("wokingham"))
             parts.Add($"{_wokinghamYears.Count(y => y.Loaded)} of {_wokinghamYears.Count} Wokingham years");
         if (_loadedCouncils.Contains("reading"))
-            parts.Add($"{_readingMonths.Count(y => y.Loaded)} of {_readingMonths.Count} Reading months");
+            parts.Add($"{_readingMonths.Count(y => y.Loaded)} of {_readingMonths.Count} Reading periods");
         return $"{string.Join(", ", parts)} loaded ({_spendRowsLoaded:N0} spend rows), " +
                $"{_exceptionsLoadedCount:N0} precomputed exceptions. {_loadedCouncils.Count} council(s) loaded so far.";
     }
