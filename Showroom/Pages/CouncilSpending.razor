@@ -4,6 +4,7 @@
 @using System.Globalization
 @using System.Text
 @using System.IO.Compression
+@using System.Text.Json
 @using CouncilAudit
 @using HoloDb
 @using Showroom.Services
@@ -67,13 +68,16 @@
                         <span class="go-in">Open →</span>
                     </button>
                 }
-                <button class="pick-card" @onclick="() => _mode = Mode.OwnFile" type="button">
-                    <h3>Use your own file</h3>
-                    <p>Any English council publishes this data under the same Transparency Code. Drop a
-                        file and map its columns by hand — nothing is pre-verified for an unsupported
-                        council, so check the mapping before you trust the result.</p>
-                    <span class="go-in">Open →</span>
-                </button>
+                @if (OwnFileEnabled)
+                {
+                    <button class="pick-card" @onclick="() => _mode = Mode.OwnFile" type="button">
+                        <h3>Use your own file</h3>
+                        <p>Any English council publishes this data under the same Transparency Code. Drop a
+                            file and map its columns by hand — nothing is pre-verified for an unsupported
+                            council, so check the mapping before you trust the result.</p>
+                        <span class="go-in">Open →</span>
+                    </button>
+                }
             </div>
         </section>
     }
@@ -615,7 +619,14 @@
                     <a href="https://www.whatdotheyknow.com/" target="_blank" rel="noopener">WhatDoTheyKnow.com</a>
                     instead of directly — it publishes both your request and the council's reply.</p>
 
-                <textarea class="foi-letter" rows="22" readonly>@BuildFoiLetter()</textarea>
+                @{ var letterText = FoiLetterText(); }
+                @if (_letterTrimmedFrom > 0)
+                {
+                    <p class="note-callout">You have selected <b>@_letterTrimmedFrom.ToString("N0")</b> items for this council. A letter lists at most
+                        <b>@MaxLetterItems</b> so that it stays readable and a council can answer it within the Act's cost limit; this one lists
+                        the first @MaxLetterItems you selected. Tick fewer, or send a second, separate letter for the rest.</p>
+                }
+                <textarea class="foi-letter" rows="22" readonly>@letterText</textarea>
                 <div class="controls">
                     <button class="go" @onclick="CopyFoi" disabled="@string.IsNullOrWhiteSpace(_foiName)" type="button">Copy to clipboard</button>
                     <button class="ghost" @onclick="DownloadFoi" disabled="@string.IsNullOrWhiteSpace(_foiName)" type="button">↓ Download as .txt</button>
@@ -635,7 +646,11 @@
 
 @code {
     // Feature switch for the supplier-name search (see the note where it is used). Off until it is measured fast on a throttled phone-like run.
-    const bool SearchEnabled = false;
+    static readonly bool SearchEnabled = false;
+    // "Use your own file" runs the vendored engine in single calls (about 0.5 s per 40,000 rows on a fast desktop, measured: parse 61-68 ms,
+    // MapRows 121-146 ms, AuditEngine.Run 450-462 ms for one Wokingham year), which freeze a phone's tab for seconds and cannot be cancelled,
+    // so it is off in this release, behind the same kind of switch as the search. The code stays.
+    static readonly bool OwnFileEnabled = false;
 
     enum Mode { Pick, Hosted, OwnFile }
     enum ExceptionType { Discrepancy, Unreconciled, Anomaly }
@@ -860,6 +875,48 @@
     }
 
     async Task LoadSelected(Hosted h) => await LoadSelectedPeriods(h.Key, h.Periods);
+
+    /// <summary>The one-tap "load every file for this council".</summary>
+    async Task LoadAll(Hosted h) { TickAll(h, true); await LoadSelected(h); }
+
+    // ---- download sizes, from manifest.json (written by CouncilDbBuilder), so the page says what a load costs BEFORE it starts ----
+    readonly Dictionary<string, Dictionary<string, long>> _sizes = new();   // council -> period tag -> compressed bytes
+    readonly Dictionary<string, long> _excBytes = new();                    // council -> compressed size of its precomputed exceptions file
+    const long BigLoadBytes = 3L * 1024 * 1024;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(await Http.GetByteArrayAsync("data/councils/manifest.json"));
+            foreach (var c in doc.RootElement.GetProperty("councils").EnumerateArray())
+            {
+                var key = c.GetProperty("key").GetString()!;
+                var d = new Dictionary<string, long>();
+                foreach (var y in c.GetProperty("years").EnumerateArray())
+                    if (y.TryGetProperty("gzBytes", out var gz)) d[y.GetProperty("tag").GetString()!] = gz.GetInt64();
+                _sizes[key] = d;
+                if (c.TryGetProperty("exceptionsGzBytes", out var eg)) _excBytes[key] = eg.GetInt64();
+            }
+        }
+        catch { /* sizes are a courtesy: without them the page still loads, it just cannot say how much */ }
+    }
+
+    static string SizeText(long bytes) => bytes < 1024 * 1024 ? $"{Math.Max(1, (bytes + 512) / 1024):N0} KB" : $"{bytes / 1048576.0:0.#} MB";
+    static string SizeSentence(long bytes) => bytes > 0 ? "about " + SizeText(bytes) : "size not available";
+
+    long DownloadBytes(Hosted h, IEnumerable<YearPick> periods)
+    {
+        if (!_sizes.TryGetValue(h.Key, out var d)) return 0;
+        long total = 0;
+        foreach (var p in periods) total += d.GetValueOrDefault(p.Tag);
+        if (total > 0 && !_exceptionsLoadedFor.Contains(h.Key)) total += _excBytes.GetValueOrDefault(h.Key);
+        return total;
+    }
+
+    string PeriodSizeText(Hosted h, YearPick y) =>
+        _sizes.TryGetValue(h.Key, out var d) && d.TryGetValue(y.Tag, out var b) ? SizeText(b)
+        : y.Format == SourceFormat.Xlsx ? "xlsx source" : "csv source";
 
     // Loads the selected, not-yet-loaded periods (financial years, quarters or months) as compact pre-normalised
     // files (built offline by CouncilDbBuilder, see that project's own header comment) and BulkLoads them into the
@@ -1270,7 +1327,7 @@ evidence of anything wrong on its own. {EndsInFoiLine}</p>",
     // state outright on every run rather than merging.
     void ResetOwnFileResult()
     {
-        _error = null; _warnings = new(); _tests = new(); _selected.Clear();
+        _error = null; _warnings = new(); _tests = new(); _selected.Clear(); _selVer++;
         _showFoi = false;
     }
 
@@ -1593,6 +1650,7 @@ evidence of anything wrong on its own. {EndsInFoiLine}</p>",
             it.Selected = on;
             if (on) _selected[it.Key] = it; else _selected.Remove(it.Key);
         }
+        _selVer++;
     }
 
     string SelectAllLabel(TestGroup t, int filteredCount) => filteredCount != t.Items.Count
@@ -1733,6 +1791,20 @@ evidence of anything wrong on its own. {EndsInFoiLine}</p>",
     {
         it.Selected = on;
         if (on) _selected[it.Key] = it; else _selected.Remove(it.Key);
+        _selVer++;
+    }
+
+    // The letter is rebuilt only when something it is made from changes (it used to be rebuilt on EVERY render, and with many
+    // items selected one build took 20 s on a fast desktop: each item scanned every row of its test for its siblings).
+    int _selVer;
+    const int MaxLetterItems = 100;
+    int _letterTrimmedFrom;   // how many items were selected for this council when the letter had to be cut to MaxLetterItems (0 = not cut)
+    string _letterKey = "", _letterText = "";
+    string FoiLetterText()
+    {
+        var key = $"{_selVer}|{_foiName}|{_foiEmail}|{_foiElectronic}|{FoiAddressee}|{_mode}|{DateTime.Now:yyyyMMdd}";
+        if (key != _letterKey) { _letterText = BuildFoiLetter(); _letterKey = key; }
+        return _letterText;
     }
 
     async Task DownloadTest(TestGroup t)
@@ -1765,6 +1837,10 @@ evidence of anything wrong on its own. {EndsInFoiLine}</p>",
         var addressee = FoiAddressee;
         var addrEmail = FoiEmailFor(addressee);
         var chosen = _selected.Values.Where(i => _mode == Mode.OwnFile || i.Council == addressee).ToList();
+        // A letter listing tens of thousands of items (possible after "select all matching") is megabytes of text and took 20 s to build
+        // for 28,000 items (measured): keep the first MaxLetterItems and say so on the page.
+        _letterTrimmedFrom = chosen.Count > MaxLetterItems ? chosen.Count : 0;
+        if (chosen.Count > MaxLetterItems) chosen = chosen.Take(MaxLetterItems).ToList();
         sb.AppendLine($"To: {addressee} — Freedom of Information team");
         sb.AppendLine(!string.IsNullOrEmpty(addrEmail)
             ? $"{addrEmail} ({FoiNoteFor(addressee)})"
@@ -2010,11 +2086,30 @@ evidence of anything wrong on its own. {EndsInFoiLine}</p>",
                     <b>@h.Profile.Name</b>
                     <span class="hint">@h.Periods.Count(y => y.Loaded) of @h.Periods.Count @(h.PeriodNoun)s loaded</span>
                 </div>
-                <div class="period-tools">
-                    <button class="ghost" type="button" @onclick="() => TickAll(h, true)" disabled="@(_busy || h.Periods.All(y => y.Loaded))">Select all</button>
-                    <button class="ghost" type="button" @onclick="() => TickAll(h, false)" disabled="@(_busy || TickedCount(h) == 0)">Clear</button>
-                    <span class="hint">@TickedCount(h) ticked</span>
+                @{ int notLoaded = h.Periods.Count(y => !y.Loaded); }
+                @* One tap loads every file for this council, and says how much that downloads first. *@
+                <div class="load-all">
+                    <button class="go" type="button" @onclick="() => LoadAll(h)" disabled="@(_busy || notLoaded == 0)">
+                        @(notLoaded == 0 ? $"All {h.Periods.Count} {h.PeriodNoun}s are loaded" : $"Load all {notLoaded} {h.PeriodNoun}{(notLoaded == 1 ? "" : "s")}")
+                    </button>
+                    @if (notLoaded > 0)
+                    {
+                        <span class="hint"><b>@SizeSentence(DownloadBytes(h, h.Periods.Where(y => !y.Loaded)))</b> to download@(_exceptionsLoadedFor.Contains(h.Key) ? "" : " (includes this council's precomputed exceptions file)")</span>
+                    }
                 </div>
+                <div class="period-tools">
+                    <label class="select-all">
+                        <input type="checkbox" checked="@(notLoaded > 0 && TickedCount(h) == notLoaded)" @onchange="e => TickAll(h, (bool)e.Value!)" disabled="@(_busy || notLoaded == 0)" />
+                        Select all @notLoaded not yet loaded
+                    </label>
+                    <button class="ghost" type="button" @onclick="() => TickAll(h, false)" disabled="@(_busy || TickedCount(h) == 0)">Clear</button>
+                    <span class="hint">@TickedCount(h) ticked@(TickedCount(h) > 0 ? $", {SizeSentence(DownloadBytes(h, h.Periods.Where(y => y.Checked && !y.Loaded)))} to download" : "")</span>
+                </div>
+                @if (TickedCount(h) > 0 && DownloadBytes(h, h.Periods.Where(y => y.Checked && !y.Loaded)) > BigLoadBytes)
+                {
+                    <p class="hint warn-hint">That is a large download. On mobile data you may prefer to load only the years you need. A big load takes longer on a
+                        phone, and this version of the page can be unresponsive for a few seconds while each file loads.</p>
+                }
                 @if (h.Grouped)
                 {
                     @foreach (var g in PeriodGroups(h))
@@ -2030,7 +2125,7 @@ evidence of anything wrong on its own. {EndsInFoiLine}</p>",
                                     <label class="year-pick @(y.Loaded ? "loaded" : "")">
                                         <input type="checkbox" checked="@y.Checked" @onchange="e => y.Checked = (bool)e.Value!" disabled="@(_busy || y.Loaded)" />
                                         <span class="year-tag">@y.Tag</span>
-                                        <span class="year-fmt">@(y.Loaded ? "loaded" : y.Format == SourceFormat.Xlsx ? "xlsx source" : "csv source")</span>
+                                        <span class="year-fmt">@(y.Loaded ? "loaded" : PeriodSizeText(h, y))</span>
                                     </label>
                                 }
                             </div>
@@ -2045,13 +2140,13 @@ evidence of anything wrong on its own. {EndsInFoiLine}</p>",
                             <label class="year-pick @(y.Loaded ? "loaded" : "")">
                                 <input type="checkbox" checked="@y.Checked" @onchange="e => y.Checked = (bool)e.Value!" disabled="@(_busy || y.Loaded)" />
                                 <span class="year-tag">@y.Tag</span>
-                                <span class="year-fmt">@(y.Loaded ? "loaded" : y.Format == SourceFormat.Xlsx ? "xlsx source" : "csv source")</span>
+                                <span class="year-fmt">@(y.Loaded ? "loaded" : PeriodSizeText(h, y))</span>
                             </label>
                         }
                     </div>
                 }
-                <button class="go" @onclick="() => LoadSelected(h)" disabled="@(_busy || TickedCount(h) == 0)" type="button">
-                    @(_busy ? _phase : "Load selected")
+                <button class="ghost" @onclick="() => LoadSelected(h)" disabled="@(_busy || TickedCount(h) == 0)" type="button">
+                    @(_busy ? _phase : TickedCount(h) == 0 ? "Load selected" : $"Load the {TickedCount(h)} selected")
                 </button>
             </div>
         </section>
@@ -2847,6 +2942,6 @@ evidence of anything wrong on its own. {EndsInFoiLine}</p>",
     }
 
 
-    async Task CopyFoi() => await JS.InvokeVoidAsync("copyText", BuildFoiLetter());
-    async Task DownloadFoi() => await JS.InvokeVoidAsync("analystDownload", "foi-request.txt", BuildFoiLetter(), "text/plain");
+    async Task CopyFoi() => await JS.InvokeVoidAsync("copyText", FoiLetterText());
+    async Task DownloadFoi() => await JS.InvokeVoidAsync("analystDownload", "foi-request.txt", FoiLetterText(), "text/plain");
 }

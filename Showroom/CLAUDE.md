@@ -1,6 +1,6 @@
 # Showroom — CLAUDE.md (showroom-owner)
 
-**Last verified:** 2026-10-03 (council scanner Session 25/26 sync)
+**Last verified:** 2026-10-03 (council scanner hotfix: search + own-file switched off, one-tap load all, FOI cap; resume note in the council section)
 
 Blazor WebAssembly app at `C:\Users\dongy\AboutUs\Showroom`, published under `/tools` on the public
 site (`AboutUs` repo, base href `/tools/`). Every tool runs entirely client-side: no server, no
@@ -77,16 +77,12 @@ package — a `ProjectReference` here is the designed path, not a MonoRepo bound
   but PrismStudio/server-side only; a better model reaches visitors via a new checkpoint, never a
   runtime shape mutation.
 
-**Prism/Nano Stories operational constants** (re-measure on every checkpoint re-mint):
-`MaxReplyStepsConst = 56` (Prism) / `MaxStorySteps = 128` (Stories) are PINNED, not `Context/2` —
-that fraction silently broke on a past checkpoint swap. Both caps exist because this checkpoint
-has never emitted its own STOP token, so every reply/story runs to its cap and ends mid-sentence —
-train it, don't paper over with a sentence-boundary heuristic. `Prism.razor`'s chat context
-(`BuildContextTokens`) uses a tagged wire format (`user: Q\nprism: A` + STOP per turn) matching
-PrismGym's packed training windows; Nano Stories encodes its prompt as a plain continuation
-instead. `HoloKernel/AsciiPunctuation.Fold` (curly quotes/dashes/nbsp/ellipsis → ASCII) runs at
-every tokenizer entry point site-wide — `SubwordVocab.Fold` blanks non-ASCII to a bare space
-otherwise, which silently mangled phone-autocorrected input before this fix.
+**Prism/Nano Stories operational constants** (re-measure on every checkpoint re-mint): `MaxReplyStepsConst = 56` (Prism) /
+`MaxStorySteps = 128` (Stories) are PINNED, not `Context/2` (that broke on a checkpoint swap). The checkpoint never emits STOP, so
+every reply/story runs to its cap and ends mid-sentence: train it, no sentence-boundary heuristic. `Prism.razor`'s chat context
+(`BuildContextTokens`) is the tagged wire format (`user: Q\nprism: A` + STOP per turn) matching PrismGym's windows; Stories uses a plain
+continuation. `HoloKernel/AsciiPunctuation.Fold` (curly quotes/dashes/nbsp -> ASCII) runs at every tokenizer entry point
+(`SubwordVocab.Fold` blanks non-ASCII, which mangled phone-autocorrected input).
 
 **Checkpoint refresh** (Prism's `oracle-brain.bin` + sidecars, also Stories/Cartographer): data-only, no publish: copy into `wwwroot/data`+`dist/data`,
 regenerate the `.gz` with `GZipStream`, write sidecars as UTF-8 no BOM, cross-check `-stackk`/`-iterwarm` against PrismStudio.
@@ -148,34 +144,36 @@ Paste/drop text; `ProseEngine.MineText` mines it (page chunks+yields at ~200k ch
 HoloDb `ProseStore` + AlgFormer plausibility (None / Prism's checkpoint / train on the visitor's text, ~0.22-0.24 ms/char/epoch), chord`data-cat="holodb-algformer"`. `ProseEngine.Plausibility` has no reset (page re-mines a fresh engine). Cap 64MB.
 
 ## Council Spending Scanner — `Pages/CouncilSpending.razor` + `.Insights.cs` (route `/council-spending`)
-Real analytical tool over England's spending-over-£500 data (not a model demo), in **HoloDb** (`Database.Open(null)`, one
-shared `spend` table). Public-audience, mobile-first, NOT editorial: nothing hand-picked, every check is a stated neutral
-rule run identically for every council; audit terms only (exception/discrepancy/unreconciled/anomaly); every section has
-plain prose (what is highlighted, what it could mean, counts + £), the "at a glance" table has a grand total; OGL credit per
-council. Engine `CouncilAudit/` is **vendored verbatim from `VirtualCustomer\src\CouncilAudit`** (re-synced 2026-10-03,
-Session 26; header comment on each file; never edit here; DebtLedger/LoanDecoder/HandCheckHelpers are CLI-only, not vendored).
-- **Four hosted councils**, data-driven by `Hosted` records (`BuildHosted`): Wokingham, Reading, West Berkshire, RBWM; picker
-  grouped by financial year (`FinancialYearOf`) with select-all for lists > 8 periods. Counts/spans are read from profiles.
-- **Data pipeline (offline, `CouncilDbBuilder`, run `dotnet run -c Release`; ~3 min)**: Wokingham/Reading from raw files in
-  `wwwroot/data/<c>/`; WB/RBWM from `VirtualCustomer\export\<c>\<tag>.transactions.csv` (env `COUNCIL_EXPORT_DIR`), through the
-  same `AuditEngine.Run` (verified: reproduces his exports row-for-row). Writes `wwwroot/data/councils/<c>/*.norm.csv.gz`,
-  `exceptions.csv.gz` (18 cols; `net` appended, group keys are council-qualified in the page) and `cross/*.csv.gz` (his flows,
-  alias grades, debt ledger, debt sink, misfits, file duplication, within-txn repeats, + `flow-rows` source lines, reconciled
-  to the flows file). Page loads cross files once (`EnsureCrossAsync`); copy regenerated data into `dist/` on publish.
-- **Sections** (`InsightsBlock`): standing payments (B rows `StandingSchedule*`), alias-aware flows (accept only; probable
-  separate, excluded), loan-interest decode (InterAuthority; NotApplicable shown as "not a loan"), correction pairs, publication
-  faults, file duplication, within-transaction repeats, debt sink + payment misfits. Scope = councils opened, switch for all six.
-- **In-browser checks = one EvalApp pipeline** (`Services/CouncilChecks.cs`, `Eval.App(...)` with two `ForEach`: per-file
-  faults, per-group `CorrectionPairs.Find`); built once; failure shows as a plain error line, never a silent fallback.
-  Publication fault rule: single-month files only for the "named month" share (marked < 9 in 10); overlap = lines already in an
-  EARLIER file (transaction, pay date, supplier key, net). Row ids stand in for rows (`id IN (...)` read-back).
-- **FOI**: new-section rows are `ExceptionItem.Custom` (own sentence/lines/request, facts only, no offered cause); a letter goes
-  to ONE council (`FoiAddressee`, only that council's items); FOI emails from `Hosted`; RBWM has none verified -> placeholder.
-- Gotchas: HoloDb >= 2.1.0 (graded NEAREST). `ExceptionItem.IsUnexplained` includes `StandingScheduleSurplus`. Cross-council
-  group ids restart per council (hence the prefix). Verified (not live-browser): desktop harness replaying the load path,
-  EvalApp pipeline and a full HtmlRenderer render with no exceptions; WASM runtime of the EvalApp pipeline is UNVERIFIED.
-- Numbers differing from his spec: exports are RBWM post-dedup, so overlap shows 8/14 not 381/61 (the 1,067/381/61 figures are
-  only in his profile quirks text); D groups total 3,196 not 3,234 (1 correction pair in 434 small groups with RBWM+Wokingham).
+Real analytical tool over England's spending-over-£500 data, in **HoloDb** (`Database.Open(null)`, one shared `spend` table).
+Public-audience, mobile-first, NOT editorial: every check is a stated neutral rule run identically for every council; audit terms only
+(exception/discrepancy/unreconciled/anomaly); every section has plain prose + counts + £; OGL credit per council. Engine `CouncilAudit/` is
+**vendored verbatim from `VirtualCustomer\src\CouncilAudit`** (re-synced 2026-10-03; never edit here; CLI-only files not vendored).
+- **Four hosted councils** (`BuildHosted`): Wokingham, Reading, West Berkshire, RBWM; periods grouped by financial year. Each council panel has a
+  one-tap "Load all N files (about X MB)", a select-all checkbox, per-FY select-all (> 8 periods) and per-file sizes (`manifest.json`
+  `gzBytes`/`exceptionsGzBytes`, read with `JsonDocument` (trim-safe), written by CouncilDbBuilder).
+- **Data pipeline (offline, `CouncilDbBuilder`, `dotnet run -c Release`, ~3 min)**: Wokingham/Reading from `wwwroot/data/<c>/`; WB/RBWM from
+  `VirtualCustomer\export\<c>\` (env `COUNCIL_EXPORT_DIR`), same `AuditEngine.Run`. Writes `councils/<c>/*.norm.csv.gz`, `exceptions.csv.gz`
+  (18 cols; group keys council-qualified in the page), `cross/*.csv.gz` (flows, alias grades, debt ledger/sink, misfits, file duplication,
+  within-txn repeats, `flow-rows`) and `manifest.json`. Copy regenerated data into `dist/` on publish.
+- **Sections** (`InsightsBlock`): standing payments, alias-aware flows (accept only), loan-interest decode, correction pairs, publication faults,
+  file duplication, within-transaction repeats, debt sink + misfits. Scope = councils opened, switch for all six.
+- **In-browser checks** (`Services/CouncilChecks.cs`): publication faults + correction pairs as an EvalApp pipeline (two `ForEach`). Fault rule:
+  single-month files only for the "named month" share (marked < 9 in 10); overlap = lines already in an EARLIER file. On EvalApp 2.0.0 a
+  `ForEach` on a single-thread host runs as one blocking loop (measured; `MonoRepo\EvalApp\todo\evalapp-native-apps.md` Field report 2).
+- **FOI**: new-section rows are `ExceptionItem.Custom` (own sentence/lines/request, no offered cause); one council per letter (`FoiAddressee`);
+  emails from `Hosted` (RBWM: none verified -> placeholder); letter capped at 100 items (28k items took 20 s to build, every render).
+- Gotchas: HoloDb >= 2.1.0. `ExceptionItem.IsUnexplained` includes `StandingScheduleSurplus`. Group ids restart per council (hence the prefix).
+- **HOTFIX 2026-10-03** (public bug, r/ukpolitics: "searching freezes the page on a phone"). Cause, measured: HoloDb 2.1.0 `NEAREST` builds its
+  index synchronously on the FIRST query at ~1 ms per ROW (15k rows 10.6 s; Wokingham 217k 334 s; Reading 327k 368 s; desktop); the page had it
+  from its first commit (2c52f54, no pre-HoloDb version exists). Note for the owner: `MonoRepo\HoloDb\todo\nearest-first-build-in-browser.md`.
+  Switches (`static readonly bool`, top of `@code`): `SearchEnabled=false` (9db79e9), `OwnFileEnabled=false` (engine calls cannot be sliced, ~0.46 s
+  per 42k rows). Reading all, real page on desktop, 1x / 6x CPU (one core shared with 5 spinners): load 5.5 s / 32.5 s with worst UI stall 1.0 s /
+  6.2 s; every render 150 ms / 0.8-1.4 s (it scans ~200k rows); FOI letter 0.47 s / 3.2 s; heap 380 MB. NOT fast.
+- **RESUME HERE: branch `wip-freeze-redesign`** holds the fix for all of that (`Services/Cooperative|SlicedCsv|SlicedSort|PeriodLoader|SupplierIndex`,
+  `Components/WorkStatus|SupplierSearchBox`; values worked out once per load, debounced boxes, sliced checks, new trigram search). Measured the
+  same way: load 5.7 s / 37-44 s, worst stall 40-64 ms / 418-697 ms (GC), render 2 ms collapsed / ~100 ms with a test open at 6x, typing stall
+  127 ms. Merge it, then flip `SearchEnabled`. Still to do: per-test shards + precomputed summary (heap 175-245 MB Reading, 430 MB all four),
+  publication faults/corrections at build time (run the CouncilChecks pipeline in CouncilDbBuilder), budget comparison (SPEC_FOR_SHOWROOM.md 9-11).
 ## Unlisted: RecycleDAO marketplace prototype — `Pages/RecycleDaoDemo.razor` (`/recycledao-demo`)
 NOT a package-capability demo, NOT in the gallery — a private, link-only client preview
 (`C:\Users\dongy\RecycleDAO`, `recycledao-owner`'s repo; never edit it from here). Absent from

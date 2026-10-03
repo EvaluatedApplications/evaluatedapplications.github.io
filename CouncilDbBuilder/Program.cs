@@ -177,6 +177,7 @@ foreach (var cfg in councils)
 
     // ---- one normalised CSV per council per year/month ----
     long totalNormBytes = 0, totalGzBytes = 0;
+    var gzByTag = new Dictionary<string, long>();   // compressed size of each period file, written to manifest.json so the page can say what a load will download
     foreach (var y in presentFiles)
     {
         var sb = new StringBuilder();
@@ -193,6 +194,7 @@ foreach (var cfg in councils)
         long normSize = new FileInfo(path).Length;
         WriteGzipSidecarAndDeletePlain(path);
         long gzSize = new FileInfo(path + ".gz").Length;
+        gzByTag[y.Tag] = gzSize;
         totalNormBytes += normSize; totalGzBytes += gzSize;
         Console.WriteLine($"[normalised] {cfg.Key} {y.Tag}: {normSize:N0} bytes ({gzSize:N0} gzipped)");
     }
@@ -322,10 +324,11 @@ foreach (var cfg in councils)
     {
         var y = presentFiles[i];
         var rows = perTagRows[y.Tag].Count;
-        sbM.AppendLine($"        {{ \"tag\": \"{y.Tag}\", \"file\": \"{y.Tag}.norm.csv.gz\", \"rows\": {rows} }}{(i < presentFiles.Count - 1 ? "," : "")}");
+        sbM.AppendLine($"        {{ \"tag\": \"{y.Tag}\", \"file\": \"{y.Tag}.norm.csv.gz\", \"rows\": {rows}, \"gzBytes\": {gzByTag[y.Tag]} }}{(i < presentFiles.Count - 1 ? "," : "")}");
     }
     sbM.AppendLine("      ],");
     sbM.AppendLine("      \"exceptionsFile\": \"exceptions.csv.gz\",");
+    sbM.AppendLine($"      \"exceptionsGzBytes\": {excGz},");
     sbM.AppendLine($"      \"totalRows\": {allRows.Count}");
     sbM.AppendLine("    }");
     manifestEntries.Add(sbM.ToString().TrimEnd());
