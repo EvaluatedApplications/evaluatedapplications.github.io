@@ -1,6 +1,6 @@
 # Showroom — CLAUDE.md (showroom-owner)
 
-**Last verified:** 2026-09-24
+**Last verified:** 2026-10-03
 
 Blazor WebAssembly app at `C:\Users\dongy\AboutUs\Showroom`, published under `/tools` on the public
 site (`AboutUs` repo, base href `/tools/`). Every tool runs entirely client-side: no server, no
@@ -10,34 +10,34 @@ though this repo sits outside MonoRepo). This repo only ever *consumes* MonoRepo
 published NuGet, never source.
 
 **Purpose**: each tool is a real, working demo of a published `EvaluatedApplications.*` package's
-capability, driven live by the visitor — no smoke and mirrors. Seven tools: **The Analyst** (HoloDb),
+capability, driven live by the visitor — no smoke and mirrors. Eight tools: **The Analyst** (HoloDb),
 **The Creature** (AlgFormer/HoloFormer + Tracer), **The Forecaster** (AlgFormer/HoloFormer),
 **Prism** (AlgFormer/HoloFormer, trained-checkpoint chat REPL), **Nano Stories** (same checkpoint as
 Prism, asked to write instead of chat), **The Cartographer** (same checkpoint again — a 2D map of the
 representation-space path one next-token decision takes), **Prose** (HoloDb + AlgFormer, grammar-
-mining corpus generator). Plus one **unlisted** page (below), a client preview.
+mining corpus generator), **Council Spending Scanner** (HoloDb, a real analytical tool over England's
+council spending transparency data, engine vendored from the EA virtual-customer agent). Plus one
+**unlisted** page (below), a client preview.
 
 ## Site plumbing
-- `Program.cs`: standard WASM host; one scoped `HttpClient`; `AddSingleton<HoloKernel.SessionHost>()`
-  (shared model cache); `AddSingleton<ContentDbHost>()` (unrelated spike, `Pages/ContentDbSpike.razor`).
-- Nav (`MainLayout.razor`) is `Home · Tools · NuGet` (3 items, lean by design). A new tool needs a
-  `Home.razor` gallery card (`<a class="card tool" href="/tools/<slug>" style="--cat:...">`, a live/
-  soon tag, a package `.ver` pill, `.desc`, `.go-in`), **not** a nav entry.
-- `wwwroot/index.html`: `<base href="/tools/" />`; links `/assets/site.css` (shared design system) +
-  Showroom's own `boot.css`/`depth.css`; GitHub Pages SPA deep-link restore; JS interop:
-  `window.analystDownload(name, text, mime)` (Blob-URL save), `window.copyText(text)`.
-- **CSS pattern**: each tool has its own `Pages/<Tool>.razor.css` (Blazor CSS isolation can't share a
-  partial across components) duplicating a shared base block verbatim (`.room`/`.crumb`/`.room-head
-  h1`/`.lede`/`.hint`/`.err`/`.go`/`.outro`, plus whatever else that tool's shape needs) before its own
-  classes — copy from `Prism.razor.css`/`Analyst.razor.css`. `wwwroot/css/voice.css` is the one real
-  exception (a genuine global stylesheet, since `TokenVoiceControls` lives in the HoloKernel RCL).
-- **Parallax depth/glow** (`wwwroot/css/depth.css`): 3 scroll-driven tiers (far = `<main>` wallpaper,
-  near = `.room-head`, mid = a fixed list of panel classes), zero JS, reduced-motion-gated. Tinted per
-  tool via `[data-cat]` on the outer `.room`: a single package name (`"algformer"`, `"holodb"`) sets
-  `--glow-near`/`--glow-mid`; a genuine multi-package tool uses a chord (`"algformer-tracer"` Creature,
-  `"holodb-algformer"` Prose) with `--glow-*-a`/`-b` + `sr-parallax-*-chord` keyframes. A new tool's
-  own panel class (e.g. `.cg-panel`) must be added to the mid-tier selector list to get the glow at all
-  — and must not carry its own `opacity` (see that file's "OPACITY-MULTIPLIER TRAP" comment).
+`Program.cs`: standard WASM host; one scoped `HttpClient`; `AddSingleton<HoloKernel.SessionHost>()`
+(shared model cache); `AddSingleton<ContentDbHost>()` (unrelated spike, `Pages/ContentDbSpike.razor`).
+Nav (`MainLayout.razor`) is `Home · Tools · NuGet` (3 items, lean by design) — a new tool needs a
+`Home.razor` gallery card (`<a class="card tool" href="/tools/<slug>" style="--cat:...">`, a live/
+soon tag, a package `.ver` pill, `.desc`, `.go-in`), **not** a nav entry. `wwwroot/index.html`:
+`<base href="/tools/" />`; links `/assets/site.css` (shared design system) + Showroom's own
+`boot.css`/`depth.css`; GitHub Pages SPA deep-link restore; JS interop: `window.analystDownload
+(name, text, mime)` (Blob-URL save), `window.copyText(text)`.
+**CSS pattern**: each tool has its own `Pages/<Tool>.razor.css` (Blazor CSS isolation can't share a
+partial across components) duplicating a shared base block verbatim (`.room`/`.crumb`/`.room-head
+h1`/`.lede`/`.hint`/`.err`/`.go`/`.outro`) before its own classes — copy from `Prism.razor.css`/
+`Analyst.razor.css`. `wwwroot/css/voice.css` is the one real global exception (`TokenVoiceControls`
+lives in the HoloKernel RCL). **Parallax depth/glow** (`wwwroot/css/depth.css`): 3 scroll-driven
+tiers, zero JS, reduced-motion-gated, tinted per tool via `[data-cat]` on the outer `.room` (a
+single package name sets `--glow-near`/`--glow-mid`; a multi-package tool uses a chord, e.g.
+`"algformer-tracer"` Creature). A new tool's own panel class must be added to the mid-tier
+selector list to get the glow — and must not carry its own `opacity` (see the "OPACITY-MULTIPLIER
+TRAP" comment in that file).
 
 ## HoloKernel — `ProjectReference ..\HoloKernel\HoloKernel.csproj`
 A sibling RCL (`AboutUs\HoloKernel`), itself NuGet-only against AlgFormer 2.16.0 + the `Prism`
@@ -47,64 +47,52 @@ package — a `ProjectReference` here is the designed path, not a MonoRepo bound
   mandatory args**: `HoloFormer.Iters`/`.IterAlphaServe` are NOT persisted by `Serialize()`, so a
   deserialized checkpoint always reads back `1`/`1`. `.Model` exposes the raw `HoloFormer` (public
   `Layers`/`Dim`/`Shifts`/`Context`/`Vocab`/`ParamCount`/`EmbRow`/`InspectStackIterFaces`/
-  `InspectAttention`/`DecodeFace` all reachable this way — see The Cartographer below for a page that
-  uses the inspector trio directly rather than through a HoloSession wrapper). `.Logits(ctx)` full
-  recompute; `.NewServeCache()`/`.Prime()`/`.StepToken()` O(1)/token KV-cache path — bit-identical to
-  `.Logits` only for a MULTI-layer model (Prism/Nano Stories); NOT verified for L=1 (Creature/
-  Forecaster) — don't route those on without re-checking.
-- `PrismCheckpoint` — `SessionKey` (`"prism"`, the canonical `SessionHost` key), `ResolveK`,
-  `ReconstructAlpha` — the two formulas every tool serving Prism's checkpoint (Prism, Nano Stories,
-  The Cartographer, Analyst's novelty scan, Prose's "Score with Prism" mode) must use IDENTICALLY.
+  `InspectAttention`/`DecodeFace`, used directly by The Cartographer below rather than through a
+  HoloSession wrapper). `.Logits(ctx)` full recompute; `.NewServeCache()`/`.Prime()`/`.StepToken()`
+  O(1)/token KV-cache path — bit-identical to `.Logits` only for a MULTI-layer model (Prism/Nano
+  Stories); NOT verified for L=1 (Creature/Forecaster) — don't route those on without re-checking.
+- `PrismCheckpoint` — `SessionKey` (`"prism"`), `ResolveK`, `ReconstructAlpha` — every tool serving
+  Prism's checkpoint (Prism, Nano Stories, The Cartographer, Analyst's novelty scan, Prose's "Score
+  with Prism") must use these two formulas IDENTICALLY.
 - `SessionHost.GetOrCreateAsync(key, factory)` — keyed by **model**, not tool; every consumer of
   Prism's checkpoint shares one in-memory instance this page load. **Ephemeral** — no persistence,
-  reload drops everything (WASM has no filesystem, none is wanted).
+  reload drops everything.
 - `RefinementLoop.Observe`/`.ObserveSequence` — the live-training pattern (`NewGrads()`->
   `IterAccumulate`/`StackIterAccumulateAllPos`->`Step`), used by Creature/Forecaster only.
 - `Decoding` comes from the **`Prism` package's** `Prism.Inference` namespace — `@using
-  global::Prism.Inference` is required on any page referencing it (see Gotchas: the namespace-collision
+  global::Prism.Inference` required on any page referencing it (see Gotchas: namespace-collision
   rule applies repo-wide, not just to the colliding page).
-- `CheckpointFetch.FetchAndDecompressGzipAsync(http, gzUrl)` — fetch+decompress a `.gz` sidecar via the
-  BCL's `GZipStream` (no JS interop). GitHub Pages serves files byte-for-byte uncompressed, so a raw
-  checkpoint needs a hand-shipped `.gz` sibling to download small. The ONE choke point every checkpoint
-  consumer shares (Prism, Nano Stories, The Cartographer, Analyst's novelty scan, Prose's "score with
-  Prism") — confirmed by grep, no page fetches `oracle-brain.bin*` any other way (Creature/Forecaster
-  only fetch small metadata sidecars, never the checkpoint bytes themselves).
-- **`CheckpointF32.Unpack`** (added 2026-09-29) runs inside `FetchAndDecompressGzipAsync` right after
-  gzip decompress — every caller above always gets a plain f64 `HoloFormer.Serialize()` buffer either
-  way. A "PF32"-magic buffer (4B magic + int32 formatVersion=1 + verbatim 28B header + n float32 LE +
-  verbatim 8B trailer, `n=(len-36)/8`) gets rebuilt to f64; a legacy f64 buffer passes through
-  unchanged. Lossless (GPU trains fp32, `(double)(float)x==x` for every stored value). `Pack` is the
-  inverse, oracle/verify-only, never called from a page. **Cross-repo byte-exact contract with
-  PrismStudio** — don't change the wire format here without changing it there. Data files themselves
-  are the coordinator's to deploy; this repo only had to be ready to accept one before it ships.
+- `CheckpointFetch.FetchAndDecompressGzipAsync(http, gzUrl)` — fetch+decompress a `.gz` sidecar
+  (BCL `GZipStream`, no JS interop); GitHub Pages serves files uncompressed, so a raw checkpoint
+  needs a hand-shipped `.gz` sibling. The ONE choke point every checkpoint consumer shares (Prism,
+  Nano Stories, The Cartographer, Analyst's novelty scan, Prose's "score with Prism"); Creature/
+  Forecaster only fetch small metadata sidecars, never checkpoint bytes. `CheckpointF32.Unpack`
+  runs inside it, rebuilding a "PF32"-magic fp32 buffer to plain f64 losslessly (`Pack` is the
+  inverse, oracle/verify-only) — **cross-repo byte-exact contract with PrismStudio**, don't change
+  the wire format here without changing it there.
 - `TokenVoice`/`TokenVoiceControls.razor` — Prism's per-token voice (face→tone synth), shared
-  byte-for-byte by Prism and Nano Stories; never quantise to a musical scale, never retune per tool.
-- `DegenerateTail.Start(ids)`/`.SafePrefix(ids)` — trims/holds back a repeating tail mid-generation
-  (Prism, Nano Stories only — The Cartographer never generates more than the single next token, so it
-  has no degenerate-tail exposure).
-- **Browser contract**: visitors **train**, never **reshape**. `GrowLayers`/`GrowShifts` are real but
-  PrismStudio/server-side only; a better model reaches visitors via a new checkpoint, never a runtime
-  shape mutation.
+  byte-for-byte by Prism and Nano Stories; never quantise to a musical scale. `DegenerateTail.
+  Start(ids)`/`.SafePrefix(ids)` trims a repeating tail mid-generation (Prism, Nano Stories only).
+- **Browser contract**: visitors **train**, never **reshape**. `GrowLayers`/`GrowShifts` are real
+  but PrismStudio/server-side only; a better model reaches visitors via a new checkpoint, never a
+  runtime shape mutation.
 
-**Prism/Nano Stories operational constants** (re-measure on every checkpoint re-mint, bytes/token
-changes): `MaxReplyStepsConst = 56` (Prism, chat turns) and `MaxStorySteps = 128` (Nano Stories) are
-PINNED, not `Context/2` — that fraction silently broke on a past checkpoint swap. Both caps exist
-because this checkpoint has never emitted its own STOP token in measured testing, so every reply/story
-runs to its cap and ends mid-sentence — train it, don't paper over with a sentence-boundary heuristic.
-Chat/story panes start empty (no seeded example). `Prism.razor`'s chat context (`BuildContextTokens`)
-uses a tagged wire format (`user: Q\nprism: A` + STOP per turn) matching PrismGym's packed training
-windows token for token; Nano Stories instead encodes its prompt as a plain continuation (that
-checkpoint's narrative-text slice never saw chat tags). `HoloKernel/AsciiPunctuation.Fold` (curly
-quotes/dashes/nbsp/ellipsis → ASCII) runs at every tokenizer entry point site-wide (Prism, Stories,
-The Cartographer, Analyst's novelty scan, Prose's plausibility scoring) — `SubwordVocab.Fold` blanks
-non-ASCII to a bare space otherwise, which silently mangled phone-autocorrected input before this fix.
+**Prism/Nano Stories operational constants** (re-measure on every checkpoint re-mint):
+`MaxReplyStepsConst = 56` (Prism) / `MaxStorySteps = 128` (Stories) are PINNED, not `Context/2` —
+that fraction silently broke on a past checkpoint swap. Both caps exist because this checkpoint
+has never emitted its own STOP token, so every reply/story runs to its cap and ends mid-sentence —
+train it, don't paper over with a sentence-boundary heuristic. `Prism.razor`'s chat context
+(`BuildContextTokens`) uses a tagged wire format (`user: Q\nprism: A` + STOP per turn) matching
+PrismGym's packed training windows; Nano Stories encodes its prompt as a plain continuation
+instead. `HoloKernel/AsciiPunctuation.Fold` (curly quotes/dashes/nbsp/ellipsis → ASCII) runs at
+every tokenizer entry point site-wide — `SubwordVocab.Fold` blanks non-ASCII to a bare space
+otherwise, which silently mangled phone-autocorrected input before this fix.
 
-**Checkpoint refresh** (Prism's `oracle-brain.bin`+`-vocab/-rounds/-stackk/-iterwarm.txt`): a
-**data-only** refresh needs no `dotnet publish` — raw-copy into `wwwroot/data` and `dist/data`,
-regenerate `oracle-brain.bin.gz` via a plain `GZipStream` one-liner, cross-check `-stackk`/`-iterwarm`
-against PrismStudio's live consts. Write sidecars via `[System.IO.File]::WriteAllText(path, text, new
-UTF8Encoding(false))`, never `Set-Content -Encoding utf8` (silently prepends a BOM). Covers Nano
-Stories and The Cartographer too — same checkpoint, same sidecars, zero extra steps.
+**Checkpoint refresh** (Prism's `oracle-brain.bin`+sidecars): a **data-only** refresh needs no
+`dotnet publish` — raw-copy into `wwwroot/data` and `dist/data`, regenerate `oracle-brain.bin.gz`
+via a plain `GZipStream` one-liner, cross-check `-stackk`/`-iterwarm` against PrismStudio's live
+consts. Write sidecars via UTF-8-no-BOM .NET I/O, never `Set-Content -Encoding utf8` (prepends a
+BOM). Covers Nano Stories and The Cartographer too — same checkpoint, same sidecars.
 
 ## The Analyst — `Pages/Analyst.razor` (route `/analyst`)
 In-browser data profiler + live SQL REPL over **HoloDb** (`Database.Open(null)`, in-memory). Sniffs
@@ -141,49 +129,33 @@ presets, since the 2026-09-24 TopP retightening below). Reproducible by seed (`R
 `Gate.Pick`). Honesty paragraph under the story states the real (~370K) parameter count so nobody
 reads a generated sample as more capable than it is.
 
-**Decode gate: TopP, not ResonanceSigma (RETIGHTENED 2026-09-24, both Prism and Stories, matching a
-fix in the PrismStudio host)**. `FloorMode.ResonanceSigma` (mean + `FloorK`*sigma over the FULL
-vocab, incl. every suppressed token) degenerates to an effective top-1 filter at 78-84% of positions
-on this checkpoint and makes `Temperature` inert there — the real cause of Stories' old
-"near-deterministic" note, not the model itself. Both pages now build `Floor = FloorMode.TopP`;
-`FloorK` is vestigial once `Floor=TopP` (verified against real `Gate.Evaluate`). **`P` is
-checkpoint-specific, re-measure on every re-mint** — as of r84,639 (first EVE-trained model,
-refreshed 2026-09-24, NOT the prior r635,618 one), cumulative softmax mass to admit N candidates at
-the FINAL face: `N=3→0.303, N=5→0.390, N=8→0.466, N=12→0.539, N=20→0.635, N=40→0.752`, P(top1)=0.199
-(~57 effective candidates). Prism's chat uses `P=0.30` (~3). Stories' presets read off the same
-table: Focused `P=0.30` (now literally == Prism's chat), Balanced `P=0.466` (~8), Wild `P=0.635`
-(~20) — never a conventional `p=0.9` (`Default`'s own value): it admits 200-300 tokens here and
-produces word salad. Re-measure the table (reconsider every P) if a future P(top1) moves off ~0.2.
-`ConfidentThreshold=0.60` unchanged on both pages, matches PrismStudio's host value. Required bumping
-`HoloKernel.csproj`'s `EvaluatedApplications.Prism` 1.0.2→1.3.0 (`FloorMode.TopP`/`DecodePolicy.P`
-don't exist before 1.3.0, reflection-verified against 1.0.2/1.1.0/1.3.0 directly).
+**Decode gate: TopP, not ResonanceSigma** (both Prism and Stories, matching the PrismStudio host) —
+`FloorMode.ResonanceSigma` degenerates to an effective top-1 filter at 78-84% of positions on this
+checkpoint, making `Temperature` inert (the real cause of Stories' old "near-deterministic"
+behavior, not the model itself). Both pages build `Floor = FloorMode.TopP`; `FloorK` is vestigial
+once `Floor=TopP`. **`P` is checkpoint-specific, re-measure on every re-mint** — as of r84,639,
+P(top1)=0.199 (~57 effective candidates); Prism's chat uses `P=0.30` (~3); Stories' presets:
+Focused `P=0.30`, Balanced `P=0.466` (~8), Wild `P=0.635` (~20) — never a conventional `p=0.9`,
+which admits 200-300 tokens here and produces word salad. `ConfidentThreshold=0.60` unchanged on
+both pages. Needs `EvaluatedApplications.Prism` >=1.3.0 (`FloorMode.TopP`/`DecodePolicy.P` don't
+exist before that).
 
 ## The Cartographer — `Pages/Cartographer.razor` (route `/cartographer`, added 2026-09-24)
 A 2D visualiser for **one** next-token decision — not a chat, not a generation loop. Reuses Prism's
-exact checkpoint via the shared `"prism"` `SessionHost` key (usually already loaded if a visitor came
-from Prism/Nano Stories). On submit: encodes the prompt (capped to `min(24, Stats().Context)` tokens,
-truncating the front if longer), then calls `HoloFormer.InspectStackIterFaces`/`InspectAttention`/
-`DecodeFace`/`EmbRow` directly off `HoloSession.Model` — no HoloKernel wrapper exists for these three
-(a deliberate gap; they're read-only inspectors, not something worth wrapping).
-- **Trajectory**: the LAST position's face at every `[boundary]` from `InspectStackIterFaces` (order:
-  embed, then one point per (layer,pass) in compute order, then FINAL — `Layers*KPass+1` points total),
-  joined into a path. Crystallisation (first boundary whose greedy top-1 already equals the final
-  answer) is marked with a triangle, matching the studio inspector's own convention.
-- **Projection**: PCA (hand-rolled power iteration, no numerics package — see the file's own comments)
-  fit on the TRAJECTORY points only, so the path gets maximum 2D spread; the vocabulary cloud and
-  attended positions are then projected into that SAME basis. The captured-variance fraction is always
-  shown in the UI text, not a tooltip. A second basis (embed→final plane, via Gram-Schmidt) is offered
-  as a cross-check, computed once per Visualize() call and free to toggle afterward (`RebuildProjection`
-  reprojects without re-running the forward pass).
-- **Attention**: `InspectAttention` gives one row per boundary (excluding FINAL, no query there)
-  resonating the last position's query against every context key at THAT SAME depth. Top-4 by
-  |weight| per boundary draw as lines to `grid[boundary][position]` — the attended position's CURRENT
-  state at that depth, decoded via `DecodeFace`, not its raw t=0 embedding.
-- **No training loop, ever** — read-only inspection of one forward pass. `HoloFormer.Map` defaults to
-  `SequentialMap` (nothing here ever sets it to a real parallel implementation), so this is deadlock-
-  safe on WASM's single thread; `HoloFormer` has no `MapAsync` twin of these inspectors yet (AlgFormer's
-  own gotcha), so `await Task.Yield()` around the call — not a fake-async wrapper — keeps the tab
-  responsive, same pattern `Prism.razor` uses.
+exact checkpoint via the shared `"prism"` `SessionHost` key. Encodes the prompt (capped to
+`min(24, Stats().Context)` tokens, truncating the front if longer), then calls `HoloFormer.
+InspectStackIterFaces`/`InspectAttention`/`DecodeFace`/`EmbRow` directly off `HoloSession.Model` —
+no HoloKernel wrapper exists for these (a deliberate gap; read-only inspectors aren't worth
+wrapping). **Trajectory**: the LAST position's face at every `[boundary]` (embed, one point per
+(layer,pass), then FINAL), joined into a path; crystallisation (first boundary whose greedy top-1
+already equals the final answer) marked with a triangle. **Projection**: hand-rolled-power-
+iteration PCA fit on the TRAJECTORY points only (vocabulary cloud + attended positions projected
+into that same basis, captured-variance fraction always shown); a second embed→final Gram-Schmidt
+basis is offered as a cross-check. **Attention**: one row per boundary (excluding FINAL); top-4 by
+|weight| draw as lines to `grid[boundary][position]`, decoded via `DecodeFace`. **No training
+loop, ever** — `HoloFormer.Map` defaults to `SequentialMap` (deadlock-safe on WASM's single
+thread); no `MapAsync` twin exists, so `await Task.Yield()` around the call keeps the tab
+responsive (same as `Prism.razor`).
 
 ## Prose — `Pages/Prose.razor` (route `/prose`)
 Paste or drop text; **Prose** (`ProseEngine`) mines it through a real rules-first grammar parser
@@ -196,6 +168,25 @@ visitor's own text — measured ~0.22-0.24 ms/char/epoch, so defaults stay small
 time estimate before committing). `ProseEngine.Plausibility` has no reset — `Prose.razor` re-mines a
 fresh `_engine` if a prior run trained one and the mode has changed back.
 
+## Council Spending Scanner — `Pages/CouncilSpending.razor` (route `/tools/council-spending`)
+A real analytical tool over **HoloDb** on England's Local Government Transparency Code data
+(councils publish every payment over £500) — not a model demo. Engine (`CouncilAudit/`) is
+**vendored, not owned here** — built by the EA virtual-customer agent, copied in from
+`C:\Users\dongy\VirtualCustomer\src\CouncilAudit`; future engine changes happen upstream, never
+edited in place here. Loads pre-normalised Wokingham data (`wwwroot/data/councils/wokingham/
+*.norm.csv.gz`, 6 years, ~217K rows) or a visitor's own CSV/xlsx into one shared in-memory
+`Database.Open(null)` (same BulkLoad pattern as The Analyst). Runs mechanical exception tests and
+drafts a Freedom-of-Information letter — no network calls, nothing sent from the page.
+**Cross-council supplier search** (`RunNearestSupplierSearch`): a `<select>` toggle — **Graded**
+(default) runs HoloDb's `NEAREST (supplierkey = '<key>') ... score` for ranked, typo/variant-
+tolerant matching; **Exact substring** is a `LIKE '%key%'` fallback. Graded mode needs **HoloDb
+>= 2.1.0** (holodb-owner's F-04 fix — `score` threw and ranking was unreliable before). Re-verified
+2026-10-03 via a throwaway harness against the real 42,405-row FY2024-25 Wokingham file in this
+page's exact 13-column schema: a truncated query ("A Wise Solution") ranks the real supplier
+("A Wise Solution Ltd") first on both `supplierkey` and raw `supplier` (absolute `score` is lower
+than holodb-owner's own narrower-schema number since the hologram is diluted across more columns —
+rank order is what matters here and holds).
+
 ## Unlisted: RecycleDAO marketplace prototype — `Pages/RecycleDaoDemo.razor` (`/recycledao-demo`)
 NOT a package-capability demo, NOT in the gallery — a private, link-only client preview
 (`C:\Users\dongy\RecycleDAO`, `recycledao-owner`'s repo; never edit it from here). Absent from
@@ -207,53 +198,50 @@ increases `_totalMinted`.
   installed WASM runtime pack** (a skew caused a real 2026-09-06 outage: the interpreter hit IL it
   didn't recognise from a mismatched native runtime and died silently at boot). Check
   `dotnet --list-runtimes` whenever the SDK moves.
-- `EvaluatedApplications.AlgFormer` **2.16.0** (bumped from 2.8.0, 2026-09-24, routine latest-NuGet
-  bump; `HoloKernel.csproj` bumped alongside it to avoid an NU1605 downgrade). `SubwordVocab.MaxLen`
-  must be ≥16 to load a freshly-minted checkpoint (fixed at 2.8.0; still true at 2.16.0).
-- `EvaluatedApplications.Prism` **1.3.0**, via `HoloKernel.csproj`'s own `PackageReference` (bumped
-  from 1.0.2, 2026-09-24 — load-bearing this time, not just routine: `FloorMode.TopP`/`DecodePolicy.P`
-  don't exist before 1.3.0, needed for the decode-gate retightening above; depends on AlgFormer
-  >=2.15.0 per its nuspec, already satisfied by this project's 2.16.0).
-- `EvaluatedApplications.HoloDb` **1.10.0** — Analyst, Prose.
+- `EvaluatedApplications.AlgFormer` **2.16.0**. `SubwordVocab.MaxLen` must be ≥16 to load a
+  freshly-minted checkpoint.
+- `EvaluatedApplications.Prism` **1.3.0**, via `HoloKernel.csproj`'s own `PackageReference` —
+  `FloorMode.TopP`/`DecodePolicy.P` don't exist before 1.3.0 (needed for the decode-gate
+  retightening below); depends on AlgFormer >=2.15.0, satisfied by this project's 2.16.0.
+- `EvaluatedApplications.HoloDb` **2.1.0** (bumped from 1.10.0, 2026-10-03 — load-bearing for
+  Council Spending Scanner: 2.1.0 is the first version with a working `score` pseudo-column and
+  graded `NEAREST`, holodb-owner's F-04 fix) — Analyst, Prose, Council Spending Scanner.
 - `EvaluatedApplications.Tracer` **1.1.0** — Creature.
 - `EvaluatedApplications.Prose` **1.3.0** — Prose. A multi-package tool's version bump ripples to
-  every other tool in this one `.csproj` (Prose forced `HoloDb`/`AlgFormer` up too, NU1605 otherwise);
-  re-`dotnet build` the whole app after adding/bumping any tool, not just its own page.
+  every other tool in this one `.csproj` (NU1605 otherwise); re-`dotnet build` the whole app after
+  adding/bumping any tool, not just its own page.
 - `ProjectReference ..\HoloKernel\HoloKernel.csproj` — Creature, Forecaster, Prism, Stories,
   Analyst, Prose, The Cartographer.
 - `PublishTrimmed=true` + `RunAOTCompilation=true` — **AOT is load-bearing, not a perf luxury**: the
   Mono WASM interpreter can't execute IL in `Prism.Inference.DecodePolicy`'s static ctor without it.
   `EmccLinkOptimizationFlag=-O1` (`-O2` OOMs the linker alongside concurrent local training).
-  `WasmEnableThreads=false` — real threading regressed a laptop's boot (higher core count spun up more
-  worker-pool contention); nothing here dispatches across threads, so nothing to gain re-enabling it.
-- **Version bumps only via `dotnet add package`** — never hand-edit `<Version>`.
+  `WasmEnableThreads=false` — real threading regressed a laptop's boot; nothing here dispatches
+  across threads, so nothing to gain re-enabling it. **Version bumps only via `dotnet add
+  package`** — never hand-edit `<Version>`.
 
 ## Boundary (hard, from the agent charter)
-- **NuGet only, never MonoRepo `ProjectReference`.** Verify API assumptions against the actual
-  published package before wiring new code (or against a matching version pulled into the local NuGet
-  cache, if the exact just-published version isn't in `.csproj` yet). `HoloKernel` is the one
-  exception — a sibling in-repo RCL, itself NuGet-only.
-- **Checkpoint hand-off (Prism) is `prismstudio-owner`'s call**; **Forecaster's live top-up** needs a
-  Finnhub key this agent can't self-register.
-- Never touch `AboutUs/site/*`, nav, or the shared design system — `website-owner`'s. Never launch
-  the app / open a browser — build-verify only; demonstrating a tool live is the user's to do.
+**NuGet only, never MonoRepo `ProjectReference`** — verify API assumptions against the actual
+published package before wiring new code. `HoloKernel` is the one exception (a sibling in-repo
+RCL, itself NuGet-only). Checkpoint hand-off (Prism) is `prismstudio-owner`'s call; Forecaster's
+live top-up needs a Finnhub key this agent can't self-register. Never touch `AboutUs/site/*`, nav,
+or the shared design system — `website-owner`'s. Never launch the app / open a browser —
+build-verify only; demonstrating a tool live is the user's to do.
 
 ## Standing technical facts
-- **Shifts must be > 1, always** — at S=1 every relation-bank is a pure diagonal, zero cross-channel
-  routing. Re-derive a floor from `bindRank = shifts·d/2` per tool's own d/context; never copy
-  another tool's `MinShifts` verbatim.
-- `golden: true` on every `HoloFormer`. WASM has no filesystem — nothing persists across a reset.
-- WASM is single-threaded/interpreted — `Parallel.For`/`IParallelMap` degrade to sequential, not a
-  crash, but keep live-training shapes small and any batch text/tensor work cooperatively yielded.
+**Shifts must be > 1, always** — at S=1 every relation-bank is a pure diagonal, zero cross-channel
+routing. Re-derive a floor from `bindRank = shifts·d/2` per tool's own d/context; never copy
+another tool's `MinShifts` verbatim. `golden: true` on every `HoloFormer`. WASM has no filesystem
+— nothing persists across a reset. WASM is single-threaded/interpreted — `Parallel.For`/
+`IParallelMap` degrade to sequential, not a crash, but keep live-training shapes small and any
+batch text/tensor work cooperatively yielded.
 - `HoloFormer` ctor: `(vocab, shifts, layers, maxContext, dModel=0, frozenPrefix=-1, embedSeed=null,
   seed=42, bindFfn=false, golden=false, normalize=true, unitary=false, growFromFront=true)`.
   `HoloShape` statics: `ShiftsFor(ctx,d,ratio=0.25)`, `BindRank`, `CleanCapacity`, `InteractionBudget`,
   `EquivCompute(d,L,K)`. `Face(id)`/`LayerFaces(toks)`/`InspectStackIter(Faces)`/`InspectStackIterFaces`/
-  `InspectAttention`/`DecodeFace`/`EmbRow` all public on `HoloFormer` (verified against the published
-  2.16.0 DLL, not memory).
+  `InspectAttention`/`DecodeFace`/`EmbRow` all public (verified against the published 2.16.0 DLL).
 
 ## Build / verify
-`dotnet build Showroom.csproj -c Release` — green (0/0) with all seven tools + HoloKernel wired in.
+`dotnet build Showroom.csproj -c Release` — green (0/0) with all eight tools + HoloKernel wired in.
 `dotnet publish` also spot-checked periodically (deploy hard-couples to it — see `AboutUs\CLAUDE.md`'s
 "hard coupling" note on `dist/`). No test project — verification is build-green + code review; live
 behaviour is the user's to check (`dotnet run`, or the deployed `/tools/` URL).
@@ -266,16 +254,14 @@ behaviour is the user's to check (`dotnet run`, or the deployed `/tools/` URL).
   `HoloFormer`/`HoloShape`/`SubwordVocab` live.
 - Any `.razor` page whose generated class name COLLIDES with a package's bare root namespace
   (`Showroom.Pages.Prism` vs. the `Prism` package; `.Prose` vs. `Prose`) needs `@using
-  global::<Namespace>` — **not scoped to the colliding page**: every page compiles into the same
-  `Showroom.Pages` namespace, so ANY page referencing `Prism.*`/`Prose.*` needs the `global::` form
-  once ANY sibling page is named `Prism`/`Prose`, even if its own name doesn't collide. Affects:
-  `Prism.razor`, `Stories.razor`, `Prose.razor`, `Analyst.razor` (The Cartographer references neither
-  namespace, so needs none — re-check the moment it ever does).
+  global::<Namespace>` — **not scoped to the colliding page**: every page in `Showroom.Pages`
+  referencing `Prism.*`/`Prose.*` needs the `global::` form once ANY sibling page is named
+  `Prism`/`Prose`. Affects: `Prism.razor`, `Stories.razor`, `Prose.razor`, `Analyst.razor`.
 - A new tool page gets the parallax/glow treatment free by reusing the house `.room`/`.room-head`/
-  panel shape — it just needs its own `data-cat="<pkg>"` (or chord) on the outer `.room`, and its own
-  main panel class added to `wwwroot/css/depth.css`'s mid-tier selector list.
+  panel shape — needs its own `data-cat="<pkg>"` (or chord) on the outer `.room`, and its own main
+  panel class added to `wwwroot/css/depth.css`'s mid-tier selector list.
 - Razor reserves the bare `<text>` tag for raw-text-without-a-wrapper output — it CANNOT carry
-  attributes (`RZ1023`). An SVG `<text x=".." y="..">` (The Cartographer's labels) must be built as a
-  `MarkupString` from a C# string instead, HTML-encoding any interpolated content by hand.
-- Multi-package tools force a real dependency-version bump for every tool in this one `.csproj` — re-
-  check `dotnet build` after adding a new tool, not just its own page.
+  attributes (`RZ1023`). An SVG `<text x=".." y="..">` must be built as a `MarkupString` from a C#
+  string instead, HTML-encoding any interpolated content by hand.
+- Multi-package tools force a real dependency-version bump for every tool in this one `.csproj` —
+  re-`dotnet build` the whole app after adding/bumping any tool, not just its own page.

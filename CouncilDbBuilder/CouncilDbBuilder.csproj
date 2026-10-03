@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Build-time tool: produces the compact NORMALISED per-council-per-year data files Showroom
+       ships as static assets and BulkLoads into an in-browser HoloDb (see
+       Showroom/Pages/CouncilSpending.razor). Run any time a council's hosted raw files change
+       (invoke with the dotnet CLI's run command, pointed at this csproj).
+
+       Same precedent as ContentDbBuilder (one build-time tool per shipped static-data artifact),
+       but this one ships plain normalised CSV + precomputed exceptions, not a HoloDb WAL/snapshot
+       file: measured (2026-10-03) that a pre-built HoloDb snapshot for this data's scale lands
+       in the tens of MB per council and doesn't shard by council/year the way a flat file does,
+       risking GitHub's 50/100 MB ceiling as more councils are added. Normalised CSV scales
+       linearly, one small file per council per year, and BulkLoads into an in-memory HoloDb in
+       the browser in just over a second at Wokingham's real 217k-row scale (measured). -->
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <!-- Vendored CouncilAudit engine, same files Showroom itself compiles, see
+       Showroom/CouncilAudit/*.cs for the "CouncilAudit engine by the EA virtual-customer agent"
+       crediting header on each file. Compiled here too (not ProjectReferenced) so this tool has
+       no dependency on Showroom.csproj's own Blazor/WASM SDK. -->
+  <ItemGroup>
+    <Compile Include="..\Showroom\CouncilAudit\*.cs" />
+  </ItemGroup>
+
+</Project>
