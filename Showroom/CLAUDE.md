@@ -187,6 +187,26 @@ page's exact 13-column schema: a truncated query ("A Wise Solution") ranks the r
 than holodb-owner's own narrower-schema number since the hologram is diluted across more columns —
 rank order is what matters here and holds).
 
+**UI pass (2026-10-03, live-site feedback)**: each exception test is now a collapsible `<button>`
+panel (collapsed by default, expanded only if it holds a hand-verified example), rows paginate at
+50/page inside a sticky-header, max-height scroll box (never renders thousands of rows at once —
+was `Take(200)` flat before), with a per-panel text+year quick filter and click-to-sort columns.
+Selection keys off `ExceptionItem.Key` (unchanged) so it survives paging/filtering; "select all"
+operates on every FILTERED item (`FilteredItems`), not just the current page. Cross-council search
+results reuse the same `table-scroll-fixed` bounded-panel class. **Evidence/highlighting, same
+pass**: a row with `EvidenceKind != None` gets a "Show evidence" toggle — `AmountCompare` (test
+1/2) shows sum-paid vs stated-invoice side by side with the signed difference, a neutral "looks
+like 2x the invoice" note (points at test 5, not a conclusion), and test 2's opposite-sign (net ==
+-gross) callout; `GroupEvidence` (test 3/4/5) shows every sibling row sharing a `GroupKey` aligned
+in a mini table with matching columns highlighted one colour and differing columns another, plus a
+legend. **Test 5 restructured**: one `ExceptionItem` per repeated LINE now (was one aggregate item
+per group) so the actual duplicate rows pair up visually — this changed its reported exception
+*count* (now counts rows, not groups). `CouncilDbBuilder/Program.cs` (the offline producer of
+`exceptions.csv.gz`) was extended to emit `compareamount`/`groupkey`/`groupsize`/`oppositesign` —
+this is precomputed data, not reconstructed client-side; re-run it (`dotnet run -c Release` from
+`AboutUs/CouncilDbBuilder/`) and copy the regenerated `wwwroot/data/councils/wokingham/
+exceptions.csv.gz` into `dist/` whenever `AuditEngine`'s own evidence-relevant fields change.
+
 ## Unlisted: RecycleDAO marketplace prototype — `Pages/RecycleDaoDemo.razor` (`/recycledao-demo`)
 NOT a package-capability demo, NOT in the gallery — a private, link-only client preview
 (`C:\Users\dongy\RecycleDAO`, `recycledao-owner`'s repo; never edit it from here). Absent from
@@ -198,16 +218,19 @@ increases `_totalMinted`.
   installed WASM runtime pack** (a skew caused a real 2026-09-06 outage: the interpreter hit IL it
   didn't recognise from a mismatched native runtime and died silently at boot). Check
   `dotnet --list-runtimes` whenever the SDK moves.
-- `EvaluatedApplications.AlgFormer` **2.16.0**. `SubwordVocab.MaxLen` must be ≥16 to load a
-  freshly-minted checkpoint.
-- `EvaluatedApplications.Prism` **1.3.0**, via `HoloKernel.csproj`'s own `PackageReference` —
-  `FloorMode.TopP`/`DecodePolicy.P` don't exist before 1.3.0 (needed for the decode-gate
-  retightening below); depends on AlgFormer >=2.15.0, satisfied by this project's 2.16.0.
+- `EvaluatedApplications.AlgFormer` **2.20.1** (re-verified against `Showroom.csproj`/
+  `HoloKernel.csproj` 2026-10-03 — both pin the same version, no skew). `SubwordVocab.MaxLen` must
+  be ≥16 to load a freshly-minted checkpoint.
+- `EvaluatedApplications.Prism` **1.3.3**, via `HoloKernel.csproj`'s own `PackageReference` (re-
+  verified 2026-10-03) — `FloorMode.TopP`/`DecodePolicy.P` don't exist before 1.3.0 (needed for the
+  decode-gate retightening below); depends on AlgFormer >=2.15.0, satisfied by this project's 2.20.1.
 - `EvaluatedApplications.HoloDb` **2.1.0** (bumped from 1.10.0, 2026-10-03 — load-bearing for
   Council Spending Scanner: 2.1.0 is the first version with a working `score` pseudo-column and
   graded `NEAREST`, holodb-owner's F-04 fix) — Analyst, Prose, Council Spending Scanner.
-- `EvaluatedApplications.Tracer` **1.1.0** — Creature.
-- `EvaluatedApplications.Prose` **1.3.0** — Prose. A multi-package tool's version bump ripples to
+- `EvaluatedApplications.Tracer` **2.0.0** (re-verified against `Showroom.csproj` 2026-10-03) —
+  Creature.
+- `EvaluatedApplications.Prose` **1.3.2** (re-verified against `Showroom.csproj` 2026-10-03) —
+  Prose. A multi-package tool's version bump ripples to
   every other tool in this one `.csproj` (NU1605 otherwise); re-`dotnet build` the whole app after
   adding/bumping any tool, not just its own page.
 - `ProjectReference ..\HoloKernel\HoloKernel.csproj` — Creature, Forecaster, Prism, Stories,
