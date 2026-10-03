@@ -1,5 +1,8 @@
 // Vendored from C:\Users\dongy\VirtualCustomer\src\CouncilAudit\SupportedCouncils.cs, copied
-// 2026-10-03, re-synced 2026-10-03 (same day, Reading onboarded + FOI contact emails added).
+// 2026-10-03, re-synced 2026-10-03 (same day, DebtCharge fix sync: Reading's back-catalogue
+// widened to the full FY2020-21..FY2025-26 set, Merton/BracknellForest entries carried along
+// verbatim from upstream even though CouncilDbBuilder/CouncilSpending.razor only drive
+// Wokingham+Reading today - this file is a faithful vendor copy, not a curated subset).
 // CouncilAudit engine by the EA virtual-customer agent. Do not edit the source repo from here;
 // future engine changes happen upstream and get re-vendored into this copy by the Showroom owner.
 
@@ -224,15 +227,80 @@ public static class SupportedCouncils
         GrossMeaning: GrossMeaning.PerLineAmount, // each voucher is one line; no repeated-total convention exists here at all
         Years: new List<CouncilYearFile>
         {
-            // Reading republishes monthly, not annually - this is a representative sample
-            // actually downloaded and checked this session, not the full back catalogue.
-            // Direct file URLs ARE individually stable (confirmed: each resolves to a real,
-            // distinct file on images.reading.gov.uk), unlike Wokingham's dropdown-driven page.
+            // Session 17: full FY2020-21..FY2025-26 back-catalogue (64 files), replacing the
+            // 5-month representative sample used through Session 16. Every URL below was
+            // live-fetched from the council's own "Council spending over £500" page on
+            // 2026-10-03 and downloaded successfully (64/64, logged in FEEDBACK.md). Reading
+            // publishes FY2020-21 as 4 quarterly files (not monthly like every later year).
+            new("2020-Q1", "https://images.reading.gov.uk/2020/11/Q1-2020-21.xlsx", SourceFormat.Xlsx),
+            new("2020-Q2", "https://images.reading.gov.uk/2020/11/Q2-2020-21.xlsx", SourceFormat.Xlsx),
+            new("2020-Q3", "https://images.reading.gov.uk/2021/03/Q3-2020-21-Revised.csv", SourceFormat.Csv),
+            new("2021-Q4", "https://images.reading.gov.uk/2021/05/Q4-2020-21-Revised.xlsx", SourceFormat.Xlsx),
+
+            new("2021-04", "https://images.reading.gov.uk/2021/06/April21.xlsx", SourceFormat.Xlsx),
+            new("2021-05", "https://images.reading.gov.uk/2021/06/May21-Revised.xlsx", SourceFormat.Xlsx),
+            new("2021-06", "https://images.reading.gov.uk/2021/07/Over-£500-June21.xlsx", SourceFormat.Xlsx),
+            new("2021-07", "https://images.reading.gov.uk/2021/08/July-21.csv", SourceFormat.Csv),
+            new("2021-08", "https://images.reading.gov.uk/2021/10/August21.csv", SourceFormat.Csv),
+            new("2021-09", "https://images.reading.gov.uk/2021/10/Over-£500-September21.xlsx", SourceFormat.Xlsx),
+            new("2021-10", "https://images.reading.gov.uk/2021/11/Over-500-Spend-October-21.csv", SourceFormat.Csv),
+            new("2021-11", "https://images.reading.gov.uk/2022/01/Over-500-Spend-November-21.csv", SourceFormat.Csv),
             new("2021-12", "https://images.reading.gov.uk/2022/01/Over-599-Spend-December-21.csv", SourceFormat.Csv),
+            new("2022-01", "https://images.reading.gov.uk/2022/02/Over-500-Spend-January-22.csv", SourceFormat.Csv),
+            new("2022-02", "https://images.reading.gov.uk/2022/03/Over-500-Spend-February-22.csv", SourceFormat.Csv),
+            new("2022-03", "https://images.reading.gov.uk/2022/04/March-22.csv", SourceFormat.Csv),
+
             new("2022-04", "https://images.reading.gov.uk/2022/05/Over-500-April-2022.csv", SourceFormat.Csv),
+            new("2022-05", "https://images.reading.gov.uk/2022/06/Over-500-May-2022.csv", SourceFormat.Csv),
+            new("2022-06", "https://images.reading.gov.uk/2022/07/Over-500-June-22.csv", SourceFormat.Csv),
+            new("2022-07", "https://images.reading.gov.uk/2022/08/Over-500-Spend-July-2022.csv", SourceFormat.Csv),
+            new("2022-08", "https://images.reading.gov.uk/2022/09/Over-500-Spend-August-2022.csv", SourceFormat.Csv),
+            new("2022-09", "https://images.reading.gov.uk/2022/10/Over-500-Spend-September-2022.csv", SourceFormat.Csv),
+            new("2022-10", "https://images.reading.gov.uk/2022/11/Over-500-Spend-October-2022.csv", SourceFormat.Csv),
+            new("2022-11", "https://images.reading.gov.uk/2022/12/Over-500-November-22.csv", SourceFormat.Csv),
+            new("2022-12", "https://images.reading.gov.uk/2023/01/Over-500-Spend-December-2022.csv", SourceFormat.Csv),
+            new("2023-01", "https://images.reading.gov.uk/2023/02/Over-500-Spend-January-2023.csv", SourceFormat.Csv),
+            new("2023-02", "https://images.reading.gov.uk/2023/03/Over-500-Spend-February-2023.csv", SourceFormat.Csv),
             new("2023-03", "https://images.reading.gov.uk/2023/04/Over-500-Spend-March-2023.csv", SourceFormat.Csv),
+
+            new("2023-04", "https://images.reading.gov.uk/2023/05/Over-500-April-2023.csv", SourceFormat.Csv),
+            new("2023-05", "https://images.reading.gov.uk/2023/06/Over-500-Spend-May-2023.csv", SourceFormat.Csv),
+            new("2023-06", "https://images.reading.gov.uk/2023/07/Over-500-Spend-June-2023.csv", SourceFormat.Csv),
+            new("2023-07", "https://images.reading.gov.uk/2023/08/Over-500-Spend-July-2023.csv", SourceFormat.Csv),
+            new("2023-08", "https://images.reading.gov.uk/2025/09/Over-500-Spend-August-23.csv", SourceFormat.Csv),
+            new("2023-09", "https://images.reading.gov.uk/2025/09/Over-500-September-2023.csv", SourceFormat.Csv),
+            new("2023-10", "https://images.reading.gov.uk/2025/09/Over-500-Spend-October-2023.csv", SourceFormat.Csv),
+            new("2023-11", "https://images.reading.gov.uk/2025/09/Over-500-Spend-November-2023.csv", SourceFormat.Csv),
+            new("2023-12", "https://images.reading.gov.uk/2025/09/Over-500-December-23.csv", SourceFormat.Csv),
+            new("2024-01", "https://images.reading.gov.uk/2025/09/Over-500-Spend-January24.csv", SourceFormat.Csv),
+            new("2024-02", "https://images.reading.gov.uk/2025/09/Over-500-February-24B.csv", SourceFormat.Csv),
+            new("2024-03", "https://images.reading.gov.uk/2025/09/Over-500-March-24B.csv", SourceFormat.Csv),
+
+            new("2024-04", "https://images.reading.gov.uk/2025/09/over-500-Spend-April-2024.csv", SourceFormat.Csv),
+            new("2024-05", "https://images.reading.gov.uk/2025/09/Over-500-Spend-May-2024.csv", SourceFormat.Csv),
             new("2024-06", "https://images.reading.gov.uk/2025/09/Over-500-Spend-June-2024.csv", SourceFormat.Csv),
+            new("2024-07", "https://images.reading.gov.uk/2024/08/Over-500-Spend-July-2024.csv", SourceFormat.Csv),
+            new("2024-08", "https://images.reading.gov.uk/2024/09/Over-500-August-2024.csv", SourceFormat.Csv),
+            new("2024-09", "https://images.reading.gov.uk/2024/10/Over-500-Spend-September-2024.csv", SourceFormat.Csv),
+            new("2024-10", "https://images.reading.gov.uk/2025/09/Over-500-Spend-October-2024.csv", SourceFormat.Csv),
+            new("2024-11", "https://images.reading.gov.uk/2025/09/Over-500-Novermber-2024.csv", SourceFormat.Csv),
+            new("2024-12", "https://images.reading.gov.uk/2025/09/Over-500-Spend-December-2024.csv", SourceFormat.Csv),
+            new("2025-01", "https://images.reading.gov.uk/2025/09/Over-500-Spend-January-2025-1.csv", SourceFormat.Csv),
+            new("2025-02", "https://images.reading.gov.uk/2025/09/Over-500-February-2025.csv", SourceFormat.Csv),
+            new("2025-03", "https://images.reading.gov.uk/2025/09/Over-500-Spend-March-2025-1.csv", SourceFormat.Csv),
+
+            new("2025-04", "https://images.reading.gov.uk/2025/09/Over-500-Spend-April-2025.csv", SourceFormat.Csv),
+            new("2025-05", "https://images.reading.gov.uk/2025/09/Over-500-Spend-May-2025.csv", SourceFormat.Csv),
+            new("2025-06", "https://images.reading.gov.uk/2025/09/Over-500-Spend-June-2025.csv", SourceFormat.Csv),
+            new("2025-07", "https://images.reading.gov.uk/2025/09/Over-500-Spend-July-2025.csv", SourceFormat.Csv),
+            new("2025-08", "https://images.reading.gov.uk/2025/09/Over-500-Spend-August-2025.csv", SourceFormat.Csv),
+            new("2025-09", "https://images.reading.gov.uk/2025/10/Over-500-Spend-September-2025.csv", SourceFormat.Csv),
+            new("2025-10", "https://images.reading.gov.uk/2025/11/Over-500-Spend-October-2025.csv", SourceFormat.Csv),
+            new("2025-11", "https://images.reading.gov.uk/2025/12/Over-500-Spend-Novemberl-2025.csv", SourceFormat.Csv),
+            new("2025-12", "https://images.reading.gov.uk/2026/09/Over-500-Spend-December-2025.csv", SourceFormat.Csv),
+            new("2026-01", "https://images.reading.gov.uk/2026/02/Over-500-Spend-January-2026.csv", SourceFormat.Csv),
             new("2026-02", "https://images.reading.gov.uk/2026/09/Over-500-Spend-February-2026-6.csv", SourceFormat.Csv),
+            new("2026-03", "https://images.reading.gov.uk/2026/04/Over-500-Spend-March-2026.csv", SourceFormat.Csv),
         },
         KnownQuirks: new List<string>
         {
@@ -273,6 +341,40 @@ public static class SupportedCouncils
                 "(WOKINGHAM) LIMITED\" is a different, unrelated false-positive match on a company trading name " +
                 "that merely contains the place name \"Wokingham\" - confirmed by reading the raw row, not a " +
                 "council-to-council payment.",
+            "Session 15: the single biggest supplier on Schedule R's Unmatched top-20 by far is \"Brighter " +
+                "Futures for Children\" (£4.3m/£2.3m/£1.3m/... single \"RBC Refunds Manual Entry\" rows, all " +
+                "19-20 June 2024). A published basis DOES exist and partially corroborates these: Brighter " +
+                "Futures for Children was Reading Borough Council's own arm's-length children's-services " +
+                "company (set up 2018, services moved back INTO the council 1 October 2025 - it no longer " +
+                "exists as a separate body); RBC's own committee papers record a £9.139m additional funding " +
+                "payment agreed for BFfC's 2023/24 outturn overspend (contract sum £44.933m, actual spend " +
+                "£54.177m, council covering £9.139m of the £9.244m gap, excluding ~£105k of accrual costs - " +
+                "https://democracy.reading.gov.uk/documents/s29497/Appendix%202%20-%20Brighter%20Futures%20for" +
+                "%20Children%20BFfC%20Budget%20Monitoring%20Report%20Quarter%202%202023-24.pdf and reporting on " +
+                "the same figure via rdg.today, 'Millions more than expected spent by Reading's council-owned " +
+                "company for children's services'). The full set of \"RBC Refunds Manual Entry\" rows to " +
+                "Brighter Futures for Children in the loaded 2024-06 file sums to £10,297,261.35 (15 rows, " +
+                "19-20 June 2024, confirmed by hand against the raw file) - close to, but NOT exactly, the " +
+                "published £9.139m figure (about £1.16m over, plausibly because the June payment run also " +
+                "settles the regular quarterly contract balance alongside the one-off top-up, but that is NOT " +
+                "independently confirmed this session). Per the no-excuses rule: this is strong, cited, real-" +
+                "world context for why a council-owned children's company receiving multi-million payments " +
+                "under a generic \"refund\" label is plausible and explainable at the institutional level - " +
+                "but the specific row-level amounts do NOT exactly reconcile against the one published figure " +
+                "found, so NO classification rule was coded and these rows correctly stay `Unmatched` in " +
+                "Schedule R. Recorded here as the caveat for anyone reading the top-20 export, not as a fix.",
+            // Session 21: searched the full back-catalogue directly for "RE3"/"FCC" rather
+            // than relying only on the Bracknell-side crossref. Reading pays "RE3 LTD" as a
+            // named supplier directly (Service Area "Directorate of Economic Growth and
+            // Neighbourhood Services", categories "Household Waste"/"Waste
+            // Disposal"/"Supplies and Services", roughly £2.0-3.1m per month in the files
+            // checked, summing to £159.7m across the rows found) - Reading is the lead/host
+            // authority holding the actual re3 operating-company contract, which is why
+            // Bracknell Forest's and (per its own much smaller, one-off case) Wokingham's
+            // shares are recharged THROUGH Reading rather than paid to a shared third party
+            // directly. Reading ALSO separately pays "FCC RECYCLING (UK) LTD" (ordinary
+            // Tipping Charge/Parks Tipping) - confirmed by hand to be a DIFFERENT entity
+            // from "RE3 LTD", not the same contract under two names; do not conflate them.",
         },
         LastChecked: "2026-10-03",
         VerificationNote:
@@ -292,5 +394,84 @@ public static class SupportedCouncils
         FoiContactEmail: "FOI.CRT@reading.gov.uk" // verified via council page https://www.reading.gov.uk/contact-us/freedom-of-information-foi/freedom-of-information-act-procedure-for-dealing-with-requests/, checked 2026-10-03
     );
 
-    public static readonly IReadOnlyList<SupportedCouncil> All = new[] { Wokingham, Merton, Reading };
+    /// <summary>
+    /// Council #4, onboarded Session 15 per the owner's own checklist (Wokingham's
+    /// neighbour, deferred from Session 14 by the owner's mid-cycle "do Reading too"
+    /// priority change). Quarterly (not monthly or annual) publication, ONE signed
+    /// "Amount £" column (same shape as Reading - no net/gross/VAT split, Schedule A
+    /// structurally inapplicable), Date published as an Excel serial number even
+    /// though the source file carries it as a genuine date cell (the engine's existing
+    /// Excel-serial fallback in <see cref="AuditEngine.ParseDate"/> was written for
+    /// exactly this shape and handles it with no new code). NOT driven by the Showroom
+    /// today (CouncilDbBuilder/CouncilSpending.razor only onboard Wokingham+Reading) -
+    /// vendored anyway, faithfully, so this copy matches upstream exactly.
+    /// </summary>
+    public static readonly SupportedCouncil BracknellForest = new(
+        Name: "Bracknell Forest Council",
+        TransparencyPageUrl: "https://www.bracknell-forest.gov.uk/council-and-democracy/finance-and-transparency/publication-scheme/what-we-spend-and-how-we-spend-it",
+        HowToFindTheFile:
+            "On Bracknell Forest's \"What we spend and how we spend it\" page, under \"Payments to suppliers over " +
+            "£500\", downloads are listed by QUARTER (3-month periods, e.g. \"April 2026 to June 2026\"), not month " +
+            "or financial year, back to December 2020. Each is a plain .xlsx. Download the quarter(s) you want and " +
+            "drop each file onto this page.",
+        Mapping: new ColumnMapping(
+            TransactionId: "TransNo",
+            Supplier: "Supplier",
+            PayDate: "Date",
+            Description: "Expenses Type",
+            ServiceArea: "Service Area",
+            Net: null,
+            Gross: "Amount £",
+            VatAmount: null,
+            VatType: null),
+        IdScope: TransactionIdScope.CouncilWideUnique,
+        GrossMeaning: GrossMeaning.PerLineAmount,
+        Years: new List<CouncilYearFile>
+        {
+            new("2020-DecFeb", "https://www.bracknell-forest.gov.uk/sites/default/files/2021-11/payments-over-500-dec-2020-to-feb-2021%20%281%29.xlsx", SourceFormat.Xlsx),
+            new("2021-MarMay", "https://www.bracknell-forest.gov.uk/sites/default/files/2021-11/payments-over-500-march-2021-to-may-2021.xlsx", SourceFormat.Xlsx),
+            new("2021-JunAug", "https://www.bracknell-forest.gov.uk/sites/default/files/2021-11/payments-over-500-june-2021-to-august-2021.xlsx", SourceFormat.Xlsx),
+            new("2021-SepDec", "https://www.bracknell-forest.gov.uk/sites/default/files/2022-01/payments-over-%C2%A3500-september-2021-to-december-2021.xlsx", SourceFormat.Xlsx),
+            new("2022-JanMar", "https://www.bracknell-forest.gov.uk/sites/default/files/2022-05/payments-over-%C2%A3500-january-2022-to-march-2022.xlsx", SourceFormat.Xlsx),
+            new("2022-AprJun", "https://www.bracknell-forest.gov.uk/sites/default/files/2022-08/payments-over-500-april-june-2022.xlsx", SourceFormat.Xlsx),
+            new("2022-JulSep", "https://www.bracknell-forest.gov.uk/sites/default/files/2022-10/payments-over-%C2%A3500-july-september-2022.xlsx", SourceFormat.Xlsx),
+            new("2022-OctDec", "https://www.bracknell-forest.gov.uk/sites/default/files/2023-02/over-500-spend-report-october-december-2022.xlsx", SourceFormat.Xlsx),
+            new("2023-JanMar", "https://www.bracknell-forest.gov.uk/sites/default/files/2023-05/payments-over-500-january-to-march-2023.xlsx", SourceFormat.Xlsx),
+            new("2023-AprJun", "https://www.bracknell-forest.gov.uk/sites/default/files/2023-08/payments-over-500-April-June%202023.xlsx", SourceFormat.Xlsx),
+            new("2023-JulSep", "https://www.bracknell-forest.gov.uk/sites/default/files/2023-11/payments-over-500-july-2023-to-september-2023.xlsx", SourceFormat.Xlsx),
+            new("2023-OctDec", "https://www.bracknell-forest.gov.uk/sites/default/files/2024-02/payments-over-500-october-december-2023.xlsx", SourceFormat.Xlsx),
+            new("2024-JanMar", "https://www.bracknell-forest.gov.uk/sites/default/files/2024-06/payments-over-500-january-to-march-2024.xlsx", SourceFormat.Xlsx),
+            new("2024-AprJun", "https://www.bracknell-forest.gov.uk/sites/default/files/2024-08/payments-over-%C2%A3500-april-june-2024.xlsx", SourceFormat.Xlsx),
+            new("2024-JulSep", "https://www.bracknell-forest.gov.uk/sites/default/files/2024-10/payments-over-%C2%A3500-july-september-2024_0.xlsx", SourceFormat.Xlsx),
+            new("2024-OctDec", "https://www.bracknell-forest.gov.uk/sites/default/files/2025-02/payments-over-%C2%A3500-october-to-december-2024.xlsx", SourceFormat.Xlsx),
+            new("2025-JanMar", "https://www.bracknell-forest.gov.uk/sites/default/files/2025-05/payments-over-%C2%A3500-january-2025-to-march-2025.xlsx", SourceFormat.Xlsx),
+            new("2025-AprJun", "https://www.bracknell-forest.gov.uk/sites/default/files/2025-08/payments-over-500-april-2025-to-june-2025.xlsx", SourceFormat.Xlsx),
+            new("2025-JulSep", "https://www.bracknell-forest.gov.uk/sites/default/files/2025-10/payments-over-500-july-2025-to-september-2025.xlsx", SourceFormat.Xlsx),
+            new("2025-OctDec", "https://www.bracknell-forest.gov.uk/sites/default/files/2026-02/payments-over-%C2%A3500-october-to-december-2025.xlsx", SourceFormat.Xlsx),
+            new("2026-JanMar", "https://www.bracknell-forest.gov.uk/sites/default/files/2026-04/Final-January-2026-March-2026.xlsx", SourceFormat.Xlsx),
+            new("2026-AprJun", "https://www.bracknell-forest.gov.uk/sites/default/files/2026-09/final-april-2026-to-june-2026.xlsx", SourceFormat.Xlsx),
+        },
+        KnownQuirks: new List<string>
+        {
+            "ONE signed \"Amount £\" column, no net/gross/VAT split at all - same structural shape as Reading - " +
+                "Schedule A (amount mismatch) cannot run for this council; it is structurally inapplicable, not a " +
+                "clean result.",
+            "Publishes by QUARTER (3-month periods), not month (Reading) or financial year (Wokingham/Merton).",
+            "No separate Invoice Type / credit-flag column - Schedule R is structurally empty for this council.",
+            "No separate SupplierInvoiceNumber field published - Schedule B stays Unclear for every group here.",
+            "TransNo is a shared BATCH/PAYMENT-RUN id for Adult Social Care Contracted Services, not a one-" +
+                "invoice reference, same trap as Reading's own \"Payment Number\".",
+        },
+        LastChecked: "2026-10-03 (Session 19 - full back-catalogue)",
+        VerificationNote:
+            "Session 19: full 22-quarter back-catalogue, 161,336 raw rows; 32,078 (19.9%) redacted and excluded. " +
+            "Schedule A correctly inapplicable (no net/gross split). Schedule B: 1,969 groups, all Unclear (no " +
+            "SupplierInvoiceNumber field), seeded sample 30/30 confirmed. Schedule D: 519 groups, 519/519 confirmed " +
+            "against raw source (full population, not a sample).",
+        FoiContactEmail: "information.compliance-officer@bracknell-forest.gov.uk" // verified via council page
+        // https://www.bracknell-forest.gov.uk/council-and-democracy/data-protection-and-freedom-information/freedom-information,
+        // checked 2026-10-03
+    );
+
+    public static readonly IReadOnlyList<SupportedCouncil> All = new[] { Wokingham, Merton, Reading, BracknellForest };
 }

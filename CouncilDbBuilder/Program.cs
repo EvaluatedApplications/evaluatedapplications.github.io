@@ -78,14 +78,16 @@ var councils = new (string Key, SupportedCouncil Council, bool HasScheduleA,
         ("FY2024-25", "wokingham-2024-25.csv", SourceFormat.Csv, "windows-1252"),
         ("FY2025-26", "wokingham-2025-26.csv", SourceFormat.Csv, "windows-1252"),
     }),
-    ("reading", SupportedCouncils.Reading, false, new (string, string, SourceFormat, string?)[]
-    {
-        ("2021-12", "reading-2021-12.csv", SourceFormat.Csv, null), // UTF-8 (with BOM) -- auto-detected
-        ("2022-04", "reading-2022-04.csv", SourceFormat.Csv, null), // windows-1252 -- auto-detected
-        ("2023-03", "reading-2023-03.csv", SourceFormat.Csv, null),
-        ("2024-06", "reading-2024-06.csv", SourceFormat.Csv, null),
-        ("2026-02", "reading-2026-02.csv", SourceFormat.Csv, null),
-    }),
+    // Full FY2020-21..FY2025-26 back-catalogue (63 of the council's 64 published periods --
+    // reading_2021-05.xlsx is EXCLUDED, a council-side export fault: its header row doesn't
+    // match its own data columns (the "Payment Number" column's cells actually contain
+    // supplier names), the same corruption ReadingFixups.IsFileMappingUsable exists to catch).
+    // Raw files live under wwwroot/data/reading/, copied verbatim from the owner's own
+    // VirtualCustomer/inbox/reading/ (the original downloads, not the re-normalised exports).
+    ("reading", SupportedCouncils.Reading, false, SupportedCouncils.Reading.Years
+        .Where(y => y.Tag != "2021-05")
+        .Select(y => (y.Tag, $"reading-{y.Tag}.{(y.Format == SourceFormat.Xlsx ? "xlsx" : "csv")}", y.Format, (string?)null))
+        .ToArray()),
 };
 
 var manifestEntries = new List<string>();
@@ -107,7 +109,22 @@ foreach (var cfg in councils)
         var table = y.Format == SourceFormat.Xlsx
             ? XlsxReader.Parse(bytes)
             : CsvReader.Parse(bytes, y.EncodingOverride is null ? null : Encoding.GetEncoding(y.EncodingOverride));
+        // Reading-specific header/layout repairs (see CouncilAudit/ReadingFixups.cs) -- the
+        // early .xlsx files have a split two-row header, and several files carry one-off
+        // header typos/naming-convention drift the plain header lookup can't resolve alone.
+        if (cfg.Key == "reading" && y.Format == SourceFormat.Xlsx)
+            table = ReadingFixups.FixXlsxLayout(table);
+        if (cfg.Key == "reading")
+            ReadingFixups.ApplyHeaderFixups(table, ReadingFixups.HeaderFixups);
+        int warnBefore = warnings.Count;
         var rows = AuditEngine.MapRows(table, cfg.Council.Mapping, y.Tag, warnings);
+        // Bad-file guard (ReadingFixups.IsFileMappingUsable): belt-and-braces alongside
+        // excluding reading_2021-05.xlsx by name above -- if some OTHER file's critical
+        // columns ever fail to map, say so loudly rather than silently shipping blank/zero
+        // rows for that period (every other tag still needs a perTagRows/manifest entry, so
+        // this logs rather than skips the tag outright).
+        if (!ReadingFixups.IsFileMappingUsable(warnings, warnBefore))
+            Console.WriteLine($"  {y.Tag}: WARNING -- {y.File} failed critical column mapping (see warning above); rows may be blank/zero for this period.");
         perTagRows[y.Tag] = rows;
         allRows.AddRange(rows);
         Console.WriteLine($"  {y.Tag}: {rows.Count:N0} rows");

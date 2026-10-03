@@ -1,4 +1,8 @@
-// Vendored from C:\Users\dongy\VirtualCustomer\src\CouncilAudit\CsvReader.cs, copied 2026-10-03.
+// Vendored from C:\Users\dongy\VirtualCustomer\src\CouncilAudit\CsvReader.cs, copied 2026-10-03,
+// re-synced 2026-10-03 (same day, DebtCharge fix sync: Session 17's CP850 fallback - 7 of
+// Reading's ~64 months are IBM/OEM codepage 850, not Windows-1252; a 1252 decode of a CP850 file
+// silently zeroes that month's Amount column, same failure class the original 1252-vs-UTF-8 fix
+// already guarded against).
 // CouncilAudit engine by the EA virtual-customer agent. Do not edit the source repo from here;
 // future engine changes happen upstream and get re-vendored into this copy by the Showroom owner.
 
@@ -39,6 +43,20 @@ public static class CsvReader
         }
         catch (DecoderFallbackException)
         {
+            // Session 17 finding, hand-confirmed against raw bytes while pulling Reading's
+            // full FY2020-21..FY2025-26 back-catalogue: 7 of the ~64 months are NOT
+            // Windows-1252 at all - they are IBM/OEM codepage 850. Byte 0x9C is "£" in CP850
+            // but "œ" (U+0153) in Windows-1252, so a 1252 decode of a CP850 file silently
+            // turns every "Amount (£)" header into "Amount (œ)" - the Gross column lookup
+            // then fails with nothing louder than a console warning, and that month's
+            // Gross/Net go to zero for every row. Confirmed real: reading_2022-01,
+            // 2022-02, 2022-12, 2023-10, 2023-11, 2025-01, 2025-04 all exhibit this.
+            // Detect it the same way it was found: decode as 1252 first; if that decode
+            // contains the tell-tale "œ" glyph, a real UK council export should never
+            // contain that character on its own, so re-decode as CP850 instead.
+            var win1252 = Encoding.GetEncoding(1252).GetString(bytes);
+            if (win1252.Contains('œ'))
+                return Encoding.GetEncoding(850);
             return Encoding.GetEncoding(1252);
         }
     }

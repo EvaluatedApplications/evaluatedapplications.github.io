@@ -1,5 +1,6 @@
 // Vendored from C:\Users\dongy\VirtualCustomer\src\CouncilAudit\Models.cs, copied 2026-10-03,
-// re-synced 2026-10-03 (same day, CouncilAudit Session 12/13 classification work).
+// re-synced 2026-10-03 (same day, DebtCharge fix sync: Session 19's MemberRowIndexes field on
+// ScheduleARow/ScheduleBGroup, needed by HandCheckHelpers.cs added alongside this sync).
 // CouncilAudit engine by the EA virtual-customer agent. Do not edit the source repo from here;
 // future engine changes happen upstream and get re-vendored into this copy by the Showroom owner.
 
@@ -183,7 +184,20 @@ public sealed record ScheduleARow(
     decimal Net, decimal Gross, decimal ExpectedGross, decimal Difference,
     string? VatType, string? ServiceArea, string? Description, int LineCount,
     ScheduleAClassification Classification = ScheduleAClassification.Unreconciled,
-    string? ClassificationDetail = null);
+    string? ClassificationDetail = null,
+    // Session 19: the exact 0-based raw-file row positions (SpendRow.RowIndexInSource)
+    // of every member line that made up this group's (SourceTag, TransactionId,
+    // Supplier) aggregate, as AuditEngine.Run itself grouped them - not re-discovered by
+    // a later text scan. Lets a hand-check look up precisely these rows by position
+    // instead of re-scanning the whole raw table for anything matching the transaction
+    // id/supplier as TEXT (the shape that produced the retired ConfirmedInRawDetailed's
+    // repeated double-counting failure - see HandCheckHelpers.cs). Defaults to empty for
+    // any caller built before this field existed; a hand-check against an empty list
+    // reports that explicitly rather than silently passing.
+    IReadOnlyList<int> MemberRowIndexes = null!)
+{
+    public IReadOnlyList<int> MemberRowIndexes { get; init; } = MemberRowIndexes ?? Array.Empty<int>();
+}
 
 /// <summary>
 /// What a Schedule B repeated-payment group looks like once a genuine supplier invoice
@@ -210,7 +224,16 @@ public sealed record ScheduleBGroup(
     int GroupId, string Supplier, decimal Net, decimal Gross, string? Description, string? PayDate,
     IReadOnlyList<SpendRow> Members,
     ScheduleBClassification Classification = ScheduleBClassification.Unclear,
-    string? ClassificationDetail = null);
+    string? ClassificationDetail = null,
+    // Session 19: parallel to Members - MemberRowIndexes[i] is the full list of exact
+    // 0-based raw-file row positions underlying Members[i] (one per raw line of that
+    // (SourceTag, TransactionId) transaction, which can be more than one - Members[i]
+    // itself is a per-transaction AGGREGATE, its own RowIndexInSource is only the FIRST
+    // of those lines). Lets a hand-check re-sum exactly the rows AuditEngine.Run itself
+    // used to build this member, rather than re-discovering "which raw rows belong here"
+    // by a text scan - see HandCheckHelpers.cs. Null for any caller built before this
+    // field existed; CLI call sites fall back to a single-row list per member in that case.
+    IReadOnlyList<IReadOnlyList<int>>? MemberRowIndexes = null);
 
 public sealed record ScheduleDGroup(
     string SourceTag, string TransactionId, int DistinctSuppliers, int DistinctPayDates,
