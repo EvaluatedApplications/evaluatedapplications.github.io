@@ -1,4 +1,6 @@
-// Vendored from C:\Users\dongy\VirtualCustomer\src\CouncilAudit\AuditEngine.cs, copied 2026-10-03.
+// Vendored from C:\Users\dongy\VirtualCustomer\src\CouncilAudit\AuditEngine.cs, copied 2026-10-03,
+// re-synced 2026-10-03 (same day, CouncilAudit Session 12/13/14: classification work, generalised
+// DoubleListing, and Schedule R credit/refund matching).
 // CouncilAudit engine by the EA virtual-customer agent. Do not edit the source repo from here;
 // future engine changes happen upstream and get re-vendored into this copy by the Showroom owner.
 
@@ -34,6 +36,9 @@ public static class AuditEngine
         int iGross = Idx(map.Gross);
         int iVatAmt = Idx(map.VatAmount);
         int iVatType = Idx(map.VatType);
+        int iInvoiceNo = Idx(map.SupplierInvoiceNumber);
+        int iCostCentre = Idx(map.CostCentreArea);
+        int iInvoiceType = Idx(map.InvoiceType);
 
         if (iTrans < 0) warnings.Add($"{sourceTag}: transaction-id column \"{map.TransactionId}\" not found in header.");
         if (iSupplier < 0) warnings.Add($"{sourceTag}: supplier column \"{map.Supplier}\" not found in header.");
@@ -83,7 +88,10 @@ public static class AuditEngine
                 gross,
                 vatAmount,
                 vatType,
-                r - 1));
+                r - 1,
+                iInvoiceNo >= 0 ? Get(iInvoiceNo).Trim() : null,
+                iCostCentre >= 0 ? Get(iCostCentre).Trim() : null,
+                iInvoiceType >= 0 ? Get(iInvoiceType).Trim() : null));
         }
         return rows;
     }
@@ -101,8 +109,21 @@ public static class AuditEngine
     /// redaction is the council withholding identifying data lawfully, not a published
     /// number that fails to reconcile.
     /// </summary>
+    /// <summary>
+    /// Fix (this session): the plain "contains REDACT" check this replaces does NOT catch
+    /// the real Merton numeric-infix format quoted in the comment above it
+    /// ("RED11538ACTED" - a digit run spliced between "RED" and "ACTED", presumably so the
+    /// placeholder still sorts/displays as distinct text per row) - "RED11538ACTED" has no
+    /// consecutive "REDACT" substring at all, so every row using that exact format was
+    /// silently NOT excluded, contrary to what the comment claimed. Caught by writing the
+    /// regression test for this council's own documented example, not by re-reading the
+    /// prose. Now matches both the plain "REDACTED..." form and the split RED...ACTED form.
+    /// </summary>
     private static bool IsRedactedPlaceholder(string s) =>
-        s.Contains("REDACT", StringComparison.OrdinalIgnoreCase);
+        s.Contains("REDACT", StringComparison.OrdinalIgnoreCase)
+        || (s.StartsWith("RED", StringComparison.OrdinalIgnoreCase)
+            && s.EndsWith("ACTED", StringComparison.OrdinalIgnoreCase)
+            && s.Length >= 8);
 
     public static AuditResult Run(
         IReadOnlyList<SpendRow> all,
@@ -153,14 +174,197 @@ public static class AuditEngine
                 ? Math.Round(netSum + vatAmountSum.Value, 2, MidpointRounding.AwayFromZero)
                 : VatAdjustedExpectedGross(netSum, first.VatType);
             decimal diff = grossStated - expected;
-            if (Math.Abs(diff) > 0.01m)
+            // Domestic reverse charge (construction services, since March 2021): a "standard
+            // rate" (STD) invoice can legitimately show gross == net with NO VAT uplift at all
+            // (the customer, not the supplier, accounts for the VAT). Measured (Session 4, real
+            // Wokingham construction invoices up to £1.44m): applying the VAT-type uplift
+            // unconditionally manufactured ~296 false mismatches of exactly this shape. Only
+            // flag when the discrepancy survives under BOTH the VAT-uplifted AND the raw-net
+            // (no uplift at all) comparison - if either reconciles, there's nothing to report.
+            decimal rawDiff = grossStated - Math.Round(netSum, 2, MidpointRounding.AwayFromZero);
+            if (Math.Abs(diff) > 0.01m && Math.Abs(rawDiff) <= 0.01m)
+                continue; // reverse charge (or any no-uplift case): raw net already reconciles.
+            if (Math.Abs(diff) <= 0.01m)
+                continue; // VAT-uplifted comparison already reconciles.
+
+            // ---- Classify before reporting, so the schedule doesn't drown real exceptions ----
+            var classification = ScheduleAClassification.Unreconciled;
+            string? detail = null;
+
+            // Double listing vs itemisation: only meaningful when every member line is
+            // identical (same net, same gross, same description) - i.e. the SAME line
+            // appears to have been published more than once, not several genuinely
+            // different charges that happen to be numerically equal.
+            if (members.Count > 1
+                && members.Select(r => (r.Net, r.Gross, (r.Description ?? "").Trim())).Distinct().Count() == 1)
             {
-                scheduleA.Add(new ScheduleARow(
-                    first.SourceTag, first.TransactionId, first.Supplier, first.PayDateRaw,
-                    netSum, grossStated, expected, grossStated - netSum,
-                    first.VatType, first.ServiceArea, first.Description, members.Count));
+                decimal lineNet = members[0].Net;
+                if (lineNet != 0m)
+                {
+                    decimal ratio = netSum / lineNet; // trivially == members.Count, kept explicit
+                    // Under RepeatedInvoiceTotal, the stated Gross is supposed to be the ONE
+                    // true invoice total; genuine itemisation of several equal-value items
+                    // would show that true (larger) total as Gross on every line, not the
+                    // single line's own value - so an exact integer multiple here (>=2) is the
+                    // double-listing signature, not itemisation (which would show diff ~ 0 and
+                    // never reach this code at all).
+                    if (grossMeaning == GrossMeaning.RepeatedInvoiceTotal
+                        && ratio >= 2m && Math.Abs(ratio - Math.Round(ratio)) < 0.001m)
+                    {
+                        classification = ScheduleAClassification.DoubleListing;
+                        detail = $"{members.Count} identical lines of {lineNet:0.00} sum to {ratio:0}x " +
+                                 $"the stated invoice ({grossStated:0.00}) - the line appears to have been " +
+                                 "published more than once, not itemised into separate charges.";
+                    }
+                }
             }
+
+            // Generalised double listing (Session 14, Net=2xGross census on Wokingham's
+            // remaining Unreconciled population): the check above only catches a SINGLE
+            // line published twice. Hand-opened 5 real cases (trans 3556053, 3557512,
+            // 3561522, 3557414, 3557664 - all FY2020-21, all EXEM VAT) where the invoice
+            // is itself itemised into 2 genuinely DIFFERENT lines (different amounts
+            // and/or descriptions) that together sum to the stated Gross exactly - and
+            // then that whole 2-line itemisation is published AGAIN, making a 4-line
+            // group whose net sum is exactly 2x the stated Gross. Generalises to k
+            // repeats of n distinct lines: every distinct (Net, Gross, Description)
+            // tuple in the group appears the SAME number of times (k >= 2), and the sum
+            // of one copy of each distinct tuple's Net reconciles the stated Gross
+            // exactly (raw comparison - every real instance found is EXEM/no VAT
+            // uplift; not yet tested against a VAT-uplifted instance, so this check is
+            // deliberately narrow to the no-uplift case for now). Full population:
+            // 23 of 1,112 rows going into this cycle, all FY2020-21, all 4-line, 100%
+            // EXEM VAT Purchases Exempt, 15 distinct suppliers (Request Nursing & Care,
+            // The Link Nursing & Care Agency Ltd, Purley Park Trust, Forest Care
+            // Limited, Reading & Wokingham Coaches and others) - a real, repeating,
+            // year-concentrated (FY2020-21 only, so far) shape, not a one-off.
+            if (classification == ScheduleAClassification.Unreconciled
+                && members.Count > 1
+                && grossMeaning == GrossMeaning.RepeatedInvoiceTotal)
+            {
+                var tupleGroups = members
+                    .GroupBy(r => (r.Net, r.Gross, (r.Description ?? "").Trim()))
+                    .ToList();
+                var distinctCounts = tupleGroups.Select(tg => tg.Count()).Distinct().ToList();
+                if (tupleGroups.Count >= 2 && distinctCounts.Count == 1 && distinctCounts[0] >= 2)
+                {
+                    int k = distinctCounts[0];
+                    decimal oneCopyNet = tupleGroups.Sum(tg => tg.Key.Net);
+                    if (Math.Abs(oneCopyNet - grossStated) <= 0.01m && Math.Abs(netSum - k * grossStated) <= 0.01m)
+                    {
+                        classification = ScheduleAClassification.DoubleListing;
+                        detail = $"{tupleGroups.Count} distinct lines summing to the stated invoice " +
+                                 $"({grossStated:0.00}) exactly are each repeated {k} times ({members.Count} " +
+                                 "lines total) - the whole itemised invoice appears to have been published " +
+                                 $"{k} times, not itemised once.";
+                    }
+                }
+            }
+
+            // Debt-charge pattern: the stated amount is an exact round principal plus a
+            // (non-round) interest/charge remainder - a loan/debt-recovery-style invoice,
+            // not an unexplained gap. Checked against whichever published figure the
+            // mismatch is actually about (grossStated).
+            if (classification == ScheduleAClassification.Unreconciled
+                && TryDecomposeDebtCharge(grossStated, out var principal, out var interest))
+            {
+                classification = ScheduleAClassification.DebtCharge;
+                detail = $"{grossStated:0.00} decomposes as principal {principal:0.00} + interest/charge " +
+                         $"{interest:0.00} - a debt-charge-style invoice, not an unexplained mismatch.";
+            }
+
+            // Early-payment-programme batch (Session 12 judgement-sample finding,
+            // confirmed real on Wokingham: Oxygen Finance Ltd and other suppliers' own
+            // negative discount-fee lines, 3,730 raw rows across six years, all tagged
+            // with the council's own "Early payment programme" COST CENTRE AREA - NOT its
+            // Description, which is the generic "Fees"; a first manual read of the raw
+            // columns got this backwards and was only caught by re-running the real engine
+            // against the real header, the exact lesson Session 7 already named once).
+            // More than one member line, every line negative, every line's CostCentreArea
+            // is exactly this council-published label. Not an arithmetic claim - we cannot
+            // and do not reconcile the stated Gross from these lines, only recognise the
+            // shape and name it rather than leaving it as an undifferentiated Unreconciled
+            // row. Falls back to never matching for a council with no CostCentreArea mapped.
+            if (classification == ScheduleAClassification.Unreconciled
+                && members.Count > 1
+                && members.All(m => m.Net < 0m)
+                && members.All(m => (m.CostCentreArea ?? "").Trim().Equals("Early payment programme", StringComparison.OrdinalIgnoreCase)))
+            {
+                classification = ScheduleAClassification.EarlyPaymentProgramme;
+                detail = $"{members.Count} negative per-invoice discount-fee lines under the council's own " +
+                         "\"Early payment programme\" cost centre - a supply-chain-finance discount batch " +
+                         "(e.g. Oxygen Finance Ltd), not an arithmetic mismatch. The stated Gross is the " +
+                         "batch's published total; the underlying invoice amounts are not in this file.";
+            }
+
+            // Negative-net sign flip (Session 13 judgement-sample finding, confirmed real
+            // on Wokingham: 2,383 of the 3,479 rows that were still Unreconciled going
+            // into this cycle - a dedicated census of the opposite-sign shape named in
+            // Session 9/10's smaller samples, widened per the Showroom owner's own flag
+            // that at least one row shows a negative ExpectedGross against a positive
+            // Gross). The published Net is negative; flipping ONLY its sign (same
+            // magnitude) reconciles the stated Gross exactly, under either the VAT-type
+            // uplift or the raw (no-uplift) comparison already used above - i.e. the
+            // magnitude is correct and the VAT arithmetic is correct, only the sign of
+            // the one published figure, Net, is inverted. Spans hundreds of distinct
+            // suppliers, every VAT type, and a sharply growing count year over year
+            // (FY2020-21: 61 -> FY2025-26: 735) - not one supplier's bug and not shrinking,
+            // so this is named and separated out, NOT marked "explained": nothing here
+            // establishes WHY Net's sign is inverted (a ledger debit/credit convention is
+            // the obvious guess, but guessing is not evidence), so it is reported as a
+            // named, recurring shape for the council to answer, exactly as Session 9 first
+            // insisted for the single-line version of this same pattern - widening the
+            // rule to the general form does not change that this stays a real question,
+            // not a resolved one.
+            if (classification == ScheduleAClassification.Unreconciled && netSum < 0m && grossStated > 0m)
+            {
+                decimal flippedExpected = VatAdjustedExpectedGross(-netSum, first.VatType);
+                decimal flippedRaw = Math.Round(-netSum, 2, MidpointRounding.AwayFromZero);
+                bool reconcilesUplifted = Math.Abs(grossStated - flippedExpected) <= 0.01m;
+                bool reconcilesRaw = Math.Abs(grossStated - flippedRaw) <= 0.01m;
+                if (reconcilesUplifted || reconcilesRaw)
+                {
+                    classification = ScheduleAClassification.NegativeNetSignFlip;
+                    detail = $"published Net ({netSum:0.00}) is the exact negative of the figure needed to " +
+                             $"reconcile the stated Gross ({grossStated:0.00}) under {(reconcilesUplifted ? $"VAT Type {first.VatType}" : "a raw, VAT-independent")} " +
+                             "comparison - the magnitude and VAT arithmetic are both correct, only the sign of " +
+                             "the published Net is inverted. Not established why; reported as a named, recurring " +
+                             "shape, not an explained one.";
+                }
+            }
+
+            // VAT rounding noise (Session 12 judgement-sample finding, confirmed real on
+            // Wokingham: Education Boutique Ltd trans 3991866 and Carrington West Ltd
+            // trans 3626256, both off by exactly 0.02 under their own published VAT
+            // type): once the VAT-type-uplifted comparison is the one in play (not a
+            // reverse-charge or no-VAT row - those already `continue`d above), a gap of a
+            // few pence is consistent with VAT being rounded per line then summed rather
+            // than once on the total, not a genuine unexplained gap. Deliberately narrow
+            // (5p) - Holt School's trans 3928781 in the same sample was off by GBP 4.03
+            // under the same reduced rate and correctly stays Unreconciled.
+            if (classification == ScheduleAClassification.Unreconciled && Math.Abs(diff) <= 0.05m)
+            {
+                classification = ScheduleAClassification.VatRoundingNoise;
+                detail = $"stated gross {grossStated:0.00} is only {Math.Abs(diff):0.00} from the VAT-type-" +
+                         $"uplifted expected {expected:0.00} - consistent with per-line VAT rounding, not a " +
+                         "genuine unexplained gap.";
+            }
+
+            scheduleA.Add(new ScheduleARow(
+                first.SourceTag, first.TransactionId, first.Supplier, first.PayDateRaw,
+                netSum, grossStated, expected, grossStated - netSum,
+                first.VatType, first.ServiceArea, first.Description, members.Count,
+                classification, detail));
         }
+
+        // Rank so what the rules can't explain rises to the top: Unreconciled first (the
+        // actual headline target - ask the council), then DebtCharge and DoubleListing
+        // (recognised, labelled, not hidden, but not where attention should go first),
+        // each ordered by the size of the gap.
+        scheduleA = scheduleA
+            .OrderBy(a => a.Classification == ScheduleAClassification.Unreconciled ? 0 : 1)
+            .ThenByDescending(a => Math.Abs(a.Difference))
+            .ToList();
 
         // ---- Schedule B: repeated payments across different transaction numbers ----
         // Same supplier + net + gross + description + pay date, different transaction id.
@@ -192,8 +396,46 @@ public static class AuditEngine
         {
             groupId++;
             var members = g.OrderBy(r => r.SourceTag).ThenBy(r => r.TransactionId, StringComparer.Ordinal).ToList();
-            scheduleB.Add(new ScheduleBGroup(groupId, g.Key.Item1, g.Key.Item2, g.Key.Item3, g.Key.Item4, g.Key.Item5, members));
+
+            // Same supplier invoice number repeated = likely duplicate; different invoice
+            // numbers at what is otherwise an identical amount = a standardised recurring
+            // rate (checklist 4b, confirmed on real Reading data: Sean Heath's group repeats
+            // one amount under TWO DIFFERENT invoice numbers - a legitimate recurring rent
+            // payment; Freeborn's and Lynx Lettings's groups repeat the SAME invoice number
+            // twice each - a genuine duplicate-payment candidate). Redacted rows never reach
+            // here (excluded above), so a redacted payee is never compared this way.
+            var invoiceNumbers = members.Select(m => m.SupplierInvoiceNumber).ToList();
+            var classification = ScheduleBClassification.Unclear;
+            string? detail = null;
+            if (invoiceNumbers.All(n => !string.IsNullOrWhiteSpace(n)))
+            {
+                var distinct = invoiceNumbers.Distinct().ToList();
+                if (distinct.Count == 1)
+                {
+                    classification = ScheduleBClassification.LikelyDuplicate;
+                    detail = $"all {members.Count} members share supplier invoice number \"{distinct[0]}\".";
+                }
+                else
+                {
+                    classification = ScheduleBClassification.LikelyRecurring;
+                    detail = $"members carry {distinct.Count} different supplier invoice numbers " +
+                              $"({string.Join(", ", distinct.Take(5))}) despite the identical amount - " +
+                              "consistent with a standardised recurring rate, not a repeat payment.";
+                }
+            }
+
+            scheduleB.Add(new ScheduleBGroup(groupId, g.Key.Item1, g.Key.Item2, g.Key.Item3, g.Key.Item4, g.Key.Item5,
+                members, classification, detail));
         }
+
+        // Same ranking principle as Schedule A: groups the rules can't explain either way
+        // (Unclear - no invoice number was available to check) rise above the ones already
+        // labelled one way or the other, largest value first within each band.
+        scheduleB = scheduleB
+            .OrderBy(b => b.Classification == ScheduleBClassification.Unclear ? 0
+                        : b.Classification == ScheduleBClassification.LikelyDuplicate ? 1 : 2)
+            .ThenByDescending(b => b.Net * b.Members.Count)
+            .ToList();
 
         // ---- Schedule D: one transaction number, more than one payee or pay date ----
         // Only a meaningful finding when TransactionId is council-wide unique (the
@@ -222,8 +464,128 @@ public static class AuditEngine
                 "so these are most likely coincidental number reuse between unrelated suppliers, not evidence of a " +
                 "shared transaction. Do not present Schedule D as a finding for this council.");
 
+        // ---- Schedule R: credit/refund rows (council's own Invoice Type label, not an
+        // inferred sign) and whether a same-supplier charge of matching magnitude exists
+        // anywhere in the loaded data (Session 14, built for Reading - the only onboarded
+        // council that publishes an Invoice Type column; structurally empty for any
+        // council that doesn't map it, same "not a bug" principle as Reading's own empty
+        // Schedule A). Deliberately generous (any matching-magnitude non-credit row for
+        // the same supplier within a year, not a strict one-to-one reconciliation) - the
+        // point is "does a plausible explanation exist in the data", the same question
+        // Schedule A's VAT/debt-charge/double-listing checks answer for Wokingham's shape.
+        var scheduleR = new List<ScheduleRRow>();
+        var creditLike = all.Where(r => IsCreditLikeInvoiceType(r.InvoiceType)).ToList();
+        if (creditLike.Count > 0)
+        {
+            var chargesBySupplier = all
+                .Where(r => !IsCreditLikeInvoiceType(r.InvoiceType))
+                .GroupBy(r => r.Supplier)
+                .ToDictionary(g => g.Key, g => g.ToList());
+
+            foreach (var c in creditLike)
+            {
+                SpendRow? match = null;
+                if (chargesBySupplier.TryGetValue(c.Supplier, out var charges))
+                {
+                    match = charges.FirstOrDefault(ch =>
+                        Math.Abs(Math.Abs(ch.Gross) - Math.Abs(c.Gross)) <= 0.01m
+                        && WithinDateWindow(c.PayDate, ch.PayDate, 365));
+                }
+                var classification = match is not null
+                    ? CreditMatchClassification.MatchedOffsettingCharge
+                    : CreditMatchClassification.Unmatched;
+                string detail = match is not null
+                    ? $"offsetting charge found: {match.TransactionId} ({match.InvoiceType}) on " +
+                      $"{match.PayDateRaw}, amount {match.Gross:0.00}, within 365 days, same supplier."
+                    : "no same-supplier charge of matching magnitude found in the loaded data within " +
+                      "365 days - the matching charge may simply be in a file not loaded this run; not " +
+                      "established to be an error, reported as published.";
+                scheduleR.Add(new ScheduleRRow(
+                    c.SourceTag, c.TransactionId, c.Supplier, c.Gross, c.InvoiceType, c.PayDateRaw,
+                    c.Description, classification, detail, c.RowIndexInSource));
+            }
+
+            scheduleR = scheduleR
+                .OrderBy(r => r.Classification == CreditMatchClassification.Unmatched ? 0 : 1)
+                .ThenByDescending(r => Math.Abs(r.Amount))
+                .ToList();
+        }
+
         return new AuditResult(
-            all.Count, bySupplierGroups.Count, scheduleA, scheduleB, scheduleD, idScope, warnings);
+            all.Count, bySupplierGroups.Count, scheduleA, scheduleB, scheduleD, idScope, warnings, scheduleR);
+    }
+
+    /// <summary>
+    /// A row is credit/refund-like if the council's own published Invoice Type says so
+    /// - confirmed real on Reading: "CREDIT" (2021-2023 files, always negative amounts)
+    /// and "RBC Refunds Manual Entry"/"RBC AR REFUNDS" (2024 onward, always POSITIVE -
+    /// the council's own sign convention for a refund changed between publishing eras,
+    /// which is exactly why this reads the label, not the sign of Amount).
+    /// </summary>
+    private static bool IsCreditLikeInvoiceType(string? invoiceType) =>
+        !string.IsNullOrWhiteSpace(invoiceType)
+        && (invoiceType.Contains("CREDIT", StringComparison.OrdinalIgnoreCase)
+            || invoiceType.Contains("REFUND", StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>
+    /// True if both dates are known and within <paramref name="days"/> of each other, OR
+    /// either date is unpublished (lenient on missing data - this schedule's job is to
+    /// surface a plausible explanation, not exclude one for a missing date; a future
+    /// cycle could tighten this if missing dates turn out to hide real mismatches).
+    /// </summary>
+    private static bool WithinDateWindow(DateOnly? a, DateOnly? b, int days)
+    {
+        if (a is null || b is null) return true;
+        return Math.Abs(a.Value.DayNumber - b.Value.DayNumber) <= days;
+    }
+
+    /// <summary>
+    /// Debt-charge pattern: an invoiced amount that decomposes exactly into an exact round
+    /// principal plus a non-round interest/charge remainder (a loan repayment, a debt-
+    /// recovery fee, a late-payment interest charge). Tries round bases from a million
+    /// down to 500 only - deliberately NOT finer bases (100, 50, 10): flooring to a fine
+    /// base always leaves a small remainder by construction (at most the base itself), so
+    /// a fine base would trivially "explain" almost every ordinary mismatch above a few
+    /// hundred pounds as a false "debt charge", not just real ones. The large bases
+    /// (1,000,000 / 500,000 / 100,000) exist because real inter-authority treasury
+    /// lending shows exactly this shape at that scale (found by hand-checking real
+    /// Wokingham data, Session 9: trans 3676987, Wandsworth Borough Council, net
+    /// 23,934.25 + principal exactly 10,000,000 = gross 10,023,934.25, VAT type NBUS -
+    /// before this fix the smaller 1000-base caught the same row but mis-reported the
+    /// principal as 10,023,000, a true but misleadingly ungenerous read of a cleanly
+    /// round 10-million loan). Requires a principal of at least 100 (a real debt/loan,
+    /// not a rounding artefact on a small amount) and accepts the FIRST (largest) base
+    /// where the leftover reads like genuine accrued interest/fee: positive, non-trivial
+    /// (not itself a round number - that would just be two round fees, not interest), and
+    /// a small fraction of the principal (under 5% - a real interest/charge component on
+    /// a debt is a small minority of the total, not a sizeable chunk of it). Deliberately
+    /// conservative: a false "explained" tag on a real exception is worse than missing a
+    /// true debt-charge invoice. NOTE: an earlier version of this also skipped any
+    /// remainder that was itself a round number (reasoning: "two round fees look like
+    /// double-counting, not interest"). Hand-checking real Wokingham data (Session 9)
+    /// disproved that: trans 3669612, Oxfordshire County Council, description literally
+    /// "Interest Payments", is genuinely a GBP 5,000,000 principal plus a clean, round
+    /// GBP 82,500 interest charge (a plausible clean percentage rate on a round sum) -
+    /// the old round-remainder check produced a false negative on a case the source data
+    /// itself names as an interest payment. The ratio cap below (5%) does the real work
+    /// of rejecting "two round fees" shapes; the separate round-number check was removed.
+    /// </summary>
+    public static bool TryDecomposeDebtCharge(decimal amount, out decimal principal, out decimal interest)
+    {
+        principal = 0m; interest = 0m;
+        if (amount <= 0m) return false;
+        foreach (var basePound in new[] { 1_000_000m, 500_000m, 100_000m, 1000m, 500m })
+        {
+            decimal candidatePrincipal = Math.Floor(amount / basePound) * basePound;
+            if (candidatePrincipal < 100m) continue;
+            decimal candidateInterest = amount - candidatePrincipal;
+            if (candidateInterest <= 0.01m) continue; // amount IS the round number - no charge to find.
+            if (candidateInterest >= candidatePrincipal * 0.05m) continue; // too large a fraction to read as interest.
+            principal = candidatePrincipal;
+            interest = candidateInterest;
+            return true;
+        }
+        return false;
     }
 
     /// <summary>

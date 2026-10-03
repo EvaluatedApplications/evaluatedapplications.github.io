@@ -62,6 +62,13 @@
                     <p>Six financial years hosted here, ready to scan — no download hunting required.</p>
                     <span class="go-in">Open →</span>
                 </button>
+                <button class="pick-card" @onclick="PickReading" type="button">
+                    <h3>Reading Borough Council</h3>
+                    <p>Five sample months hosted here. Reading publishes one signed Amount column with
+                        no separate invoice/payment split, so the payment-vs-invoice test doesn't apply —
+                        repeated-payment and multi-payee checks still run.</p>
+                    <span class="go-in">Open →</span>
+                </button>
                 <button class="pick-card" @onclick="() => _mode = Mode.OwnFile" type="button">
                     <h3>Use your own file</h3>
                     <p>Any English council publishes this data under the same Transparency Code. Drop a
@@ -84,6 +91,26 @@
                     Government Licence v3.0</a>. Source: <a href="https://www.wokingham.gov.uk/council-and-meetings/open-data-and-transparency/data-sets-and-open-data?field_media_asset_browser_target_id=101" target="_blank" rel="noopener">the council's open-data page</a>.
                     Every file below was retrieved <b>2 October 2026</b>.</p>
             </section>
+
+            @if (_topItems.TryGetValue("wokingham", out var topWok) && topWok.Count > 1)
+            {
+                <section class="topunexplained">
+                    <h2>Top unexplained items</h2>
+                    <p class="hint">The 20 largest genuinely-Unreconciled rows (Schedule A), precomputed offline,
+                        each with a neutral one-line description of what doesn't reconcile.</p>
+                    <div class="table-scroll table-scroll-fixed">
+                        <table class="exc-table">
+                            <thead><tr>@foreach (var h in topWok[0]) { <th>@h</th> }</tr></thead>
+                            <tbody>
+                                @foreach (var row in topWok.Skip(1))
+                                {
+                                    <tr>@foreach (var cell in row) { <td>@cell</td> }</tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </section>
+            }
 
             <section class="loaded-stats">
                 <h2>Loaded data</h2>
@@ -116,74 +143,165 @@
                         @(_busy ? _phase : "Load selected years")
                     </button>
                 </div>
-                <div class="council-add council-add-disabled">
+                <div class="council-add @(_loadedCouncils.Contains("reading") ? "" : "council-add-disabled")">
                     <div class="council-add-head">
-                        <b>More councils</b>
-                        <span class="hint">Coming soon — onboarding a second council follows the same
-                            hand-verified process as Wokingham before it's added here.</span>
+                        <b>Reading Borough Council</b>
+                        <span class="hint">@(_loadedCouncils.Contains("reading")
+                            ? $"{_readingMonths.Count(y => y.Loaded)} of {_readingMonths.Count} months loaded"
+                            : "Go back and choose Reading from the picker to load it alongside Wokingham.")</span>
                     </div>
                 </div>
             </section>
+        }
+        else if (_mode == Mode.Reading)
+        {
+            <section class="licence">
+                <p>Contains data from <a href="@SupportedCouncils.Reading.TransparencyPageUrl" target="_blank" rel="noopener">Reading
+                    Borough Council</a>. The council's own spending page states: "This data has been
+                    published in accordance with Governmental guidelines and is available for reuse
+                    under the <a href="https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/" target="_blank" rel="noopener">Open
+                    Government Licence</a>" (checked live against that page <b>3 October 2026</b>; the
+                    page doesn't itself name a version, so this links the current v3.0 text, the same
+                    licence Wokingham publishes under). Every file below was retrieved <b>3 October 2026</b>.</p>
+            </section>
 
-            @if (_spendRowsLoaded > 0)
+            <p class="note-callout">Reading publishes one signed <b>Amount</b> column — there is no
+                separate invoice amount to compare a payment against, so <b>Exception tests 1 and 2
+                (payment vs. stated invoice amount) do not apply to this council</b> — not a clean
+                result, a structural fact about what's published. Negative amounts are real credits
+                and corrections, not errors. Tests 3-5 (repeated payments, multi-payee transactions,
+                repeated lines) still run below.</p>
+
+            @if (_topItems.TryGetValue("reading", out var topRead) && topRead.Count > 1)
             {
-                <section class="crosscouncil">
-                    <h2>Cross-council correlations</h2>
-                    <p class="hint">@CrossCouncilStateLine()</p>
-                    <div class="cc-controls">
-                        <input type="text" @bind="_nearestSupplierQuery" @bind:event="oninput"
-                               placeholder="Type a supplier name to search everything loaded…" disabled="@_busy" />
-                        <select @bind="_searchMode" disabled="@_busy">
-                            <option value="@SearchMode.Graded">Graded match (ranked by similarity)</option>
-                            <option value="@SearchMode.ExactSubstring">Exact substring (LIKE)</option>
-                        </select>
-                        <button class="ghost" @onclick="RunNearestSupplierSearch"
-                                disabled="@(string.IsNullOrWhiteSpace(_nearestSupplierQuery) || _busy)" type="button">
-                            Search loaded suppliers
-                        </button>
+                <section class="topunexplained">
+                    <h2>Top unexplained items</h2>
+                    <p class="hint">The 20 largest unmatched credit/refund rows (Schedule R — no same-supplier
+                        charge of matching size found), precomputed offline, each with a neutral one-line
+                        description. Reading's credit sign convention changed between 2021-23 (CREDIT, negative)
+                        and 2024+ (refund entries, positive) — amounts below are shown exactly as published.</p>
+                    <div class="table-scroll table-scroll-fixed">
+                        <table class="exc-table">
+                            <thead><tr>@foreach (var h in topRead[0]) { <th>@h</th> }</tr></thead>
+                            <tbody>
+                                @foreach (var row in topRead.Skip(1))
+                                {
+                                    <tr>@foreach (var cell in row) { <td>@cell</td> }</tr>
+                                }
+                            </tbody>
+                        </table>
                     </div>
-                    @if (_searchMode == SearchMode.Graded)
-                    {
-                        <p class="hint">Ranked by HoloDb's holographic <code>NEAREST</code> similarity search
-                            against the normalised supplier key — a council name change, merger, or small
-                            spelling difference ("ACME LTD" vs "ACME LTD.") still surfaces the real supplier
-                            near the top, ranked by the <b>score</b> column (cosine similarity, 1.0 = exact
-                            match). Graded closeness is a well-behaved local ranking, not a global guarantee
-                            that every distant pair orders strictly by distance — treat a low score as a weak
-                            match, not a confident one.</p>
-                    }
-                    else
-                    {
-                        <p class="hint">An exact substring match on the normalised supplier name — only rows
-                            whose key literally contains what you typed. Use this when you want to be certain
-                            nothing beyond a literal substring is being matched.</p>
-                    }
-                    @if (_nearestResults.Count > 0)
-                    {
-                        <div class="table-scroll table-scroll-fixed">
-                            <table class="exc-table">
-                                <thead>
-                                    <tr>
-                                        <th>Supplier (as published)</th><th>Council</th>
-                                        @if (_searchMode == SearchMode.Graded) { <th>Score</th> }
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    @foreach (var r in _nearestResults)
-                                    {
-                                        <tr>
-                                            <td>@r.Supplier</td><td>@r.Council</td>
-                                            @if (_searchMode == SearchMode.Graded) { <td>@r.Score.ToString("F3")</td> }
-                                        </tr>
-                                    }
-                                </tbody>
-                            </table>
-                        </div>
-                    }
                 </section>
             }
+
+            <section class="loaded-stats">
+                <h2>Loaded data</h2>
+                <p class="hint">@StatsLine()</p>
+            </section>
+
+            <section class="years">
+                <h2>Add council / month</h2>
+                <p class="hint">Reading republishes monthly, not annually — five representative months
+                    are hosted here. Each loads as a small, pre-normalised file and BulkLoads straight
+                    into the same in-browser database as Wokingham's own data, so the cross-council
+                    view below works the moment both are loaded.</p>
+                <div class="council-add">
+                    <div class="council-add-head">
+                        <b>@SupportedCouncils.Reading.Name</b>
+                        <span class="hint">@_readingMonths.Count(y => y.Loaded) of @_readingMonths.Count months loaded</span>
+                    </div>
+                    <div class="year-grid">
+                        @foreach (var y in _readingMonths)
+                        {
+                            <label class="year-pick @(y.Loaded ? "loaded" : "")">
+                                <input type="checkbox" checked="@y.Checked" @onchange="e => y.Checked = (bool)e.Value!" disabled="@(_busy || y.Loaded)" />
+                                <span class="year-tag">@y.Tag</span>
+                                <span class="year-fmt">@(y.Loaded ? "loaded" : "csv source")</span>
+                            </label>
+                        }
+                    </div>
+                    <button class="go" @onclick="LoadSelectedReadingMonths" disabled="@(_busy || !_readingMonths.Any(y => y.Checked && !y.Loaded))" type="button">
+                        @(_busy ? _phase : "Load selected months")
+                    </button>
+                </div>
+                <div class="council-add @(_loadedCouncils.Contains("wokingham") ? "" : "council-add-disabled")">
+                    <div class="council-add-head">
+                        <b>Wokingham Borough Council</b>
+                        <span class="hint">@(_loadedCouncils.Contains("wokingham")
+                            ? $"{_wokinghamYears.Count(y => y.Loaded)} of {_wokinghamYears.Count} years loaded"
+                            : "Go back and choose Wokingham from the picker to load it alongside Reading.")</span>
+                    </div>
+                </div>
+            </section>
         }
-        else
+
+        @if ((_mode == Mode.Wokingham || _mode == Mode.Reading) && _spendRowsLoaded > 0)
+        {
+            <section class="crosscouncil">
+                <h2>Cross-council correlations</h2>
+                <p class="hint">@CrossCouncilStateLine()</p>
+                @if (_loadedCouncils.Contains("wokingham") && _loadedCouncils.Contains("reading"))
+                {
+                    <p class="note-callout">Wokingham's figures include a stated invoice amount; Reading's
+                        don't (one signed Amount column only, see above) — a cross-council match tells you
+                        the same supplier was paid by both councils, not that the two payments are
+                        reconciled against each other the way Schedule A reconciles a single council's own
+                        invoice vs. payment.</p>
+                }
+                <div class="cc-controls">
+                    <input type="text" @bind="_nearestSupplierQuery" @bind:event="oninput"
+                           placeholder="Type a supplier name to search everything loaded…" disabled="@_busy" />
+                    <select @bind="_searchMode" disabled="@_busy">
+                        <option value="@SearchMode.Graded">Graded match (ranked by similarity)</option>
+                        <option value="@SearchMode.ExactSubstring">Exact substring (LIKE)</option>
+                    </select>
+                    <button class="ghost" @onclick="RunNearestSupplierSearch"
+                            disabled="@(string.IsNullOrWhiteSpace(_nearestSupplierQuery) || _busy)" type="button">
+                        Search loaded suppliers
+                    </button>
+                </div>
+                @if (_searchMode == SearchMode.Graded)
+                {
+                    <p class="hint">Ranked by HoloDb's holographic <code>NEAREST</code> similarity search
+                        against the normalised supplier key — a council name change, merger, or small
+                        spelling difference ("ACME LTD" vs "ACME LTD.") still surfaces the real supplier
+                        near the top, ranked by the <b>score</b> column (cosine similarity, 1.0 = exact
+                        match). Graded closeness is a well-behaved local ranking, not a global guarantee
+                        that every distant pair orders strictly by distance — treat a low score as a weak
+                        match, not a confident one.</p>
+                }
+                else
+                {
+                    <p class="hint">An exact substring match on the normalised supplier name — only rows
+                        whose key literally contains what you typed. Use this when you want to be certain
+                        nothing beyond a literal substring is being matched.</p>
+                }
+                @if (_nearestResults.Count > 0)
+                {
+                    <div class="table-scroll table-scroll-fixed">
+                        <table class="exc-table">
+                            <thead>
+                                <tr>
+                                    <th>Supplier (as published)</th><th>Council</th>
+                                    @if (_searchMode == SearchMode.Graded) { <th>Score</th> }
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var r in _nearestResults)
+                                {
+                                    <tr>
+                                        <td>@r.Supplier</td><td>@r.Council</td>
+                                        @if (_searchMode == SearchMode.Graded) { <td>@r.Score.ToString("F3")</td> }
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+            </section>
+        }
+
+        @if (_mode == Mode.OwnFile)
         {
             <section class="ownfile">
                 <h2>Load your own file</h2>
@@ -267,6 +385,27 @@
 
         @if (_tests.Count > 0)
         {
+            var unexplainedSummary = DistinctSummary(unexplainedOnly: true);
+            var overallSummary = DistinctSummary(unexplainedOnly: false);
+            <section class="summary-bar">
+                <h2>Totals across everything loaded</h2>
+                <div class="summary-cards">
+                    <div class="summary-card summary-card-unexplained">
+                        <span class="summary-label">Unexplained — genuinely unaccounted for</span>
+                        <span class="summary-count">@unexplainedSummary.Count.ToString("N0") transactions</span>
+                        <span class="summary-total">@Money(unexplainedSummary.Total)</span>
+                    </div>
+                    <div class="summary-card">
+                        <span class="summary-label">All exceptions, every label combined</span>
+                        <span class="summary-count">@overallSummary.Count.ToString("N0") transactions</span>
+                        <span class="summary-total">@Money(overallSummary.Total)</span>
+                    </div>
+                </div>
+                <p class="hint">Counted over DISTINCT transactions, so a row flagged by more than one test below is
+                    only counted once here. <strong>An exception total is the value of items that fail one of the
+                    mechanical tests below — it is not money proven to be lost or wasted.</strong></p>
+            </section>
+
             <section class="results">
                 <h2>Exception tests</h2>
                 @foreach (var t in _tests)
@@ -277,12 +416,16 @@
                     var pageItems = filtered.Skip((t.Page - 1) * PageSize).Take(PageSize).ToList();
                     var startIdx = filtered.Count == 0 ? 0 : (t.Page - 1) * PageSize + 1;
                     var endIdx = Math.Min(t.Page * PageSize, filtered.Count);
+                    var testTotal = TestTotal(filtered);
+                    var selectedInTest = filtered.Where(i => i.Selected).ToList();
+                    var classTotals = ClassificationTotals(filtered);
                     <div class="test-card">
                         <button class="test-head" type="button" @onclick="() => ToggleCollapse(t)" aria-expanded="@(!t.Collapsed)">
                             <span class="collapse-arrow">@(t.Collapsed ? "▸" : "▾")</span>
                             <h3>@t.Label</h3>
                             <span class="tag @TagClass(t.Items.Count > 0 ? t.Items[0].Type : ExceptionType.Discrepancy)">@t.Items.FirstOrDefault()?.Type.ToString() ?? "—"</span>
                             <span class="count">@t.Items.Count.ToString("N0") exceptions</span>
+                            <span class="count count-total" title="@TestAmountLabel(t.Label)">@Money(testTotal)</span>
                         </button>
                         @if (!t.Collapsed)
                         {
@@ -294,11 +437,32 @@
                                 }
                                 else
                                 {
+                                    <p class="test-amount-label">The £ figure above is the @TestAmountLabel(t.Label), @(filtered.Count == t.Items.Count ? "across every item below" : "for the current filter").
+                                        @if (t.Label.Contains("test 3"))
+                                        {
+                                            <text> The narrower value of just the repeats beyond each group's first payment: <b>@Money(RepeatsBeyondFirstTotal(filtered))</b>.</text>
+                                        }
+                                    </p>
+                                    @if (classTotals.Count > 1 || (classTotals.Count == 1 && !classTotals[0].Classification.Equals("Unreconciled") && !classTotals[0].Classification.Equals("Unclear")))
+                                    {
+                                        <div class="classification-legend">
+                                            @foreach (var ct in classTotals)
+                                            {
+                                                <div class="classification-row @(ct.Classification is "Unreconciled" or "Unclear" or "Unmatched" or "" ? "classification-unexplained" : "")">
+                                                    <span class="tag @(ct.Classification is "Unreconciled" or "Unclear" or "Unmatched" or "" ? "tag-unexplained" : "tag-label")">@ClassificationDisplay(ct.Classification)</span>
+                                                    <span class="classification-count">@ct.Count.ToString("N0")</span>
+                                                    <span class="classification-total">@Money(ct.Total)</span>
+                                                    <span class="classification-meaning">@ClassificationMeanings.GetValueOrDefault(ct.Classification, "")</span>
+                                                </div>
+                                            }
+                                        </div>
+                                    }
                                     <div class="panel-controls">
                                         <label class="select-all">
                                             <input type="checkbox" checked="@AllFilteredSelected(filtered)" @onchange="e => SelectAllFiltered(filtered, (bool)e.Value!)" />
                                             @SelectAllLabel(t, filtered.Count)
                                         </label>
+                                        <span class="selected-total">Selected: <b>@selectedInTest.Count.ToString("N0")</b> item@(selectedInTest.Count == 1 ? "" : "s"), <b>@Money(TestTotal(selectedInTest))</b></span>
                                         <input type="text" class="filter-text" placeholder="Filter supplier / description…"
                                                @bind="t.FilterText" @bind:event="oninput" @bind:after="() => OnFilterChanged(t)" />
                                         <select class="filter-year" @bind="t.FilterYear" @bind:after="() => OnFilterChanged(t)">
@@ -320,6 +484,8 @@
                                                     <th class="sortable" @onclick='() => SetSort(t, "amount")'>Amount@SortArrow(t, "amount")</th>
                                                     <th class="sortable" @onclick='() => SetSort(t, "payee")'>Payee@SortArrow(t, "payee")</th>
                                                     <th class="sortable" @onclick='() => SetSort(t, "service")'>Service area@SortArrow(t, "service")</th>
+                                                    <th>Council</th>
+                                                    <th title="Ranked below the genuinely unexplained rows — see the legend above this table">Label</th>
                                                     <th>Status</th>
                                                     <th>Evidence</th>
                                                 </tr>
@@ -327,7 +493,7 @@
                                             <tbody>
                                                 @foreach (var it in pageItems)
                                                 {
-                                                    <tr class="@(it.HandVerified ? "verified" : "")">
+                                                    <tr class="@(it.HandVerified ? "verified" : "") @(it.IsUnexplained ? "" : "labelled-row")">
                                                         <td><input type="checkbox" checked="@it.Selected" @onchange="e => ToggleSelect(it, (bool)e.Value!)" /></td>
                                                         <td>@it.SourceTag</td>
                                                         <td>@it.TransactionId @if (it.HandVerified) { <span class="verified-badge" title="Hand-verified by the virtual-customer agent against the raw file">✓ verified</span> }</td>
@@ -335,6 +501,17 @@
                                                         <td>@(it.Amount is { } a ? a.ToString("C2", GB) : "—")</td>
                                                         <td>@it.Supplier</td>
                                                         <td>@(it.ServiceArea ?? "—")</td>
+                                                        <td>@it.Council</td>
+                                                        <td>
+                                                            @if (it.IsUnexplained)
+                                                            {
+                                                                <span class="tag tag-unexplained">Unexplained</span>
+                                                            }
+                                                            else
+                                                            {
+                                                                <span class="tag tag-label" title="@ClassificationMeanings.GetValueOrDefault(it.Classification, "")">@ClassificationDisplay(it.Classification)</span>
+                                                            }
+                                                        </td>
                                                         <td><span class="tag tag-status">@it.Status</span></td>
                                                         <td>
                                                             @if (it.Kind != EvidenceKind.None)
@@ -350,8 +527,9 @@
                                                     @if (it.EvidenceOpen && it.Kind == EvidenceKind.AmountCompare)
                                                     {
                                                         <tr class="evidence-row">
-                                                            <td colspan="9">
+                                                            <td colspan="11">
                                                                 <div class="evidence">
+                                                                    <p class="ev-sentence">@ExplainItem(t, it)</p>
                                                                     <div class="evidence-pair">
                                                                         <div class="ev-box"><span class="ev-label">Sum of payments published</span><span class="ev-val">@(it.Amount is { } ea ? ea.ToString("C2", GB) : "—")</span></div>
                                                                         <div class="ev-op">vs</div>
@@ -380,8 +558,9 @@
                                                     {
                                                         var siblings = GroupSiblings(t, it);
                                                         <tr class="evidence-row">
-                                                            <td colspan="9">
+                                                            <td colspan="11">
                                                                 <div class="evidence">
+                                                                    <p class="ev-sentence">@ExplainItem(t, it)</p>
                                                                     <p class="ev-note">@GroupEvidenceIntro(t, siblings.Count)</p>
                                                                     <div class="table-scroll">
                                                                         <table class="ev-table">
@@ -415,10 +594,21 @@
                                                             </td>
                                                         </tr>
                                                     }
+                                                    else if (it.EvidenceOpen && it.Kind == EvidenceKind.CreditMatch)
+                                                    {
+                                                        <tr class="evidence-row">
+                                                            <td colspan="11">
+                                                                <div class="evidence">
+                                                                    <p class="ev-sentence">@ExplainItem(t, it)</p>
+                                                                    <p class="ev-note">Engine detail: @it.ClassificationDetail</p>
+                                                                </div>
+                                                            </td>
+                                                        </tr>
+                                                    }
                                                 }
                                                 @if (pageItems.Count == 0)
                                                 {
-                                                    <tr><td colspan="9" class="hint">No rows match this filter.</td></tr>
+                                                    <tr><td colspan="11" class="hint">No rows match this filter.</td></tr>
                                                 }
                                             </tbody>
                                         </table>
@@ -443,9 +633,18 @@
         @if (_selected.Count > 0)
         {
             <section class="tray">
+                @{ var selDistinct = SelectedDistinctSummary(); }
                 <div class="tray-row">
-                    <span><b>@_selected.Count.ToString("N0")</b> exception@(_selected.Count == 1 ? "" : "s") selected</span>
+                    <span><b>@_selected.Count.ToString("N0")</b> exception@(_selected.Count == 1 ? "" : "s") selected
+                        (<b>@selDistinct.Count.ToString("N0")</b> distinct transaction@(selDistinct.Count == 1 ? "" : "s"),
+                        <b>@Money(selDistinct.Total)</b>)</span>
                     <button class="go" @onclick="() => _showFoi = true" type="button">Generate FOI request</button>
+                </div>
+                <div class="tray-breakdown">
+                    @foreach (var (type, count, total) in SelectedTypeBreakdown())
+                    {
+                        <span class="tray-chip"><span class="tag @TagClass(type)">@type</span> @count.ToString("N0") · @Money(total)</span>
+                    }
                 </div>
             </section>
         }
@@ -507,18 +706,20 @@
 </div>
 
 @code {
-    enum Mode { Pick, Wokingham, OwnFile }
+    enum Mode { Pick, Wokingham, Reading, OwnFile }
     enum ExceptionType { Discrepancy, Unreconciled, Anomaly }
     enum SearchMode { Graded, ExactSubstring }
     // What kind of evidence comparison a row supports, for the highlighted "show the discrepancy"
     // panel — None (no evidence to show), AmountCompare (test 1/2: sum paid vs stated invoice),
     // GroupEvidence (test 3/4/5: sibling rows sharing GroupKey, with matching/differing columns).
-    enum EvidenceKind { None, AmountCompare, GroupEvidence }
+    enum EvidenceKind { None, AmountCompare, GroupEvidence, CreditMatch }
 
     sealed class ExceptionItem
     {
         public string TestLabel = "";
         public ExceptionType Type;
+        public string Council = "";      // display name, e.g. "Wokingham Borough Council" — which
+        // council this row came from, so a cross-council merged test table stays unambiguous.
         public string SourceTag = "";
         public string TransactionId = "";
         public string Supplier = "";
@@ -539,8 +740,19 @@
         public bool OppositeSign;        // AmountCompare, test 2 only: net == -gross
         public string? GroupKey;         // GroupEvidence: links sibling rows within this SAME test
         public int GroupSize;
+        public int LineCount = 1;        // AmountCompare (test 1/2) only: how many raw published
+        // payment lines were summed into Amount — carried so the generated sentence can say
+        // "one payment of £X" vs "N payments totalling £X" instead of always assuming one line.
         public bool EvidenceOpen;        // UI-only: this row's evidence panel expanded
-        public string Key => $"{TestLabel}|{SourceTag}|{TransactionId}|{Supplier}|{Amount}|{PayDate}";
+        // ---- classification label (AuditEngine's ScheduleAClassification/ScheduleBClassification,
+        // see CouncilAudit/Models.cs) — "Unreconciled"/"Unclear" means no pattern was recognised
+        // (the genuinely unexplained rows this page leads with); anything else is a named, neutral
+        // label ranked below those, with a one-line "what this means" shown per test (see
+        // ClassificationMeanings below).
+        public string Classification = "Unreconciled";
+        public string? ClassificationDetail;
+        public bool IsUnexplained => Classification is "Unreconciled" or "Unclear" or "Unmatched" or "";
+        public string Key => $"{Council}|{TestLabel}|{SourceTag}|{TransactionId}|{Supplier}|{Amount}|{PayDate}";
     }
 
     sealed class TestGroup
@@ -558,6 +770,41 @@
         public bool SortDesc;
         public int Page = 1;
     }
+
+    // Neutral "what this label means" line per classification name, shown once per test (not
+    // per row) — covers both ScheduleAClassification and ScheduleBClassification names, since a
+    // test only ever carries one family or the other. "Unreconciled"/"Unclear" are included too
+    // (so the legend is complete) but rendered first/muted in the UI, same rank as the row itself.
+    static readonly Dictionary<string, string> ClassificationMeanings = new()
+    {
+        ["Unreconciled"] = "No specific pattern was recognised — the published numbers simply don't add up under any of the checks below. This is the actual target: ask the council for the invoice and the reason.",
+        ["DoubleListing"] = "The same invoice line appears to have been published more than once (the lines sum to an exact whole-number multiple of the stated invoice), rather than several genuinely different charges.",
+        ["DebtCharge"] = "The stated amount splits exactly into a round principal plus a non-round interest/charge remainder — consistent with a loan repayment or debt-recovery invoice, not an unexplained gap.",
+        ["EarlyPaymentProgramme"] = "A batch of negative early-payment discount fees under the council's own named scheme (a supply-chain-finance arrangement) — a known pattern, not an arithmetic mismatch.",
+        ["VatRoundingNoise"] = "The gap is a few pence, consistent with VAT being rounded per line and then summed, rather than once on the total — not a genuine unexplained gap.",
+        ["NegativeNetSignFlip"] = "The published net figure is the exact negative of the value needed to reconcile the stated invoice — the magnitude and VAT arithmetic are both correct, only the sign is inverted. This is reported as a named, recurring shape, not an explanation: why the sign is inverted is not established.",
+        ["Unclear"] = "No supplier invoice number was available to check — reported exactly as published, with no verdict either way.",
+        ["LikelyDuplicate"] = "Every member of this group shares the same supplier invoice number as well as the same amount — the strongest signal of a genuine duplicate payment.",
+        ["LikelyRecurring"] = "Members carry different supplier invoice numbers despite the identical amount — consistent with a standardised recurring rate (e.g. a placement or rent-scheme payment), not a repeat error.",
+        ["Unmatched"] = "No same-supplier published charge of matching magnitude was found within 365 days — not established to be an error (the matching charge may simply be in a file not loaded this session), reported as published.",
+        ["MatchedOffsettingCharge"] = "A same-supplier published charge of matching magnitude exists within 365 days — a plausible explanation exists in the loaded data, not a claim that this specific credit offsets that specific charge.",
+    };
+
+    static string ClassificationDisplay(string c) => c switch
+    {
+        "DoubleListing" => "Double listing", "DebtCharge" => "Debt charge",
+        "EarlyPaymentProgramme" => "Early payment programme", "VatRoundingNoise" => "VAT rounding noise",
+        "NegativeNetSignFlip" => "Net sign flip", "LikelyDuplicate" => "Likely duplicate",
+        "LikelyRecurring" => "Likely recurring", "MatchedOffsettingCharge" => "Matched offsetting charge",
+        "" => "—",
+        _ => c, // "Unreconciled" / "Unclear" / "Unmatched"
+    };
+
+    static readonly Dictionary<string, string> CouncilDisplayNames = new()
+    {
+        ["wokingham"] = "Wokingham Borough Council",
+        ["reading"] = "Reading Borough Council",
+    };
 
     sealed class YearPick
     {
@@ -594,7 +841,7 @@
     // session (so cross-council SQL/NEAREST queries just work) — see LoadSelectedYears below.
     Database? _db;
     int _spendRowsLoaded;
-    bool _exceptionsLoaded;
+    HashSet<string> _exceptionsLoadedFor = new();
     int _exceptionsLoadedCount;
     string _nearestSupplierQuery = "";
     SearchMode _searchMode = SearchMode.Graded;
@@ -610,6 +857,23 @@
         new() { Tag = "FY2025-26", FileName = "wokingham-2025-26.csv", Format = SourceFormat.Csv },
     };
 
+    // Reading publishes monthly, not annually — same YearPick shape, a month tag instead of a
+    // financial-year tag. Reading has NO Schedule A (see HasScheduleA note on CouncilDbBuilder) —
+    // its own picker-mode panel says so plainly rather than rendering an empty test 1/2 panel.
+    List<YearPick> _readingMonths = new()
+    {
+        new() { Tag = "2021-12", FileName = "reading-2021-12.csv", Format = SourceFormat.Csv },
+        new() { Tag = "2022-04", FileName = "reading-2022-04.csv", Format = SourceFormat.Csv },
+        new() { Tag = "2023-03", FileName = "reading-2023-03.csv", Format = SourceFormat.Csv },
+        new() { Tag = "2024-06", FileName = "reading-2024-06.csv", Format = SourceFormat.Csv },
+        new() { Tag = "2026-02", FileName = "reading-2026-02.csv", Format = SourceFormat.Csv },
+    };
+
+    // Which hosted councils have actually been loaded into _db/_tests this session — drives the
+    // cross-council correlation section's wording and the summary bar, independent of which
+    // picker-mode panel happens to be showing right now.
+    HashSet<string> _loadedCouncils = new();
+
     // ---- "use your own file" state ----
     byte[]? _ownBytes;
     SourceFormat _ownFormat;
@@ -620,6 +884,11 @@
     GrossMeaning _ownGrossMeaning = GrossMeaning.RepeatedInvoiceTotal;
     string _ownCouncilName = "";
 
+    // Picking a hosted council only switches which "add council/year" panel and FOI contact are
+    // active — it deliberately does NOT wipe already-loaded data from another hosted council (see
+    // _loadedCouncils above): the whole point of hosting more than one council is the cross-council
+    // correlation view below, which needs everything loaded this session to stay loaded while you
+    // switch between panels.
     void PickWokingham()
     {
         _mode = Mode.Wokingham; _councilDisplayName = SupportedCouncils.Wokingham.Name;
@@ -628,30 +897,56 @@
         // this address as "Informationrequests[at]Wokingham.gov.uk").
         _foiContactEmail = "informationrequests@wokingham.gov.uk";
         _foiContactCheckedNote = "checked 3 October 2026 against the council's own FOI contact page";
-        Reset();
+        _error = null; _showFoi = false;
+        _ = EnsureTopLoaded("wokingham");
+    }
+    void PickReading()
+    {
+        _mode = Mode.Reading; _councilDisplayName = SupportedCouncils.Reading.Name;
+        // Verified by hand against the council's own FOI contact page, checked 3 October 2026:
+        // https://www.reading.gov.uk/contact-us/freedom-of-information-foi/freedom-of-information-act-procedure-for-dealing-with-requests/.
+        _foiContactEmail = "FOI.CRT@reading.gov.uk";
+        _foiContactCheckedNote = "checked 3 October 2026 against the council's own FOI contact page";
+        _error = null; _showFoi = false;
+        _ = EnsureTopLoaded("reading");
+    }
+
+    // "Top unexplained items" panel — a small (<=20-row), precomputed, offline-ranked CSV per
+    // council (VirtualCustomer's export/<council>/top20_unreconciled.csv), each row already
+    // carrying a neutral one-line description. Fetched once per council, plain (not gzipped —
+    // a few KB), rendered header-driven so the two councils' differing column sets (Wokingham:
+    // Year/TransNo/Net/Gross/VatType; Reading: Month/Voucher/Amount/InvoiceType) need no special
+    // casing on this side.
+    Dictionary<string, List<string[]>> _topItems = new();
+    Dictionary<string, bool> _topLoading = new();
+    async Task EnsureTopLoaded(string councilKey)
+    {
+        if (_topItems.ContainsKey(councilKey) || _topLoading.GetValueOrDefault(councilKey)) return;
+        _topLoading[councilKey] = true;
+        try { _topItems[councilKey] = CsvReader.Parse(await Http.GetByteArrayAsync($"data/councils/{councilKey}/top20_unreconciled.csv")); }
+        catch { _topItems[councilKey] = new(); }
+        finally { _topLoading[councilKey] = false; StateHasChanged(); }
     }
     void BackToPicker()
     {
-        _mode = Mode.Pick; _foiContactEmail = ""; _foiContactCheckedNote = "";
-        _db = null; _spendRowsLoaded = 0; _exceptionsLoaded = false; _exceptionsLoadedCount = 0;
-        _nearestResults = new(); _nearestSupplierQuery = "";
-        foreach (var y in _wokinghamYears) { y.Loaded = false; y.Checked = false; }
-        Reset();
-    }
-
-    void Reset()
-    {
-        _error = null; _warnings = new(); _tests = new(); _selected.Clear();
-        _showDoubleListingNote = false; _showFoi = false;
+        // Deliberately does not clear _db/_tests/_selected/_loadedCouncils — see the note above.
+        _mode = Mode.Pick; _foiContactEmail = ""; _foiContactCheckedNote = ""; _error = null; _showFoi = false;
     }
 
     static string? NullIfEmpty(string s) => string.IsNullOrWhiteSpace(s) ? null : s;
 
-    string StatsLine() => _spendRowsLoaded == 0
-        ? "Nothing loaded yet — pick a year below to load your first council into the browser's database."
-        : $"{_wokinghamYears.Count(y => y.Loaded)} of {_wokinghamYears.Count} Wokingham years loaded " +
-          $"({_spendRowsLoaded:N0} spend rows), {_exceptionsLoadedCount:N0} precomputed exceptions. " +
-          "1 council loaded so far.";
+    string StatsLine()
+    {
+        if (_spendRowsLoaded == 0)
+            return "Nothing loaded yet — pick a year/month below to load your first council into the browser's database.";
+        var parts = new List<string>();
+        if (_loadedCouncils.Contains("wokingham"))
+            parts.Add($"{_wokinghamYears.Count(y => y.Loaded)} of {_wokinghamYears.Count} Wokingham years");
+        if (_loadedCouncils.Contains("reading"))
+            parts.Add($"{_readingMonths.Count(y => y.Loaded)} of {_readingMonths.Count} Reading months");
+        return $"{string.Join(", ", parts)} loaded ({_spendRowsLoaded:N0} spend rows), " +
+               $"{_exceptionsLoadedCount:N0} precomputed exceptions. {_loadedCouncils.Count} council(s) loaded so far.";
+    }
 
     string CrossCouncilStateLine() =>
         "Only one council is loaded today, so same-supplier and payments-between-councils views have " +
@@ -678,22 +973,27 @@
         return output.ToArray();
     }
 
-    // Loads the selected, not-yet-loaded Wokingham years as compact pre-normalised files (built
-    // offline by CouncilDbBuilder from the same raw hosted files, see that project's own header
-    // comment) and BulkLoads them into the shared in-memory HoloDb. The council-wide precomputed
-    // exceptions file loads once, alongside the first year, rather than re-running AuditEngine
-    // client-side at all for this council.
-    async Task LoadSelectedYears()
+    async Task LoadSelectedYears() => await LoadSelectedPeriods("wokingham", _wokinghamYears);
+    async Task LoadSelectedReadingMonths() => await LoadSelectedPeriods("reading", _readingMonths);
+
+    // Loads the selected, not-yet-loaded periods (financial years for Wokingham, months for
+    // Reading) as compact pre-normalised files (built offline by CouncilDbBuilder from the same
+    // raw hosted files, see that project's own header comment) and BulkLoads them into the shared
+    // in-memory HoloDb — SHARED across every hosted council loaded this session, so cross-council
+    // SQL/NEAREST queries just work the moment a second council joins. Each council's own
+    // precomputed exceptions file loads once, alongside its first period, rather than re-running
+    // AuditEngine client-side at all.
+    async Task LoadSelectedPeriods(string councilKey, List<YearPick> periods)
     {
         _error = null; _busy = true; _phase = "Loading…"; StateHasChanged(); await Task.Delay(1);
         try
         {
             EnsureDb();
-            var toLoad = _wokinghamYears.Where(y => y.Checked && !y.Loaded).ToList();
+            var toLoad = periods.Where(y => y.Checked && !y.Loaded).ToList();
             foreach (var y in toLoad)
             {
                 _phase = $"Fetching {y.Tag}…"; StateHasChanged(); await Task.Delay(1);
-                var bytes = await FetchGunzipAsync($"data/councils/wokingham/{y.Tag}.norm.csv.gz");
+                var bytes = await FetchGunzipAsync($"data/councils/{councilKey}/{y.Tag}.norm.csv.gz");
                 _phase = $"Loading {y.Tag} into HoloDb…"; StateHasChanged(); await Task.Delay(1);
                 var table = CsvReader.Parse(bytes); // plain UTF-8, no BOM — written by CouncilDbBuilder
                 int m = table.Count - 1;
@@ -720,16 +1020,17 @@
                                    servicearea, costcentre, description, supplierkey, supplier }, m);
                 y.Loaded = true; y.Checked = false;
                 _spendRowsLoaded += m;
+                _loadedCouncils.Add(councilKey);
             }
 
-            if (!_exceptionsLoaded)
+            if (!_exceptionsLoadedFor.Contains(councilKey))
             {
                 _phase = "Loading precomputed exceptions…"; StateHasChanged(); await Task.Delay(1);
-                var excBytes = await FetchGunzipAsync("data/councils/wokingham/exceptions.csv.gz");
+                var excBytes = await FetchGunzipAsync($"data/councils/{councilKey}/exceptions.csv.gz");
                 var excTable = CsvReader.Parse(excBytes);
                 BuildTestsFromExceptionsRows(excTable);
-                _exceptionsLoaded = true;
-                _exceptionsLoadedCount = excTable.Count - 1;
+                _exceptionsLoadedFor.Add(councilKey);
+                _exceptionsLoadedCount += excTable.Count - 1;
             }
 
             _showDoubleListingNote = _wokinghamYears.Any(y => y.Tag == "FY2020-21" && y.Loaded)
@@ -761,49 +1062,72 @@
         ["Exception test 5 - the same line listed more than once in the published file"] =
             "The exact same transaction number, supplier, amount, description and pay date appears on " +
             "more than one row of the same published file.",
+        ["Exception test R - credit/refund rows vs. a matching same-supplier charge"] =
+            "Every row the council's own Invoice Type column labels a credit or refund, checked against " +
+            "whether a same-supplier charge of matching size exists anywhere in the loaded data within a " +
+            "year either way. A credit sign convention changed between publishing eras — this test never " +
+            "assumes a sign, it reads the council's own Invoice Type label instead.",
     };
 
-    // Builds the same TestGroup/ExceptionItem shape the UI already renders, straight from the
-    // council-wide precomputed exceptions file — council,testlabel,type,sourcetag,transid,supplier,
-    // paydate,amount,servicearea,description,handverified,compareamount,groupkey,groupsize,
-    // oppositesign (the last 4 columns, added for the evidence/highlighting panel, are produced by
+    // Persistent across loads so a second hosted council's exceptions MERGE into the same test
+    // panels (by label) instead of replacing the first council's — this is what makes the merged
+    // "Exception tests" section genuinely cross-council once more than one is loaded.
+    Dictionary<string, TestGroup> _testsByLabel = new();
+    List<string> _testOrder = new();
+
+    // Builds the same TestGroup/ExceptionItem shape the UI already renders, straight from a
+    // council's own precomputed exceptions file — council,testlabel,type,sourcetag,transid,
+    // supplier,paydate,amount,servicearea,description,handverified,compareamount,groupkey,
+    // groupsize,oppositesign,classification,classificationdetail (the last 6 columns, added for
+    // the evidence/highlighting panel and the classification labels, are produced by
     // CouncilDbBuilder — see that project's own header comment for the exact schema). No
-    // AuditEngine.Run call for Wokingham; this file is a precomputed snapshot of its output.
+    // AuditEngine.Run call in the browser for a hosted council; this file is a precomputed
+    // snapshot of its output. Safe to call once per council, additively.
     void BuildTestsFromExceptionsRows(List<string[]> table)
     {
-        var byLabel = new Dictionary<string, TestGroup>();
-        var order = new List<string>();
         for (int i = 1; i < table.Count; i++)
         {
             var f = table[i];
+            string councilKey = f[0];
             string label = f[1];
-            if (!byLabel.TryGetValue(label, out var grp))
+            if (!_testsByLabel.TryGetValue(label, out var grp))
             {
                 grp = new TestGroup { Label = label, Description = TestDescByLabel.GetValueOrDefault(label, "") };
-                byLabel[label] = grp; order.Add(label);
+                _testsByLabel[label] = grp; _testOrder.Add(label);
             }
             var type = Enum.TryParse<ExceptionType>(f[2], out var t) ? t : ExceptionType.Discrepancy;
             decimal? compareAmount = f.Length > 11 && decimal.TryParse(f[11], NumberStyles.Any, CultureInfo.InvariantCulture, out var ca) ? ca : null;
             string? groupKey = f.Length > 12 ? NullIfEmpty(f[12]) : null;
             int groupSize = f.Length > 13 && int.TryParse(f[13], out var gs) ? gs : 1;
             bool oppositeSign = f.Length > 14 && f[14] == "True";
+            string classification = f.Length > 15 ? f[15] : "";
+            string? classificationDetail = f.Length > 16 ? NullIfEmpty(f[16]) : null;
+            int lineCount = f.Length > 17 && int.TryParse(f[17], out var lc) ? lc : 1;
             grp.Items.Add(new ExceptionItem
             {
-                TestLabel = label, Type = type, SourceTag = f[3], TransactionId = f[4], Supplier = f[5],
+                TestLabel = label, Type = type,
+                Council = CouncilDisplayNames.GetValueOrDefault(councilKey, councilKey),
+                SourceTag = f[3], TransactionId = f[4], Supplier = f[5],
                 PayDate = NullIfEmpty(f[6]),
                 Amount = decimal.TryParse(f[7], NumberStyles.Any, CultureInfo.InvariantCulture, out var amt) ? amt : null,
                 ServiceArea = NullIfEmpty(f[8]),
                 Description = NullIfEmpty(f[9]),
                 HandVerified = f[10] == "True",
-                Kind = compareAmount is not null ? EvidenceKind.AmountCompare : groupKey is not null ? EvidenceKind.GroupEvidence : EvidenceKind.None,
+                Kind = label.Contains("test R") ? EvidenceKind.CreditMatch
+                     : compareAmount is not null ? EvidenceKind.AmountCompare
+                     : groupKey is not null ? EvidenceKind.GroupEvidence : EvidenceKind.None,
                 CompareAmount = compareAmount,
                 CompareLabel = compareAmount is not null ? "Stated invoice amount" : null,
                 OppositeSign = oppositeSign,
                 GroupKey = groupKey,
                 GroupSize = groupSize,
+                Classification = string.IsNullOrEmpty(classification)
+                    ? (type == ExceptionType.Anomaly ? "Unclear" : "Unreconciled") : classification,
+                ClassificationDetail = classificationDetail,
+                LineCount = lineCount,
             });
         }
-        _tests = order.OrderBy(l => l, StringComparer.Ordinal).Select(l => byLabel[l]).ToList();
+        _tests = _testOrder.OrderBy(l => l, StringComparer.Ordinal).Select(l => _testsByLabel[l]).ToList();
         SetDefaultCollapse();
     }
 
@@ -905,9 +1229,18 @@
         _ownMapService = guess.ServiceArea ?? "";
     }
 
+    // Own-file mode is a standalone, one-off analysis — not part of the hosted-council
+    // cross-council merge (_testsByLabel/_db), so it's safe (and correct) to wipe its own
+    // state outright on every run rather than merging.
+    void ResetOwnFileResult()
+    {
+        _error = null; _warnings = new(); _tests = new(); _selected.Clear();
+        _showDoubleListingNote = false; _showFoi = false;
+    }
+
     async Task RunOwnFile()
     {
-        Reset();
+        ResetOwnFileResult();
         if (_ownBytes is null) { _error = "Load a file first."; return; }
         _busy = true; _phase = "Parsing…"; StateHasChanged(); await Task.Delay(1);
         try
@@ -954,13 +1287,23 @@
             {
                 TestLabel = paymentsExceed ? t1.Label : t2.Label,
                 Type = paymentsExceed ? ExceptionType.Discrepancy : ExceptionType.Unreconciled,
+                Council = _councilDisplayName,
                 SourceTag = r.SourceTag, TransactionId = r.TransactionId, Supplier = r.Supplier,
-                PayDate = r.PayDate, Amount = r.Gross, ServiceArea = r.ServiceArea, Description = r.Description,
+                // FIX (2026-10-03, caught while building the FOI-letter sentence generator): this
+                // used to store the STATED invoice amount (r.Gross) as "Amount" (labelled "Sum of
+                // payments published" in the evidence panel) and a derived VAT-adjusted figure
+                // (r.ExpectedGross) as "CompareAmount" (labelled "Stated invoice amount") — backwards
+                // on both counts. Amount is now the real sum of published PAYMENTS (r.Net); CompareAmount
+                // is the real stated invoice figure (r.Gross) the CompareLabel already claimed it was.
+                PayDate = r.PayDate, Amount = r.Net, ServiceArea = r.ServiceArea, Description = r.Description,
                 HandVerified = HandVerifiedTransNos.Contains(r.TransactionId),
                 Kind = EvidenceKind.AmountCompare,
-                CompareAmount = r.ExpectedGross,
+                CompareAmount = r.Gross,
                 CompareLabel = "Stated invoice amount",
                 OppositeSign = !paymentsExceed && r.Net != 0 && r.Gross != 0 && r.Net == -r.Gross,
+                Classification = r.Classification.ToString(),
+                ClassificationDetail = r.ClassificationDetail,
+                LineCount = r.LineCount,
             };
             (paymentsExceed ? t1 : t2).Items.Add(item);
         }
@@ -984,11 +1327,12 @@
             {
                 t3.Items.Add(new ExceptionItem
                 {
-                    TestLabel = t3.Label, Type = ExceptionType.Anomaly,
+                    TestLabel = t3.Label, Type = ExceptionType.Anomaly, Council = _councilDisplayName,
                     SourceTag = m.SourceTag, TransactionId = m.TransactionId, Supplier = m.Supplier,
                     PayDate = m.PayDateRaw, Amount = m.Net, ServiceArea = m.ServiceArea, Description = m.Description,
                     HandVerified = HandVerifiedTransNos.Contains(m.TransactionId),
                     Kind = EvidenceKind.GroupEvidence, GroupKey = groupKey, GroupSize = g.Members.Count,
+                    Classification = g.Classification.ToString(), ClassificationDetail = g.ClassificationDetail,
                 });
             }
         }
@@ -1011,7 +1355,7 @@
             {
                 t4.Items.Add(new ExceptionItem
                 {
-                    TestLabel = t4.Label, Type = ExceptionType.Discrepancy,
+                    TestLabel = t4.Label, Type = ExceptionType.Discrepancy, Council = _councilDisplayName,
                     SourceTag = m.SourceTag, TransactionId = m.TransactionId, Supplier = m.Supplier,
                     PayDate = m.PayDateRaw, Amount = m.Gross, ServiceArea = m.ServiceArea, Description = m.Description,
                     HandVerified = HandVerifiedTransNos.Contains(m.TransactionId),
@@ -1048,7 +1392,7 @@
             {
                 t5.Items.Add(new ExceptionItem
                 {
-                    TestLabel = t5.Label, Type = ExceptionType.Discrepancy,
+                    TestLabel = t5.Label, Type = ExceptionType.Discrepancy, Council = _councilDisplayName,
                     SourceTag = m.SourceTag, TransactionId = m.TransactionId, Supplier = m.Supplier,
                     PayDate = m.PayDateRaw, Amount = m.Gross, ServiceArea = m.ServiceArea,
                     Description = m.Description,
@@ -1070,6 +1414,96 @@
     };
 
     const int PageSize = 50;
+
+    // ---- £ totals (added 2026-10-03) ----
+    // A total here is "value involved" — the value of items that fail one of the mechanical tests
+    // below, NOT money proven lost or wasted. What the £ figure measures differs by test family:
+    // test 1/2 (payment vs. invoice) use the signed GAP between the two published figures; every
+    // other test uses the row's own published amount (already the per-line or per-group value
+    // CouncilDbBuilder/BuildTests wrote onto it).
+    static string TestAmountLabel(string testLabel) => testLabel switch
+    {
+        var l when l.Contains("test 1") || l.Contains("test 2") =>
+            "sum of the gaps between payments published and the stated invoice amount",
+        var l when l.Contains("test 3") => "total value of the repeated payments",
+        var l when l.Contains("test 4") => "total value involved in the multi-payee/multi-date transactions",
+        var l when l.Contains("test 5") => "total value of the repeated lines",
+        var l when l.Contains("test R") => "total value of the credit/refund rows",
+        _ => "total value involved",
+    };
+
+    static decimal TestRowValue(ExceptionItem it) =>
+        it.Kind == EvidenceKind.AmountCompare && it.CompareAmount is { } ca && it.Amount is { } a
+            ? Math.Abs(a - ca)
+            : Math.Abs(it.Amount ?? 0m); // CreditMatch (test R) rows can be negative (pre-2024 CREDIT era)
+
+    static decimal TestTotal(IEnumerable<ExceptionItem> items) => items.Sum(TestRowValue);
+
+    // Test 3 (repeated payments) also reports the narrower "value of the repeats beyond the
+    // first" — each group's own members minus one (the original payment), summed per group
+    // (GroupKey), not per row, so a 3-member group's own first row isn't itself counted as a repeat.
+    static decimal RepeatsBeyondFirstTotal(IReadOnlyList<ExceptionItem> items)
+    {
+        decimal total = 0m;
+        foreach (var g in items.Where(i => i.GroupKey is not null).GroupBy(i => i.GroupKey))
+        {
+            var ordered = g.ToList();
+            if (ordered.Count <= 1) continue;
+            total += ordered.Skip(1).Sum(TestRowValue);
+        }
+        return total;
+    }
+
+    // Per-classification breakdown within a test's currently FILTERED items — genuinely
+    // unexplained (Unreconciled/Unclear) ranked first, matching the row-ranking rule above.
+    static List<(string Classification, int Count, decimal Total)> ClassificationTotals(IReadOnlyList<ExceptionItem> items) =>
+        items.GroupBy(i => i.Classification)
+             .Select(g => (Classification: g.Key, Count: g.Count(), Total: TestTotal(g)))
+             .OrderBy(x => x.Classification is "Unreconciled" or "Unclear" or "" ? 0 : 1)
+             .ThenByDescending(x => x.Total)
+             .ToList();
+
+    // Session-wide summary bar: every loaded test's items, deduplicated to ONE entry per real
+    // transaction (Council+SourceTag+TransactionId) so a transaction flagged by more than one
+    // test (e.g. both test 1 and test 4) is not double-counted. Takes the first-encountered row's
+    // own value for that transaction — most transactions carry one consistent published amount
+    // across every test that names them, so this is a representative figure, not an undercount
+    // by construction.
+    (int Count, decimal Total) DistinctSummary(bool unexplainedOnly)
+    {
+        var seen = new HashSet<string>();
+        int count = 0; decimal total = 0m;
+        foreach (var t in _tests)
+            foreach (var it in t.Items)
+            {
+                if (unexplainedOnly && !it.IsUnexplained) continue;
+                var key = $"{it.Council}|{it.SourceTag}|{it.TransactionId}";
+                if (!seen.Add(key)) continue;
+                count++; total += TestRowValue(it);
+            }
+        return (count, total);
+    }
+
+    // Grand selected total for the FOI tray — same distinct-transaction dedup rule as the
+    // top summary bar, but over whatever is currently ticked across every test/page/filter.
+    (int Count, decimal Total) SelectedDistinctSummary()
+    {
+        var seen = new HashSet<string>();
+        int count = 0; decimal total = 0m;
+        foreach (var it in _selected.Values)
+        {
+            var key = $"{it.Council}|{it.SourceTag}|{it.TransactionId}";
+            if (!seen.Add(key)) continue;
+            count++; total += TestRowValue(it);
+        }
+        return (count, total);
+    }
+
+    List<(ExceptionType Type, int Count, decimal Total)> SelectedTypeBreakdown() =>
+        _selected.Values.GroupBy(i => i.Type)
+            .Select(g => (g.Key, g.Count(), TestTotal(g)))
+            .OrderByDescending(x => x.Item3)
+            .ToList();
 
     void ToggleCollapse(TestGroup t) => t.Collapsed = !t.Collapsed;
 
@@ -1164,6 +1598,74 @@
     List<ExceptionItem> GroupSiblings(TestGroup t, ExceptionItem it) =>
         it.GroupKey is null ? new List<ExceptionItem> { it } : t.Items.Where(x => x.GroupKey == it.GroupKey).ToList();
 
+    // ---- plain-English per-item sentence (added 2026-10-03) ----
+    // "each selected exception becomes a numbered item ... a plain-English sentence generated
+    // from the actual values saying what doesn't add up" — used both next to the on-page evidence
+    // highlighting AND, bundled with every involved line, in the FOI letter (see BuildFoiLetter).
+    static string Money(decimal d) => d.ToString("C2", GB);
+    static string PaymentsWord(int n) => n == 1 ? "one payment" : $"{n} payments";
+    static string JoinWithAnd(IReadOnlyList<string> items) => items.Count switch
+    {
+        0 => "", 1 => items[0], 2 => $"{items[0]} and {items[1]}",
+        _ => string.Join(", ", items.Take(items.Count - 1)) + " and " + items[^1]
+    };
+    static string TransactionsPhrase(IReadOnlyList<string> ids) =>
+        ids.Count == 1 ? $"Transaction {ids[0]}" : $"Transactions {JoinWithAnd(ids)}";
+
+    string ExplainItem(TestGroup t, ExceptionItem it)
+    {
+        var label = t.Label;
+        if (it.Kind == EvidenceKind.AmountCompare && it.CompareAmount is { } inv && it.Amount is { } paid)
+        {
+            decimal gap = Math.Abs(paid - inv);
+            string paymentsPhrase = it.LineCount <= 1 ? $"one payment of {Money(paid)}" : $"{it.LineCount} payments totalling {Money(paid)}";
+            string tail = label.Contains("test 1")
+                ? $"The published payments exceed the stated invoice by {Money(gap)}."
+                : $"No other published payment accounts for the remaining {Money(gap)}.";
+            return $"Transaction {it.TransactionId} records {paymentsPhrase} against a stated invoice amount of {Money(inv)}. {tail}";
+        }
+        if (it.Kind == EvidenceKind.GroupEvidence)
+        {
+            var sib = GroupSiblings(t, it);
+            var ids = sib.Select(s => s.TransactionId).Distinct().ToList();
+            if (label.Contains("test 3"))
+            {
+                var amt = it.Amount ?? 0m;
+                var date = it.PayDate ?? "an unpublished date";
+                return $"{TransactionsPhrase(ids)} record {PaymentsWord(sib.Count)} of {Money(amt)} each to {it.Supplier} on {date}, " +
+                       "with the same description, under different transaction numbers.";
+            }
+            if (label.Contains("test 4"))
+            {
+                var distinctSuppliers = sib.Select(s => s.Supplier).Distinct().ToList();
+                var distinctDates = sib.Select(s => s.PayDate ?? "an unpublished date").Distinct().ToList();
+                var total = sib.Sum(s => s.Amount ?? 0m);
+                return distinctSuppliers.Count > 1
+                    ? $"Transaction {it.TransactionId} is recorded against {distinctSuppliers.Count} different payees " +
+                      $"({JoinWithAnd(distinctSuppliers)}), totalling {Money(total)}."
+                    : $"Transaction {it.TransactionId} is recorded on {distinctDates.Count} different pay dates " +
+                      $"({JoinWithAnd(distinctDates)}), to {it.Supplier}, totalling {Money(total)}.";
+            }
+            if (label.Contains("test 5"))
+            {
+                int n = sib.Count; var amt = it.Amount ?? 0m;
+                return $"Transaction {it.TransactionId} lists the same {Money(amt)} payment {n} times in the published " +
+                       $"file; the {n} lines together total {Money(amt * n)}.";
+            }
+        }
+        if (it.Kind == EvidenceKind.CreditMatch)
+        {
+            var amt = Math.Abs(it.Amount ?? 0m);
+            var date = it.PayDate ?? "an unpublished date";
+            return it.Classification == "Unmatched"
+                ? $"A refund of {Money(amt)} to {it.Supplier} on {date} has no matching published charge of the same " +
+                  "amount from that supplier in the preceding/following 365 days."
+                : $"A refund of {Money(amt)} to {it.Supplier} on {date} is matched by a same-supplier charge of the " +
+                  "same amount elsewhere in the published data (see detail below).";
+        }
+        return "";
+    }
+
     // Which evidence-table columns read as "matching" vs "differs" for a given test — derived from
     // the test number in its own label rather than stored per-row, since it's the same for every
     // row in that test. year/trans/paydate/amount/payee/desc are the column keys ColClass checks.
@@ -1240,25 +1742,46 @@
             "underlying records and the reason, not for an admission.");
         sb.AppendLine();
 
+        // Each selected exception becomes ONE numbered item that bundles every published line
+        // involved (every sibling sharing the same GroupKey for test 3/4/5; the single aggregate
+        // row itself for test 1/2/R, which don't carry individual component lines once aggregated)
+        // — a plain-English sentence generated from the actual values says what doesn't add up,
+        // THEN the specific question. No offered explanation, no accusation — records and reasons
+        // only, same as the rest of this letter.
+        TestGroup? FindTestGroup(ExceptionItem it) => _tests.FirstOrDefault(tg => tg.Label == it.TestLabel);
+
         void Section(ExceptionType type, string heading, string definition, string request)
         {
-            var items = _selected.Values.Where(i => i.Type == type)
-                .OrderBy(i => i.SourceTag).ThenBy(i => i.TransactionId, StringComparer.Ordinal).ToList();
+            var items = _selected.Values.Where(i => i.Type == type).ToList();
             if (items.Count == 0) return;
+            var bundles = items
+                .GroupBy(i => i.GroupKey ?? $"{i.Council}|{i.SourceTag}|{i.TransactionId}")
+                .OrderBy(g => g.Min(i => i.SourceTag), StringComparer.Ordinal)
+                .ThenBy(g => g.Min(i => i.TransactionId), StringComparer.Ordinal)
+                .ToList();
             sb.AppendLine($"{heading} ({definition}):");
             sb.AppendLine();
-            sb.AppendLine("Year | Transaction no. | Pay date | Amount | Payee | Service area | Cost centre");
-            sb.AppendLine("-----|-----------------|----------|--------|-------|---------------|-------------");
-            foreach (var it in items)
+            int n = 0;
+            foreach (var bundle in bundles)
             {
-                sb.AppendLine(string.Join(" | ",
-                    it.SourceTag, it.TransactionId, it.PayDate ?? "—",
-                    it.Amount is { } a ? a.ToString("C2", CultureInfo.GetCultureInfo("en-GB")) : "—",
-                    it.Supplier, it.ServiceArea ?? "—", "— (not published in this dataset)"));
+                n++;
+                var first = bundle.First();
+                var tg = FindTestGroup(first);
+                var members = (tg is not null && first.GroupKey is not null ? GroupSiblings(tg, first) : bundle.ToList())
+                    .DistinctBy(m => (m.Council, m.SourceTag, m.TransactionId, m.PayDate, m.Amount)).ToList();
+                var sentence = tg is not null ? ExplainItem(tg, first) : "";
+                sb.AppendLine($"{n}. {sentence}");
+                foreach (var m in members)
+                {
+                    var line = $"   - {m.Council}, {m.SourceTag}, transaction {m.TransactionId}, " +
+                        $"{m.PayDate ?? "no pay date published"}, {(m.Amount is { } a ? a.ToString("C2", GB) : "—")}, {m.Supplier}";
+                    if (m.Kind == EvidenceKind.AmountCompare && m.CompareAmount is { } cmp)
+                        line += $" (stated invoice amount {cmp.ToString("C2", GB)})";
+                    sb.AppendLine(line);
+                }
+                sb.AppendLine($"   For this item, please provide: {request}");
+                sb.AppendLine();
             }
-            sb.AppendLine();
-            sb.AppendLine("For each item above, please provide: " + request);
-            sb.AppendLine();
         }
 
         Section(ExceptionType.Discrepancy, "Discrepancies", "the published record contradicts itself",
@@ -1266,9 +1789,10 @@
             "difference between the invoice amount and the amount(s) paid, for the line being listed more " +
             "than once, or for more than one payee or pay date being recorded against the same transaction " +
             "number (whichever applies to the item).");
-        Section(ExceptionType.Unreconciled, "Unreconciled items", "published payments do not cover the stated invoice amount",
-            "a copy of the invoice(s) and payment record(s) for the transaction, and the reason the " +
-            "published payments do not cover the full stated invoice amount.");
+        Section(ExceptionType.Unreconciled, "Unreconciled items",
+            "published payments do not cover the stated invoice amount, or a published credit/refund has no matching charge",
+            "a copy of the invoice(s) and payment record(s) for the transaction (or, for a credit/refund row, the " +
+            "record of the charge it relates to), and the reason the published figures don't reconcile.");
         Section(ExceptionType.Anomaly, "Anomalies", "the same supplier, amount, description and date recorded under different transaction numbers",
             "a copy of the invoice(s) and payment record(s) for each transaction number listed, and the " +
             "reason the same supplier, amount, description and date appear under more than one transaction number.");
