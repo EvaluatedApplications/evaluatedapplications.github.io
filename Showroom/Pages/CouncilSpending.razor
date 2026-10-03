@@ -86,7 +86,10 @@
             @HostedPanel(_cur)
         }
 
-        @if (_mode == Mode.Hosted && _spendRowsLoaded > 0)
+        @* HOTFIX 2026-10-03: the supplier-name search is switched off (SearchEnabled = false). Its first graded query makes HoloDb build a
+           NEAREST index synchronously, about a millisecond per loaded ROW (minutes for Reading), which freezes a phone's tab. It comes back
+           once it no longer blocks the page. Nothing else calls RunNearestSupplierSearch, so with this off nothing can reach that path. *@
+        @if (SearchEnabled && _mode == Mode.Hosted && _spendRowsLoaded > 0)
         {
             <section class="crosscouncil">
                 <h2>Cross-council correlations</h2>
@@ -631,6 +634,9 @@
 </div>
 
 @code {
+    // Feature switch for the supplier-name search (see the note where it is used). Off until it is measured fast on a throttled phone-like run.
+    const bool SearchEnabled = false;
+
     enum Mode { Pick, Hosted, OwnFile }
     enum ExceptionType { Discrepancy, Unreconciled, Anomaly }
     enum SearchMode { Graded, ExactSubstring }
