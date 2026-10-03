@@ -92,13 +92,27 @@ h3 { font-size: 1.02rem; font-weight: 650; margin: 0; }
 .test-desc { color: var(--ink-soft); font-size: 0.9rem; line-height: 1.5; margin: 0 0 0.7rem; }
 .test-amount-label { color: var(--ink-faint); font-size: 0.82rem; line-height: 1.5; margin: 0 0 0.7rem; }
 
-/* per-test classification legend ("what this label means", unexplained ranked first) */
-.classification-legend { display: flex; flex-direction: column; gap: 0.4rem; background: var(--bg-2); border: 1px solid var(--border-2); border-radius: 10px; padding: 0.7rem 0.9rem; margin: 0 0 0.8rem; }
-.classification-row { display: grid; grid-template-columns: auto auto auto 1fr; gap: 0.6rem; align-items: baseline; font-size: 0.84rem; }
+/* per-test classification legend ("what this label means", unexplained ranked first) —
+   mobile-first: badge + count + £ stay on one line (.classification-row-top), the explanation
+   is a separate, full-width, collapsed-by-default <details> below it so it never squeezes into
+   a tall one-word-per-line column on a narrow phone. Widened into an inline row at >=641px. */
+.classification-legend { display: flex; flex-direction: column; gap: 0.6rem; background: var(--bg-2); border: 1px solid var(--border-2); border-radius: 10px; padding: 0.7rem 0.9rem; margin: 0 0 0.8rem; }
+.classification-row { display: flex; flex-direction: column; gap: 0.3rem; font-size: 0.84rem; padding-bottom: 0.5rem; border-bottom: 1px solid var(--border-2); }
+.classification-row:last-child { border-bottom: none; padding-bottom: 0; }
+.classification-row-top { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
 .classification-row.classification-unexplained { font-weight: 600; }
 .classification-count { font-family: var(--mono); color: var(--ink-soft); }
 .classification-total { font-family: var(--mono); color: var(--ink); font-weight: 700; }
-.classification-meaning { color: var(--ink-faint); font-size: 0.8rem; line-height: 1.4; }
+.classification-meaning-details { width: 100%; }
+.classification-meaning-details summary { cursor: pointer; color: var(--ink-faint); font-size: 0.78rem; list-style: none; }
+.classification-meaning-details summary::-webkit-details-marker { display: none; }
+.classification-meaning { color: var(--ink-faint); font-size: 0.8rem; line-height: 1.4; margin: 0.35rem 0 0; }
+
+@media (min-width: 641px) {
+    .classification-row { flex-direction: row; align-items: baseline; gap: 0.7rem; border-bottom: none; padding-bottom: 0; flex-wrap: wrap; }
+    .classification-row-top { flex: 0 0 auto; }
+    .classification-meaning-details { flex: 1 1 260px; }
+}
 .tag-unexplained { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 40%, transparent); background: color-mix(in srgb, var(--warn) 10%, transparent); }
 .tag-label { color: var(--ink-soft); border-color: var(--border-2); background: var(--bg-2); }
 tr.labelled-row { opacity: 0.88; }
@@ -119,8 +133,6 @@ tr.labelled-row { opacity: 0.88; }
 .table-scroll-fixed .exc-table thead th { position: sticky; top: 0; background: var(--surface); z-index: 1; }
 .exc-table th.sortable { cursor: pointer; user-select: none; }
 .exc-table th.sortable:hover { color: var(--ink-soft); }
-.exc-table tr.verified { background: color-mix(in srgb, var(--ok) 8%, transparent); }
-.verified-badge { font-family: var(--mono); font-size: 0.7rem; color: var(--ok); margin-left: 0.4rem; }
 
 /* pagination footer */
 .pagination { display: flex; align-items: center; justify-content: space-between; gap: 0.8rem; flex-wrap: wrap; margin: 0.6rem 0; }
@@ -186,9 +198,12 @@ tr.evidence-row > td { padding: 0.8rem 0.9rem; white-space: normal; }
 .outro { margin-top: 2.4rem; padding-top: 1.2rem; border-top: 1px solid var(--border); }
 .outro p { color: var(--ink-soft); font-size: 0.92rem; line-height: 1.55; margin: 0; }
 
+/* Tables deliberately keep nowrap cells at every width (the base .exc-table/.ev-table rule) and
+   scroll horizontally inside their own .table-scroll panel instead — letting cells wrap on a
+   narrow phone just squeezes every column into a tall one-word-per-line stack, which is the
+   opposite of the fix. Do not reintroduce a mobile white-space:normal override on these tables. */
 @media (max-width: 640px) {
     .room { padding-left: 16px; padding-right: 16px; box-sizing: border-box; }
-    .exc-table th, .exc-table td { white-space: normal; }
     .tray-row { gap: 0.6rem; }
     .panel-controls { flex-direction: column; align-items: stretch; }
     .filter-text, .filter-year { width: 100%; box-sizing: border-box; }

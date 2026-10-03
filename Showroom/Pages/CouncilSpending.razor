@@ -92,26 +92,6 @@
                     Every file below was retrieved <b>2 October 2026</b>.</p>
             </section>
 
-            @if (_topItems.TryGetValue("wokingham", out var topWok) && topWok.Count > 1)
-            {
-                <section class="topunexplained">
-                    <h2>Top unexplained items</h2>
-                    <p class="hint">The 20 largest genuinely-Unreconciled rows (Schedule A), precomputed offline,
-                        each with a neutral one-line description of what doesn't reconcile.</p>
-                    <div class="table-scroll table-scroll-fixed">
-                        <table class="exc-table">
-                            <thead><tr>@foreach (var h in topWok[0]) { <th>@h</th> }</tr></thead>
-                            <tbody>
-                                @foreach (var row in topWok.Skip(1))
-                                {
-                                    <tr>@foreach (var cell in row) { <td>@cell</td> }</tr>
-                                }
-                            </tbody>
-                        </table>
-                    </div>
-                </section>
-            }
-
             <section class="loaded-stats">
                 <h2>Loaded data</h2>
                 <p class="hint">@StatsLine()</p>
@@ -171,28 +151,6 @@
                 result, a structural fact about what's published. Negative amounts are real credits
                 and corrections, not errors. Tests 3-5 (repeated payments, multi-payee transactions,
                 repeated lines) still run below.</p>
-
-            @if (_topItems.TryGetValue("reading", out var topRead) && topRead.Count > 1)
-            {
-                <section class="topunexplained">
-                    <h2>Top unexplained items</h2>
-                    <p class="hint">The 20 largest unmatched credit/refund rows (Schedule R — no same-supplier
-                        charge of matching size found), precomputed offline, each with a neutral one-line
-                        description. Reading's credit sign convention changed between 2021-23 (CREDIT, negative)
-                        and 2024+ (refund entries, positive) — amounts below are shown exactly as published.</p>
-                    <div class="table-scroll table-scroll-fixed">
-                        <table class="exc-table">
-                            <thead><tr>@foreach (var h in topRead[0]) { <th>@h</th> }</tr></thead>
-                            <tbody>
-                                @foreach (var row in topRead.Skip(1))
-                                {
-                                    <tr>@foreach (var cell in row) { <td>@cell</td> }</tr>
-                                }
-                            </tbody>
-                        </table>
-                    </div>
-                </section>
-            }
 
             <section class="loaded-stats">
                 <h2>Loaded data</h2>
@@ -376,13 +334,6 @@
             </section>
         }
 
-        @if (_showDoubleListingNote)
-        {
-            <p class="note-callout">FY2020-21's published file is known to list some transactions more
-                than once. This is a fact about the published file itself, not something this tool
-                corrected or removed — the repeated lines show up below as Exception test 5.</p>
-        }
-
         @if (_tests.Count > 0)
         {
             var unexplainedSummary = DistinctSummary(unexplainedOnly: true);
@@ -405,6 +356,43 @@
                     only counted once here. <strong>An exception total is the value of items that fail one of the
                     mechanical tests below — it is not money proven to be lost or wasted.</strong></p>
             </section>
+
+            var ranked = RankedUnexplained();
+            if (ranked.Count > 0)
+            {
+                <section class="topunexplained">
+                    <h2>Largest unexplained items in what you've loaded</h2>
+                    <p class="hint"><strong>Ranking rule:</strong> every row below is marked Unexplained by the
+                        tests further down this page, across everything you've loaded into this session so far,
+                        sorted by the £ amount published against it — highest first, top 20 shown. This list is
+                        recomputed from your own loaded data every time you load more; the same rule runs for
+                        every council, and nothing on it is picked by hand.</p>
+                    <div class="table-scroll table-scroll-fixed">
+                        <table class="exc-table">
+                            <thead>
+                                <tr>
+                                    <th>Year</th><th>Trans. no.</th><th>Pay date</th><th>Amount</th>
+                                    <th>Payee</th><th>Council</th><th>Test</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var it in ranked)
+                                {
+                                    <tr>
+                                        <td>@it.SourceTag</td>
+                                        <td>@it.TransactionId</td>
+                                        <td>@(it.PayDate ?? "—")</td>
+                                        <td>@(it.Amount is { } ra ? ra.ToString("C2", GB) : "—")</td>
+                                        <td>@it.Supplier</td>
+                                        <td>@it.Council</td>
+                                        <td>@ShortTestLabel(it.TestLabel)</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </section>
+            }
 
             <section class="results">
                 <h2>Exception tests</h2>
@@ -449,10 +437,15 @@
                                             @foreach (var ct in classTotals)
                                             {
                                                 <div class="classification-row @(ct.Classification is "Unreconciled" or "Unclear" or "Unmatched" or "" ? "classification-unexplained" : "")">
-                                                    <span class="tag @(ct.Classification is "Unreconciled" or "Unclear" or "Unmatched" or "" ? "tag-unexplained" : "tag-label")">@ClassificationDisplay(ct.Classification)</span>
-                                                    <span class="classification-count">@ct.Count.ToString("N0")</span>
-                                                    <span class="classification-total">@Money(ct.Total)</span>
-                                                    <span class="classification-meaning">@ClassificationMeanings.GetValueOrDefault(ct.Classification, "")</span>
+                                                    <div class="classification-row-top">
+                                                        <span class="tag @(ct.Classification is "Unreconciled" or "Unclear" or "Unmatched" or "" ? "tag-unexplained" : "tag-label")">@ClassificationDisplay(ct.Classification)</span>
+                                                        <span class="classification-count">@ct.Count.ToString("N0")</span>
+                                                        <span class="classification-total">@Money(ct.Total)</span>
+                                                    </div>
+                                                    <details class="classification-meaning-details">
+                                                        <summary>What this means</summary>
+                                                        <p class="classification-meaning">@ClassificationMeanings.GetValueOrDefault(ct.Classification, "")</p>
+                                                    </details>
                                                 </div>
                                             }
                                         </div>
@@ -493,10 +486,10 @@
                                             <tbody>
                                                 @foreach (var it in pageItems)
                                                 {
-                                                    <tr class="@(it.HandVerified ? "verified" : "") @(it.IsUnexplained ? "" : "labelled-row")">
+                                                    <tr class="@(it.IsUnexplained ? "" : "labelled-row")">
                                                         <td><input type="checkbox" checked="@it.Selected" @onchange="e => ToggleSelect(it, (bool)e.Value!)" /></td>
                                                         <td>@it.SourceTag</td>
-                                                        <td>@it.TransactionId @if (it.HandVerified) { <span class="verified-badge" title="Hand-verified by the virtual-customer agent against the raw file">✓ verified</span> }</td>
+                                                        <td>@it.TransactionId</td>
                                                         <td>@(it.PayDate ?? "—")</td>
                                                         <td>@(it.Amount is { } a ? a.ToString("C2", GB) : "—")</td>
                                                         <td>@it.Supplier</td>
@@ -727,7 +720,6 @@
         public decimal? Amount;
         public string? ServiceArea;
         public string? Description;
-        public bool HandVerified;
         // Leaves room for a later status change — only ever moved by hand once an official
         // council/auditor reply exists, and always paired with where that reply came from.
         public string Status = "Unconfirmed";
@@ -815,8 +807,6 @@
         public bool Loaded;
     }
 
-    static readonly string[] HandVerifiedTransNos = { "3815610", "3809081", "7032959" };
-
     Mode _mode = Mode.Pick;
     bool _busy;
     string _phase = "";
@@ -824,7 +814,6 @@
     List<string> _warnings = new();
     List<TestGroup> _tests = new();
     Dictionary<string, ExceptionItem> _selected = new();
-    bool _showDoubleListingNote;
     bool _showFoi;
     string _foiName = "";
     string _foiEmail = "";
@@ -898,7 +887,6 @@
         _foiContactEmail = "informationrequests@wokingham.gov.uk";
         _foiContactCheckedNote = "checked 3 October 2026 against the council's own FOI contact page";
         _error = null; _showFoi = false;
-        _ = EnsureTopLoaded("wokingham");
     }
     void PickReading()
     {
@@ -908,25 +896,8 @@
         _foiContactEmail = "FOI.CRT@reading.gov.uk";
         _foiContactCheckedNote = "checked 3 October 2026 against the council's own FOI contact page";
         _error = null; _showFoi = false;
-        _ = EnsureTopLoaded("reading");
     }
 
-    // "Top unexplained items" panel — a small (<=20-row), precomputed, offline-ranked CSV per
-    // council (VirtualCustomer's export/<council>/top20_unreconciled.csv), each row already
-    // carrying a neutral one-line description. Fetched once per council, plain (not gzipped —
-    // a few KB), rendered header-driven so the two councils' differing column sets (Wokingham:
-    // Year/TransNo/Net/Gross/VatType; Reading: Month/Voucher/Amount/InvoiceType) need no special
-    // casing on this side.
-    Dictionary<string, List<string[]>> _topItems = new();
-    Dictionary<string, bool> _topLoading = new();
-    async Task EnsureTopLoaded(string councilKey)
-    {
-        if (_topItems.ContainsKey(councilKey) || _topLoading.GetValueOrDefault(councilKey)) return;
-        _topLoading[councilKey] = true;
-        try { _topItems[councilKey] = CsvReader.Parse(await Http.GetByteArrayAsync($"data/councils/{councilKey}/top20_unreconciled.csv")); }
-        catch { _topItems[councilKey] = new(); }
-        finally { _topLoading[councilKey] = false; StateHasChanged(); }
-    }
     void BackToPicker()
     {
         // Deliberately does not clear _db/_tests/_selected/_loadedCouncils — see the note above.
@@ -1032,9 +1003,6 @@
                 _exceptionsLoadedFor.Add(councilKey);
                 _exceptionsLoadedCount += excTable.Count - 1;
             }
-
-            _showDoubleListingNote = _wokinghamYears.Any(y => y.Tag == "FY2020-21" && y.Loaded)
-                && _tests.Any(t => t.Label.Contains("test 5") && t.Items.Count > 0);
         }
         catch (Exception ex)
         {
@@ -1112,7 +1080,6 @@
                 Amount = decimal.TryParse(f[7], NumberStyles.Any, CultureInfo.InvariantCulture, out var amt) ? amt : null,
                 ServiceArea = NullIfEmpty(f[8]),
                 Description = NullIfEmpty(f[9]),
-                HandVerified = f[10] == "True",
                 Kind = label.Contains("test R") ? EvidenceKind.CreditMatch
                      : compareAmount is not null ? EvidenceKind.AmountCompare
                      : groupKey is not null ? EvidenceKind.GroupEvidence : EvidenceKind.None,
@@ -1131,11 +1098,31 @@
         SetDefaultCollapse();
     }
 
-    // A test panel starts expanded only if it contains at least one hand-verified example —
-    // every other panel starts collapsed so the page doesn't render thousands of rows unopened.
+    // Every test panel starts collapsed, uniformly — no panel is pre-opened or singled out;
+    // a visitor opens whichever ones they want to look at.
     void SetDefaultCollapse()
     {
-        foreach (var t in _tests) t.Collapsed = !t.Items.Any(i => i.HandVerified);
+        foreach (var t in _tests) t.Collapsed = true;
+    }
+
+    // Replaces any hand-picked "top items" list: a plain, stated, engine-computed ranking over
+    // whatever is actually loaded into _tests right now — every row currently marked Unexplained
+    // (IsUnexplained) by the tests below, sorted by the absolute £ amount published against it,
+    // highest first. Recomputed fresh every render; the same rule runs for every council, and
+    // nothing in this list is chosen by hand.
+    List<ExceptionItem> RankedUnexplained(int take = 20) =>
+        _tests.SelectMany(t => t.Items)
+            .Where(i => i.IsUnexplained)
+            .OrderByDescending(i => Math.Abs(i.Amount ?? 0m))
+            .Take(take)
+            .ToList();
+
+    // "Exception test 3 — same supplier, ..." -> "Exception test 3", for a compact column in the
+    // ranked-items table above.
+    static string ShortTestLabel(string label)
+    {
+        var dash = label.IndexOfAny(new[] { '—', '-' });
+        return dash > 0 ? label[..dash].Trim() : label;
     }
 
     // Cross-council correlation search across EVERYTHING loaded this session (any council, any
@@ -1235,7 +1222,7 @@
     void ResetOwnFileResult()
     {
         _error = null; _warnings = new(); _tests = new(); _selected.Clear();
-        _showDoubleListingNote = false; _showFoi = false;
+        _showFoi = false;
     }
 
     async Task RunOwnFile()
@@ -1296,7 +1283,6 @@
                 // on both counts. Amount is now the real sum of published PAYMENTS (r.Net); CompareAmount
                 // is the real stated invoice figure (r.Gross) the CompareLabel already claimed it was.
                 PayDate = r.PayDate, Amount = r.Net, ServiceArea = r.ServiceArea, Description = r.Description,
-                HandVerified = HandVerifiedTransNos.Contains(r.TransactionId),
                 Kind = EvidenceKind.AmountCompare,
                 CompareAmount = r.Gross,
                 CompareLabel = "Stated invoice amount",
@@ -1330,7 +1316,6 @@
                     TestLabel = t3.Label, Type = ExceptionType.Anomaly, Council = _councilDisplayName,
                     SourceTag = m.SourceTag, TransactionId = m.TransactionId, Supplier = m.Supplier,
                     PayDate = m.PayDateRaw, Amount = m.Net, ServiceArea = m.ServiceArea, Description = m.Description,
-                    HandVerified = HandVerifiedTransNos.Contains(m.TransactionId),
                     Kind = EvidenceKind.GroupEvidence, GroupKey = groupKey, GroupSize = g.Members.Count,
                     Classification = g.Classification.ToString(), ClassificationDetail = g.ClassificationDetail,
                 });
@@ -1358,7 +1343,6 @@
                     TestLabel = t4.Label, Type = ExceptionType.Discrepancy, Council = _councilDisplayName,
                     SourceTag = m.SourceTag, TransactionId = m.TransactionId, Supplier = m.Supplier,
                     PayDate = m.PayDateRaw, Amount = m.Gross, ServiceArea = m.ServiceArea, Description = m.Description,
-                    HandVerified = HandVerifiedTransNos.Contains(m.TransactionId),
                     Kind = EvidenceKind.GroupEvidence, GroupKey = groupKey, GroupSize = g.Members.Count,
                 });
             }
@@ -1396,7 +1380,6 @@
                     SourceTag = m.SourceTag, TransactionId = m.TransactionId, Supplier = m.Supplier,
                     PayDate = m.PayDateRaw, Amount = m.Gross, ServiceArea = m.ServiceArea,
                     Description = m.Description,
-                    HandVerified = HandVerifiedTransNos.Contains(m.TransactionId),
                     Kind = EvidenceKind.GroupEvidence, GroupKey = groupKey, GroupSize = n,
                 });
             }
@@ -1702,12 +1685,12 @@
     async Task DownloadTest(TestGroup t)
     {
         var sb = new StringBuilder();
-        sb.AppendLine("Year,TransactionNo,PayDate,Amount,Payee,ServiceArea,Description,ExceptionType,HandVerified");
+        sb.AppendLine("Year,TransactionNo,PayDate,Amount,Payee,ServiceArea,Description,ExceptionType");
         foreach (var it in t.Items)
         {
             sb.AppendLine(string.Join(",",
                 Csv(it.SourceTag), Csv(it.TransactionId), Csv(it.PayDate ?? ""), it.Amount?.ToString("F2") ?? "",
-                Csv(it.Supplier), Csv(it.ServiceArea ?? ""), Csv(it.Description ?? ""), it.Type.ToString(), it.HandVerified.ToString()));
+                Csv(it.Supplier), Csv(it.ServiceArea ?? ""), Csv(it.Description ?? ""), it.Type.ToString()));
         }
         await JS.InvokeVoidAsync("analystDownload", SafeFileName(t.Label) + ".csv", sb.ToString(), "text/csv");
     }
