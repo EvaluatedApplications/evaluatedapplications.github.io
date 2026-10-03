@@ -1,6 +1,6 @@
 # Showroom — CLAUDE.md (showroom-owner)
 
-**Last verified:** 2026-10-03 (council engine re-sync)
+**Last verified:** 2026-10-03 (council scanner Session 25/26 sync)
 
 Blazor WebAssembly app at `C:\Users\dongy\AboutUs\Showroom`, published under `/tools` on the public
 site (`AboutUs` repo, base href `/tools/`). Every tool runs entirely client-side: no server, no
@@ -88,11 +88,8 @@ instead. `HoloKernel/AsciiPunctuation.Fold` (curly quotes/dashes/nbsp/ellipsis �
 every tokenizer entry point site-wide — `SubwordVocab.Fold` blanks non-ASCII to a bare space
 otherwise, which silently mangled phone-autocorrected input before this fix.
 
-**Checkpoint refresh** (Prism's `oracle-brain.bin`+sidecars): a **data-only** refresh needs no
-`dotnet publish` — raw-copy into `wwwroot/data` and `dist/data`, regenerate `oracle-brain.bin.gz`
-via a plain `GZipStream` one-liner, cross-check `-stackk`/`-iterwarm` against PrismStudio's live
-consts. Write sidecars via UTF-8-no-BOM .NET I/O, never `Set-Content -Encoding utf8` (prepends a
-BOM). Covers Nano Stories and The Cartographer too — same checkpoint, same sidecars.
+**Checkpoint refresh** (Prism's `oracle-brain.bin` + sidecars, also Stories/Cartographer): data-only, no publish: copy into `wwwroot/data`+`dist/data`,
+regenerate the `.gz` with `GZipStream`, write sidecars as UTF-8 no BOM, cross-check `-stackk`/`-iterwarm` against PrismStudio.
 
 ## The Analyst — `Pages/Analyst.razor` (route `/analyst`)
 In-browser data profiler + live SQL REPL over **HoloDb** (`Database.Open(null)`, in-memory). Sniffs
@@ -122,23 +119,12 @@ strips (not appends) the trailing newline. `_turns` capped + render-batched. **A
 `HoloKernel.TokenVoice`/`TokenVoiceControls`, off by default.
 
 ## Nano Stories — `Pages/Stories.razor` (route `/stories`)
-THE SAME MODEL as Prism — same weights, same training run, not a fine-tune. Shares the `"prism"`
-`SessionHost` key and `HoloKernel.TokenVoice` byte-for-byte. Generation is a plain one-shot
-continuation (not Prism's tagged chat format). Its own `DecodePolicy` (Focused/Balanced/Wild P
-presets, since the 2026-09-24 TopP retightening below). Reproducible by seed (`Random(seed)` feeds
-`Gate.Pick`). Honesty paragraph under the story states the real (~370K) parameter count so nobody
-reads a generated sample as more capable than it is.
+SAME model as Prism (same weights, not a fine-tune), shared `"prism"` `SessionHost` key and `TokenVoice`. Plain one-shot continuation,
+own Focused/Balanced/Wild presets, seeded (`Random(seed)` -> `Gate.Pick`). States the real (~370K) parameter count under the story.
 
-**Decode gate: TopP, not ResonanceSigma** (both Prism and Stories, matching the PrismStudio host) —
-`FloorMode.ResonanceSigma` degenerates to an effective top-1 filter at 78-84% of positions on this
-checkpoint, making `Temperature` inert (the real cause of Stories' old "near-deterministic"
-behavior, not the model itself). Both pages build `Floor = FloorMode.TopP`; `FloorK` is vestigial
-once `Floor=TopP`. **`P` is checkpoint-specific, re-measure on every re-mint** — as of r84,639,
-P(top1)=0.199 (~57 effective candidates); Prism's chat uses `P=0.30` (~3); Stories' presets:
-Focused `P=0.30`, Balanced `P=0.466` (~8), Wild `P=0.635` (~20) — never a conventional `p=0.9`,
-which admits 200-300 tokens here and produces word salad. `ConfidentThreshold=0.60` unchanged on
-both pages. Needs `EvaluatedApplications.Prism` >=1.3.0 (`FloorMode.TopP`/`DecodePolicy.P` don't
-exist before that).
+**Decode gate: TopP, not ResonanceSigma** (Prism and Stories): ResonanceSigma degenerates to top-1 on this checkpoint so Temperature is inert.
+Both pages build `Floor = FloorMode.TopP` (needs Prism >= 1.3.0); `P` is checkpoint-specific, re-measure on every re-mint (r84,639:
+chat P=0.30; Stories Focused 0.30 / Balanced 0.466 / Wild 0.635; never a conventional 0.9). `ConfidentThreshold=0.60`.
 
 ## The Cartographer — `Pages/Cartographer.razor` (route `/cartographer`, added 2026-09-24)
 A 2D visualiser for **one** next-token decision — not a chat, not a generation loop. Reuses Prism's
@@ -158,68 +144,38 @@ thread); no `MapAsync` twin exists, so `await Task.Yield()` around the call keep
 responsive (same as `Prism.razor`).
 
 ## Prose — `Pages/Prose.razor` (route `/prose`)
-Paste or drop text; **Prose** (`ProseEngine`) mines it through a real rules-first grammar parser
-(`MineText`, chunked+yielded by the page at ~200k-char boundaries — the library has no chunking hook
-of its own), then recombines what it learned into sentences/Q&A pairs/packed conversations to copy
-into a training corpus. The other genuine two-package composite (HoloDb `ProseStore` + AlgFormer
-plausibility `HoloFormer`), chord `data-cat="holodb-algformer"`. Input cap 64MB (matches Analyst).
-Plausibility scoring is a 3-way choice (None / score with Prism's checkpoint / train one on the
-visitor's own text — measured ~0.22-0.24 ms/char/epoch, so defaults stay small with a live on-device
-time estimate before committing). `ProseEngine.Plausibility` has no reset — `Prose.razor` re-mines a
-fresh `_engine` if a prior run trained one and the mode has changed back.
+Paste/drop text; `ProseEngine.MineText` mines it (page chunks+yields at ~200k chars), then recombines into sentences/Q&A/conversations.
+HoloDb `ProseStore` + AlgFormer plausibility (None / Prism's checkpoint / train on the visitor's text, ~0.22-0.24 ms/char/epoch), chord`data-cat="holodb-algformer"`. `ProseEngine.Plausibility` has no reset (page re-mines a fresh engine). Cap 64MB.
 
-## Council Spending Scanner — `Pages/CouncilSpending.razor` (route `/tools/council-spending`)
-A real analytical tool over **HoloDb** on England's Local Government Transparency Code data
-(councils publish every payment over £500) — not a model demo. Engine (`CouncilAudit/`) is
-**vendored, not owned here** — built by the EA virtual-customer agent, copied in from
-`C:\Users\dongy\VirtualCustomer\src\CouncilAudit`; future engine changes happen upstream, never
-edited in place here. Loads pre-normalised Wokingham data (`wwwroot/data/councils/wokingham/
-*.norm.csv.gz`, 6 years, ~217K rows) or a visitor's own CSV/xlsx into one shared in-memory
-`Database.Open(null)` (same BulkLoad pattern as The Analyst). Runs mechanical exception tests and
-drafts a Freedom-of-Information letter — no network calls, nothing sent from the page.
-**Cross-council supplier search** (`RunNearestSupplierSearch`): a `<select>` toggle — **Graded**
-(default) runs HoloDb's `NEAREST (supplierkey = '<key>') ... score` for ranked, typo/variant-
-tolerant matching; **Exact substring** is a `LIKE '%key%'` fallback. Graded mode needs **HoloDb
->= 2.1.0** (holodb-owner's F-04 fix — `score` threw and ranking was unreliable before). Re-verified
-2026-10-03 via a throwaway harness against the real 42,405-row FY2024-25 Wokingham file in this
-page's exact 13-column schema: a truncated query ("A Wise Solution") ranks the real supplier
-("A Wise Solution Ltd") first on both `supplierkey` and raw `supplier` (absolute `score` is lower
-than holodb-owner's own narrower-schema number since the hologram is diluted across more columns —
-rank order is what matters here and holds).
-
-**UI pass (2026-10-03, live-site feedback)**: each exception test is now a collapsible `<button>`
-panel (collapsed by default, expanded only if it holds a hand-verified example), rows paginate at
-50/page inside a sticky-header, max-height scroll box (never renders thousands of rows at once —
-was `Take(200)` flat before), with a per-panel text+year quick filter and click-to-sort columns.
-Selection keys off `ExceptionItem.Key` (unchanged) so it survives paging/filtering; "select all"
-operates on every FILTERED item (`FilteredItems`), not just the current page. Cross-council search
-results reuse the same `table-scroll-fixed` bounded-panel class. **Evidence/highlighting, same
-pass**: a row with `EvidenceKind != None` gets a "Show evidence" toggle — `AmountCompare` (test
-1/2) shows sum-paid vs stated-invoice side by side with the signed difference, a neutral "looks
-like 2x the invoice" note (points at test 5, not a conclusion), and test 2's opposite-sign (net ==
--gross) callout; `GroupEvidence` (test 3/4/5) shows every sibling row sharing a `GroupKey` aligned
-in a mini table with matching columns highlighted one colour and differing columns another, plus a
-legend. **Test 5 restructured**: one `ExceptionItem` per repeated LINE now (was one aggregate item
-per group) so the actual duplicate rows pair up visually — this changed its reported exception
-*count* (now counts rows, not groups). `CouncilDbBuilder/Program.cs` (the offline producer of
-`exceptions.csv.gz`) was extended to emit `compareamount`/`groupkey`/`groupsize`/`oppositesign` —
-this is precomputed data, not reconstructed client-side; re-run it (`dotnet run -c Release` from
-`AboutUs/CouncilDbBuilder/`) and copy the regenerated `wwwroot/data/councils/wokingham/
-exceptions.csv.gz` into `dist/` whenever `AuditEngine`'s own evidence-relevant fields change.
-
-**Engine re-sync 2026-10-03 (DebtCharge fix) + full Reading**: `CouncilAudit/` re-vendored (AuditEngine
-reordered cascade + `HasDebtChargeEvidence`, Models `MemberRowIndexes`, CsvReader CP850 fallback, new
-`ReadingFixups.cs`; `HandCheckHelpers.cs` deliberately NOT vendored, CLI-only; SupportedCouncils' Bracknell
-entry condensed). `CouncilDbBuilder` now derives Reading's file list from `SupportedCouncils.Reading.Years`
-(minus `2021-05`, council-side export fault) and applies `ReadingFixups` per file; raw files in
-`wwwroot/data/reading/reading-<tag>.<ext>` (63 files, from `VirtualCustomer/inbox/reading`). Verified counts,
-Wokingham Schedule A: DebtCharge 22, NegativeNetSignFlip 3,026, Unreconciled 2,949, VatRoundingNoise 301,
-EarlyPaymentProgramme 200, DoubleListing 2,327. Engine source change needs a full AOT publish (not data-only).
-Page: `_readingMonths` is built from `SupportedCouncils.Reading.Years` minus `2021-05` (was a hardcoded 5-entry
-list, which kept the UI at 5 months despite the data), so it can't drift; each council's licence block has a
-collapsed per-file "retrieved" `<details>` (Wokingham 2 Oct, Reading 3 Oct 2026) and Reading's panel states the
-excluded 2021-05. Load is on demand: first Reading load = exceptions file ~1.2 MB gz + ~30-220 KB per ticked period.
-
+## Council Spending Scanner — `Pages/CouncilSpending.razor` + `.Insights.cs` (route `/council-spending`)
+Real analytical tool over England's spending-over-£500 data (not a model demo), in **HoloDb** (`Database.Open(null)`, one
+shared `spend` table). Public-audience, mobile-first, NOT editorial: nothing hand-picked, every check is a stated neutral
+rule run identically for every council; audit terms only (exception/discrepancy/unreconciled/anomaly); every section has
+plain prose (what is highlighted, what it could mean, counts + £), the "at a glance" table has a grand total; OGL credit per
+council. Engine `CouncilAudit/` is **vendored verbatim from `VirtualCustomer\src\CouncilAudit`** (re-synced 2026-10-03,
+Session 26; header comment on each file; never edit here; DebtLedger/LoanDecoder/HandCheckHelpers are CLI-only, not vendored).
+- **Four hosted councils**, data-driven by `Hosted` records (`BuildHosted`): Wokingham, Reading, West Berkshire, RBWM; picker
+  grouped by financial year (`FinancialYearOf`) with select-all for lists > 8 periods. Counts/spans are read from profiles.
+- **Data pipeline (offline, `CouncilDbBuilder`, run `dotnet run -c Release`; ~3 min)**: Wokingham/Reading from raw files in
+  `wwwroot/data/<c>/`; WB/RBWM from `VirtualCustomer\export\<c>\<tag>.transactions.csv` (env `COUNCIL_EXPORT_DIR`), through the
+  same `AuditEngine.Run` (verified: reproduces his exports row-for-row). Writes `wwwroot/data/councils/<c>/*.norm.csv.gz`,
+  `exceptions.csv.gz` (18 cols; `net` appended, group keys are council-qualified in the page) and `cross/*.csv.gz` (his flows,
+  alias grades, debt ledger, debt sink, misfits, file duplication, within-txn repeats, + `flow-rows` source lines, reconciled
+  to the flows file). Page loads cross files once (`EnsureCrossAsync`); copy regenerated data into `dist/` on publish.
+- **Sections** (`InsightsBlock`): standing payments (B rows `StandingSchedule*`), alias-aware flows (accept only; probable
+  separate, excluded), loan-interest decode (InterAuthority; NotApplicable shown as "not a loan"), correction pairs, publication
+  faults, file duplication, within-transaction repeats, debt sink + payment misfits. Scope = councils opened, switch for all six.
+- **In-browser checks = one EvalApp pipeline** (`Services/CouncilChecks.cs`, `Eval.App(...)` with two `ForEach`: per-file
+  faults, per-group `CorrectionPairs.Find`); built once; failure shows as a plain error line, never a silent fallback.
+  Publication fault rule: single-month files only for the "named month" share (marked < 9 in 10); overlap = lines already in an
+  EARLIER file (transaction, pay date, supplier key, net). Row ids stand in for rows (`id IN (...)` read-back).
+- **FOI**: new-section rows are `ExceptionItem.Custom` (own sentence/lines/request, facts only, no offered cause); a letter goes
+  to ONE council (`FoiAddressee`, only that council's items); FOI emails from `Hosted`; RBWM has none verified -> placeholder.
+- Gotchas: HoloDb >= 2.1.0 (graded NEAREST). `ExceptionItem.IsUnexplained` includes `StandingScheduleSurplus`. Cross-council
+  group ids restart per council (hence the prefix). Verified (not live-browser): desktop harness replaying the load path,
+  EvalApp pipeline and a full HtmlRenderer render with no exceptions; WASM runtime of the EvalApp pipeline is UNVERIFIED.
+- Numbers differing from his spec: exports are RBWM post-dedup, so overlap shows 8/14 not 381/61 (the 1,067/381/61 figures are
+  only in his profile quirks text); D groups total 3,196 not 3,234 (1 correction pair in 434 small groups with RBWM+Wokingham).
 ## Unlisted: RecycleDAO marketplace prototype — `Pages/RecycleDaoDemo.razor` (`/recycledao-demo`)
 NOT a package-capability demo, NOT in the gallery — a private, link-only client preview
 (`C:\Users\dongy\RecycleDAO`, `recycledao-owner`'s repo; never edit it from here). Absent from
@@ -264,17 +220,9 @@ or the shared design system — `website-owner`'s. Never launch the app / open a
 build-verify only; demonstrating a tool live is the user's to do.
 
 ## Standing technical facts
-**Shifts must be > 1, always** — at S=1 every relation-bank is a pure diagonal, zero cross-channel
-routing. Re-derive a floor from `bindRank = shifts·d/2` per tool's own d/context; never copy
-another tool's `MinShifts` verbatim. `golden: true` on every `HoloFormer`. WASM has no filesystem
-— nothing persists across a reset. WASM is single-threaded/interpreted — `Parallel.For`/
-`IParallelMap` degrade to sequential, not a crash, but keep live-training shapes small and any
-batch text/tensor work cooperatively yielded.
-- `HoloFormer` ctor: `(vocab, shifts, layers, maxContext, dModel=0, frozenPrefix=-1, embedSeed=null,
-  seed=42, bindFfn=false, golden=false, normalize=true, unitary=false, growFromFront=true)`.
-  `HoloShape` statics: `ShiftsFor(ctx,d,ratio=0.25)`, `BindRank`, `CleanCapacity`, `InteractionBudget`,
-  `EquivCompute(d,L,K)`. `Face(id)`/`LayerFaces(toks)`/`InspectStackIter(Faces)`/`InspectStackIterFaces`/
-  `InspectAttention`/`DecodeFace`/`EmbRow` all public (verified against the published 2.16.0 DLL).
+**Shifts must be > 1, always** (S=1 is a pure diagonal); re-derive a floor from `bindRank = shifts·d/2` per tool, never copy another's.
+`golden: true` on every `HoloFormer`. No filesystem in WASM; single-threaded, so keep live-training shapes small and yield cooperatively.
+`HoloFormer` ctor: `(vocab, shifts, layers, maxContext, dModel=0, ..., golden=false, ...)`; `HoloShape` statics `ShiftsFor/BindRank/CleanCapacity`.
 
 ## Build / verify
 `dotnet build Showroom.csproj -c Release` — green (0/0) with all eight tools + HoloKernel wired in.

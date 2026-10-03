@@ -1,6 +1,6 @@
-// Vendored from C:\Users\dongy\VirtualCustomer\src\CouncilAudit\ColumnMapper.cs, copied 2026-10-03.
-// CouncilAudit engine by the EA virtual-customer agent. Do not edit the source repo from here;
-// future engine changes happen upstream and get re-vendored into this copy by the Showroom owner.
+// Vendored from C:\Users\dongy\VirtualCustomer\src\CouncilAudit\ColumnMapper.cs, re-synced 2026-10-03 (Session 25/26 sync): verbatim upstream.
+// CouncilAudit engine by the EA virtual-customer agent. Do not edit here; future engine changes happen upstream
+// and get re-vendored into this copy by the Showroom owner.
 
 namespace CouncilAudit;
 

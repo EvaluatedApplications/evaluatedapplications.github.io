@@ -6,6 +6,7 @@
 @using System.IO.Compression
 @using CouncilAudit
 @using HoloDb
+@using Showroom.Services
 
 <PageTitle>Council Spending Scanner — Evaluated Applications</PageTitle>
 
@@ -57,18 +58,15 @@
         <section class="picker">
             <h2>Choose a council</h2>
             <div class="picker-grid">
-                <button class="pick-card" @onclick="PickWokingham" type="button">
-                    <h3>Wokingham Borough Council</h3>
-                    <p>Six financial years hosted here, ready to scan — no download hunting required.</p>
-                    <span class="go-in">Open →</span>
-                </button>
-                <button class="pick-card" @onclick="PickReading" type="button">
-                    <h3>Reading Borough Council</h3>
-                    <p>The full back-catalogue hosted here: 63 periods, April 2020 to March 2026. Reading publishes one signed Amount column with
-                        no separate invoice/payment split, so the payment-vs-invoice test doesn't apply —
-                        repeated-payment and multi-payee checks still run.</p>
-                    <span class="go-in">Open →</span>
-                </button>
+                @foreach (var h in _hosted)
+                {
+                    var hc = h;
+                    <button class="pick-card" @onclick="() => PickHosted(hc)" type="button">
+                        <h3>@hc.Profile.Name</h3>
+                        <p>@hc.PickBlurb</p>
+                        <span class="go-in">Open →</span>
+                    </button>
+                }
                 <button class="pick-card" @onclick="() => _mode = Mode.OwnFile" type="button">
                     <h3>Use your own file</h3>
                     <p>Any English council publishes this data under the same Transparency Code. Drop a
@@ -83,155 +81,23 @@
     {
         <button class="back-link" @onclick="BackToPicker" type="button">← choose a different council</button>
 
-        @if (_mode == Mode.Wokingham)
+        @if (_mode == Mode.Hosted && _cur is not null)
         {
-            <section class="licence">
-                <p>Contains data from <a href="@SupportedCouncils.Wokingham.TransparencyPageUrl" target="_blank" rel="noopener">Wokingham
-                    Borough Council</a>, used under the <a href="https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/" target="_blank" rel="noopener">Open
-                    Government Licence v3.0</a>. Source: <a href="https://www.wokingham.gov.uk/council-and-meetings/open-data-and-transparency/data-sets-and-open-data?field_media_asset_browser_target_id=101" target="_blank" rel="noopener">the council's open-data page</a>.
-                    Every file below was retrieved <b>2 October 2026</b>.</p>
-                <details class="retrieved">
-                    <summary>Files retrieved 2 October 2026 (@_wokinghamYears.Count)</summary>
-                    <ul>
-                        @foreach (var y in _wokinghamYears)
-                        {
-                            <li><span class="year-tag">@y.Tag</span> <span class="hint">@y.FileName — retrieved 2 October 2026 from the council's transparency page</span></li>
-                        }
-                    </ul>
-                </details>
-            </section>
-
-            <section class="loaded-stats">
-                <h2>Loaded data</h2>
-                <p class="hint">@StatsLine()</p>
-            </section>
-
-            <section class="years">
-                <h2>Add council / year</h2>
-                <p class="hint">Each year loads as a small, pre-normalised file (well under a megabyte
-                    compressed) and BulkLoads straight into a real database running in your browser tab —
-                    the same engine behind <a href="/tools/analyst">The Analyst</a>. Your own council
-                    loads first; add more councils here as they're onboarded, and the cross-council
-                    correlations below get more complete the more you load.</p>
-                <div class="council-add">
-                    <div class="council-add-head">
-                        <b>@SupportedCouncils.Wokingham.Name</b>
-                        <span class="hint">@_wokinghamYears.Count(y => y.Loaded) of @_wokinghamYears.Count years loaded</span>
-                    </div>
-                    <div class="year-grid">
-                        @foreach (var y in _wokinghamYears)
-                        {
-                            <label class="year-pick @(y.Loaded ? "loaded" : "")">
-                                <input type="checkbox" checked="@y.Checked" @onchange="e => y.Checked = (bool)e.Value!" disabled="@(_busy || y.Loaded)" />
-                                <span class="year-tag">@y.Tag</span>
-                                <span class="year-fmt">@(y.Loaded ? "loaded" : y.Format == SourceFormat.Xlsx ? "xlsx source" : "csv source")</span>
-                            </label>
-                        }
-                    </div>
-                    <button class="go" @onclick="LoadSelectedYears" disabled="@(_busy || !_wokinghamYears.Any(y => y.Checked && !y.Loaded))" type="button">
-                        @(_busy ? _phase : "Load selected years")
-                    </button>
-                </div>
-                <div class="council-add @(_loadedCouncils.Contains("reading") ? "" : "council-add-disabled")">
-                    <div class="council-add-head">
-                        <b>Reading Borough Council</b>
-                        <span class="hint">@(_loadedCouncils.Contains("reading")
-                            ? $"{_readingMonths.Count(y => y.Loaded)} of {_readingMonths.Count} periods loaded"
-                            : "Go back and choose Reading from the picker to load it alongside Wokingham.")</span>
-                    </div>
-                </div>
-            </section>
-        }
-        else if (_mode == Mode.Reading)
-        {
-            <section class="licence">
-                <p>Contains data from <a href="@SupportedCouncils.Reading.TransparencyPageUrl" target="_blank" rel="noopener">Reading
-                    Borough Council</a>. The council's own spending page states: "This data has been
-                    published in accordance with Governmental guidelines and is available for reuse
-                    under the <a href="https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/" target="_blank" rel="noopener">Open
-                    Government Licence</a>" (checked live against that page <b>3 October 2026</b>; the
-                    page doesn't itself name a version, so this links the current v3.0 text, the same
-                    licence Wokingham publishes under). Every file below was retrieved <b>3 October 2026</b>.
-                    One published file is <b>not</b> included: <b>2021-05</b> (the council's "May21-Revised"
-                    spreadsheet) has a council-side export fault, so its column headings don't match its own
-                    data and it can't be read reliably; that one month is missing from everything below.</p>
-                <details class="retrieved">
-                    <summary>Files retrieved 3 October 2026 (@_readingMonths.Count)</summary>
-                    <ul>
-                        @foreach (var y in _readingMonths)
-                        {
-                            <li><span class="year-tag">@y.Tag</span> <span class="hint"><a href="@y.Url" target="_blank" rel="noopener">@y.FileName</a> — retrieved 3 October 2026</span></li>
-                        }
-                        <li><span class="year-tag">2021-05</span> <span class="hint">retrieved 3 October 2026 but excluded (council-side export fault, see above)</span></li>
-                    </ul>
-                </details>
-            </section>
-
-            <p class="note-callout">Reading publishes one signed <b>Amount</b> column — there is no
-                separate invoice amount to compare a payment against, so <b>Exception tests 1 and 2
-                (payment vs. stated invoice amount) do not apply to this council</b> — not a clean
-                result, a structural fact about what's published. Negative amounts are real credits
-                and corrections, not errors. Tests 3-5 (repeated payments, multi-payee transactions,
-                repeated lines) still run below.</p>
-
-            <section class="loaded-stats">
-                <h2>Loaded data</h2>
-                <p class="hint">@StatsLine()</p>
-            </section>
-
-            <section class="years">
-                <h2>Add council / month</h2>
-                <p class="hint">Reading republishes monthly, not annually — all 63 available periods
-                    (four quarters for 2020-21, then every month to March 2026; 2021-05 is excluded,
-                    council-side export fault) are hosted here. <b>Nothing is downloaded until you tick
-                    periods and press Load</b>: the first Reading load fetches the precomputed
-                    exceptions file (about 1.2 MB compressed) plus about 30-220 KB for each period you
-                    ticked, so roughly 1.3 MB for one month. Periods you don't tick are never fetched.
-                    Each loads as a small, pre-normalised file and BulkLoads straight into the same
-                    in-browser database as Wokingham's own data, so the cross-council view below works
-                    the moment both are loaded.</p>
-                <div class="council-add">
-                    <div class="council-add-head">
-                        <b>@SupportedCouncils.Reading.Name</b>
-                        <span class="hint">@_readingMonths.Count(y => y.Loaded) of @_readingMonths.Count periods loaded</span>
-                    </div>
-                    <div class="year-grid">
-                        @foreach (var y in _readingMonths)
-                        {
-                            <label class="year-pick @(y.Loaded ? "loaded" : "")">
-                                <input type="checkbox" checked="@y.Checked" @onchange="e => y.Checked = (bool)e.Value!" disabled="@(_busy || y.Loaded)" />
-                                <span class="year-tag">@y.Tag</span>
-                                <span class="year-fmt">@(y.Loaded ? "loaded" : y.Format == SourceFormat.Xlsx ? "xlsx source" : "csv source")</span>
-                            </label>
-                        }
-                    </div>
-                    <button class="go" @onclick="LoadSelectedReadingMonths" disabled="@(_busy || !_readingMonths.Any(y => y.Checked && !y.Loaded))" type="button">
-                        @(_busy ? _phase : "Load selected periods")
-                    </button>
-                </div>
-                <div class="council-add @(_loadedCouncils.Contains("wokingham") ? "" : "council-add-disabled")">
-                    <div class="council-add-head">
-                        <b>Wokingham Borough Council</b>
-                        <span class="hint">@(_loadedCouncils.Contains("wokingham")
-                            ? $"{_wokinghamYears.Count(y => y.Loaded)} of {_wokinghamYears.Count} years loaded"
-                            : "Go back and choose Wokingham from the picker to load it alongside Reading.")</span>
-                    </div>
-                </div>
-            </section>
+            @HostedPanel(_cur)
         }
 
-        @if ((_mode == Mode.Wokingham || _mode == Mode.Reading) && _spendRowsLoaded > 0)
+        @if (_mode == Mode.Hosted && _spendRowsLoaded > 0)
         {
             <section class="crosscouncil">
                 <h2>Cross-council correlations</h2>
                 <p class="hint">@CrossCouncilStateLine()</p>
-                @if (_loadedCouncils.Contains("wokingham") && _loadedCouncils.Contains("reading"))
+                @if (_loadedCouncils.Count > 1)
                 {
-                    <p class="note-callout">Wokingham's figures include a stated invoice amount; Reading's
-                        don't (one signed Amount column only, see above) — a cross-council match tells you
-                        the same supplier was paid by both councils, not that the two payments are
-                        reconciled against each other the way Schedule A reconciles a single council's own
-                        invoice vs. payment.</p>
+                    <p class="note-callout">Councils publish different columns — only Wokingham's include a
+                        stated invoice amount alongside the payment; the others publish one amount per row — so
+                        a cross-council match tells you the same supplier was paid by more than one council,
+                        not that the payments are reconciled against each other the way exception tests 1 and 2
+                        compare a single council's own invoice with its payments.</p>
                 }
                 <div class="cc-controls">
                     <input type="text" @bind="_nearestSupplierQuery" @bind:event="oninput"
@@ -359,6 +225,11 @@
                 <h2>Warnings from the engine</h2>
                 <ul>@foreach (var w in _warnings) { <li>@w</li> }</ul>
             </section>
+        }
+
+        @if (_mode == Mode.Hosted && _spendRowsLoaded > 0)
+        {
+            @GlanceTable()
         }
 
         @if (_tests.Count > 0)
@@ -514,6 +385,7 @@
                                                 </tr>
                                             </thead>
                                             <tbody>
+                                                @{ var captioned = new HashSet<string>(); }
                                                 @foreach (var it in pageItems)
                                                 {
                                                     <tr class="@(it.IsUnexplained ? "" : "labelled-row")">
@@ -547,6 +419,11 @@
                                                             }
                                                         </td>
                                                     </tr>
+                                                    @if (!string.IsNullOrWhiteSpace(it.ClassificationDetail) && (it.GroupKey is null || captioned.Add(it.GroupKey)))
+                                                    {
+                                                        // the engine's own plain-English explanation of why this row carries its label, shown once per group
+                                                        <tr class="caption-row"><td></td><td colspan="10"><span class="row-caption">@it.ClassificationDetail</span></td></tr>
+                                                    }
                                                     @if (it.EvidenceOpen && it.Kind == EvidenceKind.AmountCompare)
                                                     {
                                                         <tr class="evidence-row">
@@ -653,6 +530,11 @@
             </section>
         }
 
+        @if (_mode == Mode.Hosted && _spendRowsLoaded > 0)
+        {
+            @InsightsBlock()
+        }
+
         @if (_selected.Count > 0)
         {
             <section class="tray">
@@ -698,15 +580,30 @@
                     }
                 </div>
 
-                @if (!_foiContactVerified)
+                @{
+                    var addressees = SelectedCouncilNames();
+                    var addr = FoiAddressee;
+                    var addrEmail = FoiEmailFor(addr);
+                }
+                @if (addressees.Count > 1)
                 {
-                    <p class="note-callout">This council's Freedom of Information contact address has not
+                    <p class="note-callout">Your selection covers <b>@addressees.Count councils</b>. A Freedom of
+                        Information request goes to one council at a time, so each letter lists only the items about
+                        the council it is addressed to. Choose who this letter is for:
+                        <select class="filter-year" @bind="_foiTo">
+                            @foreach (var n in addressees) { <option value="@n">@n</option> }
+                        </select>
+                        — then come back to this box for the next council.</p>
+                }
+                @if (string.IsNullOrEmpty(addrEmail))
+                {
+                    <p class="note-callout">@addr's Freedom of Information contact address has not
                         been hand-verified for this tool. The letter below leaves a placeholder — look up
                         the council's own FOI contact page before sending.</p>
                 }
                 else
                 {
-                    <p class="hint">Addressed to <b>@_foiContactEmail</b> (@_foiContactCheckedNote).</p>
+                    <p class="hint">Addressed to <b>@addrEmail</b> (@FoiNoteFor(addr)).</p>
                 }
 
                 <p class="hint">Keep a request focused: a council can refuse to answer under the Act's
@@ -734,7 +631,7 @@
 </div>
 
 @code {
-    enum Mode { Pick, Wokingham, Reading, OwnFile }
+    enum Mode { Pick, Hosted, OwnFile }
     enum ExceptionType { Discrepancy, Unreconciled, Anomaly }
     enum SearchMode { Graded, ExactSubstring }
     // What kind of evidence comparison a row supports, for the highlighted "show the discrepancy"
@@ -778,8 +675,19 @@
         // ClassificationMeanings below).
         public string Classification = "Unreconciled";
         public string? ClassificationDetail;
-        public bool IsUnexplained => Classification is "Unreconciled" or "Unclear" or "Unmatched" or "";
-        public string Key => $"{Council}|{TestLabel}|{SourceTag}|{TransactionId}|{Supplier}|{Amount}|{PayDate}";
+        // "StandingScheduleSurplus": more payments than months and nothing returned -- still a lead, so it ranks with the unexplained rows.
+        public bool IsUnexplained => Classification is "Unreconciled" or "Unclear" or "Unmatched" or "StandingScheduleSurplus" or "";
+        public string CouncilKey = "";   // the council's slug (wokingham, reading, ...), alongside the display name in Council
+        public decimal? Net;             // the line's published Net amount (exceptions file column "net"); test 4 rows carry Gross in Amount
+        // ---- rows of the Session 25/26 sections (CouncilSpending.Insights.cs): selectable into the same tray and FOI letter ----
+        public bool Custom;
+        public string SectionId = "", SectionTitle = "", SectionDefinition = "";
+        public string Sentence = "";                   // what the data shows, in one plain sentence (facts only, no cause offered)
+        public List<string> Lines = new();             // the published lines the sentence rests on, listed in the letter
+        public string? Request;                        // what the letter asks for, for this item
+        public string Key => Custom
+            ? $"{SectionId}|{Council}|{TransactionId}|{SourceTag}"
+            : $"{Council}|{TestLabel}|{SourceTag}|{TransactionId}|{Supplier}|{Amount}|{PayDate}";
     }
 
     sealed class TestGroup
@@ -805,7 +713,7 @@
     static readonly Dictionary<string, string> ClassificationMeanings = new()
     {
         ["Unreconciled"] = "No specific pattern was recognised — the published numbers simply don't add up under any of the checks below. This is the actual target: ask the council for the invoice and the reason.",
-        ["DoubleListing"] = "The same invoice line appears to have been published more than once (the lines sum to an exact whole-number multiple of the stated invoice), rather than several genuinely different charges.",
+        ["DoubleListing"] = "The same invoice line, or the whole itemised invoice, appears to have been published more than once (the lines sum to an exact whole-number multiple of the stated invoice, or of it once VAT is added), rather than several genuinely different charges.",
         ["DebtCharge"] = "The stated amount splits exactly into a round principal plus a non-round interest/charge remainder — consistent with a loan repayment or debt-recovery invoice, not an unexplained gap.",
         ["EarlyPaymentProgramme"] = "A batch of negative early-payment discount fees under the council's own named scheme (a supply-chain-finance arrangement) — a known pattern, not an arithmetic mismatch.",
         ["VatRoundingNoise"] = "The gap is a few pence, consistent with VAT being rounded per line and then summed, rather than once on the total — not a genuine unexplained gap.",
@@ -815,6 +723,9 @@
         ["LikelyRecurring"] = "Members carry different supplier invoice numbers despite the identical amount — consistent with a standardised recurring rate (e.g. a placement or rent-scheme payment), not a repeat error.",
         ["Unmatched"] = "No same-supplier published charge of matching magnitude was found within 365 days — not established to be an error (the matching charge may simply be in a file not loaded this session), reported as published.",
         ["MatchedOffsettingCharge"] = "A same-supplier published charge of matching magnitude exists within 365 days — a plausible explanation exists in the loaded data, not a claim that this specific credit offsets that specific charge.",
+        ["StandingScheduleCatchUp"] = "This amount is paid about once a month, month after month, and this date carries more than one payment because earlier months have none. Counting payments against months, the extra payments are made good by months with none — consistent with a late payment caught up, paid ahead, or repaid; not proof of any of them.",
+        ["StandingScheduleSurplus"] = "This amount is paid about once a month, but there are more payments than months and nothing returned in the published data. Reported as published, with the count; the files do not say why. Still a lead, so it ranks with the unexplained rows.",
+        ["StandingPaymentUnderRefundType"] = "No matching charge was found, but the same amount recurs every month under the council's own refund label — a fixed recurring transfer that carries that label, not a one-off refund waiting for a charge. What the council means by the label is not stated in the file.",
     };
 
     static string ClassificationDisplay(string c) => c switch
@@ -823,14 +734,10 @@
         "EarlyPaymentProgramme" => "Early payment programme", "VatRoundingNoise" => "VAT rounding noise",
         "NegativeNetSignFlip" => "Net sign flip", "LikelyDuplicate" => "Likely duplicate",
         "LikelyRecurring" => "Likely recurring", "MatchedOffsettingCharge" => "Matched offsetting charge",
+        "StandingScheduleCatchUp" => "Standing payment, caught up", "StandingScheduleSurplus" => "Standing payment, surplus",
+        "StandingPaymentUnderRefundType" => "Standing payment under refund label",
         "" => "—",
         _ => c, // "Unreconciled" / "Unclear" / "Unmatched"
-    };
-
-    static readonly Dictionary<string, string> CouncilDisplayNames = new()
-    {
-        ["wokingham"] = "Wokingham Borough Council",
-        ["reading"] = "Reading Borough Council",
     };
 
     sealed class YearPick
@@ -854,12 +761,8 @@
     string _foiName = "";
     string _foiEmail = "";
     bool _foiElectronic = true;
-    // Verified by hand against the council's own FOI contact page for Wokingham only (see
-    // PickWokingham below); unset ("") for "use your own file" councils until someone hand-checks
-    // that council's own FOI contact page the same way.
-    string _foiContactEmail = "";
-    string _foiContactCheckedNote = "";
-    bool _foiContactVerified => !string.IsNullOrEmpty(_foiContactEmail);
+    // FOI contact addresses live on the Hosted records (hand-verified against each council's own FOI page, see
+    // BuildHosted in CouncilSpending.Insights.cs); a council with none verified leaves a placeholder in the letter.
     string _councilDisplayName = "";
 
     // ---- HoloDb data layer: one in-memory database shared across every council/year loaded this
@@ -872,33 +775,12 @@
     SearchMode _searchMode = SearchMode.Graded;
     List<(string Supplier, string Council, double Score)> _nearestResults = new();
 
-    List<YearPick> _wokinghamYears = new()
-    {
-        new() { Tag = "FY2020-21", FileName = "wokingham-2020-21.csv", Format = SourceFormat.Csv },
-        new() { Tag = "FY2021-22", FileName = "wokingham-2021-22.csv", Format = SourceFormat.Csv },
-        new() { Tag = "FY2022-23", FileName = "wokingham-2022-23.csv", Format = SourceFormat.Csv },
-        new() { Tag = "FY2023-24", FileName = "wokingham-2023-24.xlsx", Format = SourceFormat.Xlsx },
-        new() { Tag = "FY2024-25", FileName = "wokingham-2024-25.csv", Format = SourceFormat.Csv },
-        new() { Tag = "FY2025-26", FileName = "wokingham-2025-26.csv", Format = SourceFormat.Csv },
-    };
-
-    // Reading publishes monthly, not annually — same YearPick shape, a month tag instead of a
-    // financial-year tag. Reading has NO Schedule A (see HasScheduleA note on CouncilDbBuilder) —
-    // its own picker-mode panel says so plainly rather than rendering an empty test 1/2 panel.
-    // Full FY2020-21..FY2025-26 back-catalogue, driven off the vendored SupportedCouncils list so
-    // the page can't drift from CouncilDbBuilder's own file list: 63 periods (2020-21 is 4
-    // quarters, every later period a month). 2021-05 is excluded -- council-side export fault.
-    // Nothing here is fetched until the visitor ticks a period and presses Load.
-    List<YearPick> _readingMonths = SupportedCouncils.Reading.Years
-        .Where(y => y.Tag != "2021-05")
-        .Select(y => new YearPick
-        {
-            Tag = y.Tag,
-            FileName = $"reading-{y.Tag}.{(y.Format == SourceFormat.Xlsx ? "xlsx" : "csv")}",
-            Format = y.Format,
-            Url = y.Url,
-        })
-        .ToList();
+    // The four hosted councils (Wokingham, Reading, West Berkshire, RBWM), data-driven: everything council-specific the page
+    // shows (periods, FOI contact, retrieval date) lives in the Hosted record built in CouncilSpending.Insights.cs from the
+    // vendored SupportedCouncils profiles, so the picker, the period lists and the loader are one code path.
+    // Nothing is fetched until the visitor ticks a period and presses Load.
+    readonly List<Hosted> _hosted = BuildHosted();
+    Hosted? _cur;
 
     // Which hosted councils have actually been loaded into _db/_tests this session — drives the
     // cross-council correlation section's wording and the summary bar, independent of which
@@ -920,52 +802,37 @@
     // _loadedCouncils above): the whole point of hosting more than one council is the cross-council
     // correlation view below, which needs everything loaded this session to stay loaded while you
     // switch between panels.
-    void PickWokingham()
+    async Task PickHosted(Hosted h)
     {
-        _mode = Mode.Wokingham; _councilDisplayName = SupportedCouncils.Wokingham.Name;
-        // Verified by hand against the council's own page, checked 3 October 2026:
-        // https://www.wokingham.gov.uk/foi/receiving-foi-requests-email (the page itself writes
-        // this address as "Informationrequests[at]Wokingham.gov.uk").
-        _foiContactEmail = "informationrequests@wokingham.gov.uk";
-        _foiContactCheckedNote = "checked 3 October 2026 against the council's own FOI contact page";
+        _mode = Mode.Hosted; _cur = h; _councilDisplayName = h.Profile.Name;
+        _openedCouncils.Add(h.Key);
         _error = null; _showFoi = false;
-    }
-    void PickReading()
-    {
-        _mode = Mode.Reading; _councilDisplayName = SupportedCouncils.Reading.Name;
-        // Verified by hand against the council's own FOI contact page, checked 3 October 2026:
-        // https://www.reading.gov.uk/contact-us/freedom-of-information-foi/freedom-of-information-act-procedure-for-dealing-with-requests/.
-        _foiContactEmail = "FOI.CRT@reading.gov.uk";
-        _foiContactCheckedNote = "checked 3 October 2026 against the council's own FOI contact page";
-        _error = null; _showFoi = false;
+        await EnsureCrossAsync();
     }
 
     void BackToPicker()
     {
         // Deliberately does not clear _db/_tests/_selected/_loadedCouncils — see the note above.
-        _mode = Mode.Pick; _foiContactEmail = ""; _foiContactCheckedNote = ""; _error = null; _showFoi = false;
+        _mode = Mode.Pick; _cur = null; _error = null; _showFoi = false;
     }
-
     static string? NullIfEmpty(string s) => string.IsNullOrWhiteSpace(s) ? null : s;
 
     string StatsLine()
     {
         if (_spendRowsLoaded == 0)
             return "Nothing loaded yet — pick a year/month below to load your first council into the browser's database.";
-        var parts = new List<string>();
-        if (_loadedCouncils.Contains("wokingham"))
-            parts.Add($"{_wokinghamYears.Count(y => y.Loaded)} of {_wokinghamYears.Count} Wokingham years");
-        if (_loadedCouncils.Contains("reading"))
-            parts.Add($"{_readingMonths.Count(y => y.Loaded)} of {_readingMonths.Count} Reading periods");
+        var parts = _hosted.Where(h => _loadedCouncils.Contains(h.Key))
+            .Select(h => $"{h.Periods.Count(y => y.Loaded)} of {h.Periods.Count} {h.Short} {h.PeriodNoun}s").ToList();
         return $"{string.Join(", ", parts)} loaded ({_spendRowsLoaded:N0} spend rows), " +
                $"{_exceptionsLoadedCount:N0} precomputed exceptions. {_loadedCouncils.Count} council(s) loaded so far.";
     }
 
-    string CrossCouncilStateLine() =>
-        "Only one council is loaded today, so same-supplier and payments-between-councils views have " +
-        "nothing to compare against yet — they fill in automatically as more councils are loaded above. " +
-        "The search below already runs against everything loaded this session, and will start surfacing " +
-        "cross-council matches the moment a second council joins.";
+    string CrossCouncilStateLine() => _loadedCouncils.Count < 2
+        ? "Only one council is loaded today, so same-supplier and payments-between-councils views have " +
+          "nothing to compare against yet — they fill in automatically as more councils are loaded above. " +
+          "The search below already runs against everything loaded this session, and will start surfacing " +
+          "cross-council matches the moment a second council joins."
+        : $"{_loadedCouncils.Count} councils are loaded, so the search below runs across all of them.";
 
     void EnsureDb()
     {
@@ -986,19 +853,18 @@
         return output.ToArray();
     }
 
-    async Task LoadSelectedYears() => await LoadSelectedPeriods("wokingham", _wokinghamYears);
-    async Task LoadSelectedReadingMonths() => await LoadSelectedPeriods("reading", _readingMonths);
+    async Task LoadSelected(Hosted h) => await LoadSelectedPeriods(h.Key, h.Periods);
 
-    // Loads the selected, not-yet-loaded periods (financial years for Wokingham, months for
-    // Reading) as compact pre-normalised files (built offline by CouncilDbBuilder from the same
-    // raw hosted files, see that project's own header comment) and BulkLoads them into the shared
-    // in-memory HoloDb — SHARED across every hosted council loaded this session, so cross-council
-    // SQL/NEAREST queries just work the moment a second council joins. Each council's own
-    // precomputed exceptions file loads once, alongside its first period, rather than re-running
-    // AuditEngine client-side at all.
+    // Loads the selected, not-yet-loaded periods (financial years, quarters or months) as compact pre-normalised
+    // files (built offline by CouncilDbBuilder, see that project's own header comment) and BulkLoads them into the
+    // shared in-memory HoloDb — SHARED across every hosted council loaded this session, so cross-council
+    // SQL/NEAREST queries just work the moment a second council joins. Each council's own precomputed
+    // exceptions file loads once, alongside its first period, rather than re-running AuditEngine client-side at
+    // all. While a file is parsed its publication facts are taken for the in-browser checks (CouncilChecks).
     async Task LoadSelectedPeriods(string councilKey, List<YearPick> periods)
     {
         _error = null; _busy = true; _phase = "Loading…"; StateHasChanged(); await Task.Delay(1);
+        bool loadedAny = false;
         try
         {
             EnsureDb();
@@ -1031,9 +897,19 @@
                             "servicearea", "costcentre", "description", "supplierkey", "supplier" },
                     new Array[] { id, council, year, transid, paydate, net, gross, vattype,
                                    servicearea, costcentre, description, supplierkey, supplier }, m);
+                // publication facts for this file (the page's row ids stand in for the rows themselves)
+                int order = periods.IndexOf(y);
+                _facts.RemoveAll(x => x.Council == councilKey && x.Tag == y.Tag);
+                _facts.Add(CouncilChecks.BuildFacts(councilKey, y.Tag, order,
+                    Enumerable.Range(0, m).Select(j => ((int)id[j], transid[j], paydate[j], supplierkey[j], Math.Round((decimal)net[j], 2)))));
+                int red = 0;
+                for (int j = 0; j < m; j++) if (IsRedactedText(transid[j]) || IsRedactedText(supplier[j])) red++;
+                var prevRed = _redaction.GetValueOrDefault(councilKey);
+                _redaction[councilKey] = (prevRed.Rows + m, prevRed.Redacted + red);
                 y.Loaded = true; y.Checked = false;
                 _spendRowsLoaded += m;
                 _loadedCouncils.Add(councilKey);
+                loadedAny = true;
             }
 
             if (!_exceptionsLoadedFor.Contains(councilKey))
@@ -1044,6 +920,7 @@
                 BuildTestsFromExceptionsRows(excTable);
                 _exceptionsLoadedFor.Add(councilKey);
                 _exceptionsLoadedCount += excTable.Count - 1;
+                loadedAny = true;
             }
         }
         catch (Exception ex)
@@ -1051,8 +928,8 @@
             _error = "Something went wrong loading that data: " + ex.Message;
         }
         finally { _busy = false; StateHasChanged(); }
+        if (loadedAny) await RunChecksAsync(); // publication faults + correction pairs, over everything loaded so far
     }
-
     static readonly Dictionary<string, string> TestDescByLabel = new()
     {
         ["Exception test 1 - payments above the stated invoice amount"] =
@@ -1112,16 +989,18 @@
             // removed 2026-10-03 (see that file's own header comment), shifting every index below
             // down by one from what an older version of this parser used.
             decimal? compareAmount = f.Length > 10 && decimal.TryParse(f[10], NumberStyles.Any, CultureInfo.InvariantCulture, out var ca) ? ca : null;
-            string? groupKey = f.Length > 11 ? NullIfEmpty(f[11]) : null;
+            // group ids restart at 1 in every council's file ("g3-1" exists in Wokingham's AND Reading's), so qualify them with the council
+            string? groupKey = f.Length > 11 && NullIfEmpty(f[11]) is { } gk ? councilKey + ":" + gk : null;
             int groupSize = f.Length > 12 && int.TryParse(f[12], out var gs) ? gs : 1;
             bool oppositeSign = f.Length > 13 && f[13] == "True";
             string classification = f.Length > 14 ? f[14] : "";
             string? classificationDetail = f.Length > 15 ? NullIfEmpty(f[15]) : null;
             int lineCount = f.Length > 16 && int.TryParse(f[16], out var lc) ? lc : 1;
+            decimal? lineNet = f.Length > 17 && decimal.TryParse(f[17], NumberStyles.Any, CultureInfo.InvariantCulture, out var ln) ? ln : null;
             grp.Items.Add(new ExceptionItem
             {
-                TestLabel = label, Type = type,
-                Council = CouncilDisplayNames.GetValueOrDefault(councilKey, councilKey),
+                TestLabel = label, Type = type, CouncilKey = councilKey, Net = lineNet,
+                Council = CouncilName(councilKey),
                 SourceTag = f[3], TransactionId = f[4], Supplier = f[5],
                 PayDate = NullIfEmpty(f[6]),
                 Amount = decimal.TryParse(f[7], NumberStyles.Any, CultureInfo.InvariantCulture, out var amt) ? amt : null,
@@ -1142,6 +1021,7 @@
             });
         }
         _tests = _testOrder.OrderBy(l => l, StringComparer.Ordinal).Select(l => _testsByLabel[l]).ToList();
+        _standingCache = null; // new rows loaded: the standing-payment view is rebuilt from them
         SetDefaultCollapse();
     }
 
@@ -1803,11 +1683,15 @@ evidence of anything wrong on its own. {EndsInFoiLine}</p>",
         {
             var amt = Math.Abs(it.Amount ?? 0m);
             var date = it.PayDate ?? "an unpublished date";
-            return it.Classification == "Unmatched"
-                ? $"A refund of {Money(amt)} to {it.Supplier} on {date} has no matching published charge of the same " +
-                  "amount from that supplier in the preceding/following 365 days."
-                : $"A refund of {Money(amt)} to {it.Supplier} on {date} is matched by a same-supplier charge of the " +
-                  "same amount elsewhere in the published data (see detail below).";
+            return it.Classification switch
+            {
+                "Unmatched" => $"A refund of {Money(amt)} to {it.Supplier} on {date} has no matching published charge of the same " +
+                               "amount from that supplier in the preceding/following 365 days.",
+                "StandingPaymentUnderRefundType" => $"A payment of {Money(amt)} to {it.Supplier} on {date} carries the council's refund " +
+                               "label; the same amount recurs every month under that label, and no matching charge of the same size was found.",
+                _ => $"A refund of {Money(amt)} to {it.Supplier} on {date} is matched by a same-supplier charge of the " +
+                     "same amount elsewhere in the published data (see detail below).",
+            };
         }
         return "";
     }
@@ -1871,19 +1755,23 @@ evidence of anything wrong on its own. {EndsInFoiLine}</p>",
         sb.AppendLine();
         sb.AppendLine("Freedom of Information request");
         sb.AppendLine();
-        sb.AppendLine($"To: {_councilDisplayName} — Freedom of Information team");
-        sb.AppendLine(_foiContactVerified
-            ? $"{_foiContactEmail} ({_foiContactCheckedNote})"
+        // Each letter goes to ONE council: the addressee, and only the selected items about that council.
+        var addressee = FoiAddressee;
+        var addrEmail = FoiEmailFor(addressee);
+        var chosen = _selected.Values.Where(i => _mode == Mode.OwnFile || i.Council == addressee).ToList();
+        sb.AppendLine($"To: {addressee} — Freedom of Information team");
+        sb.AppendLine(!string.IsNullOrEmpty(addrEmail)
+            ? $"{addrEmail} ({FoiNoteFor(addressee)})"
             : "[VERIFY BEFORE SENDING: this council's Freedom of Information contact address has not been " +
               "hand-checked for this tool — find it on the council's own website before sending.]");
         sb.AppendLine();
         sb.AppendLine("Dear Sir or Madam,");
         sb.AppendLine();
         sb.AppendLine($"Under the Freedom of Information Act 2000, I am requesting the following records and " +
-            $"information relating to {_councilDisplayName}'s published spending-over-£500 data.");
+            $"information relating to {addressee}'s published spending data.");
         sb.AppendLine();
-        sb.AppendLine($"The items below were identified as exceptions by a set of mechanical tests run " +
-            $"against {_councilDisplayName}'s own published spending data. An exception here is a fact " +
+        sb.AppendLine($"The items below were identified as exceptions by a set of mechanical checks run " +
+            $"against published council spending data, {addressee}'s own files among them. An exception here is a fact " +
             "about the published numbers, not proof of an error or wrongdoing — I am asking for the " +
             "underlying records and the reason, not for an admission.");
         sb.AppendLine();
@@ -1896,9 +1784,11 @@ evidence of anything wrong on its own. {EndsInFoiLine}</p>",
         // only, same as the rest of this letter.
         TestGroup? FindTestGroup(ExceptionItem it) => _tests.FirstOrDefault(tg => tg.Label == it.TestLabel);
 
+        // Items from the Session 25/26 sections (Custom) carry their own sentence, lines and request, and are listed under their
+        // own section heading below; this helper handles the exception tests (one numbered bundle per transaction/group).
         void Section(ExceptionType type, string heading, string definition, string request)
         {
-            var items = _selected.Values.Where(i => i.Type == type).ToList();
+            var items = chosen.Where(i => i.Type == type && !i.Custom).ToList();
             if (items.Count == 0) return;
             var bundles = items
                 .GroupBy(i => i.GroupKey ?? $"{i.Council}|{i.SourceTag}|{i.TransactionId}")
@@ -1943,6 +1833,24 @@ evidence of anything wrong on its own. {EndsInFoiLine}</p>",
             "a copy of the invoice(s) and payment record(s) for each transaction number listed, and the " +
             "reason the same supplier, amount, description and date appear under more than one transaction number.");
 
+        // The new sections: one heading each, one numbered item per selected row. Each item states what the published data shows
+        // (counts and amounts only, no cause offered) and asks for the records and the reason, nothing more.
+        foreach (var sec in chosen.Where(i => i.Custom).GroupBy(i => i.SectionId).OrderBy(g => g.Key, StringComparer.Ordinal))
+        {
+            var first = sec.First();
+            sb.AppendLine($"{first.SectionTitle} ({first.SectionDefinition}):");
+            sb.AppendLine();
+            int n = 0;
+            foreach (var it in sec.OrderBy(i => i.Council, StringComparer.Ordinal).ThenBy(i => i.SourceTag, StringComparer.Ordinal).ThenBy(i => i.TransactionId, StringComparer.Ordinal))
+            {
+                n++;
+                sb.AppendLine($"{n}. {it.Sentence}");
+                foreach (var l in it.Lines) sb.AppendLine($"   - {l}");
+                sb.AppendLine($"   For this item, please provide: {it.Request}");
+                sb.AppendLine();
+            }
+        }
+
         sb.AppendLine("I understand you are required to respond within 20 working days of receipt.");
         sb.AppendLine();
         if (_foiElectronic)
@@ -1962,6 +1870,976 @@ evidence of anything wrong on its own. {EndsInFoiLine}</p>",
         if (!string.IsNullOrWhiteSpace(_foiEmail)) sb.AppendLine(_foiEmail.Trim());
         return sb.ToString();
     }
+
+    // =====================================================================================================
+    // Hosted council panel (licence, files retrieved, what the council publishes, period picker)
+    // =====================================================================================================
+    string LoadHint(Hosted h) => h.Key switch
+    {
+        // sizes measured when CouncilDbBuilder last ran (gzipped); the page says "about", re-measure if the builder is re-run with new data
+        "wokingham" => "Each year loads as a small, pre-normalised file (under a megabyte compressed). The first load for a council also fetches its precomputed exceptions file (about 0.9 MB).",
+        "reading" => "Reading republishes monthly, not annually. Nothing is downloaded until you tick periods and press Load: the first Reading load fetches the precomputed exceptions file (about 1.3 MB compressed) plus about 30-220 KB for each period you ticked. Periods you don't tick are never fetched.",
+        "westberkshire" => "Nothing is downloaded until you tick months and press Load: the first West Berkshire load fetches the precomputed exceptions file (about 0.2 MB compressed) plus about 30-80 KB for each month you ticked.",
+        "rbwm" => "Nothing is downloaded until you tick files and press Load: the first RBWM load fetches the precomputed exceptions file (about 0.15 MB compressed) plus about 5-350 KB for each file you ticked (the two annual files are the largest).",
+        _ => "",
+    };
+
+    RenderFragment HostedPanel(Hosted h) => @<div class="hosted">
+        <section class="licence">
+            @if (h.Key == "wokingham")
+            {
+                <p>Contains data from <a href="@h.Profile.TransparencyPageUrl" target="_blank" rel="noopener">Wokingham
+                    Borough Council</a>, used under the <a href="https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/" target="_blank" rel="noopener">Open
+                    Government Licence v3.0</a>. Source: <a href="https://www.wokingham.gov.uk/council-and-meetings/open-data-and-transparency/data-sets-and-open-data?field_media_asset_browser_target_id=101" target="_blank" rel="noopener">the council's open-data page</a>.
+                    Every file below was retrieved <b>@h.RetrievedOn</b>.</p>
+            }
+            else if (h.Key == "reading")
+            {
+                <p>Contains data from <a href="@h.Profile.TransparencyPageUrl" target="_blank" rel="noopener">Reading
+                    Borough Council</a>. The council's own spending page states: "This data has been
+                    published in accordance with Governmental guidelines and is available for reuse
+                    under the <a href="https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/" target="_blank" rel="noopener">Open
+                    Government Licence</a>" (checked live against that page <b>3 October 2026</b>; the
+                    page doesn't itself name a version, so this links the current v3.0 text, the same
+                    licence Wokingham publishes under). Every file below was retrieved <b>@h.RetrievedOn</b>.
+                    One published file is <b>not</b> included: <b>2021-05</b> (the council's "May21-Revised"
+                    spreadsheet) has a council-side export fault, so its column headings don't match its own
+                    data and it can't be read reliably; that one month is missing from everything below.</p>
+            }
+            else if (h.Key == "westberkshire")
+            {
+                <p>Contains data from <a href="@h.Profile.TransparencyPageUrl" target="_blank" rel="noopener">West
+                    Berkshire Council</a> (its "Expenditure over £500" page), used under the <a href="https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/" target="_blank" rel="noopener">Open
+                    Government Licence v3.0</a>. Every file below was retrieved <b>@h.RetrievedOn</b>. The @h.Periods.Count months
+                    from @h.Span are included. One published month, <b>2026-08</b>, is not: the downloaded
+                    file is not a normal data export (a settings sheet with nine rows), so no spending is read from it.
+                    The council lists older months back to 2012; they are not hosted here yet.</p>
+            }
+            else if (h.Key == "rbwm")
+            {
+                <p>Contains data from the <a href="@h.Profile.TransparencyPageUrl" target="_blank" rel="noopener">Royal
+                    Borough of Windsor and Maidenhead</a> ("Payment to Suppliers Reports" under Budget, spending and
+                    procurement), used under the <a href="https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/" target="_blank" rel="noopener">Open
+                    Government Licence v3.0</a>. Every file below was retrieved <b>@h.RetrievedOn</b>: @h.Periods.Count files covering
+                    @h.Span (one annual file for each earlier year, monthly files after). Older years were not found on
+                    the council's page.</p>
+            }
+            <details class="retrieved">
+                <summary>Files retrieved @h.RetrievedOn (@h.Periods.Count@(h.Key == "reading" ? " of 64 published" : ""))</summary>
+                <ul>
+                    @foreach (var y in h.Periods)
+                    {
+                        <li><span class="year-tag">@y.Tag</span>
+                            @if (!string.IsNullOrEmpty(y.Url))
+                            {
+                                <span class="hint"><a href="@y.Url" target="_blank" rel="noopener">@y.FileName</a> — retrieved @h.RetrievedOn</span>
+                            }
+                            else
+                            {
+                                <span class="hint">@y.FileName — retrieved @h.RetrievedOn from the council's transparency page</span>
+                            }
+                        </li>
+                    }
+                    @if (h.Key == "reading")
+                    {
+                        <li><span class="year-tag">2021-05</span> <span class="hint">retrieved @h.RetrievedOn but excluded (council-side export fault, see above)</span></li>
+                    }
+                    @if (h.Key == "westberkshire")
+                    {
+                        <li><span class="year-tag">2026-08</span> <span class="hint">retrieved @h.RetrievedOn but excluded (not a normal data export, see above)</span></li>
+                    }
+                </ul>
+            </details>
+        </section>
+
+        @if (h.Key == "reading")
+        {
+            <p class="note-callout">Reading publishes one signed <b>Amount</b> column — there is no
+                separate invoice amount to compare a payment against, so <b>Exception tests 1 and 2
+                (payment vs. stated invoice amount) do not apply to this council</b> — not a clean
+                result, a structural fact about what's published. Negative amounts are real credits
+                and corrections, not errors. Tests 3-5 (repeated payments, multi-payee transactions,
+                repeated lines) still run below.</p>
+        }
+        else if (h.Key == "westberkshire")
+        {
+            <p class="note-callout">West Berkshire publishes one amount per row and <b>no transaction, invoice or
+                voucher reference at all</b>. The tool gives every row its own reference internally, so <b>Exception tests 1,
+                2, 4 and 5 (payment vs. invoice, one reference with several payees, the same line listed twice) cannot find
+                anything for this council by construction</b> — not a clean result, a structural fact about what's published.
+                Test 3 (the same payment repeated) and the standing-payment check do still run.</p>
+        }
+        else if (h.Key == "rbwm")
+        {
+            <p class="note-callout">The Royal Borough publishes <b>every payment of £100 or more</b> charged to a cost
+                centre (not £500 as most councils do), with one amount per row and no invoice or VAT split, so
+                <b>Exception tests 1 and 2 (payment vs. stated invoice amount) do not apply to this council</b> — a structural
+                fact about what's published, not a clean result. Lines the council already published in an earlier file were
+                removed before the checks ran, so the same payment is not counted twice (the "Files" check below shows what that
+                rule leaves).</p>
+        }
+
+        <section class="loaded-stats">
+            <h2>Loaded data</h2>
+            <p class="hint">@StatsLine()</p>
+            @foreach (var key in _loadedCouncils.OrderBy(x => x))
+            {
+                if (_redaction.TryGetValue(key, out var rd) && rd.Redacted > 0)
+                {
+                    <p class="hint">@CouncilName(key): <b>@rd.Redacted.ToString("N0") of @rd.Rows.ToString("N0")</b> loaded rows
+                        (@((double)rd.Redacted / rd.Rows * 100).ToString("0.#")%) carry a redacted payee or reference (the council
+                        withholds it, for example for safeguarding) and are <b>left out of every exception test</b>; they are excluded,
+                        not ignored, so the totals on this page do not include them.</p>
+                }
+            }
+        </section>
+
+        <section class="years">
+            <h2>Add council / @h.PeriodNoun</h2>
+            <p class="hint">@LoadHint(h) Each file BulkLoads straight into a real database running in your browser tab —
+                the same engine behind <a href="/tools/analyst">The Analyst</a>. The other councils hosted here load the same
+                way (go back to the picker and open another), and the cross-council views get more complete the more you load.</p>
+            <div class="council-add">
+                <div class="council-add-head">
+                    <b>@h.Profile.Name</b>
+                    <span class="hint">@h.Periods.Count(y => y.Loaded) of @h.Periods.Count @(h.PeriodNoun)s loaded</span>
+                </div>
+                <div class="period-tools">
+                    <button class="ghost" type="button" @onclick="() => TickAll(h, true)" disabled="@(_busy || h.Periods.All(y => y.Loaded))">Select all</button>
+                    <button class="ghost" type="button" @onclick="() => TickAll(h, false)" disabled="@(_busy || TickedCount(h) == 0)">Clear</button>
+                    <span class="hint">@TickedCount(h) ticked</span>
+                </div>
+                @if (h.Grouped)
+                {
+                    @foreach (var g in PeriodGroups(h))
+                    {
+                        <div class="fy-group">
+                            <label class="fy-head">
+                                <input type="checkbox" checked="@GroupAllTicked(g)" @onchange="e => TickGroup(g, (bool)e.Value!)" disabled="@(_busy || g.All(y => y.Loaded))" />
+                                <b>@g.Key</b> <span class="hint">@g.Count(y => y.Loaded) of @g.Count() loaded</span>
+                            </label>
+                            <div class="year-grid">
+                                @foreach (var y in g)
+                                {
+                                    <label class="year-pick @(y.Loaded ? "loaded" : "")">
+                                        <input type="checkbox" checked="@y.Checked" @onchange="e => y.Checked = (bool)e.Value!" disabled="@(_busy || y.Loaded)" />
+                                        <span class="year-tag">@y.Tag</span>
+                                        <span class="year-fmt">@(y.Loaded ? "loaded" : y.Format == SourceFormat.Xlsx ? "xlsx source" : "csv source")</span>
+                                    </label>
+                                }
+                            </div>
+                        </div>
+                    }
+                }
+                else
+                {
+                    <div class="year-grid">
+                        @foreach (var y in h.Periods)
+                        {
+                            <label class="year-pick @(y.Loaded ? "loaded" : "")">
+                                <input type="checkbox" checked="@y.Checked" @onchange="e => y.Checked = (bool)e.Value!" disabled="@(_busy || y.Loaded)" />
+                                <span class="year-tag">@y.Tag</span>
+                                <span class="year-fmt">@(y.Loaded ? "loaded" : y.Format == SourceFormat.Xlsx ? "xlsx source" : "csv source")</span>
+                            </label>
+                        }
+                    </div>
+                }
+                <button class="go" @onclick="() => LoadSelected(h)" disabled="@(_busy || TickedCount(h) == 0)" type="button">
+                    @(_busy ? _phase : "Load selected")
+                </button>
+            </div>
+        </section>
+    </div>;
+
+
+    // =====================================================================================================
+    // "Every check at a glance" table: one row per check (the exception tests, then the Session 25/26 checks), a grand total.
+    // =====================================================================================================
+    RenderFragment GlanceTable() => @<section class="summary-bar glance">
+        <h2>Every check at a glance</h2>
+        <p class="hint">One row per check: how many items it highlights, and the £ figure it measures. The £ column means
+            something different in each row (the right-hand words say what), and a larger number is not a worse finding.</p>
+        @{ var rows = SummaryRows(); decimal grand = rows.Where(r => r.Value is not null).Sum(r => r.Value!.Value); }
+        <div class="table-scroll">
+            <table class="exc-table glance-table">
+                <thead><tr><th>Check</th><th>Items</th><th>What the £ measures</th><th>£</th></tr></thead>
+                <tbody>
+                    @foreach (var r in rows)
+                    {
+                        <tr>
+                            <td>@r.Title</td>
+                            <td>@r.Count</td>
+                            <td>@r.ValueMeaning</td>
+                            <td class="num">@(r.Value is { } v ? Money(v) : "—")</td>
+                        </tr>
+                    }
+                    <tr class="grand-total">
+                        <td><b>Grand total</b></td><td></td><td>everything listed above, added together</td><td class="num"><b>@Money(grand)</b></td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        <p class="hint">The grand total is a plain sum of the rows above. The same payment can appear under more than one check
+            (a standing payment is also a repeated payment; a flagged month is part of its payee's total; a payment between councils
+            is listed both as a flow and, if it is debt-labelled, as a loan figure), so it is the total of everything highlighted, not a
+            count of distinct money. <strong>None of it is money proven lost, wasted or owed.</strong></p>
+    </section>;
+
+    // =====================================================================================================
+    // "More checks": the Session 25/26 sections
+    // =====================================================================================================
+    RenderFragment Card(string id, string title, ExceptionType? term, string countText, decimal? total, RenderFragment body) => @<div class="test-card" id="@id">
+        <button class="test-head" type="button" @onclick="() => Toggle(id)" aria-expanded="@IsOpen(id)">
+            <span class="collapse-arrow">@(IsOpen(id) ? "▾" : "▸")</span>
+            <h3>@title</h3>
+            @if (term is { } tm) { <span class="tag @TagClass(tm)">@tm.ToString()</span> }
+            <span class="count">@countText</span>
+            @if (total is { } tv) { <span class="count count-total">@Money(tv)</span> }
+        </button>
+        @if (IsOpen(id)) { <div class="test-body">@body</div> }
+    </div>;
+
+    RenderFragment SelectCell(ExceptionItem? it) => @<td>
+        @if (it is not null)
+        {
+            <input type="checkbox" checked="@it.Selected" @onchange="e => ToggleSelect(it, (bool)e.Value!)" aria-label="Add to the Freedom of Information request" />
+        }
+    </td>;
+
+    RenderFragment MoreButton(string id, int shown, int total) => @<div class="pagination">
+        <span class="hint">Showing @Math.Min(shown, total).ToString("N0") of @total.ToString("N0")</span>
+        @if (shown < total)
+        {
+            <button class="ghost" type="button" @onclick="() => More(id)">Show @Math.Min(MoreRows, total - shown) more</button>
+        }
+    </div>;
+
+    RenderFragment FilterBox(string id, string placeholder) => @<input type="text" class="filter-text" placeholder="@placeholder"
+        value="@Filter(id)" @oninput="e => SetFilter(id, e.Value?.ToString())" />;
+
+    RenderFragment SourceTable(string key) => @<div class="table-scroll">
+        @if (!_srcRows.TryGetValue(key, out var sr))
+        {
+            <p class="hint">No rows found for this.</p>
+        }
+        else
+        {
+            <table class="ev-table">
+                <thead><tr><th>File</th><th>Trans. no.</th><th>Pay date</th><th>Payee</th><th>Net</th><th>Description</th></tr></thead>
+                <tbody>
+                    @foreach (var r in sr)
+                    {
+                        <tr><td>@r.Tag</td><td>@r.TransId</td><td>@PayDateText(r.PayDate)</td><td>@r.Supplier</td><td>@Money(r.Net)</td><td>@r.Description</td></tr>
+                    }
+                </tbody>
+            </table>
+            <p class="hint">First @sr.Count of the rows concerned (read back from the in-browser database, as published).</p>
+        }
+    </div>;
+
+    RenderFragment InsightsBlock() => @<section class="insights">
+        <h2>More checks</h2>
+        <p class="hint">Each check below says in words what it looks at and runs the same way for every council. They read
+            the published files and nothing else; none of them says <i>why</i> a figure looks the way it does, and a council can
+            only answer that.</p>
+        <div class="scope-box">
+            <p class="hint">The checks that read the councils' whole files (payments between councils, loan interest, file
+                repeats, repeated lines, what grows and what comes back) cover: <b>@ScopeLine()</b>. The checks that need the rows
+                themselves (standing payments, correction pairs, files that do not match their name) cover what you have loaded.</p>
+            <label class="select-all">
+                <input type="checkbox" checked="@_showAllSix" @onchange="e => _showAllSix = (bool)e.Value!" />
+                Include all six councils the files cover (Wokingham, Merton, Reading, Bracknell Forest, West Berkshire, RBWM)
+            </label>
+            @{ var credits = ScopeProfiles(); }
+            <p class="hint">Contains public sector information published by
+                @for (int ci = 0; ci < credits.Count; ci++)
+                {
+                    <a href="@credits[ci].TransparencyPageUrl" target="_blank" rel="noopener">@credits[ci].Name</a>@(ci < credits.Count - 2 ? ", " : ci == credits.Count - 2 ? " and " : "")
+                }
+                and used under the <a href="https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/" target="_blank" rel="noopener">Open Government Licence v3.0</a>.</p>
+        </div>
+        @if (_crossLoading) { <p class="hint">Loading the cross-council files…</p> }
+        @if (_crossError is not null) { <p class="err">@_crossError</p> }
+        @if (_checksRunning) { <p class="hint">Running the in-browser checks…</p> }
+        @if (_checksError is not null) { <p class="err">@_checksError</p> }
+
+        @StandingSection()
+        @if (_crossLoaded) { @FlowsSection() @LoansSection() }
+        @CorrectionsSection()
+        @PubFaultsSection()
+        @if (_crossLoaded) { @FileDupSection() @WithinSection() @SinkSection() }
+    </section>;
+
+    // ---------------------------------------------------------------- 5. standing payments
+
+    RenderFragment StandingSection()
+    {
+        var all = StandingGroups();
+        var catchUp = all.Where(g => g.Classification == "StandingScheduleCatchUp").ToList();
+        var surplus = all.Where(g => g.Classification == "StandingScheduleSurplus").ToList();
+        decimal total = all.Sum(g => g.Total);
+        return @<div>
+            <div class="plain-explain">
+                <p>Some payments are made <b>once a month, month after month</b>, to the same supplier for the same amount (a
+                    <b>standing payment</b>). This check counts them against the calendar: on a date when that amount was paid several times,
+                    are there empty months that make up the difference? For example, <i>this amount is paid once a month; this month it was
+                    paid three times because two earlier months have none</i> (audit term: an <b>anomaly</b>, a pattern in the published rows).
+                    @if (all.Count > 0)
+                    {
+                        <text>In what you've loaded, <b>@all.Count.ToString("N0") groups</b> of repeated payments (@Money(total)) fit that shape:
+                        @catchUp.Count.ToString("N0") where empty months make up the difference, and @surplus.Count.ToString("N0") where there are
+                        more payments than months and nothing returned.</text>
+                    }
+                    else
+                    {
+                        <text>Load a period of a council above to see which of its repeated payments fit.</text>
+                    }
+                </p>
+                <p><b>What this could mean:</b> a payment that was late and then caught up, one made ahead of time, one made twice and later
+                    repaid, or a genuine extra payment. The files show the count, not the reason. @EndsInFoiLine</p>
+            </div>
+            @Card("standing", "Standing payments paid late, then caught up", ExceptionType.Anomaly, $"{all.Count:N0} groups", total, StandingBody(all, catchUp, surplus))
+        </div>;
+    }
+
+    RenderFragment StandingBody(List<StandingGroup> all, List<StandingGroup> catchUp, List<StandingGroup> surplus)
+    {
+        var f = Filter("standing");
+        var shown = all.Where(g => f == "" || g.Supplier.Contains(f, StringComparison.OrdinalIgnoreCase) || g.Council.Contains(f, StringComparison.OrdinalIgnoreCase)).ToList();
+        int lim = Limit("standing");
+        return @<div>
+            <p class="test-desc"><b>Rule:</b> a supplier-and-amount counts as a standing payment when it appears in at least six different calendar
+                months and in at least 60% of those months exactly once. For a group paid on one date, payments are then counted from the first month
+                that amount appears to three months after the group's own month, against the number of months elapsed (plus any empty months since that
+                supplier's previous standing amount ended), less credits of the same amount. If the payments do not outnumber the months the group is
+                <b>caught up</b>; if they do, and nothing was returned, it is a <b>surplus</b>. Only rows with no supplier invoice number to check
+                are tested this way.</p>
+            @if (all.Count == 0)
+            {
+                <p class="hint">None found in the councils you've loaded.</p>
+            }
+            else
+            {
+                <div class="classification-legend">
+                    <div class="classification-row classification-unexplained">
+                        <div class="classification-row-top">
+                            <span class="tag tag-unexplained">Standing payment, surplus</span>
+                            <span class="classification-count">@surplus.Count.ToString("N0")</span>
+                            <span class="classification-total">@Money(surplus.Sum(g => g.Total))</span>
+                        </div>
+                        <details class="classification-meaning-details"><summary>What this means</summary>
+                            <p class="classification-meaning">@ClassificationMeanings["StandingScheduleSurplus"]</p></details>
+                    </div>
+                    <div class="classification-row">
+                        <div class="classification-row-top">
+                            <span class="tag tag-label">Standing payment, caught up</span>
+                            <span class="classification-count">@catchUp.Count.ToString("N0")</span>
+                            <span class="classification-total">@Money(catchUp.Sum(g => g.Total))</span>
+                        </div>
+                        <details class="classification-meaning-details"><summary>What this means</summary>
+                            <p class="classification-meaning">@ClassificationMeanings["StandingScheduleCatchUp"]</p></details>
+                    </div>
+                </div>
+                <p class="ev-note ev-note-warn">For a surplus: more payments than months in the published data; the files do not say why.</p>
+                <div class="panel-controls">@FilterBox("standing", "Filter payee / council…")</div>
+                <div class="table-scroll table-scroll-fixed">
+                    <table class="exc-table">
+                        <thead><tr><th></th><th>Council</th><th>Files</th><th>Payee</th><th>Pay date</th><th>Each</th><th>Payments</th><th>Total</th><th>Label</th></tr></thead>
+                        <tbody>
+                            @foreach (var g in shown.Take(lim))
+                            {
+                                <tr class="@(g.Classification == "StandingScheduleSurplus" ? "" : "labelled-row")">
+                                    @SelectCell(g.Rep)
+                                    <td>@g.Council</td><td>@g.Years</td><td>@g.Supplier</td><td>@(PayDateText(g.PayDate))</td>
+                                    <td>@Money(g.Each)</td><td>@g.Payments.ToString("N0")</td><td>@Money(g.Total)</td>
+                                    <td><span class="tag @(g.Classification == "StandingScheduleSurplus" ? "tag-unexplained" : "tag-label")">@ClassificationDisplay(g.Classification)</span></td>
+                                </tr>
+                                @if (g.Detail != "")
+                                {
+                                    <tr class="caption-row"><td></td><td colspan="8"><span class="row-caption">@g.Detail</span></td></tr>
+                                }
+                            }
+                        </tbody>
+                    </table>
+                </div>
+                @MoreButton("standing", lim, shown.Count)
+            }
+        </div>;
+    }
+
+    // ---------------------------------------------------------------- 1. flows between councils (alias-aware)
+
+    RenderFragment FlowsSection()
+    {
+        var ents = FlowEntities();
+        var lines = FlowsScoped("accept");
+        decimal total = lines.Sum(l => l.Net);
+        var probable = FlowsScoped("probable");
+        var grades = _grades.Where(g => InScope(g.PayerSlug)).OrderByDescending(g => g.Score).ToList();
+        return @<div>
+            <div class="plain-explain">
+                <p>This adds up <b>how much each council paid to another council, or to a company one of them owns</b>, even when the
+                    other side is spelled differently on the payer's books. A finance system holds one supplier record per spelling, so a
+                    search on one exact name misses the rest.
+                    @if (ents.Count > 0)
+                    {
+                        <text>In the councils shown, <b>@lines.Count.ToString("N0") spellings</b> make up <b>@ents.Count.ToString("N0") bodies</b>, @Money(total) in all
+                        (@(ents.OrderByDescending(e => e.Spellings).First().Entity) appears under @ents.Max(e => e.Spellings) spellings).</text>
+                    }
+                </p>
+                <p><b>What this could mean:</b> ordinary business between public bodies (shared services, pooled pensions, care placements,
+                    jointly owned companies). Which spellings belong to which body was decided by a person reading the names, not by a score;
+                    see "How the matches were graded" below. @EndsInFoiLine</p>
+                <p class="ev-note ev-note-warn"><b>What the payer says it paid; never reconciled to the payee's income.</b></p>
+            </div>
+            @Card("flows", "Payments between councils and their companies", null, $"{ents.Count:N0} bodies, {lines.Count:N0} spellings", total, FlowsBody(ents, probable, grades))
+        </div>;
+    }
+
+    RenderFragment FlowsBody(List<(string Entity, decimal Net, int Rows, int Spellings, int Payers, List<FlowLine> Lines)> ents, List<FlowLine> probable, List<AliasGrade> grades)
+    {
+        return @<div>
+            @if (ents.Count == 0)
+            {
+                <p class="hint">No payments between these councils are recorded in the files for the councils shown.</p>
+            }
+            @foreach (var e in ents)
+            {
+                <div class="entity">
+                    <h4>@e.Entity <span class="hint">— @Money(e.Net) in @e.Rows.ToString("N0") payments, @e.Spellings spelling@(e.Spellings == 1 ? "" : "s") across @e.Payers payer@(e.Payers == 1 ? "" : "s")</span></h4>
+                    <div class="table-scroll">
+                        <table class="exc-table">
+                            <thead><tr><th></th><th>Paid by</th><th>Name as published</th><th>Payments</th><th>Total</th><th>Files</th><th>Found by</th><th>Rows</th></tr></thead>
+                            <tbody>
+                                @foreach (var l in e.Lines)
+                                {
+                                    var fl = l;
+                                    <tr>
+                                        @SelectCell(fl.Item)
+                                        <td>@CouncilName(fl.PayerSlug)</td><td>@fl.SupplierName</td><td>@fl.Rows.ToString("N0")</td><td>@Money(fl.Net)</td>
+                                        <td title="@fl.Years">@FilesSummary(fl.Years)</td>
+                                        <td>@(fl.InOldExactPass ? "exact name" : "alias match only")</td>
+                                        <td><button class="evidence-toggle" type="button" @onclick="() => ToggleFlowRows(fl)">@(fl.Open ? "Hide ▴" : "See the rows ▾")</button></td>
+                                    </tr>
+                                    @if (fl.Open)
+                                    {
+                                        <tr class="evidence-row">
+                                            <td colspan="8">
+                                                @if (_flowRowsLoading) { <p class="hint">Loading the rows…</p> }
+                                                else
+                                                {
+                                                    var src = FlowSource(fl);
+                                                    <div class="table-scroll table-scroll-fixed">
+                                                        <table class="ev-table">
+                                                            <thead><tr><th>File</th><th>Trans. no.</th><th>Pay date</th><th>Payee</th><th>Net</th><th>Description</th></tr></thead>
+                                                            <tbody>
+                                                                @foreach (var r in src.Take(100))
+                                                                {
+                                                                    <tr><td>@r.Year</td><td>@r.TransactionId</td><td>@PayDateText(r.PayDate)</td><td>@r.Supplier</td><td>@Money(r.Net)</td><td>@r.Description</td></tr>
+                                                                }
+                                                            </tbody>
+                                                        </table>
+                                                    </div>
+                                                    <p class="hint">@src.Count.ToString("N0") published lines (first @Math.Min(100, src.Count) shown), exactly as published.
+                                                        <button class="evidence-toggle" type="button" @onclick="() => DownloadFlowRows(fl)">↓ All of them (CSV)</button></p>
+                                                }
+                                            </td>
+                                        </tr>
+                                    }
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            }
+            @if (probable.Count > 0)
+            {
+                <details class="retrieved">
+                    <summary>Possible matches, shown separately and left out of every total above (@probable.Count)</summary>
+                    <ul>
+                        @foreach (var l in probable)
+                        {
+                            <li>@CouncilName(l.PayerSlug) → @l.SupplierName (possibly @l.Entity): @l.Rows.ToString("N0") payment@(l.Rows == 1 ? "" : "s"), @Money(l.Net)</li>
+                        }
+                    </ul>
+                </details>
+            }
+            <details class="retrieved">
+                <summary>How the matches were graded (@grades.Count proposals)</summary>
+                <p class="hint">A search proposed supplier names that might be the same body; <b>a person then graded each proposal</b>
+                    accept, probable or reject. No similarity score separates right from wrong (a near-identical name can be a different company and
+                    a very different spelling can be the same body), so the score below is shown for information only, never as the rule.</p>
+                <div class="table-scroll table-scroll-fixed">
+                    <table class="exc-table">
+                        <thead><tr><th>Body</th><th>Paid by</th><th>Name as published</th><th>Similarity</th><th>Grade</th><th>Note</th></tr></thead>
+                        <tbody>
+                            @foreach (var g in grades)
+                            {
+                                <tr><td>@g.Entity</td><td>@CouncilName(g.PayerSlug)</td><td>@g.SupplierName</td><td>@g.Score.ToString("0.00")</td><td>@g.Verdict</td><td>@g.Note</td></tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </details>
+        </div>;
+    }
+
+    // "FY2020-21 FY2021-22 ... FY2025-26" -> "6 files, FY2020-21 to FY2025-26"
+    static string FilesSummary(string years)
+    {
+        var parts = years.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        return parts.Length <= 2 ? string.Join(", ", parts) : $"{parts.Length} files, {parts[0]} to {parts[^1]}";
+    }
+
+    // ---------------------------------------------------------------- 2. loan interest between councils
+
+    static string RebuildText(LoanLine l)
+    {
+        if (l.Status == "NotApplicable") return "Not a loan payment (" + (l.Kind == "re3-waste-pfi" ? "an instalment under a shared waste contract" : "a different kind of payment") + ")";
+        string tidy = l.Note.Replace(" (rate x term is a hyperbola)", "").Replace("rate x term is a hyperbola", "").Trim();
+        if (l.RateBp is { } bp && l.Days is { } d && l.Principal is { } pr)
+            return $"{Money(pr)} at {bp / 100m:0.00}% for {d} days (actual days over 365)" + (l.Status == "DecodesPrincipalUnpublished" ? "; principal inferred, not published" : "");
+        if (l.Status == "Decodes") return $"{l.Candidates} rate-and-days pairs fit, so none can be singled out: " + tidy;
+        if (l.Status == "DecodesPrincipalUnpublished") return $"{l.Candidates} loan sizes, rates and day counts fit, principal not published: " + tidy;
+        return "Not rebuilt: " + tidy;
+    }
+
+    RenderFragment LoansSection()
+    {
+        var all = LoansScoped();
+        var rel = all.Where(l => l.Status != "NotApplicable").ToList();
+        int notRebuilt = rel.Count(l => l.Status == "DoesNotDecode");
+        decimal total = rel.Sum(l => l.Amount);
+        return @<div>
+            <div class="plain-explain">
+                <p>For a payment between councils that looks like <b>loan interest</b>, can the figure be rebuilt from a round loan, a rate and
+                    a number of days? If yes, the rebuild is shown; if not, it is shown as <b>not rebuilt</b>. Only payments to another council that
+                    the council's own file labels as debt, interest or a loan are listed; payments to banks, brokers, the Public Works Loan Board or
+                    to companies a council owns are different instruments and are not tested here.
+                    @if (rel.Count > 0)
+                    {
+                        <text>In the councils shown: <b>@rel.Count.ToString("N0") payments</b> (@Money(total)), @(rel.Count(l => l.Status == "Decodes")) rebuilt with a published principal,
+                        @(rel.Count(l => l.Status == "DecodesPrincipalUnpublished")) rebuilt only if the principal is inferred, and <b>@notRebuilt.ToString("N0") not rebuilt</b>.</text>
+                    }
+                </p>
+                <p><b>What this could mean:</b> loan interest is usually quoted at a rate on the actual number of days over 365. A figure that is not rebuilt
+                    may use a variable rate, part of a period, a different day count, an arrangement fee, or a loan the file does not describe; the file does
+                    not say which. @EndsInFoiLine</p>
+            </div>
+            @Card("loans", "Loan interest between councils: can the figure be rebuilt?", ExceptionType.Anomaly, $"{rel.Count:N0} payments, {notRebuilt:N0} not rebuilt", total, LoansBody(all))
+        </div>;
+    }
+
+    RenderFragment LoansBody(List<LoanLine> all)
+    {
+        int lim = Limit("loans");
+        return @<div>
+            @if (all.Count == 0)
+            {
+                <p class="hint">No debt- or interest-labelled payments between councils in the councils shown.</p>
+            }
+            else
+            {
+                <div class="table-scroll table-scroll-fixed">
+                    <table class="exc-table">
+                        <thead><tr><th></th><th>Council</th><th>File</th><th>Trans. no.</th><th>Paid to</th><th>Pay date</th><th>Amount</th><th>Result</th><th>The rebuild</th></tr></thead>
+                        <tbody>
+                            @foreach (var l in all.Take(lim))
+                            {
+                                <tr class="@(l.Status == "DoesNotDecode" ? "" : "labelled-row")">
+                                    @SelectCell(l.Item)
+                                    <td>@l.Council</td><td>@l.Year</td><td>@l.TransactionId</td><td>@l.Counterparty</td><td>@l.PayDate</td><td>@Money(l.Amount)</td>
+                                    <td><span class="tag @(l.Status == "DoesNotDecode" ? "tag-unexplained" : "tag-label")">@(l.Status switch { "Decodes" => "Rebuilt", "DecodesPrincipalUnpublished" => "Rebuilt, principal inferred", "DoesNotDecode" => "Not rebuilt", _ => "Not a loan" })</span></td>
+                                    <td class="wrap-cell">@RebuildText(l)</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+                @MoreButton("loans", lim, all.Count)
+            }
+        </div>;
+    }
+
+    // ---------------------------------------------------------------- 3. reversal-and-correction pairs
+
+    RenderFragment CorrectionsSection()
+    {
+        var items = _checks?.Corrections ?? Array.Empty<CorrectionFinding>();
+        int examined = _checks?.GroupsExamined ?? 0;
+        decimal total = items.Sum(c => Math.Abs(c.Residual));
+        return @<div>
+            <div class="plain-explain">
+                <p>Some bookings <b>reverse one amount and post another</b> that differ in a <b>single digit</b>, leaving a small amount on the books.
+                    This check looks inside every transaction number that carries a handful of lines (eight or fewer, each of £1,000 or more) for a
+                    negative line and a positive line that differ in exactly one digit and whose difference is everything the group leaves over
+                    (audit term: a <b>discrepancy</b>, the published record disagreeing with itself).
+                    @if (_checks is null)
+                    {
+                        <text>Load a period of a council above to run it.</text>
+                    }
+                    else
+                    {
+                        <text>In what you've loaded it examined <b>@examined.ToString("N0")</b> small groups and found <b>@items.Count.ToString("N0")</b>@(items.Count == 0 ? "." : $" ({Money(total)} left over).")</text>
+                    }
+                </p>
+                <p><b>What this could mean:</b> a keying slip that was corrected, a deliberate re-posting, or two unrelated lines that happen to look alike.
+                    <b>The files do not show which figure was right, or that either was a slip.</b> @EndsInFoiLine</p>
+            </div>
+            @Card("corrections", "Reversal-and-correction pairs", ExceptionType.Discrepancy, $"{items.Count:N0} of {examined:N0} groups", total, CorrectionsBody(items, examined))
+        </div>;
+    }
+
+    RenderFragment CorrectionsBody(IReadOnlyList<CorrectionFinding> items, int examined)
+    {
+        return @<div>
+            @if (_checks is null)
+            {
+                <p class="hint">Nothing loaded yet.</p>
+            }
+            else if (items.Count == 0)
+            {
+                <p class="hint">None found among the @examined.ToString("N0") small transaction groups in what you've loaded.</p>
+            }
+            else
+            {
+                <div class="table-scroll">
+                    <table class="exc-table">
+                        <thead><tr><th></th><th>Council</th><th>File</th><th>Trans. no.</th><th>Payee</th><th>Negative line</th><th>Positive line</th><th>The digit</th><th>Left over</th><th>Lines</th></tr></thead>
+                        <tbody>
+                            @foreach (var c in items)
+                            {
+                                var cc = c;
+                                var item = _corrItems.FirstOrDefault(i => i.Council == CouncilName(cc.Council) && i.SourceTag == cc.SourceTag && i.TransactionId == cc.TransactionId);
+                                <tr>
+                                    @SelectCell(item)
+                                    <td>@CouncilName(cc.Council)</td><td>@cc.SourceTag</td><td>@cc.TransactionId</td><td>@cc.Supplier</td>
+                                    <td>@Money(cc.NegativeLine)</td><td>@Money(cc.PositiveLine)</td>
+                                    <td>@DigitPlace(cc.DigitPositionFromRight): @cc.NegativeDigit against @cc.PositiveDigit</td>
+                                    <td>@Money(cc.Residual)</td><td>@cc.Lines</td>
+                                </tr>
+                                <tr class="evidence-row">
+                                    <td colspan="10">
+                                        <div class="table-scroll">
+                                            <table class="ev-table">
+                                                <thead><tr><th>File</th><th>Trans. no.</th><th>Pay date</th><th>Payee</th><th>Net</th><th>Description</th></tr></thead>
+                                                <tbody>
+                                                    @foreach (var ln in CorrectionLines(cc))
+                                                    {
+                                                        <tr class="@(ln.Net == cc.NegativeLine || ln.Net == cc.PositiveLine ? "this-row" : "")">
+                                                            <td>@ln.SourceTag</td><td>@ln.TransactionId</td><td>@(ln.PayDate ?? "—")</td><td>@ln.Supplier</td><td>@(ln.Net is { } n ? Money(n) : "—")</td><td>@(ln.Description ?? "—")</td>
+                                                        </tr>
+                                                    }
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                        <p class="hint">The two lines the rule picked are outlined. The files do not show which figure was right, or that either was a slip.</p>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </div>;
+    }
+
+    // ---------------------------------------------------------------- 4. publication faults
+
+    RenderFragment PubFaultsSection()
+    {
+        var faults = _checks?.Faults ?? Array.Empty<FileFault>();
+        var marked = MarkedFaults().ToList();
+        decimal total = _pubItems.Sum(p => p.Amount ?? 0m);
+        int overlapRows = marked.Sum(m => m.OverlapRows);
+        return @<div>
+            <div class="plain-explain">
+                <p>Does this council's file for a month <b>actually contain that month's payments</b>, and did any payment <b>appear in two files</b>?
+                    Two facts are worked out for every file you load: the share of its dated rows whose pay date falls in the month the file is named for
+                    (only for files named for a single month), and the rows that already appeared in an earlier file of the same council, matched on the
+                    transaction number, pay date, payee and net amount (audit term: a <b>discrepancy</b>).
+                    @if (_checks is null)
+                    {
+                        <text>Load a period of a council above to run it.</text>
+                    }
+                    else
+                    {
+                        <text>In what you've loaded: <b>@marked.Count.ToString("N0") of @faults.Count.ToString("N0") files</b> are marked (@Money(total) of net amounts concerned).</text>
+                    }
+                </p>
+                <p><b>What this could mean:</b> a file published under the wrong month, a file that was republished or re-extracted, or a council that
+                    publishes late payments in a later file. The engine already removes repeated lines before it checks anything else (for RBWM, lines
+                    already published in an earlier file), which is why this page's totals can differ from a plain sum of the files. This check does not infer a
+                    cause. @EndsInFoiLine</p>
+            </div>
+            @Card("pubfaults", "Files whose contents do not match their name, or overlap another file", ExceptionType.Discrepancy, $"{marked.Count:N0} of {faults.Count:N0} files", total, PubFaultsBody(faults, marked))
+        </div>;
+    }
+
+    RenderFragment PubFaultsBody(IReadOnlyList<FileFault> faults, List<FileFault> marked)
+    {
+        bool all = IsOpen("pubfaults-all");
+        var list = (all ? faults.OrderByDescending(f => IsMarked(f)).ThenBy(f => f.InsideShare).ThenBy(f => f.Council).ThenBy(f => f.Tag).ToList() : marked.OrderBy(f => f.InsideShare).ThenBy(f => f.Council).ThenBy(f => f.Tag).ToList());
+        return @<div>
+            <p class="test-desc"><b>Rule:</b> a file is <b>marked</b> when it is named for a single month and fewer than 9 in 10 of its dated rows are paid in that
+                month, or when any of its lines were already published in an earlier file of the same council. Files named for a longer period (a year, a quarter) are
+                not judged on the first fact, because the period a council's own file covers is not stated in its name the way a month is.</p>
+            @if (_checks is null)
+            {
+                <p class="hint">Nothing loaded yet.</p>
+            }
+            else
+            {
+                <label class="select-all"><input type="checkbox" checked="@all" @onchange='e => _open["pubfaults-all"] = (bool)e.Value!' /> Show all @faults.Count.ToString("N0") loaded files, not only the marked ones</label>
+                @if (list.Count == 0)
+                {
+                    <p class="hint">No loaded file is marked by this rule.</p>
+                }
+                else
+                {
+                    <div class="table-scroll table-scroll-fixed">
+                        <table class="exc-table">
+                            <thead><tr><th></th><th>Council</th><th>File</th><th>Rows</th><th>Paid in its named month</th><th>Paid outside it</th><th>Lines already in an earlier file</th><th>Source rows</th></tr></thead>
+                            <tbody>
+                                @foreach (var f in list)
+                                {
+                                    var ff = f;
+                                    string outKey = $"pub-out:{ff.Council}:{ff.Tag}", ovKey = $"pub-ov:{ff.Council}:{ff.Tag}";
+                                    <tr class="@(IsMarked(ff) ? "" : "labelled-row")">
+                                        @SelectCell(PubItem(ff))
+                                        <td>@CouncilName(ff.Council)</td><td>@ff.Tag</td><td>@ff.Rows.ToString("N0")</td>
+                                        <td>@(ff.SingleMonth && ff.DatedRows > 0 ? $"{ff.InsideRows:N0} of {ff.DatedRows:N0} ({ff.InsideShare:P0})" : "not judged (not a single month)")</td>
+                                        <td>@(ff.SingleMonth ? $"{ff.DatedRows - ff.InsideRows:N0} rows, {Money((decimal)ff.OutsideNetAbs)}" : "—")</td>
+                                        <td>@(ff.OverlapRows > 0 ? $"{ff.OverlapRows:N0} ({string.Join(", ", ff.OverlapWith.Select(o => $"{o.OtherTag}: {o.Rows:N0}"))}), {Money((decimal)ff.OverlapNetAbs)}" : "none")</td>
+                                        <td>
+                                            @if (OutsideMarked(ff)) { <button class="evidence-toggle" type="button" @onclick="() => ToggleSource(outKey, ff.OutsideIds)">@(_srcOpen.Contains(outKey) ? "Hide ▴" : "Outside rows ▾")</button> }
+                                            @if (ff.OverlapRows > 0) { <button class="evidence-toggle" type="button" @onclick="() => ToggleSource(ovKey, ff.OverlapIds)">@(_srcOpen.Contains(ovKey) ? "Hide ▴" : "Repeated rows ▾")</button> }
+                                        </td>
+                                    </tr>
+                                    @if (_srcOpen.Contains(outKey))
+                                    {
+                                        <tr class="evidence-row"><td colspan="8"><p class="hint">Rows in <b>@ff.Tag</b> paid outside @ff.PeriodLabel:</p>@SourceTable(outKey)</td></tr>
+                                    }
+                                    @if (_srcOpen.Contains(ovKey))
+                                    {
+                                        <tr class="evidence-row"><td colspan="8"><p class="hint">Rows in <b>@ff.Tag</b> already published in an earlier file:</p>@SourceTable(ovKey)</td></tr>
+                                    }
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+            }
+        </div>;
+    }
+
+    // ---------------------------------------------------------------- 6. files that list the same row twice
+
+    RenderFragment FileDupSection()
+    {
+        var all = FileDupsScoped();
+        var flagged = all.Where(d => d.Flagged).ToList();
+        decimal total = flagged.Sum(d => d.RepeatNet);
+        return @<div>
+            <div class="plain-explain">
+                <p>Does a file <b>list the same payment twice</b>, compared with the files either side? Every file contains some exactly repeated rows
+                    (ordinary repeated lines), and the rate differs a lot between councils, so each file is judged against its own council's neighbouring
+                    files (audit term: a <b>discrepancy</b>, the same line listed more than once).
+                    @if (all.Count > 0)
+                    {
+                        <text>In the councils shown, <b>@flagged.Count.ToString("N0") of @all.Count.ToString("N0") files</b> repeat far more rows than their neighbours@(flagged.Count == 0 ? "." : $" ({Money(total)} of net amounts in the second copies).")</text>
+                    }
+                </p>
+                <p><b>What this could mean:</b> a file extracted twice into one, a batch loaded twice, or genuine repeated payments. This check does not infer a
+                    cause. @EndsInFoiLine</p>
+            </div>
+            @Card("filedup", "Files that list the same row twice", ExceptionType.Discrepancy, $"{flagged.Count:N0} of {all.Count:N0} files", total, FileDupBody(all, flagged))
+        </div>;
+    }
+
+    RenderFragment FileDupBody(List<FileDupLine> all, List<FileDupLine> flagged)
+    {
+        bool showAll = IsOpen("filedup-all");
+        var list = showAll ? all.OrderByDescending(d => d.Flagged).ThenByDescending(d => d.Rate).ToList() : flagged;
+        return @<div>
+            <p class="test-desc"><b>Rule:</b> a row is a repeat when every published column matches an earlier row of the same file. A file is <b>flagged</b> when it has at
+                least 50 repeated rows, they are at least 2% of the file, and that rate is at least three times the 75th-percentile repeat rate of up to five files either side
+                (never less than 0.5%). Rows with a redacted payee or reference are left out.</p>
+            <label class="select-all"><input type="checkbox" checked="@showAll" @onchange='e => _open["filedup-all"] = (bool)e.Value!' /> Show all @all.Count.ToString("N0") files, not only the flagged ones</label>
+            @if (list.Count == 0)
+            {
+                <p class="hint">No file is flagged by this rule.</p>
+            }
+            else
+            {
+                <div class="table-scroll table-scroll-fixed">
+                    <table class="exc-table">
+                        <thead><tr><th></th><th>Council</th><th>File</th><th>Rows</th><th>Repeated rows</th><th>Net of the repeats</th><th>Share of file</th><th>Neighbours' usual share</th></tr></thead>
+                        <tbody>
+                            @foreach (var d in list)
+                            {
+                                <tr class="@(d.Flagged ? "" : "labelled-row")">
+                                    @SelectCell(d.Item)
+                                    <td>@CouncilName(d.Council)</td><td>@d.File</td><td>@d.Rows.ToString("N0")</td><td>@d.Repeats.ToString("N0")</td><td>@Money(d.RepeatNet)</td>
+                                    <td>@d.Rate.ToString("P1")</td><td>@d.NeighbourRate.ToString("P1")</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </div>;
+    }
+
+    // ---------------------------------------------------------------- 7. same line repeated inside one transaction
+
+    RenderFragment WithinSection()
+    {
+        var all = WithinScoped();
+        decimal total = all.Sum(w => w.ExtraValue);
+        return @<div>
+            <div class="plain-explain">
+                <p>Does one transaction number list <b>the same line more than once</b> — same payee, amount, description and pay date? There is no invoice total to compare
+                    these against, so they are shown as published, largest extra value first (audit term: an <b>anomaly</b>). The same amount paid on twelve
+                    different dates is a payment schedule, not a repeat, so only lines sharing a pay date count.
+                    @if (all.Count > 0)
+                    {
+                        <text>In the councils shown: <b>@all.Count.ToString("N0") repeated lines</b>, @Money(total) in the extra copies.</text>
+                    }
+                </p>
+                <p><b>What this could mean:</b> one real payment entered twice, several genuine instalments paid on one day, or a batch that lists identical items.
+                    The last column says whether the same payee and amount also turn up in other transactions, which makes a regular amount more likely. @EndsInFoiLine</p>
+            </div>
+            @Card("withintxn", "The same line repeated inside one transaction", ExceptionType.Anomaly, $"{all.Count:N0} lines", total, WithinBody(all))
+        </div>;
+    }
+
+    RenderFragment WithinBody(List<WithinLine> all)
+    {
+        var f = Filter("withintxn");
+        var shown = all.Where(w => f == "" || w.Supplier.Contains(f, StringComparison.OrdinalIgnoreCase) || w.Description.Contains(f, StringComparison.OrdinalIgnoreCase) || w.TransactionId.Contains(f, StringComparison.OrdinalIgnoreCase)).ToList();
+        int lim = Limit("withintxn");
+        return @<div>
+            <p class="test-desc"><b>Rule:</b> inside one transaction number (rows with a redacted payee or reference are left out; a reference a spreadsheet has turned into
+                scientific notation is not one transaction), a line repeated with the same payee, amount, description and pay date, for amounts of £10,000 or more. Wokingham is not
+                scanned this way: its published invoice total is compared with the lines by exception tests 1 and 2 instead.</p>
+            @if (all.Count == 0)
+            {
+                <p class="hint">No repeated lines in the councils shown.</p>
+            }
+            else
+            {
+                <div class="panel-controls">@FilterBox("withintxn", "Filter payee / description / trans. no.…")</div>
+                <div class="table-scroll table-scroll-fixed">
+                    <table class="exc-table">
+                        <thead><tr><th></th><th>Council</th><th>File</th><th>Trans. no.</th><th>Payee</th><th>Pay date</th><th>Amount</th><th>Times listed</th><th>Extra value</th><th>Same payee and amount elsewhere</th></tr></thead>
+                        <tbody>
+                            @foreach (var w in shown.Take(lim))
+                            {
+                                <tr>
+                                    @SelectCell(w.Item)
+                                    <td>@CouncilName(w.Council)</td><td>@w.Year</td><td>@w.TransactionId</td><td>@w.Supplier</td><td>@PayDateText(w.PayDate)</td>
+                                    <td>@Money(w.Net)</td><td>@w.Copies.ToString("N0")</td><td>@Money(w.ExtraValue)</td>
+                                    <td>@(w.OtherTransactions == 0 ? "in no other transaction" : $"in {w.OtherTransactions:N0} other transaction{(w.OtherTransactions == 1 ? "" : "s")}")</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+                @MoreButton("withintxn", lim, shown.Count)
+            }
+        </div>;
+    }
+
+    // ---------------------------------------------------------------- 8. what grows, what comes back, what does not fit the usual month
+
+    RenderFragment SinkSection()
+    {
+        var sinks = SinksScoped(); var mis = MisfitsScoped();
+        decimal total = sinks.Sum(s => s.NetOut);
+        int oneOff = mis.Count(m => m.LabelCheck.StartsWith("LABEL SEEN ONLY", StringComparison.Ordinal));
+        return @<div>
+            <div class="plain-explain">
+                <p>Money between councils and their companies: <b>what grows, what comes back, and what does not fit the usual month</b>. For each payer and payee
+                    pair the first table adds up what was paid over the years, notes any credit rows in the same files, and whether the yearly total kept rising.
+                    The second table lists months in which the payer's payments to that payee were far above that payee's own usual month.
+                    @if (sinks.Count > 0)
+                    {
+                        <text>In the councils shown: <b>@sinks.Count.ToString("N0") payer-and-payee pairs</b> (@Money(total)) and <b>@mis.Count.ToString("N0") unusual months</b>, of which
+                        @oneOff.ToString("N0") have a largest-row label that appears in no other month; the rest are bigger months of the usual kind.</text>
+                    }
+                </p>
+                <p class="ev-note ev-note-warn"><b>A spending file shows only the payer's side. Nothing coming back in this file does not mean a debt is unpaid; repayments and income are in other records.</b></p>
+                <p><b>What this could mean:</b> an ongoing contract or service charge that rises with demand, a loan or advance whose repayment is recorded elsewhere, or a
+                    one-off grant or settlement. The files do not say which. @EndsInFoiLine</p>
+            </div>
+            @Card("sink", "What grows, what comes back, what does not fit the usual month", ExceptionType.Anomaly, $"{sinks.Count:N0} pairs, {mis.Count:N0} months", total, SinkBody(sinks, mis))
+        </div>;
+    }
+
+    RenderFragment SinkBody(List<SinkLine> sinks, List<MisfitLine> mis)
+    {
+        int lim = Limit("misfit");
+        return @<div>
+            <h4>Payer and payee over the years</h4>
+            <p class="test-desc"><b>Rule:</b> total paid out (credit-typed and negative rows kept apart), credits as a share of it, and the longest run of full calendar years each higher
+                than the one before (the first and last calendar year of the files are part-years and cannot start or end a run). Marked "no credit rows" or "credits under 2%" when
+                three or more years and over £100,000 were paid.</p>
+            @if (sinks.Count == 0)
+            {
+                <p class="hint">No pairs in the councils shown.</p>
+            }
+            else
+            {
+                <div class="table-scroll table-scroll-fixed">
+                    <table class="exc-table">
+                        <thead><tr><th></th><th>Paid by</th><th>Paid to</th><th>Years</th><th>Payments</th><th>Total paid</th><th>Credit rows</th><th>Credits as share</th><th>What the file shows</th><th>Year by year</th></tr></thead>
+                        <tbody>
+                            @foreach (var s in sinks)
+                            {
+                                <tr>
+                                    @SelectCell(s.Item)
+                                    <td>@CouncilName(s.Payer)</td><td>@s.Entity</td><td>@s.FirstYear to @s.LastYear</td><td>@s.Rows.ToString("N0")</td><td>@Money(s.NetOut)</td>
+                                    <td>@s.CreditRows.ToString("N0") (@Money(Math.Abs(s.CreditNet)))</td><td>@s.SettleRatio.ToString("P1")</td>
+                                    <td class="wrap-cell">@(string.IsNullOrEmpty(s.Flags) ? "—" : FlagWords(s.Flags))</td>
+                                    <td class="wrap-cell">@s.YearSeries</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+            <h4>Months that do not fit the usual month</h4>
+            <p class="test-desc"><b>Rule:</b> for a payee paid in at least 12 different months, a month whose total is over £100,000 and more than three times that payee's own
+                median month. "Label seen only in this month" means the council's own wording for that month's largest row appears in no other month; otherwise it is a bigger
+                month of the usual kind.</p>
+            @if (mis.Count == 0)
+            {
+                <p class="hint">No months in the councils shown.</p>
+            }
+            else
+            {
+                <div class="table-scroll table-scroll-fixed">
+                    <table class="exc-table">
+                        <thead><tr><th></th><th>Paid by</th><th>Paid to</th><th>Month</th><th>That month</th><th>Usual month</th><th>Times usual</th><th>Rows</th><th>Label check</th><th>Largest row's label</th></tr></thead>
+                        <tbody>
+                            @foreach (var m in mis.Take(lim))
+                            {
+                                <tr class="@(m.LabelCheck.StartsWith("LABEL SEEN ONLY", StringComparison.Ordinal) ? "" : "labelled-row")">
+                                    @SelectCell(m.Item)
+                                    <td>@CouncilName(m.Payer)</td><td>@m.Entity</td><td>@m.Month</td><td>@Money(m.MonthNet)</td><td>@Money(m.MedianMonthNet)</td><td>@m.Ratio.ToString("0.#")</td><td>@m.Rows.ToString("N0")</td>
+                                    <td>@(m.LabelCheck.StartsWith("LABEL SEEN ONLY", StringComparison.Ordinal) ? "label seen only in this month" : "label seen in other months")</td>
+                                    <td class="wrap-cell">@m.TopDescription</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+                @MoreButton("misfit", lim, mis.Count)
+            }
+        </div>;
+    }
+
 
     async Task CopyFoi() => await JS.InvokeVoidAsync("copyText", BuildFoiLetter());
     async Task DownloadFoi() => await JS.InvokeVoidAsync("analystDownload", "foi-request.txt", BuildFoiLetter(), "text/plain");

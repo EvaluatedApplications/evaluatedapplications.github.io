@@ -1,8 +1,6 @@
-// Vendored from C:\Users\dongy\VirtualCustomer\src\CouncilAudit\ReadingFixups.cs, copied
-// 2026-10-03 (new file, added alongside the DebtCharge-fix re-sync so CouncilDbBuilder can
-// apply the same header/layout fixups the full Reading back-catalogue needs).
-// CouncilAudit engine by the EA virtual-customer agent. Do not edit the source repo from here;
-// future engine changes happen upstream and get re-vendored into this copy by the Showroom owner.
+// Vendored from C:\Users\dongy\VirtualCustomer\src\CouncilAudit\ReadingFixups.cs, re-synced 2026-10-03 (Session 25/26 sync): verbatim upstream.
+// CouncilAudit engine by the EA virtual-customer agent. Do not edit here; future engine changes happen upstream
+// and get re-vendored into this copy by the Showroom owner.
 
 namespace CouncilAudit;
 
@@ -10,8 +8,9 @@ namespace CouncilAudit;
 /// Reading-specific header/layout repairs (Session 17 findings, pulling the full
 /// FY2020-21..FY2025-26 back-catalogue) and the general-purpose "bad file" guard
 /// (Session 17, named for the specific corruption it caught: reading_2021-05.xlsx
-/// "May21-Revised"). Each has its own unit test against a synthetic byte sequence in
-/// the upstream CouncilAudit.Tests project - see BASELINE.md Section 5.
+/// "May21-Revised"). Moved here from CouncilAudit.Cli/Program.cs (Session 18) so each
+/// has its own unit test against a synthetic byte sequence, rather than being proven
+/// only by `reading` passing clean end to end on real data - see BASELINE.md Section 5.
 /// </summary>
 public static class ReadingFixups
 {

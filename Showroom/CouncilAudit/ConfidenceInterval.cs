@@ -1,7 +1,6 @@
-// Vendored from C:\Users\dongy\VirtualCustomer\src\CouncilAudit\ConfidenceInterval.cs, copied
-// 2026-10-03 (new file this sync). CouncilAudit engine by the EA virtual-customer agent. Do not
-// edit the source repo from here; future engine changes happen upstream and get re-vendored into
-// this copy by the Showroom owner.
+// Vendored from C:\Users\dongy\VirtualCustomer\src\CouncilAudit\ConfidenceInterval.cs, re-synced 2026-10-03 (Session 25/26 sync): verbatim upstream.
+// CouncilAudit engine by the EA virtual-customer agent. Do not edit here; future engine changes happen upstream
+// and get re-vendored into this copy by the Showroom owner.
 
 namespace CouncilAudit;
 
@@ -14,10 +13,6 @@ namespace CouncilAudit;
 /// pretending a small opened-vs-confirmed count proves the whole population.
 /// Not tied to any one schedule or council - used by the CLI's hand-check cycles for
 /// Wokingham, Merton and Reading alike (see CouncilAudit.Cli/Program.cs RunWokingham/RunMerton).
-/// Not currently consumed by the Showroom page itself (no hand-check-sample UI exists here) -
-/// vendored anyway so this file compiles identically to the upstream CouncilAudit project and
-/// future Showroom work (e.g. showing a precision interval on a hand-verified exception) has it
-/// available without a second vendoring pass.
 /// </summary>
 public static class ConfidenceInterval
 {

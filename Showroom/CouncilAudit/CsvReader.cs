@@ -1,10 +1,6 @@
-// Vendored from C:\Users\dongy\VirtualCustomer\src\CouncilAudit\CsvReader.cs, copied 2026-10-03,
-// re-synced 2026-10-03 (same day, DebtCharge fix sync: Session 17's CP850 fallback - 7 of
-// Reading's ~64 months are IBM/OEM codepage 850, not Windows-1252; a 1252 decode of a CP850 file
-// silently zeroes that month's Amount column, same failure class the original 1252-vs-UTF-8 fix
-// already guarded against).
-// CouncilAudit engine by the EA virtual-customer agent. Do not edit the source repo from here;
-// future engine changes happen upstream and get re-vendored into this copy by the Showroom owner.
+// Vendored from C:\Users\dongy\VirtualCustomer\src\CouncilAudit\CsvReader.cs, re-synced 2026-10-03 (Session 25/26 sync): verbatim upstream (CP850 fallback included).
+// CouncilAudit engine by the EA virtual-customer agent. Do not edit here; future engine changes happen upstream
+// and get re-vendored into this copy by the Showroom owner.
 
 using System.Text;
 

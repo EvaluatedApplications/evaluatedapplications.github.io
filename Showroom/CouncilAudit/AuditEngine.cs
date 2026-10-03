@@ -1,10 +1,6 @@
-// Vendored from C:\Users\dongy\VirtualCustomer\src\CouncilAudit\AuditEngine.cs, copied 2026-10-03,
-// re-synced 2026-10-03 (same day, DebtCharge fix: ClassifyScheduleA reordered to run
-// DoubleListing -> EarlyPaymentProgramme -> NegativeNetSignFlip -> DebtCharge (now gated on
-// HasDebtChargeEvidence) -> VatRoundingNoise -> Unreconciled; see HandCheckHelpers.cs/
-// ReadingFixups.cs added alongside this sync).
-// CouncilAudit engine by the EA virtual-customer agent. Do not edit the source repo from here;
-// future engine changes happen upstream and get re-vendored into this copy by the Showroom owner.
+// Vendored from C:\Users\dongy\VirtualCustomer\src\CouncilAudit\AuditEngine.cs, re-synced 2026-10-03 (Session 25/26 sync): Session 26: multi-payee Schedule A rows, mixed-VAT-label expectation, standing-payment classes (StandingSchedule), lossy scientific-notation ids ("~row<n>"), OtherColumns.
+// CouncilAudit engine by the EA virtual-customer agent. Do not edit here; future engine changes happen upstream
+// and get re-vendored into this copy by the Showroom owner.
 
 using System.Globalization;
 
@@ -20,6 +16,24 @@ namespace CouncilAudit;
 /// </summary>
 public static class AuditEngine
 {
+    /// <summary>Session 23: every non-empty cell whose column is not mapped, "Header=value|..." (a blank header
+    /// is written "ColN", N = 1-based position).
+    /// Null when there is none. Keeps the engine from ever silently dropping a published column.</summary>
+    public static string? OtherColumnsText(string[] header, string[] f, HashSet<int> mapped)
+    {
+        System.Text.StringBuilder? sb = null;
+        for (int i = 0; i < f.Length; i++) // iterate the DATA row: cells beyond the header's width are published too
+        {
+            if (mapped.Contains(i)) continue;
+            var v = f[i]?.Trim();
+            if (string.IsNullOrEmpty(v)) continue;
+            // a cell under a blank (or missing) header (RBWM's classification pairs, Merton's row index) is still published data
+            string name = i < header.Length && !string.IsNullOrWhiteSpace(header[i]) ? header[i] : $"Col{i + 1}";
+            (sb ??= new()).Append(sb.Length > 0 ? "|" : "").Append(name).Append('=').Append(v);
+        }
+        return sb?.ToString();
+    }
+
     public static List<SpendRow> MapRows(
         IReadOnlyList<string[]> table, ColumnMapping map, string sourceTag, List<string> warnings)
     {
@@ -45,6 +59,9 @@ public static class AuditEngine
         if (iTrans < 0) warnings.Add($"{sourceTag}: transaction-id column \"{map.TransactionId}\" not found in header.");
         if (iSupplier < 0) warnings.Add($"{sourceTag}: supplier column \"{map.Supplier}\" not found in header.");
         if (iGross < 0) warnings.Add($"{sourceTag}: gross/amount column \"{map.Gross}\" not found in header.");
+
+        var mapped = new HashSet<int>(new[] { iTrans, iSupplier, iPayDate, iDesc, iService, iNet, iGross,
+            iVatAmt, iVatType, iInvoiceNo, iCostCentre, iInvoiceType }.Where(i => i >= 0));
 
         var rows = new List<SpendRow>();
         for (int r = 1; r < table.Count; r++)
@@ -93,7 +110,8 @@ public static class AuditEngine
                 r - 1,
                 iInvoiceNo >= 0 ? Get(iInvoiceNo).Trim() : null,
                 iCostCentre >= 0 ? Get(iCostCentre).Trim() : null,
-                iInvoiceType >= 0 ? Get(iInvoiceType).Trim() : null));
+                iInvoiceType >= 0 ? Get(iInvoiceType).Trim() : null,
+                OtherColumnsText(header, f, mapped)));
         }
         return rows;
     }
@@ -145,6 +163,19 @@ public static class AuditEngine
             all = all.Where(r => !IsRedactedPlaceholder(r.TransactionId) && !IsRedactedPlaceholder(r.Supplier)).ToList();
         }
 
+        // Session 26: a transaction id that a spreadsheet has turned into scientific notation ("2.02408E+11") has lost
+        // its digits and is SHARED by unrelated payments (Merton: 334 rows, 66 such strings, up to 59 rows on one).
+        // Grouping by it would sum unrelated lines into one "transaction", so each such row becomes its own
+        // transaction, tagged with its source row so the id stays traceable.
+        int lossyIds = all.Count(r => IsLossyTransactionId(r.TransactionId));
+        if (lossyIds > 0)
+        {
+            warnings.Add($"{lossyIds} rows carry a transaction id that a spreadsheet turned into scientific notation " +
+                         "(digits lost, shared by unrelated payments); each is treated as its own transaction, id suffixed \"~row<n>\".");
+            all = all.Select(r => IsLossyTransactionId(r.TransactionId)
+                ? r with { TransactionId = r.TransactionId + "~row" + r.RowIndexInSource } : r).ToList();
+        }
+
         // ---- Schedule A: amount mismatch, grouped by (SourceTag, TransactionId, Supplier) ----
         // A transaction number is not always one invoice to one payee (Schedule D records
         // that fact separately); grouping by transaction+supplier avoids mixing two payees'
@@ -153,8 +184,40 @@ public static class AuditEngine
         // this schedule records when a transaction has more than one supplier.
         var bySupplierGroups = all.GroupBy(r => (r.SourceTag, r.TransactionId, r.Supplier)).ToList();
         var scheduleA = new List<ScheduleARow>();
+
+        // Session 26: MULTI-PAYEE TRANSACTIONS are tested once, at transaction level. When a transaction number
+        // spans three or more suppliers and one Gross is repeated on every line, that Gross is the transaction's
+        // figure, so comparing it with each supplier's own sum (what the per-supplier pass below does) can only
+        // fail, once per supplier. Wokingham: 10 such transactions (academy payment runs, up to 26 suppliers and
+        // 134 lines each) produced 230 per-supplier "Unreconciled" rows; none reconcile as a whole either, so each
+        // is reported as ONE transaction row, and the per-supplier rows are not.
+        var multiPayee = new HashSet<(string, string)>();
+        if (grossMeaning == GrossMeaning.RepeatedInvoiceTotal)
+        {
+            foreach (var t in all.GroupBy(r => (r.SourceTag, r.TransactionId)))
+            {
+                if (t.Select(r => r.Supplier).Distinct().Count() < 3) continue;
+                if (t.Select(r => r.Gross).Distinct().Count() != 1) continue;
+                multiPayee.Add((t.Key.SourceTag, t.Key.TransactionId));
+                var tm = t.ToList();
+                var tIn = ComputeScheduleAGroupInputs(tm, grossMeaning);
+                if (tIn is null) continue; // reconciles as a whole transaction: nothing to report.
+                var (tNet, tGross, tExp, tDiff) = tIn.Value;
+                int nSup = tm.Select(r => r.Supplier).Distinct().Count();
+                scheduleA.Add(new ScheduleARow(
+                    tm[0].SourceTag, tm[0].TransactionId, $"{tm[0].Supplier} (+{nSup - 1} other payees)", tm[0].PayDateRaw,
+                    tNet, tGross, tExp, tGross - tNet, tm[0].VatType, tm[0].ServiceArea, tm[0].Description, tm.Count,
+                    ScheduleAClassification.Unreconciled,
+                    $"multi-payee transaction: {tm.Count} lines to {nSup} suppliers sum to {tNet:0.00} (VAT-uplifted {tExp:0.00}), " +
+                    $"but the one Gross repeated on every line is {tGross:0.00}. Tested once as a whole transaction because a " +
+                    "per-supplier comparison against a transaction-wide figure cannot reconcile.",
+                    tm.Select(m => m.RowIndexInSource).ToList()));
+            }
+        }
+
         foreach (var g in bySupplierGroups)
         {
+            if (multiPayee.Contains((g.Key.SourceTag, g.Key.TransactionId))) continue;
             var members = g.ToList();
             var first = members[0];
             var inputs = ComputeScheduleAGroupInputs(members, grossMeaning);
@@ -218,6 +281,9 @@ public static class AuditEngine
 
         var scheduleB = new List<ScheduleBGroup>();
         int groupId = 0;
+        // Built once, and only if a group actually needs it.
+        var standingIndex = new Lazy<Dictionary<(string Supplier, decimal Net), StandingSchedule.Series>>(() =>
+            StandingSchedule.Build(transAgg.Select(x => x.Rep), r => IsCreditLikeInvoiceType(r.InvoiceType) || r.Net < 0m));
         foreach (var g in dupGroups)
         {
             groupId++;
@@ -252,6 +318,19 @@ public static class AuditEngine
                 }
             }
 
+            // Session 26: no invoice number to settle it, so ask whether this (supplier, amount) is a STANDING
+            // monthly payment whose count over time explains the repeat (see StandingSchedule).
+            if (classification == ScheduleBClassification.Unclear && !members.Any(m => IsCreditLikeInvoiceType(m.InvoiceType) || m.Net < 0m))
+            {
+                var gd = members[0].PayDate ?? ParseDate(members[0].PayDateRaw);
+                if (gd is not null
+                    && StandingSchedule.Classify(g.Key.Item1, g.Key.Item2, gd.Value, members.Count, standingIndex.Value) is { } st)
+                {
+                    classification = st.Classification;
+                    detail = st.Detail;
+                }
+            }
+
             scheduleB.Add(new ScheduleBGroup(groupId, g.Key.Item1, g.Key.Item2, g.Key.Item3, g.Key.Item4, g.Key.Item5,
                 members, classification, detail, memberRowIndexes));
         }
@@ -260,7 +339,7 @@ public static class AuditEngine
         // (Unclear - no invoice number was available to check) rise above the ones already
         // labelled one way or the other, largest value first within each band.
         scheduleB = scheduleB
-            .OrderBy(b => b.Classification == ScheduleBClassification.Unclear ? 0
+            .OrderBy(b => b.Classification is ScheduleBClassification.Unclear or ScheduleBClassification.StandingScheduleSurplus ? 0
                         : b.Classification == ScheduleBClassification.LikelyDuplicate ? 1 : 2)
             .ThenByDescending(b => b.Net * b.Members.Count)
             .ToList();
@@ -310,6 +389,8 @@ public static class AuditEngine
                 .GroupBy(r => r.Supplier)
                 .ToDictionary(g => g.Key, g => g.ToList());
 
+            var creditStanding = new Lazy<Dictionary<(string Supplier, decimal Amount), string>>(
+                () => StandingSchedule.BuildCreditSeries(creditLike));
             foreach (var c in creditLike)
             {
                 var (match, splitMatchA, splitMatchB) = FindScheduleRMatches(c, chargesBySupplier);
@@ -318,6 +399,14 @@ public static class AuditEngine
                 // below, the twin of ClassifyScheduleA, both ported to an EvalApp 3.0.0 Classify
                 // cascade and benchmarked in scratch/evalapp-classify-bench, NOT wired in here.
                 var (classification, detail) = ClassifyScheduleR(c, match, splitMatchA, splitMatchB);
+                // Session 26: an unmatched "refund" whose amount recurs monthly under the refund label is a fixed
+                // recurring transfer recorded with that label (Reading -> Brighter Futures for Children from 2024-03).
+                if (classification == CreditMatchClassification.Unmatched && c.Gross > 0m
+                    && creditStanding.Value.TryGetValue((c.Supplier, Math.Abs(c.Gross)), out var standingDetail))
+                {
+                    classification = CreditMatchClassification.StandingPaymentUnderRefundType;
+                    detail = standingDetail;
+                }
                 scheduleR.Add(new ScheduleRRow(
                     c.SourceTag, c.TransactionId, c.Supplier, c.Gross, c.InvoiceType, c.PayDateRaw,
                     c.Description, classification, detail, c.RowIndexInSource));
@@ -436,9 +525,16 @@ public static class AuditEngine
             : members.Sum(r => r.Gross);
         decimal? vatAmountSum = members.Any(r => r.VatAmount.HasValue)
             ? members.Sum(r => r.VatAmount ?? 0m) : null;
+        // Session 26: a group whose lines carry DIFFERENT VAT Type labels (e.g. EDF Energy: some
+        // lines Standard, some Reduced) is uplifted line by line, each at its own label's rate;
+        // using only the first line's label for the whole group mis-stated the expected gross.
+        // Measured on Wokingham's Unreconciled set: 971 mixed-label groups, 724 reconcile to
+        // the penny per line.
         decimal expected = vatAmountSum.HasValue
             ? Math.Round(netSum + vatAmountSum.Value, 2, MidpointRounding.AwayFromZero)
-            : VatAdjustedExpectedGross(netSum, first.VatType);
+            : HasMixedVatLabels(members)
+                ? ClosestTo(grossStated, PerLineExpectedGross(members, flipSign: false), VatAdjustedExpectedGross(netSum, first.VatType))
+                : VatAdjustedExpectedGross(netSum, first.VatType);
         decimal diff = grossStated - expected;
         decimal rawDiff = grossStated - Math.Round(netSum, 2, MidpointRounding.AwayFromZero);
         if (Math.Abs(diff) > 0.01m && Math.Abs(rawDiff) <= 0.01m)
@@ -506,6 +602,25 @@ public static class AuditEngine
                         "lines total) - the whole itemised invoice appears to have been published " +
                         $"{k} times, not itemised once.");
                 }
+
+                // Session 26: the same shape when the stated Gross is VAT-inclusive. One copy of each distinct line,
+                // uplifted at its VAT Type, reconciles the stated Gross (Wokingham FY2020-21 trans 3557249, REDS10:
+                // 4 lines = 2 x (3,147.16 + 558,320.02) = 2 x 561,467.18; 561,467.18 x 1.2 = 673,760.62 = the stated
+                // Gross; trans 3558633, Balfour Beatty: 6 distinct lines each twice, one copy x 1.2 = 592,072.14
+                // against 592,072.13). The Gross is then Net/k x the VAT multiple, which is why it read 0.6 x Net.
+                var oneCopy = tupleGroups.Select(tg => tg.First()).ToList();
+                var oneCopyUplifted = HasMixedVatLabels(oneCopy)
+                    ? ClosestTo(grossStated, PerLineExpectedGross(oneCopy, false), VatAdjustedExpectedGross(oneCopyNet, oneCopy[0].VatType))
+                    : VatAdjustedExpectedGross(oneCopyNet, oneCopy[0].VatType);
+                if (oneCopyUplifted != Math.Round(oneCopyNet, 2, MidpointRounding.AwayFromZero)
+                    && Math.Abs(oneCopyUplifted - grossStated) <= 0.05m)
+                {
+                    return (ScheduleAClassification.DoubleListing,
+                        $"{tupleGroups.Count} distinct lines are each repeated {k} times ({members.Count} lines total); " +
+                        $"one copy ({oneCopyNet:0.00}) uplifted at its VAT Type is {oneCopyUplifted:0.00}, the stated invoice " +
+                        $"({grossStated:0.00}) - the whole itemised invoice appears to have been published {k} times, " +
+                        "not itemised once.");
+                }
             }
         }
 
@@ -526,7 +641,9 @@ public static class AuditEngine
         // ONLY its sign reconciles the stated Gross exactly under either comparison.
         if (netSum < 0m && grossStated > 0m)
         {
-            decimal flippedExpected = VatAdjustedExpectedGross(-netSum, vatType);
+            decimal flippedExpected = HasMixedVatLabels(members)
+                ? ClosestTo(grossStated, PerLineExpectedGross(members, flipSign: true), VatAdjustedExpectedGross(-netSum, vatType))
+                : VatAdjustedExpectedGross(-netSum, vatType);
             decimal flippedRaw = Math.Round(-netSum, 2, MidpointRounding.AwayFromZero);
             bool reconcilesUplifted = Math.Abs(grossStated - flippedExpected) <= 0.01m;
             bool reconcilesRaw = Math.Abs(grossStated - flippedRaw) <= 0.01m;
@@ -685,6 +802,28 @@ public static class AuditEngine
     /// EXEM/NBUS/OSCP/ZERO: no uplift. RRTE: 5%. STD: 20%. Anything else/blank: expect
     /// gross == net (the only honest default with no VAT information at all).
     /// </summary>
+    /// <summary>A transaction id in scientific notation, e.g. "2.02408E+11" or "2.50001E+13".</summary>
+    public static bool IsLossyTransactionId(string? id) =>
+        !string.IsNullOrEmpty(id) && System.Text.RegularExpressions.Regex.IsMatch(id, @"^\d(\.\d+)?[eE]\+\d+$");
+
+    /// <summary>True when the group's lines carry more than one distinct non-blank VAT Type label.</summary>
+    public static bool HasMixedVatLabels(IReadOnlyList<SpendRow> members) =>
+        members.Select(m => (m.VatType ?? "").Trim().ToUpperInvariant())
+               .Where(v => v.Length > 0).Distinct().Count() > 1;
+
+    /// <summary>
+    /// For a mixed-label group two readings of the council's VAT are possible and both occur: each line at its own
+    /// label's rate, or the whole net at the first line's rate (Wokingham Network Healthcare, trans 3765708: Standard
+    /// 1,003.38 + Exempt 214.62 stated 1,461.60 = 1,218.00 x 1.2, i.e. the whole at Standard). The expectation used is
+    /// whichever reading is closer to the stated Gross, so a group that reconciles under either is not flagged.
+    /// </summary>
+    private static decimal ClosestTo(decimal target, decimal a, decimal b) =>
+        Math.Abs(target - a) <= Math.Abs(target - b) ? a : b;
+
+    /// <summary>Sum over lines of each line's net uplifted at its OWN VAT Type label's rate.</summary>
+    public static decimal PerLineExpectedGross(IReadOnlyList<SpendRow> members, bool flipSign) =>
+        members.Sum(m => VatAdjustedExpectedGross(flipSign ? -m.Net : m.Net, m.VatType));
+
     private static decimal VatAdjustedExpectedGross(decimal net, string? vatTypeRaw)
     {
         if (string.IsNullOrWhiteSpace(vatTypeRaw))

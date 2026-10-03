@@ -1,6 +1,6 @@
-// Vendored from C:\Users\dongy\VirtualCustomer\src\CouncilAudit\XlsxReader.cs, copied 2026-10-03.
-// CouncilAudit engine by the EA virtual-customer agent. Do not edit the source repo from here;
-// future engine changes happen upstream and get re-vendored into this copy by the Showroom owner.
+// Vendored from C:\Users\dongy\VirtualCustomer\src\CouncilAudit\XlsxReader.cs, re-synced 2026-10-03 (Session 25/26 sync): verbatim upstream (includes the office-document relationship-namespace fix first made here).
+// CouncilAudit engine by the EA virtual-customer agent. Do not edit here; future engine changes happen upstream
+// and get re-vendored into this copy by the Showroom owner.
 
 using System.IO.Compression;
 using System.Xml.Linq;
@@ -19,16 +19,14 @@ namespace CouncilAudit;
 public static class XlsxReader
 {
     private static readonly XNamespace Main = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
-    private static readonly XNamespace Rel = "http://schemas.openxmlformats.org/package/2006/relationships";
-    // SHOWROOM-OWNER FIX (2026-10-03), not yet applied upstream — flagged to the virtual-customer
-    // agent/coordinator: a <sheet r:id="..."> attribute lives in the *officeDocument* relationships
-    // namespace, not the *package* relationships namespace `Rel` above (those are two different,
-    // real OOXML namespace URIs). The original vendored code read `firstSheet.Attribute(Rel + "id")`,
-    // which is always null against a real Excel-produced .xlsx (confirmed against Wokingham's real
-    // FY2023-24 file: XDocument silently returns a null XAttribute, the explicit string-cast operator
-    // on a null XAttribute returns null rather than throwing, and the null rId then fails to match
-    // any real relationship Id in workbook.xml.rels — "Sequence contains no matching element").
-    private static readonly XNamespace OfficeRel = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
+    // BUG FIX (2026-10-03, caught by the Showroom owner vendoring this file against a real Excel
+    // .xlsx, confirmed against Wokingham's FY2023-24 file): a <sheet r:id="..."> attribute lives in
+    // the OFFICE-DOCUMENT relationships namespace, not the PACKAGE relationships namespace - those
+    // are two different real OOXML namespace URIs. Reading it against the wrong one silently returns
+    // a null XAttribute (the explicit string-cast operator on a null XAttribute returns null rather
+    // than throwing), so rId ends up null and FindFirstSheetPath fails with "Sequence contains no
+    // matching element" on every real Excel-produced file.
+    private static readonly XNamespace Rel = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
 
     public static List<string[]> Parse(byte[] bytes)
     {
@@ -101,7 +99,7 @@ public static class XlsxReader
         using var wbStream = wbEntry.Open();
         var wbDoc = XDocument.Load(wbStream);
         var firstSheet = wbDoc.Root!.Element(Main + "sheets")!.Elements(Main + "sheet").First();
-        string rId = (string)firstSheet.Attribute(OfficeRel + "id")!;
+        string rId = (string)firstSheet.Attribute(Rel + "id")!;
 
         var relsEntry = zip.GetEntry("xl/_rels/workbook.xml.rels")
             ?? throw new InvalidDataException("xlsx: no workbook.xml.rels");

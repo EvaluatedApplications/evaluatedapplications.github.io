@@ -1,8 +1,6 @@
-// Vendored from C:\Users\dongy\VirtualCustomer\src\CouncilAudit\Models.cs, copied 2026-10-03,
-// re-synced 2026-10-03 (same day, DebtCharge fix sync: Session 19's MemberRowIndexes field on
-// ScheduleARow/ScheduleBGroup, needed by HandCheckHelpers.cs added alongside this sync).
-// CouncilAudit engine by the EA virtual-customer agent. Do not edit the source repo from here;
-// future engine changes happen upstream and get re-vendored into this copy by the Showroom owner.
+// Vendored from C:\Users\dongy\VirtualCustomer\src\CouncilAudit\Models.cs, re-synced 2026-10-03 (Session 25/26 sync): Session 26: ScheduleBClassification.StandingScheduleCatchUp/Surplus, CreditMatchClassification.StandingPaymentUnderRefundType, SpendRow.OtherColumns.
+// CouncilAudit engine by the EA virtual-customer agent. Do not edit here; future engine changes happen upstream
+// and get re-vendored into this copy by the Showroom owner.
 
 namespace CouncilAudit;
 
@@ -42,7 +40,7 @@ public sealed record SpendRow(
     // reading mistook for the other (caught by re-running the real engine against the real
     // header, not by trusting a manual column-position read - see AuditEngine's
     // EarlyPaymentProgramme rule). Null when the council doesn't publish a separate column.
-    string? InvoiceType = null // Session 14 finding: Reading publishes an explicit
+    string? InvoiceType = null, // Session 14 finding: Reading publishes an explicit
     // "Invoice Type (Internal Classification)" column with council-labelled values
     // (STANDARD / CREDIT in 2021-2023 files, "RBC Standard Invoice" / "RBC Refunds Manual
     // Entry" / "RBC AR REFUNDS" from 2024 onward) that directly names whether a row is a
@@ -51,6 +49,10 @@ public sealed record SpendRow(
     // the newer "RBC Refunds Manual Entry"/"RBC AR REFUNDS" rows are always POSITIVE (the
     // council's own sign convention for a refund changed between publishing eras). Null
     // when the council doesn't publish a separate invoice-type column.
+    string? OtherColumns = null // Session 23: EVERY published column not mapped to a field above, as
+    // "Header=value|Header=value" (non-empty values only). Session 22's failure was a column the
+    // schema dropped (Cost Centre Area) hiding rows from search; the principled fix is that no
+    // published column can be silently dropped by the mapping at all.
 );
 
 /// <summary>
@@ -218,6 +220,12 @@ public enum ScheduleBClassification
     /// guaranteed-rent-scheme tenancy, a school transport route) rather than a repeat
     /// payment error.</summary>
     LikelyRecurring,
+    /// <summary>Session 26: no invoice number to check, but the (supplier, amount) is a STANDING monthly payment
+    /// and the extra payments on this date are balanced by months with none (see StandingSchedule).</summary>
+    StandingScheduleCatchUp,
+    /// <summary>Session 26: a standing monthly payment with more payments than months and nothing returned;
+    /// still reported as published, with the count.</summary>
+    StandingScheduleSurplus,
 }
 
 public sealed record ScheduleBGroup(
@@ -258,6 +266,10 @@ public enum CreditMatchClassification
     /// to be an error (the matching charge could simply be in a file not loaded this
     /// run), reported as published.</summary>
     Unmatched,
+    /// <summary>Session 26: no matching charge, but the same supplier and amount recurs monthly under the
+    /// refund Invoice Type itself (see StandingSchedule.BuildCreditSeries); a recurring transfer carrying
+    /// the refund label, not a one-off refund.</summary>
+    StandingPaymentUnderRefundType,
 }
 
 public sealed record ScheduleRRow(
