@@ -96,13 +96,22 @@ foreach (var y in years)
 var result = AuditEngine.Run(allRows, SupportedCouncils.Wokingham.IdScope, SupportedCouncils.Wokingham.GrossMeaning, warnings);
 var handVerified = new HashSet<string> { "3815610", "3809081", "7032959" };
 
+// compareamount/groupkey/groupsize/oppositesign power the Showroom page's evidence/highlighting
+// panel (see CouncilSpending.razor's BuildTestsFromExceptionsRows) -- compareamount is the "other"
+// figure in a two-value comparison (test 1/2 only), groupkey links sibling rows within the SAME
+// test so the page can show them aligned (test 3/4/5), groupsize is that group's row count, and
+// oppositesign flags a test-2 row whose published net/gross have opposite signs (likely a
+// credit/refund line worth checking before treating it as unreconciled).
 var excSb = new StringBuilder();
-excSb.AppendLine("council,testlabel,type,sourcetag,transid,supplier,paydate,amount,servicearea,description,handverified");
+excSb.AppendLine("council,testlabel,type,sourcetag,transid,supplier,paydate,amount,servicearea,description,handverified,compareamount,groupkey,groupsize,oppositesign");
 void WriteExc(string testLabel, string type, string sourceTag, string transId, string supplier,
-    string? payDate, decimal amount, string? serviceArea, string? description) =>
+    string? payDate, decimal amount, string? serviceArea, string? description,
+    decimal? compareAmount, string groupKey, int groupSize, bool oppositeSign) =>
     excSb.AppendLine(string.Join(",", Council, Csv(testLabel), type, Csv(sourceTag), Csv(transId),
         Csv(supplier), Csv(payDate ?? ""), Num(amount), Csv(serviceArea ?? ""), Csv(description ?? ""),
-        handVerified.Contains(transId).ToString()));
+        handVerified.Contains(transId).ToString(),
+        compareAmount is { } ca ? Num(ca) : "", Csv(groupKey), groupSize.ToString(CultureInfo.InvariantCulture),
+        oppositeSign.ToString()));
 
 const string T1 = "Exception test 1 - payments above the stated invoice amount";
 const string T2 = "Exception test 2 - invoice amounts not covered by published payments";
@@ -114,28 +123,48 @@ int t1n = 0, t2n = 0, t3n = 0, t4n = 0, t5n = 0;
 foreach (var r in result.ScheduleA)
 {
     bool paymentsExceed = r.Gross < r.ExpectedGross;
+    bool oppositeSign = !paymentsExceed && r.Net != 0 && r.Gross != 0 && r.Net == -r.Gross;
     WriteExc(paymentsExceed ? T1 : T2, paymentsExceed ? "Discrepancy" : "Unreconciled",
-        r.SourceTag, r.TransactionId, r.Supplier, r.PayDate, r.Gross, r.ServiceArea, r.Description);
+        r.SourceTag, r.TransactionId, r.Supplier, r.PayDate, r.Gross, r.ServiceArea, r.Description,
+        r.ExpectedGross, "", 1, oppositeSign);
     if (paymentsExceed) t1n++; else t2n++;
 }
+int g3Id = 0;
 foreach (var g in result.ScheduleB)
+{
+    g3Id++;
+    var key = $"g3-{g3Id}";
+    int n = g.Members.Count;
     foreach (var m in g.Members)
-    { WriteExc(T3, "Anomaly", m.SourceTag, m.TransactionId, m.Supplier, m.PayDateRaw, m.Net, m.ServiceArea, m.Description); t3n++; }
+    { WriteExc(T3, "Anomaly", m.SourceTag, m.TransactionId, m.Supplier, m.PayDateRaw, m.Net, m.ServiceArea, m.Description, null, key, n, false); t3n++; }
+}
 foreach (var g in result.ScheduleD)
+{
+    var key = $"g4-{g.SourceTag}-{g.TransactionId}";
+    int n = g.Members.Count;
     foreach (var m in g.Members)
-    { WriteExc(T4, "Discrepancy", m.SourceTag, m.TransactionId, m.Supplier, m.PayDateRaw, m.Gross, m.ServiceArea, m.Description); t4n++; }
+    { WriteExc(T4, "Discrepancy", m.SourceTag, m.TransactionId, m.Supplier, m.PayDateRaw, m.Gross, m.ServiceArea, m.Description, null, key, n, false); t4n++; }
+}
 
 bool IsRedacted(string s) => s.Contains("REDACT", StringComparison.OrdinalIgnoreCase);
 var clean = allRows.Where(r => !IsRedacted(r.TransactionId) && !IsRedacted(r.Supplier)).ToList();
 var dupLineGroups = clean
     .GroupBy(r => (r.SourceTag, r.TransactionId, r.Supplier, r.Net, r.Gross, (r.Description ?? "").Trim(), r.PayDateRaw))
     .Where(g => g.Count() > 1);
+// One row per REPEATED LINE (not one aggregate per group) so the Showroom page can show the actual
+// repeated lines paired up via groupkey, same shape as test 3/4's group evidence.
+int g5Id = 0;
 foreach (var g in dupLineGroups)
 {
-    var first = g.First();
-    WriteExc(T5, "Discrepancy", first.SourceTag, first.TransactionId, first.Supplier, first.PayDateRaw,
-        first.Gross, first.ServiceArea, $"{first.Description} (listed {g.Count()}x)");
-    t5n++;
+    g5Id++;
+    var key = $"g5-{g5Id}";
+    int n = g.Count();
+    foreach (var m in g)
+    {
+        WriteExc(T5, "Discrepancy", m.SourceTag, m.TransactionId, m.Supplier, m.PayDateRaw,
+            m.Gross, m.ServiceArea, m.Description, null, key, n, false);
+        t5n++;
+    }
 }
 
 var excPath = Path.Combine(outDir, "exceptions.csv");

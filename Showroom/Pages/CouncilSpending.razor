@@ -160,7 +160,7 @@
                     }
                     @if (_nearestResults.Count > 0)
                     {
-                        <div class="table-scroll">
+                        <div class="table-scroll table-scroll-fixed">
                             <table class="exc-table">
                                 <thead>
                                     <tr>
@@ -271,45 +271,169 @@
                 <h2>Exception tests</h2>
                 @foreach (var t in _tests)
                 {
+                    var filtered = FilteredItems(t);
+                    var totalPages = TotalPages(filtered.Count);
+                    if (t.Page > totalPages) { t.Page = totalPages; }
+                    var pageItems = filtered.Skip((t.Page - 1) * PageSize).Take(PageSize).ToList();
+                    var startIdx = filtered.Count == 0 ? 0 : (t.Page - 1) * PageSize + 1;
+                    var endIdx = Math.Min(t.Page * PageSize, filtered.Count);
                     <div class="test-card">
-                        <div class="test-head">
+                        <button class="test-head" type="button" @onclick="() => ToggleCollapse(t)" aria-expanded="@(!t.Collapsed)">
+                            <span class="collapse-arrow">@(t.Collapsed ? "▸" : "▾")</span>
                             <h3>@t.Label</h3>
                             <span class="tag @TagClass(t.Items.Count > 0 ? t.Items[0].Type : ExceptionType.Discrepancy)">@t.Items.FirstOrDefault()?.Type.ToString() ?? "—"</span>
                             <span class="count">@t.Items.Count.ToString("N0") exceptions</span>
-                        </div>
-                        <p class="test-desc">@t.Description</p>
-                        @if (t.Items.Count == 0)
+                        </button>
+                        @if (!t.Collapsed)
                         {
-                            <p class="hint">None found in the year(s) you loaded.</p>
-                        }
-                        else
-                        {
-                            <label class="select-all"><input type="checkbox" checked="@AllSelected(t)" @onchange="e => SelectAll(t, (bool)e.Value!)" /> select all in this test</label>
-                            <div class="table-scroll">
-                                <table class="exc-table">
-                                    <thead><tr><th></th><th>Year</th><th>Trans. no.</th><th>Pay date</th><th>Amount</th><th>Payee</th><th>Service area</th><th>Status</th></tr></thead>
-                                    <tbody>
-                                        @foreach (var it in t.Items.Take(200))
-                                        {
-                                            <tr class="@(it.HandVerified ? "verified" : "")">
-                                                <td><input type="checkbox" checked="@it.Selected" @onchange="e => ToggleSelect(it, (bool)e.Value!)" /></td>
-                                                <td>@it.SourceTag</td>
-                                                <td>@it.TransactionId @if (it.HandVerified) { <span class="verified-badge" title="Hand-verified by the virtual-customer agent against the raw file">✓ verified</span> }</td>
-                                                <td>@(it.PayDate ?? "—")</td>
-                                                <td>@(it.Amount is { } a ? a.ToString("C2", CultureInfo.GetCultureInfo("en-GB")) : "—")</td>
-                                                <td>@it.Supplier</td>
-                                                <td>@(it.ServiceArea ?? "—")</td>
-                                                <td><span class="tag tag-status">@it.Status</span></td>
-                                            </tr>
-                                        }
-                                    </tbody>
-                                </table>
+                            <div class="test-body">
+                                <p class="test-desc">@t.Description</p>
+                                @if (t.Items.Count == 0)
+                                {
+                                    <p class="hint">None found in the year(s) you loaded.</p>
+                                }
+                                else
+                                {
+                                    <div class="panel-controls">
+                                        <label class="select-all">
+                                            <input type="checkbox" checked="@AllFilteredSelected(filtered)" @onchange="e => SelectAllFiltered(filtered, (bool)e.Value!)" />
+                                            @SelectAllLabel(t, filtered.Count)
+                                        </label>
+                                        <input type="text" class="filter-text" placeholder="Filter supplier / description…"
+                                               @bind="t.FilterText" @bind:event="oninput" @bind:after="() => OnFilterChanged(t)" />
+                                        <select class="filter-year" @bind="t.FilterYear" @bind:after="() => OnFilterChanged(t)">
+                                            <option value="">All years</option>
+                                            @foreach (var y in DistinctYears(t))
+                                            {
+                                                <option value="@y">@y</option>
+                                            }
+                                        </select>
+                                    </div>
+                                    <div class="table-scroll table-scroll-fixed">
+                                        <table class="exc-table">
+                                            <thead>
+                                                <tr>
+                                                    <th></th>
+                                                    <th class="sortable" @onclick='() => SetSort(t, "year")'>Year@SortArrow(t, "year")</th>
+                                                    <th class="sortable" @onclick='() => SetSort(t, "trans")'>Trans. no.@SortArrow(t, "trans")</th>
+                                                    <th class="sortable" @onclick='() => SetSort(t, "paydate")'>Pay date@SortArrow(t, "paydate")</th>
+                                                    <th class="sortable" @onclick='() => SetSort(t, "amount")'>Amount@SortArrow(t, "amount")</th>
+                                                    <th class="sortable" @onclick='() => SetSort(t, "payee")'>Payee@SortArrow(t, "payee")</th>
+                                                    <th class="sortable" @onclick='() => SetSort(t, "service")'>Service area@SortArrow(t, "service")</th>
+                                                    <th>Status</th>
+                                                    <th>Evidence</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                @foreach (var it in pageItems)
+                                                {
+                                                    <tr class="@(it.HandVerified ? "verified" : "")">
+                                                        <td><input type="checkbox" checked="@it.Selected" @onchange="e => ToggleSelect(it, (bool)e.Value!)" /></td>
+                                                        <td>@it.SourceTag</td>
+                                                        <td>@it.TransactionId @if (it.HandVerified) { <span class="verified-badge" title="Hand-verified by the virtual-customer agent against the raw file">✓ verified</span> }</td>
+                                                        <td>@(it.PayDate ?? "—")</td>
+                                                        <td>@(it.Amount is { } a ? a.ToString("C2", GB) : "—")</td>
+                                                        <td>@it.Supplier</td>
+                                                        <td>@(it.ServiceArea ?? "—")</td>
+                                                        <td><span class="tag tag-status">@it.Status</span></td>
+                                                        <td>
+                                                            @if (it.Kind != EvidenceKind.None)
+                                                            {
+                                                                <button class="evidence-toggle" type="button" @onclick="() => ToggleEvidence(it)">@(it.EvidenceOpen ? "Hide ▴" : "Show ▾")</button>
+                                                            }
+                                                            else
+                                                            {
+                                                                <span class="hint">—</span>
+                                                            }
+                                                        </td>
+                                                    </tr>
+                                                    @if (it.EvidenceOpen && it.Kind == EvidenceKind.AmountCompare)
+                                                    {
+                                                        <tr class="evidence-row">
+                                                            <td colspan="9">
+                                                                <div class="evidence">
+                                                                    <div class="evidence-pair">
+                                                                        <div class="ev-box"><span class="ev-label">Sum of payments published</span><span class="ev-val">@(it.Amount is { } ea ? ea.ToString("C2", GB) : "—")</span></div>
+                                                                        <div class="ev-op">vs</div>
+                                                                        <div class="ev-box"><span class="ev-label">@it.CompareLabel</span><span class="ev-val">@(it.CompareAmount is { } eb ? eb.ToString("C2", GB) : "—")</span></div>
+                                                                        <div class="ev-op">=</div>
+                                                                        <div class="ev-box ev-diff"><span class="ev-label">Difference</span><span class="ev-val">@EvidenceDiff(it)</span></div>
+                                                                    </div>
+                                                                    @if (LooksLikeDoubleCount(it))
+                                                                    {
+                                                                        <p class="ev-note ev-note-warn">This sum is close to <b>2 × the stated invoice amount</b> — one plausible,
+                                                                            neutral explanation is the same published line being counted twice (see Exception
+                                                                            test 5, "the same line listed more than once"). Not a conclusion — just something to
+                                                                            check before assuming anything else.</p>
+                                                                    }
+                                                                    @if (it.OppositeSign)
+                                                                    {
+                                                                        <p class="ev-note ev-note-warn">The net and gross amounts published for this transaction
+                                                                            have opposite signs (one is negative) — check whether this is a credit or refund line
+                                                                            before treating it as unreconciled.</p>
+                                                                    }
+                                                                </div>
+                                                            </td>
+                                                        </tr>
+                                                    }
+                                                    else if (it.EvidenceOpen && it.Kind == EvidenceKind.GroupEvidence)
+                                                    {
+                                                        var siblings = GroupSiblings(t, it);
+                                                        <tr class="evidence-row">
+                                                            <td colspan="9">
+                                                                <div class="evidence">
+                                                                    <p class="ev-note">@GroupEvidenceIntro(t, siblings.Count)</p>
+                                                                    <div class="table-scroll">
+                                                                        <table class="ev-table">
+                                                                            <thead>
+                                                                                <tr>
+                                                                                    <th class="@ColClass(t, "year")">Year</th>
+                                                                                    <th class="@ColClass(t, "trans")">Trans. no.</th>
+                                                                                    <th class="@ColClass(t, "paydate")">Pay date</th>
+                                                                                    <th class="@ColClass(t, "amount")">Amount</th>
+                                                                                    <th class="@ColClass(t, "payee")">Payee</th>
+                                                                                    <th class="@ColClass(t, "desc")">Description</th>
+                                                                                </tr>
+                                                                            </thead>
+                                                                            <tbody>
+                                                                                @foreach (var sib in siblings)
+                                                                                {
+                                                                                    <tr class="@(sib == it ? "this-row" : "")">
+                                                                                        <td class="@ColClass(t, "year")">@sib.SourceTag</td>
+                                                                                        <td class="@ColClass(t, "trans")">@sib.TransactionId</td>
+                                                                                        <td class="@ColClass(t, "paydate")">@(sib.PayDate ?? "—")</td>
+                                                                                        <td class="@ColClass(t, "amount")">@(sib.Amount is { } sa ? sa.ToString("C2", GB) : "—")</td>
+                                                                                        <td class="@ColClass(t, "payee")">@sib.Supplier</td>
+                                                                                        <td class="@ColClass(t, "desc")">@(sib.Description ?? "—")</td>
+                                                                                    </tr>
+                                                                                }
+                                                                            </tbody>
+                                                                        </table>
+                                                                    </div>
+                                                                    <p class="ev-legend"><span class="ev-chip ev-chip-match">matching</span><span class="ev-chip ev-chip-differ">differs</span></p>
+                                                                </div>
+                                                            </td>
+                                                        </tr>
+                                                    }
+                                                }
+                                                @if (pageItems.Count == 0)
+                                                {
+                                                    <tr><td colspan="9" class="hint">No rows match this filter.</td></tr>
+                                                }
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                    <div class="pagination">
+                                        <span class="hint">@ShowingLabel(t, filtered.Count, startIdx, endIdx)</span>
+                                        <div class="page-controls">
+                                            <button class="ghost" type="button" disabled="@(t.Page <= 1)" @onclick="() => ChangePage(t, -1, totalPages)">← Prev</button>
+                                            <span class="hint">Page @t.Page of @totalPages</span>
+                                            <button class="ghost" type="button" disabled="@(t.Page >= totalPages)" @onclick="() => ChangePage(t, 1, totalPages)">Next →</button>
+                                        </div>
+                                    </div>
+                                    <button class="ghost" @onclick="() => DownloadTest(t)" type="button">↓ Download this test's full list (CSV)</button>
+                                }
                             </div>
-                            @if (t.Items.Count > 200)
-                            {
-                                <p class="hint">Showing the first 200 of @t.Items.Count.ToString("N0") — download the full list below.</p>
-                            }
-                            <button class="ghost" @onclick="() => DownloadTest(t)" type="button">↓ Download this test's full list (CSV)</button>
                         }
                     </div>
                 }
@@ -386,6 +510,10 @@
     enum Mode { Pick, Wokingham, OwnFile }
     enum ExceptionType { Discrepancy, Unreconciled, Anomaly }
     enum SearchMode { Graded, ExactSubstring }
+    // What kind of evidence comparison a row supports, for the highlighted "show the discrepancy"
+    // panel — None (no evidence to show), AmountCompare (test 1/2: sum paid vs stated invoice),
+    // GroupEvidence (test 3/4/5: sibling rows sharing GroupKey, with matching/differing columns).
+    enum EvidenceKind { None, AmountCompare, GroupEvidence }
 
     sealed class ExceptionItem
     {
@@ -404,6 +532,14 @@
         public string Status = "Unconfirmed";
         public string? StatusSource;
         public bool Selected;
+        // ---- evidence/highlighting, so a reader can see the actual discrepancy, not just a count ----
+        public EvidenceKind Kind;
+        public decimal? CompareAmount;   // AmountCompare: the "other" figure (stated invoice amount)
+        public string? CompareLabel;
+        public bool OppositeSign;        // AmountCompare, test 2 only: net == -gross
+        public string? GroupKey;         // GroupEvidence: links sibling rows within this SAME test
+        public int GroupSize;
+        public bool EvidenceOpen;        // UI-only: this row's evidence panel expanded
         public string Key => $"{TestLabel}|{SourceTag}|{TransactionId}|{Supplier}|{Amount}|{PayDate}";
     }
 
@@ -412,6 +548,15 @@
         public string Label = "";
         public string Description = "";
         public List<ExceptionItem> Items = new();
+        // ---- panel UI state: collapsed by default, expanded only when this test contains a
+        // hand-verified example (see SetDefaultCollapse below) — paging/sort/filter live here so
+        // each test's panel state survives a page re-render independently of the others.
+        public bool Collapsed = true;
+        public string FilterText = "";
+        public string FilterYear = "";
+        public string? SortColumn;
+        public bool SortDesc;
+        public int Page = 1;
     }
 
     sealed class YearPick
@@ -619,8 +764,11 @@
     };
 
     // Builds the same TestGroup/ExceptionItem shape the UI already renders, straight from the
-    // council-wide precomputed exceptions file (council,testlabel,type,sourcetag,transid,supplier,
-    // paydate,amount,servicearea,description,handverified) — no AuditEngine.Run call for Wokingham.
+    // council-wide precomputed exceptions file — council,testlabel,type,sourcetag,transid,supplier,
+    // paydate,amount,servicearea,description,handverified,compareamount,groupkey,groupsize,
+    // oppositesign (the last 4 columns, added for the evidence/highlighting panel, are produced by
+    // CouncilDbBuilder — see that project's own header comment for the exact schema). No
+    // AuditEngine.Run call for Wokingham; this file is a precomputed snapshot of its output.
     void BuildTestsFromExceptionsRows(List<string[]> table)
     {
         var byLabel = new Dictionary<string, TestGroup>();
@@ -635,6 +783,10 @@
                 byLabel[label] = grp; order.Add(label);
             }
             var type = Enum.TryParse<ExceptionType>(f[2], out var t) ? t : ExceptionType.Discrepancy;
+            decimal? compareAmount = f.Length > 11 && decimal.TryParse(f[11], NumberStyles.Any, CultureInfo.InvariantCulture, out var ca) ? ca : null;
+            string? groupKey = f.Length > 12 ? NullIfEmpty(f[12]) : null;
+            int groupSize = f.Length > 13 && int.TryParse(f[13], out var gs) ? gs : 1;
+            bool oppositeSign = f.Length > 14 && f[14] == "True";
             grp.Items.Add(new ExceptionItem
             {
                 TestLabel = label, Type = type, SourceTag = f[3], TransactionId = f[4], Supplier = f[5],
@@ -643,9 +795,23 @@
                 ServiceArea = NullIfEmpty(f[8]),
                 Description = NullIfEmpty(f[9]),
                 HandVerified = f[10] == "True",
+                Kind = compareAmount is not null ? EvidenceKind.AmountCompare : groupKey is not null ? EvidenceKind.GroupEvidence : EvidenceKind.None,
+                CompareAmount = compareAmount,
+                CompareLabel = compareAmount is not null ? "Stated invoice amount" : null,
+                OppositeSign = oppositeSign,
+                GroupKey = groupKey,
+                GroupSize = groupSize,
             });
         }
         _tests = order.OrderBy(l => l, StringComparer.Ordinal).Select(l => byLabel[l]).ToList();
+        SetDefaultCollapse();
+    }
+
+    // A test panel starts expanded only if it contains at least one hand-verified example —
+    // every other panel starts collapsed so the page doesn't render thousands of rows unopened.
+    void SetDefaultCollapse()
+    {
+        foreach (var t in _tests) t.Collapsed = !t.Items.Any(i => i.HandVerified);
     }
 
     // Cross-council correlation search across EVERYTHING loaded this session (any council, any
@@ -791,6 +957,10 @@
                 SourceTag = r.SourceTag, TransactionId = r.TransactionId, Supplier = r.Supplier,
                 PayDate = r.PayDate, Amount = r.Gross, ServiceArea = r.ServiceArea, Description = r.Description,
                 HandVerified = HandVerifiedTransNos.Contains(r.TransactionId),
+                Kind = EvidenceKind.AmountCompare,
+                CompareAmount = r.ExpectedGross,
+                CompareLabel = "Stated invoice amount",
+                OppositeSign = !paymentsExceed && r.Net != 0 && r.Gross != 0 && r.Net == -r.Gross,
             };
             (paymentsExceed ? t1 : t2).Items.Add(item);
         }
@@ -805,8 +975,11 @@
                 "redaction placeholder repeats across unrelated payments and would otherwise produce " +
                 "false matches."
         };
+        int g3Id = 0;
         foreach (var g in result.ScheduleB)
         {
+            g3Id++;
+            var groupKey = $"g3-{g3Id}";
             foreach (var m in g.Members)
             {
                 t3.Items.Add(new ExceptionItem
@@ -815,6 +988,7 @@
                     SourceTag = m.SourceTag, TransactionId = m.TransactionId, Supplier = m.Supplier,
                     PayDate = m.PayDateRaw, Amount = m.Net, ServiceArea = m.ServiceArea, Description = m.Description,
                     HandVerified = HandVerifiedTransNos.Contains(m.TransactionId),
+                    Kind = EvidenceKind.GroupEvidence, GroupKey = groupKey, GroupSize = g.Members.Count,
                 });
             }
         }
@@ -832,6 +1006,7 @@
         };
         foreach (var g in result.ScheduleD)
         {
+            var groupKey = $"g4-{g.SourceTag}-{g.TransactionId}";
             foreach (var m in g.Members)
             {
                 t4.Items.Add(new ExceptionItem
@@ -840,6 +1015,7 @@
                     SourceTag = m.SourceTag, TransactionId = m.TransactionId, Supplier = m.Supplier,
                     PayDate = m.PayDateRaw, Amount = m.Gross, ServiceArea = m.ServiceArea, Description = m.Description,
                     HandVerified = HandVerifiedTransNos.Contains(m.TransactionId),
+                    Kind = EvidenceKind.GroupEvidence, GroupKey = groupKey, GroupSize = g.Members.Count,
                 });
             }
         }
@@ -860,19 +1036,29 @@
         var dupLineGroups = clean
             .GroupBy(r => (r.SourceTag, r.TransactionId, r.Supplier, r.Net, r.Gross, (r.Description ?? "").Trim(), r.PayDateRaw))
             .Where(g => g.Count() > 1);
+        // One ExceptionItem per REPEATED ROW (not one aggregate per group) so the evidence panel can
+        // show the actual repeated lines paired up, same shape as test 3/4's group evidence.
+        int g5Id = 0;
         foreach (var g in dupLineGroups)
         {
-            var first = g.First();
-            t5.Items.Add(new ExceptionItem
+            g5Id++;
+            var groupKey = $"g5-{g5Id}";
+            int n = g.Count();
+            foreach (var m in g)
             {
-                TestLabel = t5.Label, Type = ExceptionType.Discrepancy,
-                SourceTag = first.SourceTag, TransactionId = first.TransactionId, Supplier = first.Supplier,
-                PayDate = first.PayDateRaw, Amount = first.Gross, ServiceArea = first.ServiceArea,
-                Description = $"{first.Description} (listed {g.Count()}x)",
-                HandVerified = HandVerifiedTransNos.Contains(first.TransactionId),
-            });
+                t5.Items.Add(new ExceptionItem
+                {
+                    TestLabel = t5.Label, Type = ExceptionType.Discrepancy,
+                    SourceTag = m.SourceTag, TransactionId = m.TransactionId, Supplier = m.Supplier,
+                    PayDate = m.PayDateRaw, Amount = m.Gross, ServiceArea = m.ServiceArea,
+                    Description = m.Description,
+                    HandVerified = HandVerifiedTransNos.Contains(m.TransactionId),
+                    Kind = EvidenceKind.GroupEvidence, GroupKey = groupKey, GroupSize = n,
+                });
+            }
         }
         _tests.Add(t5);
+        SetDefaultCollapse();
     }
 
     string TagClass(ExceptionType t) => t switch
@@ -883,16 +1069,127 @@
         _ => ""
     };
 
-    bool AllSelected(TestGroup t) => t.Items.Count > 0 && t.Items.All(i => i.Selected);
+    const int PageSize = 50;
 
-    void SelectAll(TestGroup t, bool on)
+    void ToggleCollapse(TestGroup t) => t.Collapsed = !t.Collapsed;
+
+    // Filter (and sort) a test's full item list — this runs over EVERY item in the test, not just
+    // the current page, since paging/"select all" both need to operate on the full matching set.
+    List<ExceptionItem> FilteredItems(TestGroup t)
     {
-        foreach (var it in t.Items)
+        IEnumerable<ExceptionItem> q = t.Items;
+        if (!string.IsNullOrWhiteSpace(t.FilterText))
+        {
+            var f = t.FilterText.Trim();
+            q = q.Where(i => (i.Supplier?.Contains(f, StringComparison.OrdinalIgnoreCase) ?? false)
+                           || (i.Description?.Contains(f, StringComparison.OrdinalIgnoreCase) ?? false));
+        }
+        if (!string.IsNullOrWhiteSpace(t.FilterYear))
+            q = q.Where(i => i.SourceTag == t.FilterYear);
+        q = t.SortColumn switch
+        {
+            "year" => t.SortDesc ? q.OrderByDescending(i => i.SourceTag, StringComparer.Ordinal) : q.OrderBy(i => i.SourceTag, StringComparer.Ordinal),
+            "trans" => t.SortDesc ? q.OrderByDescending(i => i.TransactionId, StringComparer.Ordinal) : q.OrderBy(i => i.TransactionId, StringComparer.Ordinal),
+            "paydate" => t.SortDesc ? q.OrderByDescending(i => i.PayDate, StringComparer.Ordinal) : q.OrderBy(i => i.PayDate, StringComparer.Ordinal),
+            "amount" => t.SortDesc ? q.OrderByDescending(i => i.Amount) : q.OrderBy(i => i.Amount),
+            "payee" => t.SortDesc ? q.OrderByDescending(i => i.Supplier, StringComparer.OrdinalIgnoreCase) : q.OrderBy(i => i.Supplier, StringComparer.OrdinalIgnoreCase),
+            "service" => t.SortDesc ? q.OrderByDescending(i => i.ServiceArea, StringComparer.Ordinal) : q.OrderBy(i => i.ServiceArea, StringComparer.Ordinal),
+            _ => q
+        };
+        return q.ToList();
+    }
+
+    List<string> DistinctYears(TestGroup t) => t.Items.Select(i => i.SourceTag).Distinct().OrderBy(x => x, StringComparer.Ordinal).ToList();
+
+    int TotalPages(int filteredCount) => Math.Max(1, (int)Math.Ceiling(filteredCount / (double)PageSize));
+
+    void ChangePage(TestGroup t, int delta, int totalPages) => t.Page = Math.Clamp(t.Page + delta, 1, totalPages);
+
+    void OnFilterChanged(TestGroup t) => t.Page = 1;
+
+    void SetSort(TestGroup t, string col)
+    {
+        if (t.SortColumn == col) t.SortDesc = !t.SortDesc;
+        else { t.SortColumn = col; t.SortDesc = false; }
+        t.Page = 1;
+    }
+
+    string SortArrow(TestGroup t, string col) => t.SortColumn != col ? "" : (t.SortDesc ? " ▼" : " ▲");
+
+    // "Select all" always operates on every FILTERED item, not just the page currently rendered —
+    // selection must cover everything matching the current filter, visible or not.
+    bool AllFilteredSelected(List<ExceptionItem> filtered) => filtered.Count > 0 && filtered.All(i => i.Selected);
+
+    void SelectAllFiltered(List<ExceptionItem> filtered, bool on)
+    {
+        foreach (var it in filtered)
         {
             it.Selected = on;
             if (on) _selected[it.Key] = it; else _selected.Remove(it.Key);
         }
     }
+
+    string SelectAllLabel(TestGroup t, int filteredCount) => filteredCount != t.Items.Count
+        ? $"select all matching ({filteredCount:N0})"
+        : "select all in this test";
+
+    string ShowingLabel(TestGroup t, int filteredCount, int startIdx, int endIdx) => filteredCount == t.Items.Count
+        ? $"Showing {startIdx}-{endIdx} of {filteredCount:N0}"
+        : $"Showing {startIdx}-{endIdx} of {filteredCount:N0} (filtered from {t.Items.Count:N0})";
+
+    // ---- evidence / highlighting: let a reader see the actual discrepancy, not just a count ----
+    static readonly CultureInfo GB = CultureInfo.GetCultureInfo("en-GB");
+
+    void ToggleEvidence(ExceptionItem it) => it.EvidenceOpen = !it.EvidenceOpen;
+
+    // The signed gap between what was published as paid and what was stated as owed — the number
+    // every "payment above/below invoice" exception is actually about.
+    string EvidenceDiff(ExceptionItem it)
+    {
+        if (it.Amount is null || it.CompareAmount is null) return "—";
+        var d = it.Amount.Value - it.CompareAmount.Value;
+        return (d >= 0 ? "+" : "") + d.ToString("C2", GB);
+    }
+
+    // A loose heuristic, surfaced as a note not a conclusion: if the sum paid is roughly double the
+    // stated invoice, the SAME published line being counted twice (test 5) is a plausible, neutral
+    // explanation worth checking before assuming anything else.
+    bool LooksLikeDoubleCount(ExceptionItem it) =>
+        it.Kind == EvidenceKind.AmountCompare && it.Amount is { } a && it.CompareAmount is { } c && c != 0
+        && (double)(a / c) is > 1.85 and < 2.15;
+
+    // Every sibling row sharing this item's GroupKey within the SAME test — pulled from the test's
+    // full (unfiltered, unpaged) item list, so the evidence panel is always complete regardless of
+    // which page or filter happens to be showing right now.
+    List<ExceptionItem> GroupSiblings(TestGroup t, ExceptionItem it) =>
+        it.GroupKey is null ? new List<ExceptionItem> { it } : t.Items.Where(x => x.GroupKey == it.GroupKey).ToList();
+
+    // Which evidence-table columns read as "matching" vs "differs" for a given test — derived from
+    // the test number in its own label rather than stored per-row, since it's the same for every
+    // row in that test. year/trans/paydate/amount/payee/desc are the column keys ColClass checks.
+    (string[] Match, string[] Differ) GroupColsFor(TestGroup t) => t.Label switch
+    {
+        var l when l.Contains("test 3") => (new[] { "payee", "amount", "desc", "paydate" }, new[] { "trans" }),
+        var l when l.Contains("test 4") => (new[] { "trans" }, new[] { "payee", "paydate" }),
+        var l when l.Contains("test 5") => (new[] { "trans", "payee", "amount", "desc", "paydate", "year" }, Array.Empty<string>()),
+        _ => (Array.Empty<string>(), Array.Empty<string>())
+    };
+
+    string ColClass(TestGroup t, string col)
+    {
+        var (match, differ) = GroupColsFor(t);
+        return match.Contains(col) ? "ev-col-match" : differ.Contains(col) ? "ev-col-differ" : "";
+    }
+
+    string GroupEvidenceIntro(TestGroup t, int groupSize) => groupSize <= 1 ? "" : t.Label switch
+    {
+        var l when l.Contains("test 5") =>
+            $"This exact line appears {groupSize:N0} times in the published file — every column below " +
+            "matches, which is the point: it's the same line, repeated.",
+        _ =>
+            $"{groupSize:N0} rows share this evidence group — columns highlighted green match across all " +
+            "of them, columns highlighted amber are where they differ."
+    };
 
     void ToggleSelect(ExceptionItem it, bool on)
     {
