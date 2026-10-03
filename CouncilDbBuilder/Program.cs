@@ -11,9 +11,13 @@
 // the closest thing) -- carried as its own field so the shared schema doesn't change per council.
 //
 // Exceptions schema (one shared shape, extended 2026-10-03 to carry the engine's own
-// classification so the Showroom page can label, not just count, Schedule A/B rows):
+// classification so the Showroom page can label, not just count, Schedule A/B rows; the
+// "handverified" column was REMOVED 2026-10-03 -- it only ever flagged 3 specific transaction
+// numbers by hand, which the Showroom page used to auto-expand and specially badge. Direct
+// feedback was that singling out specific items ahead of a visitor's own loaded data reads as
+// editorial, not mechanical, so the column and the concept are gone, not just hidden):
 // council,testlabel,type,sourcetag,transid,supplier,paydate,amount,servicearea,description,
-// handverified,compareamount,groupkey,groupsize,oppositesign,classification,classificationdetail.
+// compareamount,groupkey,groupsize,oppositesign,classification,classificationdetail,linecount.
 //
 // Multi-council (2026-10-03, Reading added alongside Wokingham): each council also gets a
 // "hasScheduleA" flag in manifest.json -- Reading publishes one signed Amount column with no
@@ -134,7 +138,6 @@ foreach (var cfg in councils)
     // ---- precomputed exceptions, all applicable tests, one file per council (spans years/months
     // by nature -- Schedule B/D group across the whole council, not within one period) ----
     var result = AuditEngine.Run(allRows, cfg.Council.IdScope, cfg.Council.GrossMeaning, warnings);
-    var handVerified = new HashSet<string> { "3815610", "3809081", "7032959" };
 
     // compareamount/groupkey/groupsize/oppositesign power the Showroom page's evidence/highlighting
     // panel; classification/classificationdetail (added 2026-10-03) carry AuditEngine's own
@@ -144,14 +147,13 @@ foreach (var cfg in councils)
     // FOI-letter sentence generator can say "one payment of GBPX" vs "N payments totalling GBPX".
     // Blank classification/detail, linecount=1 for T4/T5, which have no such concept.
     var excSb = new StringBuilder();
-    excSb.AppendLine("council,testlabel,type,sourcetag,transid,supplier,paydate,amount,servicearea,description,handverified,compareamount,groupkey,groupsize,oppositesign,classification,classificationdetail,linecount");
+    excSb.AppendLine("council,testlabel,type,sourcetag,transid,supplier,paydate,amount,servicearea,description,compareamount,groupkey,groupsize,oppositesign,classification,classificationdetail,linecount");
     void WriteExc(string testLabel, string type, string sourceTag, string transId, string supplier,
         string? payDate, decimal amount, string? serviceArea, string? description,
         decimal? compareAmount, string groupKey, int groupSize, bool oppositeSign,
         string classification, string? classificationDetail, int lineCount = 1) =>
         excSb.AppendLine(string.Join(",", cfg.Key, Csv(testLabel), type, Csv(sourceTag), Csv(transId),
             Csv(supplier), Csv(payDate ?? ""), Num(amount), Csv(serviceArea ?? ""), Csv(description ?? ""),
-            handVerified.Contains(transId).ToString(),
             compareAmount is { } ca ? Num(ca) : "", Csv(groupKey), groupSize.ToString(CultureInfo.InvariantCulture),
             oppositeSign.ToString(), classification, Csv(classificationDetail ?? ""),
             lineCount.ToString(CultureInfo.InvariantCulture)));

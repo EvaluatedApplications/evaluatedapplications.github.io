@@ -407,6 +407,9 @@
                     var testTotal = TestTotal(filtered);
                     var selectedInTest = filtered.Where(i => i.Selected).ToList();
                     var classTotals = ClassificationTotals(filtered);
+                    <div class="plain-explain">
+                        @PlainIntroHtml(t)
+                    </div>
                     <div class="test-card">
                         <button class="test-head" type="button" @onclick="() => ToggleCollapse(t)" aria-expanded="@(!t.Collapsed)">
                             <span class="collapse-arrow">@(t.Collapsed ? "▸" : "▾")</span>
@@ -626,6 +629,11 @@
         @if (_selected.Count > 0)
         {
             <section class="tray">
+                <p class="tray-guide">It's your call which of these are worth asking about — there's no
+                    right number to pick. A good rule of thumb: tick the ones where the gap or the
+                    pattern is big enough, or odd enough, that you'd genuinely like to know the reason.
+                    A short, focused request about a handful of specific items usually gets a clearer,
+                    faster answer than one asking about everything at once.</p>
                 @{ var selDistinct = SelectedDistinctSummary(); }
                 <div class="tray-row">
                     <span><b>@_selected.Count.ToString("N0")</b> exception@(_selected.Count == 1 ? "" : "s") selected
@@ -1064,13 +1072,18 @@
                 _testsByLabel[label] = grp; _testOrder.Add(label);
             }
             var type = Enum.TryParse<ExceptionType>(f[2], out var t) ? t : ExceptionType.Discrepancy;
-            decimal? compareAmount = f.Length > 11 && decimal.TryParse(f[11], NumberStyles.Any, CultureInfo.InvariantCulture, out var ca) ? ca : null;
-            string? groupKey = f.Length > 12 ? NullIfEmpty(f[12]) : null;
-            int groupSize = f.Length > 13 && int.TryParse(f[13], out var gs) ? gs : 1;
-            bool oppositeSign = f.Length > 14 && f[14] == "True";
-            string classification = f.Length > 15 ? f[15] : "";
-            string? classificationDetail = f.Length > 16 ? NullIfEmpty(f[16]) : null;
-            int lineCount = f.Length > 17 && int.TryParse(f[17], out var lc) ? lc : 1;
+            // Column layout (CouncilDbBuilder/Program.cs's exceptions.csv header): ...,description,
+            // compareamount,groupkey,groupsize,oppositesign,classification,classificationdetail,linecount
+            // -- a "handverified" column used to sit between description and compareamount; it was
+            // removed 2026-10-03 (see that file's own header comment), shifting every index below
+            // down by one from what an older version of this parser used.
+            decimal? compareAmount = f.Length > 10 && decimal.TryParse(f[10], NumberStyles.Any, CultureInfo.InvariantCulture, out var ca) ? ca : null;
+            string? groupKey = f.Length > 11 ? NullIfEmpty(f[11]) : null;
+            int groupSize = f.Length > 12 && int.TryParse(f[12], out var gs) ? gs : 1;
+            bool oppositeSign = f.Length > 13 && f[13] == "True";
+            string classification = f.Length > 14 ? f[14] : "";
+            string? classificationDetail = f.Length > 15 ? NullIfEmpty(f[15]) : null;
+            int lineCount = f.Length > 16 && int.TryParse(f[16], out var lc) ? lc : 1;
             grp.Items.Add(new ExceptionItem
             {
                 TestLabel = label, Type = type,
@@ -1123,6 +1136,122 @@
     {
         var dash = label.IndexOfAny(new[] { '—', '-' });
         return dash > 0 ? label[..dash].Trim() : label;
+    }
+
+    // ---- plain-English "what this is / what it could mean" explainer per test (added 2026-10-03,
+    // direct user feedback: "the target is not an auditor, it is members of the public" — every
+    // test panel needs its own everyday-language paragraph, with a tiny worked example built from
+    // the visitor's OWN loaded data, before anyone has to understand audit terms like "Schedule A"
+    // or "unreconciled"). Matches on the test NUMBER inside the label (via Contains), not the exact
+    // label string, because the hosted-council path (BuildTestsFromExceptionsRows) and the
+    // "use your own file" path (BuildTests) spell the same test's label slightly differently
+    // (hyphen vs. em dash) — see CouncilDbBuilder/Program.cs's T1..TR consts vs. this file's own
+    // BuildTests labels.
+    static string TestKey(string label) =>
+        label.Contains("test 1") ? "1" :
+        label.Contains("test 2") ? "2" :
+        label.Contains("test 3") ? "3" :
+        label.Contains("test 4") ? "4" :
+        label.Contains("test 5") ? "5" :
+        label.Contains("test R") ? "R" : "";
+
+    // The worked example is always the test's OWN highest-£-value item, by the same rule used for
+    // the page-wide ranking above — never a hand-picked row, and it changes automatically as more
+    // councils/years are loaded.
+    static ExceptionItem? WorkedExample(TestGroup t) =>
+        t.Items.Count == 0 ? null : t.Items.OrderByDescending(i => Math.Abs(i.Amount ?? 0m)).First();
+
+    static string Enc(string? s) => string.IsNullOrEmpty(s) ? "" :
+        s.Replace("&", "&amp;").Replace("<", "&lt;").Replace(">", "&gt;");
+
+    const string EndsInFoiLine = "These are possibilities, not an accusation — only the council's " +
+        "own records can say which; that's what an FOI request asks for.";
+
+    // One <p> explaining what the test looks for in plain words (the audit term in brackets the
+    // first time), with a worked example from the visitor's own data, plus a "What this could
+    // mean" paragraph. Returns an empty-ish placeholder (no worked example) if nothing's loaded yet
+    // for this test — the panel can still be read before it has any rows.
+    MarkupString PlainIntroHtml(TestGroup t)
+    {
+        var ex = WorkedExample(t);
+        string html = TestKey(t.Label) switch
+        {
+            "1" when ex is { Amount: { } paid, CompareAmount: { } inv } => $@"
+<p>This test looks for payments that add up to <b>more</b> than the invoice they're for (the audit
+term is an <b>invoice amount mismatch</b>). For example, in what you've loaded, {Enc(ex.Supplier)}
+was paid {Money(paid)} against transaction {Enc(ex.TransactionId)} — but the invoice itself was only
+for {Money(inv)}, which is {Money(Math.Abs(paid - inv))} more than it says.</p>
+<p><b>What this could mean:</b> a VAT adjustment, a correction, a genuine duplicate payment, a second
+unrelated cost recorded under the same reference, or a straightforward mistake. {EndsInFoiLine}</p>",
+
+            "2" when ex is { Amount: { } paid2, CompareAmount: { } inv2 } => $@"
+<p>This test looks for invoices where the payments recorded don't add up to the <b>full</b> amount
+the invoice says (the audit term is an <b>unreconciled invoice</b>). For example,
+{Enc(ex.Supplier)}'s invoice (transaction {Enc(ex.TransactionId)}) was for {Money(inv2)}, but only
+{Money(paid2)} of published payments are recorded against it — that leaves
+{Money(Math.Abs(inv2 - paid2))} with no published payment at all.
+{Under500Phrase(Math.Abs(inv2 - paid2))}</p>
+<p><b>What this could mean:</b> the rest might have been paid in several smaller amounts the council
+doesn't have to publish, paid through a different route entirely, paid outside the years/months
+you've loaded, written off, or simply not paid yet. {EndsInFoiLine}</p>",
+
+            "3" when ex is not null => $@"
+<p>This test looks for the exact <b>same</b> payment — same supplier, same amount, same description,
+same date — appearing more than once under <b>different</b> reference numbers (the audit term is a
+<b>duplicate payment pattern</b>). For example, {Money(ex.Amount ?? 0m)} to {Enc(ex.Supplier)} on
+{Enc(ex.PayDate ?? "an unpublished date")} appears under {Math.Max(ex.GroupSize, 1)} different
+reference numbers.</p>
+<p><b>What this could mean:</b> often this is a standard recurring payment — the same regular amount
+(like rent or a placement fee) simply gets a new reference every time, which is normal. It could
+also be the same real payment entered twice, or two separate payments that happen to share a date
+and amount by coincidence. {EndsInFoiLine}</p>",
+
+            "4" when ex is not null => $@"
+<p>This test looks for one single reference number being used for payments to more than one
+supplier, or on more than one date (the audit term is a <b>shared transaction reference</b>). For
+example, transaction {Enc(ex.TransactionId)} is recorded against {Math.Max(ex.GroupSize, 1)}
+different payees or pay dates, including {Enc(ex.Supplier)}.</p>
+<p><b>What this could mean:</b> a reference number reused on purpose for admin reasons, a data-entry
+mistake, or two genuinely unrelated payments that happen to share a number. {EndsInFoiLine}</p>",
+
+            "5" when ex is not null => $@"
+<p>This test looks for the exact same line of the published file appearing more than once — same
+reference, same supplier, same amount, same date (the audit term is a <b>duplicate line</b>). For
+example, a {Money(ex.Amount ?? 0m)} payment to {Enc(ex.Supplier)} under transaction
+{Enc(ex.TransactionId)} appears {Math.Max(ex.GroupSize, 1)} times in the published file — added up
+as published, that reads as {Money((ex.Amount ?? 0m) * Math.Max(ex.GroupSize, 1))}.</p>
+<p><b>What this could mean:</b> most often the file itself lists one real payment twice when it was
+produced — the supplier may only ever have been paid once. It could also mean the supplier genuinely
+was paid the same amount more than once. {EndsInFoiLine}</p>",
+
+            "R" when ex is not null => $@"
+<p>This test checks every refund or credit the council published against whether a same-supplier
+charge of a matching size shows up anywhere else in what you've loaded (the audit term is a
+<b>credit/refund match check</b>). For example, a refund of {Money(Math.Abs(ex.Amount ?? 0m))} to
+{Enc(ex.Supplier)} on {Enc(ex.PayDate ?? "an unpublished date")}
+{(ex.Classification == "MatchedOffsettingCharge" ? "IS matched by" : "has NO matching")} a
+same-supplier charge of the same size within a year either way.</p>
+<p><b>What this could mean:</b> an unmatched refund can simply mean the matching charge is in a
+year or file you haven't loaded yet, or relates to something outside the period shown — it isn't
+evidence of anything wrong on its own. {EndsInFoiLine}</p>",
+
+            _ => "<p>Load a year or month above to see a worked example from your own data.</p>",
+        };
+        return new MarkupString(html);
+    }
+
+    // The exact figure the user asked for by name: £X with no published payment, and "that would
+    // take at least N separate payments under £500" since councils only have to publish £500+
+    // payments — flagged in plain words when N would be an implausible number for one invoice.
+    static string Under500Phrase(decimal gap)
+    {
+        if (gap <= 0) return "";
+        int n = (int)Math.Ceiling(gap / 500m);
+        string tail = n > 5 ? $" — that would be {n} separate payments for a single invoice, which is a lot."
+                             : ".";
+        return $"Councils only have to publish payments of £500 or more, so if the rest was paid in " +
+               $"smaller amounts, that would take at least {n} separate payment{(n == 1 ? "" : "s")} " +
+               $"of under £500 each{tail}";
     }
 
     // Cross-council correlation search across EVERYTHING loaded this session (any council, any
@@ -1604,7 +1733,7 @@
             string paymentsPhrase = it.LineCount <= 1 ? $"one payment of {Money(paid)}" : $"{it.LineCount} payments totalling {Money(paid)}";
             string tail = label.Contains("test 1")
                 ? $"The published payments exceed the stated invoice by {Money(gap)}."
-                : $"No other published payment accounts for the remaining {Money(gap)}.";
+                : $"No other published payment accounts for the remaining {Money(gap)}. {Under500Phrase(gap)}";
             return $"Transaction {it.TransactionId} records {paymentsPhrase} against a stated invoice amount of {Money(inv)}. {tail}";
         }
         if (it.Kind == EvidenceKind.GroupEvidence)
