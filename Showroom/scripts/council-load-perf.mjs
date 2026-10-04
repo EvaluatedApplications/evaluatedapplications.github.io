@@ -104,7 +104,9 @@ const info = () => ev(`({ size: document.querySelector('.loadsize')?.innerText, 
 
 // the biggest single year of each of the three biggest councils: size line, load, open the biggest list, source rows of its first group
 if (WHICH === 'all' || WHICH === 'big') {
-  for (const [slug, fy] of [['cornwall', '2025-26'], ['leeds', '2022-23'], ['sheffield', '2025-26'], ['wokingham', '2020-21']]) {
+  // ONLY=leeds (or a comma list) limits the run to those councils, for repeated passes of one case
+  const only = process.env.ONLY ? process.env.ONLY.split(',') : null;
+  for (const [slug, fy] of [['cornwall', '2025-26'], ['leeds', '2022-23'], ['sheffield', '2025-26'], ['wokingham', '2020-21'], ['surrey', '2025-26'], ['essex', '2025-26'], ['hertfordshire', '2025-26']].filter(([s]) => only ? only.includes(s) : s !== 'surrey' && s !== 'essex' && s !== 'hertfordshire')) {
     await go(slug);
     console.log('   ' + JSON.stringify(await info()));
     await measure(`${slug} ${fy}: tick the year (size line updates)`, `window.__tickYear('${fy}'); await new Promise(r => setTimeout(r, 40))`);
@@ -172,6 +174,27 @@ if (WHICH === 'all' || WHICH === 'care') {
   await measure('wokingham: choose another year in the provider list', `const s = document.querySelectorAll('.scare select')[1]; s.value = s.options[0].value; s.dispatchEvent(new Event('change', { bubbles: true })); await new Promise(r => setTimeout(r, 120))`);
   await measure('wokingham: open a provider company record', `document.querySelector('.scare .srcbtn').click(); await window.__waitFor('.scare .chrec', '', 5000)`);
   console.log('   company record: ' + await ev(`document.querySelector('.scare .chrec').innerText.slice(0, 400)`));
+}
+
+// Surrey, Essex, Hertfordshire (Session 43): the "what cannot be checked" list, the year caption, the not-available lines, the cannot-run check and the budget statement, read back as text
+if (WHICH === 'all' || WHICH === 'new') {
+  for (const [slug, fy] of [['surrey', '2025-26'], ['essex', '2025-26'], ['hertfordshire', '2025-26'], ['hertfordshire', '2024-25']]) {
+    await go(slug);
+    console.log(`== ${slug} ${fy}: cannot-check list: ` + JSON.stringify(await ev(`[...document.querySelectorAll('.about h3 + .notelist li')].map(li => li.innerText)`)));
+    await measure(`${slug} ${fy}: Load`, `window.__tickYear('${fy}'); document.querySelector('.loadbtn').click(); await window.__waitLoaded(180000)`, 400, true);
+    await ev(`[...document.querySelectorAll('.yblock .yhead')].forEach(h => { if (h.getAttribute('aria-expanded') !== 'true') h.click(); })`); await sleep(300);
+    console.log('   year caption(s): ' + JSON.stringify(await ev(`[...document.querySelectorAll('.yblock > .caption')].map(p => p.innerText)`)));
+    console.log('   not available: ' + JSON.stringify(await ev(`[...document.querySelectorAll('.yblock .na')].map(p => p.innerText)`)));
+    console.log('   head: ' + await ev(`document.querySelector('.loaded .yblock .yhead .n')?.innerText`) + ' | ' + await ev(`document.querySelector('.loaded .yblock .plain')?.innerText`));
+    console.log('   buckets: ' + JSON.stringify(await ev(`[...document.querySelectorAll('.yblock .bucket-head')].map(b => b.innerText.replace(/\\s+/g, ' ')).slice(0, 8)`)));
+    await measure(`${slug}: open the largest group list`, `document.querySelector('.yblock .bucket-head').click(); await window.__waitFor('.yblock .bucket .lines li', '', 30000)`);
+    console.log('   first group: ' + await ev(`document.querySelector('.yblock .bucket .lines li')?.innerText.replace(/\\s+/g, ' ').slice(0, 300)`));
+    await ev(`[...document.querySelectorAll('.cross .check-head')].forEach(h => h.click())`); await sleep(2500);
+    console.log('   checks: ' + JSON.stringify(await ev(`[...document.querySelectorAll('.cross .check')].map(c => c.querySelector('h3')?.innerText + ' -> ' + (c.querySelector('.summary')?.innerText ?? '').slice(0, 160))`)));
+    await ev(`document.querySelector('.budget .check-head')?.click()`); await sleep(1500);
+    console.log('   budget panel: ' + await ev(`document.querySelector('.budget .hint')?.innerText`));
+    if (slug === 'hertfordshire' && fy === '2025-26') await shot('herts-year', '.loaded', 1800);
+  }
 }
 
 console.log('\n--- CW-PERF console lines from the page ---');

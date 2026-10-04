@@ -21,6 +21,7 @@
                 <span>@Num(U.Scan.OpenGroups) group@(U.Scan.OpenGroups == 1 ? " is" : "s are") still open (no recognised explanation)@(U.Scan.OpenWithReading > 0 ? $", of which {Num(U.Scan.OpenWithReading)} carry a pattern reading beside them. A reading is a consistent fit, not a proof, and does not close a group" : "").</span>
             }
         </p>
+        @if (YearNote(Slug, U.Year) is { } yn) { <p class="caption">@yn</p> }
         @if (U.Gap is { Eligible: true })
         {
             <div class="gyear">
@@ -41,7 +42,7 @@
                 <p class="plain">@ScheduleDefinition(sch)</p>
                 @if (na)
                 {
-                    <p class="na">Not available for this council: its published file @(sch == "A" ? "has no stated invoice or gross amount to compare the payments with" : NoDByNumbering.Contains(Slug) ? "gives every transaction number to one payee on one date, or to a single row" : "has no transaction reference to group by"), so this rule @(sch == "D" && NoDByNumbering.Contains(Slug) ? "finds nothing by construction" : "cannot run"). That is a limit of the file, not a clean result.</p>
+                    <p class="na">Not available for this council: its published file @(sch == "A" ? (NoTransactionNumber.Contains(Slug) ? "has no transaction number, so one transaction's payments cannot be added up and set against a stated amount" : "has no stated invoice or gross amount to compare the payments with") : NoDByNumbering.Contains(Slug) ? "gives every transaction number to one payee on one date, or to a single row" : "has no transaction reference to group by"), so this rule @(sch == "D" && NoDByNumbering.Contains(Slug) ? "finds nothing by construction" : "cannot run"). That is a limit of the file, not a clean result.</p>
                 }
                 @if (buckets.Any(b => b.SupplierFurnished))
                 {

@@ -18,8 +18,8 @@ if (args.Length > 1 && args[1] == "props")
 }
 
 Directory.CreateDirectory(outDir);
-// The councils the page ships: those the engine knows AND that have a phone export folder. A council the scanner has taken on but not yet exported (Surrey on
-// 2026-10-04) is left out, and said so, until its web_export exists; it is never given a slug or a half-built page.
+// The councils the page ships: those the engine knows AND that have a phone export folder. A council the scanner has taken on but not yet exported
+// is left out, and said so, until its web_export exists; it is never given a slug or a half-built page.
 var published = SupportedCouncils.Everyone.Where(c => TrySlug(c.Name) is string s && Directory.Exists(Path.Combine(webExport, s))).ToList();
 foreach (var c in SupportedCouncils.Everyone.Where(c => !published.Contains(c))) Console.WriteLine($"NOT SHIPPED (no web_export folder or no slug): {c.Name}");
 
@@ -280,7 +280,7 @@ foreach (var n in profilesOnly ? Array.Empty<string>() : new[] { "transaction_tw
 // source-file names, hand-over tips) are dropped, and a note with nothing left is held back. Every change is printed so the profile's
 // owner can reword the source; the profile text itself is never edited here.
 var Sentence = new System.Text.RegularExpressions.Regex(@"(?<=[.;:])\s+(?=[A-Z""(])");
-var InternalSentence = new System.Text.RegularExpressions.Regex(@"owner's tip|Session \d+|FIRST PASS|plain bot fetch|\.cs\b|\.md\b|CityFixups|AuditEngine|ColumnMapping|MapRows|KnownQuirks|\bfoi/|scratch|inbox|Schedule R\b|hand-built|ONBOARDING|checklist|BASELINE|FEEDBACK|\bCLI\b|ParseDate|against the BASE|Fixups|this session|handopen|full-engine|MAD-r|XlsxReader", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+var InternalSentence = new System.Text.RegularExpressions.Regex(@"owner's tip|Session \d+|FIRST PASS|plain bot fetch|\.cs\b|\.md\b|CityFixups|AuditEngine|ColumnMapping|MapRows|KnownQuirks|\bfoi/|scratch|inbox|Schedule R\b|hand-built|ONBOARDING|checklist|BASELINE|FEEDBACK|\bCLI\b|ParseDate|against the BASE|Fixups|this session|handopen|full-engine|MAD-r|XlsxReader|XlsReader|ExcelDataReader|FileDuplication|OtherForRepeat", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
 string Reword(string s)
 {
     s = System.Text.RegularExpressions.Regex.Replace(s, @"\s*\((?:see |per )?[^()]*(?:ONBOARDING_CHECKLIST|checklist step|BASELINE|FEEDBACK)[^()]*\)", "");
@@ -289,6 +289,8 @@ string Reword(string s)
     s = System.Text.RegularExpressions.Regex.Replace(s, @"Schedule A/B/D", m => Cap(m, "the invoice-amount, repeated-payment and shared-transaction-number checks"));
     s = System.Text.RegularExpressions.Regex.Replace(s, @"Schedule A( \(amount mismatch\))?", m => Cap(m, "the invoice-amount check"));
     s = System.Text.RegularExpressions.Regex.Replace(s, @"Schedule B", m => Cap(m, "the repeated-payment check"));
+    s = System.Text.RegularExpressions.Regex.Replace(s, @"(?<=check and )D(?= (?:are|is)\b)", "the shared-transaction-number check");   // "the invoice-amount check and D are empty"
+    s = System.Text.RegularExpressions.Regex.Replace(s, @"`rawcheck`", m => Cap(m, "the raw-file check"));
     s = System.Text.RegularExpressions.Regex.Replace(s, @"Schedule D", m => Cap(m, "the shared-transaction-number check"));
     // the preparation command and its step: "`prep kirklees` writes it dd/MM/yyyy" becomes "the scanner writes it dd/MM/yyyy"
     s = System.Text.RegularExpressions.Regex.Replace(s, @"`prep(?: [a-z]+)?`|\b(?:[Tt]he )?Prepare step\b", m => Cap(m, "the scanner"));
@@ -345,7 +347,7 @@ static string? TrySlug(string name)
         ("merton", "merton"), ("reading", "reading"), ("birmingham", "birmingham"), ("leeds", "leeds"), ("sheffield", "sheffield"),
         ("bradford", "bradford"), ("liverpool", "liverpool"), ("bristol", "bristol"), ("wakefield", "wakefield"), ("coventry", "coventry"),
         ("durham", "durham"), ("kirklees", "kirklees"), ("leicester", "leicester"), ("cornwall", "cornwall"), ("nottingham", "nottingham"),
-        ("wirral", "wirral"), ("newcastle", "newcastle") })
+        ("wirral", "wirral"), ("newcastle", "newcastle"), ("surrey", "surrey"), ("essex", "essex"), ("hertfordshire", "hertfordshire") })
         if (n.Contains(key)) return slug;
     return null;
 }

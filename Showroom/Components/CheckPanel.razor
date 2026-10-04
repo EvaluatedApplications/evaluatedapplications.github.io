@@ -79,7 +79,7 @@
             var mine = Slug is null ? tab.Rows : tab.Rows.Where(r => Def.Matches(tab, r, Slug)).ToList();
             var (rows, summary) = Def.Build(tab, mine);
             _rows = rows;
-            _summary = mine.Count == 0 ? "This check has no rows for this council." : summary;
+            _summary = Slug is not null && CouncilTerms.CheckCannotRun(Slug, Def.Id) is { } cannot ? cannot : mine.Count == 0 ? "This check has no rows for this council." : summary;
             _loaded = true;
             await Data.LogAsync($"check {Def.Id} ({(Slug ?? "all")}) built", sw.ElapsedMilliseconds, $"({mine.Count} source rows)");
         }

@@ -22,7 +22,7 @@
         </ul>
         @if (_error is not null) { <p class="err">@_error</p> }
         else if (!_loaded) { <p class="hint">Loading the declared-spend files (small)...</p> }
-        else if (_years.Count == 0) { <p class="hint">No declared-spend years are listed for this council.</p> }
+        else if (_years.Count == 0) { <p class="hint">@(_why.Length > 0 ? _why : "No declared-spend years are listed for this council.")</p> }
         else
         {
             <p class="plain"><b>Key.</b> F is the total of every published Net amount in the file for the year. K1 is the declared running expenses plus Housing Revenue Account expenditure. K2 is K1 plus declared capital expenditure.
@@ -74,7 +74,7 @@
     bool _open, _loaded;
     string? _error;
     List<BYear> _years = new();
-    string _loadedFor = "";
+    string _loadedFor = "", _why = "";
 
     protected override void OnParametersSet()
     {
@@ -116,6 +116,14 @@
                 y.Status = u is null ? "" : PoolStatus(units.G(u, "Pool"), units.B(u, "Eligible"), units.G(u, "Note"));
                 years.Add(y);
             }
+            _why = "";
+            if (years.Count == 0)
+            {
+                var mine = units.Rows.Where(r => units.G(r, "Council") == Slug).ToList();
+                if (mine.Count > 0 && !mine.Any(r => units.B(r, "Eligible")))
+                    _why = $"This comparison cannot run for this council. Its file covers {mine.Count} financial years, but no government Revenue Outturn figure is held here for any of them, so none can be set against the file total. "
+                         + "That is a limit of what is held here, not a clean result. The file's own total for each year is shown when you load that year above.";
+            }
             _years = years; _loaded = true; _loadedFor = Slug;
             await Data.LogAsync($"budget {Slug} built", sw.ElapsedMilliseconds, $"({_years.Count} years, {_years.Sum(y => y.Lines.Count)} lines)");
         }
@@ -128,7 +136,7 @@
         string where = pool switch
         {
             "exploratory" => "A worked example: not in the pre-registered test.",
-            "stage1" => "In the first group of the pre-registered test.",
+            "stage1" or "confirmatory" => "In the first group of the pre-registered test.",   // the budget files name the first group "confirmatory"
             "stage2" => "In the second group (the cities) of the pre-registered test.",
             "stage2b" => "In the third group (four more cities) of the pre-registered test.",
             "stage2c" => "In the fourth group (nine more councils) of the pre-registered test.",

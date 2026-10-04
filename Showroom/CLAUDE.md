@@ -1,6 +1,6 @@
 # Showroom — CLAUDE.md (showroom-owner)
 
-**Last verified:** 2026-10-04 (council scanner: by financial year; n-squared quirk, care caption, Wokingham social care view)
+**Last verified:** 2026-10-04 (council scanner: 24 councils incl. Surrey/Essex/Hertfordshire; by financial year; Wokingham social care view)
 
 Blazor WebAssembly app at `C:\Users\dongy\AboutUs\Showroom`, published under `/tools` on the public
 site (`AboutUs` repo, base href `/tools/`). Every tool runs entirely client-side: no server, no
@@ -132,17 +132,20 @@ Paste/drop text; `ProseEngine.MineText` mines it (page chunks+yields at ~200k ch
 HoloDb `ProseStore` + AlgFormer plausibility (None / Prism's checkpoint / train on the visitor's text, ~0.22-0.24 ms/char/epoch), chord`data-cat="holodb-algformer"`. `ProseEngine.Plausibility` has no reset (page re-mines a fresh engine). Cap 64MB.
 
 ## Council Spending Scanner: `Pages/CouncilSpending.razor` (routes `/council-spending`, `/council-spending/{slug}`)
-Built on the virtual-customer's PHONE-SIZED export (`VirtualCustomer\web_export`; SPEC_FOR_SHOWROOM.md items 9-26). Twenty-one councils, no HoloDb,
+Built on the virtual-customer's PHONE-SIZED export (`VirtualCustomer\web_export`; SPEC_FOR_SHOWROOM.md items 9-26). Twenty-four councils, no HoloDb,
 no engine in the browser. Public-audience, mobile-first, not editorial: audit terms, plain prose + counts + GBP, OGL credit, never a cause.
-- **Adding a council** (done for 9 on 2026-10-04): a line in `CouncilWebData.Councils` (full name EXACTLY as the profile's, short name), a `("key","slug")` pair in the builder's `Slug()` (else it throws
-  "no slug for X"), `CouncilTerms.NoScheduleA/NoScheduleD` from the exceptions (A or D rows = 0 and the profile says empty by construction; `NoDByNumbering` when numbers exist but never span payees), then re-run the builder.
+- **Adding a council** (done for 9, then Surrey/Essex/Hertfordshire, 2026-10-04): a line in `CouncilWebData.Councils` (full name EXACTLY as the profile's, short name), a `("key","slug")` pair in the builder's `TrySlug()` (else it is
+  "NOT SHIPPED"), `CouncilTerms.NoScheduleA/NoScheduleD` from the exceptions (A or D rows = 0 and the profile says empty by construction; `NoDByNumbering` when numbers exist but never span payees; `NoTransactionNumber` when
+  none is published: also makes `CheckCannotRun` say twins/within-transaction cannot run), `CouncilTerms.CannotCheck(slug)` (the "What cannot be checked" list on the page), `YearNote` (Hertfordshire's April 2025 threshold
+  caption per year), then re-run the builder. Say plainly where a check cannot run: never an empty list that reads as clean. `budget_units.csv` Pool `confirmatory` = the first test group (it was never `stage1`); a council
+  with units but none eligible gets the "cannot run, no government figure held here" line from `BudgetPanel`. Builder's `InternalSentence`/`Reword` also drop `XlsReader`/`FileDuplication` sentences, rename `rawcheck`.
   New cross files go in the builder's `cross/` list and a row in `BudgetTestPanel`'s set list. Profile prose needs no page code (flagged = quirk opening in capitals), but read the builder's REWORDED/HELD BACK
   output and grep profiles.json for working-file words (`prep`, "Prepare step" are reworded to "the scanner" in `Reword`; `XlsxReader` sentences dropped).
 - **Load by financial year** (user: "I preferred it when I could choose what to load"). `LoadPicker` = tick-list of financial years (April-March; "No readable date" last), Select all/Clear, size line before any fetch, "Choose months" per year,
   ONE Load with progress + Cancel (keeps finished years). `YearBlock` per loaded unit: totals, `GapBars` (whole years only), schedule/bucket lists; top of view: per-year totals + `GapSummary`. `MonthScan` keeps raw bytes only for recent
   years (`RawBudget` 40 MB, LRU); an evicted year re-inflates via `EnsureRawAsync` (0.04-0.85 s) before a list opens (`NeedRaw`).
-- **Data** (`website-data/council-web`, ~312 MB, 4,392 files, largest 1.2 MB; `AboutUs\CouncilWebBuilder`, `dotnet run -c Release --project CouncilWebBuilder`, about 70-90 s, writes straight into
-  the data repo (arg 1 / `COUNCIL_WEB_OUT`; `COUNCIL_PART_CAP_MB` tests the split), a run only overwrites, so delete a stale file BY NAME (the 6 old `*.exceptions.2.csv.gz` went 2026-10-04); ships only councils with a `web_export/<slug>` folder (Surrey is in the engine, not exported: "NOT SHIPPED"); fails above 50 MB/file;
+- **Data** (`website-data/council-web`, 448 MB, 5,396 files, largest 1.2 MB (website-data whole tree 652 MB incl. old+new runtime, .git 473 MB; Pages cap 1 GB); `AboutUs\CouncilWebBuilder`, `dotnet run -c Release --project CouncilWebBuilder`, about 70-90 s, writes straight into
+  the data repo (arg 1 / `COUNCIL_WEB_OUT`; `COUNCIL_PART_CAP_MB` tests the split), a run only overwrites, so delete a stale file BY NAME (the 6 old `*.exceptions.2.csv.gz` went 2026-10-04); ships only councils with a `web_export/<slug>` folder (24 now; a council without one prints "NOT SHIPPED"); fails above 50 MB/file;
   second arg `profiles` rewrites only profiles.json.gz. Then commit + push website-data, nothing else): `index.csv`, per-council `months.csv` (exception columns describe the slim files) +
   `years.csv` (`Year,Months,Parts,TxRows,Net,ExceptionRows,ExceptionBytes,ExceptionGzipBytes`), **exception files in ONE slim format**: `<slug>/<YYYY-MM>.exceptions.csv.gz` (a month) and
   `<slug>/fy-<YYYY-YY>.exceptions[.N].csv.gz` (a year bundle, cut into parts of whole months only above 12 MB raw: none are today; largest year 1.2 MB gz / 11 MB raw). Format: a `@2022-11` marker
@@ -160,7 +163,9 @@ no engine in the browser. Public-audience, mobile-first, not editorial: audit te
   and source buttons are PLAIN markup with state on the row (a component per row cost ~5 ms each on a phone).
 - **Source rows**: the tap fetches that month's transaction slice (all parts), finds the group's transaction numbers (cap 80; a repeated-payment group narrows to its supplier), lists up to 200 lines.
 - **Measured** (headless Edge, CPU 6x, 4 Mbps, 100 ms RTT): `scripts/council-load-perf.mjs <dist> 6 4096 100 <data> [big|select|cancel|care]` (`care` = Wokingham quirks, care captions, social care panel), `council-perf.mjs`,
-  `gap-perf.mjs`. 2026-10-04 after the social care work, Load wall / worst stall: Cornwall 2025-26 5.4 s / 207 ms; Leeds 2022-23 6.4 s / 194 (earlier 4.9 / 79: noise or a regression, re-check); Sheffield 4.3 s / 63;
+  `gap-perf.mjs`. `ONLY=leeds` limits `big` to some councils; scenario `new` prints the Surrey/Essex/Hertfordshire notes. **Leeds 2022-23 Load is NOISE, not a regression** (3 interleaved passes, old vs new dist, same data): old 8.6/7.3/8.6 s, new 8.5/9.2/7.7 s,
+  fetch-wait constant 2.54 s, inflate+scan swings 4.3-6.1 s run to run; the machine ran ~1.5-2 s slower that evening than at 4.9/6.4, so compare only interleaved passes of both builds, never a number from another hour.
+  2026-10-04 Load wall / worst stall: Surrey 2025-26 5.4 s / 145 ms; Essex 7.5 s / 97; Hertfordshire 1.6 s / 0; earlier: Cornwall 2025-26 5.4 s / 207 ms; Sheffield 4.3 s / 63;
   Wokingham 2020-21 0.8 s / 57; Wokingham two years 1.9 s / 98. Social care panel first open (4 files, 50 KB gz) 1.3 s / 355 ms; year switch 0.3 s. Select all (earlier): Leeds 12 yrs 17.7 s / 131; Sheffield 16.1 s / 228;
   RSS ~1.15-1.3 GB. Open a list 27-300 ms; source rows 1.6-2.4 s. Page open 0.4-2 s, boot 1.0-1.4 s.
 - Gotchas: `--` in csproj XML comments breaks load; BudgetPanel's `<text>` trick fails in code blocks; CSS is one scoped file using `.cs ::deep`; lists with stateful children need `@key`.

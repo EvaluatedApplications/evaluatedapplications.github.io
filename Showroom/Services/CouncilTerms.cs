@@ -154,11 +154,54 @@ public static class CouncilTerms
     /// <summary>Schedules that cannot run for a council because its file has no VAT split (A) or no transaction reference (D). "Not available", never "clean".</summary>
     public static readonly HashSet<string> NoScheduleA = new()
         { "reading", "bracknellforest", "westberkshire", "rbwm", "birmingham", "leeds", "sheffield", "bradford", "liverpool", "bristol",
-          "wakefield", "coventry", "durham", "kirklees", "leicester", "cornwall", "nottingham", "wirral", "newcastle" };
-    // durham, kirklees and newcastle: every transaction number sits against one payee (or one row), so the shared-number check is empty by construction in the profiles
-    public static readonly HashSet<string> NoScheduleD = new() { "birmingham", "westberkshire", "sheffield", "leeds", "durham", "kirklees", "newcastle" };
+          "wakefield", "coventry", "durham", "kirklees", "leicester", "cornwall", "nottingham", "wirral", "newcastle", "surrey", "essex", "hertfordshire" };
+    // durham, kirklees, newcastle and hertfordshire: every transaction number sits against one payee on one date, so the shared-number check is empty by construction in the profiles
+    public static readonly HashSet<string> NoScheduleD = new() { "birmingham", "westberkshire", "sheffield", "leeds", "durham", "kirklees", "newcastle", "surrey", "essex", "hertfordshire" };
     /// <summary>The members of NoScheduleD that do publish a number: the shared-number check is empty because of how the numbers are given, not because they are missing.</summary>
-    public static readonly HashSet<string> NoDByNumbering = new() { "durham", "kirklees", "newcastle" };
+    public static readonly HashSet<string> NoDByNumbering = new() { "durham", "kirklees", "newcastle", "hertfordshire" };
+    /// <summary>Councils whose file publishes no transaction number at all (the scanner gives each row a placeholder "(no number published) N"): every check that keys on a transaction number cannot run.</summary>
+    public static readonly HashSet<string> NoTransactionNumber = new() { "surrey", "essex" };
+
+    /// <summary>The reason a cross-council check cannot run for this council, or null when it can. Said on the page instead of "no rows", which would read as a clean result.</summary>
+    public static string? CheckCannotRun(string slug, string checkId) =>
+        NoTransactionNumber.Contains(slug) && checkId is "twins" or "withintxn"
+            ? "This check cannot run for this council: its file publishes no transaction number, and this check compares transaction numbers. That is a limit of the file, not a clean result."
+            : null;
+
+    /// <summary>Plain statements, shown at the top of a council's page, of what cannot be checked for it and why. Nothing here says anything about the payments themselves.</summary>
+    public static List<string> CannotCheck(string slug)
+    {
+        var l = new List<string>();
+        if (NoTransactionNumber.Contains(slug))
+        {
+            l.Add("The invoice-amount check and the shared-transaction-number check cannot run: the file publishes no transaction number, so one transaction's payments cannot be added up or compared. They are listed under each year as \"not available\", not as clean.");
+            l.Add("Two cross-council checks need a transaction number and cannot run either: transactions published twice under two numbers, and the same line repeated inside one transaction.");
+            l.Add("The repeated-payment check is the only repeat test that can run, and it has no transaction number to tell two payments apart: a group is the same payee, amount and description on the same date.");
+        }
+        else if (slug == "hertfordshire")
+        {
+            l.Add("The invoice-amount check cannot run: the file has one amount column (Net Amount), so there is no stated invoice or gross amount to compare the payments with.");
+            l.Add("The shared-transaction-number check finds nothing by construction: the file gives each transaction number to one payee on one date. That is a result of how the numbers are given, not a sign the check was clean.");
+        }
+        if (slug is "surrey" or "essex" or "hertfordshire")
+            l.Add("The declared-spend comparison cannot run: no government Revenue Outturn figure is held here for this council, so no year is set against the file total, and this council is in none of the groups of the pre-registered test.");
+        if (slug is "surrey" or "essex" or "hertfordshire")
+            l.Add(slug == "essex"
+                ? "Lines whose payee is a pooled label (one label standing for many people, such as a foster care payment) are shown by the scanner as \"Redacted (pooled label): <label>\" and are left out of every check. The checks say nothing about those lines."
+                : "Lines whose payee the council redacts are left out of every check and only counted. The checks say nothing about those lines.");
+        return l;
+    }
+
+    /// <summary>A caption for one financial year of a council when its publication changes inside or at the edge of the year; null otherwise.</summary>
+    public static string? YearNote(string slug, string year)
+    {
+        if (slug != "hertfordshire" || year.Length != 7 || year[4] != '-') return null;   // "undated" is also seven characters
+        return string.CompareOrdinal(year, "2025-26") >= 0
+            ? "From April 2025 this council's file lists payments over £500; before that it listed payments over £250. Counts and totals from this year are not comparable with earlier years."
+            : string.CompareOrdinal(year, "2024-25") == 0
+                ? "This council's file lists payments over £250 up to March 2025; from April 2025 it lists payments over £500. Counts and totals are not comparable with later years."
+                : "This council's file lists payments over £250; from April 2025 it lists payments over £500. Counts and totals are not comparable with later years.";
+    }
 
     public const string DiscrepancyNote =
         "A discrepancy here is a fact about the published numbers, not proof of an error or wrongdoing. Councils publish corrections, instalments, and VAT treatments that can look like a mismatch until explained. If you intend to raise this with the council or its auditor, ask for the records and the reason, not for an admission.";
