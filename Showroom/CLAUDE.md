@@ -1,6 +1,6 @@
 # Showroom — CLAUDE.md (showroom-owner)
 
-**Last verified:** 2026-10-04 (r3,970 window fix; council scanner: 25 councils incl. Stockport; by financial year; Wokingham social care view)
+**Last verified:** 2026-10-04 (r3,970 window fix; council scanner: 26 councils incl. Stockport and City of York; by financial year; Wokingham social care view)
 
 Blazor WebAssembly app at `C:\Users\dongy\AboutUs\Showroom`, published under `/tools` on the public
 site (`AboutUs` repo, base href `/tools/`). Every tool runs entirely client-side: no server, no
@@ -137,11 +137,12 @@ Paste/drop text; `ProseEngine.MineText` mines it (page chunks+yields at ~200k ch
 HoloDb `ProseStore` + AlgFormer plausibility (None / Prism's checkpoint / train on the visitor's text, ~0.22-0.24 ms/char/epoch), chord`data-cat="holodb-algformer"`. `ProseEngine.Plausibility` has no reset (page re-mines a fresh engine). Cap 64MB.
 
 ## Council Spending Scanner: `Pages/CouncilSpending.razor` (routes `/council-spending`, `/council-spending/{slug}`)
-Built on the virtual-customer's PHONE-SIZED export (`VirtualCustomer\web_export`; SPEC_FOR_SHOWROOM.md items 9-26). Twenty-five councils, no HoloDb,
+Built on the virtual-customer's PHONE-SIZED export (`VirtualCustomer\web_export`; SPEC_FOR_SHOWROOM.md items 9-26). Twenty-six councils, no HoloDb,
 no engine in the browser. Public-audience, mobile-first, not editorial: audit terms, plain prose + counts + GBP, OGL credit, never a cause.
 - **Stockport** (added 2026-10-04, 115 months): a transaction number only from April 2025 (17 months) and 66 of 115 files carry an invoice date only, so it is NOT in `NoTransactionNumber` (twins/within-transaction
   DO run on the numbered months): `CouncilTerms.HasNumber`/`NotAvailable(slug, sch, year)` word A (one amount column) and D (no number before April 2025, nothing found after) per year; `YearNote` + `CannotCheck` carry the
   caveats; in no budget group (no Revenue Outturn held). A limit that depends on the year needs this per-year shape, not the all-or-nothing sets.
+- **City of York** (added 2026-10-04, 15 annual files, 1,273,453 rows): Schedule D is 46,498 transactions but it reads the NUMBERING, not payments (2011/12-2017/18 payment-run references shared by unrelated payees; 2024/25 "202425CRCR" numbers each shared by two different payees), so York is NOT in NoScheduleD; CouncilTerms.YorkSharedNumbering/NumberingNote(slug, sch, year) print that plainly above the D block for those 8 years (YearBlock), CannotCheck + YearNote carry row-count non-comparability, redaction share (0.9-26.0%), no VAT split (in NoScheduleA). No budget group (no Revenue Outturn held; udget_units.csv Note says so).
 - **Adding a council** (done for 9, then Surrey/Essex/Hertfordshire, 2026-10-04): a line in `CouncilWebData.Councils` (full name EXACTLY as the profile's, short name), a `("key","slug")` pair in the builder's `TrySlug()` (else it is
   "NOT SHIPPED"), `CouncilTerms.NoScheduleA/NoScheduleD` from the exceptions (A or D rows = 0 and the profile says empty by construction; `NoDByNumbering` when numbers exist but never span payees; `NoTransactionNumber` when
   none is published: also makes `CheckCannotRun` say twins/within-transaction cannot run), `CouncilTerms.CannotCheck(slug)` (the "What cannot be checked" list on the page), `YearNote` (Hertfordshire's April 2025 threshold
@@ -153,7 +154,7 @@ no engine in the browser. Public-audience, mobile-first, not editorial: audit te
   ONE Load with progress + Cancel (keeps finished years). `YearBlock` per loaded unit: totals, `GapBars` (whole years only), schedule/bucket lists; top of view: per-year totals + `GapSummary`. `MonthScan` keeps raw bytes only for recent
   years (`RawBudget` 40 MB, LRU); an evicted year re-inflates via `EnsureRawAsync` (0.04-0.85 s) before a list opens (`NeedRaw`).
 - **Data** (`website-data/council-web`, 448 MB, 5,396 files, largest 1.2 MB (website-data whole tree 652 MB incl. old+new runtime, .git 473 MB; Pages cap 1 GB); `AboutUs\CouncilWebBuilder`, `dotnet run -c Release --project CouncilWebBuilder`, about 70-90 s, writes straight into
-  the data repo (arg 1 / `COUNCIL_WEB_OUT`; `COUNCIL_PART_CAP_MB` tests the split), a run only overwrites, so delete a stale file BY NAME (the 6 old `*.exceptions.2.csv.gz` went 2026-10-04); ships only councils with a `web_export/<slug>` folder (25 now; a council without one prints "NOT SHIPPED"; City of York has none yet); fails above 50 MB/file;
+  the data repo (arg 1 / `COUNCIL_WEB_OUT`; `COUNCIL_PART_CAP_MB` tests the split), a run only overwrites, so delete a stale file BY NAME (the 6 old `*.exceptions.2.csv.gz` went 2026-10-04); ships only councils with a `web_export/<slug>` folder (26 now; a council without one prints "NOT SHIPPED"); fails above 50 MB/file;
   second arg `profiles` rewrites only profiles.json.gz. Then commit + push website-data, nothing else): `index.csv`, per-council `months.csv` (exception columns describe the slim files) +
   `years.csv` (`Year,Months,Parts,TxRows,Net,ExceptionRows,ExceptionBytes,ExceptionGzipBytes`), **exception files in ONE slim format**: `<slug>/<YYYY-MM>.exceptions.csv.gz` (a month) and
   `<slug>/fy-<YYYY-YY>.exceptions[.N].csv.gz` (a year bundle, cut into parts of whole months only above 12 MB raw: none are today; largest year 1.2 MB gz / 11 MB raw). Format: a `@2022-11` marker

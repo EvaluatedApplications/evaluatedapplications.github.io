@@ -347,7 +347,7 @@ static string? TrySlug(string name)
         ("merton", "merton"), ("reading", "reading"), ("birmingham", "birmingham"), ("leeds", "leeds"), ("sheffield", "sheffield"),
         ("bradford", "bradford"), ("liverpool", "liverpool"), ("bristol", "bristol"), ("wakefield", "wakefield"), ("coventry", "coventry"),
         ("durham", "durham"), ("kirklees", "kirklees"), ("leicester", "leicester"), ("cornwall", "cornwall"), ("nottingham", "nottingham"),
-        ("wirral", "wirral"), ("newcastle", "newcastle"), ("surrey", "surrey"), ("essex", "essex"), ("hertfordshire", "hertfordshire"), ("stockport", "stockport") })
+        ("wirral", "wirral"), ("newcastle", "newcastle"), ("surrey", "surrey"), ("essex", "essex"), ("hertfordshire", "hertfordshire"), ("stockport", "stockport"), ("york", "york") })
         if (n.Contains(key)) return slug;
     return null;
 }
