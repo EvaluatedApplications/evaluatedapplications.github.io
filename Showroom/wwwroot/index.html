@@ -120,6 +120,12 @@
       window.copyText = function (text) {
         return navigator.clipboard.writeText(text);
       };
+      // Scroll an element into view by id (Council Spending Scanner's request tray). The page's base href is
+      // /tools/, so a bare "#id" link would navigate away instead of scrolling; this does not.
+      window.scrollToId = function (id) {
+        var el = document.getElementById(id);
+        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      };
 
       // Prism's per-token tone synth (2026-09-13, rewritten inharmonic 2026-09-14). Each generated
       // token is rendered as a short note built DIRECTLY from that token's own phasor face: 128

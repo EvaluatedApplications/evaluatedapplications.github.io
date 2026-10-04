@@ -1,6 +1,8 @@
 @using System.Diagnostics
 @using Showroom.Services
 @inject CouncilWebData Data
+@inject FoiTray Tray
+@implements IDisposable
 
 @* One check of the Council Spending Scanner. Closed until tapped; its file is fetched on the first tap only, parsed in time slices,
    and shown fifteen lines at a time, so the page never builds a long list the visitor did not ask for. *@
@@ -23,7 +25,24 @@
                 <ol class="lines">
                     @foreach (var r in _rows.Take(_shown))
                     {
-                        <li><div class="l1">@r.Line1</div><div class="l2">@r.Line2</div></li>
+                        <li @key="r">
+                            <div class="l1">@r.Line1</div><div class="l2">@r.Line2</div>
+                            @if (r.Foi is not null || r.Src is not null)
+                            {
+                                bool on = r.Key is not null && Tray.Has(r.Key); bool src = r.Source?.Open == true;
+                                <div class="acts">
+                                    @if (r.Foi is not null)
+                                    {
+                                        <button type="button" class="tick @(on ? "on" : "")" aria-pressed="@(on ? "true" : "false")" @onclick="() => Tick(r)">@(on ? "In your request (tap to remove)" : "Add to request")</button>
+                                    }
+                                    @if (r.Src is not null)
+                                    {
+                                        <button type="button" class="srcbtn" aria-expanded="@(src ? "true" : "false")" @onclick="() => ToggleSource(r)">@(src ? "Hide the source rows" : "See the source rows")</button>
+                                    }
+                                </div>
+                                @if (src) { <SourceBlocks State="r.Source!" /> }
+                            }
+                        </li>
                     }
                 </ol>
                 @if (_rows.Count > _shown)
@@ -31,6 +50,7 @@
                     <button type="button" class="more" @onclick="More">Show @Math.Min(15, _rows.Count - _shown) more (@(_rows.Count - _shown) not shown)</button>
                 }
             }
+            @if (_full) { <p class="err" role="status">Your request already holds @FoiTray.MaxItems items; remove some first.</p> }
             <p class="caption">@Def.Caption</p>
         }
     }
@@ -67,4 +87,33 @@
     }
 
     void More() => _shown += 15;
+
+    // Plain buttons with their state on the row (a component per row is slower to draw on a phone); see MonthView for the same pattern.
+    bool _self, _full;
+    protected override void OnInitialized() => Tray.ItemsChanged += OnTray;
+    public void Dispose() => Tray.ItemsChanged -= OnTray;
+    void OnTray() { if (!_self && _open && _loaded) InvokeAsync(StateHasChanged); }
+
+    void Tick(CheckRow r)
+    {
+        _full = false; _self = true;
+        try
+        {
+            if (Tray.Has(r.Key!)) Tray.Remove(r.Key!);
+            else
+            {
+                var it = r.Foi!();
+                it.Key = r.Key!; it.Section = Def.Title;
+                if (!Tray.Add(it)) _full = true;
+            }
+        }
+        finally { _self = false; }
+    }
+
+    async Task ToggleSource(CheckRow r)
+    {
+        var s = r.Source ??= new SourceState();
+        s.Open = !s.Open;
+        if (s.Open && !s.Loaded && !s.Busy) await s.LoadAsync(Data, r.Src!(), () => InvokeAsync(StateHasChanged));
+    }
 }

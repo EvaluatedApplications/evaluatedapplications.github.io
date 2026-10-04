@@ -17,7 +17,7 @@
         <h1>Council Spending Scanner</h1>
         <p class="lede">Councils in England publish every payment over a set amount under the Local Government Transparency Code. This tool reads twelve councils' published files, prepared ahead of time, and shows where the
             published numbers do not add up on their own terms. Each check is one stated rule, run the same way for every council. It never says why a number looks the way it does; it shows the numbers and leaves the
-            council to explain.</p>
+            council to explain. If you want the council's records, tap "Add to request" under any item and build a letter at the bottom of the page.</p>
     </header>
     <p class="caveat"><strong>@DiscrepancyNote</strong></p>
 
@@ -62,6 +62,8 @@
         @foreach (var d in CouncilChecksWeb.All) { <CheckPanel Def="d" Slug="@null" /> }
         <BudgetTestPanel />
     </section>
+
+    <FoiTrayPanel />
 }
 else if (_notFound)
 {
@@ -131,6 +133,8 @@ else
 
         <BudgetPanel Slug="@Slug" />
         <BudgetTestPanel />
+
+        <FoiTrayPanel />
 
         <p class="licence">@OglCredit</p>
     }

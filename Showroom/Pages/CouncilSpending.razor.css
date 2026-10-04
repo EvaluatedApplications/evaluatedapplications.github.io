@@ -86,8 +86,30 @@
 .cs ::deep table.tests th, .cs ::deep table.tests td { text-align: left; padding: 0.4rem 0.4rem; border-top: 1px solid var(--border-2); vertical-align: top; }
 .cs ::deep table.tests th { color: var(--ink-faint); font-weight: 600; }
 
+/* per-item actions (add to request, see the source rows) and the request tray */
+.cs ::deep .acts { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; margin-top: 0.45rem; }
+.cs ::deep .tick, .cs ::deep .srcbtn { background: var(--bg-2); border: 1px solid var(--border-2); border-radius: 8px; padding: 0.5rem 0.8rem; color: var(--ink-soft); cursor: pointer; min-height: 44px; font-size: 0.86rem; }
+.cs ::deep .tick:hover, .cs ::deep .srcbtn:hover { border-color: var(--accent); }
+.cs ::deep .tick.on { border-color: var(--accent); color: var(--ink); background: var(--surface-2); }
+.cs ::deep .reading { margin-top: 0.4rem; }
+.cs ::deep .reading .tag { text-transform: none; font-weight: 600; letter-spacing: 0; margin-right: 0.4rem; white-space: normal; color: var(--ink-soft); }
+.cs ::deep .src { margin-top: 0.3rem; }
+.cs ::deep .srcblock { border-left: 2px solid var(--border-2); padding-left: 0.7rem; margin: 0.4rem 0; }
+.cs ::deep .foi { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 0.2rem 0.9rem 0.9rem; margin: 1.2rem 0; scroll-margin-top: 1rem; }
+.cs ::deep .foi-fields { display: flex; flex-direction: column; gap: 0.7rem; margin: 0.4rem 0 0.8rem; }
+.cs ::deep .foi-fields label { display: flex; flex-direction: column; gap: 0.25rem; font-size: 0.86rem; color: var(--ink-soft); }
+.cs ::deep .foi-fields label.chk { flex-direction: row; align-items: center; gap: 0.5rem; min-height: 44px; }
+.cs ::deep .foi-fields input[type="text"], .cs ::deep .foi-fields input[type="email"] { background: var(--bg-2); border: 1px solid var(--border-2); border-radius: 8px; padding: 0.6rem 0.7rem; color: var(--ink); font-size: 1rem; min-height: 44px; box-sizing: border-box; width: 100%; }
+.cs ::deep .foi-letter { width: 100%; box-sizing: border-box; background: var(--bg-2); border: 1px solid var(--border-2); border-radius: 10px; padding: 0.8rem 0.9rem; color: var(--ink); font-family: var(--mono); font-size: 0.8rem; line-height: 1.5; resize: vertical; }
+.cs ::deep .foi-buttons { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.6rem; }
+.cs ::deep .foi-buttons .go { background: var(--accent); color: #fff; border: none; border-radius: 8px; padding: 0.55rem 1rem; min-height: 44px; font-weight: 650; cursor: pointer; }
+.cs ::deep .foi-buttons button:disabled { opacity: 0.5; cursor: not-allowed; }
+.cs ::deep .foi-fab { position: fixed; right: 12px; bottom: calc(12px + env(safe-area-inset-bottom, 0px)); z-index: 20; background: var(--accent); color: #fff; border: none; border-radius: 999px; padding: 0.7rem 1.1rem; min-height: 44px; font-weight: 700; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5); cursor: pointer; }
+
 @media (min-width: 641px) {
     .cs.room { padding: 3rem 24px 4rem; }
+    .cs ::deep .foi-fields { flex-direction: row; flex-wrap: wrap; align-items: flex-end; }
+    .cs ::deep .foi-fields input[type="text"], .cs ::deep .foi-fields input[type="email"] { min-width: 240px; width: auto; }
     .cs ::deep .lede { font-size: 1.08rem; }
     .cs ::deep .picker-grid { grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
     .cs ::deep .wordpanel dl { grid-template-columns: auto 1fr; }

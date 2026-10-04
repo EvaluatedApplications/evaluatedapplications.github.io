@@ -1,0 +1,158 @@
+@using Showroom.Services
+@using static Showroom.Services.CouncilTerms
+@inject FoiTray Tray
+@inject CouncilWebData Data
+@inject IJSRuntime JS
+@implements IDisposable
+
+@* The request tray and the letter. Closed until opened; the letter is built only while it is open, from the items ticked for one council.
+   It states facts and asks for the records and the reason, nothing else. It is never sent anywhere: the visitor copies it or saves it. *@
+@if (Tray.Count > 0 && !_open)
+{
+    <button type="button" class="foi-fab" @onclick="OpenFromButton">Your request (@Tray.Count)</button>
+}
+<section class="foi" id="foi-tray">
+    <button type="button" class="check-head" @onclick="Toggle" aria-expanded="@(_open ? "true" : "false")">
+        <span class="arrow" aria-hidden="true">@(_open ? "▾" : "▸")</span>
+        <h2>Build a records request</h2>
+        <span class="count">@(Tray.Count == 0 ? "nothing added yet" : Tray.Count + " added")</span>
+    </button>
+    @if (_open)
+    {
+        <p class="plain">Tap "Add to request" under any flagged item on these pages. The tray makes one letter for each council, from the items you added to it. The letter states only what the published numbers show and asks the council for the records it holds and the reason. It offers no explanation and asks nothing that suggests an answer. Nothing is sent: you copy it or save it, then send it yourself. Your tray lives only while this page stays open.</p>
+        @if (Tray.Count == 0)
+        {
+            <p class="hint">Nothing added yet.</p>
+        }
+        else
+        {
+            <label class="pick">Letter to
+                <select @onchange="PickCouncil">
+                    @foreach (var c in Present)
+                    {
+                        <option value="@c.Slug" selected="@(c.Slug == _slug)">@CouncilWebData.NameOf(c.Slug) (@c.Count item@(c.Count == 1 ? "" : "s"))</option>
+                    }
+                </select>
+            </label>
+
+            <h3>Items for this letter</h3>
+            <ol class="lines">
+                @foreach (var it in Mine)
+                {
+                    <li @key="it.Key">
+                        <div class="l1">@it.Fact</div>
+                        <div class="acts"><button type="button" class="srcbtn" @onclick="() => Tray.Remove(it.Key)">Remove</button></div>
+                    </li>
+                }
+            </ol>
+            @if (Mine.Count > FoiTray.MaxPerLetter)
+            {
+                <p class="err">A council cannot sensibly answer more than @FoiTray.MaxPerLetter items in one request. The letter holds the first @FoiTray.MaxPerLetter; @(Mine.Count - FoiTray.MaxPerLetter) are left out of it. Remove some, or send the rest as a second request.</p>
+            }
+
+            <h3>Your details</h3>
+            <p class="plain">A Freedom of Information request needs your real name. It stays in this page and goes into the letter text only.</p>
+            <div class="foi-fields">
+                <label>Your name <input type="text" value="@Tray.Name" autocomplete="name" placeholder="Jane Smith" @onchange="e => SetName(e.Value?.ToString() ?? string.Empty)" /></label>
+                <label class="chk"><input type="checkbox" checked="@Tray.Electronic" @onchange="e => SetElectronic(e.Value is true)" /> I am happy to receive the reply electronically</label>
+                @if (Tray.Electronic)
+                {
+                    <label>Your email <input type="email" value="@Tray.ReplyEmail" autocomplete="email" placeholder="jane@example.com" @onchange="e => SetEmail(e.Value?.ToString() ?? string.Empty)" /></label>
+                }
+            </div>
+
+            <h3>The letter</h3>
+            @if (_profile?.Foi is { } addr)
+            {
+                <p class="plain">Send it to <a href="mailto:@addr">@addr</a>, the Freedom of Information address on the council's own page when this tool was last checked.</p>
+            }
+            else
+            {
+                <p class="plain">This tool has not verified a Freedom of Information address for this council, so the letter leaves a placeholder. Find the address on the council's own website before you send it.</p>
+            }
+            <textarea class="foi-letter" rows="20" readonly aria-label="The letter">@Letter()</textarea>
+            <div class="foi-buttons">
+                <button type="button" class="go" @onclick="Copy" disabled="@(Blank)">Copy the letter</button>
+                <button type="button" class="more" @onclick="Download" disabled="@(Blank)">Save as a text file</button>
+                <button type="button" class="more" @onclick="() => Tray.ClearCouncil(_slug)">Clear this council's items</button>
+            </div>
+            @if (Blank) { <p class="hint">Enter your name to copy or save the letter.</p> }
+            @if (_note is not null) { <p class="hint" role="status">@_note</p> }
+        }
+    }
+</section>
+
+@code {
+    bool _open;
+    string _slug = "", _profileSlug = "";
+    CouncilProfile? _profile;
+    string? _note;
+    int _letterVersion = -1; string _letterSlug = "", _letter = "";
+
+    bool Blank => string.IsNullOrWhiteSpace(Tray.Name);
+    List<FoiItem> Mine => Tray.Items.Where(i => i.Slug == _slug).ToList();
+    IEnumerable<(string Slug, int Count)> Present =>
+        CouncilWebData.Councils.Select(c => (c.Slug, Count: Tray.Items.Count(i => i.Slug == c.Slug))).Where(x => x.Count > 0);
+
+    protected override void OnInitialized() => Tray.Changed += OnChanged;
+    public void Dispose() => Tray.Changed -= OnChanged;
+
+    void OnChanged() => _ = InvokeAsync(async () => { if (_open) await EnsureCouncil(); StateHasChanged(); });
+
+    async Task EnsureCouncil()
+    {
+        var slugs = Tray.Items.Select(i => i.Slug).Distinct().ToHashSet();
+        if (slugs.Count == 0) { _slug = ""; return; }
+        if (!slugs.Contains(_slug)) _slug = CouncilWebData.Councils.Select(c => c.Slug).FirstOrDefault(slugs.Contains) ?? slugs.First();
+        if (_profileSlug != _slug)
+        {
+            _profileSlug = _slug;
+            try { _profile = await Data.ProfileAsync(_slug); } catch { _profile = null; }
+        }
+    }
+
+    async Task Toggle()
+    {
+        _open = !_open;
+        if (_open) await EnsureCouncil();
+    }
+
+    async Task OpenFromButton()
+    {
+        _open = true;
+        await EnsureCouncil();
+        StateHasChanged();
+        await Task.Delay(30);   // let the panel draw before scrolling to it
+        await JS.InvokeVoidAsync("scrollToId", "foi-tray");
+    }
+
+    async Task PickCouncil(ChangeEventArgs e)
+    {
+        _slug = e.Value?.ToString() ?? _slug;
+        _note = null;
+        await EnsureCouncil();
+    }
+
+    void SetName(string v) { Tray.Name = v; Tray.Touch(); }
+    void SetEmail(string v) { Tray.ReplyEmail = v; Tray.Touch(); }
+    void SetElectronic(bool v) { Tray.Electronic = v; Tray.Touch(); }
+
+    // rebuilt only when the tray, the details or the council changed
+    string Letter()
+    {
+        if (_letterVersion != Tray.Version || _letterSlug != _slug)
+        {
+            _letter = FoiFacts.Letter(CouncilWebData.NameOf(_slug), _profile?.Foi, Mine, Tray.Name, Tray.ReplyEmail, Tray.Electronic, DateTime.Today, out _);
+            _letterVersion = Tray.Version; _letterSlug = _slug;
+        }
+        return _letter;
+    }
+
+    async Task Copy()
+    {
+        try { await JS.InvokeVoidAsync("copyText", Letter()); _note = "Copied. Paste it into an email to the council."; }
+        catch { _note = "Your browser would not copy it. Select the text in the box and copy it by hand."; }
+    }
+
+    async Task Download() => await JS.InvokeVoidAsync("analystDownload", $"foi-request-{_slug}.txt", Letter(), "text/plain");
+}

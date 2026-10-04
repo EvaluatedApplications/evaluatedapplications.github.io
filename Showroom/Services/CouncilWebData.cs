@@ -10,7 +10,7 @@ namespace Showroom.Services;
 public sealed record CouncilIndexRow(string Slug, int Months, int TxRows, int ExceptionRows, long TotalGzipBytes);
 
 /// <summary>One line of a council's months.csv. A month is the month of each ROW'S OWN pay date, not the file tag.</summary>
-public sealed record MonthRow(string Month, int TxRows, decimal Net, int ExceptionParts, int ExceptionRows, long ExceptionGzipBytes);
+public sealed record MonthRow(string Month, int TxRows, decimal Net, int ExceptionParts, int ExceptionRows, long ExceptionGzipBytes, int Parts = 1);
 
 /// <summary>A council's own profile text, written by the virtual-customer and carried unchanged (see CouncilWebBuilder).</summary>
 public sealed record CouncilProfile(string Slug, string Name, string Page, string HowTo, IReadOnlyList<string> Quirks,
@@ -119,10 +119,33 @@ public sealed class CouncilWebData
         if (_months.TryGetValue(slug, out var m)) return m;
         var t = await TableAsync($"{slug}/months.csv", false, co);
         // Month,Parts,Rows,Net,Bytes,GzipBytes,ExceptionParts,ExceptionRows,ExceptionBytes,ExceptionGzipBytes
-        m = t.Skip(1).Where(r => r.Length >= 10).Select(r => new MonthRow(r[0], I(r[2]), D(r[3]), I(r[6]), I(r[7]), long.Parse(r[9], CultureInfo.InvariantCulture))).ToList();
+        m = t.Skip(1).Where(r => r.Length >= 10).Select(r => new MonthRow(r[0], I(r[2]), D(r[3]), I(r[6]), I(r[7]), long.Parse(r[9], CultureInfo.InvariantCulture), Math.Max(1, I(r[1])))).ToList();
         _months[slug] = m;
         return m;
     }
+
+    // The raw bytes of the last two months' transaction slices, so a second "See the source rows" in the same month costs nothing.
+    readonly Dictionary<string, List<byte[]>> _txSlices = new();
+    readonly List<string> _txOrder = new();
+
+    /// <summary>Every part of one month's transaction slice (decompressed bytes). Fetched only when a visitor asks for source rows.</summary>
+    public async Task<List<byte[]>> TxSliceAsync(string slug, string month, int parts, Cooperative co)
+    {
+        string key = slug + "/" + month;
+        if (_txSlices.TryGetValue(key, out var hit)) return hit;
+        var sw = Stopwatch.StartNew();
+        var list = new List<byte[]>();
+        for (int p = 1; p <= Math.Max(1, parts); p++)
+            list.Add(await GetBytesAsync(p == 1 ? $"{slug}/{month}.csv" : $"{slug}/{month}.{p}.csv", true, co));
+        _txSlices[key] = list; _txOrder.Add(key);
+        while (_txOrder.Count > 2) { _txSlices.Remove(_txOrder[0]); _txOrder.RemoveAt(0); }
+        await LogAsync($"tx slice {key}", sw.ElapsedMilliseconds, $"({parts} part(s), {list.Sum(b => b.Length) / 1024} KB)");
+        return list;
+    }
+
+    /// <summary>The slug of a council from its full name ("Leeds City Council" gives "leeds"); null when it is not one of the twelve.</summary>
+    public static string? SlugOfName(string fullName) =>
+        Councils.FirstOrDefault(c => c.Name.Equals(fullName, StringComparison.OrdinalIgnoreCase)).Slug;
 
     public async Task<CouncilProfile?> ProfileAsync(string slug)
     {

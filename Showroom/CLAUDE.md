@@ -1,6 +1,6 @@
 # Showroom — CLAUDE.md (showroom-owner)
 
-**Last verified:** 2026-10-03 (council scanner hotfix: search + own-file switched off, one-tap load all, FOI cap; resume note in the council section)
+**Last verified:** 2026-10-04 (council scanner: request tray + letter, source rows from shipped transaction slices, classic page deleted, pattern readings as flags)
 
 Blazor WebAssembly app at `C:\Users\dongy\AboutUs\Showroom`, published under `/tools` on the public
 site (`AboutUs` repo, base href `/tools/`). Every tool runs entirely client-side: no server, no
@@ -62,14 +62,9 @@ package — a `ProjectReference` here is the designed path, not a MonoRepo bound
 - `Decoding` comes from the **`Prism` package's** `Prism.Inference` namespace — `@using
   global::Prism.Inference` required on any page referencing it (see Gotchas: namespace-collision
   rule applies repo-wide, not just to the colliding page).
-- `CheckpointFetch.FetchAndDecompressGzipAsync(http, gzUrl)` — fetch+decompress a `.gz` sidecar
-  (BCL `GZipStream`, no JS interop); GitHub Pages serves files uncompressed, so a raw checkpoint
-  needs a hand-shipped `.gz` sibling. The ONE choke point every checkpoint consumer shares (Prism,
-  Nano Stories, The Cartographer, Analyst's novelty scan, Prose's "score with Prism"); Creature/
-  Forecaster only fetch small metadata sidecars, never checkpoint bytes. `CheckpointF32.Unpack`
-  runs inside it, rebuilding a "PF32"-magic fp32 buffer to plain f64 losslessly (`Pack` is the
-  inverse, oracle/verify-only) — **cross-repo byte-exact contract with PrismStudio**, don't change
-  the wire format here without changing it there.
+- `CheckpointFetch.FetchAndDecompressGzipAsync(http, gzUrl)` — fetch + inflate a `.gz` sidecar (BCL `GZipStream`); Pages serves files uncompressed, so a raw checkpoint needs a hand-shipped
+  `.gz` sibling. The ONE choke point every checkpoint consumer shares (Prism, Stories, Cartographer, Analyst's novelty scan, Prose's "score with Prism"); Creature/Forecaster fetch only
+  small sidecars. `CheckpointF32.Unpack` runs inside it ("PF32" fp32 to plain f64, lossless): **cross-repo byte-exact contract with PrismStudio**, never change the wire format here alone.
 - `TokenVoice`/`TokenVoiceControls.razor` — Prism's per-token voice (face→tone synth), shared
   byte-for-byte by Prism and Nano Stories; never quantise to a musical scale. `DegenerateTail.
   Start(ids)`/`.SafePrefix(ids)` trims a repeating tail mid-generation (Prism, Nano Stories only).
@@ -81,8 +76,8 @@ package — a `ProjectReference` here is the designed path, not a MonoRepo bound
 `MaxStorySteps = 128` (Stories) are PINNED, not `Context/2` (that broke on a checkpoint swap). The checkpoint never emits STOP, so
 every reply/story runs to its cap and ends mid-sentence: train it, no sentence-boundary heuristic. `Prism.razor`'s chat context
 (`BuildContextTokens`) is the tagged wire format (`user: Q\nprism: A` + STOP per turn) matching PrismGym's windows; Stories uses a plain
-continuation. `HoloKernel/AsciiPunctuation.Fold` (curly quotes/dashes/nbsp -> ASCII) runs at every tokenizer entry point
-(`SubwordVocab.Fold` blanks non-ASCII, which mangled phone-autocorrected input).
+continuation. `HoloKernel/AsciiPunctuation.Fold` (curly quotes/dashes -> ASCII) runs at every tokenizer entry
+(`SubwordVocab.Fold` blanks non-ASCII).
 
 **Checkpoint refresh** (Prism's `oracle-brain.bin` + sidecars, also Stories/Cartographer): data-only, no publish: copy into `wwwroot/data`+`dist/data`,
 regenerate the `.gz` with `GZipStream`, write sidecars as UTF-8 no BOM, cross-check `-stackk`/`-iterwarm` against PrismStudio.
@@ -123,42 +118,45 @@ Both pages build `Floor = FloorMode.TopP` (needs Prism >= 1.3.0); `P` is checkpo
 chat P=0.30; Stories Focused 0.30 / Balanced 0.466 / Wild 0.635; never a conventional 0.9). `ConfidentThreshold=0.60`.
 
 ## The Cartographer — `Pages/Cartographer.razor` (route `/cartographer`, added 2026-09-24)
-A 2D visualiser for **one** next-token decision — not a chat, not a generation loop. Reuses Prism's
-exact checkpoint via the shared `"prism"` `SessionHost` key. Encodes the prompt (capped to
-`min(24, Stats().Context)` tokens, truncating the front if longer), then calls `HoloFormer.
-InspectStackIterFaces`/`InspectAttention`/`DecodeFace`/`EmbRow` directly off `HoloSession.Model` —
-no HoloKernel wrapper exists for these (a deliberate gap; read-only inspectors aren't worth
-wrapping). **Trajectory**: the LAST position's face at every `[boundary]` (embed, one point per
-(layer,pass), then FINAL), joined into a path; crystallisation (first boundary whose greedy top-1
-already equals the final answer) marked with a triangle. **Projection**: hand-rolled-power-
-iteration PCA fit on the TRAJECTORY points only (vocabulary cloud + attended positions projected
-into that same basis, captured-variance fraction always shown); a second embed→final Gram-Schmidt
-basis is offered as a cross-check. **Attention**: one row per boundary (excluding FINAL); top-4 by
-|weight| draw as lines to `grid[boundary][position]`, decoded via `DecodeFace`. **No training
-loop, ever** — `HoloFormer.Map` defaults to `SequentialMap` (deadlock-safe on WASM's single
-thread); no `MapAsync` twin exists, so `await Task.Yield()` around the call keeps the tab
-responsive (same as `Prism.razor`).
+A 2D visualiser for **one** next-token decision (not a chat, no generation loop) on Prism's exact checkpoint via the shared `"prism"` `SessionHost` key. Encodes the prompt (capped to
+`min(24, Stats().Context)` tokens, front truncated), then calls `HoloFormer.InspectStackIterFaces`/`InspectAttention`/`DecodeFace`/`EmbRow` directly off `HoloSession.Model` (no
+HoloKernel wrapper: read-only inspectors aren't worth one). **Trajectory**: the LAST position's face at every boundary (embed, each (layer,pass), FINAL) as a path; the first boundary whose
+greedy top-1 equals the final answer is marked. **Projection**: power-iteration PCA fit on the trajectory points only (captured-variance fraction always shown; an embed-to-final
+Gram-Schmidt basis as cross-check). **Attention**: top-4 by |weight| per boundary drawn to `grid[boundary][position]`. **No training loop, ever**; `HoloFormer.Map` defaults to
+`SequentialMap` (deadlock-safe on WASM) and there is no `MapAsync`, so `await Task.Yield()` around the call keeps the tab responsive (as in `Prism.razor`).
 
 ## Prose — `Pages/Prose.razor` (route `/prose`)
 Paste/drop text; `ProseEngine.MineText` mines it (page chunks+yields at ~200k chars), then recombines into sentences/Q&A/conversations.
 HoloDb `ProseStore` + AlgFormer plausibility (None / Prism's checkpoint / train on the visitor's text, ~0.22-0.24 ms/char/epoch), chord`data-cat="holodb-algformer"`. `ProseEngine.Plausibility` has no reset (page re-mines a fresh engine). Cap 64MB.
 
 ## Council Spending Scanner: `Pages/CouncilSpending.razor` (routes `/council-spending`, `/council-spending/{slug}`)
-Rebuilt 2026-10-04 on the virtual-customer's PHONE-SIZED export (`VirtualCustomer\web_export`; SPEC_FOR_SHOWROOM.md items 9-21). Twelve councils, no HoloDb,
+Built on the virtual-customer's PHONE-SIZED export (`VirtualCustomer\web_export`; SPEC_FOR_SHOWROOM.md items 9-22). Twelve councils, no HoloDb,
 no engine in the browser. Public-audience, mobile-first, not editorial: audit terms, plain prose + counts + GBP, OGL credit, never a cause.
-- **Data** (`wwwroot/data/council-web`, 21.4 MB, 951 files, built by `AboutUs\CouncilWebBuilder` with `dotnet run -c Release`): `index.csv`, per-council
-  `months.csv`, month EXCEPTION slices gzipped (`<slug>/<YYYY-MM>.exceptions[.N].csv.gz`), small cross files `cross/*.csv.gz` (twins, cross-file repeats, file
-  duplication, within-txn, flows, loan decode, debt sink, misfits, budget reconciliation/units/tests, sources.csv), `profiles.json.gz` (SupportedCouncils.Everyone text,
-  via reflection, engine compiled from VirtualCustomer\src; 5 internal working-note entries held back, listed on build), `PREREG_BUDGET_TEST.txt`.
-  Transaction month slices (143 MB gz) are NOT shipped (hidden "see the source rows"). Never load a whole-council exceptions.csv. Re-run the builder after every
-  `phoneexport`/`export`, then copy into `dist/`.
-- **Code**: `Services/CouncilWebData` (fetch, chunked inflate, cache), `CouncilMonth` (`MonthScan`: byte-level scan, no string per line; groups opened on demand),
-  `CouncilChecksWeb` (check definitions, plain loops: LINQ over decimals/tuples is slow in WASM), `CouncilTerms` (wording, invariant formatting);
-  `Components/CheckPanel|MonthView|BudgetPanel|BudgetTestPanel`. Panels load on first tap. Each load logs a `CW-PERF` console line.
-- Old in-browser engine page kept UNLINKED as `/council-spending-classic` (`CouncilSpendingClassic*`, old `data/councils`); search/own-file stay OFF. Candidate to delete.
-- Measured (headless Edge via CDP, published AOT build, CPU 6x + 4 Mbps/100 ms): biggest month (Leeds 2022-11, 17,983 lines) ready 1.6 s, worst stall under 200 ms; first-use
-  stalls up to about 560 ms (first check, first council page, declared-spend panel). Harness lived in the session scratchpad (node + msedge --remote-debugging-port).
-- Gotchas: `--` in csproj XML comments breaks load; BudgetPanel's `<text>` trick fails in code blocks; CSS is one scoped file using `.cs ::deep`.
+- **Data** (`wwwroot/data/council-web`, 169.5 MB, 2,254 files, none over 0.24 MB; `AboutUs\CouncilWebBuilder`, `dotnet run -c Release --project CouncilWebBuilder`,
+  about 45 s, wipe the folder first so stale files go; it fails above 50 MB/file; second arg `profiles` rewrites only profiles.json.gz): `index.csv`, per-council `months.csv`,
+  month EXCEPTION slices (`<slug>/<YYYY-MM>.exceptions[.N].csv.gz`), month TRANSACTION slices (`<slug>/<YYYY-MM>[.N].csv.gz`, 1,333 files, 13 slim columns, fetched only by "See the
+  source rows"), `cross/*.csv.gz`, `profiles.json.gz`, `PREREG_BUDGET_TEST.txt`. Never load a whole council. After every `phoneexport`/`export`: re-run the builder, publish, refresh `dist/`.
+  Profile text is cleaned in the BUILDER, never at source: the engine's "Schedule A/B/D" and "the engine" become the page's words, sentences naming working files, sessions or
+  checklists are dropped, empty notes held back; REWORDED/HELD BACK lines print for the profile owner (West Berkshire 3, RBWM 1 held back at last run).
+- **Code**: `Services/CouncilWebData` (fetch, chunked inflate, caches; keeps the last two months' transaction bytes), `CouncilMonth` (`MonthScan`: byte-level scan, no string per line,
+  groups opened on demand; reads `ExplainedBy`/`ExplainedMeaning` by header name), `CouncilSource` (`SourceScan`, `SourceState`), `CouncilChecksWeb` (check definitions, plain loops: LINQ over
+  decimals/tuples is slow in WASM), `CouncilTerms` (wording, `TryDate` day-first: "03/04/2020" is 3 April), `FoiTray` (`FoiTray`, `FoiFacts`: item sentences and the letter);
+  `Components/CheckPanel|MonthView|BudgetPanel|BudgetTestPanel|FoiTrayPanel|SourceBlocks`. Each load logs a `CW-PERF` console line.
+- **Pattern readings** (item 22, as changed in Session 34): RecurringBatchRate and CadenceCatchUp are NOT classes. An Unclear group carries them in `ExplainedBy` + `ExplainedMeaning`;
+  shown as a tag with the meaning as caption, the group stays open. Month summary: "N still open (Unclear + standing-payment surplus), of which K carry a pattern reading".
+- **Request tray** (`FoiTrayPanel`, one letter per council): "Add to request" on every month group and cross-check row (not budget lines). The letter states facts and asks
+  "Please provide the records you hold for this item, and the reason for it." No class meanings, readings, `Detail` text or loan rebuilds go in it (those are explanations). Address
+  is the profile's verified `foi` (4 of 12 councils) else a placeholder. Caps: 300 items, 100 per letter. Copy/save only; lives for the page load. Tick and source buttons are
+  PLAIN markup with their state on the row (`ExGroup.Source`, `CheckRow.Source`); a component per row cost about 5 ms each on a phone. `FoiTray.ItemsChanged` redraws lists, `Changed` the panel.
+- **Source rows**: the tap fetches that month's transaction slice (all parts), scans the bytes for the group's transaction numbers (`AllTx` cap 80; a repeated-payment group also
+  narrows to its supplier when that matches), lists up to 200 lines. Sampled 1,359 groups over 60 months: every one found its lines. A check row without a readable date has none.
+- Measured (`scripts/council-perf.mjs`: headless Edge via CDP on a published AOT build, CPU 6x + 4 Mbps/100 ms, two passes, wall/worst stall): tick one item 55-73/74 ms; open the
+  tray 365-433/287 ms the first time (profile fetch), about 190/60 with items; letter of 100 items opens 310-540/0; list of 15 groups 166-188/188; show 15 more worst stall 61-139;
+  source rows of the first group 0.6 s (Wokingham, stall 104), 2.0-2.1 s (Bradford), 2.4-2.5 s (Leeds, Sheffield: 3-4 parts, about 4.8 MB raw; stall 55-64), a second group in the same month 0.25-0.5 s.
+  Weakest: a tick in a 100-row list redraws the list (84-160 ms). First use of a check or month still stalls 0.3-0.5 s.
+- Classic in-browser engine page DELETED 2026-10-04 with `data/councils`. Still on disk and unused (delete when ready): `CouncilAudit/`, `Services/CouncilChecks|PeriodLoader|SlicedSort|SupplierIndex.cs`,
+  `Components/SupplierSearchBox|WorkStatus`, `data/reading` + `data/wokingham` (raw council files, 100 MB, nothing links them), and `AboutUs\CouncilDbBuilder`.
+- Gotchas: `--` in csproj XML comments breaks load; BudgetPanel's `<text>` trick fails in code blocks; CSS is one scoped file using `.cs ::deep`; lists with stateful children need `@key`.
 ## Unlisted: RecycleDAO marketplace prototype — `Pages/RecycleDaoDemo.razor` (`/recycledao-demo`)
 NOT a package-capability demo, NOT in the gallery — a private, link-only client preview
 (`C:\Users\dongy\RecycleDAO`, `recycledao-owner`'s repo; never edit it from here). Absent from
@@ -230,5 +228,3 @@ behaviour is the user's to check (`dotnet run`, or the deployed `/tools/` URL).
 - Razor reserves the bare `<text>` tag for raw-text-without-a-wrapper output — it CANNOT carry
   attributes (`RZ1023`). An SVG `<text x=".." y="..">` must be built as a `MarkupString` from a C#
   string instead, HTML-encoding any interpolated content by hand.
-- Multi-package tools force a real dependency-version bump for every tool in this one `.csproj` —
-  re-`dotnet build` the whole app after adding/bumping any tool, not just its own page.

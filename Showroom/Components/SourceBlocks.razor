@@ -1,0 +1,47 @@
+@using Showroom.Services
+@using static Showroom.Services.CouncilTerms
+
+@* The open "See the source rows" panel of one item. Only an item the visitor opened has one of these; the lists draw none until then. *@
+<div class="src">
+    @if (State.Busy) { <p class="hint" role="status">Reading the published lines for that month... @State.Progress</p> }
+    @if (State.Error is not null) { <p class="err">@State.Error</p> }
+    @foreach (var b in State.Blocks)
+    {
+        <div class="srcblock">
+            <p class="plain">@b.Summary</p>
+            @if (b.Result is { Rows.Count: > 0 })
+            {
+                <ol class="lines">
+                    @foreach (var r in b.Result.Rows.Take(b.Shown))
+                    {
+                        <li><div class="l1">@Head(r)</div><div class="l2">@Tail(r)</div></li>
+                    }
+                </ol>
+                @if (b.Result.Rows.Count > b.Shown)
+                {
+                    <button type="button" class="more" @onclick="() => b.Shown += 15">Show @Math.Min(15, b.Result.Rows.Count - b.Shown) more (@(b.Result.Rows.Count - b.Shown) not shown)</button>
+                }
+                @if (b.Result.Found > b.Result.Rows.Count) { <p class="hint">@Num(b.Result.Found) lines carry these numbers; the first @Num(b.Result.Rows.Count) are listed.</p> }
+            }
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public SourceState State { get; set; } = default!;
+
+    static string Head(SourceRow r) => $"{(r.Supplier.Length > 0 ? r.Supplier : "(no payee published)")}: {Gbp(r.Net)} on {Date(r.PayDate)}";
+
+    static string Tail(SourceRow r)
+    {
+        var p = new List<string> { $"Transaction {r.Tx}." };
+        if (r.Gross != 0 || r.Vat != 0) p.Add($"Gross {Gbp(r.Gross)}{(r.Vat != 0 ? ", VAT " + Gbp(r.Vat) : "")}.");
+        if (r.Service.Length > 0) p.Add(r.Service + ".");
+        if (r.CostCentre.Length > 0) p.Add(r.CostCentre + ".");
+        if (r.Description.Length > 0) p.Add("\"" + (r.Description.Length > 140 ? r.Description[..140] + "..." : r.Description) + "\"");
+        if (r.InvoiceNo.Length > 0) p.Add($"Supplier invoice {r.InvoiceNo}.");
+        if (r.InvoiceType.Length > 0) p.Add(r.InvoiceType + ".");
+        p.Add($"Published in the file tagged {r.Year}{(r.RowIndex.Length > 0 ? ", line " + r.RowIndex : "")}.");
+        return string.Join(" ", p);
+    }
+}

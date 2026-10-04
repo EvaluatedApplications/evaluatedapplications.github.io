@@ -26,10 +26,26 @@ public static class CouncilTerms
     public static string Date(string s)
     {
         if (string.IsNullOrWhiteSpace(s)) return "no date";
-        if (double.TryParse(s, NumberStyles.Float, CultureInfo.InvariantCulture, out var serial) && serial > 20000 && serial < 80000)
-            return DateTime.FromOADate(serial).ToString("d MMM yyyy", GB);
-        if (DateTime.TryParse(s, CultureInfo.InvariantCulture, DateTimeStyles.None, out var d)) return d.ToString("d MMM yyyy", GB);
-        return s;
+        return TryDate(s, out var d) ? d.ToString("d MMM yyyy", GB) : s;
+    }
+
+    // Day first, as the councils and the scanner read them ("03/04/2020" is 3 April, never March 4); the framework's invariant parser would read it month first.
+    static readonly string[] DateFormats =
+    {
+        "yyyy-MM-dd", "yyyy-MM-ddTHH:mm:ss", "yyyy-MM-dd HH:mm:ss", "dd/MM/yyyy", "d/M/yyyy", "dd/MM/yyyy HH:mm", "dd/MM/yy", "dd-MMM-yy", "dd-MMM-yyyy", "d MMM yyyy", "d-MMM-yy", "yyyyMMdd",
+    };
+
+    public static bool TryDate(string s, out DateTime d)
+    {
+        d = default;
+        if (string.IsNullOrWhiteSpace(s)) return false;
+        s = s.Trim();
+        if (double.TryParse(s, NumberStyles.Float, CultureInfo.InvariantCulture, out var serial))
+        {
+            if (serial > 20000 && serial < 80000) { d = DateTime.FromOADate(serial); return true; }
+            if (s.Length != 8) return false;   // a plain number that is not a day-number or yyyyMMdd is not a date
+        }
+        return DateTime.TryParseExact(s, DateFormats, GB, DateTimeStyles.None, out d);
     }
 
     /// <summary>"2024-03" to "March 2024"; anything else (such as "undated") is returned as is.</summary>
@@ -48,6 +64,22 @@ public static class CouncilTerms
         "" => "No classification", _ => c,
     };
 
+    /// <summary>The pattern readings the engine attaches to a still-open group (ExplainedBy). A reading never removes a group from the open count and is never a verdict.</summary>
+    public static string ReadingTag(string by) => by switch
+    {
+        "RecurringBatchRate" => "Pattern reading: recurring batch rate",
+        "CadenceCatchUp" => "Pattern reading: monthly payments, caught up",
+        _ => "Pattern reading: " + by,
+    };
+
+    /// <summary>Used when a row carries the flag but no text of its own; otherwise the row's own ExplainedMeaning is the caption.</summary>
+    public static string ReadingMeaning(string by) => by switch
+    {
+        "RecurringBatchRate" => "Same amount paid in batches on many separate dates, as a per-head rate or a roll of placements is; this batch is no larger than the biggest that amount has formed before. A consistent reading, not a proof.",
+        "CadenceCatchUp" => "This supplier's ledger line is paid about once a month in steady sums; this month's payments are no more than the months since the last one would account for. A consistent reading, not a proof.",
+        _ => "",
+    };
+
     /// <summary>Unexplained classes lead; the explained ones follow, with the same-day and migration-label explanations below "Unclear".</summary>
     public static int Rank(string c) => c switch
     {
@@ -64,7 +96,7 @@ public static class CouncilTerms
         "EarlyPaymentProgramme" => "A batch of negative early-payment discount fees under the council's own named scheme (a supply-chain-finance arrangement): a known pattern, not an arithmetic mismatch.",
         "VatRoundingNoise" => "The gap is a few pence, consistent with VAT being rounded per line and then summed, rather than once on the total.",
         "NegativeNetSignFlip" => "The published net figure is the exact negative of the value needed to reconcile the stated invoice. Reported as a named, recurring shape, not an explanation: why the sign is inverted is not established.",
-        "Unclear" => "No supplier invoice number was available to check, so the repeat is reported exactly as published, with no verdict either way.",
+        "Unclear" => "No supplier invoice number was available to check, so the repeat is reported exactly as published, with no verdict either way. A group may carry a pattern reading beside it; the reading is a consistent fit, not a proof, and the group stays open.",
         "LikelyDuplicate" => "Every member of this group shares the same supplier invoice number as well as the same amount: the strongest signal of a genuine duplicate payment.",
         "LikelyRecurring" => "Members carry different supplier invoice numbers despite the identical amount: consistent with a standardised recurring rate, not a repeat.",
         "Unmatched" => "No same-supplier published charge of matching magnitude was found within 365 days. Not established to be an error; reported as published.",
@@ -76,6 +108,9 @@ public static class CouncilTerms
         "MigrationControlLabel" => "Every line carries the council's own label \"AP MIGRATION CONTROL ACCOUNT\": a ledger-migration control account. The file does not say whether cash left under it. Not a finding.",
         _ => "",
     };
+
+    /// <summary>"2024-03-05", "05-Mar-24" or a spreadsheet day-number as the file's month key "2024-03"; "" when the date cannot be read.</summary>
+    public static string MonthKey(string s) => TryDate(s, out var d) ? d.ToString("yyyy-MM", GB) : "";
 
     public static string ScheduleTitle(string s) => s switch
     {

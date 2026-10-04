@@ -11,9 +11,18 @@ public sealed record ExLine(string Tx, string Supplier, decimal Net, decimal Gro
 public sealed class ExGroup
 {
     public string Schedule = "", Class = "", Detail = "";
+    /// <summary>The pattern reading beside a still-open group ("RecurringBatchRate", "CadenceCatchUp") and its plain-English reason; empty when there is none.</summary>
+    public string ExplainedBy = "", ExplainedMeaning = "";
     public List<ExLine> Lines = new();     // the first few lines of the group (enough to show; see MonthScan.ShownLines)
     public int LineCount;                  // every line of the group that falls in this month
     public decimal Value;                  // A: the amount that does not reconcile; B and D: the net value of the lines
+    internal MonthScan Scan = null!;
+    internal MonthScan.Gr Src = null!;
+    /// <summary>The "See the source rows" panel of this group, once the visitor has tapped it; and the group's tray key, worked out once.</summary>
+    public SourceState? Source;
+    public string? FoiKey;
+    /// <summary>Every distinct transaction number of the group's lines in this month (at most <paramref name="cap"/>), read on demand.</summary>
+    public List<string> AllTx(int cap = 80) => Scan.DistinctTx(Src, cap);
 }
 
 /// <summary>All the groups of one schedule and classification in the month, biggest first.</summary>
@@ -28,6 +37,16 @@ public sealed class ExBucket
     public int Shown = 15;                 // how many groups the page currently lists (UI state)
     public bool Open;
     public int GroupCount => Items.Count;
+    int _withReading = -1;
+    /// <summary>How many of the groups carry a pattern reading beside them (they stay open: a reading is a consistent fit, not a verdict).</summary>
+    public int WithReading
+    {
+        get
+        {
+            if (_withReading < 0) { int n = 0; foreach (var g in Items) if (g.Exp is not null) n++; _withReading = n; }
+            return _withReading;
+        }
+    }
     readonly Dictionary<int, ExGroup> _made = new();
     public ExGroup Group(int k)
     {
@@ -50,6 +69,7 @@ public sealed class MonthScan
     {
         public byte Sched;                 // 'A', 'B' or 'D'
         public string Cls = "";
+        public string? Exp;                // the pattern reading attached to the group (ExplainedBy), if any
         public int First = -1, Last = -1, Count;
         public double Value;
     }
@@ -61,9 +81,11 @@ public sealed class MonthScan
     int[] _cols = Array.Empty<int>();
     public List<ExBucket> Buckets { get; private set; } = new();
     public int TotalLines { get; private set; }
+    public int OpenGroups { get; private set; }
+    public int OpenWithReading { get; private set; }
 
     // column positions, by header name
-    int cSched, cGid, cTx, cSupplier, cNet, cDiff, cDetail, cClass, cGross;
+    int cSched, cGid, cTx, cSupplier, cNet, cDiff, cDetail, cClass, cGross, cExpBy = -1, cExpMeaning = -1;
 
     public static async Task<MonthScan> ScanAsync(List<byte[]> parts, Cooperative co)
     {
@@ -108,6 +130,13 @@ public sealed class MonthScan
                 }
                 if (g.First < 0) g.First = row; else s._rowNext[g.Last] = row;
                 g.Last = row; g.Count++;
+                if (g.Exp is null && s.cExpBy >= 0 && s.cExpBy < nf && ln[s.cExpBy] > 0)
+                {
+                    int el = ln[s.cExpBy];
+                    if (chars.Length < el) chars = new char[el * 2];
+                    for (int i = 0; i < el; i++) chars[i] = (char)b[st[s.cExpBy] + i];
+                    g.Exp = classes.Get(chars.AsSpan(0, el));
+                }
                 g.Value += sched == 'A' ? Math.Abs(diff) : net;
                 if (sched == 'D' && ln[s.cDetail] > 0 && g.Count == 1)
                     s._furnished |= b.AsSpan(st[s.cDetail], ln[s.cDetail]).IndexOf("SupplierFurnished"u8) >= 0;
@@ -139,6 +168,9 @@ public sealed class MonthScan
             return c != 0 ? c : Math.Abs(b.Value).CompareTo(Math.Abs(a.Value));
         });
         s.Buckets = buckets;
+        // "still open" is Unclear plus standing-payment surplus; "of which carry a pattern reading" sits beside it (the reading never closes a group)
+        foreach (var bk in buckets)
+            if (bk.Schedule == "B" && bk.Class is "Unclear" or "StandingScheduleSurplus") { s.OpenGroups += bk.GroupCount; s.OpenWithReading += bk.WithReading; }
         return s;
     }
 
@@ -155,13 +187,14 @@ public sealed class MonthScan
         }
         cSched = Find("Schedule"); cGid = Find("GroupId"); cTx = Find("TransactionId"); cSupplier = Find("SupplierName"); cNet = Find("Net");
         cDiff = Find("Difference"); cDetail = Find("Detail"); cClass = Find("Classification"); cGross = Find("TransactionGross");
+        cExpBy = Find("ExplainedBy"); cExpMeaning = Find("ExplainedMeaning");   // absent in older exports: no readings then
         if (cSched < 0 || cGid < 0 || cNet < 0 || cDiff < 0 || cClass < 0 || cDetail < 0 || cTx < 0 || cSupplier < 0)
             throw new InvalidDataException("This month's file does not have the columns the page expects.");
         if (cGross < 0) cGross = cNet;
     }
 
     /// <summary>Reads one record into start/length pairs (the field's bytes, without the surrounding quotes); leaves pos after the line end.</summary>
-    static int Fields(byte[] b, ref int pos, int[] st, int[] ln)
+    internal static int Fields(byte[] b, ref int pos, int[] st, int[] ln)
     {
         int n = b.Length, f = 0;
         while (true)
@@ -200,7 +233,7 @@ public sealed class MonthScan
     /// <summary>Reads a group's first few lines in full (every field), for display.</summary>
     internal ExGroup Materialize(Gr g)
     {
-        var o = new ExGroup { Schedule = ((char)g.Sched).ToString(), Class = g.Cls, LineCount = g.Count, Value = (decimal)g.Value };
+        var o = new ExGroup { Schedule = ((char)g.Sched).ToString(), Class = g.Cls, LineCount = g.Count, Value = (decimal)g.Value, Scan = this, Src = g, ExplainedBy = g.Exp ?? "" };
         var st = new int[32]; var ln = new int[32];
         int row = g.First;
         for (int i = 0; i < ShownLines && row >= 0; i++, row = _rowNext[row])
@@ -209,9 +242,28 @@ public sealed class MonthScan
             int pos = _rowOff[row];
             int nf = Fields(b, ref pos, st, ln);
             if (nf < 12) continue;
-            if (i == 0) o.Detail = Text(b, st[cDetail], ln[cDetail]);
+            if (i == 0)
+            {
+                o.Detail = Text(b, st[cDetail], ln[cDetail]);
+                if (g.Exp is not null && cExpMeaning >= 0 && cExpMeaning < nf) o.ExplainedMeaning = Text(b, st[cExpMeaning], ln[cExpMeaning]);
+            }
             o.Lines.Add(new ExLine(Text(b, st[cTx], ln[cTx]), Text(b, st[cSupplier], ln[cSupplier]),
                 Dec(Text(b, st[cNet], ln[cNet])), Dec(Text(b, st[cGross], ln[cGross])), Dec(Text(b, st[cDiff], ln[cDiff]))));
+        }
+        return o;
+    }
+
+    internal List<string> DistinctTx(Gr g, int cap)
+    {
+        var seen = new HashSet<string>(); var o = new List<string>();
+        var st = new int[32]; var ln = new int[32];
+        for (int row = g.First; row >= 0 && o.Count < cap; row = _rowNext[row])
+        {
+            var b = _parts[_rowPart[row]];
+            int pos = _rowOff[row];
+            if (Fields(b, ref pos, st, ln) < 12) continue;
+            var tx = Text(b, st[cTx], ln[cTx]);
+            if (seen.Add(tx)) o.Add(tx);
         }
         return o;
     }

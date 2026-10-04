@@ -22,5 +22,7 @@ builder.Services.AddSingleton<ContentDbHost>();
 
 // Council Spending Scanner data (phone-sized files under data/council-web); caches small tables for the page load. See Services/CouncilWebData.cs.
 builder.Services.AddScoped<CouncilWebData>();
+// The visitor's records-request tray (items ticked on the council pages). Lives for the page load; nothing is stored or sent.
+builder.Services.AddScoped<FoiTray>();
 
 await builder.Build().RunAsync();
