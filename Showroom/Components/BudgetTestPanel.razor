@@ -1,0 +1,75 @@
+@using System.Diagnostics
+@using Showroom.Services
+@inject CouncilWebData Data
+
+@* The pre-registered test and its result, in plain words. The verdicts are shown as the files give them; a slope (beta) is never shown as a finding. *@
+<section class="budget">
+    <button type="button" class="check-head" @onclick="Toggle" aria-expanded="@(_open ? "true" : "false")">
+        <span class="arrow" aria-hidden="true">@(_open ? "▾" : "▸")</span>
+        <h2>Did the test find anything? No: it was inconclusive</h2>
+    </button>
+    <p class="plain">Before looking, a method was written down and committed: compare each council-year's file total with what the council declared to government, and ask whether the second copies the rules flag
+        explain any of the gap. <a href="data/council-web/PREREG_BUDGET_TEST.txt" target="_blank" rel="noopener">The method as written before the run</a>.</p>
+    @if (_open)
+    {
+        <div class="verdict">
+            <p><b>In plain words.</b> The test was inconclusive, on every one of its arms. The flagged second copies are a median 0.01% of a council's file total (3.4% if the repeat-payment leads are added), while the ratio of file total to declared figure varies by about 23% between council-years (the comparator's own noise). A signal that small cannot be told apart from a gap that large, so the test cannot say whether any flagged row was an
+                extra outgoing, and no slope from it is presented as a finding.</p>
+            <p><b>The cities.</b> In Leeds the file total is between 11% below and 12% above the declared running expenses plus Housing Revenue Account, and 10% to 28% below once capital and pass-through payments are added.
+                The second copies the test counts are zero in Leeds by its definition, so the test says nothing there, and the repeat-payment leads give a fit the pre-registration calls an unexpected shape, with no verdict
+                (it reflects the size gap, not the flagged rows). The Leeds same-line-in-two-files repeats (£6.35m in 2022-23, £3.07m in 2023-24) are not in the statistic; they were found after the test was written.</p>
+            <p><b>Four more cities.</b> In Sheffield, Bradford, Liverpool and Bristol the file total is below the declared running expenses plus capital and pass-through in all 17 city-years (0.56 to 0.99 of it), and the second
+                copies the test counts are zero in Sheffield and 0.00 to 0.85% elsewhere. The test cannot tell whether flagged rows were extra outgoings. All six arms are inconclusive.</p>
+            <p class="caption">Revenue Outturn is revenue only and net of recoverable VAT; this file is gross of payment, includes capital, pass-through payments, loan movements and credits. Employees are not paid through a supplier file.
+                The published files cannot show which bank payments left.</p>
+        </div>
+        @if (_error is not null) { <p class="err">@_error</p> }
+        else if (!_loaded) { <p class="hint">Loading the results (small files)...</p> }
+        else
+        {
+            @foreach (var s in _sets)
+            {
+                <h3>@s.Title</h3>
+                <table class="tests">
+                    <thead><tr><th>Arm</th><th>Role</th><th>Council-years</th><th>Verdict</th></tr></thead>
+                    <tbody>
+                    @foreach (var r in s.Rows)
+                    {
+                        <tr><td>@r[0]</td><td>@r[1]</td><td>@r[2]</td><td>@Verdict(r[3])</td></tr>
+                    }
+                    </tbody>
+                </table>
+            }
+            <p class="caption">Council-years in the first group: 19, from Reading, Bracknell Forest, RBWM and Merton. Wokingham's years are a worked example and are not in the test. Declared figures are the government's Open Government Licence statistics, credited by name and year on each council's page.</p>
+        }
+    }
+</section>
+
+@code {
+    sealed class Set { public string Title = ""; public List<string[]> Rows = new(); }
+    bool _open, _loaded;
+    string? _error;
+    readonly List<Set> _sets = new();
+
+    static string Verdict(string v) => v == "INCONCLUSIVE" ? "Inconclusive" : v.StartsWith("UNEXPECTED SHAPE") ? "Unexpected shape, no verdict" : v;
+
+    async Task Toggle()
+    {
+        _open = !_open;
+        if (!_open || _loaded || _error is not null) return;
+        var sw = Stopwatch.StartNew();
+        try
+        {
+            var co = new Cooperative(CancellationToken.None);
+            foreach (var (file, title) in new[] { ("budget_test", "First group (Reading, Bracknell Forest, RBWM, Merton)"), ("budget_test_stage2", "Second group (Leeds)"),
+                         ("budget_test_stage2b", "Third group (Sheffield, Bradford, Liverpool, Bristol)"), ("budget_test_pooled_all", "All groups pooled") })
+            {
+                var t = new Tab(await Data.TableAsync($"cross/{file}.csv", true, co));
+                _sets.Add(new Set { Title = title, Rows = t.Rows.Select(r => new[] { t.G(r, "Arm"), t.G(r, "Role"), t.G(r, "Units"), t.G(r, "Verdict") }).ToList() });
+            }
+            _loaded = true;
+            await Data.LogAsync("budget test built", sw.ElapsedMilliseconds);
+        }
+        catch (Exception ex) { _error = "Could not load the results: " + ex.Message; }
+    }
+}

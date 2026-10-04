@@ -1,0 +1,169 @@
+@using System.Diagnostics
+@using Showroom.Services
+@using static Showroom.Services.CouncilTerms
+@inject CouncilWebData Data
+
+@* One month of one council: the month's exception slice(s) are fetched when the visitor picks the month (never a whole-council file),
+   scanned in time slices, and listed fifteen groups at a time. Nothing is judged; every group is what the file shows. *@
+<section class="month">
+    <h2>Look at one month</h2>
+    <p class="plain">A month here is the month of each payment's own date, not the name of the file it came from. Pick a month to see what the three rules flag in it. Only that month's small file is fetched
+        (the largest is about 0.3 MB compressed); nothing else is loaded until you ask.</p>
+    @if (Months.Count == 0)
+    {
+        <p class="hint">No months are listed for this council.</p>
+    }
+    else
+    {
+        <label class="pick">Month
+            <select @onchange="OnPick" disabled="@_busy">
+                <option value="">Choose a month</option>
+                @foreach (var yg in Months.GroupBy(m => m.Month.Length >= 4 ? m.Month[..4] : m.Month).OrderBy(g => g.Key == "unda" ? 1 : 0).ThenByDescending(g => g.Key))
+                {
+                    <optgroup label="@(yg.Key == "unda" ? "No readable date" : yg.Key)">
+                        @foreach (var m in yg.OrderByDescending(x => x.Month))
+                        {
+                            <option value="@m.Month" selected="@(m.Month == _month)">@MonthName(m.Month) (@Num(m.ExceptionRows) flagged lines)</option>
+                        }
+                    </optgroup>
+                }
+            </select>
+        </label>
+        @if (_busy) { <p class="hint" role="status">Reading @MonthName(_month)... @_progress</p> }
+        @if (_error is not null) { <p class="err">@_error</p> }
+        @if (_result is not null && !_busy)
+        {
+            <p class="summary"><b>@MonthName(_month)</b>: @Num(_result.TotalLines) lines flagged, in @Num(_result.Buckets.Sum(b => b.GroupCount)) groups.
+                @if (_result.Buckets.Count == 0) { <span>Nothing is flagged in this month's published lines by any of the three rules.</span> }</p>
+            @foreach (var sch in Schedules)
+            {
+                var buckets = _result.Buckets.Where(b => b.Schedule == sch).ToList();
+                bool na = (sch == "A" && NoScheduleA.Contains(Slug)) || (sch == "D" && NoScheduleD.Contains(Slug));
+                if (buckets.Count == 0 && !na) continue;
+                <div class="sched">
+                    <h3>@ScheduleTitle(sch)</h3>
+                    <p class="plain">@ScheduleDefinition(sch)</p>
+                    @if (na)
+                    {
+                        <p class="na">Not available for this council: its published file @(sch == "A" ? "has no separate VAT or gross figure to compare" : "has no transaction reference to group by"), so this rule cannot run. That is a limit of the file, not a clean result.</p>
+                    }
+                    @if (buckets.Any(b => b.SupplierFurnished))
+                    {
+                        <p class="caption">This council's transaction numbers are furnished by suppliers (invoice numbers). Two suppliers can simply have used the same number, so a group below is not read as one payment going to two payees.</p>
+                    }
+                    @foreach (var b in buckets)
+                    {
+                        <div class="bucket @(IsUnexplained(b.Class) ? "unexplained" : "explained")">
+                            <button type="button" class="bucket-head" @onclick="() => b.Open = !b.Open" aria-expanded="@(b.Open ? "true" : "false")">
+                                <span class="arrow" aria-hidden="true">@(b.Open ? "▾" : "▸")</span>
+                                <span class="cls">@Display(b.Class)</span>
+                                <span class="n">@Num(b.GroupCount) group@(b.GroupCount == 1 ? "" : "s"), @Num(b.Lines) lines, @Gbp(b.Value)</span>
+                            </button>
+                            @if (b.Open)
+                            {
+                                var meaning = Meaning(b.Class);
+                                @if (meaning.Length > 0) { <p class="meaning">@meaning</p> }
+                                <ol class="lines">
+                                    @for (int k = 0; k < Math.Min(b.Shown, b.GroupCount); k++)
+                                    {
+                                        var g = b.Group(k);
+                                        <li>
+                                            <div class="l1">@Head(g)</div>
+                                            <div class="l2">@Sub(g)</div>
+                                        </li>
+                                    }
+                                </ol>
+                                @if (b.GroupCount > b.Shown)
+                                {
+                                    <button type="button" class="more" @onclick="() => b.Shown += 15">Show @Math.Min(15, b.GroupCount - b.Shown) more (@(b.GroupCount - b.Shown) not shown)</button>
+                                }
+                            }
+                        </div>
+                    }
+                </div>
+            }
+            <p class="caption">@DiscrepancyNote</p>
+        }
+    }
+</section>
+
+@code {
+    static readonly string[] Schedules = { "B", "A", "D" };
+
+    [Parameter, EditorRequired] public string Slug { get; set; } = "";
+    [Parameter, EditorRequired] public List<MonthRow> Months { get; set; } = new();
+
+    string _month = "";
+    bool _busy;
+    string? _error, _progress;
+    MonthScan? _result;
+    // the last three months stay in memory (each holds its raw bytes, up to about 3 MB); older ones are read again if asked for
+    readonly Dictionary<string, MonthScan> _cache = new();
+    readonly List<string> _order = new();
+    string _lastSlug = "";
+
+    protected override void OnParametersSet()
+    {
+        if (_lastSlug != Slug) { _cache.Clear(); _order.Clear(); _result = null; _month = ""; _error = null; }
+        _lastSlug = Slug;
+    }
+
+    async Task OnPick(ChangeEventArgs e)
+    {
+        _month = e.Value?.ToString() ?? "";
+        _error = null; _result = null;
+        if (_month.Length == 0) return;
+        if (_cache.TryGetValue(_month, out var hit)) { _result = hit; return; }
+        var m = Months.FirstOrDefault(x => x.Month == _month);
+        if (m is null) return;
+        _busy = true; _progress = "";
+        StateHasChanged();
+        var sw = Stopwatch.StartNew();
+        try
+        {
+            var co = new Cooperative(CancellationToken.None);
+            var parts = new List<byte[]>();
+            for (int p = 1; p <= m.ExceptionParts; p++)
+            {
+                string path = p == 1 ? $"{Slug}/{_month}.exceptions.csv" : $"{Slug}/{_month}.exceptions.{p}.csv";
+                _progress = m.ExceptionParts > 1 ? $"part {p} of {m.ExceptionParts}" : "";
+                parts.Add(await Data.BytesAsync(path, true, co));
+            }
+            long got = sw.ElapsedMilliseconds;
+            var sw2 = Stopwatch.StartNew();
+            var scan = parts.Count == 0 ? await MonthScan.ScanAsync(new List<byte[]>(), co) : await MonthScan.ScanAsync(parts, co);
+            _result = _cache[_month] = scan;
+            _order.Add(_month);
+            while (_order.Count > 3) { _cache.Remove(_order[0]); _order.RemoveAt(0); }
+            await Data.LogAsync($"month {Slug} {_month} ready", sw.ElapsedMilliseconds, $"(fetch+inflate {got}ms, scan {sw2.ElapsedMilliseconds}ms, {scan.TotalLines} lines, {m.ExceptionParts} part(s), longest slice {co.MaxSliceMs:F0}ms)");
+        }
+        catch (Exception ex) { _error = "Could not read this month: " + ex.Message; }
+        finally { _busy = false; }
+    }
+
+    static string Head(ExGroup g)
+    {
+        var who = g.Lines.Select(l => l.Supplier).Distinct().ToList();
+        string s = who.Count == 0 ? "" : who.Count == 1 ? who[0] : who[0] + " and " + who[1];
+        if (who.Count > 2) s += $" and {who.Count - 2} other payee(s)";
+        return g.Schedule == "A" ? $"{s}: {Gbp(g.Value)} that does not reconcile" : $"{s}: {Gbp(g.Value)} across {Num(g.LineCount)} line(s)";
+    }
+
+    static string Sub(ExGroup g)
+    {
+        var tx = g.Lines.Select(l => l.Tx).Distinct().ToList();
+        bool moreLines = g.LineCount > g.Lines.Count;
+        string txs = tx.Count <= 4 ? string.Join(", ", tx) : string.Join(", ", tx.Take(4)) + " and others";
+        if (moreLines && tx.Count <= 4) txs += " and others";
+        string detail = MonthScan.CleanDetail(g.Detail);
+        if (g.Schedule == "A")
+        {
+            var l = g.Lines[0];
+            return $"Transaction {txs}. Published net {Gbp(l.Net)}, gross {Gbp(l.Gross)}, difference {Gbp(l.Diff)}. {detail}";
+        }
+        int size = MonthScan.GroupSizeOf(g.Detail);
+        string amounts = string.Join(", ", g.Lines.Select(l => Gbp(l.Net)).Distinct().Take(4));
+        string of = size > g.LineCount ? $" (this month's {g.LineCount} of {size} in the group)" : "";
+        return $"Transaction{(tx.Count == 1 && !moreLines ? "" : "s")} {txs}. Amounts {amounts}{(moreLines ? ", and others" : "")}{of}. {detail}".Trim();
+    }
+}

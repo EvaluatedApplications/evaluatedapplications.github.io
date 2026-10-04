@@ -143,37 +143,22 @@ responsive (same as `Prism.razor`).
 Paste/drop text; `ProseEngine.MineText` mines it (page chunks+yields at ~200k chars), then recombines into sentences/Q&A/conversations.
 HoloDb `ProseStore` + AlgFormer plausibility (None / Prism's checkpoint / train on the visitor's text, ~0.22-0.24 ms/char/epoch), chord`data-cat="holodb-algformer"`. `ProseEngine.Plausibility` has no reset (page re-mines a fresh engine). Cap 64MB.
 
-## Council Spending Scanner — `Pages/CouncilSpending.razor` + `.Insights.cs` (route `/council-spending`)
-Real analytical tool over England's spending-over-£500 data, in **HoloDb** (`Database.Open(null)`, one shared `spend` table).
-Public-audience, mobile-first, NOT editorial: every check is a stated neutral rule run identically for every council; audit terms only
-(exception/discrepancy/unreconciled/anomaly); every section has plain prose + counts + £; OGL credit per council. Engine `CouncilAudit/` is
-**vendored verbatim from `VirtualCustomer\src\CouncilAudit`** (re-synced 2026-10-03; never edit here; CLI-only files not vendored).
-- **Four hosted councils** (`BuildHosted`): Wokingham, Reading, West Berkshire, RBWM; periods grouped by financial year. Each council panel has a
-  one-tap "Load all N files (about X MB)", a select-all checkbox, per-FY select-all (> 8 periods) and per-file sizes (`manifest.json`
-  `gzBytes`/`exceptionsGzBytes`, read with `JsonDocument` (trim-safe), written by CouncilDbBuilder).
-- **Data pipeline (offline, `CouncilDbBuilder`, `dotnet run -c Release`, ~3 min)**: Wokingham/Reading from `wwwroot/data/<c>/`; WB/RBWM from
-  `VirtualCustomer\export\<c>\` (env `COUNCIL_EXPORT_DIR`), same `AuditEngine.Run`. Writes `councils/<c>/*.norm.csv.gz`, `exceptions.csv.gz`
-  (18 cols; group keys council-qualified in the page), `cross/*.csv.gz` (flows, alias grades, debt ledger/sink, misfits, file duplication,
-  within-txn repeats, `flow-rows`) and `manifest.json`. Copy regenerated data into `dist/` on publish.
-- **Sections** (`InsightsBlock`): standing payments, alias-aware flows (accept only), loan-interest decode, correction pairs, publication faults,
-  file duplication, within-transaction repeats, debt sink + misfits. Scope = councils opened, switch for all six.
-- **In-browser checks** (`Services/CouncilChecks.cs`): publication faults + correction pairs as an EvalApp pipeline (two `ForEach`). Fault rule:
-  single-month files only for the "named month" share (marked < 9 in 10); overlap = lines already in an EARLIER file. On EvalApp 2.0.0 a
-  `ForEach` on a single-thread host runs as one blocking loop (measured; `MonoRepo\EvalApp\todo\evalapp-native-apps.md` Field report 2).
-- **FOI**: new-section rows are `ExceptionItem.Custom` (own sentence/lines/request, no offered cause); one council per letter (`FoiAddressee`);
-  emails from `Hosted` (RBWM: none verified -> placeholder); letter capped at 100 items (28k items took 20 s to build, every render).
-- Gotchas: HoloDb >= 2.1.0. `ExceptionItem.IsUnexplained` includes `StandingScheduleSurplus`. Group ids restart per council (hence the prefix).
-- **HOTFIX 2026-10-03** (public bug, r/ukpolitics: "searching freezes the page on a phone"). Cause, measured: HoloDb 2.1.0 `NEAREST` builds its
-  index synchronously on the FIRST query at ~1 ms per ROW (15k rows 10.6 s; Wokingham 217k 334 s; Reading 327k 368 s; desktop); the page had it
-  from its first commit (2c52f54, no pre-HoloDb version exists). Note for the owner: `MonoRepo\HoloDb\todo\nearest-first-build-in-browser.md`.
-  Switches (`static readonly bool`, top of `@code`): `SearchEnabled=false` (9db79e9), `OwnFileEnabled=false` (engine calls cannot be sliced, ~0.46 s
-  per 42k rows). Reading all, real page on desktop, 1x / 6x CPU (one core shared with 5 spinners): load 5.5 s / 32.5 s with worst UI stall 1.0 s /
-  6.2 s; every render 150 ms / 0.8-1.4 s (it scans ~200k rows); FOI letter 0.47 s / 3.2 s; heap 380 MB. NOT fast.
-- **RESUME HERE: branch `wip-freeze-redesign`** holds the fix for all of that (`Services/Cooperative|SlicedCsv|SlicedSort|PeriodLoader|SupplierIndex`,
-  `Components/WorkStatus|SupplierSearchBox`; values worked out once per load, debounced boxes, sliced checks, new trigram search). Measured the
-  same way: load 5.7 s / 37-44 s, worst stall 40-64 ms / 418-697 ms (GC), render 2 ms collapsed / ~100 ms with a test open at 6x, typing stall
-  127 ms. Merge it, then flip `SearchEnabled`. Still to do: per-test shards + precomputed summary (heap 175-245 MB Reading, 430 MB all four),
-  publication faults/corrections at build time (run the CouncilChecks pipeline in CouncilDbBuilder), budget comparison (SPEC_FOR_SHOWROOM.md 9-11).
+## Council Spending Scanner: `Pages/CouncilSpending.razor` (routes `/council-spending`, `/council-spending/{slug}`)
+Rebuilt 2026-10-04 on the virtual-customer's PHONE-SIZED export (`VirtualCustomer\web_export`; SPEC_FOR_SHOWROOM.md items 9-21). Twelve councils, no HoloDb,
+no engine in the browser. Public-audience, mobile-first, not editorial: audit terms, plain prose + counts + GBP, OGL credit, never a cause.
+- **Data** (`wwwroot/data/council-web`, 21.4 MB, 951 files, built by `AboutUs\CouncilWebBuilder` with `dotnet run -c Release`): `index.csv`, per-council
+  `months.csv`, month EXCEPTION slices gzipped (`<slug>/<YYYY-MM>.exceptions[.N].csv.gz`), small cross files `cross/*.csv.gz` (twins, cross-file repeats, file
+  duplication, within-txn, flows, loan decode, debt sink, misfits, budget reconciliation/units/tests, sources.csv), `profiles.json.gz` (SupportedCouncils.Everyone text,
+  via reflection, engine compiled from VirtualCustomer\src; 5 internal working-note entries held back, listed on build), `PREREG_BUDGET_TEST.txt`.
+  Transaction month slices (143 MB gz) are NOT shipped (hidden "see the source rows"). Never load a whole-council exceptions.csv. Re-run the builder after every
+  `phoneexport`/`export`, then copy into `dist/`.
+- **Code**: `Services/CouncilWebData` (fetch, chunked inflate, cache), `CouncilMonth` (`MonthScan`: byte-level scan, no string per line; groups opened on demand),
+  `CouncilChecksWeb` (check definitions, plain loops: LINQ over decimals/tuples is slow in WASM), `CouncilTerms` (wording, invariant formatting);
+  `Components/CheckPanel|MonthView|BudgetPanel|BudgetTestPanel`. Panels load on first tap. Each load logs a `CW-PERF` console line.
+- Old in-browser engine page kept UNLINKED as `/council-spending-classic` (`CouncilSpendingClassic*`, old `data/councils`); search/own-file stay OFF. Candidate to delete.
+- Measured (headless Edge via CDP, published AOT build, CPU 6x + 4 Mbps/100 ms): biggest month (Leeds 2022-11, 17,983 lines) ready 1.6 s, worst stall under 200 ms; first-use
+  stalls up to about 560 ms (first check, first council page, declared-spend panel). Harness lived in the session scratchpad (node + msedge --remote-debugging-port).
+- Gotchas: `--` in csproj XML comments breaks load; BudgetPanel's `<text>` trick fails in code blocks; CSS is one scoped file using `.cs ::deep`.
 ## Unlisted: RecycleDAO marketplace prototype — `Pages/RecycleDaoDemo.razor` (`/recycledao-demo`)
 NOT a package-capability demo, NOT in the gallery — a private, link-only client preview
 (`C:\Users\dongy\RecycleDAO`, `recycledao-owner`'s repo; never edit it from here). Absent from

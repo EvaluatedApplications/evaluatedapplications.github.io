@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Build-time tool for the phone-sized Council Spending Scanner data (Showroom/wwwroot/data/council-web).
+       Reads the virtual-customer's web_export (per-council months.csv, month slices, index.csv) and its small
+       cross-council export CSVs, and writes only what the page loads: index.csv, months.csv, exception slices
+       gzipped, the small check files gzipped, and profiles.json (the twelve councils' own profile text:
+       transparency page, how to find the file, structural notes and publication faults).
+
+       Profiles are read from the virtual-customer's engine source (SupportedCouncils.Everyone), compiled here
+       as plain C#; this is an OFFLINE tool and the page itself never references that engine copy.
+       Run: dotnet run -c Release with the project path CouncilWebBuilder
+       Environment: COUNCIL_WEB_EXPORT (default C:\Users\dongy\VirtualCustomer\web_export),
+       COUNCIL_EXPORT_DIR (default C:\Users\dongy\VirtualCustomer\export),
+       COUNCIL_ENGINE_DIR (default C:\Users\dongy\VirtualCustomer\src\CouncilAudit). -->
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <EngineDir Condition="'$(COUNCIL_ENGINE_DIR)' == ''">C:\Users\dongy\VirtualCustomer\src\CouncilAudit</EngineDir>
+    <EngineDir Condition="'$(COUNCIL_ENGINE_DIR)' != ''">$(COUNCIL_ENGINE_DIR)</EngineDir>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="$(EngineDir)\*.cs" />
+  </ItemGroup>
+
+</Project>

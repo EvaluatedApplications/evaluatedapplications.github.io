@@ -20,4 +20,7 @@ builder.Services.AddSingleton<SessionHost>();
 // once something calls GetOrLoadAsync, which today is only the spike page itself.
 builder.Services.AddSingleton<ContentDbHost>();
 
+// Council Spending Scanner data (phone-sized files under data/council-web); caches small tables for the page load. See Services/CouncilWebData.cs.
+builder.Services.AddScoped<CouncilWebData>();
+
 await builder.Build().RunAsync();

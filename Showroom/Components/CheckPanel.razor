@@ -1,0 +1,70 @@
+@using System.Diagnostics
+@using Showroom.Services
+@inject CouncilWebData Data
+
+@* One check of the Council Spending Scanner. Closed until tapped; its file is fetched on the first tap only, parsed in time slices,
+   and shown fifteen lines at a time, so the page never builds a long list the visitor did not ask for. *@
+<section class="check">
+    <button type="button" class="check-head" @onclick="Toggle" aria-expanded="@(_open ? "true" : "false")">
+        <span class="arrow" aria-hidden="true">@(_open ? "▾" : "▸")</span>
+        <h3>@Def.Title</h3>
+        @if (_loaded) { <span class="count">@_rows.Count</span> }
+    </button>
+    @if (_open)
+    {
+        <p class="plain">@Def.Plain</p>
+        @if (_error is not null) { <p class="err">@_error</p> }
+        else if (!_loaded) { <p class="hint">Loading this check (a small file)...</p> }
+        else
+        {
+            <p class="summary">@_summary</p>
+            @if (_rows.Count > 0)
+            {
+                <ol class="lines">
+                    @foreach (var r in _rows.Take(_shown))
+                    {
+                        <li><div class="l1">@r.Line1</div><div class="l2">@r.Line2</div></li>
+                    }
+                </ol>
+                @if (_rows.Count > _shown)
+                {
+                    <button type="button" class="more" @onclick="More">Show @Math.Min(15, _rows.Count - _shown) more (@(_rows.Count - _shown) not shown)</button>
+                }
+            }
+            <p class="caption">@Def.Caption</p>
+        }
+    }
+</section>
+
+@code {
+    [Parameter, EditorRequired] public CheckDef Def { get; set; } = default!;
+    /// <summary>Show only this council's rows; null shows every council.</summary>
+    [Parameter] public string? Slug { get; set; }
+
+    bool _open, _loaded;
+    int _shown = 15;
+    string? _error, _summary;
+    List<CheckRow> _rows = new();
+
+    async Task Toggle()
+    {
+        _open = !_open;
+        if (!_open || _loaded || _error is not null) return;
+        var sw = Stopwatch.StartNew();
+        try
+        {
+            var co = new Cooperative(CancellationToken.None);
+            var table = await Data.TableAsync(Def.File, true, co);
+            var tab = new Tab(table);
+            var mine = Slug is null ? tab.Rows : tab.Rows.Where(r => Def.Matches(tab, r, Slug)).ToList();
+            var (rows, summary) = Def.Build(tab, mine);
+            _rows = rows;
+            _summary = mine.Count == 0 ? "This check has no rows for this council." : summary;
+            _loaded = true;
+            await Data.LogAsync($"check {Def.Id} ({(Slug ?? "all")}) built", sw.ElapsedMilliseconds, $"({mine.Count} source rows)");
+        }
+        catch (Exception ex) { _error = "Could not load this check: " + ex.Message; }
+    }
+
+    void More() => _shown += 15;
+}

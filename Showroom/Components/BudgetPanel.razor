@@ -1,0 +1,141 @@
+@using System.Diagnostics
+@using Showroom.Services
+@using static Showroom.Services.CouncilTerms
+@inject CouncilWebData Data
+
+@* Declared spend against the file total: per council-year, line by line, in the order the virtual-customer's reconciliation lists them.
+   The government's own outturn statistics are credited by name and year with a link; the "unexplained" line is shown as "unexplained". *@
+<section class="budget">
+    <button type="button" class="check-head" @onclick="Toggle" aria-expanded="@(_open ? "true" : "false")">
+        <span class="arrow" aria-hidden="true">@(_open ? "▾" : "▸")</span>
+        <h2>Declared spend against the file total</h2>
+        @if (_loaded) { <span class="count">@_years.Count year@(_years.Count == 1 ? "" : "s")</span> }
+    </button>
+    <p class="plain">For each financial year, the arithmetic is laid out line by line: what the council declared to government, what the published file adds up to, and what is left over. The declared figures are the government's
+        Revenue Outturn and Capital Outturn statistics. They are shown so you can see the two sets of numbers side by side, not as a finding.</p>
+    @if (_open)
+    {
+        <ul class="caps">
+            <li>Revenue Outturn is revenue only and net of recoverable VAT; this file is gross of payment, includes capital, pass-through payments, loan movements and credits.</li>
+            <li>Employees are not paid through a supplier file.</li>
+            <li>The published files cannot show which bank payments left.</li>
+        </ul>
+        @if (_error is not null) { <p class="err">@_error</p> }
+        else if (!_loaded) { <p class="hint">Loading the declared-spend files (small)...</p> }
+        else if (_years.Count == 0) { <p class="hint">No declared-spend years are listed for this council.</p> }
+        else
+        {
+            <p class="plain"><b>Key.</b> F is the total of every published Net amount in the file for the year. K1 is the declared running expenses plus Housing Revenue Account expenditure. K2 is K1 plus declared capital expenditure.
+                K3 is K2 plus the pass-through payments seen in the file (for example tax authorities, pension funds, fire and police authorities). R is F minus K3: positive means the file total is above the declared figure.
+                T_A is the value of second copies the rules flag as published twice; T_B adds the repeat-payment leads.</p>
+            @foreach (var y in _years)
+            {
+                <div class="year">
+                    <button type="button" class="bucket-head" @onclick="() => y.Open = !y.Open" aria-expanded="@(y.Open ? "true" : "false")">
+                        <span class="arrow" aria-hidden="true">@(y.Open ? "▾" : "▸")</span>
+                        <span class="cls">@y.Year</span>
+                        <span class="n">@y.Headline</span>
+                    </button>
+                    @if (y.Open)
+                    {
+                        <p class="plain">@y.Status</p>
+                        <ol class="lines budget-lines">
+                            @{ bool ctxShown = false; }
+                            @foreach (var l in y.Lines)
+                            {
+                                bool ctx = l.Kind is "observed in file (context)" or "post hoc";
+                                @if (ctx && !ctxShown)
+                                {
+                                    ctxShown = true;
+                                    <li class="ctxnote">Added after the first results were seen; shown so you can see where the money in the file goes, not part of the test.</li>
+                                }
+                                <li class="@("k-" + l.Kind.Replace(' ', '-').Replace("(", "").Replace(")", ""))">
+                                    <div class="l1"><span class="kind">@KindLabel(l.Kind)</span> @l.Line@(l.Kind == "note" ? "" : ": ")<b>@(l.Kind == "note" ? "" : Gbp(l.Gbp))</b></div>
+                                    <div class="l2">@l.Source@(string.IsNullOrWhiteSpace(l.Note) ? "" : ". " + l.Note.Trim()).
+                                        @if (l.Url is not null) { <span> </span><a href="@l.Url" target="_blank" rel="noopener">Open the government file</a> }
+                                    </div>
+                                </li>
+                            }
+                        </ol>
+                    }
+                </div>
+            }
+            <p class="caption">@OglCredit</p>
+        }
+    }
+</section>
+
+@code {
+    [Parameter, EditorRequired] public string Slug { get; set; } = "";
+
+    sealed class BLine { public string Line = "", Kind = "", Source = "", Note = ""; public decimal Gbp; public string? Url; }
+    sealed class BYear { public string Year = "", Headline = "", Status = ""; public List<BLine> Lines = new(); public bool Open; }
+
+    bool _open, _loaded;
+    string? _error;
+    List<BYear> _years = new();
+    string _loadedFor = "";
+
+    protected override void OnParametersSet()
+    {
+        if (_loadedFor != Slug) { _loaded = false; _years = new(); _error = null; if (_open) _ = LoadAsync(); }
+    }
+
+    static string KindLabel(string k) => k switch
+    {
+        "declared" => "Declared", "derived" => "Worked out", "observed in file" => "In the file", "observed in file (context)" => "In the file, for context",
+        "file" => "The file total", "flagged by rule" => "Flagged by a rule", "unexplained" => "Unexplained", "post hoc" => "Added afterwards", "note" => "Note", _ => k,
+    };
+
+    async Task Toggle()
+    {
+        _open = !_open;
+        if (_open && !_loaded) await LoadAsync();
+    }
+
+    async Task LoadAsync()
+    {
+        var sw = Stopwatch.StartNew();
+        try
+        {
+            var co = new Cooperative(CancellationToken.None);
+            var rec = new Tab(await Data.TableAsync("cross/budget_reconciliation.csv", true, co));
+            var units = new Tab(await Data.TableAsync("cross/budget_units.csv", true, co));
+            var years = new List<BYear>();
+            foreach (var g in rec.Rows.Where(r => rec.G(r, "Council") == Slug).GroupBy(r => rec.G(r, "Year")).OrderByDescending(g => g.Key))
+            {
+                var y = new BYear { Year = g.Key };
+                foreach (var r in g)
+                    y.Lines.Add(new BLine { Line = rec.G(r, "Line"), Kind = rec.G(r, "Kind"), Source = rec.G(r, "Source"), Note = rec.G(r, "Note"), Gbp = rec.M(r, "GBP") });
+                foreach (var l in y.Lines.Where(l => l.Kind == "declared")) l.Url = await Data.SourceUrlAsync(l.Source, co);
+                decimal? f = y.Lines.FirstOrDefault(l => l.Kind == "file")?.Gbp, k3 = y.Lines.FirstOrDefault(l => l.Line.StartsWith("K3"))?.Gbp;
+                y.Headline = f is not null && k3 is not null
+                    ? $"file total {Gbp(f.Value)} against declared plus pass-through {Gbp(k3.Value)}"
+                    : "see the lines";
+                var u = units.Rows.FirstOrDefault(r => units.G(r, "Council") == Slug && units.G(r, "Year") == g.Key);
+                y.Status = u is null ? "" : PoolStatus(units.G(u, "Pool"), units.B(u, "Eligible"), units.G(u, "Note"));
+                years.Add(y);
+            }
+            _years = years; _loaded = true; _loadedFor = Slug;
+            await Data.LogAsync($"budget {Slug} built", sw.ElapsedMilliseconds, $"({_years.Count} years, {_years.Sum(y => y.Lines.Count)} lines)");
+        }
+        catch (Exception ex) { _error = "Could not load the declared-spend files: " + ex.Message; }
+        StateHasChanged();
+    }
+
+    static string PoolStatus(string pool, bool eligible, string note)
+    {
+        string where = pool switch
+        {
+            "exploratory" => "A worked example: not in the pre-registered test.",
+            "stage1" => "In the first group of the pre-registered test.",
+            "stage2" => "In the second group (the cities) of the pre-registered test.",
+            "stage2b" => "In the third group (four more cities) of the pre-registered test.",
+            _ => "",
+        };
+        string elig = eligible
+            ? "This year has twelve covered months and a published comparator, so it is eligible for the comparison."
+            : "This year is not eligible for the comparison (it needs twelve covered months and a published comparator)." + (string.IsNullOrWhiteSpace(note) ? "" : " " + (note.Length > 260 ? note[..260] + "..." : note));
+        return (where + " " + elig).Trim();
+    }
+}
