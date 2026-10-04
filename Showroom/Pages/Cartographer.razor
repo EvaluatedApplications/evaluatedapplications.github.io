@@ -95,7 +95,7 @@
                         @foreach (var a in _attnLinks)
                         {
                             <line class="cg-attn" x1="@Fmt(a.FromSx)" y1="@Fmt(a.FromSy)" x2="@Fmt(a.ToSx)" y2="@Fmt(a.ToSy)"
-                                  stroke-width="@Fmt(0.5 + a.Weight * 2.5)" opacity="@Fmt(0.12 + a.Weight * 0.55)" />
+                                  stroke-width="@Fmt(Deep ? 0.35 + a.Weight * 0.9 : 0.5 + a.Weight * 2.5)" opacity="@Fmt(Deep ? 0.05 + a.Weight * 0.2 : 0.12 + a.Weight * 0.55)" />
                         }
                         @foreach (var a in _attnLinks)
                         {
@@ -112,7 +112,10 @@
                             {
                                 <circle class="cg-traj @(t.IsFinal ? "final" : "")" cx="@Fmt(t.Sx)" cy="@Fmt(t.Sy)" r="@(t.IsFinal ? 5.5 : 4)" />
                             }
-                            @SvgText("cg-traj-label", t.Sx + 7, t.Sy - 6, t.Label)
+                            @if (ShowTrajLabel(t))
+                            {
+                                @SvgText("cg-traj-label", t.Sx + 7, t.Sy - 6, t.Label)
+                            }
                         }
                         @foreach (var (lbl, dot) in LabeledCloudPairs())
                         {
@@ -129,6 +132,7 @@
                 </div>
             </div>
 
+            <div class="cg-table-wrap">
             <table class="cg-table">
                 <thead><tr><th>#</th><th>Step</th><th>Top guess there</th><th>Confidence</th><th></th></tr></thead>
                 <tbody>
@@ -144,6 +148,7 @@
                     }
                 </tbody>
             </table>
+            </div>
         }
 
         <div class="outro">
@@ -156,9 +161,17 @@
 </div>
 
 @code {
-    const int MaxPromptTokens = 24;
+    // 24 -> 64 on 2026-10-04: r3,970 emits ~1.15 chars/token, so 24 tokens was ~28 characters, shorter than the page's own
+    // 90-character input. 64 tokens x 100 boundaries is still a few hundred KB of faces and well inside ctx=512.
+    const int MaxPromptTokens = 64;
     const int TopKPerBoundary = 3;
+    // r3,970 has 33 layers x K=3 = 100 boundaries (the old checkpoint had ~41). With that many, 4 attention lines per
+    // boundary (400) and a label on every point turn the plot into a smear, so a deep path draws 1 thin faint line per boundary and
+    // labels only the landmarks (embed, FINAL, the crystallisation point, every 11th); the table below still lists them all.
+    const int DeepPathBoundaries = 24;
     const int MaxAttendedPerBoundary = 4;
+    const int MaxAttendedDeep = 1;
+    const int LabelEvery = 11;
     const double PlotW = 760, PlotH = 540;
 
     sealed class LoadStep { public string Label = ""; public string Status = "fetching…"; public string Cls = ""; }
@@ -209,6 +222,9 @@
     List<CloudDot> _cloudDots = new();
 
     static string Fmt(double v) => v.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
+    bool Deep => _trajPoints.Count > DeepPathBoundaries;   // 100 boundaries on r3,970: lighter, thinner attention lines (first render at 2.5 px / 0.67 opacity buried the path)
+    bool ShowTrajLabel(TrajPoint t) =>
+        _trajPoints.Count <= DeepPathBoundaries || t.IsCrystal || t.IsFinal || t.Boundary == 0 || t.Boundary % LabelEvery == 0;
     string PathPoints() => string.Join(" ", _trajPoints.Select(t => $"{Fmt(t.Sx)},{Fmt(t.Sy)}"));
     static string CloudClass(CloudDot c)
     {
@@ -411,7 +427,7 @@
             {
                 var row = _attnRows[b];
                 var cand = Enumerable.Range(0, row.Length).Where(j => j != last)
-                    .OrderByDescending(j => Math.Abs(row[j])).Take(MaxAttendedPerBoundary).ToList();
+                    .OrderByDescending(j => Math.Abs(row[j])).Take(total > DeepPathBoundaries ? MaxAttendedDeep : MaxAttendedPerBoundary).ToList();
                 if (cand.Count == 0) continue;
                 var maxAbs = cand.Max(j => Math.Abs(row[j]));
                 if (maxAbs < 1e-12) continue;

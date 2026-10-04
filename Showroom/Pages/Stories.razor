@@ -187,10 +187,13 @@
     enum Variety { Focused, Balanced, Wild }
     static double PFor(Variety v) => v switch
     {
-        Variety.Focused => 0.30,
-        Variety.Wild => 0.635,
-        _ => 0.466,
+        Variety.Focused => 0.43,
+        Variety.Wild => 0.89,
+        _ => 0.77,
     };
+    // 2026-10-04: the three values above are re-measured on r3,970 (V=320 d=64 L=33 ctx=512 K=3) by the same cumulative-mass
+    // rule (Focused 0.43 = Prism chat's P, Balanced 0.77, Wild 0.89). They are CHECKPOINT-SPECIFIC: the r84,639 table above
+    // no longer applies, and these must be re-measured as training continues.
     sealed record VarietyOption(Variety Value, string Label, string Hint);
     static readonly VarietyOption[] VarietyOptions =
     {
@@ -227,7 +230,11 @@
     //
     // 512 x 3.13 measured bytes/token (Prism's figure, same vocab) is ~1,600 characters. Re-measure
     // bytes/token alongside Prism's own MaxReplySteps on the next re-mint, since both depend on it.
-    const int MaxStorySteps = 512;
+    //
+    // 512 -> 448 on 2026-10-04 (r3,970, ctx=512): the context window is now 512, so a story of 512 steps plus any prompt
+    // overflowed it and re-Primed the whole window EVERY step (~5.7 ms/token x 512 = ~2.9 s a step). 448 leaves 64 prompt
+    // tokens, so prompt + story stays under 512 and the cache never fills (GenerateStoryAsync clamps a longer prompt).
+    const int MaxStorySteps = 448;
 
     // Consumed by the sentence-boundary trim at the end of GenerateStoryAsync — see that comment.
     static readonly char[] SentenceEnders = { '.', '!', '?' };
@@ -366,6 +373,10 @@
         var policy = PolicyFor(PFor(variety));
         var promptTokens = _vocab!.Encode(HoloKernel.AsciiPunctuation.Fold(prompt));
         var seq = new List<int>(promptTokens.Length > 0 ? promptTokens : new[] { 0 });
+        // Prompt + story must fit the window or every step past it re-Primes (~2.9 s each at ctx=512). 448 steps leave 64
+        // prompt tokens; a longer opening line (maxlength 120 chars can reach ~100 tokens) keeps only its tail.
+        var promptBudget = _stats!.Context - MaxStorySteps;
+        if (seq.Count > promptBudget) seq.RemoveRange(0, seq.Count - promptBudget);
         var outIds = new List<int>();
         var vocabLimit = _vocab.Size;
         var guard = new DegenGuard(policy);

@@ -40,7 +40,7 @@ public sealed class CouncilWebData
 
     public CouncilWebData(HttpClient http, IJSRuntime js) { _http = http; _js = js; }
 
-    /// <summary>The twenty-four councils, in the order the page lists them: the four hosted first, then the cities, then the nine added in Session 38, then Surrey, Essex and Hertfordshire (Session 43).</summary>
+    /// <summary>The twenty-five councils, in the order the page lists them: the four hosted first, then the cities, then the nine added in Session 38, then Surrey, Essex and Hertfordshire (Session 43), then Stockport (Session 45).</summary>
     public static readonly (string Slug, string Name, string Short)[] Councils =
     {
         ("wokingham", "Wokingham Borough Council", "Wokingham"),
@@ -67,6 +67,7 @@ public sealed class CouncilWebData
         ("surrey", "Surrey County Council", "Surrey"),
         ("essex", "Essex County Council", "Essex"),
         ("hertfordshire", "Hertfordshire County Council", "Hertfordshire"),
+        ("stockport", "Stockport Metropolitan Borough Council", "Stockport"),
     };
 
     public static string NameOf(string slug) => Councils.FirstOrDefault(c => c.Slug == slug).Name ?? slug;
@@ -186,7 +187,7 @@ public sealed class CouncilWebData
         return list;
     }
 
-    /// <summary>The slug of a council from its full name ("Leeds City Council" gives "leeds"); null when it is not one of the twenty-four.</summary>
+    /// <summary>The slug of a council from its full name ("Leeds City Council" gives "leeds"); null when it is not one of the twenty-five.</summary>
     public static string? SlugOfName(string fullName) =>
         Councils.FirstOrDefault(c => c.Name.Equals(fullName, StringComparison.OrdinalIgnoreCase)).Slug;
 

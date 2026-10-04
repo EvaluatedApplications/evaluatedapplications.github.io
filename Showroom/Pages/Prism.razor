@@ -109,7 +109,7 @@
 
         @* Condensed from the site's "Meaning as chords" page (site/holoformer.html), 2026-09-15, on the user's request, plus
            an honest account of what the audible tokens are. Keep the "What you're hearing" claims in lockstep with
-           HoloKernel.TokenVoice's PlayTone/BaseFrequency: 32 tones = this checkpoint's FrozenPrefix/2 (the codec band), "twice" = its StackK of 2. If either changes on a
+           HoloKernel.TokenVoice's PlayTone/BaseFrequency: 32 tones = this checkpoint's FrozenPrefix/2 (the codec band), "three times" = its StackK of 3. If either changes on a
            new checkpoint, update this copy too — and Nano Stories' own copy of the same claim, since it shares this voice. *@
         <section class="explain" aria-labelledby="explain-title">
             <h2 id="explain-title">How Prism works, as sound</h2>
@@ -122,8 +122,8 @@
                     they merge into a new one. Number chords are tuned so that merging them is the arithmetic itself.</li>
                 <li><strong>It remembers like a radio.</strong> Everything it has read folds into one running sound. To recall
                     something it tunes to that frequency, and the match rings out while the rest cancels to silence.</li>
-                <li><strong>It thinks by replaying.</strong> Each layer plays its part twice before handing the sound on. The
-                    first pass sketches, the second turns the sketch into the answer.</li>
+                <li><strong>It thinks by replaying.</strong> Each layer plays its part three times before handing the sound on. The
+                    early passes sketch, the last turns the sketch into the answer.</li>
             </ul>
             <h3>What you're hearing</h3>
             <p>Turn sound on and every piece of a word Prism writes plays its own chord, right as it appears. That chord is not
@@ -179,10 +179,14 @@
     // on this distribution and produces word salad — do not carry that default over, that mistake has
     // already been made once on this stack. Re-measure this table (and reconsider P) if P(top1) ever
     // moves off ~0.2 on a future checkpoint.
+    //
+    // 2026-10-04: re-measured on r3,970 (V=320 d=64 L=33 S=64 ctx=512 K=3) by the same cumulative-mass rule: chat P=0.43.
+    // CHECKPOINT-SPECIFIC: this value and Stories' three presets are only right for this checkpoint and must be
+    // re-measured as training continues (the table above is the r84,639 one, kept to show the method).
     static readonly DecodePolicy Policy = DecodePolicy.Default with
     {
         Floor = FloorMode.TopP,
-        P = 0.30,
+        P = 0.43,
         DegenNonGreedyRun = 0,
     };
     // The real stop condition is CharVocab.End (the model's own stop token) or DegenGuard catching a
@@ -216,7 +220,11 @@
     // Re-measure this against every new checkpoint: it depends on the vocabulary's bytes/token, which
     // changes on every re-mint. Do NOT "fix" the mid-sentence ending with a sentence-boundary
     // heuristic — chat quality gets fixed by training, not by trimming (see AboutUs CLAUDE.md).
-    const int MaxReplyStepsConst = 56;
+    //
+    // 56 -> 160 on 2026-10-04 (r3,970, V=320 d=64 L=33 ctx=512, ~1.15 chars/token): the model now emits its own STOP in
+    // ~45% of replies, so this is a backstop, not the usual ending. It ALSO sets the prompt budget (Context - this, see
+    // GenerateReplyAsync), so keep it well under Context or no history fits.
+    const int MaxReplyStepsConst = 160;
     //
     // HALVED 2026-09-12, from one full context window to half of one, because the full window was
     // measured to be well past where this checkpoint's output survives. The old reasoning — "a full
@@ -383,7 +391,10 @@
     // stream, since it renders as an already-complete turn the first time the chat UI paints at all.
     async Task<(string Text, StopReason Reason)> GenerateReplyAsync(Func<string, Task>? onPartial)
     {
-        var seq = BuildContextTokens(_vocab!, _turns, _stats!.Context);   // packed-turn context: finished exchanges end in STOP, see BuildContextTokens
+        // BUDGET = Context - MaxReplySteps (2026-10-04, r3,970 ctx=512): the prompt must leave room for a full reply or the
+        // cache fills mid-reply and every remaining step re-Primes the whole window (~5.7 ms/token x 512 = ~2.9 s PER STEP,
+        // a measured 163.5 s turn). With prompt <= 512-160 the cache never reaches Context and the loop is O(1)/token.
+        var seq = BuildContextTokens(_vocab!, _turns, _stats!.Context - MaxReplySteps);   // packed-turn context: finished exchanges end in STOP, see BuildContextTokens
         var outIds = new List<int>();
         var vocabLimit = _vocab!.Size;
         var guard = new DegenGuard(Policy);

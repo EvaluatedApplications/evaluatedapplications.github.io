@@ -1,6 +1,6 @@
 # Showroom — CLAUDE.md (showroom-owner)
 
-**Last verified:** 2026-10-04 (council scanner: 24 councils incl. Surrey/Essex/Hertfordshire; by financial year; Wokingham social care view)
+**Last verified:** 2026-10-04 (r3,970 window fix; council scanner: 25 councils incl. Stockport; by financial year; Wokingham social care view)
 
 Blazor WebAssembly app at `C:\Users\dongy\AboutUs\Showroom`, published under `/tools` on the public
 site (`AboutUs` repo, base href `/tools/`). Every tool runs entirely client-side: no server, no
@@ -64,8 +64,11 @@ package — a `ProjectReference` here is the designed path, not a MonoRepo bound
   `DegenerateTail.Start(ids)`/`.SafePrefix(ids)` trims a repeating tail mid-generation (Prism, Stories only).
 - **Browser contract**: visitors **train**, never **reshape** (`GrowLayers`/`GrowShifts` are PrismStudio-only; a better model ships as a new checkpoint).
 
-**Prism/Nano Stories constants** (re-measure on every checkpoint re-mint): `MaxReplyStepsConst = 56` / `MaxStorySteps = 128` are PINNED, not `Context/2`. The checkpoint never emits STOP, so every
-reply runs to its cap. `Prism.razor` context is the tagged wire format (`user: Q\nprism: A` + STOP per turn); Stories is a plain continuation. `AsciiPunctuation.Fold` runs at every tokenizer entry.
+**Prism/Nano Stories constants** (re-measure on every checkpoint re-mint): `MaxReplyStepsConst = 160` / `MaxStorySteps = 448` are PINNED, not `Context/2` (r3,970: V=320 d=64 L=33 S=64 ctx=512 K=3,
+~1.15 chars/token; the model now emits STOP in ~45% of replies, the cap is a backstop). **THE WINDOW RULE: prompt + reply must stay under `Context`, or every step past it re-Primes the whole window**
+(~5.7 ms/token x 512 = ~2.9 s PER STEP; a measured 163.5 s chat turn 7). So Prism builds history with budget `Context - MaxReplySteps` (352), Stories clamps the prompt to `Context - MaxStorySteps` (64 tokens,
+tail kept). Change either cap and the budget moves with it; keep each well under `Context`. `Prism.razor` context is the tagged wire format (`user: Q\nprism: A` + STOP per turn); Stories is a plain
+continuation. `AsciiPunctuation.Fold` runs at every tokenizer entry. Check with `node scripts/chat-turns.mjs <dist> <website-data> 9 6` (9 turns, flags any over 6 s).
 
 **Checkpoint refresh** (data-only, no publish, no site-repo change): write `prism/oracle-brain.bin.gz` (`GZipStream`) + `oracle-vocab/rounds/stackk/iterwarm.txt` (UTF-8 no BOM) into
 `C:\Users\dongy\website-data\prism\`, commit, push website-data only. Verify: `https://evaluatedapplications.github.io/website-data/prism/oracle-rounds.txt`.
@@ -81,7 +84,8 @@ the site repo stops growing: `council-web/` (CouncilWebBuilder writes straight t
   fingerprinted file; the first call, `dotnet.js`, is resolved through the import map). `blazor.webassembly.*.js` stays in the site. Empty on `localhost` (dev serves its own runtime).
 - **Source change = `scripts/publish-site.ps1`** (publish, rebuild `dist/`, copy the runtime to `website-data/_framework`, plain files only: Pages never serves `.br`/`.gz`). PUSH ORDER:
   website-data first, then the site. Re-run with `-Prune` after the site push is live (it deletes old runtime files; doing it earlier breaks the still-live site).
-- **Check a build**: `node scripts/boot-check.mjs <dist> <website-data dir>` (headless Edge: Prism boots from the data origin, replies, no off-origin request) and
+- **Check a build**: `node scripts/boot-check.mjs <dist> <website-data dir>` (headless Edge: Prism boots from the data origin, replies, no off-origin request), `scripts/chat-turns.mjs` (N chat turns timed; env
+  `PROMPT_SET=mid|mix|long` shapes the history: on the pre-fix build `mid` hit a 199.0 s turn 8; after, 12 turns max 3.1 s and 20 `mix` turns max 4.0 s), `scripts/tool-check.mjs` (Stories per variety + Cartographer counts/screenshot) and
   `node scripts/council-perf.mjs <dist> 6 4096 100`.
 
 ## The Analyst — `Pages/Analyst.razor` (route `/analyst`)
@@ -113,18 +117,19 @@ strips (not appends) the trailing newline. `_turns` capped + render-batched. **A
 
 ## Nano Stories — `Pages/Stories.razor` (route `/stories`)
 SAME model as Prism (same weights, not a fine-tune), shared `"prism"` `SessionHost` key and `TokenVoice`. Plain one-shot continuation,
-own Focused/Balanced/Wild presets, seeded (`Random(seed)` -> `Gate.Pick`). States the real (~370K) parameter count under the story.
+own Focused/Balanced/Wild presets, seeded (`Random(seed)` -> `Gate.Pick`). States the real parameter count (read from the checkpoint; ~1.0M at r3,970) under the story.
 
 **Decode gate: TopP, not ResonanceSigma** (Prism and Stories): ResonanceSigma degenerates to top-1 on this checkpoint so Temperature is inert.
-Both pages build `Floor = FloorMode.TopP` (needs Prism >= 1.3.0); `P` is checkpoint-specific, re-measure on every re-mint (r84,639:
-chat P=0.30; Stories Focused 0.30 / Balanced 0.466 / Wild 0.635; never a conventional 0.9). `ConfidentThreshold=0.60`.
+Both pages build `Floor = FloorMode.TopP` (needs Prism >= 1.3.0); `P` is checkpoint-specific, re-measure on every re-mint and as training continues (r3,970, by the cumulative-mass rule:
+chat P=0.43; Stories Focused 0.43 / Balanced 0.77 / Wild 0.89; r84,639 was 0.30 / 0.30, 0.466, 0.635; never a conventional 0.9 untested). `ConfidentThreshold=0.60`.
+Page copy "plays its part three times" = K=3 (Prism's explainer + the TokenVoice comment); update it if K changes.
 
 ## The Cartographer — `Pages/Cartographer.razor` (route `/cartographer`, added 2026-09-24)
 A 2D visualiser for **one** next-token decision (not a chat, no generation loop) on Prism's exact checkpoint via the shared `"prism"` `SessionHost` key. Encodes the prompt (capped to
-`min(24, Stats().Context)` tokens, front truncated), then calls `HoloFormer.InspectStackIterFaces`/`InspectAttention`/`DecodeFace`/`EmbRow` directly off `HoloSession.Model` (no
+`min(64, Stats().Context)` tokens, front truncated), then calls `HoloFormer.InspectStackIterFaces`/`InspectAttention`/`DecodeFace`/`EmbRow` directly off `HoloSession.Model` (no
 HoloKernel wrapper: read-only inspectors aren't worth one). **Trajectory**: the LAST position's face at every boundary (embed, each (layer,pass), FINAL) as a path; the first boundary whose
 greedy top-1 equals the final answer is marked. **Projection**: power-iteration PCA fit on the trajectory points only (captured-variance fraction always shown; an embed-to-final
-Gram-Schmidt basis as cross-check). **Attention**: top-4 by |weight| per boundary drawn to `grid[boundary][position]`. **No training loop, ever**; `HoloFormer.Map` defaults to
+Gram-Schmidt basis as cross-check). **Attention**: top-4 by |weight| per boundary drawn to `grid[boundary][position]`. Deep paths (r3,970 = 33 layers x K=3 = 100 boundaries): above 24 boundaries it draws 1 thin faint attention line per boundary (2 at full strength buried the path) and labels only embed/FINAL/crystal/every 11th; the table scrolls in a box. **No training loop, ever**; `HoloFormer.Map` defaults to
 `SequentialMap` (deadlock-safe on WASM) and there is no `MapAsync`, so `await Task.Yield()` around the call keeps the tab responsive (as in `Prism.razor`).
 
 ## Prose — `Pages/Prose.razor` (route `/prose`)
@@ -132,8 +137,11 @@ Paste/drop text; `ProseEngine.MineText` mines it (page chunks+yields at ~200k ch
 HoloDb `ProseStore` + AlgFormer plausibility (None / Prism's checkpoint / train on the visitor's text, ~0.22-0.24 ms/char/epoch), chord`data-cat="holodb-algformer"`. `ProseEngine.Plausibility` has no reset (page re-mines a fresh engine). Cap 64MB.
 
 ## Council Spending Scanner: `Pages/CouncilSpending.razor` (routes `/council-spending`, `/council-spending/{slug}`)
-Built on the virtual-customer's PHONE-SIZED export (`VirtualCustomer\web_export`; SPEC_FOR_SHOWROOM.md items 9-26). Twenty-four councils, no HoloDb,
+Built on the virtual-customer's PHONE-SIZED export (`VirtualCustomer\web_export`; SPEC_FOR_SHOWROOM.md items 9-26). Twenty-five councils, no HoloDb,
 no engine in the browser. Public-audience, mobile-first, not editorial: audit terms, plain prose + counts + GBP, OGL credit, never a cause.
+- **Stockport** (added 2026-10-04, 115 months): a transaction number only from April 2025 (17 months) and 66 of 115 files carry an invoice date only, so it is NOT in `NoTransactionNumber` (twins/within-transaction
+  DO run on the numbered months): `CouncilTerms.HasNumber`/`NotAvailable(slug, sch, year)` word A (one amount column) and D (no number before April 2025, nothing found after) per year; `YearNote` + `CannotCheck` carry the
+  caveats; in no budget group (no Revenue Outturn held). A limit that depends on the year needs this per-year shape, not the all-or-nothing sets.
 - **Adding a council** (done for 9, then Surrey/Essex/Hertfordshire, 2026-10-04): a line in `CouncilWebData.Councils` (full name EXACTLY as the profile's, short name), a `("key","slug")` pair in the builder's `TrySlug()` (else it is
   "NOT SHIPPED"), `CouncilTerms.NoScheduleA/NoScheduleD` from the exceptions (A or D rows = 0 and the profile says empty by construction; `NoDByNumbering` when numbers exist but never span payees; `NoTransactionNumber` when
   none is published: also makes `CheckCannotRun` say twins/within-transaction cannot run), `CouncilTerms.CannotCheck(slug)` (the "What cannot be checked" list on the page), `YearNote` (Hertfordshire's April 2025 threshold
@@ -145,7 +153,7 @@ no engine in the browser. Public-audience, mobile-first, not editorial: audit te
   ONE Load with progress + Cancel (keeps finished years). `YearBlock` per loaded unit: totals, `GapBars` (whole years only), schedule/bucket lists; top of view: per-year totals + `GapSummary`. `MonthScan` keeps raw bytes only for recent
   years (`RawBudget` 40 MB, LRU); an evicted year re-inflates via `EnsureRawAsync` (0.04-0.85 s) before a list opens (`NeedRaw`).
 - **Data** (`website-data/council-web`, 448 MB, 5,396 files, largest 1.2 MB (website-data whole tree 652 MB incl. old+new runtime, .git 473 MB; Pages cap 1 GB); `AboutUs\CouncilWebBuilder`, `dotnet run -c Release --project CouncilWebBuilder`, about 70-90 s, writes straight into
-  the data repo (arg 1 / `COUNCIL_WEB_OUT`; `COUNCIL_PART_CAP_MB` tests the split), a run only overwrites, so delete a stale file BY NAME (the 6 old `*.exceptions.2.csv.gz` went 2026-10-04); ships only councils with a `web_export/<slug>` folder (24 now; a council without one prints "NOT SHIPPED"); fails above 50 MB/file;
+  the data repo (arg 1 / `COUNCIL_WEB_OUT`; `COUNCIL_PART_CAP_MB` tests the split), a run only overwrites, so delete a stale file BY NAME (the 6 old `*.exceptions.2.csv.gz` went 2026-10-04); ships only councils with a `web_export/<slug>` folder (25 now; a council without one prints "NOT SHIPPED"; City of York has none yet); fails above 50 MB/file;
   second arg `profiles` rewrites only profiles.json.gz. Then commit + push website-data, nothing else): `index.csv`, per-council `months.csv` (exception columns describe the slim files) +
   `years.csv` (`Year,Months,Parts,TxRows,Net,ExceptionRows,ExceptionBytes,ExceptionGzipBytes`), **exception files in ONE slim format**: `<slug>/<YYYY-MM>.exceptions.csv.gz` (a month) and
   `<slug>/fy-<YYYY-YY>.exceptions[.N].csv.gz` (a year bundle, cut into parts of whole months only above 12 MB raw: none are today; largest year 1.2 MB gz / 11 MB raw). Format: a `@2022-11` marker
