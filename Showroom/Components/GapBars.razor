@@ -1,0 +1,43 @@
+@using Showroom.Services
+@using static Showroom.Services.CouncilTerms
+
+@* The three bars of one council-year, on ONE scale: declared spend, what the published file itemises (and the declared spend not itemised in it), and the
+   flagged repeat payments against the size of that difference; then the one computed sentence. Plain boxes, no SVG, no script. The difference is two totals on
+   different bases, never "undeclared" or "missing". *@
+<div class="gchart" aria-hidden="true">
+    @{ decimal max = Y.Declared > Y.File ? Y.Declared : Y.File; }
+    <div class="gl"><span class="sw sdec"></span>Declared spend <b>@Gbp(Y.Declared)</b></div>
+    <div class="gtrack"><i class="seg sdec" style="left:0;width:@W(Y.Declared, max)"></i></div>
+    <div class="gl"><span class="sw sfile"></span>Itemised in the published file <b>@Gbp(Y.File)</b>
+        @if (Y.Gap > 0m) { <span class="sw sgap"></span><span>Declared spend not itemised in the file </span><b>@Gbp(Y.Gap)</b> }
+        else { <span class="sw sover"></span><span>Above the declared spend </span><b>@Gbp(-Y.Gap)</b> }
+    </div>
+    <div class="gtrack">
+        @if (Y.Gap > 0m)
+        {
+            <i class="seg sfile" style="left:0;width:@W(Y.File, max)"></i>
+            <i class="seg sgap" style="left:@W(Y.File, max);width:@W(Y.Gap, max)"></i>
+        }
+        else
+        {
+            <i class="seg sfile" style="left:0;width:@W(Y.Declared, max)"></i>
+            <i class="seg sover" style="left:@W(Y.Declared, max);width:@W(-Y.Gap, max)"></i>
+        }
+    </div>
+    <div class="gl"><span class="sw sta"></span>Second copies published twice <b>@Gbp(Y.TA)</b> <span class="sw stb"></span>Repeat-payment leads <b>@Gbp(Y.Leads)</b>@if (Y.Gap > 0m) { <span class="gnote"> (dashed outline: the size of the not-itemised amount)</span> }</div>
+    <div class="gtrack">
+        @if (Y.Gap > 0m) { <i class="seg sbox" style="left:0;width:@W(Y.Gap, max)"></i> }
+        @if (Y.TA > 0m) { <i class="seg sta flag" style="left:0;width:@W(Y.TA, max)"></i> }
+        @if (Y.Leads > 0m) { <i class="seg stb flag" style="left:@W(Y.TA, max);width:@W(Y.Leads, max)"></i> }
+    </div>
+    <div class="gaxis"><span>£0</span><span>@Gbp(max) (one scale for all three bars)</span></div>
+</div>
+<p class="greading">@Y.Reading()</p>
+@if (Y.Year is "2017-18" or "2018-19") { <p class="hint">For this year the government's split between employees and running expenses is an estimate, not a council return, so the declared figure is rougher.</p> }
+
+@code {
+    [Parameter, EditorRequired] public GapYear Y { get; set; } = null!;
+
+    /// <summary>A bar's left or width as a percentage of the year's one scale.</summary>
+    static string W(decimal part, decimal max) => max <= 0m || part <= 0m ? "0%" : Math.Min(100d, (double)(part / max) * 100d).ToString("0.###", System.Globalization.CultureInfo.InvariantCulture) + "%";
+}

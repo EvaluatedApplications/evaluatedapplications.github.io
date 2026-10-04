@@ -53,7 +53,7 @@
                 </a>
             }
         </div>
-        <p class="hint">Each council page loads one small file per month you open, never a whole council, so it stays quick on a phone.</p>
+        <p class="hint">On a council's page you tick the financial years to load (the size is shown first); nothing is loaded until you press Load, and never a whole council unless you tick every year, so it stays quick on a phone.</p>
     </section>
 
     <section class="cross">
@@ -124,7 +124,7 @@ else
             </section>
         }
 
-        <MonthView Slug="@Slug" Months="_months" />
+        <LoadPicker Slug="@Slug" Months="_months" Years="_years" />
 
         <section class="cross">
             <h2>Other checks for @CouncilWebData.ShortOf(Slug)</h2>
@@ -132,7 +132,6 @@ else
             @foreach (var d in CouncilChecksWeb.All) { <CheckPanel @key="@(Slug + d.Id)" Def="d" Slug="@Slug" /> }
         </section>
 
-        <GapPanel Slug="@Slug" />
         <BudgetPanel Slug="@Slug" />
         <BudgetTestPanel />
 
@@ -148,6 +147,7 @@ else
 
     List<CouncilIndexRow>? _index;
     List<MonthRow> _months = new();
+    List<YearRow> _years = new();
     CouncilProfile? _profile;
     List<string> _flags = new(), _others = new(), _facts = new();
     bool _ready, _notFound;
@@ -171,6 +171,7 @@ else
             if (_notFound || _loadedSlug == Slug) return;
             _ready = false;
             _months = await Data.MonthsAsync(Slug, co);
+            _years = await Data.YearsAsync(Slug, co);
             _profile = await Data.ProfileAsync(Slug);
             _index ??= await Data.IndexAsync(co);
             BuildFacts();
@@ -206,7 +207,7 @@ else
                 _facts.Add($"No published line carries a payment date in {(missing.Count <= 12 ? string.Join(", ", missing) : Num(missing.Count) + " of those months")}.");
         }
         var und = _months.FirstOrDefault(m => m.Month == "undated");
-        if (und is not null) _facts.Add($"{Num(und.TxRows)} lines have no readable payment date and are listed under \"rows with no readable date\" in the month picker.");
+        if (und is not null) _facts.Add($"{Num(und.TxRows)} lines have no readable payment date and are listed under \"No readable date\" in the list of years to load.");
         _facts.Add($"The rules flag {Num(_months.Sum(m => m.ExceptionRows))} lines in all, as published, none of them a finding.");
     }
 }

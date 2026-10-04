@@ -12,6 +12,10 @@ public sealed record CouncilIndexRow(string Slug, int Months, int TxRows, int Ex
 /// <summary>One line of a council's months.csv. A month is the month of each ROW'S OWN pay date, not the file tag.</summary>
 public sealed record MonthRow(string Month, int TxRows, decimal Net, int ExceptionParts, int ExceptionRows, long ExceptionGzipBytes, int Parts = 1);
 
+/// <summary>One line of a council's years.csv: one FINANCIAL year (April to March, "2023-24"; or "undated"). Its flagged lines are one bundle
+/// (<see cref="Parts"/> files, split only when a year is heavy); <see cref="ExceptionGzipBytes"/> is what the visitor downloads for it.</summary>
+public sealed record YearRow(string Year, int Months, int Parts, int TxRows, decimal Net, int ExceptionRows, long ExceptionBytes, long ExceptionGzipBytes);
+
 /// <summary>A council's own profile text, written by the virtual-customer and carried unchanged (see CouncilWebBuilder).</summary>
 public sealed record CouncilProfile(string Slug, string Name, string Page, string HowTo, IReadOnlyList<string> Quirks,
     string LastChecked, string Verification, string? Foi, int HeldBack);
@@ -70,14 +74,16 @@ public sealed class CouncilWebData
         try { await _js.InvokeVoidAsync("console.info", $"CW-PERF {what} {ms:F0}ms {extra}".TrimEnd()); } catch { }
     }
 
-    async Task<byte[]> GetBytesAsync(string path, bool gz, Cooperative co)
+    /// <summary>The downloaded (still gzipped) bytes of a file. A cancelled load stops the download.</summary>
+    public async Task<byte[]> FetchAsync(string path, bool gz, CancellationToken ct = default) =>
+        await _http.GetByteArrayAsync(Root + path + (gz ? ".gz" : ""), ct);
+
+    /// <summary>Inflates gzip bytes in 32 KB steps, handing the thread back between steps when a slice is spent (a 1.5 MB file inflates in one go otherwise).</summary>
+    public static async Task<byte[]> InflateAsync(byte[] raw, Cooperative co, int expected = 0)
     {
-        var raw = await _http.GetByteArrayAsync(Root + path + (gz ? ".gz" : ""));
-        if (!gz) return raw;
-        // inflate in 32 KB steps, handing the thread back between steps when a slice is spent (a 1.5 MB file inflates in one go otherwise)
         using var input = new MemoryStream(raw, writable: false);
         using var zip = new GZipStream(input, CompressionMode.Decompress);
-        var output = new MemoryStream(raw.Length * 6);
+        var output = new MemoryStream(expected > 0 ? expected : raw.Length * 6);
         var buf = new byte[32768];
         int n;
         while ((n = zip.Read(buf, 0, buf.Length)) > 0)
@@ -85,7 +91,13 @@ public sealed class CouncilWebData
             output.Write(buf, 0, n);
             if (co.Due) await co.YieldAsync();
         }
-        return output.ToArray();
+        return output.GetBuffer().AsSpan(0, (int)output.Length).ToArray();
+    }
+
+    async Task<byte[]> GetBytesAsync(string path, bool gz, Cooperative co)
+    {
+        var raw = await FetchAsync(path, gz, co.Ct);
+        return gz ? await InflateAsync(raw, co) : raw;
     }
 
     /// <summary>A file's decompressed bytes (not cached): for the month slices, which are scanned straight from bytes.</summary>
@@ -131,6 +143,25 @@ public sealed class CouncilWebData
         m = t.Skip(1).Where(r => r.Length >= 10).Select(r => new MonthRow(r[0], I(r[2]), D(r[3]), I(r[6]), I(r[7]), long.Parse(r[9], CultureInfo.InvariantCulture), Math.Max(1, I(r[1])))).ToList();
         _months[slug] = m;
         return m;
+    }
+
+    readonly Dictionary<string, List<YearRow>> _years = new();
+    public async Task<List<YearRow>> YearsAsync(string slug, Cooperative co)
+    {
+        if (_years.TryGetValue(slug, out var y)) return y;
+        var t = await TableAsync($"{slug}/years.csv", false, co);
+        // Year,Months,Parts,TxRows,Net,ExceptionRows,ExceptionBytes,ExceptionGzipBytes
+        y = t.Skip(1).Where(r => r.Length >= 8).Select(r => new YearRow(r[0], I(r[1]), I(r[2]), I(r[3]), D(r[4]), I(r[5]), long.Parse(r[6], CultureInfo.InvariantCulture), long.Parse(r[7], CultureInfo.InvariantCulture))).ToList();
+        _years[slug] = y;
+        return y;
+    }
+
+    /// <summary>The financial year (April to March, as the government's declared totals are given) a month belongs to: "2023-04" and "2024-03" are both "2023-24". Anything else is "undated".</summary>
+    public static string FinancialYearOf(string month)
+    {
+        if (month.Length != 7 || !int.TryParse(month.AsSpan(0, 4), out var y) || !int.TryParse(month.AsSpan(5, 2), out var m)) return "undated";
+        int s = m >= 4 ? y : y - 1;
+        return $"{s}-{(s + 1) % 100:00}";
     }
 
     // The raw bytes of the last two months' transaction slices, so a second "See the source rows" in the same month costs nothing.

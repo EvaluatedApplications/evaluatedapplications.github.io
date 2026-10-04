@@ -20,13 +20,151 @@ if (args.Length > 1 && args[1] == "props")
 Directory.CreateDirectory(outDir);
 long rawTotal = 0, gzTotal = 0; int files = 0, txSlices = 0;
 
-void WriteGz(string name, byte[] data)
+long WriteGz(string name, byte[] data)
 {
     var path = Path.Combine(outDir, name + ".gz");
     Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-    using var fs = File.Create(path);
+    using (var fs = File.Create(path))
     using (var gz = new GZipStream(fs, CompressionLevel.SmallestSize)) gz.Write(data);
-    rawTotal += data.Length; gzTotal += new FileInfo(path).Length; files++;
+    long size = new FileInfo(path).Length;
+    rawTotal += data.Length; gzTotal += size; files++;
+    return size;
+}
+
+// ---------------------------------------------------------------------------------------------------------------------------------------
+// Exception files. The page loads them by FINANCIAL YEAR (April to March, the year the councils' declared totals are given in), one fetch
+// per year, or by single months when a visitor ticks months. Both are the same SLIM format, a "section" per month:
+//     @2022-11                                  (marker line: the month of the file the rows came from)
+//     Schedule,GroupId,TransactionId,SupplierName,Net,Difference,Detail,Classification,TransactionGross,ExplainedBy,ExplainedMeaning
+//     rows...
+// Slim = the page's own reading of the engine's export with what it never shows taken out: Council, Year, SupplierKey and Gross are dropped;
+// TransactionGross is left empty when it equals Net; Detail and ExplainedMeaning (the same sentence on every line of a group) stay on the first
+// line of each group only, which is the only place the page reads them. Rows, groups, values and the text shown are unchanged (checked against
+// the unslimmed files: see CLAUDE.md). A year bundle is cut into parts of whole months only if a part would pass PartCapRaw.
+// ---------------------------------------------------------------------------------------------------------------------------------------
+int PartCapRaw = (int.TryParse(Environment.GetEnvironmentVariable("COUNCIL_PART_CAP_MB"), out var capMb) ? capMb : 12) * 1024 * 1024;   // the env var is for testing a split
+const int MonthCapRaw = 16 * 1024 * 1024;
+const string SlimHeader = "Schedule,GroupId,TransactionId,SupplierName,Net,Difference,Detail,Classification,TransactionGross,ExplainedBy,ExplainedMeaning";
+
+string FinancialYear(string month)
+{
+    if (month.Length != 7 || !int.TryParse(month[..4], out var y) || !int.TryParse(month[5..], out var m)) return "undated";
+    int s = m >= 4 ? y : y - 1;
+    return $"{s}-{(s + 1) % 100:00}";
+}
+
+List<List<string>> ParseCsv(string t)
+{
+    var rows = new List<List<string>>(); var row = new List<string>(); var sb = new StringBuilder();
+    int i = 0, n = t.Length; bool any = false;
+    if (n > 0 && t[0] == '﻿') i = 1;
+    while (i < n)
+    {
+        char c = t[i];
+        if (c == '"')
+        {
+            i++; any = true;
+            while (i < n) { if (t[i] == '"') { if (i + 1 < n && t[i + 1] == '"') { sb.Append('"'); i += 2; continue; } i++; break; } sb.Append(t[i++]); }
+        }
+        else if (c == ',') { row.Add(sb.ToString()); sb.Clear(); i++; any = true; }
+        else if (c == '\r') i++;
+        else if (c == '\n') { if (any || row.Count > 0) { row.Add(sb.ToString()); rows.Add(row); } row = new(); sb.Clear(); any = false; i++; }
+        else { sb.Append(c); i++; any = true; }
+    }
+    if (any || row.Count > 0) { row.Add(sb.ToString()); rows.Add(row); }
+    return rows;
+}
+
+string Q(string s) => s.IndexOfAny(new[] { ',', '"', '\r', '\n' }) >= 0 ? "\"" + s.Replace("\"", "\"\"") + "\"" : s;
+
+// One month's section in slim form, from the month's exception file(s) (a month the engine split in parts is read as one: group ids carry across parts).
+(byte[] Data, int Rows) SlimMonth(string dir, string month)
+{
+    var files = Directory.GetFiles(dir, month + ".exceptions*.csv")
+        .OrderBy(f => { var p = Path.GetFileName(f)[(month.Length + ".exceptions".Length)..]; return p == ".csv" ? 1 : int.Parse(p.Split('.')[1]); }).ToList();
+    if (files.Count == 0) return (Array.Empty<byte>(), 0);
+    var sb = new StringBuilder();
+    sb.Append('@').Append(month).Append('\n').Append(SlimHeader).Append('\n');
+    var seen = new HashSet<(char, long)>();
+    int rowsOut = 0;
+    foreach (var f in files)
+    {
+        var recs = ParseCsv(File.ReadAllText(f, Encoding.UTF8));
+        if (recs.Count == 0) continue;
+        var h = recs[0]; int Col(string n) => h.FindIndex(x => x.Equals(n, StringComparison.OrdinalIgnoreCase));
+        int cS = Col("Schedule"), cG = Col("GroupId"), cT = Col("TransactionId"), cN = Col("SupplierName"), cNet = Col("Net"), cD = Col("Difference"),
+            cDet = Col("Detail"), cC = Col("Classification"), cTG = Col("TransactionGross"), cEB = Col("ExplainedBy"), cEM = Col("ExplainedMeaning");
+        if (cS < 0 || cG < 0 || cT < 0 || cN < 0 || cNet < 0 || cD < 0 || cDet < 0 || cC < 0) throw new InvalidDataException($"{f}: columns missing");
+        string At(List<string> r, int c) => c >= 0 && c < r.Count ? r[c] : "";
+        for (int k = 1; k < recs.Count; k++)
+        {
+            var r = recs[k];
+            if (r.Count < 12) continue;      // the page skips these too
+            string sched = At(r, cS);
+            bool hasGid = long.TryParse(At(r, cG), System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var gid);
+            bool first = !(hasGid && sched.Length > 0 && sched[0] != 'A') || seen.Add((sched[0], gid));
+            string net = At(r, cNet), tg = At(r, cTG);
+            bool sameGross = tg.Length == 0 || (decimal.TryParse(tg, System.Globalization.CultureInfo.InvariantCulture, out var a) && decimal.TryParse(net, System.Globalization.CultureInfo.InvariantCulture, out var b) && a == b);
+            sb.Append(Q(sched)).Append(',').Append(Q(At(r, cG))).Append(',').Append(Q(At(r, cT))).Append(',').Append(Q(At(r, cN))).Append(',').Append(Q(net)).Append(',')
+              .Append(Q(At(r, cD))).Append(',').Append(first ? Q(At(r, cDet)) : "").Append(',').Append(Q(At(r, cC))).Append(',').Append(sameGross ? "" : Q(tg)).Append(',')
+              .Append(Q(At(r, cEB))).Append(',').Append(first ? Q(At(r, cEM)) : "").Append('\n');
+            rowsOut++;
+        }
+    }
+    return rowsOut == 0 ? (Array.Empty<byte>(), 0) : (new UTF8Encoding(false).GetBytes(sb.ToString()), rowsOut);
+}
+
+// Writes one council's month files, year bundles, months.csv (its exception columns now describe the slim files) and years.csv.
+void WriteExceptions(string slug, string dir)
+{
+    var lines = File.ReadAllLines(Path.Combine(dir, "months.csv")).Where(l => l.Length > 0).ToList();
+    var outLines = new List<string> { lines[0] };
+    var byYear = new SortedDictionary<string, List<(string Month, byte[] Data, int Rows)>>(StringComparer.Ordinal);
+    var tot = new Dictionary<string, (int Months, long Tx, decimal Net)>();
+    foreach (var line in lines.Skip(1))
+    {
+        var f = line.Split(',');           // plain numbers: no quoted fields in months.csv
+        string month = f[0];
+        var (data, rows) = SlimMonth(dir, month);
+        long gz = 0;
+        if (rows > 0)
+        {
+            if (data.Length > MonthCapRaw) throw new InvalidOperationException($"{slug} {month}: slim month is {data.Length / 1048576.0:F1} MB raw, over the cap");
+            gz = WriteGz($"{slug}/{month}.exceptions.csv", data);
+        }
+        if (int.TryParse(f[7], out var old) && old != rows) Console.WriteLine($"ROW COUNT [{slug} {month}]: months.csv says {old} flagged lines, the files hold {rows}");
+        f[6] = rows > 0 ? "1" : "0"; f[7] = rows.ToString(); f[8] = data.Length.ToString(); f[9] = gz.ToString();
+        outLines.Add(string.Join(",", f));
+        string fy = FinancialYear(month);
+        if (!byYear.TryGetValue(fy, out var list)) byYear[fy] = list = new();
+        list.Add((month, data, rows));
+        tot.TryGetValue(fy, out var t);
+        tot[fy] = (t.Months + 1, t.Tx + long.Parse(f[2]), t.Net + decimal.Parse(f[3], System.Globalization.CultureInfo.InvariantCulture));
+    }
+    WriteRaw($"{slug}/months.csv", new UTF8Encoding(false).GetBytes(string.Join("\n", outLines) + "\n"));
+
+    var years = new List<string> { "Year,Months,Parts,TxRows,Net,ExceptionRows,ExceptionBytes,ExceptionGzipBytes" };
+    foreach (var (fy, list) in byYear)
+    {
+        var parts = new List<MemoryStream> { new MemoryStream() };
+        int rows = 0;
+        foreach (var (_, data, r) in list)
+        {
+            if (r == 0) continue;
+            if (parts[^1].Length > 0 && parts[^1].Length + data.Length > PartCapRaw) parts.Add(new MemoryStream());
+            parts[^1].Write(data); rows += r;
+        }
+        long raw = 0, gz = 0; int np = 0;
+        if (rows > 0)
+            foreach (var (p, i) in parts.Select((p, i) => (p, i)))
+            {
+                gz += WriteGz($"{slug}/fy-{fy}.exceptions{(i == 0 ? "" : "." + (i + 1))}.csv", p.ToArray());
+                raw += p.Length; np++;
+            }
+        var tt = tot[fy];
+        years.Add($"{fy},{tt.Months},{np},{tt.Tx},{tt.Net.ToString(System.Globalization.CultureInfo.InvariantCulture)},{rows},{raw},{gz}");
+    }
+    WriteRaw($"{slug}/years.csv", new UTF8Encoding(false).GetBytes(string.Join("\n", years) + "\n"));
 }
 void WriteRaw(string name, byte[] data)
 {
@@ -44,9 +182,7 @@ if (!profilesOnly) WriteRaw("index.csv", File.ReadAllBytes(Path.Combine(webExpor
 foreach (var slug in profilesOnly ? Array.Empty<string>() : SupportedCouncils.Everyone.Select(c => Slug(c.Name)))
 {
     var dir = Path.Combine(webExport, slug);
-    WriteRaw($"{slug}/months.csv", File.ReadAllBytes(Path.Combine(dir, "months.csv")));
-    foreach (var f in Directory.GetFiles(dir, "*.exceptions*.csv"))
-        WriteGz($"{slug}/{Path.GetFileName(f)}", File.ReadAllBytes(f));
+    WriteExceptions(slug, dir);
     // Transaction slices ("See the source rows"): one month per file, further parts when a month holds more than 12,000 rows. Fetched only
     // when a visitor asks for the source rows of one flagged item, never in bulk.
     foreach (var f in Directory.GetFiles(dir, "*.csv"))

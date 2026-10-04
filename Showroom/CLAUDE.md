@@ -1,6 +1,6 @@
 # Showroom — CLAUDE.md (showroom-owner)
 
-**Last verified:** 2026-10-04 (big data and the Blazor runtime moved to the website-data repo; council scanner: request tray + letter, source rows, 21 councils, test at n=96)
+**Last verified:** 2026-10-04 (council scanner loads by financial year: tick-list + one Load; year bundles in website-data)
 
 Blazor WebAssembly app at `C:\Users\dongy\AboutUs\Showroom`, published under `/tools` on the public
 site (`AboutUs` repo, base href `/tools/`). Every tool runs entirely client-side: no server, no
@@ -64,15 +64,10 @@ package — a `ProjectReference` here is the designed path, not a MonoRepo bound
   `DegenerateTail.Start(ids)`/`.SafePrefix(ids)` trims a repeating tail mid-generation (Prism, Stories only).
 - **Browser contract**: visitors **train**, never **reshape** (`GrowLayers`/`GrowShifts` are PrismStudio-only; a better model ships as a new checkpoint).
 
-**Prism/Nano Stories operational constants** (re-measure on every checkpoint re-mint): `MaxReplyStepsConst = 56` (Prism) /
-`MaxStorySteps = 128` (Stories) are PINNED, not `Context/2` (that broke on a checkpoint swap). The checkpoint never emits STOP, so
-every reply/story runs to its cap and ends mid-sentence: train it, no sentence-boundary heuristic. `Prism.razor`'s chat context
-(`BuildContextTokens`) is the tagged wire format (`user: Q\nprism: A` + STOP per turn) matching PrismGym's windows; Stories uses a plain
-continuation. `HoloKernel/AsciiPunctuation.Fold` (curly quotes/dashes -> ASCII) runs at every tokenizer entry
-(`SubwordVocab.Fold` blanks non-ASCII).
+**Prism/Nano Stories constants** (re-measure on every checkpoint re-mint): `MaxReplyStepsConst = 56` / `MaxStorySteps = 128` are PINNED, not `Context/2`. The checkpoint never emits STOP, so every
+reply runs to its cap. `Prism.razor` context is the tagged wire format (`user: Q\nprism: A` + STOP per turn); Stories is a plain continuation. `AsciiPunctuation.Fold` runs at every tokenizer entry.
 
-**Checkpoint refresh** (Prism's checkpoint + sidecars, shared by Stories/Cartographer/Analyst/Prose): data-only, no publish, NO site-repo change: write `prism/oracle-brain.bin.gz`
-(`GZipStream`; raw `.bin` is not shipped, nothing fetches it) + `oracle-vocab/rounds/stackk/iterwarm.txt` (UTF-8 no BOM; cross-check `-stackk`/`-iterwarm` against PrismStudio) into
+**Checkpoint refresh** (data-only, no publish, no site-repo change): write `prism/oracle-brain.bin.gz` (`GZipStream`) + `oracle-vocab/rounds/stackk/iterwarm.txt` (UTF-8 no BOM) into
 `C:\Users\dongy\website-data\prism\`, commit, push website-data only. Verify: `https://evaluatedapplications.github.io/website-data/prism/oracle-rounds.txt`.
 
 ## Data and runtime live in the website-data repo (2026-10-04)
@@ -143,36 +138,36 @@ no engine in the browser. Public-audience, mobile-first, not editorial: audit te
   "no slug for X"), `CouncilTerms.NoScheduleA/NoScheduleD` from the exceptions (A or D rows = 0 and the profile says empty by construction; `NoDByNumbering` when numbers exist but never span payees), then re-run the builder.
   New cross files go in the builder's `cross/` list and a row in `BudgetTestPanel`'s set list. Profile prose needs no page code (flagged = quirk opening in capitals), but read the builder's REWORDED/HELD BACK
   output and grep profiles.json for working-file words (`prep`, "Prepare step" are reworded to "the scanner" in `Reword`; `XlsxReader` sentences dropped).
-- **Data** (`website-data/council-web`, 292.6 MB, 4,202 files, none over 0.28 MB; `AboutUs\CouncilWebBuilder`, `dotnet run -c Release --project CouncilWebBuilder`,
-  about 70-90 s, writes straight into the data repo (arg 1 / `COUNCIL_WEB_OUT` overrides), wipe the folder first so stale files go; it fails above 50 MB/file; second arg `profiles` rewrites
-  only profiles.json.gz. Then commit + push website-data, nothing else): `index.csv`, per-council `months.csv`,
-  month EXCEPTION slices (`<slug>/<YYYY-MM>.exceptions[.N].csv.gz`), month TRANSACTION slices (`<slug>/<YYYY-MM>[.N].csv.gz`, 1,333 files, 13 slim columns, fetched only by "See the
-  source rows"), `cross/*.csv.gz`, `profiles.json.gz`, `PREREG_BUDGET_TEST.txt`. After every `phoneexport`/`export`: re-run the builder (no site publish needed).
-  Profile text is cleaned in the BUILDER, never at source: the engine's "Schedule A/B/D" and "the engine" become the page's words, sentences naming working files, sessions or
-  checklists are dropped, empty notes held back; REWORDED/HELD BACK lines print for the profile owner (West Berkshire 3, RBWM 1 held back at last run). Never load a whole council.
-- **Code**: `Services/CouncilWebData` (fetch, chunked inflate, caches; keeps the last two months' transaction bytes), `CouncilMonth` (`MonthScan`: byte-level scan, no string per line,
-  groups opened on demand; reads `ExplainedBy`/`ExplainedMeaning` by header name), `CouncilSource` (`SourceScan`, `SourceState`), `CouncilChecksWeb` (check definitions, plain loops: LINQ over
-  decimals/tuples is slow in WASM), `CouncilTerms` (wording, `TryDate` day-first: "03/04/2020" is 3 April), `FoiTray` (`FoiTray`, `FoiFacts`: item sentences and the letter);
-  `Components/CheckPanel|MonthView|BudgetPanel|BudgetTestPanel|FoiTrayPanel|SourceBlocks`. Each load logs a `CW-PERF` console line.
-- **Gap panel** (`Components/GapPanel` + `Services/CouncilGap`, 2026-10-04): per eligible council-year, ONE scale: declared (K3) / file (F) / "declared spend not itemised in the file" (K3-F, never
-  "undeclared") / flagged (T_A second copies + T_B-T_A leads), one computed sentence (fits N times over; larger than; or file above declared), council summary, hub table. Reads only
-  `cross/budget_units.csv` (K3 EXCLUDES employee pay, so staff pay is not in the gap). Open on council pages, closed on the hub. Measure: `scripts/gap-perf.mjs <dist> 6 4096 100 <data> [cold]`.
-- **Pattern readings** (item 22, as changed in Session 34): RecurringBatchRate and CadenceCatchUp are NOT classes. An Unclear group carries them in `ExplainedBy` + `ExplainedMeaning`;
-  shown as a tag with the meaning as caption, the group stays open. Month summary: "N still open (Unclear + standing-payment surplus), of which K carry a pattern reading".
-- **Request tray** (`FoiTrayPanel`, one letter per council): "Add to request" on every month group and cross-check row (not budget lines). The letter states facts and asks
-  "Please provide the records you hold for this item, and the reason for it." No class meanings, readings, `Detail` text or loan rebuilds go in it (those are explanations). Address
-  is the profile's verified `foi` (4 of 12 councils) else a placeholder. Caps: 300 items, 100 per letter. Copy/save only; lives for the page load. Tick and source buttons are
-  PLAIN markup with their state on the row (`ExGroup.Source`, `CheckRow.Source`); a component per row cost about 5 ms each on a phone. `FoiTray.ItemsChanged` redraws lists, `Changed` the panel.
-- **Source rows**: the tap fetches that month's transaction slice (all parts), scans the bytes for the group's transaction numbers (`AllTx` cap 80; a repeated-payment group also
-  narrows to its supplier when that matches), lists up to 200 lines. Sampled 1,359 groups over 60 months: every one found its lines. A check row without a readable date has none.
-- Measured (`scripts/council-perf.mjs`: headless Edge via CDP on a published AOT build, CPU 6x + 4 Mbps/100 ms, wall/worst stall; re-run 2026-10-04 on the website-data layout, one pass: in range, first open of the twins check stalled 641 ms): tick one item 55-73/74 ms; open the
-  tray 365-433/287 ms the first time (profile fetch), about 190/60 with items; letter of 100 items opens 310-540/0; list of 15 groups 166-188/188; show 15 more worst stall 61-139;
-  source rows of the first group 0.6 s (Wokingham, stall 104), 2.0-2.1 s (Bradford), 2.4-2.5 s (Leeds, Sheffield: 3-4 parts, about 4.8 MB raw; stall 55-64), a second group in the same month 0.25-0.5 s.
-  Weakest: a tick in a 100-row list redraws the list (84-160 ms). First use of a check or month still stalls 0.3-0.5 s.
-- 21 councils, same bar (CPU 6x, 4 Mbps, 100 ms; one pass 2026-10-04): hub ready 270 ms, boot to hub 1.4 s, hub list re-render 101 ms (21 cards); first council page (profiles.json 121 KB) 1.4 s wall, worst stall
-  643 ms, later council pages 0.15-0.56 s; month pick 0.23-0.81 s (Cornwall 2021-10, largest month 6.7 MB raw: 1.8 s); source rows 0.6-2.5 s (Wakefield 2022-11: 4 parts, 5.6 MB, 2.5 s, stall 270 ms). Coventry's
-  fact line reads "February 2001 to November 2033": a few typed dates in the file are data, shown as published (the profile says so).
-- Classic in-browser engine page DELETED 2026-10-04 with `data/councils`; the unlinked raw `data/reading` + `data/wokingham` (100 MB) were deleted from wwwroot/dist the same day.
+- **Load by financial year** (2026-10-04, user: "I preferred it when I could choose what to load"; replaced the month picker). `LoadPicker` = tick-list of financial years (April-March, the year
+  the declared total is for; "No readable date" last), Select all/Clear, the size line (download MB before anything is fetched), "Choose months" per year (month ticks are the underlying
+  state; a year is ticked when all its months are), ONE Load with progress + Cancel (cancel keeps finished years, Load again continues from the cache). Next year's file downloads while the
+  current is scanned. `YearBlock` per loaded unit (whole year = one bundle; some months = those months' files): totals, the three-bar declared comparison (`GapBars`, whole years only: declared
+  is a whole-year figure; partial/undated/ineligible years say why), then the schedule/bucket lists as before. Top of the view: per-year totals table + `GapSummary` sentences for the loaded
+  years. Up to 3 asked years open, more collapsed. `GapPanel` is hub-only now. **Memory**: `MonthScan` keeps raw bytes only for recent years (`RawBudget` 40 MB, LRU); an evicted year keeps
+  its gz and `EnsureRawAsync` re-inflates it (0.04-0.85 s) before a list opens, "show more" or source rows (`NeedRaw` callback; groups already shown stay cached).
+- **Data** (`website-data/council-web`, ~312 MB, 4,392 files, largest 1.2 MB; `AboutUs\CouncilWebBuilder`, `dotnet run -c Release --project CouncilWebBuilder`, about 70-90 s, writes straight into
+  the data repo (arg 1 / `COUNCIL_WEB_OUT`; `COUNCIL_PART_CAP_MB` tests the split), WIPE the folder first so stale files go (a run without the wipe left 6 old `*.exceptions.2.csv.gz`); fails above 50 MB/file;
+  second arg `profiles` rewrites only profiles.json.gz. Then commit + push website-data, nothing else): `index.csv`, per-council `months.csv` (exception columns describe the slim files) +
+  `years.csv` (`Year,Months,Parts,TxRows,Net,ExceptionRows,ExceptionBytes,ExceptionGzipBytes`), **exception files in ONE slim format**: `<slug>/<YYYY-MM>.exceptions.csv.gz` (a month) and
+  `<slug>/fy-<YYYY-YY>.exceptions[.N].csv.gz` (a year bundle, cut into parts of whole months only above 12 MB raw: none are today; largest year 1.2 MB gz / 11 MB raw). Format: a `@2022-11` marker
+  line, a header, rows (Council/Year/SupplierKey/Gross dropped; TransactionGross empty when = Net; Detail + ExplainedMeaning on the first line of each group only; group ids are per month section).
+  Verified 824,695 groups identical to the unslimmed export (every field, 12 lines, tx lists; year bundles, month files and a forced 3 MB split). Month TRANSACTION slices
+  (`<slug>/<YYYY-MM>[.N].csv.gz`, 2,432 files) are fetched only by "See the source rows"; also `cross/*.csv.gz`, `profiles.json.gz`, `PREREG_BUDGET_TEST.txt`. After every `phoneexport`/`export`:
+  re-run the builder (no site publish). Profile text is cleaned in the BUILDER (engine names -> the page's words, working-file sentences dropped; REWORDED/HELD BACK lines print for the profile owner).
+- **Code**: `Services/CouncilWebData` (fetch, `InflateAsync`, `YearsAsync`, `FinancialYearOf`, caches), `CouncilLoad` (`YearInfo`, `LoadedUnit`), `CouncilMonth` (`MonthScan`: byte-level scan over
+  sections, no string per line, groups opened on demand; columns by header name; `ExGroup.Month` is the source file's month, used by tray keys and source rows), `CouncilSource`, `CouncilChecksWeb`
+  (plain loops: LINQ over decimals/tuples is slow in WASM), `CouncilTerms` (`TryDate` day-first), `FoiTray`, `CouncilGap` (`GapYear`/`GapSummary`: declared K3 / file F / not itemised K3-F /
+  flagged T_A + T_B-T_A, reads only `cross/budget_units.csv`; K3 EXCLUDES employee pay); `Components/LoadPicker|YearBlock|GapBars|GapPanel|CheckPanel|BudgetPanel|BudgetTestPanel|FoiTrayPanel|SourceBlocks`.
+  Each load logs `CW-PERF` lines ("longest slice" counts awaited network time; the harness long task is the real stall).
+- **Pattern readings**: RecurringBatchRate and CadenceCatchUp are NOT classes; an Unclear group carries them in `ExplainedBy` + `ExplainedMeaning` (tag + caption, group stays open).
+- **Request tray** (`FoiTrayPanel`, one letter per council): "Add to request" on every group and cross-check row. The letter states facts and asks "Please provide the records you hold for this
+  item, and the reason for it." No class meanings, readings, `Detail` text or loan rebuilds in it. Address = the profile's verified `foi` else a placeholder. Caps 300 items / 100 per letter. Tick
+  and source buttons are PLAIN markup with state on the row (a component per row cost ~5 ms each on a phone).
+- **Source rows**: the tap fetches that month's transaction slice (all parts), finds the group's transaction numbers (cap 80; a repeated-payment group narrows to its supplier), lists up to 200 lines.
+- **Measured** (headless Edge, CPU 6x, 4 Mbps, 100 ms RTT, 2026-10-04): `scripts/council-load-perf.mjs <dist> 6 4096 100 <data> [big|select|cancel]` (+ phone-width screenshots to %TEMP%), `council-perf.mjs`
+  (month scenarios now tick one month), `gap-perf.mjs`. Biggest single years, Load wall / worst stall: Cornwall 2025-26 (0.8 MB) 6.2 s / 122 ms; Leeds 2022-23 (1.2 MB) 4.9 s / 79; Sheffield 2025-26
+  (0.8 MB) 4.6 s / 85. Select all: Cornwall 7 yrs 3.6 MB 11.2 s / 134; Leeds 12 yrs 6.2 MB 17.7 s / 121-131; Sheffield 12 yrs 6.0 MB, 712,593 lines, 16.1 s / 228. Renderer RSS flat ~1.15-1.3 GB across
+  Select all (idle baseline ~1.0 GB). Open a list 27-300 ms; source rows 1.6-2.4 s big councils. Hub/page-open numbers unchanged: council page 0.4-2 s, boot 1.4 s. Coventry's dates run 2001-2033 as published.
 - Gotchas: `--` in csproj XML comments breaks load; BudgetPanel's `<text>` trick fails in code blocks; CSS is one scoped file using `.cs ::deep`; lists with stateful children need `@key`.
 ## Unlisted: RecycleDAO marketplace prototype — `Pages/RecycleDaoDemo.razor` (`/recycledao-demo`)
 NOT a package-capability demo, NOT in the gallery — a private, link-only client preview

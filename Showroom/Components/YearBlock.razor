@@ -1,0 +1,174 @@
+@using Showroom.Services
+@using static Showroom.Services.CouncilTerms
+@inject CouncilWebData Data
+@inject FoiTray Tray
+@implements IDisposable
+
+@* One thing the visitor loaded (a financial year, or some months of one): its totals, its declared-spend comparison (a whole year only: the declared total is a
+   whole-year figure), and the flagged groups, fifteen at a time. Nothing is judged; every group is what the file shows. The scanned bytes may have been let go to keep
+   the phone's memory small; the handlers below read them back first (NeedRaw) before anything is listed from them. *@
+<section class="yblock">
+    <button type="button" class="check-head yhead" @onclick="() => U.Open = !U.Open" aria-expanded="@(U.Open ? "true" : "false")">
+        <span class="arrow" aria-hidden="true">@(U.Open ? "▾" : "▸")</span>
+        <h3>@U.Label</h3>
+        <span class="n">@Num(U.FlaggedLines) flagged lines in @Num(U.Groups) groups@(U.Scan.OpenGroups > 0 ? $", {Num(U.Scan.OpenGroups)} still open" : "")@(U.Gap is { Eligible: true } ? $". Declared {Gbp(U.Gap.Declared)}, file {Gbp(U.Gap.File)}" : "")</span>
+    </button>
+    @if (U.Open)
+    {
+        <p class="plain">@U.Coverage: @Num(U.TxRows) published lines, @Gbp(U.Net) of Net in all, of which @Num(U.FlaggedLines) lines are flagged by the three rules.
+            @if (U.Scan.OpenGroups > 0)
+            {
+                <span>@Num(U.Scan.OpenGroups) group@(U.Scan.OpenGroups == 1 ? " is" : "s are") still open (no recognised explanation)@(U.Scan.OpenWithReading > 0 ? $", of which {Num(U.Scan.OpenWithReading)} carry a pattern reading beside them. A reading is a consistent fit, not a proof, and does not close a group" : "").</span>
+            }
+        </p>
+        @if (U.Gap is { Eligible: true })
+        {
+            <div class="gyear">
+                <h4>Declared spend for @U.Year</h4>
+                <GapBars Y="U.Gap" />
+            </div>
+        }
+        else if (U.GapNote.Length > 0) { <p class="hint">@U.GapNote</p> }
+        @if (U.Busy) { <p class="hint" role="status">Reading @U.Label again (its bytes were let go to save memory)...</p> }
+        @if (U.Scan.Buckets.Count == 0) { <p class="plain">Nothing is flagged in these published lines by any of the three rules.</p> }
+        @foreach (var sch in Schedules)
+        {
+            var buckets = U.Scan.Buckets.Where(b => b.Schedule == sch).ToList();
+            bool na = (sch == "A" && NoScheduleA.Contains(Slug)) || (sch == "D" && NoScheduleD.Contains(Slug));
+            if (buckets.Count == 0 && !na) continue;
+            <div class="sched">
+                <h4>@ScheduleTitle(sch)</h4>
+                <p class="plain">@ScheduleDefinition(sch)</p>
+                @if (na)
+                {
+                    <p class="na">Not available for this council: its published file @(sch == "A" ? "has no stated invoice or gross amount to compare the payments with" : NoDByNumbering.Contains(Slug) ? "gives every transaction number to one payee on one date, or to a single row" : "has no transaction reference to group by"), so this rule @(sch == "D" && NoDByNumbering.Contains(Slug) ? "finds nothing by construction" : "cannot run"). That is a limit of the file, not a clean result.</p>
+                }
+                @if (buckets.Any(b => b.SupplierFurnished))
+                {
+                    <p class="caption">This council's transaction numbers are furnished by suppliers (invoice numbers). Two suppliers can simply have used the same number, so a group below is not read as one payment going to two payees.</p>
+                }
+                @foreach (var b in buckets)
+                {
+                    <div class="bucket @(IsUnexplained(b.Class) ? "unexplained" : "explained")">
+                        <button type="button" class="bucket-head" @onclick="() => ToggleBucket(b)" aria-expanded="@(b.Open ? "true" : "false")">
+                            <span class="arrow" aria-hidden="true">@(b.Open ? "▾" : "▸")</span>
+                            <span class="cls">@Display(b.Class)</span>
+                            <span class="n">@Num(b.GroupCount) group@(b.GroupCount == 1 ? "" : "s"), @Num(b.Lines) lines, @Gbp(b.Value)@(b.WithReading > 0 ? $", {Num(b.WithReading)} with a pattern reading" : "")</span>
+                        </button>
+                        @if (b.Open)
+                        {
+                            var meaning = Meaning(b.Class);
+                            @if (meaning.Length > 0) { <p class="meaning">@meaning</p> }
+                            <ol class="lines">
+                                @for (int k = 0; k < Math.Min(b.Shown, b.GroupCount); k++)
+                                {
+                                    var g = b.Group(k);
+                                    <li @key="g">
+                                        <div class="l1">@Head(g)</div>
+                                        <div class="l2">@Sub(g)</div>
+                                        @if (g.ExplainedBy.Length > 0)
+                                        {
+                                            <div class="reading"><span class="tag">@ReadingTag(g.ExplainedBy)</span>
+                                                <span class="l2">@(g.ExplainedMeaning.Length > 0 ? g.ExplainedMeaning : ReadingMeaning(g.ExplainedBy))</span></div>
+                                        }
+                                        @{ bool on = Tray.Has(KeyOf(g)); bool src = g.Source?.Open == true; }
+                                        <div class="acts">
+                                            <button type="button" class="tick @(on ? "on" : "")" aria-pressed="@(on ? "true" : "false")" @onclick="() => Tick(g)">@(on ? "In your request (tap to remove)" : "Add to request")</button>
+                                            <button type="button" class="srcbtn" aria-expanded="@(src ? "true" : "false")" @onclick="() => ToggleSource(g)">@(src ? "Hide the source rows" : "See the source rows")</button>
+                                        </div>
+                                        @if (src) { <SourceBlocks State="g.Source!" /> }
+                                    </li>
+                                }
+                            </ol>
+                            @if (b.GroupCount > b.Shown)
+                            {
+                                <button type="button" class="more" @onclick="() => More(b)">Show @Math.Min(15, b.GroupCount - b.Shown) more (@(b.GroupCount - b.Shown) not shown)</button>
+                            }
+                        }
+                    </div>
+                }
+            </div>
+        }
+        @if (_full) { <p class="err" role="status">Your request already holds @FoiTray.MaxItems items; remove some first.</p> }
+    }
+</section>
+
+@code {
+    static readonly string[] Schedules = { "B", "A", "D" };
+
+    [Parameter, EditorRequired] public string Slug { get; set; } = "";
+    [Parameter, EditorRequired] public LoadedUnit U { get; set; } = null!;
+    /// <summary>Makes sure the unit's bytes are in memory (reads them back if they were let go) and marks the unit most recently used.</summary>
+    [Parameter, EditorRequired] public Func<LoadedUnit, Task> NeedRaw { get; set; } = null!;
+
+    // the same key FoiFacts.FromGroup gives the item, so a group stays ticked when the visitor comes back to it (worked out once per group)
+    string KeyOf(ExGroup g) => g.FoiKey ??= $"g|{Slug}|{g.Month}|{g.Schedule}|{g.Class}|{(g.Lines.Count > 0 ? g.Lines[0].Tx : "")}|{g.Lines.Select(l => l.Supplier).FirstOrDefault()}|{g.Value}";
+
+    // Ticks and source rows are plain buttons in the list, with their state on the group itself: a component per row cost a phone about 5 ms each to draw.
+    // An item added or removed elsewhere (the tray panel) redraws the list; one added here does not draw twice.
+    bool _self, _full;
+    protected override void OnInitialized() => Tray.ItemsChanged += OnTray;
+    public void Dispose() => Tray.ItemsChanged -= OnTray;
+    void OnTray() { if (!_self && U.Open) InvokeAsync(StateHasChanged); }
+
+    async Task ToggleBucket(ExBucket b)
+    {
+        if (!b.Open) await NeedRaw(U);
+        b.Open = !b.Open;
+    }
+
+    async Task More(ExBucket b)
+    {
+        await NeedRaw(U);
+        b.Shown += 15;
+    }
+
+    void Tick(ExGroup g)
+    {
+        var key = KeyOf(g);
+        _full = false; _self = true;
+        try { if (Tray.Has(key)) Tray.Remove(key); else if (!Tray.Add(FoiFacts.FromGroup(Slug, g.Month, g))) _full = true; }
+        finally { _self = false; }
+    }
+
+    async Task ToggleSource(ExGroup g)
+    {
+        var s = g.Source ??= new SourceState();
+        s.Open = !s.Open;
+        if (s.Open && !s.Loaded && !s.Busy)
+        {
+            await NeedRaw(U);
+            await s.LoadAsync(Data, TargetsOf(g), () => InvokeAsync(StateHasChanged));
+        }
+    }
+
+    // one month's slice, every transaction number of the group; a group of one supplier's repeated lines also names the supplier
+    List<SourceTarget> TargetsOf(ExGroup g) =>
+        new() { new SourceTarget(Slug, g.Month, g.AllTx(), g.Schedule == "B" && g.Lines.Count > 0 ? g.Lines[0].Supplier : null) };
+
+    static string Head(ExGroup g)
+    {
+        var who = g.Lines.Select(l => l.Supplier).Distinct().ToList();
+        string s = who.Count == 0 ? "" : who.Count == 1 ? who[0] : who[0] + " and " + who[1];
+        if (who.Count > 2) s += $" and {who.Count - 2} other payee(s)";
+        return g.Schedule == "A" ? $"{s}: {Gbp(g.Value)} that does not reconcile" : $"{s}: {Gbp(g.Value)} across {Num(g.LineCount)} line(s)";
+    }
+
+    static string Sub(ExGroup g)
+    {
+        var tx = g.Lines.Select(l => l.Tx).Distinct().ToList();
+        bool moreLines = g.LineCount > g.Lines.Count;
+        string txs = tx.Count <= 4 ? string.Join(", ", tx) : string.Join(", ", tx.Take(4)) + " and others";
+        if (moreLines && tx.Count <= 4) txs += " and others";
+        string detail = MonthScan.CleanDetail(g.Detail);
+        if (g.Schedule == "A")
+        {
+            var l = g.Lines[0];
+            return $"Transaction {txs}. Published net {Gbp(l.Net)}, gross {Gbp(l.Gross)}, difference {Gbp(l.Diff)}. {detail}";
+        }
+        int size = MonthScan.GroupSizeOf(g.Detail);
+        string amounts = string.Join(", ", g.Lines.Select(l => Gbp(l.Net)).Distinct().Take(4));
+        string of = size > g.LineCount ? $" (this month's {g.LineCount} of {size} in the group)" : "";
+        return $"Transaction{(tx.Count == 1 && !moreLines ? "" : "s")} {txs}. Amounts {amounts}{(moreLines ? ", and others" : "")}{of}. {detail}".Trim();
+    }
+}

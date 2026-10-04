@@ -77,8 +77,13 @@ console.log(JSON.stringify({ bootToHubInteractiveMs: Math.round(await ev(`perfor
 if (CPU > 1) await send('Emulation.setCPUThrottlingRate', { rate: CPU });
 if (NET_KBPS > 0) await send('Network.emulateNetworkConditions', { offline: false, latency: RTT, downloadThroughput: NET_KBPS * 1024 / 8, uploadThroughput: NET_KBPS * 1024 / 8 });
 const go = slug => measure(`${slug}: council page ready`, `history.pushState({}, '', '/tools/council-spending/${slug}'); window.dispatchEvent(new PopStateEvent('popstate')); await window.__waitFor('.about', '', 30000)`);
+// the council page loads by financial year (April to March); to keep these scenarios comparable with the older month-picker numbers, tick ONE month
+// (expand its year, tick the month) and Load, which fetches that month's own small file
+const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+const fyOf = m => { const y = +m.slice(0, 4), mo = +m.slice(5); const s = mo >= 4 ? y : y - 1; return `${s}-${String((s + 1) % 100).padStart(2, '0')}`; };
 async function month(slug, m) {
-  await measure(`${slug} ${m}: pick the month`, `const sel = document.querySelector('.month select'); sel.value = '${m}'; sel.dispatchEvent(new Event('change', { bubbles: true })); await window.__waitFor('.month .summary b', '', 60000)`);
+  const fy = fyOf(m), title = `${MONTHS[+m.slice(5) - 1]} ${m.slice(0, 4)}`;
+  await measure(`${slug} ${m}: tick the month and Load`, `const li = [...document.querySelectorAll('.loadsec .yitem')].find(x => x.querySelector('.ytitle').textContent === '${fy}'); li.querySelector('.ymonths').click(); await window.__waitFor('.loadsec .mrows', '', 5000); const mi = [...li.querySelectorAll('.mrows li')].find(x => x.querySelector('.ytitle').textContent === '${title}'); mi.querySelector('input').click(); await new Promise(r => setTimeout(r, 40)); document.querySelector('.loadbtn').click(); await window.__waitFor('.yblock .summary, .yblock .plain', '', 60000); await new Promise(r => setTimeout(r, 30))`);
 }
 
 // ---------- hub: tick rows of a cross-council check, open the tray, read the letter
@@ -94,31 +99,31 @@ await measure('hub: open the source rows of a twin row', `const l = document.que
 for (const [slug, m] of [['wokingham', '2020-10']]) {
   await go(slug);
   await month(slug, m);
-  await measure(`${slug} ${m}: open the largest group list`, `document.querySelector('.month .bucket-head').click(); await window.__waitFor('.month .bucket .lines li', '', 30000)`);
-  await measure(`${slug} ${m}: tick one group`, `document.querySelector('.month .tick').click(); await window.__waitFor('.month .tick.on', '', 5000)`);
-  await measure(`${slug} ${m}: tick the other 14 listed groups`, `const ts = [...document.querySelectorAll('.month .tick:not(.on)')]; for (const t of ts) { t.click(); await new Promise(r => setTimeout(r, 10)); }`);
+  await measure(`${slug} ${m}: open the largest group list`, `document.querySelector('.yblock .bucket-head').click(); await window.__waitFor('.yblock .bucket .lines li', '', 30000)`);
+  await measure(`${slug} ${m}: tick one group`, `document.querySelector('.yblock .tick').click(); await window.__waitFor('.yblock .tick.on', '', 5000)`);
+  await measure(`${slug} ${m}: tick the other 14 listed groups`, `const ts = [...document.querySelectorAll('.yblock .tick:not(.on)')]; for (const t of ts) { t.click(); await new Promise(r => setTimeout(r, 10)); }`);
   await measure(`${slug} ${m}: open the tray with 15 groups + 5 twin rows ticked`, `document.querySelector('.foi-fab').click(); await window.__waitFor('.foi-letter', '', 30000); await new Promise(r => setTimeout(r, 50))`);
   console.log('\n=== LETTER (wokingham, first 2400 chars) ===\n' + (await letter()).slice(0, 2400) + '\n=== END ===\n');
-  await measure(`${slug} ${m}: see the source rows of the first group`, `const b = document.querySelector('.month .lines li .srcbtn'); b.click(); await window.__waitFor('.month .srcblock .lines li', '', 60000)`);
+  await measure(`${slug} ${m}: see the source rows of the first group`, `const b = document.querySelector('.yblock .lines li .srcbtn'); b.click(); await window.__waitFor('.yblock .srcblock .lines li', '', 60000)`);
 }
 
 // ---------- the heaviest months: source rows of the biggest groups
 for (const [slug, m] of [['leeds', '2022-11'], ['sheffield', '2023-03'], ['bradford', '2025-09']]) {
   await go(slug);
   await month(slug, m);
-  await measure(`${slug} ${m}: open the largest group list`, `document.querySelector('.month .bucket-head').click(); await window.__waitFor('.month .bucket .lines li', '', 30000)`);
-  await measure(`${slug} ${m}: see the source rows of the first group (fetch + scan the month's transaction file)`, `const b = document.querySelector('.month .lines li .srcbtn'); b.click(); await window.__waitFor('.month .srcblock', '', 90000)`); console.log('   SRC: ' + await ev(`[...document.querySelectorAll('.month .srcblock .plain')].map(e => e.innerText).join(' || ')`) + ' | rows listed: ' + await ev(`document.querySelectorAll('.month .srcblock .lines li').length`));
-  await measure(`${slug} ${m}: see the source rows of a second group, same month (cached bytes)`, `const bs = document.querySelectorAll('.month .lines li .srcbtn'); bs[1].click(); await window.__waitFor('.month .lines li:nth-child(2) .srcblock', '', 90000)`);
-  await measure(`${slug} ${m}: tick a group, open the tray`, `document.querySelector('.month .tick:not(.on)').click(); await new Promise(r => setTimeout(r, 30)); document.querySelector('.foi-fab')?.click(); await window.__waitFor('.foi-letter', '', 30000)`);
+  await measure(`${slug} ${m}: open the largest group list`, `document.querySelector('.yblock .bucket-head').click(); await window.__waitFor('.yblock .bucket .lines li', '', 30000)`);
+  await measure(`${slug} ${m}: see the source rows of the first group (fetch + scan the month's transaction file)`, `const b = document.querySelector('.yblock .lines li .srcbtn'); b.click(); await window.__waitFor('.yblock .srcblock', '', 90000)`); console.log('   SRC: ' + await ev(`[...document.querySelectorAll('.yblock .srcblock .plain')].map(e => e.innerText).join(' || ')`) + ' | rows listed: ' + await ev(`document.querySelectorAll('.yblock .srcblock .lines li').length`));
+  await measure(`${slug} ${m}: see the source rows of a second group, same month (cached bytes)`, `const bs = document.querySelectorAll('.yblock .lines li .srcbtn'); bs[1].click(); await window.__waitFor('.yblock .lines li:nth-child(2) .srcblock', '', 90000)`);
+  await measure(`${slug} ${m}: tick a group, open the tray`, `document.querySelector('.yblock .tick:not(.on)').click(); await new Promise(r => setTimeout(r, 30)); document.querySelector('.foi-fab')?.click(); await window.__waitFor('.foi-letter', '', 30000)`);
 }
 
 // ---------- a tray of 100 items: the longest letter
 await go('wokingham');
 await month('wokingham', '2020-10');
 await measure('wokingham 2020-10: open every group list and show all of the largest, ticking 100 groups', `
-  const heads = [...document.querySelectorAll('.month .bucket-head')]; heads[0].click(); await window.__waitFor('.month .bucket .lines li', '', 30000);
+  const heads = [...document.querySelectorAll('.yblock .bucket-head')]; heads[0].click(); await window.__waitFor('.yblock .bucket .lines li', '', 30000);
   let n = 0;
-  while (n < 100) { const more = document.querySelector('.month .more'); const ts = [...document.querySelectorAll('.month .tick:not(.on)')]; for (const t of ts) { t.click(); n++; if (n >= 100) break; } if (n < 100 && more) { more.click(); await new Promise(r => setTimeout(r, 40)); } else if (n < 100) break; }
+  while (n < 100) { const more = document.querySelector('.yblock .more'); const ts = [...document.querySelectorAll('.yblock .tick:not(.on)')]; for (const t of ts) { t.click(); n++; if (n >= 100) break; } if (n < 100 && more) { more.click(); await new Promise(r => setTimeout(r, 40)); } else if (n < 100) break; }
   window.__ticked = n`);
 console.log(JSON.stringify({ ticked: await ev('window.__ticked') }));
 await sleep(1500);

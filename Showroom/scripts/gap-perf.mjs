@@ -1,4 +1,4 @@
-// Headless-Edge harness for the declared-spend panel (GapPanel): hub summary, per-council panels, one screenshot. Same server, throttle and long-task measure as council-perf.mjs.
+// Headless-Edge harness for the declared-spend comparison: the hub summary (GapPanel), and on each council page the three-bar comparison drawn inside every loaded whole year (YearBlock + GapBars); screenshots. Same server, throttle and long-task measure as council-perf.mjs.
 // or a publish output) under /tools/ and the website-data repo under /website-data/ (one origin, as on Pages),
 // drives the pages over the DevTools protocol with CPU and network throttling, prints wall time and the worst stall (long task) of each action.
 // Usage: node gap-perf.mjs <published wwwroot> <cpu slowdown, 1 = none> <download kbit/s, 0 = none> <rtt ms> [<website-data dir, default C:\Users\dongy\website-data>]   (phone bar used so far: 6 4096 100)
@@ -54,6 +54,7 @@ await send('Runtime.enable'); await send('Log.enable'); await send('Page.enable'
 await send('Page.addScriptToEvaluateOnNewDocument', { source: `
   window.__lt = []; try { new PerformanceObserver(l => { for (const e of l.getEntries()) window.__lt.push([e.startTime, e.duration]); }).observe({ entryTypes: ['longtask'] }); } catch (e) {}
   window.__waitFor = (sel, text, timeout) => new Promise((res, rej) => { const t0 = performance.now(); const tick = () => { const el = document.querySelector(sel); if (el && (!text || el.textContent.includes(text))) return res(performance.now() - t0); if (performance.now() - t0 > timeout) return rej(new Error('timeout waiting for ' + sel + ' ' + (text||''))); setTimeout(tick, 15); }; tick(); });
+  window.__waitLoaded = (timeout) => new Promise((res, rej) => { const t0 = performance.now(); const tick = () => { const b = document.querySelector('.loadbtn'); const n = document.querySelectorAll('.loaded .yblock').length; if (b && !b.disabled && !document.querySelector('.loadprog') && n > 0) return res(n); if (document.querySelector('.err')) return rej(new Error('page error: ' + document.querySelector('.err').textContent)); if (performance.now() - t0 > timeout) return rej(new Error('timeout waiting for the load')); setTimeout(tick, 25); }; tick(); });
   window.__setVal = (el, v) => { const proto = Object.getPrototypeOf(el); const d = Object.getOwnPropertyDescriptor(proto, 'value'); d.set.call(el, v); el.dispatchEvent(new Event('change', { bubbles: true })); };
 ` });
 
@@ -79,22 +80,23 @@ if (CPU > 1) await send('Emulation.setCPUThrottlingRate', { rate: CPU });
 if (NET_KBPS > 0) await send('Network.emulateNetworkConditions', { offline: false, latency: RTT, downloadThroughput: NET_KBPS * 1024 / 8, uploadThroughput: NET_KBPS * 1024 / 8 });
 await measure('hub: open the declared-spend summary (first gz file of the session)', `document.querySelector('.gappanel .check-head').click(); await window.__waitFor('.gappanel .gaptable tbody tr', '', 60000)`);
 console.log('hub rows: ' + await ev(`document.querySelectorAll('.gappanel .gaptable tbody tr').length`) + ' | ' + await ev(`document.querySelector('.gappanel .summary').innerText`));
-const go = slug => measure(`${slug}: council page with the declared-spend panel ready`, `history.pushState({}, '', '/tools/council-spending/${slug}'); window.dispatchEvent(new PopStateEvent('popstate')); await window.__waitFor('.about', '', 30000); await window.__waitFor('.gappanel .summary, .gappanel .err', '', 30000)`);
-for (const slug of ['wokingham', 'merton', 'coventry', 'leeds', 'sheffield', 'westberkshire']) {
+const go = slug => measure(`${slug}: council page ready`, `history.pushState({}, '', '/tools/council-spending/${slug}'); window.dispatchEvent(new PopStateEvent('popstate')); await window.__waitFor('.loadsec .yitem', '', 30000)`);
+// Select all and Load on the smaller councils (the big ones are measured in council-load-perf.mjs); the bars are drawn inside each loaded whole year
+const loadAll = slug => measure(`${slug}: Select all + Load (declared-spend bars drawn inside each year)`, `document.querySelector('.selall').click(); await new Promise(r => setTimeout(r, 40)); document.querySelector('.loadbtn').click(); await window.__waitLoaded(240000)`, 400);
+const open = () => ev(`[...document.querySelectorAll('.loaded .yblock .yhead')].forEach(h => { if (h.getAttribute('aria-expanded') !== 'true') h.click(); })`);
+for (const slug of ['wokingham', 'merton', 'coventry', 'westberkshire']) {
   await go(slug);
-  console.log(`   ${slug}: years drawn ${await ev(`document.querySelectorAll('.gappanel .gyear').length`)}, DOM nodes in panel ${await ev(`document.querySelector('.gappanel').querySelectorAll('*').length`)}`);
+  await loadAll(slug);
+  await measure(`${slug}: open every year`, `[...document.querySelectorAll('.loaded .yblock .yhead')].forEach(h => { if (h.getAttribute('aria-expanded') !== 'true') h.click(); }); await new Promise(r => setTimeout(r, 100))`);
+  console.log(`   ${slug}: year blocks ${await ev(`document.querySelectorAll('.loaded .yblock').length`)}, with the three bars ${await ev(`document.querySelectorAll('.loaded .yblock .gchart').length`)}, DOM nodes ${await ev(`document.querySelector('.loaded').querySelectorAll('*').length`)} | ${await ev(`[...document.querySelectorAll('.loaded .summary')].map(e => e.innerText).join(' || ')`)}`);
 }
 await go('wokingham');
-await ev(`document.querySelector('.gappanel').scrollIntoView()`); await sleep(400);
-const clip = await ev(`(() => { const r = document.querySelector('.gappanel').getBoundingClientRect(); return { x: 0, y: r.top + window.scrollY, width: 412, height: Math.min(r.height, 2600), scale: 1 }; })()`);
+await loadAll('wokingham');
+await ev(`[...document.querySelectorAll('.loaded .yblock .yhead')].forEach(h => { if (h.getAttribute('aria-expanded') !== 'true') h.click(); })`); await sleep(500);
+const clip = await ev(`(() => { document.querySelector('.loaded .yblock').scrollIntoView(); const r = document.querySelector('.loaded').getBoundingClientRect(); return { x: 0, y: r.top + window.scrollY, width: 412, height: Math.min(r.height, 3200), scale: 1 }; })()`);
+await sleep(400);
 const shot = await send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: true, clip });
 fs.writeFileSync(path.join(process.env.TEMP, 'gap-wokingham.png'), Buffer.from(shot.result.data, 'base64'));
-console.log('screenshot: ' + path.join(process.env.TEMP, 'gap-wokingham.png') + ' ' + JSON.stringify(clip));
-await go('merton');
-await ev(`document.querySelector('.gappanel').scrollIntoView()`); await sleep(400);
-const clip2 = await ev(`(() => { const r = document.querySelector('.gappanel').getBoundingClientRect(); return { x: 0, y: r.top + window.scrollY, width: 412, height: Math.min(r.height, 1800), scale: 1 }; })()`);
-const shot2 = await send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: true, clip: clip2 });
-fs.writeFileSync(path.join(process.env.TEMP, 'gap-merton.png'), Buffer.from(shot2.result.data, 'base64'));
-console.log('\n--- CW-PERF console lines from the page ---');
-perf.filter(l => /gap|budget|units|profiles/.test(l)).forEach(l => console.log(l));
+console.log('screenshot: ' + path.join(process.env.TEMP, 'gap-wokingham.png') + ' ' + JSON.stringify(clip));console.log('\n--- CW-PERF console lines from the page ---');
+perf.filter(l => /gap|budget|units|profiles|load /.test(l)).forEach(l => console.log(l));
 ws.close(); edge.kill(); server.close(); process.exit(0);

@@ -1,0 +1,354 @@
+@using System.Diagnostics
+@using Showroom.Services
+@using static Showroom.Services.CouncilTerms
+@inject CouncilWebData Data
+@implements IDisposable
+
+@* Choose what to load: the council's financial years (April to March, the year its declared total is given for) as a tick-list, with Select all and the download size
+   before anything is fetched; one Load for everything ticked, with progress and Cancel. A year is one file (split only when it is heavy); ticking months instead loads
+   those months' own small files. What is loaded is shown below: per-year totals, and for each year the declared-spend comparison and the flagged groups.
+   Nothing here stops the page: downloads and scans run in time slices, and Cancel keeps whatever finished. *@
+<section class="loadsec">
+    <h2>Choose what to load</h2>
+    <p class="plain">Tick the financial years you want, then load them together. A financial year runs April to March, which is how the council's declared total spend is given, so each loaded year can be set beside its own total.
+        Each year is one small file of what the three rules flag in it; the size is shown before anything is fetched, and nothing is loaded until you press Load. "Choose months" under a year loads single months instead.
+        Under each group, "See the source rows" reads the published lines it came from (that month's transaction file, fetched only when you tap), and "Add to request" puts it in the records request you can build at the bottom of the page.</p>
+    @if (_years.Count == 0)
+    {
+        <p class="hint">No months are listed for this council.</p>
+    }
+    else
+    {
+        <div class="loadtools">
+            <button type="button" class="selall" @onclick="SelectAll" disabled="@_busy">Select all</button>
+            <button type="button" class="selnone" @onclick="ClearAll" disabled="@(_busy || _ticked.Count == 0)">Clear</button>
+        </div>
+        <ul class="yrows">
+            @foreach (var y in _years)
+            {
+                int t = 0; foreach (var m in y.Months) if (_ticked.Contains(m.Month)) t++;
+                bool all = t == y.Months.Count, some = t > 0 && !all, open = _expanded.Contains(y.Year);
+                <li class="yitem" @key="y.Year">
+                    <div class="yrow">
+                        <label class="ycheck">
+                            <input type="checkbox" checked="@all" disabled="@_busy" @onchange="e => TickYear(y, (bool)(e.Value ?? false))" />
+                            <span class="ytext"><span class="ytitle">@y.Title</span>
+                                <span class="ymeta">@y.Coverage, @Num(y.ExceptionRows) flagged lines, @Size(y.GzipBytes)@(some ? $" (ticked: {t} of {y.Months.Count} months)" : "")@(Loaded(y) ? ", loaded" : "")</span></span>
+                        </label>
+                        <button type="button" class="ymonths" aria-expanded="@(open ? "true" : "false")" @onclick="() => ToggleMonths(y)">@(open ? "Hide months" : "Choose months")</button>
+                    </div>
+                    @if (open)
+                    {
+                        <ul class="mrows">
+                            @foreach (var m in y.Months)
+                            {
+                                <li @key="m.Month">
+                                    <label class="mcheck">
+                                        <input type="checkbox" checked="@_ticked.Contains(m.Month)" disabled="@_busy" @onchange="e => TickMonth(m.Month, (bool)(e.Value ?? false))" />
+                                        <span class="ytext"><span class="ytitle">@MonthName(m.Month)</span>
+                                            <span class="ymeta">@Num(m.ExceptionRows) flagged lines, @Size(m.ExceptionGzipBytes)</span></span>
+                                    </label>
+                                </li>
+                            }
+                        </ul>
+                    }
+                </li>
+            }
+        </ul>
+        <p class="loadsize" role="status">@SizeLine()</p>
+        <div class="loadgo">
+            <button type="button" class="loadbtn go" @onclick="LoadAsync" disabled="@(_busy || _ticked.Count == 0)">@(_busy ? "Loading..." : "Load what is ticked")</button>
+            @if (_busy) { <button type="button" class="cancelbtn" @onclick="Cancel">Cancel</button> }
+        </div>
+        @if (_busy)
+        {
+            <div class="loadprog" role="status">
+                <progress max="@_total" value="@_done"></progress>
+                <p class="hint">@_progress</p>
+            </div>
+        }
+        else if (_note.Length > 0) { <p class="hint" role="status">@_note</p> }
+        @if (_error is not null) { <p class="err">@_error</p> }
+    }
+</section>
+
+@if (_view.Count > 0)
+{
+    <section class="loaded">
+        <h2>What you loaded</h2>
+        <table class="tests ytable">
+            <thead><tr><th>Year</th><th>Published lines</th><th>Net paid</th><th>Flagged lines</th><th>Still open</th></tr></thead>
+            <tbody>
+            @foreach (var u in _view)
+            {
+                <tr @key="u.Key">
+                    <td>@u.Label</td><td>@Num(u.TxRows)</td><td>@Gbp(u.Net)</td><td>@Num(u.FlaggedLines)</td><td>@Num(u.Scan.OpenGroups)</td>
+                </tr>
+            }
+            </tbody>
+        </table>
+        @foreach (var s in _sentences) { <p class="summary">@s</p> }
+        <p class="caption">The declared total is the spend the council declared to government for the whole financial year. It is set beside the published file for each whole year below; "declared spend not itemised in the file" is the difference between two totals on different bases, never a list of payments and never a finding.</p>
+        <div class="loadtools">
+            <button type="button" class="selall" @onclick="() => SetOpen(true)">Open every year</button>
+            <button type="button" class="selnone" @onclick="() => SetOpen(false)">Close every year</button>
+        </div>
+        @foreach (var u in _view)
+        {
+            <YearBlock @key="u.Key" Slug="@Slug" U="u" NeedRaw="NeedRaw" />
+        }
+        <p class="caption">@DiscrepancyNote</p>
+    </section>
+}
+
+@code {
+    [Parameter, EditorRequired] public string Slug { get; set; } = "";
+    [Parameter, EditorRequired] public List<MonthRow> Months { get; set; } = new();
+    [Parameter, EditorRequired] public List<YearRow> Years { get; set; } = new();
+
+    /// <summary>How much of the loaded years' bytes the page keeps in memory at once (the slim files run about 100 bytes a line); older ones are read back on demand.</summary>
+    const long RawBudget = 40L * 1024 * 1024;
+
+    List<YearInfo> _years = new();
+    readonly HashSet<string> _ticked = new();      // months (the unit of the tick-list underneath; a year is ticked when all of its months are)
+    readonly HashSet<string> _expanded = new();
+    readonly Dictionary<string, LoadedUnit> _cache = new();
+    readonly List<LoadedUnit> _lru = new();
+    List<LoadedUnit> _view = new();
+    List<string> _sentences = new();
+    bool _busy;
+    int _done, _total;
+    string _progress = "", _note = "";
+    string? _error;
+    string _lastSlug = "";
+    CancellationTokenSource? _cts;
+    Dictionary<string, GapYear>? _gap;
+
+    protected override void OnParametersSet()
+    {
+        if (_lastSlug == Slug) return;
+        _cts?.Cancel();
+        _years = YearInfo.Build(Months, Years);
+        _ticked.Clear(); _expanded.Clear(); _cache.Clear(); _lru.Clear(); _everShown.Clear(); _view = new(); _sentences = new();
+        _error = null; _note = ""; _gap = null; _busy = false;
+        _lastSlug = Slug;
+    }
+
+    public void Dispose() => _cts?.Cancel();
+
+    static string Size(long bytes) => bytes <= 0 ? "no file" : bytes < 1024 * 1024 ? Math.Max(1, (bytes + 512) / 1024) + " KB" : (bytes / 1048576.0).ToString("0.0", System.Globalization.CultureInfo.InvariantCulture) + " MB";
+
+    // ---- ticks
+    void TickMonth(string month, bool on) { if (on) _ticked.Add(month); else _ticked.Remove(month); }
+    void TickYear(YearInfo y, bool on) { foreach (var m in y.Months) TickMonth(m.Month, on); }
+    void SelectAll() { foreach (var y in _years) TickYear(y, true); }
+    void ClearAll() => _ticked.Clear();
+    void ToggleMonths(YearInfo y) { if (!_expanded.Remove(y.Year)) _expanded.Add(y.Year); }
+    bool Loaded(YearInfo y) => _cache.ContainsKey("fy:" + y.Year);
+
+    /// <summary>What a Load of the current ticks would fetch, newest first: a whole year is one bundle; a year with only some months ticked loads those months' own files.</summary>
+    sealed class Plan
+    {
+        public string Key = "", Year = "", Label = "", Coverage = "";
+        public bool Full;
+        public List<MonthRow> Months = new();
+        public YearInfo Info = null!;
+        public List<string> Paths = new();
+        public long ExpectedRaw;               // known for a one-file year bundle, else 0
+        public long GzipBytes;
+        public int Rows, TxRows;
+        public decimal Net;
+    }
+
+    List<Plan> MakePlans()
+    {
+        var plans = new List<Plan>();
+        foreach (var y in _years)
+        {
+            var ticked = y.Months.Where(m => _ticked.Contains(m.Month)).ToList();
+            if (ticked.Count == 0) continue;
+            var p = new Plan { Year = y.Year, Info = y, Months = ticked, Full = ticked.Count == y.Months.Count };
+            foreach (var m in ticked) { p.TxRows += m.TxRows; p.Net += m.Net; }
+            if (p.Full)
+            {
+                p.Key = "fy:" + y.Year; p.Label = y.Title; p.Coverage = y.Coverage;
+                int parts = y.Row?.Parts ?? 0;
+                for (int i = 1; i <= parts; i++) p.Paths.Add($"{Slug}/fy-{y.Year}.exceptions{(i == 1 ? "" : "." + i)}.csv");
+                p.GzipBytes = y.GzipBytes; p.Rows = y.ExceptionRows;
+                if (parts == 1) p.ExpectedRaw = y.Row!.ExceptionBytes;
+            }
+            else
+            {
+                p.Key = "m:" + y.Year + ":" + string.Join(",", ticked.Select(m => m.Month));
+                p.Label = $"{y.Title}, {ticked.Count} of {y.Months.Count} month{(y.Months.Count == 1 ? "" : "s")}";
+                p.Coverage = ticked.Count == 1 ? MonthName(ticked[0].Month) : $"{ticked.Count} months ({MonthName(ticked[0].Month)} to {MonthName(ticked[^1].Month)})";
+                foreach (var m in ticked) { if (m.ExceptionParts > 0) { p.Paths.Add($"{Slug}/{m.Month}.exceptions.csv"); p.GzipBytes += m.ExceptionGzipBytes; } p.Rows += m.ExceptionRows; }
+            }
+            plans.Add(p);
+        }
+        return plans;
+    }
+
+    string SizeLine()
+    {
+        if (_ticked.Count == 0) return "Nothing is ticked yet. Nothing has been downloaded.";
+        var plans = MakePlans();
+        long download = 0; int fresh = 0, cached = 0; long rows = 0;
+        foreach (var p in plans) { rows += p.Rows; if (_cache.ContainsKey(p.Key)) cached++; else { download += p.GzipBytes; fresh++; } }
+        string what = plans.Count == 1 ? "1 year" : plans.Count + " years";
+        return fresh == 0
+            ? $"{what} ticked, {Num(rows)} flagged lines. Already loaded: nothing more to download."
+            : $"{what} ticked, {Num(rows)} flagged lines. To download: {Size(download)}{(cached > 0 ? $" ({cached} already loaded, not fetched again)" : "")}. Nothing is fetched until you press Load.";
+    }
+
+    // ---- loading
+    void Cancel() => _cts?.Cancel();
+
+    async Task LoadAsync()
+    {
+        var plans = MakePlans();
+        if (plans.Count == 0 || _busy) return;
+        _error = null; _note = ""; _busy = true; _done = 0; _total = plans.Count;
+        _cts = new CancellationTokenSource();
+        var co = new Cooperative(_cts.Token);
+        var sw = Stopwatch.StartNew();
+        long fetchMs = 0, scanMs = 0, lines = 0; int fresh = 0;
+        var order = plans.Select(p => p.Key).ToList();
+        _view = plans.Where(p => _cache.ContainsKey(p.Key)).Select(p => _cache[p.Key]).ToList();
+        _progress = "Starting..."; Refresh();
+        await Task.Delay(1);
+        Task<byte[][]>? ahead = null;
+        int aheadIndex = -1;
+        try
+        {
+            if (_gap is null)
+            {
+                var units = new Tab(await Data.TableAsync("cross/budget_units.csv", true, co));
+                _gap = new();
+                foreach (var g in GapYear.Build(units, Slug)) _gap[g.Year] = g;
+            }
+            for (int i = 0; i < plans.Count; i++)
+            {
+                var p = plans[i];
+                if (_cache.TryGetValue(p.Key, out var have)) { _done = i + 1; continue; }
+                co.Ct.ThrowIfCancellationRequested();
+                // the download of this year (started while the one before was being scanned), or start it now
+                var t0 = sw.ElapsedMilliseconds;
+                _progress = $"{p.Label} ({i + 1} of {plans.Count}): downloading {Size(p.GzipBytes)}..."; Refresh();
+                var gz = await (ahead is not null && aheadIndex == i ? ahead : FetchAll(p, co.Ct));
+                ahead = null;
+                fetchMs += sw.ElapsedMilliseconds - t0;
+                // start the next year's download so it arrives while this one is read
+                for (int j = i + 1; j < plans.Count; j++)
+                    if (!_cache.ContainsKey(plans[j].Key)) { ahead = FetchAll(plans[j], co.Ct); aheadIndex = j; break; }
+
+                t0 = sw.ElapsedMilliseconds;
+                _progress = $"{p.Label} ({i + 1} of {plans.Count}): reading {Num(p.Rows)} flagged lines..."; Refresh();
+                var u = await BuildUnit(p, gz, co);
+                scanMs += sw.ElapsedMilliseconds - t0; lines += u.FlaggedLines; fresh++;
+                _cache[p.Key] = u;
+                Use(u);
+                _view = order.Where(k => _cache.ContainsKey(k)).Select(k => _cache[k]).ToList();
+                OpenDefaults(plans.Count);
+                _done = i + 1;
+                Summarise();
+                Refresh();
+                await Task.Delay(1);
+            }
+            _note = $"Loaded {plans.Count} {(plans.Count == 1 ? "year" : "years")}.";
+        }
+        catch (OperationCanceledException)
+        {
+            int got = _view.Count;
+            _note = $"Stopped. {got} of {plans.Count} {(plans.Count == 1 ? "year" : "years")} loaded; they are shown below, and Load carries on with the rest.";
+            ahead = null;
+        }
+        catch (Exception ex) { _error = "Could not load: " + ex.Message; ahead = null; }
+        finally
+        {
+            _busy = false;
+            Summarise();
+        }
+        await Data.LogAsync($"load {Slug} {plans.Count} unit(s) done", sw.ElapsedMilliseconds, $"({fresh} fetched, fetch-wait {fetchMs}ms, inflate+scan {scanMs}ms, {lines} lines, longest slice {co.MaxSliceMs:F0}ms, {co.Yields} yields)");
+    }
+
+    async Task<byte[][]> FetchAll(Plan p, CancellationToken ct)
+    {
+        var tasks = p.Paths.Select(path => Data.FetchAsync(path, true, ct)).ToArray();
+        return await Task.WhenAll(tasks);
+    }
+
+    async Task<LoadedUnit> BuildUnit(Plan p, byte[][] gz, Cooperative co)
+    {
+        long expected = p.ExpectedRaw;
+        async Task<List<byte[]>> Inflate(Cooperative c)
+        {
+            var parts = new List<byte[]>();
+            foreach (var g in gz) parts.Add(await CouncilWebData.InflateAsync(g, c, (int)Math.Min(expected, int.MaxValue)));
+            return parts;
+        }
+        var raw = await Inflate(co);
+        var scan = await MonthScan.ScanAsync(raw, co);
+        scan.Reload = Inflate;
+        var u = new LoadedUnit { Key = p.Key, Year = p.Year, Full = p.Full, Label = p.Label, Coverage = p.Coverage, Scan = scan, TxRows = p.TxRows, Net = p.Net };
+        foreach (var m in p.Months) u.Months.Add(m.Month);
+        if (p.Year == "undated") u.GapNote = "Lines with no readable payment date belong to no financial year, so there is no declared total to set them against.";
+        else if (!p.Full) u.GapNote = $"The declared total is a figure for a whole financial year. Tick every month of {p.Year} to set it beside the file.";
+        else if (_gap is not null && _gap.TryGetValue(p.Year, out var gy))
+        {
+            if (gy.Eligible) u.Gap = gy;
+            else u.GapNote = $"Not set against the declared total: {gy.WhyNot}.";
+        }
+        else u.GapNote = "No declared total is held for this year.";
+        return u;
+    }
+
+    // ---- memory: keep the bytes of the most recently used years, let the rest go (they are read back from the downloaded file when a list is opened)
+    void Use(LoadedUnit u)
+    {
+        _lru.Remove(u); _lru.Add(u);
+        long total = 0;
+        foreach (var x in _lru) if (x.Scan.RawLoaded) total += x.Scan.RawBytes;
+        for (int i = 0; i < _lru.Count && total > RawBudget; i++)
+        {
+            var x = _lru[i];
+            if (x == u || !x.Scan.RawLoaded) continue;
+            x.Scan.Evict();
+            if (!x.Scan.RawLoaded) total -= x.Scan.RawBytes;
+        }
+    }
+
+    async Task NeedRaw(LoadedUnit u)
+    {
+        if (!u.Scan.RawLoaded)
+        {
+            u.Busy = true; Refresh();
+            await Task.Delay(1);
+            var sw = Stopwatch.StartNew();
+            var co = new Cooperative(CancellationToken.None);
+            try { await u.Scan.EnsureRawAsync(co); }
+            finally { u.Busy = false; }
+            await Data.LogAsync($"reread {Slug} {u.Key}", sw.ElapsedMilliseconds, $"({u.Scan.RawBytes / 1024} KB, longest slice {co.MaxSliceMs:F0}ms)");
+        }
+        Use(u);
+    }
+
+    // ---- what is shown
+    void OpenDefaults(int asked)
+    {
+        // up to three years open at once; with more, the totals table above is the overview and each year opens when tapped
+        foreach (var u in _view) if (_everShown.Add(u.Key)) u.Open = asked <= 3;
+    }
+    readonly HashSet<string> _everShown = new();   // units that have been shown once (their open/closed state is the visitor's from then on)
+
+    void SetOpen(bool open) { foreach (var u in _view) u.Open = open; }
+
+    void Summarise()
+    {
+        var gaps = new List<GapYear>();
+        foreach (var u in _view) if (u.Gap is not null) gaps.Add(u.Gap);
+        _sentences = gaps.Count == 0 ? new() : GapSummary.Of(gaps).Sentences();
+    }
+
+    void Refresh() => StateHasChanged();
+}

@@ -11,6 +11,8 @@ public sealed record ExLine(string Tx, string Supplier, decimal Net, decimal Gro
 public sealed class ExGroup
 {
     public string Schedule = "", Class = "", Detail = "";
+    /// <summary>The month of the file the group's lines came from ("2022-11", or "undated"): the month its source rows are read from.</summary>
+    public string Month = "";
     /// <summary>The pattern reading beside a still-open group ("RecurringBatchRate", "CadenceCatchUp") and its plain-English reason; empty when there is none.</summary>
     public string ExplainedBy = "", ExplainedMeaning = "";
     public List<ExLine> Lines = new();     // the first few lines of the group (enough to show; see MonthScan.ShownLines)
@@ -21,7 +23,8 @@ public sealed class ExGroup
     /// <summary>The "See the source rows" panel of this group, once the visitor has tapped it; and the group's tray key, worked out once.</summary>
     public SourceState? Source;
     public string? FoiKey;
-    /// <summary>Every distinct transaction number of the group's lines in this month (at most <paramref name="cap"/>), read on demand.</summary>
+    /// <summary>Every distinct transaction number of the group's lines in this month (at most <paramref name="cap"/>), read on demand
+    /// (the scan's bytes must be in memory: <see cref="MonthScan.EnsureRawAsync"/>).</summary>
     public List<string> AllTx(int cap = 80) => Scan.DistinctTx(Src, cap);
 }
 
@@ -68,13 +71,13 @@ public sealed class MonthScan
     internal sealed class Gr
     {
         public byte Sched;                 // 'A', 'B' or 'D'
-        public string Cls = "";
+        public string Cls = "", Month = "";
         public string? Exp;                // the pattern reading attached to the group (ExplainedBy), if any
         public int First = -1, Last = -1, Count;
         public double Value;
     }
 
-    List<byte[]> _parts = new();
+    List<byte[]>? _parts = new();          // null once evicted (see EnsureRawAsync)
     readonly List<byte> _rowPart = new();
     readonly List<int> _rowOff = new();
     readonly List<int> _rowNext = new();
@@ -85,12 +88,30 @@ public sealed class MonthScan
     public int OpenWithReading { get; private set; }
 
     // column positions, by header name
-    int cSched, cGid, cTx, cSupplier, cNet, cDiff, cDetail, cClass, cGross, cExpBy = -1, cExpMeaning = -1;
+    int cSched, cGid, cTx, cSupplier, cNet, cDiff, cDetail, cClass, cGross, cExpBy = -1, cExpMeaning = -1, _minFields;
 
+    /// <summary>The bytes of the file(s) the scan was made from are only needed to show a group's lines or look up its transaction numbers. A phone cannot hold
+    /// every year of a big council, so the page may let go of them (<see cref="Evict"/>) and read them back from the downloaded file when a visitor opens a list.</summary>
+    public bool RawLoaded => _parts is not null;
+    /// <summary>The size of the scanned bytes (remembered after eviction).</summary>
+    public long RawBytes { get; private set; }
+    /// <summary>How to get the bytes back (the file is already downloaded; this only inflates it again).</summary>
+    public Func<Cooperative, Task<List<byte[]>>>? Reload { get; set; }
+    public void Evict() { if (Reload is not null) _parts = null; }
+    public async Task EnsureRawAsync(Cooperative co)
+    {
+        if (_parts is not null) return;
+        _parts = await Reload!(co);
+    }
+
+    /// <summary>Scans one or more files in the page's format: sections that open with a "@2022-11" line (the month the rows came from) and then a header line.
+    /// Group numbers are only meaningful inside one month, so each month keeps its own table of groups (a month split across parts is one scope).</summary>
     public static async Task<MonthScan> ScanAsync(List<byte[]> parts, Cooperative co)
     {
         var s = new MonthScan { _parts = parts };
-        var gmap = new Dictionary<long, Gr>();
+        var gmaps = new Dictionary<string, Dictionary<long, Gr>>();
+        Dictionary<long, Gr> gmap = new();
+        string month = "";
         var all = new List<Gr>();
         var classes = new Interner();
         var st = new int[32]; var ln = new int[32];
@@ -99,14 +120,37 @@ public sealed class MonthScan
         for (int p = 0; p < parts.Count; p++)
         {
             var b = parts[p];
+            s.RawBytes += b.Length;
             int pos = b.Length >= 3 && b[0] == 0xEF && b[1] == 0xBB && b[2] == 0xBF ? 3 : 0;
-            int nf = Fields(b, ref pos, st, ln);
-            s.Header(b, st, ln, nf);
+            int nf = 0;
+            bool headerRead = false;
             while (pos < b.Length)
             {
                 int rowStart = pos;
                 nf = Fields(b, ref pos, st, ln);
-                if (nf < 12) continue;
+                if (!headerRead)
+                {
+                    // a section opens with "@month" and then the header; a file with no marker opens with the header itself
+                    if (nf == 1 && ln[0] > 1 && b[st[0]] == (byte)'@')
+                    {
+                        month = Encoding.ASCII.GetString(b, st[0] + 1, ln[0] - 1);
+                        nf = Fields(b, ref pos, st, ln);
+                    }
+                    else month = "";
+                    s.Header(b, st, ln, nf);
+                    if (!gmaps.TryGetValue(month, out gmap!)) gmaps[month] = gmap = new();
+                    headerRead = true;
+                    continue;
+                }
+                if (nf == 1 && ln[0] > 1 && b[st[0]] == (byte)'@')
+                {
+                    month = Encoding.ASCII.GetString(b, st[0] + 1, ln[0] - 1);
+                    nf = Fields(b, ref pos, st, ln);
+                    s.Header(b, st, ln, nf);
+                    if (!gmaps.TryGetValue(month, out gmap!)) gmaps[month] = gmap = new();
+                    continue;
+                }
+                if (nf < s._minFields) continue;
                 byte sched = ln[s.cSched] > 0 ? b[st[s.cSched]] : (byte)'?';
                 long gid = 0;
                 bool hasGid = ln[s.cGid] > 0 && Utf8Parser.TryParse(b.AsSpan(st[s.cGid], ln[s.cGid]), out gid, out _);
@@ -124,7 +168,7 @@ public sealed class MonthScan
                 long key = hasGid && sched != 'A' ? (gid << 2) | (sched == 'B' ? 1L : 2L) : 0;
                 if (key == 0 || !gmap.TryGetValue(key, out g!))
                 {
-                    g = new Gr { Sched = sched, Cls = cls };
+                    g = new Gr { Sched = sched, Cls = cls, Month = month };
                     all.Add(g);
                     if (key != 0) gmap[key] = g;
                 }
@@ -190,7 +234,8 @@ public sealed class MonthScan
         cExpBy = Find("ExplainedBy"); cExpMeaning = Find("ExplainedMeaning");   // absent in older exports: no readings then
         if (cSched < 0 || cGid < 0 || cNet < 0 || cDiff < 0 || cClass < 0 || cDetail < 0 || cTx < 0 || cSupplier < 0)
             throw new InvalidDataException("This month's file does not have the columns the page expects.");
-        if (cGross < 0) cGross = cNet;
+        if (cGross < 0) cGross = cNet;     // an empty TransactionGross also reads as Net (the files leave it empty when it is the same)
+        _minFields = Math.Max(Math.Max(Math.Max(cSched, cGid), Math.Max(cTx, cSupplier)), Math.Max(Math.Max(cNet, cDiff), Math.Max(cDetail, cClass))) + 1;
     }
 
     /// <summary>Reads one record into start/length pairs (the field's bytes, without the surrounding quotes); leaves pos after the line end.</summary>
@@ -233,35 +278,38 @@ public sealed class MonthScan
     /// <summary>Reads a group's first few lines in full (every field), for display.</summary>
     internal ExGroup Materialize(Gr g)
     {
-        var o = new ExGroup { Schedule = ((char)g.Sched).ToString(), Class = g.Cls, LineCount = g.Count, Value = (decimal)g.Value, Scan = this, Src = g, ExplainedBy = g.Exp ?? "" };
+        var parts = _parts ?? throw new InvalidOperationException("The scanned bytes were let go; call EnsureRawAsync first.");
+        var o = new ExGroup { Schedule = ((char)g.Sched).ToString(), Class = g.Cls, Month = g.Month, LineCount = g.Count, Value = (decimal)g.Value, Scan = this, Src = g, ExplainedBy = g.Exp ?? "" };
         var st = new int[32]; var ln = new int[32];
         int row = g.First;
         for (int i = 0; i < ShownLines && row >= 0; i++, row = _rowNext[row])
         {
-            var b = _parts[_rowPart[row]];
+            var b = parts[_rowPart[row]];
             int pos = _rowOff[row];
             int nf = Fields(b, ref pos, st, ln);
-            if (nf < 12) continue;
+            if (nf < _minFields) continue;
             if (i == 0)
             {
                 o.Detail = Text(b, st[cDetail], ln[cDetail]);
                 if (g.Exp is not null && cExpMeaning >= 0 && cExpMeaning < nf) o.ExplainedMeaning = Text(b, st[cExpMeaning], ln[cExpMeaning]);
             }
+            string net = Text(b, st[cNet], ln[cNet]);
             o.Lines.Add(new ExLine(Text(b, st[cTx], ln[cTx]), Text(b, st[cSupplier], ln[cSupplier]),
-                Dec(Text(b, st[cNet], ln[cNet])), Dec(Text(b, st[cGross], ln[cGross])), Dec(Text(b, st[cDiff], ln[cDiff]))));
+                Dec(net), Dec(cGross < nf && ln[cGross] > 0 ? Text(b, st[cGross], ln[cGross]) : net), Dec(Text(b, st[cDiff], ln[cDiff]))));
         }
         return o;
     }
 
     internal List<string> DistinctTx(Gr g, int cap)
     {
+        var parts = _parts ?? throw new InvalidOperationException("The scanned bytes were let go; call EnsureRawAsync first.");
         var seen = new HashSet<string>(); var o = new List<string>();
         var st = new int[32]; var ln = new int[32];
         for (int row = g.First; row >= 0 && o.Count < cap; row = _rowNext[row])
         {
-            var b = _parts[_rowPart[row]];
+            var b = parts[_rowPart[row]];
             int pos = _rowOff[row];
-            if (Fields(b, ref pos, st, ln) < 12) continue;
+            if (Fields(b, ref pos, st, ln) < _minFields) continue;
             var tx = Text(b, st[cTx], ln[cTx]);
             if (seen.Add(tx)) o.Add(tx);
         }
