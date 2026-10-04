@@ -130,8 +130,12 @@ public static class CouncilTerms
 
     /// <summary>Schedules that cannot run for a council because its file has no VAT split (A) or no transaction reference (D). "Not available", never "clean".</summary>
     public static readonly HashSet<string> NoScheduleA = new()
-        { "reading", "bracknellforest", "westberkshire", "rbwm", "birmingham", "leeds", "sheffield", "bradford", "liverpool", "bristol" };
-    public static readonly HashSet<string> NoScheduleD = new() { "birmingham", "westberkshire", "sheffield", "leeds" };
+        { "reading", "bracknellforest", "westberkshire", "rbwm", "birmingham", "leeds", "sheffield", "bradford", "liverpool", "bristol",
+          "wakefield", "coventry", "durham", "kirklees", "leicester", "cornwall", "nottingham", "wirral", "newcastle" };
+    // durham, kirklees and newcastle: every transaction number sits against one payee (or one row), so the shared-number check is empty by construction in the profiles
+    public static readonly HashSet<string> NoScheduleD = new() { "birmingham", "westberkshire", "sheffield", "leeds", "durham", "kirklees", "newcastle" };
+    /// <summary>The members of NoScheduleD that do publish a number: the shared-number check is empty because of how the numbers are given, not because they are missing.</summary>
+    public static readonly HashSet<string> NoDByNumbering = new() { "durham", "kirklees", "newcastle" };
 
     public const string DiscrepancyNote =
         "A discrepancy here is a fact about the published numbers, not proof of an error or wrongdoing. Councils publish corrections, instalments, and VAT treatments that can look like a mismatch until explained. If you intend to raise this with the council or its auditor, ask for the records and the reason, not for an admission.";

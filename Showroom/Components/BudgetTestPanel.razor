@@ -20,6 +20,9 @@
                 (it reflects the size gap, not the flagged rows). The Leeds same-line-in-two-files repeats (£6.35m in 2022-23, £3.07m in 2023-24) are not in the statistic; they were found after the test was written.</p>
             <p><b>Four more cities.</b> In Sheffield, Bradford, Liverpool and Bristol the file total is below the declared running expenses plus capital and pass-through in all 17 city-years (0.56 to 0.99 of it), and the second
                 copies the test counts are zero in Sheffield and 0.00 to 0.85% elsewhere. The test cannot tell whether flagged rows were extra outgoings. All six arms are inconclusive.</p>
+            <p><b>Nine more councils.</b> In 49 of these 52 council-years (Wakefield, Coventry, Durham, Kirklees, Leicester, Cornwall, Nottingham, Wirral and Newcastle) the file total is below the declared running expenses plus capital and
+                pass-through (0.45 to 1.84 of it, median 0.76); the second copies the test counts are 0.0% to 8.1% of the file total. All six arms are inconclusive: the test cannot tell whether flagged rows were extra outgoings.
+                Pooled over all four groups the test now has 96 council-years, and every one of its six arms is still inconclusive. No slope is presented as a finding.</p>
             <p class="caption">Revenue Outturn is revenue only and net of recoverable VAT; this file is gross of payment, includes capital, pass-through payments, loan movements and credits. Employees are not paid through a supplier file.
                 The published files cannot show which bank payments left.</p>
         </div>
@@ -62,7 +65,9 @@
         {
             var co = new Cooperative(CancellationToken.None);
             foreach (var (file, title) in new[] { ("budget_test", "First group (Reading, Bracknell Forest, RBWM, Merton)"), ("budget_test_stage2", "Second group (Leeds)"),
-                         ("budget_test_stage2b", "Third group (Sheffield, Bradford, Liverpool, Bristol)"), ("budget_test_pooled_all", "All groups pooled") })
+                         ("budget_test_stage2b", "Third group (Sheffield, Bradford, Liverpool, Bristol)"),
+                         ("budget_test_stage2c", "Fourth group (Wakefield, Coventry, Durham, Kirklees, Leicester, Cornwall, Nottingham, Wirral, Newcastle)"),
+                         ("budget_test_pooled_all", "First three groups pooled (44 council-years)"), ("budget_test_pooled_all2", "All four groups pooled (96 council-years)") })
             {
                 var t = new Tab(await Data.TableAsync($"cross/{file}.csv", true, co));
                 _sets.Add(new Set { Title = title, Rows = t.Rows.Select(r => new[] { t.G(r, "Arm"), t.G(r, "Role"), t.G(r, "Units"), t.G(r, "Verdict") }).ToList() });

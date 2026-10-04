@@ -60,7 +60,7 @@ foreach (var slug in profilesOnly ? Array.Empty<string>() : SupportedCouncils.Ev
 
 // The small cross-council check files and the declared-spend files (all read whole, each well under 400 KB raw).
 foreach (var n in profilesOnly ? Array.Empty<string>() : new[] { "transaction_twins", "cross_file_repeats", "file_duplication", "within_txn_repeats", "budget_reconciliation",
-                          "budget_units", "budget_test", "budget_test_stage2", "budget_test_stage2b", "budget_test_pooled", "budget_test_pooled_all",
+                          "budget_units", "budget_test", "budget_test_stage2", "budget_test_stage2b", "budget_test_stage2c", "budget_test_pooled", "budget_test_pooled_all", "budget_test_pooled_all2",
                           "crossref_alias_flows", "supplier_alias_grades", "debt_ledger", "debt_sink", "payment_misfits" })
     WriteGz($"cross/{n}.csv", File.ReadAllBytes(Path.Combine(export, n + ".csv")));
 
@@ -69,7 +69,7 @@ foreach (var n in profilesOnly ? Array.Empty<string>() : new[] { "transaction_tw
 // source-file names, hand-over tips) are dropped, and a note with nothing left is held back. Every change is printed so the profile's
 // owner can reword the source; the profile text itself is never edited here.
 var Sentence = new System.Text.RegularExpressions.Regex(@"(?<=[.;:])\s+(?=[A-Z""(])");
-var InternalSentence = new System.Text.RegularExpressions.Regex(@"owner's tip|Session \d+|FIRST PASS|plain bot fetch|\.cs\b|\.md\b|CityFixups|AuditEngine|ColumnMapping|MapRows|KnownQuirks|\bfoi/|scratch|inbox|Schedule R\b|hand-built|ONBOARDING|checklist|BASELINE|FEEDBACK|\bCLI\b|ParseDate|against the BASE|Fixups|this session|handopen|full-engine|MAD-r", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+var InternalSentence = new System.Text.RegularExpressions.Regex(@"owner's tip|Session \d+|FIRST PASS|plain bot fetch|\.cs\b|\.md\b|CityFixups|AuditEngine|ColumnMapping|MapRows|KnownQuirks|\bfoi/|scratch|inbox|Schedule R\b|hand-built|ONBOARDING|checklist|BASELINE|FEEDBACK|\bCLI\b|ParseDate|against the BASE|Fixups|this session|handopen|full-engine|MAD-r|XlsxReader", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
 string Reword(string s)
 {
     s = System.Text.RegularExpressions.Regex.Replace(s, @"\s*\((?:see |per )?[^()]*(?:ONBOARDING_CHECKLIST|checklist step|BASELINE|FEEDBACK)[^()]*\)", "");
@@ -79,6 +79,8 @@ string Reword(string s)
     s = System.Text.RegularExpressions.Regex.Replace(s, @"Schedule A( \(amount mismatch\))?", m => Cap(m, "the invoice-amount check"));
     s = System.Text.RegularExpressions.Regex.Replace(s, @"Schedule B", m => Cap(m, "the repeated-payment check"));
     s = System.Text.RegularExpressions.Regex.Replace(s, @"Schedule D", m => Cap(m, "the shared-transaction-number check"));
+    // the preparation command and its step: "`prep kirklees` writes it dd/MM/yyyy" becomes "the scanner writes it dd/MM/yyyy"
+    s = System.Text.RegularExpressions.Regex.Replace(s, @"`prep(?: [a-z]+)?`|\b(?:[Tt]he )?Prepare step\b", m => Cap(m, "the scanner"));
     s = System.Text.RegularExpressions.Regex.Replace(s, @"\b(The|the|an|a) engine\b", m => m.Value[0] == 'T' ? "The scanner" : m.Value.StartsWith("an") ? "a scanner" : "the scanner");
     s = System.Text.RegularExpressions.Regex.Replace(s, @"\bengine\b", "scanner");
     return s;
@@ -129,7 +131,9 @@ static string Slug(string name)
     var n = name.ToLowerInvariant();
     foreach (var (key, slug) in new[] { ("windsor", "rbwm"), ("bracknell", "bracknellforest"), ("west berkshire", "westberkshire"), ("wokingham", "wokingham"),
         ("merton", "merton"), ("reading", "reading"), ("birmingham", "birmingham"), ("leeds", "leeds"), ("sheffield", "sheffield"),
-        ("bradford", "bradford"), ("liverpool", "liverpool"), ("bristol", "bristol") })
+        ("bradford", "bradford"), ("liverpool", "liverpool"), ("bristol", "bristol"), ("wakefield", "wakefield"), ("coventry", "coventry"),
+        ("durham", "durham"), ("kirklees", "kirklees"), ("leicester", "leicester"), ("cornwall", "cornwall"), ("nottingham", "nottingham"),
+        ("wirral", "wirral"), ("newcastle", "newcastle") })
         if (n.Contains(key)) return slug;
     throw new InvalidOperationException("no slug for " + name);
 }

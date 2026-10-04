@@ -1,6 +1,6 @@
 # Showroom — CLAUDE.md (showroom-owner)
 
-**Last verified:** 2026-10-04 (big data and the Blazor runtime moved to the website-data repo; council scanner: request tray + letter, source rows, classic page deleted)
+**Last verified:** 2026-10-04 (big data and the Blazor runtime moved to the website-data repo; council scanner: request tray + letter, source rows, 21 councils, test at n=96)
 
 Blazor WebAssembly app at `C:\Users\dongy\AboutUs\Showroom`, published under `/tools` on the public
 site (`AboutUs` repo, base href `/tools/`). Every tool runs entirely client-side: no server, no
@@ -137,12 +137,15 @@ Paste/drop text; `ProseEngine.MineText` mines it (page chunks+yields at ~200k ch
 HoloDb `ProseStore` + AlgFormer plausibility (None / Prism's checkpoint / train on the visitor's text, ~0.22-0.24 ms/char/epoch), chord`data-cat="holodb-algformer"`. `ProseEngine.Plausibility` has no reset (page re-mines a fresh engine). Cap 64MB.
 
 ## Council Spending Scanner: `Pages/CouncilSpending.razor` (routes `/council-spending`, `/council-spending/{slug}`)
-Built on the virtual-customer's PHONE-SIZED export (`VirtualCustomer\web_export`; SPEC_FOR_SHOWROOM.md items 9-22). Twelve councils, no HoloDb,
+Built on the virtual-customer's PHONE-SIZED export (`VirtualCustomer\web_export`; SPEC_FOR_SHOWROOM.md items 9-26). Twenty-one councils, no HoloDb,
 no engine in the browser. Public-audience, mobile-first, not editorial: audit terms, plain prose + counts + GBP, OGL credit, never a cause.
-- **Data** (`website-data/council-web`, 169.5 MB, 2,254 files, none over 0.24 MB; `AboutUs\CouncilWebBuilder`, `dotnet run -c Release --project CouncilWebBuilder`,
-  about 45 s, writes straight into the data repo (arg 1 / `COUNCIL_WEB_OUT` overrides), wipe the folder first so stale files go; it fails above 50 MB/file; second arg `profiles` rewrites
-  only profiles.json.gz. Then commit + push website-data, nothing else. KNOWN BREAK 2026-10-04: the engine now lists Wakefield and the builder's `Slug()` has no entry, so a run throws
-  until the page takes a 13th council): `index.csv`, per-council `months.csv`,
+- **Adding a council** (done for 9 on 2026-10-04): a line in `CouncilWebData.Councils` (full name EXACTLY as the profile's, short name), a `("key","slug")` pair in the builder's `Slug()` (else it throws
+  "no slug for X"), `CouncilTerms.NoScheduleA/NoScheduleD` from the exceptions (A or D rows = 0 and the profile says empty by construction; `NoDByNumbering` when numbers exist but never span payees), then re-run the builder.
+  New cross files go in the builder's `cross/` list and a row in `BudgetTestPanel`'s set list. Profile prose needs no page code (flagged = quirk opening in capitals), but read the builder's REWORDED/HELD BACK
+  output and grep profiles.json for working-file words (`prep`, "Prepare step" are reworded to "the scanner" in `Reword`; `XlsxReader` sentences dropped).
+- **Data** (`website-data/council-web`, 292.6 MB, 4,202 files, none over 0.28 MB; `AboutUs\CouncilWebBuilder`, `dotnet run -c Release --project CouncilWebBuilder`,
+  about 70-90 s, writes straight into the data repo (arg 1 / `COUNCIL_WEB_OUT` overrides), wipe the folder first so stale files go; it fails above 50 MB/file; second arg `profiles` rewrites
+  only profiles.json.gz. Then commit + push website-data, nothing else): `index.csv`, per-council `months.csv`,
   month EXCEPTION slices (`<slug>/<YYYY-MM>.exceptions[.N].csv.gz`), month TRANSACTION slices (`<slug>/<YYYY-MM>[.N].csv.gz`, 1,333 files, 13 slim columns, fetched only by "See the
   source rows"), `cross/*.csv.gz`, `profiles.json.gz`, `PREREG_BUDGET_TEST.txt`. After every `phoneexport`/`export`: re-run the builder (no site publish needed).
   Profile text is cleaned in the BUILDER, never at source: the engine's "Schedule A/B/D" and "the engine" become the page's words, sentences naming working files, sessions or
@@ -163,6 +166,9 @@ no engine in the browser. Public-audience, mobile-first, not editorial: audit te
   tray 365-433/287 ms the first time (profile fetch), about 190/60 with items; letter of 100 items opens 310-540/0; list of 15 groups 166-188/188; show 15 more worst stall 61-139;
   source rows of the first group 0.6 s (Wokingham, stall 104), 2.0-2.1 s (Bradford), 2.4-2.5 s (Leeds, Sheffield: 3-4 parts, about 4.8 MB raw; stall 55-64), a second group in the same month 0.25-0.5 s.
   Weakest: a tick in a 100-row list redraws the list (84-160 ms). First use of a check or month still stalls 0.3-0.5 s.
+- 21 councils, same bar (CPU 6x, 4 Mbps, 100 ms; one pass 2026-10-04): hub ready 270 ms, boot to hub 1.4 s, hub list re-render 101 ms (21 cards); first council page (profiles.json 121 KB) 1.4 s wall, worst stall
+  643 ms, later council pages 0.15-0.56 s; month pick 0.23-0.81 s (Cornwall 2021-10, largest month 6.7 MB raw: 1.8 s); source rows 0.6-2.5 s (Wakefield 2022-11: 4 parts, 5.6 MB, 2.5 s, stall 270 ms). Coventry's
+  fact line reads "February 2001 to November 2033": a few typed dates in the file are data, shown as published (the profile says so).
 - Classic in-browser engine page DELETED 2026-10-04 with `data/councils`; the unlinked raw `data/reading` + `data/wokingham` (100 MB) were deleted from wwwroot/dist the same day.
 - Gotchas: `--` in csproj XML comments breaks load; BudgetPanel's `<text>` trick fails in code blocks; CSS is one scoped file using `.cs ::deep`; lists with stateful children need `@key`.
 ## Unlisted: RecycleDAO marketplace prototype — `Pages/RecycleDaoDemo.razor` (`/recycledao-demo`)

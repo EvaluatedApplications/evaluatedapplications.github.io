@@ -36,7 +36,7 @@ public sealed class CouncilWebData
 
     public CouncilWebData(HttpClient http, IJSRuntime js) { _http = http; _js = js; }
 
-    /// <summary>The twelve councils, in the order the page lists them: the four hosted first, then the others.</summary>
+    /// <summary>The twenty-one councils, in the order the page lists them: the four hosted first, then the cities, then the nine added in Session 38.</summary>
     public static readonly (string Slug, string Name, string Short)[] Councils =
     {
         ("wokingham", "Wokingham Borough Council", "Wokingham"),
@@ -51,6 +51,15 @@ public sealed class CouncilWebData
         ("bradford", "Bradford Metropolitan District Council", "Bradford"),
         ("liverpool", "Liverpool City Council", "Liverpool"),
         ("bristol", "Bristol City Council", "Bristol"),
+        ("wakefield", "Wakefield Metropolitan District Council", "Wakefield"),
+        ("coventry", "Coventry City Council", "Coventry"),
+        ("durham", "Durham County Council", "Durham"),
+        ("kirklees", "Kirklees Council", "Kirklees"),
+        ("leicester", "Leicester City Council", "Leicester"),
+        ("cornwall", "Cornwall Council", "Cornwall"),
+        ("nottingham", "Nottingham City Council", "Nottingham"),
+        ("wirral", "Wirral Metropolitan Borough Council", "Wirral"),
+        ("newcastle", "Newcastle City Council", "Newcastle"),
     };
 
     public static string NameOf(string slug) => Councils.FirstOrDefault(c => c.Slug == slug).Name ?? slug;
@@ -143,7 +152,7 @@ public sealed class CouncilWebData
         return list;
     }
 
-    /// <summary>The slug of a council from its full name ("Leeds City Council" gives "leeds"); null when it is not one of the twelve.</summary>
+    /// <summary>The slug of a council from its full name ("Leeds City Council" gives "leeds"); null when it is not one of the twenty-one.</summary>
     public static string? SlugOfName(string fullName) =>
         Councils.FirstOrDefault(c => c.Name.Equals(fullName, StringComparison.OrdinalIgnoreCase)).Slug;
 

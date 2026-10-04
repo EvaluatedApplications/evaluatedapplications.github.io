@@ -203,7 +203,7 @@ public static class CouncilChecksWeb
         new()
         {
             Id = "flows", Title = "Money paid between these councils and the companies they own",
-            Plain = "How much each of these councils paid another one of them, or a company one of them owns, even when the other side is spelled differently on the payer's books. Every spelling is listed. A person graded each candidate spelling by hand; no similarity score separates right from wrong, so the table behind this is published in full. Only graded matches marked \"accept\" are counted.",
+            Plain = "How much each of these councils paid another one of them, or a company one of them owns, even when the other side is spelled differently on the payer's books. Every spelling is listed. A person graded each candidate spelling by hand; no similarity score separates right from wrong, so the table behind this is published in full. Only graded matches marked \"accept\" are counted. The name as published is shown beside the authority it was matched to, because the matching is a triage, not a proof: of 99 names the first screen called \"all distinctive words present\", one was a different body (Woking, for Wokingham).",
             Caption = "What the payer says it paid; never reconciled to the payee's income.",
             File = "cross/crossref_alias_flows.csv", CouncilCol = "Payer",
             Build = (t, rows) =>

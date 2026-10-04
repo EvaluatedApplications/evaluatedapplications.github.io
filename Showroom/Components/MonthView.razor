@@ -52,7 +52,7 @@
                     <p class="plain">@ScheduleDefinition(sch)</p>
                     @if (na)
                     {
-                        <p class="na">Not available for this council: its published file @(sch == "A" ? "has no separate VAT or gross figure to compare" : "has no transaction reference to group by"), so this rule cannot run. That is a limit of the file, not a clean result.</p>
+                        <p class="na">Not available for this council: its published file @(sch == "A" ? "has no stated invoice or gross amount to compare the payments with" : NoDByNumbering.Contains(Slug) ? "gives every transaction number to one payee on one date, or to a single row" : "has no transaction reference to group by"), so this rule @(sch == "D" && NoDByNumbering.Contains(Slug) ? "finds nothing by construction" : "cannot run"). That is a limit of the file, not a clean result.</p>
                     }
                     @if (buckets.Any(b => b.SupplierFurnished))
                     {
