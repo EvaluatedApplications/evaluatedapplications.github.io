@@ -7,7 +7,7 @@ namespace Showroom.Services;
 /// One council-year of the declared-spend comparison, read from the virtual-customer's budget_units.csv (the file the pre-registered test
 /// reads, so every figure here is the test's own). Declared = K3 (Revenue Outturn running expenses + Housing Revenue Account + Capital
 /// Outturn + the pass-through payments seen in the file; employee pay is NOT in it). File = F, the sum of every published Net amount.
-/// Flagged = T_B: the second copies published twice (T_A) plus the repeat-payment leads. The gap is Declared - File.
+/// Flagged = T_B: the second copies of lines listed under a second transaction number (T_A) plus the repeated-payment groups. The gap is Declared - File.
 /// </summary>
 public sealed class GapYear
 {
@@ -51,7 +51,7 @@ public sealed class GapYear
     {
         decimal gap = Gap, fl = Flagged;
         if (fl <= 0m) return "No payments were flagged for this year, so there is nothing to set against the declared spend.";
-        string flagged = $"Flagged repeat payments ({Gbp(fl)}: {Gbp(TA)} second copies published twice, {Gbp(Leads)} repeat-payment leads)";
+        string flagged = $"Flagged repeat payments ({Gbp(fl)}: {Gbp(TA)} second copies of lines listed under a second transaction number, {Gbp(Leads)} repeated-payment groups)";
         if (gap > 0m && fl <= gap)
             return $"{flagged} would fit inside the {Gbp(gap)} of declared spend not itemised in the file {Times(gap / fl)} times over, so the budget figures cannot rule them out.";
         if (gap > 0m)
@@ -100,7 +100,7 @@ public sealed class GapSummary
         if (N == 0) { l.Add("No year of this council can be compared yet: the comparison needs a file that covers twelve months and a published government figure for the same year."); return l; }
         l.Add($"{N} year{(N == 1 ? "" : "s")} can be compared ({(First == Last ? First : First + " to " + Last)}). In {Fits} of {N} the flagged repeat payments fit inside the declared spend not itemised in the file, so the budget figures cannot rule them out.");
         if (Below > 0)
-            l.Add($"The file itemises less than the declared spend in {Below} of {N} years, leaving {Gbp(SumGap)} of declared spend not itemised in all. Flagged repeat payments in those years total {Gbp(SumFlaggedBelow)} ({Gbp(SumTABelow)} second copies, {Gbp(SumLeadsBelow)} repeat-payment leads)"
+            l.Add($"The file itemises less than the declared spend in {Below} of {N} years, leaving {Gbp(SumGap)} of declared spend not itemised in all. Flagged repeat payments in those years total {Gbp(SumFlaggedBelow)} ({Gbp(SumTABelow)} second copies, {Gbp(SumLeadsBelow)} repeated-payment groups)"
                 + (Fits > 0 ? $"; where they fit, they fit {GapYear.Times(MinFit)} to {GapYear.Times(MaxFit)} times over ({GapYear.Times(MedFit)} in the median year)" : "")
                 + (Larger > 0 ? $"; in {Larger} year{(Larger == 1 ? "" : "s")} they are larger than the not-itemised amount" : "") + ".");
         if (Above > 0)

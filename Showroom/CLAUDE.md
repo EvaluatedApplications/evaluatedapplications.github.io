@@ -1,6 +1,6 @@
 # Showroom — CLAUDE.md (showroom-owner)
 
-**Last verified:** 2026-10-04 (r3,970 window fix; council scanner now DATA-DRIVEN: 27 councils incl. Calderdale, a new council needs no page edit)
+**Last verified:** 2026-10-04 (r3,970 window fix; council scanner DATA-DRIVEN, 28 councils; audit wording/rendering pass done)
 
 Blazor WebAssembly app at `C:\Users\dongy\AboutUs\Showroom`, published under `/tools` on the public site
 (`AboutUs` repo, base href `/tools/`). Every tool runs entirely client-side: no server, no upload. Charter:
@@ -144,16 +144,26 @@ mobile-first, not editorial: audit terms, plain prose + counts + GBP, OGL credit
 - **`Services/CouncilOverrides.cs`**: ONLY prose that cannot be derived: Hertfordshire (amount column,
   threshold caption), Stockport (A text, date-only and redaction lines, year notes), York (numbering
   notes, row counts, redaction range), Durham (`DByNumbering`: its ledger-reference counter reads like
-  Leeds's, the page always worded it the other way). `CouncilTerms.ListForEveryCouncil = false`: the
-  page-top "What cannot be checked" list is built only for `noBudget` councils (the five that always
-  had one + Calderdale); the other 21 state the same limits per year. Flip it to list every council.
+  Leeds's, the page always worded it the other way), `NoPublishedNumber` (Sheffield, Birmingham, West
+  Berkshire: the scanner added a row number; Sheffield checked against the council's files by the
+  2026-10-04 audit, the other two on their profiles' word). `ListForEveryCouncil = true`: the "What
+  cannot be checked" list is on EVERY council page (the derived limits + two universal lines).
+- **Audit rules (2026-10-04, an independent auditor)**: no raw engine code is ever printed:
+  `Services/CouncilCodes.cs` maps classification, reading, debt-sink flag, label check, loan status to
+  words (unlisted = "Other (not described here)"), and BOTH `CouncilWebBuilder` (full run) and
+  `CouncilTermsCheck` FAIL (exit 1) on a code the table lacks: add it there. No "fault" label, no
+  "published twice"/"lead"/"actual target" wording (twins = "identical lines under two transaction
+  numbers"). A council paying itself (`IsSelf`, "Leeds CC") is left out of flows/debt sink/misfits/
+  loan checks and counted. `TxText`: a council with no published number never has the scanner's row
+  number called its transaction number (page, letter, source rows); `CheckCannotRun`/`CheckNote`/
+  `CheckCoverage` say where a number-based check cannot or only partly runs. The letter quotes only
+  net, gross, transaction, date, payee (no computed difference). Builder `Clean` drops first-person,
+  working-note and statistical-jargon text and PRINTS `HELD LINES` for review.
 - **Regression**: `dotnet run -c Release --project CouncilTermsCheck -- <council-web> out.txt [slugs]`
   prints every council's list, year notes and A/D lines from the SHIPPED profiles + years.csv; diff
-  against `CouncilTermsCheck/golden.txt` (913 lines for the 26 were byte-identical before/after the
-  refactor). Profile prose needs no page code (flagged = quirk opening in capitals), but read the
-  builder's REWORDED/HELD BACK output and grep profiles.json for working-file words (`prep`, "Prepare
-  step" -> "the scanner" in `Reword`; `XlsxReader`/`XlsReader`/`FileDuplication` sentences dropped).
-  `budget_units.csv` Pool `confirmatory` = the first test group; a council with units but none eligible
+  against `CouncilTermsCheck/golden.txt` (regenerated 2026-10-04 for the audit wording; explain every
+  diff). Read the builder's REWORDED/HELD BACK/HELD LINES output and grep profiles.json for
+  working-file words (`Reword`, `InternalSentence`). `budget_units.csv` Pool `confirmatory` = the first test group; a council with units but none eligible
   gets the "cannot run, no government figure held here" line from `BudgetPanel`. New cross files go in
   the builder's `cross/` list and a row in `BudgetTestPanel`'s set list.
 - **Load by financial year** (user: "I preferred it when I could choose what to load"). `LoadPicker` =
@@ -168,10 +178,9 @@ mobile-first, not editorial: audit terms, plain prose + counts + GBP, OGL credit
   overwrites, so delete a stale file BY NAME; fails above 50 MB/file): `index.csv`, per-council
   `months.csv` + `years.csv`, **exception files in ONE slim format** `<slug>/<YYYY-MM>.exceptions.csv.gz`
   and `<slug>/fy-<YYYY-YY>.exceptions[.N].csv.gz` (year bundle, parts of whole months above 12 MB raw).
-  Format: `@2022-11` marker line, a header, rows (Council/Year/SupplierKey dropped; TransactionGross empty
-  when = Net; Detail + ExplainedMeaning on a group's first line; `Gross` kept on an A row where it differs
-  from Net and on NSquaredRows lines; `Care` "1" on a Wokingham B group wholly in care cost centres).
-  Month TRANSACTION slices `<slug>/<YYYY-MM>[.N].csv.gz` are fetched only by "See the source rows"; also
+  Format: `@2022-11` marker line, a header, slim rows (TransactionGross empty when = Net; Detail +
+  ExplainedMeaning on a group's first line; `Gross` kept on A and NSquaredRows rows; `Care` "1" on a
+  Wokingham care B group). Month TRANSACTION slices `<slug>/<YYYY-MM>[.N].csv.gz` are fetched only by "See the source rows"; also
   `cross/*.csv.gz`, `profiles.json.gz`, `PREREG_BUDGET_TEST.txt`. Profile text is cleaned in the BUILDER.
 - **Code**: `Services/CouncilWebData` (fetch, `InflateAsync`, caches), `CouncilLoad`, `CouncilMonth`
   (`MonthScan`: byte-level, columns by header name), `CouncilSource`, `CouncilChecksWeb` (plain loops:
@@ -187,17 +196,14 @@ mobile-first, not editorial: audit terms, plain prose + counts + GBP, OGL credit
 - **Request tray** (`FoiTrayPanel`, one letter per council): the letter states facts and asks "Please
   provide the records you hold for this item, and the reason for it." No class meanings/readings/`Detail`.
   Address = the profile's verified `foi` else a placeholder. Caps 300 items / 100 per letter. Tick/source
-  buttons are PLAIN markup (a component per row cost ~5 ms). **Source rows**: the tap fetches that month's
-  slice (all parts), finds the group's transaction numbers (cap 80), lists up to 200 lines.
+  buttons are PLAIN markup (a component per row cost ~5 ms). **Source rows**: fetch that month's slice,
+  find the group's transaction numbers (cap 80), list up to 200 lines.
 - **Measured** (headless Edge, CPU 6x, 4 Mbps, 100 ms RTT): `scripts/council-load-perf.mjs <dist> 6 4096
   100 <data> [big|select|cancel|care|new]` (`ONLY=york,calderdale` limits `big` and `new`; `new` also
   prints the rendered cannot-check list), `council-perf.mjs`, `gap-perf.mjs`. Compare only interleaved
-  passes of two builds (the machine drifts 1.5-2 s an hour). Load wall / worst stall: York 2015-16 (its biggest
-  year, 576 KB, 68,771 lines) 4.5-5.0 s / 140-175 ms, York 2024-25 5.0 s / 317; Calderdale 2024-25 (140 KB,
-  13,473 lines) 1.3 s / 0; Surrey 5.4 s / 145; Essex 7.5 s / 97; Hertfordshire 1.6 s / 0; Cornwall 5.4 s / 207;
-  Sheffield 4.3 s / 63; Wokingham 2020-21 0.8 s / 57. Page open York 2.1 s (first open, 0.8 s stall) vs
-  Calderdale 0.5 s; the data-driven build is within noise of the old one (2 interleaved passes). Select
-  all (Leeds 12 yrs) 17.7 s / 131; open a list 27-300 ms; source rows 1.4-2.4 s.
+  passes of two builds (the machine drifts 1.5-2 s an hour). Load wall / worst stall: York 2015-16 (its
+  biggest year, 68,771 lines) 4.5-5.0 s / 140-175 ms; Essex 7.5 s / 97; Calderdale 2024-25 1.3 s / 0.
+  Page open 0.5-2.1 s; open a list 27-300 ms; source rows 1.4-2.4 s.
 - Gotchas: `--` in csproj XML comments breaks load; BudgetPanel's `<text>` trick fails in code blocks; CSS
   is one scoped file using `.cs ::deep`; lists with stateful children need `@key`.
 

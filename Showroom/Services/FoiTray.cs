@@ -63,15 +63,24 @@ public static class FoiFacts
     public const string Request = "Please provide the records you hold for this item, and the reason for it.";
 
     static string MonthPhrase(string month) => month == "undated" ? "payments with no readable date" : "payments dated " + MonthName(month);
-    static string Txn(string tx) => tx.Contains("~row") ? "(no transaction number is given in full in the file)" : tx;
+    // A transaction number is quoted only where the council's file really gives one: the scanner's row numbers and placeholders are never presented as the council's number (CouncilTerms.TxText).
+    // A letter asks the council about ITS records, so it is identified by payee, date and amounts when the file has no number.
+    static string Txn(string slug, string tx) => TxText(slug, tx);
+
+    /// <summary>The heading a group's items sit under in the letter. Neutral wording: the schedule titles on the page describe what a rule looks for, a letter states only what the file shows.</summary>
+    static string LetterSection(string schedule) => schedule switch
+    {
+        "A" => "Transactions published with a net amount and a gross amount",
+        _ => ScheduleTitle(schedule),
+    };
 
     /// <summary>A flagged group of one month, as the visitor sees it on the page.</summary>
     public static FoiItem FromGroup(string slug, string month, ExGroup g)
     {
-        var it = new FoiItem { Slug = slug, Section = ScheduleTitle(g.Schedule) };
+        var it = new FoiItem { Slug = slug, Section = LetterSection(g.Schedule) };
         var who = g.Lines.Select(l => l.Supplier).Distinct().ToList();
         string supplier = who.Count == 0 ? "a payee" : who.Count == 1 ? who[0] : who[0] + " and " + (who.Count == 2 ? who[1] : $"{who.Count - 1} other payees");
-        var tx = g.Lines.Select(l => Txn(l.Tx)).Distinct().ToList();
+        var tx = g.Lines.Select(l => Txn(slug, l.Tx)).Distinct().ToList();
         string txs = string.Join(", ", tx.Take(6)) + (tx.Count > 6 || (tx.Count > 1 && g.LineCount > g.Lines.Count) ? " and others" : "");
         it.Key = $"g|{slug}|{month}|{g.Schedule}|{g.Class}|{(g.Lines.Count > 0 ? g.Lines[0].Tx : "")}|{who.FirstOrDefault()}|{g.Value}";
         string when = MonthPhrase(month);
@@ -80,15 +89,16 @@ public static class FoiFacts
             var l = g.Lines[0];
             if (g.Class == "NSquaredListing")
                 // facts only: the stated gross and the published rows' total (no class, reading or cause goes in a letter)
-                it.Fact = $"In the {when}, transaction {Txn(l.Tx)} ({l.Supplier}) is published as {NumLines(g.LineCount)} totalling {Gbp(l.Net)}, against a stated gross of {Gbp(l.Gross)}.";
+                it.Fact = $"In the {when}, transaction {Txn(slug, l.Tx)} ({l.Supplier}) is published as {NumLines(g.LineCount)} totalling {Gbp(l.Net)}, against a stated gross of {Gbp(l.Gross)}.";
             else
-                it.Fact = $"In the {when}, transaction {Txn(l.Tx)} ({l.Supplier}) is published with a net of {Gbp(l.Net)} and a gross of {Gbp(l.Gross)}. The payments published for it differ by {Gbp(Math.Abs(l.Diff))} from the invoice amount the file states for it, once VAT is allowed for.";
-            it.Lines.Add($"transaction {Txn(l.Tx)}, {l.Supplier}, net {Gbp(l.Net)}, gross {Gbp(l.Gross)}, difference {Gbp(l.Diff)}");
+                // Facts the file shows directly and nothing computed from them: no difference, no VAT adjustment (the "difference" the scanner holds is not yet a figure a letter should quote)
+                it.Fact = $"In the {when}, transaction {Txn(slug, l.Tx)} ({l.Supplier}) is published with a net of {Gbp(l.Net)} and a gross of {Gbp(l.Gross)}.";
+            it.Lines.Add($"transaction {Txn(slug, l.Tx)}, {l.Supplier}, {when}, net {Gbp(l.Net)}, gross {Gbp(l.Gross)}");
         }
         else if (g.Schedule == "D")
         {
             it.Fact = $"In the {when}, transaction number {txs} is published against more than one payee or pay date: {NumLines(g.LineCount)}, {Gbp(g.Value)} in all.";
-            AddLines(it, g);
+            AddLines(it, g, slug);
         }
         else
         {
@@ -100,14 +110,14 @@ public static class FoiFacts
                 it.Fact = $"In the {when}, the published file lists {Plural(g.Lines.Select(l => l.Tx).Distinct().Count(), "transaction", "transactions")} ({txs}) for {supplier}, each with a stated gross of {Gbp(g.Lines[0].Gross)} and published lines totalling {Gbp(g.Lines[0].Net)}.";
             else
                 it.Fact = $"In the {when}, the published file lists {NumLines(g.LineCount)} for {supplier} with the same amount ({amounts}), description and pay date, under transaction{(tx.Count == 1 ? "" : "s")} {txs}; {Gbp(g.Value)} in all.{of}";
-            AddLines(it, g);
+            AddLines(it, g, slug);
         }
         return it;
     }
 
-    static void AddLines(FoiItem it, ExGroup g)
+    static void AddLines(FoiItem it, ExGroup g, string slug)
     {
-        foreach (var l in g.Lines) it.Lines.Add($"transaction {Txn(l.Tx)}, {l.Supplier}, net {Gbp(l.Net)}, gross {Gbp(l.Gross)}");
+        foreach (var l in g.Lines) it.Lines.Add($"transaction {Txn(slug, l.Tx)}, {l.Supplier}, net {Gbp(l.Net)}, gross {Gbp(l.Gross)}");
         if (g.LineCount > g.Lines.Count) it.Lines.Add($"and {Plural(g.LineCount - g.Lines.Count, "more line", "more lines")} of the same group in that month");
     }
 

@@ -2,6 +2,7 @@ using System.IO.Compression;
 using System.Text;
 using System.Text.Json;
 using CouncilAudit;
+using Showroom.Services;   // CouncilCodes: the plain-words table the page uses (compiled in from Showroom/Services/CouncilCodes.cs)
 
 // Prepares council-web (the Council Spending Scanner data) straight into the website-data repo (C:\Users\dongy\website-data\council-web,
 // served at /website-data/council-web by that repo's own GitHub Pages), from the virtual-customer's web_export. See the csproj comment.
@@ -63,6 +64,9 @@ long rawTotal = 0, gzTotal = 0; int files = 0, txSlices = 0;
 //   noBudget     every declared-spend unit of the council has no published Revenue Outturn (export/budget_units.csv), or it has none: the comparison cannot run
 //   redacted/pooled  rows whose payee is redacted (the engine's own test) / is a pooled label ("Redacted (pooled label): ...")
 // ---------------------------------------------------------------------------------------------------------------------------------------
+// Every machine code the data carries into a page line (classification, pattern reading, debt-sink flag, label check, loan-rebuild status), collected as the files are written and
+// checked at the end against Showroom's CouncilCodes table: a code with no plain-words entry FAILS the run (exit 1), so a new engine code can never reach the page unmapped.
+var seenCodes = new HashSet<(string Vocab, string Value)>();
 var acc = new Dictionary<string, FactsAcc>();
 FactsAcc Acc(string slug) { if (!acc.TryGetValue(slug, out var a)) acc[slug] = a = new FactsAcc(); return a; }
 var budgetNote = new Dictionary<string, (int Units, int NoOutturn)>();
@@ -219,6 +223,7 @@ HashSet<long> CareGroupsOf(string dir, string month, List<string> files)
             var r = recs[k];
             if (r.Count < 12) continue;      // the page skips these too
             string sched = At(r, cS);
+            seenCodes.Add((CouncilCodes.VocabClassification, At(r, cC))); seenCodes.Add((CouncilCodes.VocabExplainedBy, At(r, cEB)));
             if (sched == "A") facts.A++; else if (sched == "D") { facts.D++; facts.DYears.Add(FinancialYear(month)); }
             bool hasGid = long.TryParse(At(r, cG), System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var gid);
             bool first = !(hasGid && sched.Length > 0 && sched[0] != 'A') || seen.Add((sched[0], gid));
@@ -337,6 +342,14 @@ foreach (var n in profilesOnly ? Array.Empty<string>() : new[] { "transaction_tw
                           "budget_units", "budget_test", "budget_test_stage2", "budget_test_stage2b", "budget_test_stage2c", "budget_test_pooled", "budget_test_pooled_all", "budget_test_pooled_all2",
                           "crossref_alias_flows", "supplier_alias_grades", "debt_ledger", "debt_sink", "payment_misfits" })
     WriteGz($"cross/{n}.csv", WithoutHeldCouncils(n, File.ReadAllBytes(Path.Combine(export, n + ".csv"))));
+if (!profilesOnly)
+    foreach (var (file, column, vocab) in new[] { ("debt_sink", "Flags", CouncilCodes.VocabDebtFlag), ("payment_misfits", "LabelCheck", CouncilCodes.VocabLabelCheck), ("debt_ledger", "DecodeStatus", CouncilCodes.VocabDecodeStatus) })
+    {
+        var recs = ParseCsv(File.ReadAllText(Path.Combine(export, file + ".csv"), Encoding.UTF8));
+        int col = recs[0].IndexOf(column);
+        if (col < 0) throw new InvalidDataException($"{file}.csv has no {column} column");
+        foreach (var r in recs.Skip(1)) if (r.Count > col) seenCodes.Add((vocab, r[col]));
+    }
 
 // Profile text is the virtual-customer's own working notes. Before it goes on the public page: (1) the engine's internal names for the
 // three rules become the page's own words, (2) sentences that point at the working files themselves (session numbers, checklist steps,
@@ -361,19 +374,68 @@ string Reword(string s)
     s = System.Text.RegularExpressions.Regex.Replace(s, @"\bengine\b", "scanner");
     return s;
 }
+// A public page is not the working notebook (2026-10-04, after an independent audit). Three more kinds of text never reach it:
+//  (1) FIRST PERSON ("I read all 77 workbooks", "computed by the site, not by me"): the notes are the scanner's, never a person's voice;
+//  (2) INTERNAL working notes ("need a human click-through to re-confirm before being shown live", "Recorded here as the caveat for anyone reading the top-20 export, not as a fix",
+//      "A real, not-yet-confirmed lead"): they talk about the work or lean toward a conclusion, and say nothing a reader can use;
+//  (3) STATISTICAL JARGON of the verification protocol ("seeded", "n=30", "Wilson 95% CI [88.6%, 100.0%]", "(seed 20263001)"): the plain facts around it (how many groups were
+//      hand-checked and all confirmed) stay, the jargon goes.
+// Every sentence or clause dropped is collected and printed at the end (HELD LINES) so the profile's owner can reword the source; the profile text itself is never edited here.
+var FirstPerson = new System.Text.RegularExpressions.Regex(@"\b(?:I|I'm|I've|I'd|I'll|me|my|myself|mine)\b");   // case-sensitive on purpose
+var WorkingNote = new System.Text.RegularExpressions.Regex(@"human click-through|not-yet-confirmed|\bnot as a fix\b|Recorded here as|top-?\d+ export|shown live to a visitor|\bseed \d+\b|\bWilson\b|\b95% ?CI\b|\bCI \[", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+var heldLines = new List<string>();
+bool IsPrivate(string s) => InternalSentence.IsMatch(s) || FirstPerson.IsMatch(s) || WorkingNote.IsMatch(s);
+string StripJargon(string s)
+{
+    // markdown the notes were written in ("**30/30 confirmed**", "`Unclear`") is not shown as symbols
+    s = s.Replace("**", "");
+    s = System.Text.RegularExpressions.Regex.Replace(s, @"`([^`]*)`", "$1");
+    // the verification protocol's own words: the plain facts stay ("hand-checks 30/30 in each class"), the jargon goes
+    s = System.Text.RegularExpressions.Regex.Replace(s, @"\s*\([^()]*Wilson[^()]*\)", "");   // a bracket that holds only the interval goes whole
+    s = System.Text.RegularExpressions.Regex.Replace(s, @",?\s*(?:95% )?Wilson (?:95% )?CI\s*\[[^\]]*\](?:\s*for n=\d+)?", "");
+    s = System.Text.RegularExpressions.Regex.Replace(s, @"\b(?:seeded\s+)?(?:random\s+)?(?:sample\s+)?n=\d+,?\s+", "");
+    s = System.Text.RegularExpressions.Regex.Replace(s, @"\bseeded\s+", "");
+    s = System.Text.RegularExpressions.Regex.Replace(s, @"\s*\(seed \d+\)", "");
+    // a trailing working-note clause: "..., and need a human click-through to re-confirm before being shown live to a visitor"
+    s = System.Text.RegularExpressions.Regex.Replace(s, @",?\s*(?:and )?needs? a human click-through[^.]*(?=\.)", "");
+    return s;
+}
 string? Clean(string slugName, string text)
 {
-    // a parenthetical that only points at the working files or the engine's own names goes; the sentence around it stays
-    var stripped = System.Text.RegularExpressions.Regex.Replace(text, @"\s*\([^()]*\)", m => InternalSentence.IsMatch(m.Value) || m.Value.Contains("the engine") ? "" : m.Value);
-    var kept = Sentence.Split(stripped).Where(x => !InternalSentence.IsMatch(x)).ToArray();
-    if (kept.Length == 0) { Console.WriteLine($"HELD BACK [{slugName}]: {text[..Math.Min(130, text.Length)]}"); return null; }
+    text = StripJargon(text);
+    // a parenthetical that only points at the working files, the engine's own names, a person's voice or the verification protocol goes; the sentence around it stays
+    var stripped = System.Text.RegularExpressions.Regex.Replace(text, @"\s*\([^()]*\)", m =>
+    {
+        if (IsPrivate(m.Value) || m.Value.Contains("the engine")) { heldLines.Add($"[{slugName}] (clause in brackets) {m.Value.Trim()}"); return ""; }
+        return m.Value;
+    });
+    var kept = new List<string>();
+    foreach (var sn in Sentence.Split(stripped))
+    {
+        if (!IsPrivate(sn)) { kept.Add(sn); continue; }
+        // a sentence that points at the working files goes whole (as it always did); one that is only first person, a working note or protocol jargon keeps the clauses
+        // that are not ("Unclear 14,225 groups ...; I could not class two"), and the others are held
+        if (InternalSentence.IsMatch(sn)) { heldLines.Add($"[{slugName}] {sn.Trim()}"); continue; }
+        var clauses = sn.Split("; ");
+        var ok = clauses.Where(c => !IsPrivate(c)).ToList();
+        foreach (var c in clauses.Where(IsPrivate)) heldLines.Add($"[{slugName}] {c.Trim()}");
+        if (ok.Count > 0 && ok.Count < clauses.Length)
+        {
+            var joined = string.Join("; ", ok).TrimEnd();
+            kept.Add(joined.EndsWith('.') || joined.EndsWith(')') || joined.EndsWith('"') ? joined : joined + ".");
+        }
+    }
+    if (kept.Count == 0) { Console.WriteLine($"HELD BACK [{slugName}]: {text[..Math.Min(130, text.Length)]}"); return null; }
     var o = Reword(string.Join(" ", kept));
     o = System.Text.RegularExpressions.Regex.Replace(o, @"[;:,]\s*$", ".");
-    if (o != text) Console.WriteLine($"REWORDED [{slugName}] ({kept.Length}/{Sentence.Split(text).Length} sentences kept): {o[..Math.Min(170, o.Length)]}");
+    if (o != text) Console.WriteLine($"REWORDED [{slugName}] ({kept.Count}/{Sentence.Split(text).Length} sentences kept): {o[..Math.Min(170, o.Length)]}");
     return o;
 }
 var cleanQuirks = published.ToDictionary(c => c.Name, c => c.KnownQuirks.Select(q => Clean(c.Name, q)).Where(q => q is not null).Cast<string>().ToArray());
 var cleanVerif = published.ToDictionary(c => c.Name, c => Clean(c.Name + " verification", c.VerificationNote) ?? "");
+var cleanHowTo = published.ToDictionary(c => c.Name, c => Clean(c.Name + " how to find the file", c.HowToFindTheFile) ?? "");
+Console.WriteLine($"=== HELD LINES (dropped from the public text, for review; {heldLines.Count}) ===");
+foreach (var h in heldLines.Distinct()) Console.WriteLine("HELD: " + h);
 
 // Facts per council (see the FACTS comment above). A "profiles" run measures nothing: it carries over what the last full build wrote.
 var oldFacts = new Dictionary<string, JsonElement>();
@@ -408,7 +470,7 @@ var profiles = published.Select(c => new Dictionary<string, object?>
     ["short"] = ShortName(c.Name),
     ["facts"] = FactsOf(Slug(c.Name)),
     ["page"] = c.TransparencyPageUrl,
-    ["howTo"] = c.HowToFindTheFile,
+    ["howTo"] = cleanHowTo[c.Name],
     ["quirks"] = cleanQuirks[c.Name],
     ["heldBack"] = c.KnownQuirks.Count - cleanQuirks[c.Name].Length,
     ["lastChecked"] = c.LastChecked,
@@ -421,6 +483,19 @@ var json = JsonSerializer.SerializeToUtf8Bytes(profiles, new JsonSerializerOptio
 WriteGz("profiles.json", json);
 WriteRaw("PREREG_BUDGET_TEST.txt", File.ReadAllBytes(Path.Combine(Path.GetDirectoryName(webExport)!, "PREREG_BUDGET_TEST.md")));
 WriteRaw("cross/sources.csv", File.ReadAllBytes(@"C:\Users\dongy\VirtualCustomer\inbox\published\sources.csv"));
+
+// A code the page has no plain words for fails the run: nothing may print a raw engine code ("DebtLabelled", "NoReturnFlow"). Add the code to Showroom/Services/CouncilCodes.cs.
+if (!profilesOnly)
+{
+    var unmapped = CouncilCodes.Audit(seenCodes);
+    if (unmapped.Count > 0)
+    {
+        foreach (var u in unmapped) Console.WriteLine("UNMAPPED CODE: " + u);
+        Console.WriteLine($"FAILED: {unmapped.Count} machine code(s) in the data have no plain-words entry in Showroom/Services/CouncilCodes.cs. Map them, then run again.");
+        return 1;
+    }
+    Console.WriteLine($"CODES: all {seenCodes.Count} classification, reading, flag, label and status values in the data are mapped to plain words.");
+}
 
 // GitHub refuses any file over 100 MB and warns over 50 MB; the owner's bar is 50 MB. Report the largest and fail loudly above it.
 var biggest = new DirectoryInfo(outDir).EnumerateFiles("*", SearchOption.AllDirectories).OrderByDescending(f => f.Length).First();

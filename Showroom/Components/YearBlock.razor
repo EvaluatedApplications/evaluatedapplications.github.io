@@ -158,9 +158,10 @@
         return g.Schedule == "A" ? $"{s}: {Gbp(g.Value)} that does not reconcile" : $"{s}: {Gbp(g.Value)} across {NumLines(g.LineCount)}";
     }
 
-    static string Sub(ExGroup g)
+    // a transaction number is shown only where the council's file gives one: a scanner row number or placeholder is shown as "the file gives no transaction number" (CouncilTerms.TxText)
+    string Sub(ExGroup g)
     {
-        var tx = g.Lines.Select(l => l.Tx).Distinct().ToList();
+        var tx = g.Lines.Select(l => TxText(Slug, l.Tx)).Distinct().ToList();
         bool moreLines = g.LineCount > g.Lines.Count;
         string txs = tx.Count <= 4 ? string.Join(", ", tx) : string.Join(", ", tx.Take(4)) + " and others";
         if (moreLines && tx.Count <= 4) txs += " and others";

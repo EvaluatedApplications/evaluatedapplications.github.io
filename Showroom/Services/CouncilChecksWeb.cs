@@ -87,6 +87,27 @@ public static class CouncilChecksWeb
     /// <summary>Source targets for the lines that carry a date the scanner can place in a month; a row with no readable date has none.</summary>
     static List<SourceTarget> At(string slug, params (string Date, string Tx)[] at) =>
         at.Where(a => MonthKey(a.Date).Length > 0 && a.Tx.Length > 0).Select(a => new SourceTarget(slug, MonthKey(a.Date), new[] { a.Tx })).ToList();
+    // ---- a council paying itself is not a payment to another council ----
+    // Some payee labels are the paying council's own name in another spelling ("Leeds CC", "Surrey CC", "Merton"). They are left out of the lists that are about money going to
+    // OTHER councils and companies, counted, and said so in the summary. A company a council owns ("Wokingham Housing") is not the council itself and stays.
+    static readonly HashSet<string> Generic = new(StringComparer.Ordinal) { "city", "county", "borough", "metropolitan", "district", "council", "cc", "bc", "mbc", "mdc", "london", "of", "royal", "the", "and" };
+    static string Core(string s)
+    {
+        var sb = new StringBuilder(); var w = new StringBuilder();
+        void Flush() { if (w.Length > 0 && !Generic.Contains(w.ToString())) sb.Append(w); w.Clear(); }
+        foreach (var ch in s.ToLowerInvariant()) { if (char.IsLetter(ch)) w.Append(ch); else Flush(); }
+        Flush();
+        return sb.ToString();
+    }
+    /// <summary>True when the payee label is the paying council itself, by its slug (its full name and its short name are both tried).</summary>
+    public static bool IsSelf(string payerSlug, string entity)
+    {
+        if (payerSlug.Length == 0) return false;
+        string e = Core(entity);
+        return e.Length > 0 && (e == Core(CouncilWebData.NameOf(payerSlug)) || e == Core(CouncilWebData.ShortOf(payerSlug)));
+    }
+    static string SelfNote(int n, string noun, string eg) => n == 0 ? "" : $" {Plural(n, noun, noun + "s")} where the payee is the council's own name (for example \"{eg}\") {(n == 1 ? "is" : "are")} left out: a council paying itself is not a payment to another council.";
+
     static bool Many(Tab t, List<string[]> rows)
     {
         string? first = null;
@@ -98,9 +119,9 @@ public static class CouncilChecksWeb
     {
         new()
         {
-            Id = "twins", Title = "Transactions published twice under two transaction numbers",
-            Plain = "Two different transaction numbers, the same supplier, the same lines (amount and description), and first pay dates within seven days. Sorted by the value of the second copy.",
-            Caption = "The file cannot show whether cash left twice. Bracknell Forest pairs dated in the future are forward schedules.",
+            Id = "twins", Title = "Identical lines under two transaction numbers",
+            Plain = "Two different transaction numbers, the same supplier, the same lines (amount and description), first pay dates within seven days, and lines of that kind seen in at most three transactions. A pair that does not meet all of these is not listed, so this is not a list of every identical pair. Sorted by the value of the second transaction.",
+            Caption = "The file cannot show whether cash left twice, or whether one payment was published under two numbers. Bracknell Forest pairs dated in the future are forward schedules.",
             File = "cross/transaction_twins.csv",
             Build = (t, rows) =>
             {
@@ -110,17 +131,21 @@ public static class CouncilChecksWeb
                 {
                     decimal v = t.M(r, "TotalValue"); sum += Math.Abs(v);
                     string slug = t.G(r, "Council"), ta = t.G(r, "TransactionA"), tb = t.G(r, "TransactionB");
+                    // DaysApart is -1 when a first pay date is missing from the file: it is not "1 day apart"
+                    bool dated = t.I(r, "DaysApart") >= 0;
+                    string apart = dated ? $"first pay dates {Math.Abs(t.I(r, "DaysApart"))} day(s) apart ({Date(t.G(r, "DateA"))} and {Date(t.G(r, "DateB"))})"
+                                         : $"a first pay date is missing in the file ({Date(t.G(r, "DateA"))} and {Date(t.G(r, "DateB"))})";
                     o.Add(new CheckRow(Math.Abs(v), $"{t.G(r, "SupplierName")}: {Gbp(v)}",
-                        $"{(many ? S(t.G(r, "Council")) + ". " : "")}Transactions {ta} and {tb}, {t.I(r, "Lines")} line(s), first pay dates {Math.Abs(t.I(r, "DaysApart"))} day(s) apart ({Date(t.G(r, "DateA"))} and {Date(t.G(r, "DateB"))}). {Cap(t.G(r, "Kind"))}.")
+                        $"{(many ? S(t.G(r, "Council")) + ". " : "")}Transactions {ta} and {tb}, {t.I(r, "Lines")} line(s), {apart}. {Cap(t.G(r, "Kind"))}.")
                     {
                         Key = $"twins|{slug}|{ta}|{tb}",
-                        Foi = () => Item(slug, $"Transactions {ta} and {tb}, both for {t.G(r, "SupplierName")}, have the same {t.I(r, "Lines")} line(s) (amount and description). {(t.G(r, "DateA") == t.G(r, "DateB") ? $"Their first pay date is {Date(t.G(r, "DateA"))} for both." : $"Their first pay dates are {Date(t.G(r, "DateA"))} and {Date(t.G(r, "DateB"))}, {Math.Abs(t.I(r, "DaysApart"))} day(s) apart.")} {Cap(Stop(t.G(r, "Kind")))}. The second copy is {Gbp(v)}.",
+                        Foi = () => Item(slug, $"Transactions {ta} and {tb}, both for {t.G(r, "SupplierName")}, have the same {t.I(r, "Lines")} line(s) (amount and description). {(t.G(r, "DateA") == t.G(r, "DateB") ? $"Their first pay date is {Date(t.G(r, "DateA"))} for both." : dated ? $"Their first pay dates are {Date(t.G(r, "DateA"))} and {Date(t.G(r, "DateB"))}, {Math.Abs(t.I(r, "DaysApart"))} day(s) apart." : $"The file gives no first pay date for one or both ({Date(t.G(r, "DateA"))} and {Date(t.G(r, "DateB"))}).")} {Cap(Stop(t.G(r, "Kind")))}. The second transaction is {Gbp(v)}.",
                             $"transaction {ta}, pay date {Date(t.G(r, "DateA"))}, file {t.G(r, "YearA")}", $"transaction {tb}, pay date {Date(t.G(r, "DateB"))}, file {t.G(r, "YearB")}"),
                         Src = () => At(slug, (t.G(r, "DateA"), ta), (t.G(r, "DateB"), tb)),
                     });
                 }
                 SortDesc(o);
-                return (o, $"{Num(o.Count)} pair(s); the second copies are worth {Gbp(sum)} in all.");
+                return (o, $"{Num(o.Count)} pair(s); the second transaction of each pair carries {Gbp(sum)} in all. A transaction that is in more than one pair is counted in each, and a credit counts as its absolute value, so this is not the sum of distinct extra payments.");
             },
         },
         new()
@@ -219,9 +244,10 @@ public static class CouncilChecksWeb
                     string nm = t.G(r, "SupplierName"); if (!e.Names.Contains(nm)) e.Names.Add(nm);
                     foreach (var y in t.G(r, "Years").Split(' ', StringSplitOptions.RemoveEmptyEntries)) if (!e.Years.Contains(y)) e.Years.Add(y);
                 }
-                var o = new List<CheckRow>(); decimal sum = 0;
+                var o = new List<CheckRow>(); decimal sum = 0; int self = 0; string selfEg = "";
                 foreach (var e in byPair.Values)
                 {
+                    if (IsSelf(e.Payer, e.Entity)) { self++; selfEg = e.Entity; continue; }
                     sum += e.Net;
                     var pe = e;
                     o.Add(new CheckRow(e.Net, $"{S(e.Payer)} paid {e.Entity}: {Gbp(e.Net)} in {Num(e.Rows)} rows",
@@ -232,7 +258,7 @@ public static class CouncilChecksWeb
                     });
                 }
                 SortDesc(o);
-                return (o, $"{Num(o.Count)} payer-and-payee pair(s) found, {Gbp(sum)} in all.");
+                return (o, $"{Num(o.Count)} payer-and-payee pair(s) found, {Gbp(sum)} in all.{SelfNote(self, "pair", selfEg)}");
             },
         },
         new()
@@ -243,10 +269,11 @@ public static class CouncilChecksWeb
             File = "cross/debt_ledger.csv", ByName = true,
             Build = (t, rows) =>
             {
-                var o = new List<CheckRow>(); int ia = 0, ok = 0, no = 0;
+                var o = new List<CheckRow>(); int ia = 0, ok = 0, no = 0, self = 0; string selfEg = "";
                 foreach (var r in rows)
                 {
                     if (t.G(r, "Class") != "InterAuthority") continue;
+                    if (IsSelf(CouncilWebData.SlugOfName(t.G(r, "Council")) ?? "", t.G(r, "Counterparty"))) { self++; selfEg = t.G(r, "Counterparty"); continue; }
                     ia++;
                     string status = t.G(r, "DecodeStatus"), how;
                     if (status == "Decodes") ok++; else if (status == "DoesNotDecode") no++;
@@ -255,7 +282,7 @@ public static class CouncilChecksWeb
                     else if (status == "Decodes") how = $"Rebuilt from a round loan of {Gbp(t.M(r, "DecodedPrincipal"))}, but more than one rate and number of days give the same figure: {t.G(r, "DecodeNote")}.";
                     else if (status == "DecodesPrincipalUnpublished") how = $"The figure can be rebuilt as interest, but the loan itself is not published: {t.G(r, "DecodeNote")}.";
                     else if (status == "DoesNotDecode") how = $"Not rebuilt from a round loan, a rate and a number of days ({t.G(r, "DecodeNote")}).";
-                    else how = "Not applicable.";
+                    else how = CouncilCodes.DecodeStatus(status) + ".";   // "Not applicable", or the unlisted text for a status the table does not describe (never the raw code)
                     decimal amt = t.M(r, "Amount");
                     string slug = CouncilWebData.SlugOfName(t.G(r, "Council")) ?? "", tx = t.G(r, "TransactionId"), howNow = how;
                     var row = new CheckRow(Math.Abs(amt), $"{t.G(r, "Counterparty")}: {Gbp(amt)} on {Date(t.G(r, "PayDate"))}", $"{S2(t.G(r, "Council"))} {t.G(r, "Year")}. {how}");
@@ -263,63 +290,68 @@ public static class CouncilChecksWeb
                     {
                         row.Key = $"loan|{slug}|{tx}|{t.G(r, "PayDate")}|{amt}";
                         // facts only: the payment, and (when the check could not rebuild it) that it did not rebuild; a rebuilt figure is an explanation, so it is not repeated here
-                        row.Foi = () => Item(slug, $"The published file shows a payment of {Gbp(amt)} to {t.G(r, "Counterparty")} on {Date(t.G(r, "PayDate"))} (transaction {tx}, file tagged {t.G(r, "Year")})." +
+                        row.Foi = () => Item(slug, $"The published file shows a payment of {Gbp(amt)} to {t.G(r, "Counterparty")} on {Date(t.G(r, "PayDate"))} (transaction {TxText(slug, tx)}, file tagged {t.G(r, "Year")})." +
                             (t.G(r, "DecodeStatus") == "DoesNotDecode" ? " The figure does not rebuild from a round loan, a rate and a number of days." : ""));
                         row.Src = () => At(slug, (t.G(r, "PayDate"), tx));
                     }
                     o.Add(row);
                 }
                 SortDesc(o);
-                return (o, $"{Num(ia)} payment(s) between councils: {Num(ok)} rebuilt, {Num(no)} not rebuilt, the rest rebuilt as interest on an unpublished loan or not applicable.");
+                return (o, $"{Num(ia)} payment(s) between councils: {Num(ok)} rebuilt, {Num(no)} not rebuilt, the rest rebuilt as interest on an unpublished loan or not applicable.{SelfNote(self, "payment", selfEg)}");
             },
         },
         new()
         {
-            Id = "debtsink", Title = "Money out to councils' companies and other councils, and what comes back",
-            Plain = "Each pair shows what one council's spending file shows going out to another council or a company it owns, over how many years, what was credited back in the same file, and any run of rising years. Flags are the file's own shape (for example a rising streak), not conclusions.",
+            Id = "debtsink", Title = "Money paid out to other councils and councils' companies, and what is credited back",
+            Plain = "Each pair shows what one council's spending file shows going out to another council or a company it owns, over how many years, and what was credited back in the same file. The \"In this file\" line states in words what the scanner noticed about the pair's yearly totals and credits; it is a description of the numbers, not a conclusion. A payee that is the paying council's own name is not another council and is left out.",
             Caption = "A spending file shows only the payer's side. Nothing coming back in this file does not mean a debt is unpaid; repayments and income are in other records.",
             File = "cross/debt_sink.csv", CouncilCol = "Payer",
             Build = (t, rows) =>
             {
-                var o = new List<CheckRow>(rows.Count); decimal sum = 0;
+                var o = new List<CheckRow>(rows.Count); decimal sum = 0; int self = 0; string selfEg = "";
                 foreach (var r in rows)
                 {
-                    decimal out_ = t.M(r, "NetOut"); sum += out_;
                     string slug = t.G(r, "Payer"), entity = t.G(r, "Entity");
+                    if (IsSelf(slug, entity)) { self++; selfEg = entity; continue; }
+                    decimal out_ = t.M(r, "NetOut"); sum += out_;
+                    // the engine's flag codes ("NoReturnFlow", "RisingFullYears3") are never printed: CouncilCodes turns each into words (and the build tools fail on a code it does not know)
+                    string noted = CouncilCodes.DebtFlags(t.G(r, "Flags"));
                     o.Add(new CheckRow(out_, $"{S(t.G(r, "Payer"))} to {t.G(r, "Entity")}: {Gbp(out_)} out in {Num(t.I(r, "Rows"))} rows, {t.G(r, "FirstYear")} to {t.G(r, "LastYear")}",
-                        $"Credited back in this file: {Num(t.I(r, "CreditRows"))} rows, {Gbp(t.M(r, "CreditNet"))}. {(t.I(r, "RisingStreakYears") > 1 ? $"Rising for {t.I(r, "RisingStreakYears")} years. " : "")}By year: {t.G(r, "YearSeries")}.{(t.G(r, "Flags") != "" ? " Flags: " + t.G(r, "Flags") + "." : "")}")
+                        $"Credited back in this file: {Num(t.I(r, "CreditRows"))} rows, {Gbp(t.M(r, "CreditNet"))}. By year: {t.G(r, "YearSeries")}.{(noted.Length > 0 ? " In this file: " + noted + "." : "")}")
                     {
                         Key = $"debtsink|{slug}|{entity}",
                         Foi = () => Item(slug, $"The published file shows {S(slug)} paying {entity} {Gbp(out_)} in {Num(t.I(r, "Rows"))} rows, {t.G(r, "FirstYear")} to {t.G(r, "LastYear")}, with {Num(t.I(r, "CreditRows"))} credit rows ({Gbp(t.M(r, "CreditNet"))}) from {entity} in the same file. By year: {Series(t.G(r, "YearSeries"))}."),
                     });
                 }
                 SortDesc(o);
-                return (o, $"{Num(o.Count)} pair(s), {Gbp(sum)} out in all.");
+                return (o, $"{Num(o.Count)} pair(s), {Gbp(sum)} out in all.{SelfNote(self, "pair", selfEg)}");
             },
         },
         new()
         {
             Id = "misfits", Title = "Months that do not fit the usual month",
-            Plain = "For the same pairs as above: a month whose total is far from that pair's usual month. \"Label seen only in this month\" means the council's own wording for that month's largest row appears in no other month; the rest are bigger months of the usual kind.",
+            Plain = "For the same pairs as above: a month whose total is far from that pair's usual month. Each line says whether the council's own description of that month's largest row appears in any other month. A pair whose payee is the paying council's own name is left out.",
             Caption = "A spending file shows only the payer's side. Nothing coming back in this file does not mean a debt is unpaid; repayments and income are in other records.",
             File = "cross/payment_misfits.csv", CouncilCol = "Payer",
             Build = (t, rows) =>
             {
-                var o = new List<CheckRow>(rows.Count); int only = 0;
+                var o = new List<CheckRow>(rows.Count); int only = 0, self = 0; string selfEg = "";
                 foreach (var r in rows)
                 {
                     decimal v = t.M(r, "MonthNet");
-                    if (t.G(r, "LabelCheck").StartsWith("LABEL SEEN ONLY", StringComparison.OrdinalIgnoreCase)) only++;
                     string slug = t.G(r, "Payer"), entity = t.G(r, "Entity"), month = t.G(r, "Month");
+                    if (IsSelf(slug, entity)) { self++; selfEg = entity; continue; }
+                    string label = CouncilCodes.LabelCheck(t.G(r, "LabelCheck"));   // the engine's own wording in plain sentences; an unknown value is never printed raw
+                    if (t.G(r, "LabelCheck").StartsWith("LABEL SEEN ONLY", StringComparison.OrdinalIgnoreCase)) only++;
                     o.Add(new CheckRow(v, $"{S(t.G(r, "Payer"))} to {t.G(r, "Entity")}, {MonthName(t.G(r, "Month"))}: {Gbp(v)}",
-                        $"A usual month for this pair is {Gbp(t.M(r, "MedianMonthNet"))} ({t.M(r, "Ratio").ToString("0.#", CultureInfo.InvariantCulture)} times). {Num(t.I(r, "Rows"))} rows. {t.G(r, "LabelCheck")}. Largest row: {Trim(t.G(r, "TopDescription"), 90)}.")
+                        $"A usual month for this pair is {Gbp(t.M(r, "MedianMonthNet"))} ({t.M(r, "Ratio").ToString("0.#", CultureInfo.InvariantCulture)} times). {Num(t.I(r, "Rows"))} rows. {label} Largest row: {Trim(t.G(r, "TopDescription"), 90)}.")
                     {
                         Key = $"misfit|{slug}|{entity}|{month}",
-                        Foi = () => Item(slug, $"In {MonthName(month)} the published file shows {S(slug)} paying {entity} {Gbp(v)} in {Num(t.I(r, "Rows"))} rows. A usual month for that pair is {Gbp(t.M(r, "MedianMonthNet"))}, so this month is {t.M(r, "Ratio").ToString("0.#", CultureInfo.InvariantCulture)} times it. Label check: {t.G(r, "LabelCheck")}. Largest row: {Trim(Clean(t.G(r, "TopDescription")), 120)}."),
+                        Foi = () => Item(slug, $"In {MonthName(month)} the published file shows {S(slug)} paying {entity} {Gbp(v)} in {Num(t.I(r, "Rows"))} rows. A usual month for that pair is {Gbp(t.M(r, "MedianMonthNet"))}, so this month is {t.M(r, "Ratio").ToString("0.#", CultureInfo.InvariantCulture)} times it. {label} Largest row: {Trim(Clean(t.G(r, "TopDescription")), 120)}."),
                     });
                 }
                 SortDesc(o);
-                return (o, $"{Num(o.Count)} month(s) flagged, {Num(only)} of them carrying a label seen in no other month.");
+                return (o, $"{Num(o.Count)} month(s) flagged, {Num(only)} of them with a description that appears in no other month.{SelfNote(self, "month", selfEg)}");
             },
         },
     };

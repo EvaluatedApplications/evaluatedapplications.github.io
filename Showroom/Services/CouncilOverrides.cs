@@ -13,7 +13,8 @@ public sealed record CouncilOverride(
     bool? DByNumbering = null,                  // forces the wording of the shared-number block ("finds nothing by construction" vs "cannot run") where the derived reading is a judgement call
     string[]? CannotCheck = null,               // ordered template for the page-top list (default {A} {number} {budget} {redaction})
     Func<string, string?>? YearNote = null,     // financial year -> caption, or null
-    Func<string, string?>? NumberingNote = null);  // financial year with Schedule D rows -> caption above the block
+    Func<string, string?>? NumberingNote = null,   // financial year with Schedule D rows -> caption above the block
+    bool? NoPublishedNumber = null);            // the council publishes no transaction number and the scanner added a row number of its own (not measurable from the export: the profile says so)
 
 public static class CouncilOverrides
 {
@@ -24,6 +25,13 @@ public static class CouncilOverrides
         // Durham's number is a ledger reference with a line counter in it ("4560613-00584"), one per row, so the measured facts read it like Leeds's per-file counter. The page has always said of
         // Durham that every number sits on one payee and one date; that wording is kept.
         ["durham"] = new(DByNumbering: true),
+
+        // These three publish no transaction number at all; the number the scanner shows against a line is a synthetic per-row id it added. Sheffield: checked by an independent audit against
+        // the council's own September and December 2024 files (no transaction-number column) and stated in its profile. Birmingham and West Berkshire: stated in their profiles ("a synthetic
+        // per-row RowRef is added", "NO transaction/invoice/voucher reference column of any kind"); not yet re-checked against the council files by anyone but the scanner.
+        ["sheffield"] = new(NoPublishedNumber: true),
+        ["birmingham"] = new(NoPublishedNumber: true),
+        ["westberkshire"] = new(NoPublishedNumber: true),
 
         ["hertfordshire"] = new(
             ALine: "The invoice-amount check cannot run: the file has one amount column (Net Amount), so there is no stated invoice or gross amount to compare the payments with.",

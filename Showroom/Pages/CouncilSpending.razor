@@ -39,7 +39,7 @@ else if (Slug is null)
             <dt><span class="tag">Discrepancy</span></dt>
             <dd>The published record contradicts itself: a payment that does not match its own stated invoice amount, the same line listed more than once, or one transaction number covering more than one payee or pay date.</dd>
             <dt><span class="tag">Unreconciled</span></dt>
-            <dd>The published payments do not cover the stated invoice amount. The remainder is not in the published data; it may exist elsewhere, or not yet have been paid.</dd>
+            <dd>The published payments for a transaction do not add up to the invoice amount the file states for it, under any of the rules the checks apply. The file does not say why.</dd>
             <dt><span class="tag">Anomaly</span></dt>
             <dd>A pattern, not a contradiction: the same supplier, amount, description and date appear more than once under different transaction numbers.</dd>
         </dl>
@@ -119,18 +119,13 @@ else
         @if (_profile is not null)
         {
             <section class="notes">
-                <h2>Publication faults and how the files are built</h2>
-                <p class="plain">These are the notes kept on this council's profile, written when its files were first checked. The ones written in capitals are the profile's own flags for faults and limits of the publication.</p>
-                @if (_flags.Count > 0)
+                <h2>How this council's files are published</h2>
+                <p class="plain">These are the notes kept on this council's profile, written when its files were first checked. They describe how the files are laid out and what they hold; a note is not a finding about any payment.</p>
+                @if (_profile.Quirks.Count > 0)
                 {
-                    <h3>Flagged in the profile</h3>
-                    <ul class="notelist">@foreach (var q in _flags) { <li>@q</li> }</ul>
+                    <ul class="notelist">@foreach (var q in _profile.Quirks) { <li>@q</li> }</ul>
                 }
-                @if (_others.Count > 0)
-                {
-                    <h3>Other notes</h3>
-                    <ul class="notelist">@foreach (var q in _others) { <li>@q</li> }</ul>
-                }
+                else { <p class="hint">No notes are kept for this council.</p> }
                 <details class="verify">
                     <summary>How the checks on this council were verified</summary>
                     <p class="plain">@_profile.Verification</p>
@@ -166,7 +161,7 @@ else
     List<MonthRow> _months = new();
     List<YearRow> _years = new();
     CouncilProfile? _profile;
-    List<string> _flags = new(), _others = new(), _facts = new();
+    List<string> _facts = new();
     bool _ready, _notFound;
     string? _error;
     string _loadedSlug = "";
@@ -203,15 +198,7 @@ else
     void BuildFacts()
     {
         _facts = new();
-        _flags = new(); _others = new();
-        if (_profile is not null)
-            foreach (var q in _profile.Quirks)
-            {
-                // the profile writes its own flags in capitals ("JUNE 2025 IS MOSTLY UNPUBLISHED:"); a note that opens with a capitalised word is listed as flagged
-                var first = q.Split(' ', 2, StringSplitOptions.RemoveEmptyEntries).FirstOrDefault() ?? "";
-                bool flagged = first.Count(char.IsLetter) >= 2 && first.All(ch => !char.IsLower(ch));
-                (flagged ? _flags : _others).Add(q);
-            }
+        // no note is labelled a "fault": a first word in capitals ("CSV", "ONE signed Amount column") says nothing about whether a note describes a fault, and the profile carries no such flag
         var dated = _months.Where(m => m.Month != "undated").OrderBy(m => m.Month).ToList();
         if (dated.Count > 0)
         {

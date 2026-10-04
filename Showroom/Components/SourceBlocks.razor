@@ -14,7 +14,7 @@
                 <ol class="lines">
                     @foreach (var r in b.Result.Rows.Take(b.Shown))
                     {
-                        <li><div class="l1">@Head(r)</div><div class="l2">@Tail(r)</div></li>
+                        <li><div class="l1">@Head(r)</div><div class="l2">@Tail(b.Slug, r)</div></li>
                     }
                 </ol>
                 @if (b.Result.Rows.Count > b.Shown)
@@ -32,9 +32,10 @@
 
     static string Head(SourceRow r) => $"{(r.Supplier.Length > 0 ? r.Supplier : "(no payee published)")}: {Gbp(r.Net)} on {Date(r.PayDate)}";
 
-    static string Tail(SourceRow r)
+    static string Tail(string slug, SourceRow r)
     {
-        var p = new List<string> { $"Transaction {r.Tx}." };
+        // a council that publishes no transaction number: the id here is the scanner's own row number, and is called that
+        var p = new List<string> { NoNumber(slug) ? $"Scanner row number {r.Tx} (the council publishes no transaction number)." : $"Transaction {r.Tx}." };
         if (r.Gross != 0 || r.Vat != 0) p.Add($"Gross {Gbp(r.Gross)}{(r.Vat != 0 ? ", VAT " + Gbp(r.Vat) : "")}.");
         if (r.Service.Length > 0) p.Add(r.Service + ".");
         if (r.CostCentre.Length > 0) p.Add(r.CostCentre + ".");

@@ -27,6 +27,8 @@ public sealed class SourceResult
 public sealed class SourceBlock
 {
     public SourceResult? Result;
+    /// <summary>The council this block belongs to: where the council publishes no transaction number, the scanner's row number is named as that, never as the council's number.</summary>
+    public string Slug = "";
     public string Summary = "";
     public int Shown = 15;
 }
@@ -52,7 +54,7 @@ public sealed class SourceState
                 Blocks.Add(new SourceBlock { Summary = "This line has no readable pay date, so the month file it sits in is not known and its source rows cannot be looked up." });
             foreach (var t in targets)
             {
-                var b = new SourceBlock();
+                var b = new SourceBlock { Slug = t.Slug };
                 var months = await data.MonthsAsync(t.Slug, co);
                 var m = months.FirstOrDefault(x => x.Month == t.Month);
                 if (m is null)
@@ -68,9 +70,11 @@ public sealed class SourceState
                     b.Result = await SourceScan.FindAsync(parts, t.Tx, t.Supplier, co);
                     await data.LogAsync($"source rows {t.Slug} {t.Month}", sw2.ElapsedMilliseconds, $"({b.Result.Found} found, longest slice {co.MaxSliceMs:F0}ms)");
                     string ids = string.Join(", ", t.Tx.Take(4)) + (t.Tx.Count > 4 ? $" and {t.Tx.Count - 4} more" : "");
+                    // where the council publishes no transaction number the id is the scanner's row number, and is said to be
+                    string what = CouncilTerms.NoNumber(t.Slug) ? "the scanner's row number (this council publishes no transaction number)" : "transaction";
                     b.Summary = b.Result.Found == 0
-                        ? $"No line in {CouncilTerms.MonthName(t.Month)}'s published file carries transaction {ids}."
-                        : $"{CouncilTerms.NumLines(b.Result.Found)} in {CouncilTerms.MonthName(t.Month)}'s published file {(b.Result.Found == 1 ? "carries" : "carry")} transaction {ids}" + (b.Result.NarrowedBySupplier ? ", narrowed to the same supplier." : ".");
+                        ? $"No line in {CouncilTerms.MonthName(t.Month)}'s published file carries {what} {ids}."
+                        : $"{CouncilTerms.NumLines(b.Result.Found)} in {CouncilTerms.MonthName(t.Month)}'s published file {(b.Result.Found == 1 ? "carries" : "carry")} {what} {ids}" + (b.Result.NarrowedBySupplier ? ", narrowed to the same supplier." : ".");
                 }
                 Blocks.Add(b);
             }

@@ -20,6 +20,7 @@
         else
         {
             <p class="summary">@_summary</p>
+            @if (!string.IsNullOrEmpty(_note)) { <p class="caption">@_note</p> }
             @if (_rows.Count > 0)
             {
                 <ol class="lines">
@@ -63,7 +64,7 @@
 
     bool _open, _loaded;
     int _shown = 15;
-    string? _error, _summary;
+    string? _error, _summary, _note;
     List<CheckRow> _rows = new();
 
     async Task Toggle()
@@ -78,8 +79,12 @@
             var tab = new Tab(table);
             var mine = Slug is null ? tab.Rows : tab.Rows.Where(r => Def.Matches(tab, r, Slug)).ToList();
             var (rows, summary) = Def.Build(tab, mine);
-            _rows = rows;
-            _summary = Slug is not null && CouncilTerms.CheckCannotRun(Slug, Def.Id) is { } cannot ? cannot : mine.Count == 0 ? "This check has no rows for this council." : summary;
+            // the councils' measured facts are registered when profiles.json is read; the all-councils view of a number-based check needs them to say which councils it cannot cover
+            if (Slug is null && Def.Id is "twins" or "withintxn" && CouncilWebData.Councils.Count > 0) await Data.ProfileAsync(CouncilWebData.Councils[0].Slug);
+            var cannot = Slug is null ? null : CouncilTerms.CheckCannotRun(Slug, Def.Id);
+            _rows = cannot is not null ? new() : rows;   // a check that cannot run for this council lists nothing, and says why instead of "no rows"
+            _summary = cannot ?? (mine.Count == 0 ? "This check has no rows for this council." : summary);
+            _note = Slug is null ? CouncilTerms.CheckCoverage(Def.Id, CouncilWebData.Councils.Select(c => (c.Slug, c.Short))) : CouncilTerms.CheckNote(Slug, Def.Id);
             _loaded = true;
             await Data.LogAsync($"check {Def.Id} ({(Slug ?? "all")}) built", sw.ElapsedMilliseconds, $"({mine.Count} source rows)");
         }
