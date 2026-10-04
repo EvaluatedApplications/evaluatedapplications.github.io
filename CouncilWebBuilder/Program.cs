@@ -18,6 +18,11 @@ if (args.Length > 1 && args[1] == "props")
 }
 
 Directory.CreateDirectory(outDir);
+// The councils the page ships: those the engine knows AND that have a phone export folder. A council the scanner has taken on but not yet exported (Surrey on
+// 2026-10-04) is left out, and said so, until its web_export exists; it is never given a slug or a half-built page.
+var published = SupportedCouncils.Everyone.Where(c => TrySlug(c.Name) is string s && Directory.Exists(Path.Combine(webExport, s))).ToList();
+foreach (var c in SupportedCouncils.Everyone.Where(c => !published.Contains(c))) Console.WriteLine($"NOT SHIPPED (no web_export folder or no slug): {c.Name}");
+
 long rawTotal = 0, gzTotal = 0; int files = 0, txSlices = 0;
 
 long WriteGz(string name, byte[] data)
@@ -35,16 +40,46 @@ long WriteGz(string name, byte[] data)
 // Exception files. The page loads them by FINANCIAL YEAR (April to March, the year the councils' declared totals are given in), one fetch
 // per year, or by single months when a visitor ticks months. Both are the same SLIM format, a "section" per month:
 //     @2022-11                                  (marker line: the month of the file the rows came from)
-//     Schedule,GroupId,TransactionId,SupplierName,Net,Difference,Detail,Classification,TransactionGross,ExplainedBy,ExplainedMeaning
+//     Schedule,GroupId,TransactionId,SupplierName,Net,Difference,Detail,Classification,TransactionGross,ExplainedBy,ExplainedMeaning,Gross,Care
+// Two columns were added on 2026-10-04 (the page finds columns by name, so an older slice still reads). "Gross" below is no longer dropped everywhere:
+//   Gross  the line's own stated Gross, kept only where it differs from Net on a Schedule A row (the stated invoice amount the payments are
+//          compared with) and on a Schedule B row read as NSquaredRows (the run's real value). Empty everywhere else.
+//   Care   "1" on the first line of a Schedule B group of Wokingham whose every line sits in an adult or children's care cost centre (the
+//          cost centre is not in the exception file, so it is looked up in the month's transaction slice by transaction number).
 //     rows...
-// Slim = the page's own reading of the engine's export with what it never shows taken out: Council, Year, SupplierKey and Gross are dropped;
+// Slim = the page's own reading of the engine's export with what it never shows taken out: Council, Year and SupplierKey are dropped, and Gross except as noted above;
 // TransactionGross is left empty when it equals Net; Detail and ExplainedMeaning (the same sentence on every line of a group) stay on the first
 // line of each group only, which is the only place the page reads them. Rows, groups, values and the text shown are unchanged (checked against
 // the unslimmed files: see CLAUDE.md). A year bundle is cut into parts of whole months only if a part would pass PartCapRaw.
 // ---------------------------------------------------------------------------------------------------------------------------------------
 int PartCapRaw = (int.TryParse(Environment.GetEnvironmentVariable("COUNCIL_PART_CAP_MB"), out var capMb) ? capMb : 12) * 1024 * 1024;   // the env var is for testing a split
 const int MonthCapRaw = 16 * 1024 * 1024;
-const string SlimHeader = "Schedule,GroupId,TransactionId,SupplierName,Net,Difference,Detail,Classification,TransactionGross,ExplainedBy,ExplainedMeaning";
+const string SlimHeader = "Schedule,GroupId,TransactionId,SupplierName,Net,Difference,Detail,Classification,TransactionGross,ExplainedBy,ExplainedMeaning,Gross,Care";
+
+// Wokingham's care cost centres (SPEC_FOR_SHOWROOM item 29): Nursing, Residential, Domiciliary, Supported Living, Day Care, Respite, Children's Homes
+// Purchasing, Semi Independent, Independent Fostering Agency. A cost centre is care when its name holds one of these words.
+string[] CareWords = { "nursing", "residential", "domiciliary", "supported living", "day care", "respite", "homes purchasing", "semi independent", "independent fostering agency" };
+bool IsCareCentre(string cc) { var l = cc.ToLowerInvariant(); foreach (var w in CareWords) if (l.Contains(w)) return true; return false; }
+long careGroups = 0, careGroupsChecked = 0;
+
+// transaction number -> cost centre for one month of one council, from the month's transaction slice (all parts); empty when the slice has no such column
+Dictionary<string, string> CostCentres(string dir, string month)
+{
+    var map = new Dictionary<string, string>();
+    foreach (var f in Directory.GetFiles(dir, month + "*.csv"))
+    {
+        var n = Path.GetFileName(f);
+        if (n.Contains(".exceptions") || n == "months.csv") continue;
+        var rest = n[month.Length..];
+        if (rest != ".csv" && !System.Text.RegularExpressions.Regex.IsMatch(rest, @"^\.\d+\.csv$")) continue;
+        var recs = ParseCsv(File.ReadAllText(f, Encoding.UTF8));
+        if (recs.Count == 0) continue;
+        int cT = recs[0].FindIndex(x => x.Equals("TransactionId", StringComparison.OrdinalIgnoreCase)), cC = recs[0].FindIndex(x => x.Equals("CostCentreArea", StringComparison.OrdinalIgnoreCase));
+        if (cT < 0 || cC < 0) continue;
+        for (int k = 1; k < recs.Count; k++) if (recs[k].Count > Math.Max(cT, cC)) map[recs[k][cT]] = recs[k][cC];
+    }
+    return map;
+}
 
 string FinancialYear(string month)
 {
@@ -77,8 +112,33 @@ List<List<string>> ParseCsv(string t)
 
 string Q(string s) => s.IndexOfAny(new[] { ',', '"', '\r', '\n' }) >= 0 ? "\"" + s.Replace("\"", "\"\"") + "\"" : s;
 
+// The Schedule B groups of one month of Wokingham whose every line (each found in the transaction slice) sits in a care cost centre.
+HashSet<long> CareGroupsOf(string dir, string month, List<string> files)
+{
+    var cc = CostCentres(dir, month);
+    var found = new Dictionary<long, int>(); var care = new Dictionary<long, int>();
+    foreach (var f in files)
+    {
+        var recs = ParseCsv(File.ReadAllText(f, Encoding.UTF8));
+        if (recs.Count == 0) continue;
+        var h = recs[0]; int Col(string n) => h.FindIndex(x => x.Equals(n, StringComparison.OrdinalIgnoreCase));
+        int cS = Col("Schedule"), cG = Col("GroupId"), cT = Col("TransactionId");
+        for (int k = 1; k < recs.Count; k++)
+        {
+            var r = recs[k];
+            if (r.Count <= Math.Max(cS, Math.Max(cG, cT)) || r[cS] != "B" || !long.TryParse(r[cG], out var gid)) continue;
+            if (!cc.TryGetValue(r[cT], out var centre)) continue;
+            found[gid] = found.GetValueOrDefault(gid) + 1;
+            if (IsCareCentre(centre)) care[gid] = care.GetValueOrDefault(gid) + 1;
+        }
+    }
+    var o = new HashSet<long>();
+    foreach (var (gid, n) in found) { careGroupsChecked++; if (care.GetValueOrDefault(gid) == n) { o.Add(gid); careGroups++; } }
+    return o;
+}
+
 // One month's section in slim form, from the month's exception file(s) (a month the engine split in parts is read as one: group ids carry across parts).
-(byte[] Data, int Rows) SlimMonth(string dir, string month)
+(byte[] Data, int Rows) SlimMonth(string slug, string dir, string month)
 {
     var files = Directory.GetFiles(dir, month + ".exceptions*.csv")
         .OrderBy(f => { var p = Path.GetFileName(f)[(month.Length + ".exceptions".Length)..]; return p == ".csv" ? 1 : int.Parse(p.Split('.')[1]); }).ToList();
@@ -86,6 +146,7 @@ string Q(string s) => s.IndexOfAny(new[] { ',', '"', '\r', '\n' }) >= 0 ? "\"" +
     var sb = new StringBuilder();
     sb.Append('@').Append(month).Append('\n').Append(SlimHeader).Append('\n');
     var seen = new HashSet<(char, long)>();
+    var careSet = slug == "wokingham" ? CareGroupsOf(dir, month, files) : null;
     int rowsOut = 0;
     foreach (var f in files)
     {
@@ -93,7 +154,7 @@ string Q(string s) => s.IndexOfAny(new[] { ',', '"', '\r', '\n' }) >= 0 ? "\"" +
         if (recs.Count == 0) continue;
         var h = recs[0]; int Col(string n) => h.FindIndex(x => x.Equals(n, StringComparison.OrdinalIgnoreCase));
         int cS = Col("Schedule"), cG = Col("GroupId"), cT = Col("TransactionId"), cN = Col("SupplierName"), cNet = Col("Net"), cD = Col("Difference"),
-            cDet = Col("Detail"), cC = Col("Classification"), cTG = Col("TransactionGross"), cEB = Col("ExplainedBy"), cEM = Col("ExplainedMeaning");
+            cDet = Col("Detail"), cC = Col("Classification"), cTG = Col("TransactionGross"), cEB = Col("ExplainedBy"), cEM = Col("ExplainedMeaning"), cGr = Col("Gross");
         if (cS < 0 || cG < 0 || cT < 0 || cN < 0 || cNet < 0 || cD < 0 || cDet < 0 || cC < 0) throw new InvalidDataException($"{f}: columns missing");
         string At(List<string> r, int c) => c >= 0 && c < r.Count ? r[c] : "";
         for (int k = 1; k < recs.Count; k++)
@@ -104,10 +165,15 @@ string Q(string s) => s.IndexOfAny(new[] { ',', '"', '\r', '\n' }) >= 0 ? "\"" +
             bool hasGid = long.TryParse(At(r, cG), System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var gid);
             bool first = !(hasGid && sched.Length > 0 && sched[0] != 'A') || seen.Add((sched[0], gid));
             string net = At(r, cNet), tg = At(r, cTG);
+            // the stated Gross: kept on a Schedule A row when it differs from Net, and on an NSquaredRows group (the run's real value)
+            string gr = At(r, cGr), keepGross = "";
+            if (gr.Length > 0 && sched == "A" && !(decimal.TryParse(gr, System.Globalization.CultureInfo.InvariantCulture, out var ga) && decimal.TryParse(net, System.Globalization.CultureInfo.InvariantCulture, out var gn) && ga == gn)) keepGross = gr;
+            else if (gr.Length > 0 && At(r, cEB) == "NSquaredRows") keepGross = gr;
+            bool care = first && careSet is not null && sched == "B" && hasGid && careSet.Contains(gid);
             bool sameGross = tg.Length == 0 || (decimal.TryParse(tg, System.Globalization.CultureInfo.InvariantCulture, out var a) && decimal.TryParse(net, System.Globalization.CultureInfo.InvariantCulture, out var b) && a == b);
             sb.Append(Q(sched)).Append(',').Append(Q(At(r, cG))).Append(',').Append(Q(At(r, cT))).Append(',').Append(Q(At(r, cN))).Append(',').Append(Q(net)).Append(',')
               .Append(Q(At(r, cD))).Append(',').Append(first ? Q(At(r, cDet)) : "").Append(',').Append(Q(At(r, cC))).Append(',').Append(sameGross ? "" : Q(tg)).Append(',')
-              .Append(Q(At(r, cEB))).Append(',').Append(first ? Q(At(r, cEM)) : "").Append('\n');
+              .Append(Q(At(r, cEB))).Append(',').Append(first ? Q(At(r, cEM)) : "").Append(',').Append(Q(keepGross)).Append(',').Append(care ? "1" : "").Append('\n');
             rowsOut++;
         }
     }
@@ -125,7 +191,7 @@ void WriteExceptions(string slug, string dir)
     {
         var f = line.Split(',');           // plain numbers: no quoted fields in months.csv
         string month = f[0];
-        var (data, rows) = SlimMonth(dir, month);
+        var (data, rows) = SlimMonth(slug, dir, month);
         long gz = 0;
         if (rows > 0)
         {
@@ -179,7 +245,7 @@ bool profilesOnly = args.Length > 1 && args[1] == "profiles";
 
 // index.csv and each months.csv stay plain text (tiny, read first). Exception slices are gzipped.
 if (!profilesOnly) WriteRaw("index.csv", File.ReadAllBytes(Path.Combine(webExport, "index.csv")));
-foreach (var slug in profilesOnly ? Array.Empty<string>() : SupportedCouncils.Everyone.Select(c => Slug(c.Name)))
+foreach (var slug in profilesOnly ? Array.Empty<string>() : published.Select(c => Slug(c.Name)))
 {
     var dir = Path.Combine(webExport, slug);
     WriteExceptions(slug, dir);
@@ -192,6 +258,15 @@ foreach (var slug in profilesOnly ? Array.Empty<string>() : SupportedCouncils.Ev
         WriteGz($"{slug}/{n}", File.ReadAllBytes(f));
         txSlices++;
     }
+}
+
+// Wokingham's social care view (SPEC_FOR_SHOWROOM item 30; made by the scanner's "socialcare wokingham", Wokingham only). Four small files the page reads whole
+// (providers 200 KB raw). companies_house_links.csv is a hand-kept input, and new_providers.csv repeats the "new large provider" column of providers.csv: neither ships.
+if (!profilesOnly)
+{
+    foreach (var n in new[] { "concentration", "providers", "rates", "invoice_date_repeats" })
+        WriteGz($"wokingham/socialcare/{n}.csv", File.ReadAllBytes(Path.Combine(export, "wokingham_socialcare", n + ".csv")));
+    Console.WriteLine($"CARE COSTS: {careGroups} of {careGroupsChecked} Wokingham Schedule B groups (found in the transaction slices) sit wholly in a care cost centre");
 }
 
 // The small cross-council check files and the declared-spend files (all read whole, each well under 400 KB raw).
@@ -232,11 +307,11 @@ string? Clean(string slugName, string text)
     if (o != text) Console.WriteLine($"REWORDED [{slugName}] ({kept.Length}/{Sentence.Split(text).Length} sentences kept): {o[..Math.Min(170, o.Length)]}");
     return o;
 }
-var cleanQuirks = SupportedCouncils.Everyone.ToDictionary(c => c.Name, c => c.KnownQuirks.Select(q => Clean(c.Name, q)).Where(q => q is not null).Cast<string>().ToArray());
-var cleanVerif = SupportedCouncils.Everyone.ToDictionary(c => c.Name, c => Clean(c.Name + " verification", c.VerificationNote) ?? "");
+var cleanQuirks = published.ToDictionary(c => c.Name, c => c.KnownQuirks.Select(q => Clean(c.Name, q)).Where(q => q is not null).Cast<string>().ToArray());
+var cleanVerif = published.ToDictionary(c => c.Name, c => Clean(c.Name + " verification", c.VerificationNote) ?? "");
 
 // Profiles: the councils' own text.
-var profiles = SupportedCouncils.Everyone.Select(c => new Dictionary<string, object?>
+var profiles = published.Select(c => new Dictionary<string, object?>
 {
     ["slug"] = Slug(c.Name),
     ["name"] = c.Name,
@@ -262,7 +337,8 @@ Console.WriteLine($"largest file shipped: {biggest.FullName} {biggest.Length / 1
 if (biggest.Length > 50L * 1048576) { Console.WriteLine("A FILE IS OVER 50 MB"); return 1; }
 return 0;
 
-static string Slug(string name)
+static string Slug(string name) => TrySlug(name) ?? throw new InvalidOperationException("no slug for " + name);
+static string? TrySlug(string name)
 {
     var n = name.ToLowerInvariant();
     foreach (var (key, slug) in new[] { ("windsor", "rbwm"), ("bracknell", "bracknellforest"), ("west berkshire", "westberkshire"), ("wokingham", "wokingham"),
@@ -271,5 +347,5 @@ static string Slug(string name)
         ("durham", "durham"), ("kirklees", "kirklees"), ("leicester", "leicester"), ("cornwall", "cornwall"), ("nottingham", "nottingham"),
         ("wirral", "wirral"), ("newcastle", "newcastle") })
         if (n.Contains(key)) return slug;
-    throw new InvalidOperationException("no slug for " + name);
+    return null;
 }

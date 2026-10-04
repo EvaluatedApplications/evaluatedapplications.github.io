@@ -20,6 +20,9 @@ public static class CouncilTerms
     }
 
     public static string Num(long n) => n.ToString("#,##0", GB);
+    /// <summary>"1 line", "2 lines", "1,204 lines": the count with its noun in the right number.</summary>
+    public static string Plural(long n, string one, string many) => Num(n) + " " + (n == 1 ? one : many);
+    public static string NumLines(long n) => Plural(n, "line", "lines");
     public static string Pct(decimal fraction) => (fraction * 100m).ToString("0.##", GB) + "%";
 
     /// <summary>Pay dates arrive as ISO text, as dd-MMM-yy, or as a spreadsheet day-number (Reading's older files); show all as "4 May 2021".</summary>
@@ -61,6 +64,7 @@ public static class CouncilTerms
         "StandingScheduleCatchUp" => "Standing payment, caught up", "StandingScheduleSurplus" => "Standing payment, surplus",
         "StandingPaymentUnderRefundType" => "Standing payment under refund label",
         "ReversedSameDay" => "Copies cancelled the same day", "MigrationControlLabel" => "Council's own migration label",
+        "NSquaredListing" => "Publication quirk: rows printed n times",
         "" => "No classification", _ => c,
     };
 
@@ -69,16 +73,34 @@ public static class CouncilTerms
     {
         "RecurringBatchRate" => "Pattern reading: recurring batch rate",
         "CadenceCatchUp" => "Pattern reading: monthly payments, caught up",
+        "NSquaredRows" => "Publication quirk: rows printed n times",
         _ => "Pattern reading: " + by,
     };
+
+    /// <summary>The caption of a group's reading. A group the council's report printed n times (NSquaredRows) gets the engine's plain words and then its own
+    /// figures (the de-duplicated value, with the first letter capitalised); every other reading is the row's own sentence, or the standard one.</summary>
+    public static string ReadingCaption(string by, string own)
+    {
+        if (by == "NSquaredRows")
+        {
+            string t = own.Length > 0 ? char.ToUpperInvariant(own[0]) + own[1..] : "";
+            return ReadingMeaning(by) + (t.Length > 0 ? " " + t : "");
+        }
+        return own.Length > 0 ? own : ReadingMeaning(by);
+    }
 
     /// <summary>Used when a row carries the flag but no text of its own; otherwise the row's own ExplainedMeaning is the caption.</summary>
     public static string ReadingMeaning(string by) => by switch
     {
         "RecurringBatchRate" => "Same amount paid in batches on many separate dates, as a per-head rate or a roll of placements is; this batch is no larger than the biggest that amount has formed before. A consistent reading, not a proof.",
         "CadenceCatchUp" => "This supplier's ledger line is paid about once a month in steady sums; this month's payments are no more than the months since the last one would account for. A consistent reading, not a proof.",
+        "NSquaredRows" => "This payment run prints each payee's lines as many times as the payee has lines. The row total is not money; the stated invoice amount is the run.",
         _ => "",
     };
+
+    /// <summary>Shown under a repeat group in a care cost centre (Wokingham), where a care home or agency bills each resident separately.</summary>
+    public const string CareCaption =
+        "Care homes and agencies bill each resident separately, so equal amounts on one day are normal. The published file has no client or period column, so it cannot tell two residents from one bill paid twice.";
 
     /// <summary>Unexplained classes lead; the explained ones follow, with the same-day and migration-label explanations below "Unclear".</summary>
     public static int Rank(string c) => c switch
@@ -105,6 +127,7 @@ public static class CouncilTerms
         "StandingScheduleSurplus" => "This amount is paid about once a month, but there are more payments than months and nothing returned in the published data. More payments than months in the published data; the files do not say why. Still a lead, so it ranks with the unexplained rows.",
         "StandingPaymentUnderRefundType" => "No matching charge was found, but the same amount recurs every month under the council's own refund label. What the council means by the label is not stated in the file.",
         "ReversedSameDay" => "The same supplier is also shown with equal-and-opposite lines on the same date, which cancel the extra copies: the lines net to one payment. An explanation of a repeat, not a finding.",
+        "NSquaredListing" => "Publication quirk, not extra money: the distinct lines add up to the stated amount to the penny. This payment run prints each payee's lines as many times as the payee has lines, so the row total is not money; the stated invoice amount is the run.",
         "MigrationControlLabel" => "Every line carries the council's own label \"AP MIGRATION CONTROL ACCOUNT\": a ledger-migration control account. The file does not say whether cash left under it. Not a finding.",
         _ => "",
     };

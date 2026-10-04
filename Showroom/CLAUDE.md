@@ -1,6 +1,6 @@
 # Showroom — CLAUDE.md (showroom-owner)
 
-**Last verified:** 2026-10-04 (council scanner loads by financial year: tick-list + one Load; year bundles in website-data)
+**Last verified:** 2026-10-04 (council scanner: by financial year; n-squared quirk, care caption, Wokingham social care view)
 
 Blazor WebAssembly app at `C:\Users\dongy\AboutUs\Showroom`, published under `/tools` on the public
 site (`AboutUs` repo, base href `/tools/`). Every tool runs entirely client-side: no server, no
@@ -138,36 +138,31 @@ no engine in the browser. Public-audience, mobile-first, not editorial: audit te
   "no slug for X"), `CouncilTerms.NoScheduleA/NoScheduleD` from the exceptions (A or D rows = 0 and the profile says empty by construction; `NoDByNumbering` when numbers exist but never span payees), then re-run the builder.
   New cross files go in the builder's `cross/` list and a row in `BudgetTestPanel`'s set list. Profile prose needs no page code (flagged = quirk opening in capitals), but read the builder's REWORDED/HELD BACK
   output and grep profiles.json for working-file words (`prep`, "Prepare step" are reworded to "the scanner" in `Reword`; `XlsxReader` sentences dropped).
-- **Load by financial year** (2026-10-04, user: "I preferred it when I could choose what to load"; replaced the month picker). `LoadPicker` = tick-list of financial years (April-March, the year
-  the declared total is for; "No readable date" last), Select all/Clear, the size line (download MB before anything is fetched), "Choose months" per year (month ticks are the underlying
-  state; a year is ticked when all its months are), ONE Load with progress + Cancel (cancel keeps finished years, Load again continues from the cache). Next year's file downloads while the
-  current is scanned. `YearBlock` per loaded unit (whole year = one bundle; some months = those months' files): totals, the three-bar declared comparison (`GapBars`, whole years only: declared
-  is a whole-year figure; partial/undated/ineligible years say why), then the schedule/bucket lists as before. Top of the view: per-year totals table + `GapSummary` sentences for the loaded
-  years. Up to 3 asked years open, more collapsed. `GapPanel` is hub-only now. **Memory**: `MonthScan` keeps raw bytes only for recent years (`RawBudget` 40 MB, LRU); an evicted year keeps
-  its gz and `EnsureRawAsync` re-inflates it (0.04-0.85 s) before a list opens, "show more" or source rows (`NeedRaw` callback; groups already shown stay cached).
+- **Load by financial year** (user: "I preferred it when I could choose what to load"). `LoadPicker` = tick-list of financial years (April-March; "No readable date" last), Select all/Clear, size line before any fetch, "Choose months" per year,
+  ONE Load with progress + Cancel (keeps finished years). `YearBlock` per loaded unit: totals, `GapBars` (whole years only), schedule/bucket lists; top of view: per-year totals + `GapSummary`. `MonthScan` keeps raw bytes only for recent
+  years (`RawBudget` 40 MB, LRU); an evicted year re-inflates via `EnsureRawAsync` (0.04-0.85 s) before a list opens (`NeedRaw`).
 - **Data** (`website-data/council-web`, ~312 MB, 4,392 files, largest 1.2 MB; `AboutUs\CouncilWebBuilder`, `dotnet run -c Release --project CouncilWebBuilder`, about 70-90 s, writes straight into
-  the data repo (arg 1 / `COUNCIL_WEB_OUT`; `COUNCIL_PART_CAP_MB` tests the split), WIPE the folder first so stale files go (a run without the wipe left 6 old `*.exceptions.2.csv.gz`); fails above 50 MB/file;
+  the data repo (arg 1 / `COUNCIL_WEB_OUT`; `COUNCIL_PART_CAP_MB` tests the split), a run only overwrites, so delete a stale file BY NAME (the 6 old `*.exceptions.2.csv.gz` went 2026-10-04); ships only councils with a `web_export/<slug>` folder (Surrey is in the engine, not exported: "NOT SHIPPED"); fails above 50 MB/file;
   second arg `profiles` rewrites only profiles.json.gz. Then commit + push website-data, nothing else): `index.csv`, per-council `months.csv` (exception columns describe the slim files) +
   `years.csv` (`Year,Months,Parts,TxRows,Net,ExceptionRows,ExceptionBytes,ExceptionGzipBytes`), **exception files in ONE slim format**: `<slug>/<YYYY-MM>.exceptions.csv.gz` (a month) and
   `<slug>/fy-<YYYY-YY>.exceptions[.N].csv.gz` (a year bundle, cut into parts of whole months only above 12 MB raw: none are today; largest year 1.2 MB gz / 11 MB raw). Format: a `@2022-11` marker
-  line, a header, rows (Council/Year/SupplierKey/Gross dropped; TransactionGross empty when = Net; Detail + ExplainedMeaning on the first line of each group only; group ids are per month section).
-  Verified 824,695 groups identical to the unslimmed export (every field, 12 lines, tx lists; year bundles, month files and a forced 3 MB split). Month TRANSACTION slices
+  line, a header, rows (Council/Year/SupplierKey dropped; TransactionGross empty when = Net; Detail + ExplainedMeaning on the first line of each group only; group ids per month section; last two columns `Gross` = stated Gross, kept only on a Schedule A row where it differs from Net and on NSquaredRows lines (before this the page showed A rows' summed TransactionGross as "gross"), and `Care` = "1" on the first line of a Wokingham B group whose lines all sit in care cost centres, joined from the month slice by transaction number: 6,826 of 12,174, matching the spec).
+  Month TRANSACTION slices
   (`<slug>/<YYYY-MM>[.N].csv.gz`, 2,432 files) are fetched only by "See the source rows"; also `cross/*.csv.gz`, `profiles.json.gz`, `PREREG_BUDGET_TEST.txt`. After every `phoneexport`/`export`:
   re-run the builder (no site publish). Profile text is cleaned in the BUILDER (engine names -> the page's words, working-file sentences dropped; REWORDED/HELD BACK lines print for the profile owner).
-- **Code**: `Services/CouncilWebData` (fetch, `InflateAsync`, `YearsAsync`, `FinancialYearOf`, caches), `CouncilLoad` (`YearInfo`, `LoadedUnit`), `CouncilMonth` (`MonthScan`: byte-level scan over
-  sections, no string per line, groups opened on demand; columns by header name; `ExGroup.Month` is the source file's month, used by tray keys and source rows), `CouncilSource`, `CouncilChecksWeb`
-  (plain loops: LINQ over decimals/tuples is slow in WASM), `CouncilTerms` (`TryDate` day-first), `FoiTray`, `CouncilGap` (`GapYear`/`GapSummary`: declared K3 / file F / not itemised K3-F /
-  flagged T_A + T_B-T_A, reads only `cross/budget_units.csv`; K3 EXCLUDES employee pay); `Components/LoadPicker|YearBlock|GapBars|GapPanel|CheckPanel|BudgetPanel|BudgetTestPanel|FoiTrayPanel|SourceBlocks`.
-  Each load logs `CW-PERF` lines ("longest slice" counts awaited network time; the harness long task is the real stall).
+- **Code**: `Services/CouncilWebData` (fetch, `InflateAsync`, caches), `CouncilLoad`, `CouncilMonth` (`MonthScan`: byte-level scan, no string per line, columns by header name), `CouncilSource`, `CouncilChecksWeb` (plain loops: LINQ over
+  decimals is slow in WASM), `CouncilTerms`, `FoiTray`, `CouncilGap` (reads only `cross/budget_units.csv`; K3 EXCLUDES employee pay); `Components/LoadPicker|YearBlock|GapBars|GapPanel|CheckPanel|BudgetPanel|BudgetTestPanel|FoiTrayPanel|SourceBlocks|SocialCarePanel`. Each load logs `CW-PERF` lines.
+- **N-squared runs** (Wokingham academy runs print a payee's n lines n times): Schedule A class `NSquaredListing` (explained style, caption "publication quirk, not extra money") and a B reading `NSquaredRows` (group stays open). Their value is the STATED Gross once (MonthScan sets `Value = max`), never the inflated row total; FOI facts state gross and row total only. Also `Plural`/`NumLines` in CouncilTerms: never write "N lines" by hand.
+- **Care caption** (`Care` flag, Wokingham B groups) and **`SocialCarePanel`** (Wokingham page only, closed until tapped, 4 files in `wokingham/socialcare/`: concentration, providers, rates, invoice_date_repeats; `new_providers` and `companies_house_links` are not shipped): HHI/top-10 table, who is paid by year with share and a Companies House record (ALWAYS with its source; link hidden when the match is uncertain or contradicted by dates; date flags shown as sentences, never as a finding), nursing/residential weekly medians only, invoice-date repeats and new-large providers with the spec captions. Optalis = "council-owned company". No individual named.
 - **Pattern readings**: RecurringBatchRate and CadenceCatchUp are NOT classes; an Unclear group carries them in `ExplainedBy` + `ExplainedMeaning` (tag + caption, group stays open).
 - **Request tray** (`FoiTrayPanel`, one letter per council): "Add to request" on every group and cross-check row. The letter states facts and asks "Please provide the records you hold for this
   item, and the reason for it." No class meanings, readings, `Detail` text or loan rebuilds in it. Address = the profile's verified `foi` else a placeholder. Caps 300 items / 100 per letter. Tick
   and source buttons are PLAIN markup with state on the row (a component per row cost ~5 ms each on a phone).
 - **Source rows**: the tap fetches that month's transaction slice (all parts), finds the group's transaction numbers (cap 80; a repeated-payment group narrows to its supplier), lists up to 200 lines.
-- **Measured** (headless Edge, CPU 6x, 4 Mbps, 100 ms RTT, 2026-10-04): `scripts/council-load-perf.mjs <dist> 6 4096 100 <data> [big|select|cancel]` (+ phone-width screenshots to %TEMP%), `council-perf.mjs`
-  (month scenarios now tick one month), `gap-perf.mjs`. Biggest single years, Load wall / worst stall: Cornwall 2025-26 (0.8 MB) 6.2 s / 122 ms; Leeds 2022-23 (1.2 MB) 4.9 s / 79; Sheffield 2025-26
-  (0.8 MB) 4.6 s / 85. Select all: Cornwall 7 yrs 3.6 MB 11.2 s / 134; Leeds 12 yrs 6.2 MB 17.7 s / 121-131; Sheffield 12 yrs 6.0 MB, 712,593 lines, 16.1 s / 228. Renderer RSS flat ~1.15-1.3 GB across
-  Select all (idle baseline ~1.0 GB). Open a list 27-300 ms; source rows 1.6-2.4 s big councils. Hub/page-open numbers unchanged: council page 0.4-2 s, boot 1.4 s. Coventry's dates run 2001-2033 as published.
+- **Measured** (headless Edge, CPU 6x, 4 Mbps, 100 ms RTT): `scripts/council-load-perf.mjs <dist> 6 4096 100 <data> [big|select|cancel|care]` (`care` = Wokingham quirks, care captions, social care panel), `council-perf.mjs`,
+  `gap-perf.mjs`. 2026-10-04 after the social care work, Load wall / worst stall: Cornwall 2025-26 5.4 s / 207 ms; Leeds 2022-23 6.4 s / 194 (earlier 4.9 / 79: noise or a regression, re-check); Sheffield 4.3 s / 63;
+  Wokingham 2020-21 0.8 s / 57; Wokingham two years 1.9 s / 98. Social care panel first open (4 files, 50 KB gz) 1.3 s / 355 ms; year switch 0.3 s. Select all (earlier): Leeds 12 yrs 17.7 s / 131; Sheffield 16.1 s / 228;
+  RSS ~1.15-1.3 GB. Open a list 27-300 ms; source rows 1.6-2.4 s. Page open 0.4-2 s, boot 1.0-1.4 s.
 - Gotchas: `--` in csproj XML comments breaks load; BudgetPanel's `<text>` trick fails in code blocks; CSS is one scoped file using `.cs ::deep`; lists with stateful children need `@key`.
 ## Unlisted: RecycleDAO marketplace prototype — `Pages/RecycleDaoDemo.razor` (`/recycledao-demo`)
 NOT a package-capability demo, NOT in the gallery — a private, link-only client preview

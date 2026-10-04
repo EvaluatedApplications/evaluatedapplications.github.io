@@ -46,7 +46,7 @@
                     <h3>@c.Name</h3>
                     @if (ix is not null)
                     {
-                        <p>@Num(ix.Months) months of payments, @Num(ix.TxRows) published lines, @Num(ix.ExceptionRows) lines flagged by the rules.</p>
+                        <p>@Plural(ix.Months, "month", "months") of payments, @NumLines(ix.TxRows) published, @NumLines(ix.ExceptionRows) flagged by the rules.</p>
                     }
                     else { <p class="hint">Loading...</p> }
                     <span class="go-in">Open this council</span>
@@ -132,6 +132,8 @@ else
             @foreach (var d in CouncilChecksWeb.All) { <CheckPanel @key="@(Slug + d.Id)" Def="d" Slug="@Slug" /> }
         </section>
 
+        @if (Slug == "wokingham") { <SocialCarePanel /> }
+
         <BudgetPanel Slug="@Slug" />
         <BudgetTestPanel />
 
@@ -207,7 +209,8 @@ else
                 _facts.Add($"No published line carries a payment date in {(missing.Count <= 12 ? string.Join(", ", missing) : Num(missing.Count) + " of those months")}.");
         }
         var und = _months.FirstOrDefault(m => m.Month == "undated");
-        if (und is not null) _facts.Add($"{Num(und.TxRows)} lines have no readable payment date and are listed under \"No readable date\" in the list of years to load.");
-        _facts.Add($"The rules flag {Num(_months.Sum(m => m.ExceptionRows))} lines in all, as published, none of them a finding.");
+        if (und is not null) _facts.Add($"{NumLines(und.TxRows)} {(und.TxRows == 1 ? "has" : "have")} no readable payment date and {(und.TxRows == 1 ? "is" : "are")} listed under \"No readable date\" in the list of years to load.");
+        int flaggedAll = _months.Sum(m => m.ExceptionRows);
+        _facts.Add($"The rules flag {NumLines(flaggedAll)} in all, as published, {(flaggedAll == 1 ? "and it is not" : "none of them")} a finding.");
     }
 }

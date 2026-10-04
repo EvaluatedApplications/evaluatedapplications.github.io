@@ -78,12 +78,16 @@ public static class FoiFacts
         if (g.Schedule == "A" && g.Lines.Count > 0)
         {
             var l = g.Lines[0];
-            it.Fact = $"In the {when}, transaction {Txn(l.Tx)} ({l.Supplier}) is published with a net of {Gbp(l.Net)} and a gross of {Gbp(l.Gross)}. The payments published for it differ by {Gbp(Math.Abs(l.Diff))} from the invoice amount the file states for it, once VAT is allowed for.";
+            if (g.Class == "NSquaredListing")
+                // facts only: the stated gross and the published rows' total (no class, reading or cause goes in a letter)
+                it.Fact = $"In the {when}, transaction {Txn(l.Tx)} ({l.Supplier}) is published as {NumLines(g.LineCount)} totalling {Gbp(l.Net)}, against a stated gross of {Gbp(l.Gross)}.";
+            else
+                it.Fact = $"In the {when}, transaction {Txn(l.Tx)} ({l.Supplier}) is published with a net of {Gbp(l.Net)} and a gross of {Gbp(l.Gross)}. The payments published for it differ by {Gbp(Math.Abs(l.Diff))} from the invoice amount the file states for it, once VAT is allowed for.";
             it.Lines.Add($"transaction {Txn(l.Tx)}, {l.Supplier}, net {Gbp(l.Net)}, gross {Gbp(l.Gross)}, difference {Gbp(l.Diff)}");
         }
         else if (g.Schedule == "D")
         {
-            it.Fact = $"In the {when}, transaction number {txs} is published against more than one payee or pay date: {Num(g.LineCount)} line(s), {Gbp(g.Value)} in all.";
+            it.Fact = $"In the {when}, transaction number {txs} is published against more than one payee or pay date: {NumLines(g.LineCount)}, {Gbp(g.Value)} in all.";
             AddLines(it, g);
         }
         else
@@ -91,7 +95,11 @@ public static class FoiFacts
             int size = MonthScan.GroupSizeOf(g.Detail);
             string amounts = string.Join(", ", g.Lines.Select(l => Gbp(l.Net)).Distinct().Take(4));
             string of = size > g.LineCount ? $" This month holds {Num(g.LineCount)} of the group's {Num(size)} lines." : "";
-            it.Fact = $"In the {when}, the published file lists {Num(g.LineCount)} line(s) for {supplier} with the same amount ({amounts}), description and pay date, under transaction{(tx.Count == 1 ? "" : "s")} {txs}; {Gbp(g.Value)} in all.{of}";
+            if (g.ExplainedBy == "NSquaredRows" && g.Lines.Count > 0)
+                // a payment run the file prints n times: state the stated gross and what each transaction's lines total (the group value is the stated gross, once)
+                it.Fact = $"In the {when}, the published file lists {Plural(g.Lines.Select(l => l.Tx).Distinct().Count(), "transaction", "transactions")} ({txs}) for {supplier}, each with a stated gross of {Gbp(g.Lines[0].Gross)} and published lines totalling {Gbp(g.Lines[0].Net)}.";
+            else
+                it.Fact = $"In the {when}, the published file lists {NumLines(g.LineCount)} for {supplier} with the same amount ({amounts}), description and pay date, under transaction{(tx.Count == 1 ? "" : "s")} {txs}; {Gbp(g.Value)} in all.{of}";
             AddLines(it, g);
         }
         return it;
@@ -100,7 +108,7 @@ public static class FoiFacts
     static void AddLines(FoiItem it, ExGroup g)
     {
         foreach (var l in g.Lines) it.Lines.Add($"transaction {Txn(l.Tx)}, {l.Supplier}, net {Gbp(l.Net)}, gross {Gbp(l.Gross)}");
-        if (g.LineCount > g.Lines.Count) it.Lines.Add($"and {Num(g.LineCount - g.Lines.Count)} more line(s) of the same group in that month");
+        if (g.LineCount > g.Lines.Count) it.Lines.Add($"and {Plural(g.LineCount - g.Lines.Count, "more line", "more lines")} of the same group in that month");
     }
 
     /// <summary>The letter to one council, built only from the items ticked for it. <paramref name="omitted"/> is how many items did not fit.</summary>

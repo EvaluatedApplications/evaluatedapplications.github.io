@@ -17,12 +17,14 @@ public sealed class ExGroup
     public string ExplainedBy = "", ExplainedMeaning = "";
     public List<ExLine> Lines = new();     // the first few lines of the group (enough to show; see MonthScan.ShownLines)
     public int LineCount;                  // every line of the group that falls in this month
-    public decimal Value;                  // A: the amount that does not reconcile; B and D: the net value of the lines
+    public decimal Value;                  // A: the amount that does not reconcile; B and D: the net value of the lines. A publication quirk (rows printed n times) is the run's STATED Gross, counted once, never the inflated row total.
     internal MonthScan Scan = null!;
     internal MonthScan.Gr Src = null!;
     /// <summary>The "See the source rows" panel of this group, once the visitor has tapped it; and the group's tray key, worked out once.</summary>
     public SourceState? Source;
     public string? FoiKey;
+    /// <summary>A Schedule B group of Wokingham whose lines all sit in care cost centres: the page adds the care caption (a care home bills each resident separately).</summary>
+    public bool Care;
     /// <summary>Every distinct transaction number of the group's lines in this month (at most <paramref name="cap"/>), read on demand
     /// (the scan's bytes must be in memory: <see cref="MonthScan.EnsureRawAsync"/>).</summary>
     public List<string> AllTx(int cap = 80) => Scan.DistinctTx(Src, cap);
@@ -88,7 +90,7 @@ public sealed class MonthScan
     public int OpenWithReading { get; private set; }
 
     // column positions, by header name
-    int cSched, cGid, cTx, cSupplier, cNet, cDiff, cDetail, cClass, cGross, cExpBy = -1, cExpMeaning = -1, _minFields;
+    int cSched, cGid, cTx, cSupplier, cNet, cDiff, cDetail, cClass, cGross, cExpBy = -1, cExpMeaning = -1, cStated = -1, cCare = -1, _minFields;
 
     /// <summary>The bytes of the file(s) the scan was made from are only needed to show a group's lines or look up its transaction numbers. A phone cannot hold
     /// every year of a big council, so the page may let go of them (<see cref="Evict"/>) and read them back from the downloaded file when a visitor opens a list.</summary>
@@ -181,7 +183,12 @@ public sealed class MonthScan
                     for (int i = 0; i < el; i++) chars[i] = (char)b[st[s.cExpBy] + i];
                     g.Exp = classes.Get(chars.AsSpan(0, el));
                 }
-                g.Value += sched == 'A' ? Math.Abs(diff) : net;
+                // A run the council's report printed n times (NSquaredListing, or an NSquaredRows group): the row total is not money, the stated Gross is the run
+                // (the same on every row, so counted once). Without a stated Gross in the slice the old sums stand.
+                double stated = 0;
+                bool hasStated = s.cStated >= 0 && s.cStated < nf && ln[s.cStated] > 0 && Utf8Parser.TryParse(b.AsSpan(st[s.cStated], ln[s.cStated]), out stated, out _);
+                if (hasStated && (cls == "NSquaredListing" || g.Exp == "NSquaredRows")) g.Value = Math.Max(g.Value, stated);
+                else g.Value += sched == 'A' ? Math.Abs(diff) : net;
                 if (sched == 'D' && ln[s.cDetail] > 0 && g.Count == 1)
                     s._furnished |= b.AsSpan(st[s.cDetail], ln[s.cDetail]).IndexOf("SupplierFurnished"u8) >= 0;
 
@@ -232,6 +239,7 @@ public sealed class MonthScan
         cSched = Find("Schedule"); cGid = Find("GroupId"); cTx = Find("TransactionId"); cSupplier = Find("SupplierName"); cNet = Find("Net");
         cDiff = Find("Difference"); cDetail = Find("Detail"); cClass = Find("Classification"); cGross = Find("TransactionGross");
         cExpBy = Find("ExplainedBy"); cExpMeaning = Find("ExplainedMeaning");   // absent in older exports: no readings then
+        cStated = Find("Gross"); cCare = Find("Care");   // the stated Gross (Schedule A, and a run printed n times) and the care flag: absent in older slices
         if (cSched < 0 || cGid < 0 || cNet < 0 || cDiff < 0 || cClass < 0 || cDetail < 0 || cTx < 0 || cSupplier < 0)
             throw new InvalidDataException("This month's file does not have the columns the page expects.");
         if (cGross < 0) cGross = cNet;     // an empty TransactionGross also reads as Net (the files leave it empty when it is the same)
@@ -292,10 +300,15 @@ public sealed class MonthScan
             {
                 o.Detail = Text(b, st[cDetail], ln[cDetail]);
                 if (g.Exp is not null && cExpMeaning >= 0 && cExpMeaning < nf) o.ExplainedMeaning = Text(b, st[cExpMeaning], ln[cExpMeaning]);
+                if (cCare >= 0 && cCare < nf && ln[cCare] > 0) o.Care = true;
             }
             string net = Text(b, st[cNet], ln[cNet]);
-            o.Lines.Add(new ExLine(Text(b, st[cTx], ln[cTx]), Text(b, st[cSupplier], ln[cSupplier]),
-                Dec(net), Dec(cGross < nf && ln[cGross] > 0 ? Text(b, st[cGross], ln[cGross]) : net), Dec(Text(b, st[cDiff], ln[cDiff]))));
+            // the line's gross: its own stated Gross when the slice carries one; a Schedule A row without one has Gross = Net (the slice leaves it out then);
+            // a Schedule B line shows the whole transaction's gross as before (TransactionGross, empty when equal to Net)
+            string gross = cStated >= 0 && cStated < nf && ln[cStated] > 0 ? Text(b, st[cStated], ln[cStated])
+                : g.Sched == (byte)'A' && cStated >= 0 ? net
+                : cGross < nf && ln[cGross] > 0 ? Text(b, st[cGross], ln[cGross]) : net;
+            o.Lines.Add(new ExLine(Text(b, st[cTx], ln[cTx]), Text(b, st[cSupplier], ln[cSupplier]), Dec(net), Dec(gross), Dec(Text(b, st[cDiff], ln[cDiff]))));
         }
         return o;
     }

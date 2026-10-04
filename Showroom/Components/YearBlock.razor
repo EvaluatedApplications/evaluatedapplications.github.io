@@ -11,11 +11,11 @@
     <button type="button" class="check-head yhead" @onclick="() => U.Open = !U.Open" aria-expanded="@(U.Open ? "true" : "false")">
         <span class="arrow" aria-hidden="true">@(U.Open ? "▾" : "▸")</span>
         <h3>@U.Label</h3>
-        <span class="n">@Num(U.FlaggedLines) flagged lines in @Num(U.Groups) groups@(U.Scan.OpenGroups > 0 ? $", {Num(U.Scan.OpenGroups)} still open" : "")@(U.Gap is { Eligible: true } ? $". Declared {Gbp(U.Gap.Declared)}, file {Gbp(U.Gap.File)}" : "")</span>
+        <span class="n">@Num(U.FlaggedLines) flagged @(U.FlaggedLines == 1 ? "line" : "lines") in @Plural(U.Groups, "group", "groups")@(U.Scan.OpenGroups > 0 ? $", {Num(U.Scan.OpenGroups)} still open" : "")@(U.Gap is { Eligible: true } ? $". Declared {Gbp(U.Gap.Declared)}, file {Gbp(U.Gap.File)}" : "")</span>
     </button>
     @if (U.Open)
     {
-        <p class="plain">@U.Coverage: @Num(U.TxRows) published lines, @Gbp(U.Net) of Net in all, of which @Num(U.FlaggedLines) lines are flagged by the three rules.
+        <p class="plain">@U.Coverage: @NumLines(U.TxRows) published, @Gbp(U.Net) of Net in all, of which @NumLines(U.FlaggedLines) @(U.FlaggedLines == 1 ? "is" : "are") flagged by the three rules.
             @if (U.Scan.OpenGroups > 0)
             {
                 <span>@Num(U.Scan.OpenGroups) group@(U.Scan.OpenGroups == 1 ? " is" : "s are") still open (no recognised explanation)@(U.Scan.OpenWithReading > 0 ? $", of which {Num(U.Scan.OpenWithReading)} carry a pattern reading beside them. A reading is a consistent fit, not a proof, and does not close a group" : "").</span>
@@ -53,7 +53,7 @@
                         <button type="button" class="bucket-head" @onclick="() => ToggleBucket(b)" aria-expanded="@(b.Open ? "true" : "false")">
                             <span class="arrow" aria-hidden="true">@(b.Open ? "▾" : "▸")</span>
                             <span class="cls">@Display(b.Class)</span>
-                            <span class="n">@Num(b.GroupCount) group@(b.GroupCount == 1 ? "" : "s"), @Num(b.Lines) lines, @Gbp(b.Value)@(b.WithReading > 0 ? $", {Num(b.WithReading)} with a pattern reading" : "")</span>
+                            <span class="n">@Plural(b.GroupCount, "group", "groups"), @NumLines(b.Lines), @Gbp(b.Value)@(b.WithReading > 0 ? $", {Num(b.WithReading)} with a pattern reading" : "")</span>
                         </button>
                         @if (b.Open)
                         {
@@ -69,8 +69,9 @@
                                         @if (g.ExplainedBy.Length > 0)
                                         {
                                             <div class="reading"><span class="tag">@ReadingTag(g.ExplainedBy)</span>
-                                                <span class="l2">@(g.ExplainedMeaning.Length > 0 ? g.ExplainedMeaning : ReadingMeaning(g.ExplainedBy))</span></div>
+                                                <span class="l2">@ReadingCaption(g.ExplainedBy, g.ExplainedMeaning)</span></div>
                                         }
+                                        @if (g.Care) { <div class="care l2">@CareCaption</div> }
                                         @{ bool on = Tray.Has(KeyOf(g)); bool src = g.Source?.Open == true; }
                                         <div class="acts">
                                             <button type="button" class="tick @(on ? "on" : "")" aria-pressed="@(on ? "true" : "false")" @onclick="() => Tick(g)">@(on ? "In your request (tap to remove)" : "Add to request")</button>
@@ -150,8 +151,12 @@
     {
         var who = g.Lines.Select(l => l.Supplier).Distinct().ToList();
         string s = who.Count == 0 ? "" : who.Count == 1 ? who[0] : who[0] + " and " + who[1];
-        if (who.Count > 2) s += $" and {who.Count - 2} other payee(s)";
-        return g.Schedule == "A" ? $"{s}: {Gbp(g.Value)} that does not reconcile" : $"{s}: {Gbp(g.Value)} across {Num(g.LineCount)} line(s)";
+        if (who.Count > 2) s += $" and {Plural(who.Count - 2, "other payee", "other payees")}";
+        // A run the council's report printed n times: the value is the stated Gross (the run), never the inflated row total.
+        if (g.Class == "NSquaredListing" && g.Lines.Count > 0) return $"{s}: a payment run of {Gbp(g.Value)} as stated; its published rows total {Gbp(g.Lines[0].Net)}";
+        if (g.ExplainedBy == "NSquaredRows")
+            return $"{s}: a payment run of {Gbp(g.Value)} as stated, under {Plural(g.Lines.Select(l => l.Tx).Distinct().Count(), "transaction number", "transaction numbers")}";
+        return g.Schedule == "A" ? $"{s}: {Gbp(g.Value)} that does not reconcile" : $"{s}: {Gbp(g.Value)} across {NumLines(g.LineCount)}";
     }
 
     static string Sub(ExGroup g)
@@ -164,7 +169,14 @@
         if (g.Schedule == "A")
         {
             var l = g.Lines[0];
+            if (g.Class == "NSquaredListing") return $"Transaction {txs}. Published rows total {Gbp(l.Net)}; the stated gross is {Gbp(l.Gross)}. {detail}";
             return $"Transaction {txs}. Published net {Gbp(l.Net)}, gross {Gbp(l.Gross)}, difference {Gbp(l.Diff)}. {detail}";
+        }
+        if (g.ExplainedBy == "NSquaredRows" && g.Lines.Count > 0)
+        {
+            var l = g.Lines[0];
+            string times = l.Gross > 0 ? $", about {(l.Net / l.Gross).ToString("0.0", System.Globalization.CultureInfo.InvariantCulture)} times the run" : "";
+            return $"Transaction{(tx.Count == 1 ? "" : "s")} {txs}. {(tx.Count == 1 ? "It carries" : "Each carries")} the same run, stated at {Gbp(l.Gross)}; the lines published for {(tx.Count == 1 ? "it" : "each")} total {Gbp(l.Net)}{times}, because of how the council's report prints them.";
         }
         int size = MonthScan.GroupSizeOf(g.Detail);
         string amounts = string.Join(", ", g.Lines.Select(l => Gbp(l.Net)).Distinct().Take(4));

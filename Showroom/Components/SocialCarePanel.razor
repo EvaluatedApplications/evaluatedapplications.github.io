@@ -1,0 +1,292 @@
+@using System.Diagnostics
+@using System.Globalization
+@using Showroom.Services
+@using static Showroom.Services.CouncilTerms
+@inject CouncilWebData Data
+
+@* Wokingham's social care view (SPEC_FOR_SHOWROOM item 30): payments to private social care providers. Four small files, read whole when the panel is first opened
+   (concentration, providers, rates, invoice-date repeats; 0.25 MB raw in all). Everything is a count or a sum of the published payments; a reading, a date flag or a
+   company record is shown with its source and caption and is never a finding. No individual is named: the files hold payee organisations only. *@
+<section class="budget scare">
+    <button type="button" class="check-head" @onclick="Toggle" aria-expanded="@(_open ? "true" : "false")">
+        <span class="arrow" aria-hidden="true">@(_open ? "▾" : "▸")</span>
+        <h2>Payments to social care providers</h2>
+    </button>
+    @if (_open)
+    {
+        <p class="plain">Wokingham's payments to the organisations that provide adult and children's social care for the council: care homes, home care, supported living, children's homes and fostering agencies. The figures are sums of the
+            published payments, grouped by the kind of care the scanner classed them as. They show who is paid and how much; they do not say whether a price or a payment was right.</p>
+        @if (_error is not null) { <p class="err">@_error</p> }
+        else if (!_loaded) { <p class="hint">Loading the social care files (small)...</p> }
+        else
+        {
+            @* ---- 1. how concentrated ---- *@
+            <h3>How concentrated is the market?</h3>
+            <p class="summary">@_headline</p>
+            <label class="pick">Kind of care
+                <select @onchange="OnConcType">
+                    @foreach (var t in _concTypes) { <option value="@t" selected="@(t == _concType)">@(t == ALL ? "All care" : t)</option> }
+                </select>
+            </label>
+            <div class="tscroll">
+                <table class="tests">
+                    <thead><tr><th>Year</th><th>Paid</th><th>Payees</th><th>Ten largest</th><th>HHI</th><th>Largest payee</th></tr></thead>
+                    <tbody>
+                    @foreach (var c in ConcRows())
+                    {
+                        <tr>
+                            <td>@YearName(c.Year)</td><td>@Gbp(c.Total)</td><td>@Num(c.Suppliers)</td><td>@c.Top10.ToString("0.#", GB)%</td><td>@Num(c.Hhi)</td>
+                            <td>@c.Largest, @c.LargestShare.ToString("0.#", GB)%@(c.CouncilOwned > 0m && c.CouncilOwned == c.LargestShare ? " (council-owned company)" : "")</td>
+                        </tr>
+                    }
+                    </tbody>
+                </table>
+            </div>
+            <p class="caption">The HHI (Herfindahl-Hirschman index) adds up the squares of each payee's percentage share of the total: 10,000 would be one payee taking everything, and the lower it is the more evenly the money is spread.
+                "Ten largest" is the share of the total taken by the ten biggest payees. Optalis is the council's own care company: it is shown as a council-owned company, not as a private provider. Where another payee leads a kind of care, it leads that row.</p>
+
+            @* ---- 2. who is paid ---- *@
+            <h3>Who is paid, by year</h3>
+            <label class="pick">Financial year
+                <select @onchange="OnYear">
+                    @foreach (var y in _years) { <option value="@y" selected="@(y == _year)">@YearName(y)</option> }
+                </select>
+            </label>
+            <p class="summary">@_yearLine</p>
+            <ol class="lines">
+                @foreach (var p in ProvidersFor(_year).Take(_shown))
+                {
+                    <li @key="p.Name">
+                        <div class="l1">@p.Name: @Gbp(p.Year(_year)), @Share(p.Year(_year), _yearTotal)% of the year's total</div>
+                        <div class="l2">@GroupLabel(p.Group)@(p.MainType.Length > 0 ? ", mainly " + p.MainType.ToLowerInvariant() : ""). Paid between @Date(p.First) and @Date(p.Last) in these files.@(p.NewLarge ? " New in these files and large at once." : "")</div>
+                        <div class="acts"><button type="button" class="srcbtn" aria-expanded="@(_ch.Contains(p.Name) ? "true" : "false")" @onclick="() => ToggleCh(p.Name)">@(_ch.Contains(p.Name) ? "Hide the company record" : "Company record")</button></div>
+                        @if (_ch.Contains(p.Name)) { <div class="l2 chrec">@((MarkupString)CompanyHtml(p))</div> }
+                    </li>
+                }
+            </ol>
+            @if (ProvidersFor(_year).Count > _shown) { <button type="button" class="more" @onclick="() => _shown += 15">Show @Math.Min(15, ProvidersFor(_year).Count - _shown) more (@(ProvidersFor(_year).Count - _shown) not shown)</button> }
+            <p class="caption">Shares are of everything the scanner counted as social care in that financial year. A payee that is a company is matched to its Companies House record by name; each record is shown with where it came from, and a match marked uncertain
+                has no link. Only organisations appear; the files hold no individual's name.</p>
+
+            @* ---- 3. weekly rates ---- *@
+            <h3>Weekly rates in nursing and residential care</h3>
+            <div class="rowpick">
+                <label class="pick">Kind of care
+                    <select @onchange="OnRateType">
+                        <option value="Nursing" selected="@(_rateType == "Nursing")">Nursing</option><option value="Residential" selected="@(_rateType == "Residential")">Residential</option>
+                    </select>
+                </label>
+                <label class="pick">Financial year
+                    <select @onchange="OnRateYear">
+                        @foreach (var y in _rateYears) { <option value="@y" selected="@(y == _rateYear)">@YearName(y)</option> }
+                    </select>
+                </label>
+            </div>
+            <p class="summary">@RateLine()</p>
+            <ol class="lines">
+                @foreach (var r in RatesFor().Take(_rShown))
+                {
+                    <li @key="r.Name">
+                        <div class="l1">@r.Name: median @Gbp(r.Median) a week</div>
+                        <div class="l2">From @Plural(r.Lines, "invoice line", "invoice lines")@(r.Min == r.Max ? ", all at the same rate" : $", ranging from {Gbp(r.Min)} to {Gbp(r.Max)}").</div>
+                    </li>
+                }
+            </ol>
+            @if (RatesFor().Count > _rShown) { <button type="button" class="more" @onclick="() => _rShown += 15">Show @Math.Min(15, RatesFor().Count - _rShown) more (@(RatesFor().Count - _rShown) not shown)</button> }
+            <p class="caption">Worked out from the invoice amounts (weekly rate x days / 7), not published by the council. A provider's median moves with the mix of residents, so a jump is not a price rise by itself. Rates are shown only for nursing
+                and residential care: the method does not work for home care, supported living or children's services, so none is shown for them.</p>
+
+            @* ---- 4. the hardest to explain ---- *@
+            <h3>The items hardest to explain, with their ordinary readings</h3>
+            <p class="plain">These are the places in the social care payments where the published numbers are least easy to read, each with the ordinary reasons that would produce them. The file cannot tell which reading is true, and none is a finding.</p>
+
+            <h4>Same amount and invoice date, paid twice on different days</h4>
+            <p class="plain">Payments of £10,000 or more to one provider with the same amount and the same invoice date under different transaction numbers, paid on different days (@_repeats.Count in all).</p>
+            <ol class="lines">
+                @foreach (var r in _repeats)
+                {
+                    <li @key="r.Key">
+                        <div class="l1">@r.Supplier: @Gbp(r.Net) with invoice date @Date(r.InvoiceDate), listed @r.Copies times, so @Gbp(r.Beyond) beyond the first</div>
+                        <div class="l2">@r.Care. @r.PaidText@(r.Round ? " The amount is in round thousands." : "")@(r.VatDiffers ? " The payments carry different VAT codes." : "")</div>
+                    </li>
+                }
+            </ol>
+            <p class="caption">Same amount, same invoice date, paid twice on different days. Often termly or block invoices for several periods, or two separate payments (a grant and an on-account payment). The file cannot tell which; refunds are income and never appear in spending files.</p>
+
+            <h4>Providers new in these files and large at once</h4>
+            <p class="plain">Payees first paid from April 2021 that received £250,000 or more in their first twelve months (@_newLarge.Count in all).</p>
+            <ol class="lines">
+                @foreach (var p in _newLarge.Take(_nShown))
+                {
+                    <li @key="p.Name">
+                        <div class="l1">@p.Name: @Gbp(p.First12) in its first twelve months, @Gbp(p.Total) in all</div>
+                        <div class="l2">First paid @Date(p.First)@(p.MainType.Length > 0 ? ", mainly " + p.MainType.ToLowerInvariant() : "").</div>
+                    </li>
+                }
+            </ol>
+            @if (_newLarge.Count > _nShown) { <button type="button" class="more" @onclick="() => _nShown += 15">Show @Math.Min(15, _newLarge.Count - _nShown) more (@(_newLarge.Count - _nShown) not shown)</button> }
+            <p class="caption">New in these files and large at once. Usual reasons: a new home or scheme, a renamed company, a takeover, or one high-cost child placement.</p>
+
+            <h4>Company records whose dates do not fit</h4>
+            <p class="plain">Where a payee's name matches a company whose dates do not fit the payments (@_dateOdd.Count in all). The same test flagged ordinary non-care suppliers more often, so a date that does not fit is not evidence of anything about the payee.</p>
+            <ol class="lines">
+                @foreach (var p in _dateOdd)
+                {
+                    <li @key="p.Name">
+                        <div class="l1">@p.Name: @Gbp(p.Total) in all, first paid @Date(p.First)</div>
+                        <div class="l2 chrec">@((MarkupString)CompanyHtml(p))</div>
+                    </li>
+                }
+            </ol>
+            <p class="caption">Companies House data is the public register's, shown with its source and the date it was read. A name match with dates that do not fit is usually a different company with the same or a similar name.</p>
+            <p class="caption">@OglCredit</p>
+        }
+    }
+</section>
+
+@code {
+    const string ALL = "ALL";
+    static readonly CultureInfo GB = CultureInfo.InvariantCulture;
+    static readonly string Folder = "wokingham/socialcare/";
+
+    sealed record Conc(string Year, string Type, decimal Total, int Suppliers, int Hhi, decimal Top10, string Largest, decimal LargestShare, decimal CouncilOwned);
+    sealed class Prov
+    {
+        public string Name = "", Group = "", MainType = "", First = "", Last = "", Number = "", CoName = "", Status = "", Incorporated = "", Dissolved = "", Match = "", Source = "", Flag = "", Note = "";
+        public bool NewLarge; public decimal First12, Total;
+        public Dictionary<string, decimal> ByYear = new();
+        public decimal Year(string y) => ByYear.TryGetValue(y, out var v) ? v : 0m;
+    }
+    sealed record Rate(string Name, string Type, string Year, int Lines, decimal Median, decimal Min, decimal Max);
+    sealed record Repeat(string Key, string Supplier, decimal Net, string InvoiceDate, int Copies, decimal Beyond, bool Round, bool VatDiffers, string Care, string PaidText);
+
+    bool _open, _loaded;
+    string? _error;
+    List<Conc> _conc = new();
+    List<Prov> _provs = new();
+    List<Rate> _rates = new();
+    List<Repeat> _repeats = new();
+    List<Prov> _newLarge = new(), _dateOdd = new();
+    List<string> _years = new(), _rateYears = new(), _concTypes = new();
+    string _concType = ALL, _year = "", _rateType = "Nursing", _rateYear = "", _headline = "", _yearLine = "";
+    decimal _yearTotal;
+    int _shown = 15, _rShown = 15, _nShown = 15;
+    readonly HashSet<string> _ch = new();
+    readonly Dictionary<string, List<Prov>> _sorted = new();
+
+    async Task Toggle()
+    {
+        _open = !_open;
+        if (!_open || _loaded || _error is not null) return;
+        var sw = Stopwatch.StartNew();
+        try
+        {
+            var co = new Cooperative(CancellationToken.None);
+            var conc = new Tab(await Data.TableAsync(Folder + "concentration.csv", true, co));
+            var prov = new Tab(await Data.TableAsync(Folder + "providers.csv", true, co));
+            var rate = new Tab(await Data.TableAsync(Folder + "rates.csv", true, co));
+            var rep = new Tab(await Data.TableAsync(Folder + "invoice_date_repeats.csv", true, co));
+            _conc = conc.Rows.Select(r => new Conc(conc.G(r, "FinancialYear"), conc.G(r, "CareType"), conc.M(r, "Total"), conc.I(r, "Suppliers"), conc.I(r, "HHI"), conc.M(r, "Top10Share"),
+                conc.G(r, "Largest"), conc.M(r, "LargestShare"), conc.M(r, "CouncilOwnedShare"))).ToList();
+            _years = _conc.Where(c => c.Type == ALL).Select(c => c.Year).Distinct().OrderBy(y => y, StringComparer.Ordinal).ToList();
+            _concTypes = new List<string> { ALL }.Concat(_conc.Select(c => c.Type).Where(t => t != ALL).Distinct().OrderBy(t => t, StringComparer.Ordinal)).ToList();
+            _year = _years.Count > 0 ? _years[^1] : "";
+            var yearCols = _years;
+            _provs = prov.Rows.Select(r =>
+            {
+                var p = new Prov
+                {
+                    Name = prov.G(r, "Supplier"), Group = prov.G(r, "Group"), MainType = prov.G(r, "MainCareType"), First = prov.G(r, "FirstPay"), Last = prov.G(r, "LastPay"),
+                    NewLarge = prov.G(r, "NewLargeProvider").Length > 0, First12 = prov.M(r, "FirstTwelveMonths"), Total = prov.M(r, "Total"),
+                    Number = prov.G(r, "CompanyNumber"), CoName = prov.G(r, "CompanyName"), Status = prov.G(r, "CompanyStatus"), Incorporated = prov.G(r, "Incorporated"),
+                    Dissolved = prov.G(r, "Dissolved"), Match = prov.G(r, "MatchConfidence"), Source = prov.G(r, "CompanySource"), Flag = prov.G(r, "CompanyDateFlag"), Note = prov.G(r, "CompanyNote"),
+                };
+                foreach (var y in yearCols) p.ByYear[y] = prov.M(r, y);
+                return p;
+            }).ToList();
+            _newLarge = _provs.Where(p => p.NewLarge).OrderByDescending(p => p.First12).ToList();
+            _dateOdd = _provs.Where(p => p.Flag.Length > 0).OrderByDescending(p => p.Total).ToList();
+            _rates = rate.Rows.Select(r => new Rate(rate.G(r, "Supplier"), rate.G(r, "CareType"), rate.G(r, "FinancialYear"), rate.I(r, "DecodedLines"), rate.M(r, "MedianWeekly"), rate.M(r, "MinWeekly"), rate.M(r, "MaxWeekly")))
+                .Where(r => r.Type is "Nursing" or "Residential").ToList();   // the method fails for the other kinds of care: never shown
+            _rateYears = _rates.Select(r => r.Year).Distinct().OrderBy(y => y, StringComparer.Ordinal).ToList();
+            _rateYear = _rateYears.Count > 0 ? _rateYears[^1] : "";
+            _repeats = rep.Rows.Select(r => new Repeat(rep.G(r, "Supplier") + rep.G(r, "InvoiceDate") + rep.G(r, "Net"), rep.G(r, "Supplier"), rep.M(r, "Net"), rep.G(r, "InvoiceDate"), rep.I(r, "Copies"),
+                rep.M(r, "ValueBeyondFirst"), rep.G(r, "RoundThousands").Length > 0, rep.G(r, "VatCodesDiffer").Length > 0, rep.G(r, "CareType"), PaidText(rep.G(r, "Payments")))).ToList();
+            BuildHeadline();
+            SetYear();
+            _loaded = true;
+            await Data.LogAsync("social care built", sw.ElapsedMilliseconds, $"({_provs.Count} providers, {_rates.Count} rate rows)");
+        }
+        catch (Exception ex) { _error = "Could not load the social care files: " + ex.Message; }
+    }
+
+    // "2022-09-01/3745899/OSCP 2022-09-14/3751760/ZERO" becomes "Paid 1 Sep 2022 (transaction 3745899, VAT code OSCP) and 14 Sep 2022 (transaction 3751760, VAT code ZERO)."
+    static string PaidText(string s)
+    {
+        var parts = s.Split(' ', StringSplitOptions.RemoveEmptyEntries).Select(t => t.Split('/')).Where(a => a.Length >= 2)
+            .Select(a => $"{Date(a[0])} (transaction {a[1]}{(a.Length > 2 && a[2].Length > 0 ? ", VAT code " + a[2] : "")})").ToList();
+        return parts.Count == 0 ? "" : "Paid " + (parts.Count == 1 ? parts[0] : string.Join(", ", parts.Take(parts.Count - 1)) + " and " + parts[^1]) + ".";
+    }
+
+    void BuildHeadline()
+    {
+        var all = _conc.Where(c => c.Type == ALL).OrderBy(c => c.Year, StringComparer.Ordinal).ToList();
+        if (all.Count == 0) { _headline = ""; return; }
+        var first = all[0]; var last = all[^1];
+        bool sameLeader = all.All(c => c.Largest == first.Largest);
+        _headline = $"Across all care, the HHI runs from {Num(all.Min(c => c.Hhi))} to {Num(all.Max(c => c.Hhi))} and the ten largest payees take {all.Min(c => c.Top10).ToString("0.#", GB)}% to {all.Max(c => c.Top10).ToString("0.#", GB)}% of the total: the money is spread across {Num(all.Min(c => c.Suppliers))} to {Num(all.Max(c => c.Suppliers))} payees a year, not held by a few."
+            + (sameLeader ? $" The largest payee in every year is {first.Largest}, {(first.CouncilOwned > 0m ? "the council-owned company, " : "")}at {first.LargestShare.ToString("0.#", GB)}% in {YearName(first.Year)} and {last.LargestShare.ToString("0.#", GB)}% in {YearName(last.Year)}." : "");
+    }
+
+    void SetYear()
+    {
+        var all = _conc.FirstOrDefault(c => c.Type == ALL && c.Year == _year);
+        _yearTotal = all?.Total ?? 0m;
+        _yearLine = all is null ? "" : $"{Gbp(all.Total)} paid to {Num(all.Suppliers)} payees in {YearName(_year)}. The list is ordered by what each was paid that year.";
+    }
+
+    List<Prov> ProvidersFor(string y)
+    {
+        if (!_sorted.TryGetValue(y, out var l)) _sorted[y] = l = _provs.Where(p => p.Year(y) > 0m).OrderByDescending(p => p.Year(y)).ToList();
+        return l;
+    }
+    void OnConcType(ChangeEventArgs e) => _concType = e.Value?.ToString() ?? ALL;
+    void OnYear(ChangeEventArgs e) { _year = e.Value?.ToString() ?? _year; _shown = 15; SetYear(); }
+    void OnRateType(ChangeEventArgs e) { _rateType = e.Value?.ToString() ?? _rateType; _rShown = 15; }
+    void OnRateYear(ChangeEventArgs e) { _rateYear = e.Value?.ToString() ?? _rateYear; _rShown = 15; }
+
+    IEnumerable<Conc> ConcRows() => _conc.Where(c => c.Type == _concType).OrderBy(c => c.Year, StringComparer.Ordinal);
+    List<Rate> RatesFor() => _rates.Where(r => r.Type == _rateType && r.Year == _rateYear).OrderByDescending(r => r.Lines).ThenByDescending(r => r.Median).ToList();
+    string RateLine()
+    {
+        var l = RatesFor();
+        return l.Count == 0 ? "No provider has a rate that can be worked out for this kind of care in this year." : $"{Plural(l.Count, "provider", "providers")} with a weekly rate that could be worked out from its invoices in {YearName(_rateYear)}, listed by how many invoice lines each rests on.";
+    }
+
+    void ToggleCh(string name) { if (!_ch.Remove(name)) _ch.Add(name); }
+
+    static string Share(decimal part, decimal whole) => whole <= 0m ? "0" : (part * 100m / whole).ToString("0.0", GB);
+    static string YearName(string fy) => fy.StartsWith("FY", StringComparison.Ordinal) ? fy[2..] : fy;
+    static string GroupLabel(string g) => g switch { "Council-owned" => "Council-owned company", "Public" => "Classed as a public-sector payee", _ => "Independent provider" };
+    static string H(string s) => System.Net.WebUtility.HtmlEncode(s);
+
+    // The Companies House record of a payee, ALWAYS with its source text beside it. The link is hidden when the match is marked uncertain (or contradicted by the dates);
+    // the date flag is never shown by its name, only as the sentence the data gives.
+    static string CompanyHtml(Prov p)
+    {
+        if (p.Number.Length == 0) return "No Companies House record has been matched to this name." + (p.Note.Length > 0 ? " " + H(p.Note) : "");
+        var sb = new System.Text.StringBuilder();
+        sb.Append("Companies House record: ").Append(H(p.CoName)).Append(" (company number ").Append(H(p.Number)).Append("), ").Append(H(p.Status.ToLowerInvariant()));
+        if (p.Incorporated.Length > 0) sb.Append(", incorporated ").Append(H(Date(p.Incorporated)));
+        if (p.Dissolved.Length > 0) sb.Append(", dissolved ").Append(H(Date(p.Dissolved)));
+        sb.Append(". ");
+        if (p.Match.Length > 0) sb.Append("Match: ").Append(H(p.Match)).Append(". ");
+        if (p.Flag == "PaidAfterDissolution" && p.Dissolved.Length > 0)
+            sb.Append("The company of this exact name was dormant and was dissolved on ").Append(H(Date(p.Dissolved))).Append("; payments continued under the name. Group companies at the same address are active, so this reads as a trading name on the council's supplier record. ");
+        if (p.Note.Length > 0 && p.Flag != "PaidAfterDissolution") sb.Append(H(p.Note)).Append(' ');
+        if (p.Source.Length > 0) sb.Append("Source: ").Append(H(p.Source)).Append(". ");
+        bool uncertain = p.Match.StartsWith("uncertain", StringComparison.OrdinalIgnoreCase) || p.Match.StartsWith("contradicted", StringComparison.OrdinalIgnoreCase);
+        if (!uncertain) sb.Append("<a href=\"https://find-and-update.company-information.service.gov.uk/company/").Append(Uri.EscapeDataString(p.Number)).Append("\" target=\"_blank\" rel=\"noopener\">See the record on Companies House</a>");
+        return sb.ToString().TrimEnd();
+    }
+}

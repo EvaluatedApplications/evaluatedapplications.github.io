@@ -70,7 +70,7 @@ public sealed class SourceState
                     string ids = string.Join(", ", t.Tx.Take(4)) + (t.Tx.Count > 4 ? $" and {t.Tx.Count - 4} more" : "");
                     b.Summary = b.Result.Found == 0
                         ? $"No line in {CouncilTerms.MonthName(t.Month)}'s published file carries transaction {ids}."
-                        : $"{CouncilTerms.Num(b.Result.Found)} line(s) in {CouncilTerms.MonthName(t.Month)}'s published file carry transaction {ids}" + (b.Result.NarrowedBySupplier ? ", narrowed to the same supplier." : ".");
+                        : $"{CouncilTerms.NumLines(b.Result.Found)} in {CouncilTerms.MonthName(t.Month)}'s published file {(b.Result.Found == 1 ? "carries" : "carry")} transaction {ids}" + (b.Result.NarrowedBySupplier ? ", narrowed to the same supplier." : ".");
                 }
                 Blocks.Add(b);
             }

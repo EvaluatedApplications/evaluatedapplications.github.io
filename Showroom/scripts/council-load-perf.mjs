@@ -155,6 +155,25 @@ if (WHICH === 'all' || WHICH === 'cancel') {
   await shot('wokingham-two-years', '.loaded', 3400);
 }
 
+// Wokingham: the n-squared payment runs (2022-23 holds the group, 2023-24 the Schedule A row), the care caption on a repeat group, and the social care panel
+if (WHICH === 'all' || WHICH === 'care') {
+  await go('wokingham');
+  await ev(`window.__tickYear('2022-23'); window.__tickYear('2023-24')`); await sleep(100);
+  await measure('wokingham 2022-23 + 2023-24: Load', `document.querySelector('.loadbtn').click(); await window.__waitLoaded(120000)`, 400, true);
+  await ev(`[...document.querySelectorAll('.yblock .yhead')].forEach(h => { if (h.getAttribute('aria-expanded') !== 'true') h.click(); })`); await sleep(300);
+  // open every bucket of both years so the quirk rows and the care captions are in the DOM, then read them back
+  await measure('wokingham: open every group list of the two years', `for (const b of document.querySelectorAll('.yblock .bucket-head')) { if (b.getAttribute('aria-expanded') !== 'true') b.click(); } await new Promise(r => setTimeout(r, 600))`);
+  console.log('   n-squared rows: ' + JSON.stringify(await ev(`[...document.querySelectorAll('.yblock .lines li')].filter(li => /payment run/.test(li.textContent)).map(li => li.innerText.replace(/\\s+/g, ' ').slice(0, 900))`)));
+  console.log('   care captions on screen: ' + await ev(`document.querySelectorAll('.yblock .care').length`) + ', bucket heads: ' + JSON.stringify(await ev(`[...document.querySelectorAll('.yblock .bucket-head')].map(b => b.innerText.replace(/\\s+/g, ' ')).filter(t => /Publication quirk|Unclear|Standing|Unreconciled/.test(t)).slice(0, 8)`)));
+  await shot('wokingham-quirk', '.yblock .bucket', 1800);
+  await measure('wokingham: open the social care panel (4 small files)', `document.querySelector('.scare .check-head').click(); await window.__waitFor('.scare .lines li', '', 60000)`);
+  console.log('   ' + await ev(`document.querySelector('.scare .summary').innerText.slice(0, 400)`));
+  await shot('wokingham-socialcare', '.scare', 3200);
+  await measure('wokingham: choose another year in the provider list', `const s = document.querySelectorAll('.scare select')[1]; s.value = s.options[0].value; s.dispatchEvent(new Event('change', { bubbles: true })); await new Promise(r => setTimeout(r, 120))`);
+  await measure('wokingham: open a provider company record', `document.querySelector('.scare .srcbtn').click(); await window.__waitFor('.scare .chrec', '', 5000)`);
+  console.log('   company record: ' + await ev(`document.querySelector('.scare .chrec').innerText.slice(0, 400)`));
+}
+
 console.log('\n--- CW-PERF console lines from the page ---');
 perf.filter(l => /load |reread/.test(l)).forEach(l => console.log(l));
 fs.writeFileSync(path.join(process.env.TEMP, `cw-load-result-cpu${CPU}-net${NET_KBPS}.json`), JSON.stringify({ cpu: CPU, netKbps: NET_KBPS, rtt: RTT, rows }, null, 1));
