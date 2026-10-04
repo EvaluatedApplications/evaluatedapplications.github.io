@@ -18,12 +18,68 @@ if (args.Length > 1 && args[1] == "props")
 }
 
 Directory.CreateDirectory(outDir);
-// The councils the page ships: those the engine knows AND that have a phone export folder. A council the scanner has taken on but not yet exported
-// is left out, and said so, until its web_export exists; it is never given a slug or a half-built page.
-var published = SupportedCouncils.Everyone.Where(c => TrySlug(c.Name) is string s && Directory.Exists(Path.Combine(webExport, s))).ToList();
-foreach (var c in SupportedCouncils.Everyone.Where(c => !published.Contains(c))) Console.WriteLine($"NOT SHIPPED (no web_export folder or no slug): {c.Name}");
+// The councils the page ships are DISCOVERED, never listed here: a council is shipped when web_export/index.csv has a row for it (the row's first column is
+// its slug, the name of its web_export folder) AND the engine has a profile whose name matches that slug. Nothing to add per council: no slug table, no page edit.
+// A slug with no profile, or a profile with no row, is printed and left out until both exist; it is never given a half-built page.
+// A profile matches a slug when the slug is the name's words run together ("Bracknell Forest Council" holds "bracknellforest", "City of York Council" holds "york")
+// or the initials of its capitalised words ("Royal Borough of Windsor and Maidenhead" is "rbwm"). Two matches for one slug stop the run.
+var indexLines = File.ReadAllLines(Path.Combine(webExport, "index.csv"), Encoding.UTF8).Where(l => l.Length > 0).ToList();
+var indexHeader = indexLines[0];
+var indexRows = indexLines.Skip(1).Select(l => l.Split(',')).Where(r => Directory.Exists(Path.Combine(webExport, r[0]))).ToList();
+var slugOf = new Dictionary<string, string>();                      // profile name -> slug
+var rowOf = new Dictionary<string, string[]>();                     // slug -> its index.csv row
+// A council the scanner is still working on has a row and a stub profile ("Profile text pending the first run"): it is HELD until the profile is written, so a half-onboarded
+// council is never published by a rebuild. COUNCIL_HOLD (comma-separated slugs) holds one by hand.
+var held = (Environment.GetEnvironmentVariable("COUNCIL_HOLD") ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToHashSet();
+var heldKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);   // slug and full name of every council with an index row that is not shipped: its rows are also dropped from the cross files
+foreach (var row in indexRows)
+{
+    var hits = SupportedCouncils.Everyone.Where(c => NameMatchesSlug(c.Name, row[0])).ToList();
+    if (hits.Count == 0) { Console.WriteLine($"NOT SHIPPED (no profile in the engine matches the slug): {row[0]}"); heldKeys.Add(row[0]); continue; }
+    if (hits.Count > 1) throw new InvalidOperationException($"slug '{row[0]}' matches {hits.Count} profiles: {string.Join("; ", hits.Select(h => h.Name))}");
+    if (held.Contains(row[0]) || hits[0].VerificationNote.StartsWith("Profile text pending", StringComparison.OrdinalIgnoreCase))
+    { Console.WriteLine($"HELD (profile text not written yet, or COUNCIL_HOLD): {row[0]}"); heldKeys.Add(row[0]); heldKeys.Add(hits[0].Name); continue; }
+    if (slugOf.ContainsKey(hits[0].Name)) throw new InvalidOperationException($"profile '{hits[0].Name}' matches two slugs");
+    slugOf[hits[0].Name] = row[0]; rowOf[row[0]] = row;
+}
+// The page lists councils in the order the engine took them on, so a new council lands at the end with no ordering to keep.
+var published = SupportedCouncils.Everyone.Where(c => slugOf.ContainsKey(c.Name)).ToList();
+foreach (var c in SupportedCouncils.Everyone.Where(c => !slugOf.ContainsKey(c.Name))) Console.WriteLine($"NOT SHIPPED (no web_export row or folder): {c.Name}");
 
 long rawTotal = 0, gzTotal = 0; int files = 0, txSlices = 0;
+
+// ---------------------------------------------------------------------------------------------------------------------------------------
+// FACTS, measured from the export itself (written into each council's profile as "facts"; the page turns them into the "What cannot be checked" list,
+// the per-year "not available" lines and the check notices, so none of that is typed per council). One pass over every transaction slice and every
+// exception file of a full build; a "profiles" run reuses the facts the last full build wrote into profiles.json.gz.
+//   noA          no stated invoice amount to compare with: no Schedule A row anywhere, and no slice row whose Gross differs from Net or carries a VAT amount
+//   noD          no Schedule D row anywhere (the shared-transaction-number check found nothing)
+//   noNumber     no month publishes a transaction number (every row carries the scanner's "(no number published) N" placeholder)
+//   numbered*    numbers published from one month on and none before it (placeholders in every earlier month): first and last numbered month and their count
+//   counterIds   the number is a per-file counter: in 80% or more of the months the smallest trailing number among the ids is 1 and the trailing numbers are nearly all different
+//                (it restarts every month: Leeds "2406-00001", Birmingham/West Berkshire/Sheffield synthetic row numbers; Durham's "4219343-RES-12-2023-324" repeats its line numbers, so it is not one). Such a number is not a reference one transaction can share, which is how the engine's own notes call it blind
+//   dByNumbering noD with real numbers published (not none, not partial, not counters): every number sits on one payee and one date, a result of how the numbers are given
+//   dYears       financial years with at least one Schedule D row
+//   noBudget     every declared-spend unit of the council has no published Revenue Outturn (export/budget_units.csv), or it has none: the comparison cannot run
+//   redacted/pooled  rows whose payee is redacted (the engine's own test) / is a pooled label ("Redacted (pooled label): ...")
+// ---------------------------------------------------------------------------------------------------------------------------------------
+var acc = new Dictionary<string, FactsAcc>();
+FactsAcc Acc(string slug) { if (!acc.TryGetValue(slug, out var a)) acc[slug] = a = new FactsAcc(); return a; }
+var budgetNote = new Dictionary<string, (int Units, int NoOutturn)>();
+{
+    var bu = Path.Combine(export, "budget_units.csv");
+    if (File.Exists(bu))
+    {
+        var recs = ParseCsv(File.ReadAllText(bu, Encoding.UTF8));
+        int cC = recs[0].IndexOf("Council"), cN = recs[0].IndexOf("Note");
+        foreach (var r in recs.Skip(1))
+        {
+            if (r.Count <= Math.Max(cC, cN)) continue;
+            budgetNote.TryGetValue(r[cC], out var t);
+            budgetNote[r[cC]] = (t.Units + 1, t.NoOutturn + (r[cN].StartsWith("no published Revenue Outturn", StringComparison.OrdinalIgnoreCase) ? 1 : 0));
+        }
+    }
+}
 
 long WriteGz(string name, byte[] data)
 {
@@ -147,6 +203,7 @@ HashSet<long> CareGroupsOf(string dir, string month, List<string> files)
     sb.Append('@').Append(month).Append('\n').Append(SlimHeader).Append('\n');
     var seen = new HashSet<(char, long)>();
     var careSet = slug == "wokingham" ? CareGroupsOf(dir, month, files) : null;
+    var facts = Acc(slug);
     int rowsOut = 0;
     foreach (var f in files)
     {
@@ -162,6 +219,7 @@ HashSet<long> CareGroupsOf(string dir, string month, List<string> files)
             var r = recs[k];
             if (r.Count < 12) continue;      // the page skips these too
             string sched = At(r, cS);
+            if (sched == "A") facts.A++; else if (sched == "D") { facts.D++; facts.DYears.Add(FinancialYear(month)); }
             bool hasGid = long.TryParse(At(r, cG), System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var gid);
             bool first = !(hasGid && sched.Length > 0 && sched[0] != 'A') || seen.Add((sched[0], gid));
             string net = At(r, cNet), tg = At(r, cTG);
@@ -244,7 +302,10 @@ void WriteRaw(string name, byte[] data)
 bool profilesOnly = args.Length > 1 && args[1] == "profiles";
 
 // index.csv and each months.csv stay plain text (tiny, read first). Exception slices are gzipped.
-if (!profilesOnly) WriteRaw("index.csv", File.ReadAllBytes(Path.Combine(webExport, "index.csv")));
+// The page's council list, count and names come from this file: the export's own columns, then the profile's full Name and a Short name, one row per SHIPPED council in the engine's order.
+if (!profilesOnly)
+    WriteRaw("index.csv", new UTF8Encoding(false).GetBytes(indexHeader + ",Name,Short\n" +
+        string.Join("", published.Select(c => string.Join(",", rowOf[Slug(c.Name)]) + "," + Q(c.Name) + "," + Q(ShortName(c.Name)) + "\n"))));
 foreach (var slug in profilesOnly ? Array.Empty<string>() : published.Select(c => Slug(c.Name)))
 {
     var dir = Path.Combine(webExport, slug);
@@ -255,7 +316,9 @@ foreach (var slug in profilesOnly ? Array.Empty<string>() : published.Select(c =
     {
         var n = Path.GetFileName(f);
         if (n == "months.csv" || n.Contains(".exceptions")) continue;
-        WriteGz($"{slug}/{n}", File.ReadAllBytes(f));
+        var bytes = File.ReadAllBytes(f);
+        ScanSlice(Acc(slug), n[..Math.Min(7, n.Length)], bytes);
+        WriteGz($"{slug}/{n}", bytes);
         txSlices++;
     }
 }
@@ -273,7 +336,7 @@ if (!profilesOnly)
 foreach (var n in profilesOnly ? Array.Empty<string>() : new[] { "transaction_twins", "cross_file_repeats", "file_duplication", "within_txn_repeats", "budget_reconciliation",
                           "budget_units", "budget_test", "budget_test_stage2", "budget_test_stage2b", "budget_test_stage2c", "budget_test_pooled", "budget_test_pooled_all", "budget_test_pooled_all2",
                           "crossref_alias_flows", "supplier_alias_grades", "debt_ledger", "debt_sink", "payment_misfits" })
-    WriteGz($"cross/{n}.csv", File.ReadAllBytes(Path.Combine(export, n + ".csv")));
+    WriteGz($"cross/{n}.csv", WithoutHeldCouncils(n, File.ReadAllBytes(Path.Combine(export, n + ".csv"))));
 
 // Profile text is the virtual-customer's own working notes. Before it goes on the public page: (1) the engine's internal names for the
 // three rules become the page's own words, (2) sentences that point at the working files themselves (session numbers, checklist steps,
@@ -312,11 +375,38 @@ string? Clean(string slugName, string text)
 var cleanQuirks = published.ToDictionary(c => c.Name, c => c.KnownQuirks.Select(q => Clean(c.Name, q)).Where(q => q is not null).Cast<string>().ToArray());
 var cleanVerif = published.ToDictionary(c => c.Name, c => Clean(c.Name + " verification", c.VerificationNote) ?? "");
 
+// Facts per council (see the FACTS comment above). A "profiles" run measures nothing: it carries over what the last full build wrote.
+var oldFacts = new Dictionary<string, JsonElement>();
+if (profilesOnly)
+{
+    var oldPath = Path.Combine(outDir, "profiles.json.gz");
+    if (File.Exists(oldPath))
+    {
+        using var gz = new GZipStream(File.OpenRead(oldPath), CompressionMode.Decompress);
+        using var doc = JsonDocument.Parse(gz);
+        foreach (var e in doc.RootElement.EnumerateArray())
+            if (e.TryGetProperty("slug", out var s) && e.TryGetProperty("facts", out var f)) oldFacts[s.GetString()!] = f.Clone();
+    }
+}
+object? FactsOf(string slug)
+{
+    if (profilesOnly)
+    {
+        if (!oldFacts.TryGetValue(slug, out var kept)) throw new InvalidOperationException($"{slug}: no facts in the last profiles.json.gz; run a full build first (not the profiles-only run)");
+        return kept;
+    }
+    var a = Acc(slug);
+    budgetNote.TryGetValue(slug, out var bn);
+    return a.ToFacts(bn.Units == 0 || bn.NoOutturn == bn.Units);
+}
+
 // Profiles: the councils' own text.
 var profiles = published.Select(c => new Dictionary<string, object?>
 {
     ["slug"] = Slug(c.Name),
     ["name"] = c.Name,
+    ["short"] = ShortName(c.Name),
+    ["facts"] = FactsOf(Slug(c.Name)),
     ["page"] = c.TransparencyPageUrl,
     ["howTo"] = c.HowToFindTheFile,
     ["quirks"] = cleanQuirks[c.Name],
@@ -339,15 +429,176 @@ Console.WriteLine($"largest file shipped: {biggest.FullName} {biggest.Length / 1
 if (biggest.Length > 50L * 1048576) { Console.WriteLine("A FILE IS OVER 50 MB"); return 1; }
 return 0;
 
-static string Slug(string name) => TrySlug(name) ?? throw new InvalidOperationException("no slug for " + name);
-static string? TrySlug(string name)
+// The cross-council files are written by the scanner for every council it has taken on, including one still being onboarded (held above). A row of such a council must not be
+// published before the council is, so rows whose Council / Payer / PayerSlug column names a held council are dropped; a file with no such row is shipped byte for byte.
+byte[] WithoutHeldCouncils(string name, byte[] data)
 {
-    var n = name.ToLowerInvariant();
-    foreach (var (key, slug) in new[] { ("windsor", "rbwm"), ("bracknell", "bracknellforest"), ("west berkshire", "westberkshire"), ("wokingham", "wokingham"),
-        ("merton", "merton"), ("reading", "reading"), ("birmingham", "birmingham"), ("leeds", "leeds"), ("sheffield", "sheffield"),
-        ("bradford", "bradford"), ("liverpool", "liverpool"), ("bristol", "bristol"), ("wakefield", "wakefield"), ("coventry", "coventry"),
-        ("durham", "durham"), ("kirklees", "kirklees"), ("leicester", "leicester"), ("cornwall", "cornwall"), ("nottingham", "nottingham"),
-        ("wirral", "wirral"), ("newcastle", "newcastle"), ("surrey", "surrey"), ("essex", "essex"), ("hertfordshire", "hertfordshire"), ("stockport", "stockport"), ("york", "york") })
-        if (n.Contains(key)) return slug;
-    return null;
+    if (heldKeys.Count == 0) return data;
+    string text = new UTF8Encoding(false).GetString(data);
+    int pos = 0;
+    string? Record()   // the next physical record, raw (a quoted field may hold a line break)
+    {
+        if (pos >= text.Length) return null;
+        int start = pos; bool q = false;
+        while (pos < text.Length) { char c = text[pos++]; if (c == '"') q = !q; else if (c == '\n' && !q) break; }
+        return text[start..pos];
+    }
+    string FieldAt(string rec, int col)
+    {
+        var sb = new StringBuilder(); int f = 0; bool q = false;
+        for (int i = 0; i < rec.Length; i++)
+        {
+            char c = rec[i];
+            if (c == '"') { if (q && i + 1 < rec.Length && rec[i + 1] == '"') { if (f == col) sb.Append('"'); i++; } else q = !q; }
+            else if (c == ',' && !q) { if (f == col) return sb.ToString(); f++; }
+            else if ((c == '\r' || c == '\n') && !q) break;
+            else if (f == col) sb.Append(c);
+        }
+        return f == col ? sb.ToString() : "";
+    }
+    var header = Record(); if (header is null) return data;
+    var names = ParseCsv(header)[0];
+    int col = names.FindIndex(x => x is "Council" or "Payer" or "PayerSlug");
+    if (col < 0) return data;
+    var kept = new StringBuilder(header); int dropped = 0;
+    for (var r = Record(); r is not null; r = Record())
+        if (heldKeys.Contains(FieldAt(r, col).Trim())) dropped++; else kept.Append(r);
+    if (dropped == 0) return data;
+    Console.WriteLine($"HELD ROWS DROPPED from cross/{name}.csv: {dropped}");
+    return new UTF8Encoding(false).GetBytes(kept.ToString());
+}
+string Slug(string name) => slugOf.TryGetValue(name, out var s) ? s : throw new InvalidOperationException("no slug for " + name);
+
+// "Bracknell Forest Council" holds "bracknellforest"; "Royal Borough of Windsor and Maidenhead" is "rbwm" (the initials of its capitalised words).
+static bool NameMatchesSlug(string name, string slug)
+{
+    string run = new string(name.Where(char.IsLetter).ToArray()).ToLowerInvariant();
+    if (run.Contains(slug)) return true;
+    string initials = new string(name.Split(' ', StringSplitOptions.RemoveEmptyEntries).Where(w => char.IsUpper(w[0])).Select(w => char.ToLowerInvariant(w[0])).ToArray());
+    return initials == slug;
+}
+
+// The name the page uses in headings and links: "Wokingham Borough Council" is "Wokingham", "City of York Council" is "York", "London Borough of Merton" is "Merton",
+// "Royal Borough of Windsor and Maidenhead" is "RBWM". Only the words every council name carries are dropped; nothing is listed per council.
+static string ShortName(string name)
+{
+    if (name.StartsWith("Royal Borough of ")) return new string(name.Split(' ', StringSplitOptions.RemoveEmptyEntries).Where(w => char.IsUpper(w[0])).Select(w => w[0]).ToArray());
+    string s = name;
+    foreach (var lead in new[] { "City of ", "London Borough of " }) if (s.StartsWith(lead)) s = s[lead.Length..];
+    foreach (var tail in new[] { " Metropolitan District Council", " Metropolitan Borough Council", " Borough Council", " City Council", " County Council", " Council" })
+        if (s.EndsWith(tail)) { s = s[..^tail.Length]; break; }
+    return s;
+}
+
+// One byte-level pass over a transaction slice (columns found by header name; nothing is allocated per field but the payee and the id when needed).
+static void ScanSlice(FactsAcc a, string month, byte[] d)
+{
+    int i = 0, n = d.Length;
+    if (n >= 3 && d[0] == 0xEF && d[1] == 0xBB && d[2] == 0xBF) i = 3;
+    var st = new int[40]; var ln = new int[40]; var qd = new bool[40];
+    int cId = -1, cNet = -1, cGr = -1, cVat = -1, cSup = -1;
+    bool header = true;
+    long rows = 0, ph = 0;
+    if (a.CurMonth != month) a.FlushMonth();
+    a.CurMonth = month;
+    ReadOnlySpan<byte> placeholder = "(no number published)"u8;
+    string Str(int f) { var sp = d.AsSpan(st[f], ln[f]); var s = Encoding.UTF8.GetString(sp); return qd[f] ? s.Replace("\"\"", "\"") : s; }
+    while (i < n)
+    {
+        int f = 0; bool end = false;
+        while (!end)
+        {
+            int s = i, len; bool q = false;
+            if (i < n && d[i] == (byte)'"')
+            {
+                q = true; i++; s = i;
+                while (i < n) { if (d[i] == (byte)'"') { if (i + 1 < n && d[i + 1] == (byte)'"') { i += 2; continue; } break; } i++; }
+                len = i - s; if (i < n) i++;
+            }
+            else { while (i < n && d[i] != (byte)',' && d[i] != (byte)'\n' && d[i] != (byte)'\r') i++; len = i - s; }
+            if (f < 40) { st[f] = s; ln[f] = len; qd[f] = q; }
+            f++;
+            if (i >= n) end = true;
+            else if (d[i] == (byte)',') i++;
+            else { if (d[i] == (byte)'\r') i++; if (i < n && d[i] == (byte)'\n') i++; end = true; }
+        }
+        if (f == 1 && ln[0] == 0) continue;
+        if (header)
+        {
+            header = false;
+            for (int k = 0; k < Math.Min(f, 40); k++)
+                switch (Str(k)) { case "TransactionId": cId = k; break; case "Net": cNet = k; break; case "Gross": cGr = k; break; case "VatAmount": cVat = k; break; case "SupplierName": cSup = k; break; }
+            if (cId < 0 || cNet < 0 || cGr < 0 || cVat < 0 || cSup < 0) throw new InvalidDataException("slice header lacks a column the facts need: " + month);
+            continue;
+        }
+        if (f <= Math.Max(Math.Max(cId, cNet), Math.Max(Math.Max(cGr, cVat), cSup))) continue;
+        rows++;
+        var idSpan = d.AsSpan(st[cId], ln[cId]);
+        bool isPh = idSpan.StartsWith(placeholder);
+        if (isPh) ph++;
+        else
+        {
+            int e = idSpan.Length, b = e;
+            while (b > 0 && idSpan[b - 1] >= (byte)'0' && idSpan[b - 1] <= (byte)'9') b--;
+            a.CurRows++;
+            if (b < e && e - b <= 18 && long.TryParse(Encoding.UTF8.GetString(idSpan[b..e]), out var cnt)) { a.CurSet.Add(cnt); if (cnt < a.CurMin) a.CurMin = cnt; }
+        }
+        var netSpan = d.AsSpan(st[cNet], ln[cNet]); var grSpan = d.AsSpan(st[cGr], ln[cGr]);
+        if (ln[cVat] > 0) a.Vat++;
+        if (grSpan.Length > 0 && netSpan.Length > 0 && !grSpan.SequenceEqual(netSpan))
+        {
+            if (decimal.TryParse(Encoding.UTF8.GetString(grSpan), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var g)
+                && decimal.TryParse(Encoding.UTF8.GetString(netSpan), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var nt)) { if (Math.Abs(g - nt) > 0.005m) a.GrossNe++; }
+            else a.GrossNe++;
+        }
+        var sup = Str(cSup);
+        if (CouncilAudit.AuditEngine.IsRedactedSupplier(sup)) { a.Redacted++; if (sup.Contains("(pooled label)", StringComparison.OrdinalIgnoreCase)) a.Pooled++; }
+    }
+    a.Rows += rows; a.Placeholders += ph;
+    if (month != "undated")
+    {
+        a.MonthRows.TryGetValue(month, out var t);
+        a.MonthRows[month] = (t.Rows + rows, t.Ph + ph);
+    }
+}
+
+sealed class FactsAcc
+{
+    public long A, D, Rows, Placeholders, GrossNe, Vat, Redacted, Pooled;
+    public SortedSet<string> DYears = new(StringComparer.Ordinal);
+    public SortedDictionary<string, (long Rows, long Ph)> MonthRows = new(StringComparer.Ordinal);
+    // the per-file counter test, one month at a time (slices arrive month by month): the smallest trailing number is 1 and the trailing numbers are nearly all different
+    public string CurMonth = ""; public long CurMin = long.MaxValue, CurRows; public HashSet<long> CurSet = new();
+    public int CounterMonths, CountedMonths;
+    public void FlushMonth()
+    {
+        if (CurMonth != "" && CurMonth != "undated" && CurRows >= 20)
+        {
+            CountedMonths++;
+            if (CurMin <= 1 && CurSet.Count * 10 >= CurRows * 6) CounterMonths++;
+        }
+        CurMonth = ""; CurMin = long.MaxValue; CurRows = 0; CurSet = new();
+    }
+
+    public Dictionary<string, object?> ToFacts(bool noBudget)
+    {
+        var numbered = MonthRows.Where(m => m.Value.Rows > 0 && m.Value.Ph * 2 <= m.Value.Rows).Select(m => m.Key).ToList();
+        var holders = MonthRows.Where(m => m.Value.Rows > 0 && m.Value.Ph * 2 > m.Value.Rows).Select(m => m.Key).ToList();
+        bool noNumber = Rows > 0 && numbered.Count == 0;
+        // numbers from one month on and none before it: every placeholder month precedes every numbered month
+        bool partial = numbered.Count > 0 && holders.Count > 0 && string.CompareOrdinal(holders[^1], numbered[0]) < 0;
+        bool noA = Rows > 0 && A == 0 && GrossNe == 0 && Vat == 0;
+        bool noD = Rows > 0 && D == 0;
+        FlushMonth();
+        bool counterIds = CountedMonths > 0 && CounterMonths * 10 >= CountedMonths * 8;
+        return new Dictionary<string, object?>
+        {
+            ["rows"] = Rows, ["noA"] = noA, ["noD"] = noD, ["noNumber"] = noNumber,
+            ["numberedFirst"] = partial ? numbered[0] : null, ["numberedLast"] = partial ? numbered[^1] : null, ["numberedMonths"] = partial ? numbered.Count : 0,
+            ["counterIds"] = counterIds,
+            ["dByNumbering"] = noD && !noNumber && !partial && !counterIds,
+            ["dYears"] = DYears.ToArray(),
+            ["noBudget"] = noBudget, ["redacted"] = Redacted, ["pooled"] = Pooled,
+        };
+    }
 }

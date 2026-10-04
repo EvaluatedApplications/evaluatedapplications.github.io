@@ -35,20 +35,13 @@
         @foreach (var sch in Schedules)
         {
             var buckets = U.Scan.Buckets.Where(b => b.Schedule == sch).ToList();
-            bool na = (sch == "A" && NoScheduleA.Contains(Slug)) || (sch == "D" && NoScheduleD.Contains(Slug));
+            bool na = IsNa(Slug, sch);
             if (buckets.Count == 0 && !na) continue;
             <div class="sched">
                 <h4>@ScheduleTitle(sch)</h4>
                 <p class="plain">@ScheduleDefinition(sch)</p>
                 @if (NumberingNote(Slug, sch, U.Year) is { } numNote) { <p class="na">@numNote</p> }
-                @if (na && NotAvailable(Slug, sch, U.Year) is { } naText)
-                {
-                    <p class="na">@naText</p>
-                }
-                else if (na)
-                {
-                    <p class="na">Not available for this council: its published file @(sch == "A" ? (NoTransactionNumber.Contains(Slug) ? "has no transaction number, so one transaction's payments cannot be added up and set against a stated amount" : "has no stated invoice or gross amount to compare the payments with") : NoDByNumbering.Contains(Slug) ? "gives every transaction number to one payee on one date, or to a single row" : "has no transaction reference to group by"), so this rule @(sch == "D" && NoDByNumbering.Contains(Slug) ? "finds nothing by construction" : "cannot run"). That is a limit of the file, not a clean result.</p>
-                }
+                @if (na && NotAvailable(Slug, sch, U.Year) is { } naText) { <p class="na">@naText</p> }
                 @if (buckets.Any(b => b.SupplierFurnished))
                 {
                     <p class="caption">This council's transaction numbers are furnished by suppliers (invoice numbers). Two suppliers can simply have used the same number, so a group below is not read as one payment going to two payees.</p>

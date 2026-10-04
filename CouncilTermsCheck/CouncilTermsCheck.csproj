@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Regression check for the Council Spending page's wording. Compiles the page's own CouncilTerms / CouncilFacts / CouncilOverrides (plain C#, no Blazor) and prints, for every
+       council in a council-web folder, the "What cannot be checked" list, each financial year's caption, and the not-available / numbering lines of the invoice-amount and
+       shared-number blocks. The facts are read from the shipped profiles.json.gz and the years from each council's years.csv, so it prints what a visitor would be shown.
+       Run:  dotnet run -c Release with the project path CouncilTermsCheck, then the arguments: the council-web folder, the output file, optionally a comma list of slugs
+       then diff out.txt against golden.txt (a council added since is simply extra lines). Offline tool: nothing here is part of the published site. -->
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="..\Showroom\Services\CouncilTerms.cs" />
+    <Compile Include="..\Showroom\Services\CouncilFacts.cs" />
+    <Compile Include="..\Showroom\Services\CouncilOverrides.cs" />
+  </ItemGroup>
+
+</Project>

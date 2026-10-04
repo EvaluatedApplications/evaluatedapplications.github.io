@@ -25,6 +25,11 @@ public static class CouncilTerms
     public static string NumLines(long n) => Plural(n, "line", "lines");
     public static string Pct(decimal fraction) => (fraction * 100m).ToString("0.##", GB) + "%";
 
+    static readonly string[] Ones = { "zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen", "seventeen", "eighteen", "nineteen" };
+    static readonly string[] Tens = { "", "", "twenty", "thirty", "forty", "fifty", "sixty", "seventy", "eighty", "ninety" };
+    /// <summary>A count in words for running prose ("twenty-seven"); digits above ninety-nine. The council count is computed, never typed.</summary>
+    public static string Words(int n) => n < 0 || n > 99 ? Num(n) : n < 20 ? Ones[n] : Tens[n / 10] + (n % 10 == 0 ? "" : "-" + Ones[n % 10]);
+
     /// <summary>Pay dates arrive as ISO text, as dd-MMM-yy, or as a spreadsheet day-number (Reading's older files); show all as "4 May 2021".</summary>
     public static string Date(string s)
     {
@@ -151,108 +156,123 @@ public static class CouncilTerms
         _ => "",
     };
 
-    /// <summary>Schedules that cannot run for a council because its file has no VAT split (A) or no transaction reference (D). "Not available", never "clean".</summary>
-    public static readonly HashSet<string> NoScheduleA = new()
-        { "reading", "bracknellforest", "westberkshire", "rbwm", "birmingham", "leeds", "sheffield", "bradford", "liverpool", "bristol",
-          "wakefield", "coventry", "durham", "kirklees", "leicester", "cornwall", "nottingham", "wirral", "newcastle", "surrey", "essex", "hertfordshire", "stockport", "york" };
-    // durham, kirklees, newcastle and hertfordshire: every transaction number sits against one payee on one date, so the shared-number check is empty by construction in the profiles
-    public static readonly HashSet<string> NoScheduleD = new() { "birmingham", "westberkshire", "sheffield", "leeds", "durham", "kirklees", "newcastle", "surrey", "essex", "hertfordshire", "stockport" };
-    /// <summary>The members of NoScheduleD that do publish a number: the shared-number check is empty because of how the numbers are given, not because they are missing.</summary>
-    public static readonly HashSet<string> NoDByNumbering = new() { "durham", "kirklees", "newcastle", "hertfordshire" };
-    /// <summary>Councils whose file publishes no transaction number at all (the scanner gives each row a placeholder "(no number published) N"): every check that keys on a transaction number cannot run.</summary>
-    public static readonly HashSet<string> NoTransactionNumber = new() { "surrey", "essex" };
+    // ----------------------------------------------------------------------------------------------------------------------------------
+    // What cannot be checked. Nothing below names a council: every statement is built from the FACTS the builder measured from the council's own export and wrote
+    // into its profile (CouncilFacts: no stated invoice amount, no Schedule D row, no transaction number, numbers from one month on, per-file counters, no
+    // declared-spend unit). The only per-council wording left is CouncilOverrides: prose that cannot be derived (a column's name, York's numbering, a threshold change).
+    // ----------------------------------------------------------------------------------------------------------------------------------
 
-    /// <summary>Stockport publishes a transaction number only from April 2025 (17 of its 115 monthly files, to August 2026): not in NoTransactionNumber, because the
-    /// two number-keyed cross-council checks DO run on those months. Before then they cannot run, which the year caption and CannotCheck say.</summary>
-    public static bool HasNumber(string slug, string year) =>
-        slug == "stockport" ? year.Length == 7 && year[4] == '-' && string.CompareOrdinal(year, "2025-26") >= 0 : !NoTransactionNumber.Contains(slug);
+    /// <summary>The page-top "What cannot be checked" list is built for the councils the declared-spend test does not cover (no unit has a published Revenue Outturn): the
+    /// shape every page has had since that list was added. A council the test does cover states the same invoice-amount and shared-number limits per year instead. Set true
+    /// to print the derived list for every council (the older councils would then each gain a few lines that repeat what their year blocks already say).</summary>
+    public const bool ListForEveryCouncil = false;
 
-    /// <summary>City of York: in 2011/12 to 2017/18 the transaction number is a payment-run reference shared by unrelated payees paid on the same day, and in 2024/25 each
-    /// "202425CRCR" number is shared by two lines of different payees. In those years Schedule D reads the numbering, not the payments.</summary>
-    public static bool YorkSharedNumbering(string slug, string year) =>
-        slug == "york" && year.Length == 7 && year[4] == '-' && (string.CompareOrdinal(year, "2018-19") < 0 || year == "2024-25");
+    /// <summary>True when this schedule cannot run for this council ("A": no stated invoice amount to compare; "D": the shared-transaction-number check found nothing). "Not available", never "clean".</summary>
+    public static bool IsNa(string slug, string sch) => sch switch { "A" => CouncilFacts.Of(slug).NoA, "D" => CouncilFacts.Of(slug).NoD, _ => false };
 
-    /// <summary>A caption for the shared-transaction-number block when a council's numbering, not its payments, produces the groups; null otherwise.</summary>
-    public static string? NumberingNote(string slug, string sch, string year)
+    static bool DByNumbering(string slug) => CouncilOverrides.For(slug)?.DByNumbering ?? CouncilFacts.Of(slug).DByNumbering;
+
+    /// <summary>Whether a financial year of a council whose numbers begin part-way through its history falls in the numbered stretch; true for every other council.</summary>
+    public static bool HasNumber(string slug, string year)
     {
-        if (sch != "D" || !YorkSharedNumbering(slug, year)) return null;
-        return year == "2024-25"
-            ? "Read this block as a fact about the numbering, not about the payments. In this year's file the numbers beginning \"202425CRCR\" are each used by exactly two lines of different payees, so a group here is two unrelated lines that were given the same number. It is not one payment going to two payees, and no group below is an exception on that ground."
-            : "Read this block as a fact about the numbering, not about the payments. In this year's file the transaction number is a payment-run reference, shared by unrelated payees paid on the same day, so a group here is a payment run, not one payment going to several payees. No group below is an exception on that ground.";
+        var f = CouncilFacts.Of(slug);
+        if (f.NoNumber) return false;
+        if (!f.Partial) return true;
+        return IsYear(year) && string.CompareOrdinal(year, FinancialYearOf(f.NumberedFirst!)) >= 0;
+    }
+    static bool IsYear(string y) => y.Length == 7 && y[4] == '-' && char.IsDigit(y[0]);
+    /// <summary>The financial year (April to March) a month key belongs to: "2023-04" and "2024-03" are both "2023-24"; anything else is "undated".</summary>
+    public static string FinancialYearOf(string month)
+    {
+        if (month.Length != 7 || !int.TryParse(month.AsSpan(0, 4), out var y) || !int.TryParse(month.AsSpan(5, 2), out var m)) return "undated";
+        int s = m >= 4 ? y : y - 1;
+        return $"{s}-{(s + 1) % 100:00}";
     }
 
-    /// <summary>The "not available" line of a Schedule A or D block for the one council whose answer depends on the year (Stockport); null for every other council.</summary>
+    /// <summary>A caption for the shared-transaction-number block of a year in which the council's numbering, not its payments, produces the groups (the years with Schedule D rows, for a
+    /// council whose prose says so); null otherwise.</summary>
+    public static string? NumberingNote(string slug, string sch, string year)
+    {
+        if (sch != "D" || !CouncilFacts.Of(slug).DYears.Contains(year)) return null;
+        return CouncilOverrides.For(slug)?.NumberingNote?.Invoke(year);
+    }
+
+    /// <summary>The "not available" line of a Schedule A or D block for a year; null when the schedule can run for this council (nothing to say beyond the groups).</summary>
     public static string? NotAvailable(string slug, string sch, string year)
     {
-        if (slug != "stockport") return null;
-        if (sch == "A")
-            return "Not available for this council: its published file has one amount column (Gross equals Net, no VAT split), so there is no stated invoice amount to compare the payments with, and this rule cannot run. That is a limit of the file, not a clean result.";
-        return HasNumber(slug, year)
-            ? "Not available for most of this council's history, and nothing found here: its file gives a transaction number only from April 2025. In the months that carry one, this rule found no number against more than one payee or pay date. That is a limit of the file, not a sign the rule was clean for earlier years."
-            : "Not available for this council: its published file has no transaction number before April 2025, so there is no reference to group by and this rule cannot run. That is a limit of the file, not a clean result.";
+        if (!IsNa(slug, sch)) return null;
+        var f = CouncilFacts.Of(slug);
+        if (sch == "A" && CouncilOverrides.For(slug)?.NotAvailableA is { } a) return a;
+        if (sch == "D" && f.Partial)
+        {
+            string from = MonthName(f.NumberedFirst!);
+            return HasNumber(slug, year)
+                ? $"Not available for most of this council's history, and nothing found here: its file gives a transaction number only from {from}. In the months that carry one, this rule found no number against more than one payee or pay date. That is a limit of the file, not a sign the rule was clean for earlier years."
+                : $"Not available for this council: its published file has no transaction number before {from}, so there is no reference to group by and this rule cannot run. That is a limit of the file, not a clean result.";
+        }
+        return "Not available for this council: its published file "
+            + (sch == "A" ? (f.NoNumber ? "has no transaction number, so one transaction's payments cannot be added up and set against a stated amount" : "has no stated invoice or gross amount to compare the payments with")
+               : DByNumbering(slug) ? "gives every transaction number to one payee on one date, or to a single row" : "has no transaction reference to group by")
+            + ", so this rule " + (sch == "D" && DByNumbering(slug) ? "finds nothing by construction" : "cannot run") + ". That is a limit of the file, not a clean result.";
     }
 
     /// <summary>The reason a cross-council check cannot run for this council, or null when it can. Said on the page instead of "no rows", which would read as a clean result.</summary>
     public static string? CheckCannotRun(string slug, string checkId) =>
-        NoTransactionNumber.Contains(slug) && checkId is "twins" or "withintxn"
+        CouncilFacts.Of(slug).NoNumber && checkId is "twins" or "withintxn"
             ? "This check cannot run for this council: its file publishes no transaction number, and this check compares transaction numbers. That is a limit of the file, not a clean result."
             : null;
 
     /// <summary>Plain statements, shown at the top of a council's page, of what cannot be checked for it and why. Nothing here says anything about the payments themselves.</summary>
     public static List<string> CannotCheck(string slug)
     {
+        var f = CouncilFacts.Of(slug);
         var l = new List<string>();
-        if (NoTransactionNumber.Contains(slug))
+        if (!ListForEveryCouncil && !f.NoBudget) return l;
+        var ov = CouncilOverrides.For(slug);
+        foreach (var item in ov?.CannotCheck ?? new[] { "{A}", "{number}", "{budget}", "{redaction}" })
+        {
+            switch (item)
+            {
+                case "{A}": if (f.NoNumber) break; if (f.NoA) l.Add(ov?.ALine ?? ALine); break;
+                case "{number}": AddNumberLines(slug, f, l); break;
+                case "{budget}": if (f.NoBudget) l.Add(BudgetLine); break;
+                case "{redaction}": if (f.Redacted > 0) l.Add(f.Pooled > 0 ? PooledLine : RedactedLine); break;
+                default: l.Add(item); break;
+            }
+        }
+        return l;
+    }
+
+    const string ALine = "The invoice-amount check cannot run: the file gives no VAT amount and Gross equals Net on every line, so there is no stated invoice amount to compare the payments with.";
+    const string BudgetLine = "The declared-spend comparison cannot run: no government Revenue Outturn figure is held here for this council, so no year is set against the file total, and this council is in none of the groups of the pre-registered test.";
+    const string RedactedLine = "Lines whose payee the council redacts are left out of every check and only counted. The checks say nothing about those lines.";
+    const string PooledLine = "Lines whose payee is a pooled label (one label standing for many people, such as a foster care payment) are shown by the scanner as \"Redacted (pooled label): <label>\" and are left out of every check. The checks say nothing about those lines.";
+
+    static void AddNumberLines(string slug, CouncilFacts f, List<string> l)
+    {
+        if (f.NoNumber)
         {
             l.Add("The invoice-amount check and the shared-transaction-number check cannot run: the file publishes no transaction number, so one transaction's payments cannot be added up or compared. They are listed under each year as \"not available\", not as clean.");
             l.Add("Two cross-council checks need a transaction number and cannot run either: transactions published twice under two numbers, and the same line repeated inside one transaction.");
             l.Add("The repeated-payment check is the only repeat test that can run, and it has no transaction number to tell two payments apart: a group is the same payee, amount and description on the same date.");
         }
-        else if (slug == "hertfordshire")
+        else if (f.Partial)
         {
-            l.Add("The invoice-amount check cannot run: the file has one amount column (Net Amount), so there is no stated invoice or gross amount to compare the payments with.");
+            string from = MonthName(f.NumberedFirst!), to = MonthName(f.NumberedLast!);
+            l.Add($"No transaction number is published before {from} (the {f.NumberedMonths} months from {from} to {to} carry one). For every earlier month the shared-transaction-number check cannot run, and neither can the two cross-council checks that need a number: transactions published twice under two numbers, and the same line repeated inside one transaction. They are listed as not available, not as clean. In the months with a number they run"
+                + (f.NoD ? ", and the transaction-number check found no number against more than one payee or pay date." : "."));
+        }
+        else if (f.NoD && (CouncilOverrides.For(slug)?.DByNumbering ?? f.DByNumbering))
             l.Add("The shared-transaction-number check finds nothing by construction: the file gives each transaction number to one payee on one date. That is a result of how the numbers are given, not a sign the check was clean.");
-        }
-        else if (slug == "stockport")
-        {
-            l.Add("The invoice-amount check cannot run: the file has one amount column (Gross equals Net, no VAT split), so there is no stated invoice amount to compare the payments with.");
-            l.Add("No transaction number is published before April 2025 (the 17 months from April 2025 to August 2026 carry one). For every earlier month the shared-transaction-number check cannot run, and neither can the two cross-council checks that need a number: transactions published twice under two numbers, and the same line repeated inside one transaction. They are listed as not available, not as clean. In the months with a number they run, and the transaction-number check found no number against more than one payee or pay date.");
-            l.Add("In 66 of the 115 monthly files the only date is the invoice date, with no payment date. A repeated-payment group there is the same payee, amount and description under the same invoice date, which is not the same day of payment, so same-payment-day readings are limited for this council.");
-        }
-        else if (slug == "york")
-        {
-            l.Add("The invoice-amount check cannot run: the file has one amount column (Net Amount), so there is no stated invoice amount to compare the payments with.");
-            l.Add("The shared-transaction-number check reads the numbering, not the payments, in two stretches. From 2011/12 to 2017/18 the transaction number is a payment-run reference shared by unrelated payees paid on the same day, and in 2024/25 each number beginning \"202425CRCR\" is shared by two lines of different payees. The groups it finds there are a result of how the numbers are given, not a sign of any payment going to two payees, and no test that keys on the number can be read for those years. In 2018/19 to 2023/24 and 2025/26 every number is one line and the check finds nothing.");
-            l.Add("Counts are not comparable across years: the file has 37,522 rows in 2011/12, 88,575 in 2012/13 (with almost the same total), 164,221 in 2013/14, then 139,000 to 146,000 until a drop in December 2016, and 56,000 to 68,000 a year since. The thresholds in the file names also change (over GBP 500, all payments, over GBP 250). From 2011/12 to 2014/15 the single amount column does not say whether it includes VAT.");
-            l.Add("The share of rows whose payee the council redacts varies from 0.9% to 26.0% by year (17.8% in 2012/13, 3.4% in 2025/26). Those lines are left out of every check and only counted. The checks say nothing about them.");
-        }
-        if (slug is "surrey" or "essex" or "hertfordshire" or "stockport" or "york")
-            l.Add("The declared-spend comparison cannot run: no government Revenue Outturn figure is held here for this council, so no year is set against the file total, and this council is in none of the groups of the pre-registered test.");
-        if (slug == "stockport")
-            l.Add("About a third of the rows (31.6%) have a payee the council redacts or labels \"*Exclude\" (one label standing for unrelated payments). Those lines are left out of every check and only counted. The checks say nothing about them.");
-        if (slug is "surrey" or "essex" or "hertfordshire")
-            l.Add(slug == "essex"
-                ?"Lines whose payee is a pooled label (one label standing for many people, such as a foster care payment) are shown by the scanner as \"Redacted (pooled label): <label>\" and are left out of every check. The checks say nothing about those lines."
-                : "Lines whose payee the council redacts are left out of every check and only counted. The checks say nothing about those lines.");
-        return l;
+        else if (f.NoD)
+            l.Add("The shared-transaction-number check cannot run: the file's transaction number is a per-file counter that restarts every month, not a reference that one transaction can share. That is a limit of the file, not a clean result.");
     }
 
-    /// <summary>A caption for one financial year of a council when its publication changes inside or at the edge of the year; null otherwise.</summary>
+    /// <summary>A caption for one financial year of a council when its publication changes inside or at the edge of the year (prose, so a CouncilOverrides entry); null otherwise.</summary>
     public static string? YearNote(string slug, string year)
     {
-        if (year.Length != 7 || year[4] != '-') return null;   // "undated" is also seven characters
-        if (slug == "stockport")
-            return string.CompareOrdinal(year, "2025-26") >= 0
-                ? "From April 2025 this council's file gives a transaction number and, from then, a payment date as well as an invoice date, and, by the council's own account, lists all spend (monthly rows step up from about 22,900 to about 36,000). Counts and totals from this year are not comparable with earlier years."
-                : "This council's file gives no transaction number before April 2025, and in many months only an invoice date, not a payment date. Counts and totals here are not comparable with later years.";
-        if (slug == "york")
-            return "Row counts are not comparable across this council's years: the file's size, layout and threshold change from year to year (see the notes at the top of this page).";
-        if (slug != "hertfordshire") return null;
-        return string.CompareOrdinal(year, "2025-26") >= 0
-            ? "From April 2025 this council's file lists payments over £500; before that it listed payments over £250. Counts and totals from this year are not comparable with earlier years."
-            : string.CompareOrdinal(year, "2024-25") == 0
-                ? "This council's file lists payments over £250 up to March 2025; from April 2025 it lists payments over £500. Counts and totals are not comparable with later years."
-                : "This council's file lists payments over £250; from April 2025 it lists payments over £500. Counts and totals are not comparable with later years.";
+        if (!IsYear(year)) return null;   // "undated" is also seven characters
+        return CouncilOverrides.For(slug)?.YearNote?.Invoke(year);
     }
 
     public const string DiscrepancyNote =

@@ -1,4 +1,4 @@
-﻿@page "/council-spending"
+@page "/council-spending"
 @page "/council-spending/{Slug}"
 @using System.Diagnostics
 @using Showroom.Components
@@ -9,13 +9,23 @@
 <PageTitle>@(Slug is null ? "Council Spending Scanner" : CouncilWebData.ShortOf(Slug) + " spending") — Evaluated Applications</PageTitle>
 
 <div class="room cs" data-cat="councilaudit">
-@if (Slug is null)
+@if (!_catalogReady)
 {
-    @* ============================ the twenty-six councils ============================ *@
+    @* nothing below may ask for a council's name, count or facts until index.csv has been read *@
     <header class="room-head">
         <nav class="crumb"><a href="/">Tools</a> <span>/</span> Council Spending Scanner</nav>
         <h1>Council Spending Scanner</h1>
-        <p class="lede">Councils in England publish every payment over a set amount under the Local Government Transparency Code. This tool reads twenty-six councils' published files, prepared ahead of time, and shows where the
+    </header>
+    @if (_error is not null) { <p class="err">@_error</p> }
+    else { <p class="hint" role="status">Loading...</p> }
+}
+else if (Slug is null)
+{
+    @* ============================ the councils (count and list from index.csv) ============================ *@
+    <header class="room-head">
+        <nav class="crumb"><a href="/">Tools</a> <span>/</span> Council Spending Scanner</nav>
+        <h1>Council Spending Scanner</h1>
+        <p class="lede">Councils in England publish every payment over a set amount under the Local Government Transparency Code. This tool reads @Words(CouncilWebData.Councils.Count) councils' published files, prepared ahead of time, and shows where the
             published numbers do not add up on their own terms. Each check is one stated rule, run the same way for every council. It never says why a number looks the way it does; it shows the numbers and leaves the
             council to explain. If you want the council's records, tap "Add to request" under any item and build a letter at the bottom of the page.</p>
     </header>
@@ -57,7 +67,7 @@
     </section>
 
     <section class="cross">
-        <h2>Across all twenty-six councils</h2>
+        <h2>Across all @Words(CouncilWebData.Councils.Count) councils</h2>
         <p class="plain">These checks read small summary files that cover every council. Tap one to open it; each loads only when opened. The same checks, limited to one council, are on each council's own page.</p>
         @foreach (var d in CouncilChecksWeb.All) { <CheckPanel Def="d" Slug="@null" /> }
         <GapPanel />
@@ -71,7 +81,7 @@ else if (_notFound)
     <header class="room-head">
         <nav class="crumb"><a href="/">Tools</a> <span>/</span> <a href="/tools/council-spending">Council Spending Scanner</a></nav>
         <h1>No such council</h1>
-        <p class="lede"><a href="/tools/council-spending">Back to the twenty-six councils.</a></p>
+        <p class="lede"><a href="/tools/council-spending">Back to the @Words(CouncilWebData.Councils.Count) councils.</a></p>
     </header>
 }
 else
@@ -160,6 +170,7 @@ else
     bool _ready, _notFound;
     string? _error;
     string _loadedSlug = "";
+    bool _catalogReady;
 
     protected override async Task OnParametersSetAsync()
     {
@@ -168,9 +179,10 @@ else
         var co = new Cooperative(CancellationToken.None);
         try
         {
+            _index ??= await Data.IndexAsync(co);   // the council list, its count and its names (CouncilWebData.Councils) come from here
+            _catalogReady = true;
             if (Slug is null)
             {
-                _index ??= await Data.IndexAsync(co);
                 await Data.LogAsync("hub ready", sw.ElapsedMilliseconds);
                 return;
             }
@@ -179,8 +191,7 @@ else
             _ready = false;
             _months = await Data.MonthsAsync(Slug, co);
             _years = await Data.YearsAsync(Slug, co);
-            _profile = await Data.ProfileAsync(Slug);
-            _index ??= await Data.IndexAsync(co);
+            _profile = await Data.ProfileAsync(Slug);   // also registers every council's measured facts (CouncilFacts)
             BuildFacts();
             _loadedSlug = Slug;
             _ready = true;

@@ -106,7 +106,7 @@ const info = () => ev(`({ size: document.querySelector('.loadsize')?.innerText, 
 if (WHICH === 'all' || WHICH === 'big') {
   // ONLY=leeds (or a comma list) limits the run to those councils, for repeated passes of one case
   const only = process.env.ONLY ? process.env.ONLY.split(',') : null;
-  for (const [slug, fy] of [['cornwall', '2025-26'], ['leeds', '2022-23'], ['sheffield', '2025-26'], ['wokingham', '2020-21'], ['surrey', '2025-26'], ['essex', '2025-26'], ['hertfordshire', '2025-26']].filter(([s]) => only ? only.includes(s) : s !== 'surrey' && s !== 'essex' && s !== 'hertfordshire')) {
+  for (const [slug, fy] of [['cornwall', '2025-26'], ['leeds', '2022-23'], ['sheffield', '2025-26'], ['wokingham', '2020-21'], ['surrey', '2025-26'], ['essex', '2025-26'], ['hertfordshire', '2025-26'], ['york', '2015-16'], ['calderdale', '2024-25']].filter(([s]) => only ? only.includes(s) : !['surrey', 'essex', 'hertfordshire', 'york', 'calderdale'].includes(s))) {
     await go(slug);
     console.log('   ' + JSON.stringify(await info()));
     await measure(`${slug} ${fy}: tick the year (size line updates)`, `window.__tickYear('${fy}'); await new Promise(r => setTimeout(r, 40))`);
@@ -176,9 +176,10 @@ if (WHICH === 'all' || WHICH === 'care') {
   console.log('   company record: ' + await ev(`document.querySelector('.scare .chrec').innerText.slice(0, 400)`));
 }
 
-// Surrey, Essex, Hertfordshire (Session 43): the "what cannot be checked" list, the year caption, the not-available lines, the cannot-run check and the budget statement, read back as text
+// Surrey, Essex, Hertfordshire (Session 43), York, Calderdale: the "what cannot be checked" list, the year caption, the not-available lines, the cannot-run check and the budget statement, read back as text
 if (WHICH === 'all' || WHICH === 'new') {
-  for (const [slug, fy] of [['surrey', '2025-26'], ['essex', '2025-26'], ['hertfordshire', '2025-26'], ['hertfordshire', '2024-25']]) {
+  const onlyNew = process.env.ONLY ? process.env.ONLY.split(',') : null;   // ONLY=calderdale,york limits this scenario too
+  for (const [slug, fy] of [['surrey', '2025-26'], ['essex', '2025-26'], ['hertfordshire', '2025-26'], ['hertfordshire', '2024-25'], ['york', '2024-25'], ['calderdale', '2024-25']].filter(([s]) => onlyNew ? onlyNew.includes(s) : true)) {
     await go(slug);
     console.log(`== ${slug} ${fy}: cannot-check list: ` + JSON.stringify(await ev(`[...document.querySelectorAll('.about h3 + .notelist li')].map(li => li.innerText)`)));
     await measure(`${slug} ${fy}: Load`, `window.__tickYear('${fy}'); document.querySelector('.loadbtn').click(); await window.__waitLoaded(180000)`, 400, true);

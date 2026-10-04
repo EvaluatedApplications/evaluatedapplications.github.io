@@ -1,4 +1,4 @@
-﻿using System.Diagnostics;
+using System.Diagnostics;
 using System.Globalization;
 using System.IO.Compression;
 using System.Text.Json;
@@ -7,7 +7,7 @@ using Microsoft.JSInterop;
 namespace Showroom.Services;
 
 /// <summary>One line of web_export/index.csv: what one council's phone-sized export holds.</summary>
-public sealed record CouncilIndexRow(string Slug, int Months, int TxRows, int ExceptionRows, long TotalGzipBytes);
+public sealed record CouncilIndexRow(string Slug, int Months, int TxRows, int ExceptionRows, long TotalGzipBytes, string Name, string Short);
 
 /// <summary>One line of a council's months.csv. A month is the month of each ROW'S OWN pay date, not the file tag.</summary>
 public sealed record MonthRow(string Month, int TxRows, decimal Net, int ExceptionParts, int ExceptionRows, long ExceptionGzipBytes, int Parts = 1);
@@ -40,40 +40,13 @@ public sealed class CouncilWebData
 
     public CouncilWebData(HttpClient http, IJSRuntime js) { _http = http; _js = js; }
 
-    /// <summary>The twenty-six councils, in the order the page lists them: the four hosted first, then the cities, then the nine added in Session 38, then Surrey, Essex and Hertfordshire (Session 43), then Stockport (Session 45), then City of York (Session 46).</summary>
-    public static readonly (string Slug, string Name, string Short)[] Councils =
-    {
-        ("wokingham", "Wokingham Borough Council", "Wokingham"),
-        ("reading", "Reading Borough Council", "Reading"),
-        ("westberkshire", "West Berkshire Council", "West Berkshire"),
-        ("rbwm", "Royal Borough of Windsor and Maidenhead", "RBWM"),
-        ("bracknellforest", "Bracknell Forest Council", "Bracknell Forest"),
-        ("merton", "London Borough of Merton", "Merton"),
-        ("birmingham", "Birmingham City Council", "Birmingham"),
-        ("leeds", "Leeds City Council", "Leeds"),
-        ("sheffield", "Sheffield City Council", "Sheffield"),
-        ("bradford", "Bradford Metropolitan District Council", "Bradford"),
-        ("liverpool", "Liverpool City Council", "Liverpool"),
-        ("bristol", "Bristol City Council", "Bristol"),
-        ("wakefield", "Wakefield Metropolitan District Council", "Wakefield"),
-        ("coventry", "Coventry City Council", "Coventry"),
-        ("durham", "Durham County Council", "Durham"),
-        ("kirklees", "Kirklees Council", "Kirklees"),
-        ("leicester", "Leicester City Council", "Leicester"),
-        ("cornwall", "Cornwall Council", "Cornwall"),
-        ("nottingham", "Nottingham City Council", "Nottingham"),
-        ("wirral", "Wirral Metropolitan Borough Council", "Wirral"),
-        ("newcastle", "Newcastle City Council", "Newcastle"),
-        ("surrey", "Surrey County Council", "Surrey"),
-        ("essex", "Essex County Council", "Essex"),
-        ("hertfordshire", "Hertfordshire County Council", "Hertfordshire"),
-        ("stockport", "Stockport Metropolitan Borough Council", "Stockport"),
-        ("york", "City of York Council", "York"),
-    };
+    // The councils, their order, count and names come from council-web/index.csv (CouncilWebBuilder writes one row per SHIPPED council, in the order the engine took them on,
+    // with the profile's full Name and a Short name): nothing here is typed per council. Empty until IndexAsync has run; the Council Spending page awaits it before it draws.
+    static List<(string Slug, string Name, string Short)> _catalog = new();
+    public static IReadOnlyList<(string Slug, string Name, string Short)> Councils => _catalog;
 
-    public static string NameOf(string slug) => Councils.FirstOrDefault(c => c.Slug == slug).Name ?? slug;
-    public static string ShortOf(string slug) => Councils.FirstOrDefault(c => c.Slug == slug).Short ?? slug;
-
+    public static string NameOf(string slug) => _catalog.FirstOrDefault(c => c.Slug == slug).Name ?? slug;
+    public static string ShortOf(string slug) => _catalog.FirstOrDefault(c => c.Slug == slug).Short ?? slug;
     public async Task LogAsync(string what, double ms, string extra = "")
     {
         try { await _js.InvokeVoidAsync("console.info", $"CW-PERF {what} {ms:F0}ms {extra}".TrimEnd()); } catch { }
@@ -134,9 +107,10 @@ public sealed class CouncilWebData
         if (_index is not null) return _index;
         var t = await TableAsync("index.csv", false, co);
         // Council,Months,Parts,TxRows,ExceptionRows,UnmatchedExceptionRows,LargestMonth,LargestMonthRaw,LargestMonthGzip,
-        // LargestExceptionMonthRaw,LargestExceptionMonthGzip,TotalRawMB,TotalGzipMB,ArchiveMB
-        _index = t.Skip(1).Where(r => r.Length >= 13).Select(r => new CouncilIndexRow(r[0], I(r[1]), I(r[3]), I(r[4]),
-            (long)(double.Parse(r[12], CultureInfo.InvariantCulture) * 1048576))).ToList();
+        // LargestExceptionMonthRaw,LargestExceptionMonthGzip,TotalRawMB,TotalGzipMB,ArchiveMB,Name,Short   (the last two are the builder's)
+        _index = t.Skip(1).Where(r => r.Length >= 15).Select(r => new CouncilIndexRow(r[0], I(r[1]), I(r[3]), I(r[4]),
+            (long)(double.Parse(r[12], CultureInfo.InvariantCulture) * 1048576), r[14], r.Length > 15 && r[15].Length > 0 ? r[15] : r[14])).ToList();
+        _catalog = _index.Select(r => (r.Slug, r.Name, r.Short)).ToList();
         return _index;
     }
 
@@ -162,12 +136,7 @@ public sealed class CouncilWebData
     }
 
     /// <summary>The financial year (April to March, as the government's declared totals are given) a month belongs to: "2023-04" and "2024-03" are both "2023-24". Anything else is "undated".</summary>
-    public static string FinancialYearOf(string month)
-    {
-        if (month.Length != 7 || !int.TryParse(month.AsSpan(0, 4), out var y) || !int.TryParse(month.AsSpan(5, 2), out var m)) return "undated";
-        int s = m >= 4 ? y : y - 1;
-        return $"{s}-{(s + 1) % 100:00}";
-    }
+    public static string FinancialYearOf(string month) => CouncilTerms.FinancialYearOf(month);
 
     // The raw bytes of the last two months' transaction slices, so a second "See the source rows" in the same month costs nothing.
     readonly Dictionary<string, List<byte[]>> _txSlices = new();
@@ -188,9 +157,9 @@ public sealed class CouncilWebData
         return list;
     }
 
-    /// <summary>The slug of a council from its full name ("Leeds City Council" gives "leeds"); null when it is not one of the twenty-six.</summary>
+    /// <summary>The slug of a council from its full name ("Leeds City Council" gives "leeds"); null when it is not one of the shipped councils.</summary>
     public static string? SlugOfName(string fullName) =>
-        Councils.FirstOrDefault(c => c.Name.Equals(fullName, StringComparison.OrdinalIgnoreCase)).Slug;
+        _catalog.FirstOrDefault(c => c.Name.Equals(fullName, StringComparison.OrdinalIgnoreCase)).Slug;
 
     public async Task<CouncilProfile?> ProfileAsync(string slug)
     {
@@ -208,6 +177,8 @@ public sealed class CouncilWebData
                 int held = e.TryGetProperty("heldBack", out var hb) ? hb.GetInt32() : 0;
                 list.Add(new CouncilProfile(S("slug"), S("name"), S("page"), S("howTo"), quirks, S("lastChecked"), S("verification"),
                     string.IsNullOrWhiteSpace(S("foi")) ? null : S("foi"), held));
+                // what the builder measured from this council's export; every "cannot be checked" statement is built from it (CouncilTerms)
+                if (e.TryGetProperty("facts", out var facts) && facts.ValueKind == JsonValueKind.Object) CouncilFacts.Set(S("slug"), CouncilFacts.FromJson(facts));
             }
             _profiles = list;
             await LogAsync("profiles.json", sw.ElapsedMilliseconds, $"({bytes.Length / 1024} KB)");
