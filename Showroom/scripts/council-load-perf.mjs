@@ -106,7 +106,9 @@ const info = () => ev(`({ size: document.querySelector('.loadsize')?.innerText, 
 if (WHICH === 'all' || WHICH === 'big') {
   // ONLY=leeds (or a comma list) limits the run to those councils, for repeated passes of one case
   const only = process.env.ONLY ? process.env.ONLY.split(',') : null;
-  for (const [slug, fy] of [['cornwall', '2025-26'], ['leeds', '2022-23'], ['sheffield', '2025-26'], ['wokingham', '2020-21'], ['surrey', '2025-26'], ['essex', '2025-26'], ['hertfordshire', '2025-26'], ['york', '2015-16'], ['calderdale', '2024-25']].filter(([s]) => only ? only.includes(s) : !['surrey', 'essex', 'hertfordshire', 'york', 'calderdale'].includes(s))) {
+  // CASES=wokingham:2024-25,reading:2022-23 measures exactly those council-years (the biggest by rows and by flagged lines, which move when the data does)
+  const cases = process.env.CASES ? process.env.CASES.split(',').map(c => c.split(':')) : [['cornwall', '2025-26'], ['leeds', '2022-23'], ['sheffield', '2025-26'], ['wokingham', '2020-21'], ['surrey', '2025-26'], ['essex', '2025-26'], ['hertfordshire', '2025-26'], ['york', '2015-16'], ['calderdale', '2024-25']].filter(([s]) => only ? only.includes(s) : !['surrey', 'essex', 'hertfordshire', 'york', 'calderdale'].includes(s));
+  for (const [slug, fy] of cases) {
     await go(slug);
     console.log('   ' + JSON.stringify(await info()));
     await measure(`${slug} ${fy}: tick the year (size line updates)`, `window.__tickYear('${fy}'); await new Promise(r => setTimeout(r, 40))`);

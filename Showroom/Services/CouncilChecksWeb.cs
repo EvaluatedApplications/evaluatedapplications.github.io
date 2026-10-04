@@ -37,6 +37,10 @@ public sealed class CheckRow
 public sealed class CheckDef
 {
     public string Id = "", Title = "", Plain = "", Caption = "", File = "";
+    /// <summary>The names this check carries in cross/check_rules.csv (the engine's registry of every row filter a check applies); shown as the check's "rules it applies" disclosure.</summary>
+    public string[] RuleChecks = Array.Empty<string>();
+    /// <summary>A rule the check's own file states on every row (the twins file writes it on each line); given the whole table, returns the distinct texts, shown beside the summary.</summary>
+    public Func<Tab, List<string>>? RuleOf;
     /// <summary>Column holding the council this row belongs to; matched against the slug (or the full name when ByName).</summary>
     public string CouncilCol = "Council";
     public bool ByName;
@@ -120,23 +124,31 @@ public static class CouncilChecksWeb
         new()
         {
             Id = "twins", Title = "Identical lines under two transaction numbers",
-            Plain = "Two different transaction numbers, the same supplier, the same lines (amount and description), first pay dates within seven days, and lines of that kind seen in at most three transactions. A pair that does not meet all of these is not listed, so this is not a list of every identical pair. Sorted by the value of the second transaction.",
+            Plain = "Two different transaction numbers with the same supplier and the same lines (amount and description). Each row is a pair; three identical transactions give three pairs but two extra copies, so the summary counts groups of identical transactions, not pairs. A pair that does not meet every condition of the rule below is not listed, so this is not a list of every identical pair. Sorted by the value of the second transaction.",
             Caption = "The file cannot show whether cash left twice, or whether one payment was published under two numbers. Bracknell Forest pairs dated in the future are forward schedules.",
-            File = "cross/transaction_twins.csv",
+            File = "cross/transaction_twins.csv", RuleChecks = new[] { "TwinPairs" },
+            // the rule the engine writes on every row (TxnTwinScan.RuleText): every condition, including the two-line, GBP 10,000, one-payee, redacted, mangled-number and doubled-listing ones
+            RuleOf = t => { var l = new List<string>(); foreach (var r in t.Rows) { var x = Cap(t.G(r, "Reading").Trim()); if (x.Length > 0 && !l.Contains(x)) l.Add(x); } return l; },
             Build = (t, rows) =>
             {
                 bool many = Many(t, rows);
-                var o = new List<CheckRow>(rows.Count); decimal sum = 0;
+                var o = new List<CheckRow>(rows.Count); decimal extra = 0, extraAbs = 0; int bigGroups = 0;
+                var groups = new HashSet<string>(StringComparer.Ordinal);
                 foreach (var r in rows)
                 {
-                    decimal v = t.M(r, "TotalValue"); sum += Math.Abs(v);
+                    decimal v = t.M(r, "TotalValue");
                     string slug = t.G(r, "Council"), ta = t.G(r, "TransactionA"), tb = t.G(r, "TransactionB");
+                    // a group of identical transactions: GroupId is the file's own (an older file without it counts each pair as a group); each transaction after a group's first is one extra copy,
+                    // credited once on the pair that reaches it, so the column sums to the value of the extra copies (a credit is negative)
+                    string gid = t.G(r, "GroupId"); int gsize = Math.Max(2, t.I(r, "GroupSize"));
+                    if (groups.Add(slug + "|" + (gid.Length > 0 ? gid : ta + "|" + tb)) && gsize > 2) bigGroups++;
+                    decimal ec = t.M(r, "ExtraCopyValue"); extra += ec; extraAbs += Math.Abs(ec);
                     // DaysApart is -1 when a first pay date is missing from the file: it is not "1 day apart"
                     bool dated = t.I(r, "DaysApart") >= 0;
                     string apart = dated ? $"first pay dates {Math.Abs(t.I(r, "DaysApart"))} day(s) apart ({Date(t.G(r, "DateA"))} and {Date(t.G(r, "DateB"))})"
                                          : $"a first pay date is missing in the file ({Date(t.G(r, "DateA"))} and {Date(t.G(r, "DateB"))})";
                     o.Add(new CheckRow(Math.Abs(v), $"{t.G(r, "SupplierName")}: {Gbp(v)}",
-                        $"{(many ? S(t.G(r, "Council")) + ". " : "")}Transactions {ta} and {tb}, {t.I(r, "Lines")} line(s), {apart}. {Cap(t.G(r, "Kind"))}.")
+                        $"{(many ? S(t.G(r, "Council")) + ". " : "")}Transactions {ta} and {tb}, {t.I(r, "Lines")} line(s), {apart}. {Cap(t.G(r, "Kind"))}.{(gsize > 2 ? $" One of {Num(gsize)} identical transactions, listed pair by pair." : "")}")
                     {
                         Key = $"twins|{slug}|{ta}|{tb}",
                         Foi = () => Item(slug, $"Transactions {ta} and {tb}, both for {t.G(r, "SupplierName")}, have the same {t.I(r, "Lines")} line(s) (amount and description). {(t.G(r, "DateA") == t.G(r, "DateB") ? $"Their first pay date is {Date(t.G(r, "DateA"))} for both." : dated ? $"Their first pay dates are {Date(t.G(r, "DateA"))} and {Date(t.G(r, "DateB"))}, {Math.Abs(t.I(r, "DaysApart"))} day(s) apart." : $"The file gives no first pay date for one or both ({Date(t.G(r, "DateA"))} and {Date(t.G(r, "DateB"))}).")} {Cap(Stop(t.G(r, "Kind")))}. The second transaction is {Gbp(v)}.",
@@ -145,15 +157,16 @@ public static class CouncilChecksWeb
                     });
                 }
                 SortDesc(o);
-                return (o, $"{Num(o.Count)} pair(s); the second transaction of each pair carries {Gbp(sum)} in all. A transaction that is in more than one pair is counted in each, and a credit counts as its absolute value, so this is not the sum of distinct extra payments.");
+                return (o, $"{Plural(groups.Count, "group", "groups")} of identical transactions ({Plural(o.Count, "pair", "pairs")} listed{(bigGroups > 0 ? $"; {Num(bigGroups)} of the groups hold more than two transactions" : "")}). "
+                    + $"Every transaction after a group's first is one extra copy: together the extra copies carry {Gbp(extra)} (a credit counts as negative), or {Gbp(extraAbs)} if a credit counts as its absolute value.");
             },
         },
         new()
         {
             Id = "crossfile", Title = "The same line published in two files",
-            Plain = "A payment line is \"also in an earlier file\" when an earlier file of the same council holds a row with the same supplier, amount, payment date, description and service. Only files with at least one such row are listed; the rate is shown with the row count, not only a flag.",
+            Plain = "A payment line is \"also in an earlier file\" when an earlier file of the same council holds a row with the same supplier, amount, payment date, description and service (letter case in the description and service is ignored). Only files with at least one such row are listed; the rate is shown with the row count, not only a flag.",
             Caption = "The file cannot show whether the payment was posted twice or published twice.",
-            File = "cross/cross_file_repeats.csv",
+            File = "cross/cross_file_repeats.csv", RuleChecks = new[] { "CrossFile" },
             Build = (t, rows) =>
             {
                 bool many = Many(t, rows);
@@ -180,7 +193,7 @@ public static class CouncilChecksWeb
             Id = "filedup", Title = "Files that list the same row twice",
             Plain = "Does a file contain the same payment line more than once, compared with the months either side of it? Each file's repeat rate is set against its own council's neighbouring files, because repeat rates differ about tenfold between councils. Only flagged files are listed.",
             Caption = "The files do not say why a line is repeated.",
-            File = "cross/file_duplication.csv",
+            File = "cross/file_duplication.csv", RuleChecks = new[] { "FileDuplication" },
             Build = (t, rows) =>
             {
                 var o = new List<CheckRow>();
@@ -203,9 +216,10 @@ public static class CouncilChecksWeb
         new()
         {
             Id = "withintxn", Title = "The same line repeated inside one transaction",
-            Plain = "One transaction number lists an identical line (same supplier, amount, description and pay date) more than once. No invoice total exists in the files to compare against, so the lines are shown as published, sorted by the extra value. The same amount on different dates is a payment schedule, not a repeat, and is not listed.",
+            Plain = "One transaction number lists an identical line (same supplier, amount, description and pay date) at least twice, and the line's amount is at least £10,000 (in absolute value): a smaller repeated line is not listed. The same amount on different dates is a payment schedule, not a repeat, and is not listed either. "
+                + "Wokingham is not run: its invoice-amount check already tests each transaction against the invoice total its file states. For every other council the files state no invoice total to compare against, so the lines are shown as published, sorted by the extra value.",
             Caption = "The file cannot show whether the repeated line was one payment or several.",
-            File = "cross/within_txn_repeats.csv",
+            File = "cross/within_txn_repeats.csv", RuleChecks = new[] { "WithinTransaction" },
             Build = (t, rows) =>
             {
                 var o = new List<CheckRow>(rows.Count); decimal sum = 0;
@@ -230,7 +244,7 @@ public static class CouncilChecksWeb
             Id = "flows", Title = "Money paid between these councils and the companies they own",
             Plain = "How much each of these councils paid another one of them, or a company one of them owns, even when the other side is spelled differently on the payer's books. Every spelling is listed. A person graded each candidate spelling by hand; no similarity score separates right from wrong, so the table behind this is published in full. Only graded matches marked \"accept\" are counted. The name as published is shown beside the authority it was matched to, because the matching is a triage, not a proof: of 99 names the first screen called \"all distinctive words present\", one was a different body (Woking, for Wokingham).",
             Caption = "What the payer says it paid; never reconciled to the payee's income.",
-            File = "cross/crossref_alias_flows.csv", CouncilCol = "Payer",
+            File = "cross/crossref_alias_flows.csv", CouncilCol = "Payer", RuleChecks = new[] { "AliasFlows" },
             Build = (t, rows) =>
             {
                 // one line per payer and payee, with every spelling and period the accepted matches carry
@@ -266,7 +280,7 @@ public static class CouncilChecksWeb
             Id = "loandecode", Title = "Loan interest between councils: can the figure be rebuilt?",
             Plain = "For a payment between councils that looks like loan interest: can the figure be rebuilt from a round loan, a rate and a number of days? If yes, the rebuild is shown; if not, it is shown as not rebuilt. Loans from the Public Works Loan Board, banks or a council's own company are different instruments and are not listed.",
             Caption = "A payment that is not rebuilt is not evidence of anything; many loans are not round or not in the file.",
-            File = "cross/debt_ledger.csv", ByName = true,
+            File = "cross/debt_ledger.csv", ByName = true, RuleChecks = new[] { "DebtLedger" },
             Build = (t, rows) =>
             {
                 var o = new List<CheckRow>(); int ia = 0, ok = 0, no = 0, self = 0; string selfEg = "";
@@ -303,9 +317,9 @@ public static class CouncilChecksWeb
         new()
         {
             Id = "debtsink", Title = "Money paid out to other councils and councils' companies, and what is credited back",
-            Plain = "Each pair shows what one council's spending file shows going out to another council or a company it owns, over how many years, and what was credited back in the same file. The \"In this file\" line states in words what the scanner noticed about the pair's yearly totals and credits; it is a description of the numbers, not a conclusion. A payee that is the paying council's own name is not another council and is left out.",
+            Plain = "Each pair shows what one council's spending file shows going out to another council or a company it owns, over how many years, and what was credited back in the same file. The \"In this file\" line states in words what the scanner noticed about the pair's yearly totals and credits; it is a description of the numbers, not a conclusion. A payee that is the paying council's own name is not another council and is left out. Rows with no published payment date count in every total and are shown separately; they are left out only of the year-by-year figures and the month test.",
             Caption = "A spending file shows only the payer's side. Nothing coming back in this file does not mean a debt is unpaid; repayments and income are in other records.",
-            File = "cross/debt_sink.csv", CouncilCol = "Payer",
+            File = "cross/debt_sink.csv", CouncilCol = "Payer", RuleChecks = new[] { "DebtSink" },
             Build = (t, rows) =>
             {
                 var o = new List<CheckRow>(rows.Count); decimal sum = 0; int self = 0; string selfEg = "";
@@ -316,11 +330,14 @@ public static class CouncilChecksWeb
                     decimal out_ = t.M(r, "NetOut"); sum += out_;
                     // the engine's flag codes ("NoReturnFlow", "RisingFullYears3") are never printed: CouncilCodes turns each into words (and the build tools fail on a code it does not know)
                     string noted = CouncilCodes.DebtFlags(t.G(r, "Flags"));
+                    // rows with no published pay date are in the totals but not in the year series (UndatedRows / UndatedNet, which the engine added in Session 52; an older file has neither column)
+                    int undated = t.I(r, "UndatedRows"); decimal undatedNet = t.M(r, "UndatedNet");
+                    string undatedLine = undated > 0 ? $" {Plural(undated, "row", "rows")} ({Gbp(undatedNet)}) {(undated == 1 ? "has" : "have")} no published payment date: {(undated == 1 ? "it is" : "they are")} in the totals but not in the by-year figures." : "";
                     o.Add(new CheckRow(out_, $"{S(t.G(r, "Payer"))} to {t.G(r, "Entity")}: {Gbp(out_)} out in {Num(t.I(r, "Rows"))} rows, {t.G(r, "FirstYear")} to {t.G(r, "LastYear")}",
-                        $"Credited back in this file: {Num(t.I(r, "CreditRows"))} rows, {Gbp(t.M(r, "CreditNet"))}. By year: {t.G(r, "YearSeries")}.{(noted.Length > 0 ? " In this file: " + noted + "." : "")}")
+                        $"Credited back in this file: {Num(t.I(r, "CreditRows"))} rows, {Gbp(t.M(r, "CreditNet"))}. By year: {t.G(r, "YearSeries")}.{undatedLine}{(noted.Length > 0 ? " In this file: " + noted + "." : "")}")
                     {
                         Key = $"debtsink|{slug}|{entity}",
-                        Foi = () => Item(slug, $"The published file shows {S(slug)} paying {entity} {Gbp(out_)} in {Num(t.I(r, "Rows"))} rows, {t.G(r, "FirstYear")} to {t.G(r, "LastYear")}, with {Num(t.I(r, "CreditRows"))} credit rows ({Gbp(t.M(r, "CreditNet"))}) from {entity} in the same file. By year: {Series(t.G(r, "YearSeries"))}."),
+                        Foi = () => Item(slug, $"The published file shows {S(slug)} paying {entity} {Gbp(out_)} in {Num(t.I(r, "Rows"))} rows, {t.G(r, "FirstYear")} to {t.G(r, "LastYear")}, with {Num(t.I(r, "CreditRows"))} credit rows ({Gbp(t.M(r, "CreditNet"))}) from {entity} in the same file. By year: {Series(t.G(r, "YearSeries"))}.{undatedLine}"),
                     });
                 }
                 SortDesc(o);
@@ -332,7 +349,7 @@ public static class CouncilChecksWeb
             Id = "misfits", Title = "Months that do not fit the usual month",
             Plain = "For the same pairs as above: a month whose total is far from that pair's usual month. Each line says whether the council's own description of that month's largest row appears in any other month. A pair whose payee is the paying council's own name is left out.",
             Caption = "A spending file shows only the payer's side. Nothing coming back in this file does not mean a debt is unpaid; repayments and income are in other records.",
-            File = "cross/payment_misfits.csv", CouncilCol = "Payer",
+            File = "cross/payment_misfits.csv", CouncilCol = "Payer", RuleChecks = new[] { "DebtSink" },
             Build = (t, rows) =>
             {
                 var o = new List<CheckRow>(rows.Count); int only = 0, self = 0; string selfEg = "";

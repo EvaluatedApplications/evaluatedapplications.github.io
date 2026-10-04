@@ -15,11 +15,13 @@
     @if (_open)
     {
         <p class="plain">@Def.Plain</p>
+        @if (Def.RuleChecks.Length > 0) { <RulesDisclosure Checks="Def.RuleChecks" /> }
         @if (_error is not null) { <p class="err">@_error</p> }
         else if (!_loaded) { <p class="hint">Loading this check (a small file)...</p> }
         else
         {
             <p class="summary">@_summary</p>
+            @foreach (var rule in _fileRules) { <p class="caption"><b>The rule as the file states it on every row.</b> @rule</p> }
             @if (!string.IsNullOrEmpty(_note)) { <p class="caption">@_note</p> }
             @if (_rows.Count > 0)
             {
@@ -66,6 +68,7 @@
     int _shown = 15;
     string? _error, _summary, _note;
     List<CheckRow> _rows = new();
+    List<string> _fileRules = new();
 
     async Task Toggle()
     {
@@ -77,6 +80,7 @@
             var co = new Cooperative(CancellationToken.None);
             var table = await Data.TableAsync(Def.File, true, co);
             var tab = new Tab(table);
+            _fileRules = Def.RuleOf?.Invoke(tab) ?? new();
             var mine = Slug is null ? tab.Rows : tab.Rows.Where(r => Def.Matches(tab, r, Slug)).ToList();
             var (rows, summary) = Def.Build(tab, mine);
             // the councils' measured facts are registered when profiles.json is read; the all-councils view of a number-based check needs them to say which councils it cannot cover

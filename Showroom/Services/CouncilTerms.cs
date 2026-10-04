@@ -94,10 +94,10 @@ public static class CouncilTerms
     /// <summary>Unexplained classes lead; the explained ones follow, with the same-day and migration-label explanations below "Unclear".</summary>
     public static int Rank(string c) => c switch
     {
-        "Unreconciled" => 0, "StandingScheduleSurplus" => 1, "Unclear" => 2, "Unmatched" => 3,
+        "Unreconciled" => 0, "StandingScheduleSurplus" => 1, "Unclear" => 2, "Unmatched" => 3, "SmallGap" => 4,
         "ReversedSameDay" => 10, "MigrationControlLabel" => 11, _ => 5,
     };
-    public static bool IsUnexplained(string c) => c is "Unreconciled" or "Unclear" or "Unmatched" or "StandingScheduleSurplus" or "";
+    public static bool IsUnexplained(string c) => c is "Unreconciled" or "SmallGap" or "Unclear" or "Unmatched" or "StandingScheduleSurplus" or "";
 
     public static string Meaning(string c) => c switch
     {
@@ -105,7 +105,8 @@ public static class CouncilTerms
         "DoubleListing" => "The same invoice line, or the whole itemised invoice, appears to have been published more than once (the lines sum to an exact whole-number multiple of the stated invoice, or of it once VAT is added), rather than several genuinely different charges.",
         "DebtCharge" => "The stated amount splits exactly into a round principal plus a non-round interest or charge remainder: consistent with a loan repayment or debt-recovery invoice, not an unexplained gap.",
         "EarlyPaymentProgramme" => "A batch of negative early-payment discount fees under the council's own named scheme (a supply-chain-finance arrangement): a known pattern, not an arithmetic mismatch.",
-        "VatRoundingNoise" => "The gap is a few pence, consistent with VAT being rounded per line and then summed, rather than once on the total.",
+        "VatRoundingNoise" => "The gap is a few pence (5p or less), consistent with VAT being rounded per line and then summed, rather than once on the total.",
+        "SmallGap" => "The gap is more than 5p and under £1. It is too large to be read as VAT rounding and no pattern accounts for it. The file does not say why.",
         "NegativeNetSignFlip" => "The published net figure is the exact negative of the value needed to reconcile the stated invoice. Reported as a named, recurring shape, not an explanation: why the sign is inverted is not established.",
         "Unclear" => "No supplier invoice number was available to check, so the repeat is reported exactly as published, with no verdict either way. A group may carry a pattern reading beside it; the reading is a consistent fit, not a proof, and the group stays open.",
         "LikelyDuplicate" => "Every member of this group shares the same supplier invoice number as well as the same amount. The file does not show whether more than one payment was made.",
@@ -134,7 +135,7 @@ public static class CouncilTerms
 
     public static string ScheduleDefinition(string s) => s switch
     {
-        "A" => "The payments published for one transaction add up to more or less than the invoice amount the file states for it, once VAT is allowed for. A fact about the published figures, not a verdict.",
+        "A" => "The invoice amount the file states for a transaction (its Gross) is compared with the Gross expected from the payments published for it: each line's Net with its VAT type applied (Standard 20%, Reduced 5%, any other label 0%). The gap shown is the stated Gross minus that expected Gross. A transaction is listed only when the gap is more than 1p; up to 5p is called VAT rounding, under £1 a small gap, £1 or more unreconciled. A fact about the published figures, not a verdict.",
         "B" => "Lines that share a supplier, an amount, a description and a pay date. Some are explained by a recognised pattern (a standing monthly payment, an exact reversal the same day); the rest are listed as published.",
         "D" => "The same transaction number appears against more than one payee, or more than one pay date, in the published data. Where a council's own transaction numbers are supplier-furnished invoice numbers, two suppliers can simply have used the same number; this is not read as one payment going to two payees.",
         _ => "",
@@ -214,11 +215,18 @@ public static class CouncilTerms
     /// <summary>The two cross-council checks that read transaction numbers (identical lines under two numbers; the same line repeated inside one number).</summary>
     static bool NeedsNumber(string checkId) => checkId is "twins" or "withintxn";
 
+    /// <summary>The one council whose own file states an invoice total, so the engine's within-transaction scan skips it (WithinTxnScan: "Schedule A already tests this against the published invoice total").
+    /// Said on the page instead of an empty list, which would read as a clean result.</summary>
+    const string WithinTxnSkippedSlug = "wokingham";
+    static bool WithinTxnNotRun(string slug, string checkId) => checkId == "withintxn" && slug == WithinTxnSkippedSlug;
+
     /// <summary>The reason a cross-council check cannot run for this council, or null when it can. Said on the page instead of "no rows", which would read as a clean result.
     /// A council with no published number, and one whose number is a count that restarts every month or is given to one line only, cannot say that two lines belong to one transaction.</summary>
     public static string? CheckCannotRun(string slug, string checkId)
     {
         if (!NeedsNumber(checkId)) return null;
+        if (WithinTxnNotRun(slug, checkId))
+            return "This check is not run for this council: its invoice-amount check already tests each transaction against the invoice total the file states, so a line repeated inside one transaction is looked for there. That is a choice of the rules, not a clean result of this check.";
         var f = CouncilFacts.Of(slug);
         if (NoNumber(slug))
             return "This check cannot run for this council: its file publishes no transaction number" + (ScannerNumbers(slug) ? " (the number shown against each line is a row number the scanner added)" : "") + ", and this check compares transaction numbers. That is a limit of the file, not a clean result.";
@@ -240,12 +248,15 @@ public static class CouncilTerms
     {
         if (!NeedsNumber(checkId)) return "";
         var none = new List<string>(); var part = new List<string>();
+        var notRun = new List<string>();
         foreach (var (slug, name) in councils)
         {
-            if (CheckCannotRun(slug, checkId) is not null) none.Add(name);
+            if (WithinTxnNotRun(slug, checkId)) notRun.Add(name);
+            else if (CheckCannotRun(slug, checkId) is not null) none.Add(name);
             else if (CouncilFacts.Of(slug).Partial) part.Add(name);
         }
         var sb = new System.Text.StringBuilder();
+        if (notRun.Count > 0) sb.Append($"This check is not run for {string.Join(", ", notRun)}: the invoice-amount check already tests each transaction against the invoice total the file states. ");
         if (none.Count > 0) sb.Append($"This check cannot run for {string.Join(", ", none)}: the transaction number in their files cannot link lines (none is published, or it is a count used by one line). They are not covered, and no list here is a clean result for them. ");
         if (part.Count > 0) sb.Append($"It covers only the months with a transaction number for {string.Join(", ", part)}. ");
         return sb.ToString().Trim();

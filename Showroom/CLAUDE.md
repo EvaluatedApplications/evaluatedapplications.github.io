@@ -1,6 +1,6 @@
 # Showroom — CLAUDE.md (showroom-owner)
 
-**Last verified:** 2026-10-04 (r3,970 window fix; council scanner DATA-DRIVEN, 28 councils; audit wording/rendering pass done)
+**Last verified:** 2026-10-05 (r3,970 window fix; council scanner DATA-DRIVEN, 28 councils; virtual-customer audit sessions 52-53 built into the page and the data)
 
 Blazor WebAssembly app at `C:\Users\dongy\AboutUs\Showroom`, published under `/tools` on the public site
 (`AboutUs` repo, base href `/tools/`). Every tool runs entirely client-side: no server, no upload. Charter:
@@ -18,14 +18,14 @@ virtual-customer's engine export). Plus one **unlisted** client-preview page.
 
 ## Site plumbing
 `Program.cs`: standard WASM host; one scoped `HttpClient`; `AddSingleton<HoloKernel.SessionHost>()`
-(shared model cache); `AddSingleton<ContentDbHost>()` (unrelated spike). Nav (`MainLayout.razor`) is
-`Home · Tools · NuGet` (lean by design): a new tool needs a `Home.razor` gallery card
-(`<a class="card tool" href="/tools/<slug>" style="--cat:...">`, live/soon tag, package `.ver` pill,
-`.desc`, `.go-in`), **not** a nav entry, and NO count of anything typed into its text.
+(shared model cache). Nav (`MainLayout.razor`) is
+`Home · Tools · NuGet` (lean by design): a new tool needs a `Home.razor` gallery card (`<a class="card tool"
+href="/tools/<slug>" style="--cat:...">`, tag, `.ver` pill, `.desc`, `.go-in`), **not** a nav entry, and NO count
+of anything typed into its text.
 `wwwroot/index.html`: `<base href="/tools/" />`; links `/assets/site.css` (shared design system) + `boot.css`/
 `depth.css`; SPA deep-link restore; JS interop `window.analystDownload`, `window.copyText`.
-**CSS**: each tool has its own `Pages/<Tool>.razor.css` (isolation can't share a partial) duplicating a base
-block (`.room`/`.crumb`/`.lede`/`.hint`/`.err`/`.go`/`.outro`); copy from `Prism.razor.css`.
+**CSS**: each tool has its own `Pages/<Tool>.razor.css` duplicating a base block (`.room`/`.crumb`/`.lede`/
+`.hint`/`.err`/`.go`/`.outro`); copy from `Prism.razor.css`.
 **Parallax glow** (`depth.css`): 3 scroll-driven tiers, zero JS, tinted per tool via `[data-cat]` on the outer
 `.room` (a package name or a chord such as `"algformer-tracer"`); a new tool's panel class must join the
 mid-tier selector list and must not carry its own `opacity` (the "OPACITY-MULTIPLIER TRAP" comment).
@@ -36,27 +36,24 @@ package (a `ProjectReference` here is the designed path, not a MonoRepo boundary
 - `ModelSpec` — shape + the **S>1 invariant enforced by construction**.
 - `HoloSession.Create(spec)` / `.FromCheckpoint(bytes, kPass, serveAlpha)`: **K and alpha are
   mandatory args** (`Iters`/`IterAlphaServe` are NOT persisted by `Serialize()`; a deserialized
-  checkpoint reads back `1`/`1`). `.Model` exposes the raw `HoloFormer` (`InspectStackIterFaces`/
-  `InspectAttention`/`DecodeFace`/`EmbRow`, used directly by The Cartographer). `.Logits(ctx)` full
-  recompute; `.NewServeCache()`/`.Prime()`/`.StepToken()` O(1)/token KV-cache path, bit-identical to
-  `.Logits` only for a MULTI-layer model (Prism/Stories); NOT verified for L=1 (Creature/Forecaster).
+  checkpoint reads back `1`/`1`). `.Model` exposes the raw `HoloFormer` (Cartographer uses it directly).
+  `.Logits(ctx)` full recompute; `.NewServeCache()`/`.Prime()`/`.StepToken()` O(1)/token KV-cache path,
+  bit-identical to `.Logits` only for a MULTI-layer model (Prism/Stories); NOT verified for L=1.
 - `PrismCheckpoint` — `SessionKey` (`"prism"`), `ResolveK`, `ReconstructAlpha`: every tool serving
   Prism's checkpoint (Prism, Stories, Cartographer, Analyst, Prose) uses these IDENTICALLY.
 - `SessionHost.GetOrCreateAsync(key, factory)` — keyed by **model**, not tool; **ephemeral** (reload
   drops everything). `RefinementLoop.Observe`/`.ObserveSequence` — the live-training loop
   (`NewGrads()`->`IterAccumulate`/`StackIterAccumulateAllPos`->`Step`), Creature/Forecaster only.
 - `Decoding` is the **`Prism` package's** `Prism.Inference`: `@using global::Prism.Inference`.
-- `CheckpointFetch.FetchAndDecompressGzipAsync(http, gzUrl)`: the ONE choke point for checkpoint
-  loads (Pages serves the hand-shipped `.gz` uncompressed); `CheckpointF32.Unpack` ("PF32" fp32 to
-  f64) is a **cross-repo byte-exact contract with PrismStudio**: never change the wire format here alone.
-- `TokenVoice`/`TokenVoiceControls.razor`: per-token voice (never quantise to a musical scale);
-  `DegenerateTail.Start/.SafePrefix` trims a repeating tail (Prism, Stories).
+- `CheckpointFetch.FetchAndDecompressGzipAsync(http, gzUrl)`: the ONE choke point for checkpoint loads;
+  `CheckpointF32.Unpack` ("PF32") is a **cross-repo byte-exact contract with PrismStudio**: never change the
+  wire format here alone. `TokenVoice` (never quantise to a musical scale); `DegenerateTail` trims a loop.
 - **Browser contract**: visitors **train**, never **reshape** (`GrowLayers`/`GrowShifts` are
   PrismStudio-only; a better model ships as a new checkpoint).
 
 **Prism/Stories constants** (re-measure on every re-mint): `MaxReplyStepsConst = 160` /
-`MaxStorySteps = 448` are PINNED, not `Context/2` (r3,970: V=320 d=64 L=33 S=64 ctx=512 K=3, ~1.15
-chars/token; STOP in ~45% of replies). **THE WINDOW RULE: prompt + reply must stay under `Context`, or
+`MaxStorySteps = 448` are PINNED, not `Context/2` (r3,970: ctx=512 K=3, ~1.15 chars/token). **THE WINDOW
+RULE: prompt + reply must stay under `Context`, or
 every step past it re-Primes the whole window** (~2.9 s PER STEP at 512; a measured 163.5 s chat turn). So
 Prism builds history with budget `Context - MaxReplySteps` (352), Stories clamps the prompt to `Context -
 MaxStorySteps` (64 tokens, tail kept). `Prism.razor` context is the tagged wire format (`user: Q\nprism: A`
@@ -81,9 +78,8 @@ commit, push website-data only. Verify: `.../website-data/prism/oracle-rounds.tx
 - **Source change = `scripts/publish-site.ps1`** (publish, rebuild `dist/`, copy the runtime to
   `website-data/_framework`). PUSH ORDER: website-data first, then the site; re-run with `-Prune`
   only after the site push is live (it deletes old runtime files the live site still boots from).
-- **Check a build**: `node scripts/boot-check.mjs <dist> <website-data>`, `chat-turns.mjs`,
-  `tool-check.mjs` (Stories + Cartographer), `council-perf.mjs <dist> 6 4096 100`,
-  `council-load-perf.mjs` (below).
+- **Check a build** (published `dist`): `scripts/boot-check.mjs <dist> <website-data>`, `chat-turns.mjs`,
+  `tool-check.mjs`, `council-perf.mjs`, `council-load-perf.mjs`, `rules-check.mjs` (council ones below).
 
 ## The tools (one paragraph each)
 - **Analyst** `/analyst`: in-browser data profiler + SQL REPL over **HoloDb** (`Database.Open(null)`).
@@ -92,8 +88,7 @@ commit, push website-data only. Verify: `.../website-data/prism/oracle-rounds.tx
   (opt-in): a text column's surprisal against Prism's checkpoint via `SessionHost` key `"prism"`.
 - **Creature** `/creature`: 20x20 grid the visitor draws; a **HoloFormer** learns to forage live.
   `Dim=384, Layers=1`, KPass from `oracle-stackk.txt`, `MaxCtx=32`, `MinShifts=8`. **Tracer**
-  `GridTactics.Reachable` BFS = the distance field; a bounded `DropOldest` channel keeps simulation off
-  training. `ResetBrain` drops the session.
+  `GridTactics.Reachable` BFS = the distance field; a bounded channel keeps simulation off training.
 - **Forecaster** `/forecaster`: same substrate on a real hourly AAPL tape. `Dim=128, Layers=1`,
   `CandleContext=128` -> `MaxContext=256`, `Vocab=17`; `wwwroot/data/forecaster-history.json`
   (~3,484 candles); optional Finnhub top-up if `finnhub-key.txt` exists and NYSE is open.
@@ -101,17 +96,15 @@ commit, push website-data only. Verify: `.../website-data/prism/oracle-rounds.tx
   `ServeCache` O(1)/token stepping, `Gate`/`DegenGuard` confidence-gated decoding, `Prime()` strips
   the trailing newline, `_turns` capped + render-batched, audible tokens off by default.
 - **Nano Stories** `/stories`: SAME weights (not a fine-tune), shared `"prism"` key and `TokenVoice`;
-  one-shot continuation, Focused/Balanced/Wild presets, seeded `Gate.Pick`; states the real
-  parameter count (~1.0M at r3,970). **Decode gate = TopP, not ResonanceSigma** (it degenerates to
-  top-1 here so Temperature would be inert): `Floor = FloorMode.TopP` (Prism >= 1.3.0); `P` is
-  checkpoint-specific, re-measure on every re-mint (r3,970 by the cumulative-mass rule: chat 0.43;
-  Stories 0.43 / 0.77 / 0.89; never an untested 0.9); `ConfidentThreshold=0.60`. Copy "plays its part
-  three times" = K=3; update it if K changes.
+  one-shot continuation, Focused/Balanced/Wild presets, seeded `Gate.Pick`; states the real parameter count
+  (~1.0M at r3,970). **Decode gate = TopP, not ResonanceSigma** (that degenerates to top-1 here):
+  `Floor = FloorMode.TopP` (Prism >= 1.3.0); `P` is checkpoint-specific, re-measure on every re-mint (r3,970:
+  chat 0.43; Stories 0.43 / 0.77 / 0.89); `ConfidentThreshold=0.60`. Copy "plays its part three times" = K=3.
 - **Cartographer** `/cartographer`: 2D view of ONE next-token decision on Prism's checkpoint (prompt capped
-  `min(64, Context)`): the last position's face at every boundary (embed, each (layer,pass), FINAL) as a
-  path, the first boundary whose greedy top-1 = the final answer marked; power-iteration PCA (captured
-  variance always shown); top-4 attention per boundary; above 24 boundaries (r3,970: 100) it thins lines and
-  labels. **No training loop, ever**; `await Task.Yield()` keeps the tab responsive (no `MapAsync`).
+  `min(64, Context)`): the last position's face at every boundary (embed, each (layer,pass), FINAL) as a path,
+  the first boundary whose greedy top-1 = the final answer marked; power-iteration PCA (captured variance always
+  shown); top-4 attention per boundary; above 24 boundaries it thins lines and labels. **No training loop, ever**;
+  `await Task.Yield()` keeps the tab responsive (no `MapAsync`).
 - **Prose** `/prose`: paste/drop text; `ProseEngine.MineText` (chunks+yields ~200k chars) then
   recombines into sentences/Q&A/conversations. HoloDb `ProseStore` + AlgFormer plausibility (None /
   Prism's checkpoint / train on the visitor's text, ~0.22-0.24 ms/char/epoch), `data-cat=
@@ -119,74 +112,71 @@ commit, push website-data only. Verify: `.../website-data/prism/oracle-rounds.tx
 
 ## Council Spending Scanner: `Pages/CouncilSpending.razor` (`/council-spending`, `/council-spending/{slug}`)
 Built on the virtual-customer's PHONE-SIZED export (`VirtualCustomer\web_export`; SPEC_FOR_SHOWROOM.md
-items 9-30). 27 councils (the count is computed), no HoloDb/engine in the browser. Public-audience,
+items 9-30). 28 councils (the count is computed), no HoloDb/engine in the browser. Public-audience,
 mobile-first, not editorial: audit terms, plain prose + counts + GBP, OGL credit, never a cause.
-- **A new council needs NO page edit** (2026-10-04, Calderdale was the proof). After the
-  virtual-customer's `phoneexport <slug>` (and every `export`): run the builder, commit + push
-  website-data only, no site publish. The builder DISCOVERS councils: an `index.csv` row (first column
-  = slug = folder) + the engine profile whose name matches it (`NameMatchesSlug`: the name's words run
-  together, or its initials: "rbwm"); order = the engine's, so a new council lands last; `ShortName`
-  derived. A council whose profile `VerificationNote` starts "Profile text pending" (or in env
-  `COUNCIL_HOLD`) is HELD (Camden, 2026-10-04) and its rows are dropped from `cross/*.csv`
-  (`WithoutHeldCouncils`): it ships by itself the run after its profile text is written.
+- **A new council needs NO page edit** (Calderdale proved it). After the virtual-customer's `phoneexport <slug>`
+  (and every `export`): run the builder, commit + push website-data only, no site publish. The builder
+  DISCOVERS councils: an `index.csv` row (first column = slug = folder) + the engine profile whose name matches
+  (`NameMatchesSlug`: the name's words run together, or its initials: "rbwm"); order = the engine's, so a new
+  council lands last; `ShortName` derived. A council is HELD (rows also dropped from `cross/*.csv`,
+  `WithoutHeldCouncils`) when its profile `VerificationNote` starts "Profile text pending", it is in env
+  `COUNCIL_HOLD`, or `VirtualCustomer\export\checklist_holds.csv` lists it with Effect `withhold` (the builder
+  reads the file; same slugs as `CouncilAudit.Cli checklist holdenv`; empty on 2026-10-05).
 - **`index.csv`** = the export's columns + `Name,Short`: the page's council list, order, count and names
-  (`CouncilWebData.Councils/NameOf/ShortOf`, filled by `IndexAsync`; the page draws nothing until it has
-  run, `_catalogReady`; `CouncilTerms.Words(n)` writes the count in prose). `profiles.json` also carries
-  `short` and `facts`; Home's card has no count.
-- **Facts** the builder MEASURES (a byte pass over every slice + the exception files; `profiles` reuses them): `noA` (no A row, Gross = Net and no VAT on every row), `noD` (no D
-  row), `noNumber`, `numberedFirst/Last/Months` (numbers from one month on), `counterIds` (per-file
-  counter: smallest trailing number 1 and nearly all different in >= 80% of months: Leeds, Birmingham,
-  West Berkshire, Sheffield, Durham), `dByNumbering` (noD with real numbers), `dYears`, `noBudget` (every
-  `budget_units` note "no published Revenue Outturn", or no unit), `redacted`/`pooled` (engine
-  `IsRedactedSupplier`). Page: `CouncilFacts` (registered when `ProfileAsync` reads profiles.json),
-  `CouncilTerms` (`IsNa`, `NotAvailable`, `CannotCheck`, `CheckCannotRun`, `YearNote`, `NumberingNote`)
-  builds every statement from them. Say plainly where a check cannot run, never an empty list.
-- **`Services/CouncilOverrides.cs`**: ONLY prose that cannot be derived: Hertfordshire (amount column,
-  threshold caption), Stockport (A text, date-only and redaction lines, year notes), York (numbering
-  notes, row counts, redaction range), Durham (`DByNumbering`: its ledger-reference counter reads like
-  Leeds's, the page always worded it the other way), `NoPublishedNumber` (Sheffield, Birmingham, West
-  Berkshire: the scanner added a row number; Sheffield checked against the council's files by the
-  2026-10-04 audit, the other two on their profiles' word). `ListForEveryCouncil = true`: the "What
-  cannot be checked" list is on EVERY council page (the derived limits + two universal lines).
+  (`CouncilWebData.Councils`, filled by `IndexAsync`; nothing draws before `_catalogReady`; `CouncilTerms.Words(n)`
+  writes the count in prose). `profiles.json` also carries `short` and `facts`; Home's card has no count.
+- **Facts** the builder MEASURES (byte pass over every slice + exception file; a `profiles` run reuses them): `noA`
+  (no A row, Gross = Net, no VAT), `noD`, `noNumber`, `numberedFirst/Last/Months`, `counterIds` (per-file counter),
+  `dByNumbering`, `dYears`, `noBudget` (every `budget_units` note "no published Revenue Outturn", or no unit),
+  `redacted`/`pooled`. `CouncilFacts` (set when `ProfileAsync` reads profiles.json) and `CouncilTerms` build
+  every statement from them. Say plainly where a check cannot run, never an empty list.
+- **`Services/CouncilOverrides.cs`**: ONLY prose that cannot be derived: Hertfordshire (amount column, threshold),
+  Stockport (A text, date-only and redaction lines, year notes), York (numbering notes, row counts, redaction
+  range), Durham (`DByNumbering`), `NoPublishedNumber` (Sheffield, Birmingham, West Berkshire: the scanner added
+  a row number). `ListForEveryCouncil = true`: the "What cannot be checked" list is on EVERY council page.
 - **Audit rules (2026-10-04, an independent auditor)**: no raw engine code is ever printed:
-  `Services/CouncilCodes.cs` maps classification, reading, debt-sink flag, label check, loan status to
-  words (unlisted = "Other (not described here)"), and BOTH `CouncilWebBuilder` (full run) and
+  `Services/CouncilCodes.cs` maps classification (incl. `SmallGap`), reading, debt-sink flag, label check, loan status and
+  debt-ledger payee class (`OwnCouncil`...) to words (unlisted = "Other (not described here)"), and BOTH `CouncilWebBuilder` (full run) and
   `CouncilTermsCheck` FAIL (exit 1) on a code the table lacks: add it there. No "fault" label, no
-  "published twice"/"lead"/"actual target" wording (twins = "identical lines under two transaction
-  numbers"). A council paying itself (`IsSelf`, "Leeds CC") is left out of flows/debt sink/misfits/
-  loan checks and counted. `TxText`: a council with no published number never has the scanner's row
-  number called its transaction number (page, letter, source rows); `CheckCannotRun`/`CheckNote`/
-  `CheckCoverage` say where a number-based check cannot or only partly runs. The letter quotes only
-  net, gross, transaction, date, payee (no computed difference). Builder `Clean` drops first-person,
-  working-note and statistical-jargon text and PRINTS `HELD LINES` for review.
+  "published twice"/"lead"/"actual target" wording (twins = "identical lines under two transaction numbers"). A council paying itself (`IsSelf`, "Leeds CC") is left out of flows/debt sink/misfits/
+  loan checks and counted. `TxText`: a council with no published number never has the scanner's row number
+  called its transaction number; `CheckCannotRun`/`CheckNote`/`CheckCoverage` say where a number-based check
+  cannot or only partly runs (within-transaction: not run for Wokingham, `WithinTxnNotRun`, mirrors the engine).
+  Schedule A `Difference` = stated Gross minus the Gross expected from the lines' VAT types (engine S52); the letter
+  quotes net, gross, transaction, date, payee and that gap, never a class, reading or cause. Builder `Clean` drops
+  first-person, working-note and statistical-jargon text and PRINTS `HELD LINES` for review.
 - **Regression**: `dotnet run -c Release --project CouncilTermsCheck -- <council-web> out.txt [slugs]`
-  prints every council's list, year notes and A/D lines from the SHIPPED profiles + years.csv; diff
-  against `CouncilTermsCheck/golden.txt` (regenerated 2026-10-04 for the audit wording; explain every
-  diff). Read the builder's REWORDED/HELD BACK/HELD LINES output and grep profiles.json for
-  working-file words (`Reword`, `InternalSentence`). `budget_units.csv` Pool `confirmatory` = the first test group; a council with units but none eligible
-  gets the "cannot run, no government figure held here" line from `BudgetPanel`. New cross files go in
-  the builder's `cross/` list and a row in `BudgetTestPanel`'s set list.
-- **Load by financial year** (user: "I preferred it when I could choose what to load"). `LoadPicker` =
-  tick-list of financial years (April-March; "No readable date" last), Select all/Clear, size line before
-  any fetch, "Choose months" per year, ONE Load with progress + Cancel (keeps finished years).
-  `YearBlock` per loaded unit: totals, `GapBars`, schedule/bucket lists; top: per-year totals +
-  `GapSummary`. `MonthScan` keeps raw bytes only for recent years (`RawBudget` 40 MB, LRU); an evicted
-  year re-inflates via `EnsureRawAsync` (0.04-0.85 s) before a list opens (`NeedRaw`).
-- **Data** (`website-data/council-web`, ~515 MB, 6,336 files, largest 1.2 MB; Pages cap 1 GB;
-  `AboutUs\CouncilWebBuilder`, `dotnet run -c Release --project CouncilWebBuilder`, ~3 min incl. the
-  facts pass; arg 1 / `COUNCIL_WEB_OUT`, 2nd arg `profiles` rewrites only profiles.json.gz; a run only
-  overwrites, so delete a stale file BY NAME; fails above 50 MB/file): `index.csv`, per-council
-  `months.csv` + `years.csv`, **exception files in ONE slim format** `<slug>/<YYYY-MM>.exceptions.csv.gz`
-  and `<slug>/fy-<YYYY-YY>.exceptions[.N].csv.gz` (year bundle, parts of whole months above 12 MB raw).
-  Format: `@2022-11` marker line, a header, slim rows (TransactionGross empty when = Net; Detail +
-  ExplainedMeaning on a group's first line; `Gross` kept on A and NSquaredRows rows; `Care` "1" on a
-  Wokingham care B group). Month TRANSACTION slices `<slug>/<YYYY-MM>[.N].csv.gz` are fetched only by "See the source rows"; also
-  `cross/*.csv.gz`, `profiles.json.gz`, `PREREG_BUDGET_TEST.txt`. Profile text is cleaned in the BUILDER.
+  prints every council's list, year notes and A/D lines from the SHIPPED profiles + years.csv; diff against
+  `CouncilTermsCheck/golden.txt` (regenerated 2026-10-05; explain every diff). Read the builder's REWORDED/HELD
+  BACK/HELD LINES output and grep profiles.json for working-file words. `budget_units.csv` Pool `confirmatory` =
+  the first test group; a council with units but none eligible gets the "cannot run" line (measured, never typed per
+  council). The builder adds `FrozenEligible` (from `export/budget_units_<stage>.csv`): Wirral 2022-23 became
+  eligible after Stage 2c froze, so `BudgetPanel` says it is outside the statistic. `BudgetTestPanel`'s prose
+  numbers are TYPED (frozen 49 of 52 / 96 vs current 50 of 53 / 97; Stage 2d 37 units, 26 below, 133 pooled):
+  recompute from `budget_units*.csv` when a stage or unit moves. New cross files: the builder's `cross/` list +
+  a row in `BudgetTestPanel`'s set list.
+- **Load by financial year** (user's choice). `LoadPicker` = tick-list of financial years (April-March; "No
+  readable date" last), size line before any fetch, "Choose months" per year, ONE Load with progress + Cancel.
+  `YearBlock` per loaded unit: totals, `GapBars`, schedule/bucket lists. `MonthScan` keeps raw bytes only for
+  recent years (`RawBudget` 40 MB, LRU); an evicted year re-inflates (`EnsureRawAsync`, `NeedRaw`) before a list opens.
+- **Data** (`website-data/council-web`, ~525 MB, 6,5xx files, largest 1.2 MB; Pages cap 1 GB; `AboutUs\CouncilWebBuilder`,
+  `dotnet run -c Release --project CouncilWebBuilder`, ~3 min; 2nd arg `profiles` rewrites only profiles.json.gz;
+  fails above 50 MB/file): `index.csv`, per-council `months.csv` + `years.csv`, **exception files in ONE slim format** `<slug>/<YYYY-MM>.exceptions.csv.gz`
+  and `<slug>/fy-<YYYY-YY>.exceptions[.N].csv.gz` (parts of whole months above 12 MB raw): `@2022-11` marker
+  line, a header, slim rows (TransactionGross empty when = Net; Detail + ExplainedMeaning on a group's first line;
+  `Gross` kept on A and NSquaredRows rows; `Care` "1" on a Wokingham care B group). Month TRANSACTION slices
+  `<slug>/<YYYY-MM>[.N].csv.gz` are fetched only by "See the source rows"; also
+  `cross/*.csv.gz` (incl. `check_rules`: the engine's registry of every row filter), `profiles.json.gz`, `PREREG_BUDGET_TEST.txt`.
+  Profile text is cleaned in the BUILDER. Delete a file the run no longer writes (Merton's `undated` slices, 2026-10-05).
 - **Code**: `Services/CouncilWebData` (fetch, `InflateAsync`, caches), `CouncilLoad`, `CouncilMonth`
   (`MonthScan`: byte-level, columns by header name), `CouncilSource`, `CouncilChecksWeb` (plain loops:
   LINQ over decimals is slow in WASM), `FoiTray`, `CouncilGap` (K3 EXCLUDES employee pay);
   `Components/LoadPicker|YearBlock|GapBars|GapPanel|CheckPanel|BudgetPanel|BudgetTestPanel|FoiTrayPanel|
-  SourceBlocks|SocialCarePanel`. Each load logs `CW-PERF` lines. **N-squared runs** (Wokingham): class
+  SourceBlocks|SocialCarePanel|RulesDisclosure`. Each load logs `CW-PERF` lines. **One rules disclosure per check**
+  (`RulesDisclosure`, from `cross/check_rules.csv`): `CheckDef.RuleChecks` names the registry's checks; YearBlock shows
+  Schedule A/B/D; BudgetPanel/GapPanel `BudgetComparison`; the council page `RawReconciliation`. Twins: the summary counts
+  GROUPS (`GroupId`) and sums `ExtraCopyValue` (signed and absolute), and `CheckDef.RuleOf` shows the row-level RuleText
+  (the file's `Reading` column) beside it. Debt sink shows `UndatedRows`/`UndatedNet`. **N-squared runs** (Wokingham): class
   `NSquaredListing` / reading `NSquaredRows`; the value is the STATED Gross once (`MonthScan` `Value =
   max`), never the inflated row total. `Plural`/`NumLines`: never write "N lines" by hand. Pattern
   readings (`RecurringBatchRate`, `CadenceCatchUp`) are NOT classes: `ExplainedBy` + `ExplainedMeaning`.
@@ -199,19 +189,20 @@ mobile-first, not editorial: audit terms, plain prose + counts + GBP, OGL credit
   buttons are PLAIN markup (a component per row cost ~5 ms). **Source rows**: fetch that month's slice,
   find the group's transaction numbers (cap 80), list up to 200 lines.
 - **Measured** (headless Edge, CPU 6x, 4 Mbps, 100 ms RTT): `scripts/council-load-perf.mjs <dist> 6 4096
-  100 <data> [big|select|cancel|care|new]` (`ONLY=york,calderdale` limits `big` and `new`; `new` also
-  prints the rendered cannot-check list), `council-perf.mjs`, `gap-perf.mjs`. Compare only interleaved
-  passes of two builds (the machine drifts 1.5-2 s an hour). Load wall / worst stall: York 2015-16 (its
-  biggest year, 68,771 lines) 4.5-5.0 s / 140-175 ms; Essex 7.5 s / 97; Calderdale 2024-25 1.3 s / 0.
-  Page open 0.5-2.1 s; open a list 27-300 ms; source rows 1.4-2.4 s.
+  100 <data> [big|select|cancel|care|new]` (`ONLY=` limits `big` and `new`; `CASES=wokingham:2024-25,
+  reading:2022-23` runs exactly those council-years: the biggest years move with the data, check
+  `years.csv`), `council-perf.mjs`, `gap-perf.mjs`; `rules-check.mjs <dist>` prints the text of the rules
+  disclosures, twins, Schedule A, debt sink and budget lines (a content check, no timings). Compare only
+  interleaved passes of two builds (the machine drifts 1.5-2 s an hour). Load wall / worst stall (2026-10-05):
+  Wokingham 2024-25 (42,405 lines, 11,409 flagged) 1.8-2.4 s / 134-190 ms; Reading 2022-23 (67,852 lines)
+  1.1 s / 0-60 ms, 2025-26 (12,588 flagged) 1.4-1.6 s / 142-171 ms; York 2015-16 (68,771 lines) 4.5-5.0 s / 175; Essex 7.5 s.
+  Hub twins open 1.6-2.0 s / 480-540 ms, same as the build before. Page open 0.5-2.1 s; list 27-300 ms.
 - Gotchas: `--` in csproj XML comments breaks load; BudgetPanel's `<text>` trick fails in code blocks; CSS
   is one scoped file using `.cs ::deep`; lists with stateful children need `@key`.
 
 ## Unlisted: RecycleDAO marketplace prototype — `Pages/RecycleDaoDemo.razor` (`/recycledao-demo`)
-NOT a package-capability demo, NOT in the gallery: a private, link-only client preview
-(`C:\Users\dongy\RecycleDAO`, `recycledao-owner`'s repo; never edit it from here). Absent from
-`Home.razor`/nav, `noindex,nofollow`. Mint invariant: `MintForApproval` is the only method that
-increases `_totalMinted`.
+NOT a package demo, NOT in the gallery: a private, link-only client preview (`recycledao-owner`'s repo,
+never edit it from here), `noindex,nofollow`. Mint invariant: only `MintForApproval` increases `_totalMinted`.
 
 ## Dependencies (exact NuGet versions, `Showroom.csproj`, re-verified 2026-10-03)
 - `Microsoft.AspNetCore.Components.WebAssembly` **10.0.11**: **must equal the installed WASM runtime pack**
@@ -229,10 +220,9 @@ increases `_totalMinted`.
 
 ## Boundary (hard, from the agent charter)
 **NuGet only, never MonoRepo `ProjectReference`** (`HoloKernel`, a sibling NuGet-only RCL, is the one
-exception). Checkpoint hand-off is `prismstudio-owner`'s call; Forecaster's live top-up needs a Finnhub
-key. Never touch `AboutUs/site/*`, nav or the shared design system (`website-owner`'s). Never launch the
-app / open a browser for a demo: build-verify only (the headless-Edge scripts are measurement harnesses
-run on a published build).
+exception). Never touch `AboutUs/site/*`, nav or the shared design system (`website-owner`'s). Never launch
+the app / open a browser for a demo: build-verify only (the headless-Edge scripts are measurement harnesses
+run on a published build). Checkpoint hand-off is `prismstudio-owner`'s call.
 
 ## Standing facts, build
 **Shifts must be > 1, always** (S=1 is a pure diagonal); re-derive a floor from `bindRank = shifts·d/2`
@@ -247,8 +237,7 @@ live behaviour is the user's (`dotnet run`, or the deployed `/tools/`).
   resolves against the shell's cwd), never `Get-Content`/`Set-Content` on source (mojibake).
 - `Home.razor` card hrefs are ABSOLUTE (`/tools/<slug>`). `PrismFormer` (not `AlgFormer`) is the namespace of
   `HoloFormer`/`HoloShape`/`SubwordVocab`.
-- A `.razor` page whose class name COLLIDES with a package's root namespace (`Showroom.Pages.Prism` vs the
-  `Prism` package; `.Prose`) needs `@using global::<Namespace>` in every page referencing `Prism.*`/`Prose.*`
-  (`Prism`, `Stories`, `Prose`, `Analyst`).
+- A `.razor` page whose class name COLLIDES with a package namespace (`Showroom.Pages.Prism`, `.Prose`) needs
+  `@using global::<Namespace>` in every page referencing `Prism.*`/`Prose.*` (Prism, Stories, Prose, Analyst).
 - Razor reserves the bare `<text>` tag (cannot carry attributes, `RZ1023`): build an SVG `<text>` as a
   `MarkupString`, HTML-encoding interpolated content by hand.

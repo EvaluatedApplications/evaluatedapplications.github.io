@@ -16,6 +16,7 @@ public static class CouncilCodes
     public const string VocabDebtFlag = "DebtSinkFlag";
     public const string VocabLabelCheck = "LabelCheck";
     public const string VocabDecodeStatus = "DecodeStatus";
+    public const string VocabLedgerClass = "LedgerClass";
 
     static readonly Dictionary<string, string> Classes = new(StringComparer.Ordinal)
     {
@@ -37,6 +38,21 @@ public static class CouncilCodes
         ["ReversedSameDay"] = "Copies cancelled the same day",
         ["MigrationControlLabel"] = "Council's own migration label",
         ["NSquaredListing"] = "Publication quirk: rows printed n times",
+        ["SmallGap"] = "Small gap (under £1)",
+    };
+
+    // The debt ledger's class of a payee (debt_ledger.csv "Class"). The page lists only the "InterAuthority" ones, but every value the data carries is described
+    // here so a new one fails the build tools instead of reaching a page unmapped. "OwnCouncil" is a payee that is the paying council's own name.
+    static readonly Dictionary<string, string> LedgerClasses = new(StringComparer.Ordinal)
+    {
+        ["InterAuthority"] = "Another council",
+        ["OwnedCompany"] = "A company the council owns",
+        ["OwnCouncil"] = "The council's own name",
+        ["Pwlb"] = "Public Works Loan Board",
+        ["Bank"] = "A bank",
+        ["Broker"] = "A broker",
+        ["Redacted"] = "Payee redacted",
+        ["Other"] = "Another payee",
     };
 
     static readonly Dictionary<string, string> Readings = new(StringComparer.Ordinal)
@@ -66,6 +82,8 @@ public static class CouncilCodes
     public static string Reading(string code) => Readings.TryGetValue(code ?? "", out var s) ? s : Unlisted;
     /// <summary>The sentence for a payment-misfit "label check" value.</summary>
     public static string LabelCheck(string code) => LabelChecks.TryGetValue(code ?? "", out var s) ? s : Unlisted;
+    /// <summary>Plain words for a debt-ledger payee class, or <see cref="Unlisted"/>.</summary>
+    public static string LedgerClass(string code) => LedgerClasses.TryGetValue(code ?? "", out var s) ? s : Unlisted;
     /// <summary>Plain words for a loan-interest rebuild status.</summary>
     public static string DecodeStatus(string code) => DecodeStatuses.TryGetValue(code ?? "", out var s) ? s : Unlisted;
 
@@ -105,6 +123,7 @@ public static class CouncilCodes
                 VocabDebtFlag => value.Split(' ', StringSplitOptions.RemoveEmptyEntries).All(t => DebtFlag(t) is not null),
                 VocabLabelCheck => LabelChecks.ContainsKey(value),
                 VocabDecodeStatus => value.Length == 0 || DecodeStatuses.ContainsKey(value),
+                VocabLedgerClass => LedgerClasses.ContainsKey(value),
                 _ => false,
             };
             if (!ok) missing.Add($"{vocab}: \"{value}\"");

@@ -35,7 +35,7 @@ foreach (var slug in slugs.OrderBy(s => s, StringComparer.Ordinal))
         }
     }
 }
-if (only is null) sw.WriteLine("COVERAGE twins: " + CheckCoverage("twins", slugs.Select(s => (s, s))));
+if (only is null) foreach (var id in new[] { "twins", "withintxn" }) sw.WriteLine($"COVERAGE {id}: " + CheckCoverage(id, slugs.Select(s => (s, s))));
 File.WriteAllText(args[1], sw.ToString().Replace("\r\n", "\n"));
 Console.WriteLine("wrote " + args[1]);
 
@@ -63,6 +63,7 @@ void Cross(string file, string column, string vocab)
 Cross("debt_sink", "Flags", CouncilCodes.VocabDebtFlag);
 Cross("payment_misfits", "LabelCheck", CouncilCodes.VocabLabelCheck);
 Cross("debt_ledger", "DecodeStatus", CouncilCodes.VocabDecodeStatus);
+Cross("debt_ledger", "Class", CouncilCodes.VocabLedgerClass);
 // exception bundles: Schedule,GroupId,TransactionId,SupplierName,Net,Difference,Detail,Classification(7),TransactionGross,ExplainedBy(9),...  (quoted fields may hold commas)
 foreach (var dir in Directory.GetDirectories(dataRoot).Where(d => Path.GetFileName(d) != "cross"))
     foreach (var file in Directory.GetFiles(dir, "fy-*.exceptions*.csv.gz"))

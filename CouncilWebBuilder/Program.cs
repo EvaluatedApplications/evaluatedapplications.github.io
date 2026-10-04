@@ -32,6 +32,20 @@ var rowOf = new Dictionary<string, string[]>();                     // slug -> i
 // A council the scanner is still working on has a row and a stub profile ("Profile text pending the first run"): it is HELD until the profile is written, so a half-onboarded
 // council is never published by a rebuild. COUNCIL_HOLD (comma-separated slugs) holds one by hand.
 var held = (Environment.GetEnvironmentVariable("COUNCIL_HOLD") ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToHashSet();
+// The scanner's own error-category checklist holds a council that fails a category it cannot fix: export/checklist_holds.csv (Council,Category,Reason,Effect). Effect "withhold" (also the
+// default when the column is empty) keeps the council off the page exactly like COUNCIL_HOLD; any other effect ("note") only prints. This is the file `CouncilAudit.Cli checklist holdenv`
+// reads, so the two agree by construction (the CLI prints the same slugs, comma separated, for COUNCIL_HOLD).
+{
+    string holdsPath = Path.Combine(export, "checklist_holds.csv");
+    if (File.Exists(holdsPath))
+        foreach (var h in ParseCsv(File.ReadAllText(holdsPath, Encoding.UTF8)).Skip(1))
+        {
+            if (h.Count < 3 || h[0].Length == 0) continue;
+            string effect = h.Count > 3 && h[3].Length > 0 ? h[3] : "withhold";
+            Console.WriteLine($"CHECKLIST HOLD [{h[0]} {h[1]}] effect {effect}: {h[2]}");
+            if (effect == "withhold") held.Add(h[0]);
+        }
+}
 var heldKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);   // slug and full name of every council with an index row that is not shipped: its rows are also dropped from the cross files
 foreach (var row in indexRows)
 {
@@ -39,7 +53,7 @@ foreach (var row in indexRows)
     if (hits.Count == 0) { Console.WriteLine($"NOT SHIPPED (no profile in the engine matches the slug): {row[0]}"); heldKeys.Add(row[0]); continue; }
     if (hits.Count > 1) throw new InvalidOperationException($"slug '{row[0]}' matches {hits.Count} profiles: {string.Join("; ", hits.Select(h => h.Name))}");
     if (held.Contains(row[0]) || hits[0].VerificationNote.StartsWith("Profile text pending", StringComparison.OrdinalIgnoreCase))
-    { Console.WriteLine($"HELD (profile text not written yet, or COUNCIL_HOLD): {row[0]}"); heldKeys.Add(row[0]); heldKeys.Add(hits[0].Name); continue; }
+    { Console.WriteLine($"HELD (profile text not written yet, COUNCIL_HOLD, or export/checklist_holds.csv): {row[0]}"); heldKeys.Add(row[0]); heldKeys.Add(hits[0].Name); continue; }
     if (slugOf.ContainsKey(hits[0].Name)) throw new InvalidOperationException($"profile '{hits[0].Name}' matches two slugs");
     slugOf[hits[0].Name] = row[0]; rowOf[row[0]] = row;
 }
@@ -339,11 +353,17 @@ if (!profilesOnly)
 
 // The small cross-council check files and the declared-spend files (all read whole, each well under 400 KB raw).
 foreach (var n in profilesOnly ? Array.Empty<string>() : new[] { "transaction_twins", "cross_file_repeats", "file_duplication", "within_txn_repeats", "budget_reconciliation",
-                          "budget_units", "budget_test", "budget_test_stage2", "budget_test_stage2b", "budget_test_stage2c", "budget_test_pooled", "budget_test_pooled_all", "budget_test_pooled_all2",
-                          "crossref_alias_flows", "supplier_alias_grades", "debt_ledger", "debt_sink", "payment_misfits" })
-    WriteGz($"cross/{n}.csv", WithoutHeldCouncils(n, File.ReadAllBytes(Path.Combine(export, n + ".csv"))));
+                          "budget_units", "budget_test", "budget_test_stage2", "budget_test_stage2b", "budget_test_stage2c", "budget_test_stage2d", "budget_test_pooled", "budget_test_pooled_all", "budget_test_pooled_all2",
+                          "budget_test_pooled_all3", "crossref_alias_flows", "supplier_alias_grades", "debt_ledger", "debt_sink", "payment_misfits",
+                          "check_rules" })   // check_rules: the engine's registry of every row filter each check applies (CheckRules.cs); the page shows it as one disclosure per check
+{
+    var bytes = WithoutHeldCouncils(n, File.ReadAllBytes(Path.Combine(export, n + ".csv")));
+    if (n == "budget_units") bytes = WithFrozenColumn(bytes);
+    WriteGz($"cross/{n}.csv", bytes);
+}
 if (!profilesOnly)
-    foreach (var (file, column, vocab) in new[] { ("debt_sink", "Flags", CouncilCodes.VocabDebtFlag), ("payment_misfits", "LabelCheck", CouncilCodes.VocabLabelCheck), ("debt_ledger", "DecodeStatus", CouncilCodes.VocabDecodeStatus) })
+    foreach (var (file, column, vocab) in new[] { ("debt_sink", "Flags", CouncilCodes.VocabDebtFlag), ("payment_misfits", "LabelCheck", CouncilCodes.VocabLabelCheck), ("debt_ledger", "DecodeStatus", CouncilCodes.VocabDecodeStatus),
+                                                                  ("debt_ledger", "Class", CouncilCodes.VocabLedgerClass) })
     {
         var recs = ParseCsv(File.ReadAllText(Path.Combine(export, file + ".csv"), Encoding.UTF8));
         int col = recs[0].IndexOf(column);
@@ -541,6 +561,44 @@ byte[] WithoutHeldCouncils(string name, byte[] data)
     if (dropped == 0) return data;
     Console.WriteLine($"HELD ROWS DROPPED from cross/{name}.csv: {dropped}");
     return new UTF8Encoding(false).GetBytes(kept.ToString());
+}
+// budget_units.csv gains one column, FrozenEligible: whether the council-year was eligible in the freeze file of its own stage (export/budget_units_<stage>.csv, committed before that stage's statistic).
+// The live file can hold a year that became eligible after its group was frozen (Wirral 2022-23: a missing month was added later); the pre-registered statistic does not include it, and the page says so.
+// "" when no freeze file holds the council-year. The page reads columns by name, so nothing else about the file changes.
+byte[] WithFrozenColumn(byte[] data)
+{
+    var frozen = new Dictionary<string, Dictionary<string, string>>(StringComparer.Ordinal);   // stage -> "council|year" -> Eligible as frozen
+    foreach (var stage in new[] { "stage1", "stage2", "stage2b", "stage2c", "stage2d" })
+    {
+        var p = Path.Combine(export, $"budget_units_{stage}.csv");
+        if (!File.Exists(p)) continue;
+        var t = ParseCsv(File.ReadAllText(p, Encoding.UTF8));
+        int c = t[0].IndexOf("Council"), y = t[0].IndexOf("Year"), e = t[0].IndexOf("Eligible");
+        if (c < 0 || y < 0 || e < 0) throw new InvalidDataException($"{p}: no Council, Year or Eligible column");
+        var d = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var r in t.Skip(1)) if (r.Count > Math.Max(c, Math.Max(y, e))) d[r[c] + "|" + r[y]] = r[e];
+        frozen[stage] = d;
+    }
+    var rows = ParseCsv(new UTF8Encoding(false).GetString(data));
+    int cC = rows[0].IndexOf("Council"), cY = rows[0].IndexOf("Year"), cP = rows[0].IndexOf("Pool");
+    if (cC < 0 || cY < 0 || cP < 0) throw new InvalidDataException("budget_units.csv: no Council, Year or Pool column");
+    var sb = new StringBuilder();
+    sb.Append(string.Join(",", rows[0].Select(Q))).Append(",FrozenEligible\n");
+    int late = 0;
+    foreach (var r in rows.Skip(1))
+    {
+        string f = "";
+        if (r.Count > Math.Max(cC, Math.Max(cY, cP)))
+        {
+            string stage = r[cP] is "exploratory" or "confirmatory" ? "stage1" : r[cP];   // Stage 1's freeze file holds both of its pools
+            if (frozen.TryGetValue(stage, out var d) && d.TryGetValue(r[cC] + "|" + r[cY], out var el)) f = el;
+        }
+        int cE = rows[0].IndexOf("Eligible");
+        if (f == "False" && cE >= 0 && r.Count > cE && r[cE] == "True") { late++; Console.WriteLine($"ELIGIBLE AFTER ITS FREEZE: {r[cC]} {r[cY]} ({r[cP]})"); }
+        sb.Append(string.Join(",", r.Select(Q))).Append(',').Append(f).Append('\n');
+    }
+    Console.WriteLine($"BUDGET UNITS: {rows.Count - 1} council-years, {late} eligible now that were not eligible when their group was frozen.");
+    return new UTF8Encoding(false).GetBytes(sb.ToString());
 }
 string Slug(string name) => slugOf.TryGetValue(name, out var s) ? s : throw new InvalidOperationException("no slug for " + name);
 

@@ -13,16 +13,20 @@
     @if (_open)
     {
         <div class="verdict">
-            <p><b>In plain words.</b> The test was inconclusive, on every one of its arms. The flagged second copies are a median 0.01% of a council's file total (3.4% if the repeated-payment groups are added), while the ratio of file total to declared figure varies by about 23% between council-years (the comparator's own noise). A signal that small cannot be told apart from a gap that large, so the test cannot say whether any flagged row was an
+            <p><b>In plain words.</b> The test was inconclusive, on every one of its arms. In the first group the flagged second copies are a median 0.01% of a council's file total (3.4% if the repeated-payment groups are added), while the ratio of file total to declared figure varies by about 23% between council-years (the comparator's own noise). A signal that small cannot be told apart from a gap that large, so the test cannot say whether any flagged row was an
                 extra outgoing, and no slope from it is presented as a finding.</p>
-            <p><b>The cities.</b> In Leeds the file total is between 11% below and 12% above the declared running expenses plus Housing Revenue Account, and 10% to 28% below once capital and pass-through payments are added.
+            <p><b>The cities.</b> In Leeds the file total is between 11% below and 12% above the declared running expenses plus Housing Revenue Account, and 12% to 28% below once capital and pass-through payments are added.
                 The second copies the test counts are zero in Leeds by its definition, so the test says nothing there, and the repeated-payment groups give a fit the pre-registration calls an unexpected shape, with no verdict
                 (it reflects the size gap, not the flagged rows). The Leeds same-line-in-two-files repeats (£6.35m in 2022-23, £3.07m in 2023-24) are not in the statistic; they were found after the test was written.</p>
             <p><b>Four more cities.</b> In Sheffield, Bradford, Liverpool and Bristol the file total is below the declared running expenses plus capital and pass-through in all 17 city-years (0.56 to 0.99 of it), and the second
                 copies the test counts are zero in Sheffield and 0.00 to 0.85% elsewhere. The test cannot tell whether flagged rows were extra outgoings. All six arms are inconclusive.</p>
-            <p><b>Nine more councils.</b> In 49 of these 52 council-years (Wakefield, Coventry, Durham, Kirklees, Leicester, Cornwall, Nottingham, Wirral and Newcastle) the file total is below the declared running expenses plus capital and
-                pass-through (0.45 to 1.84 of it, median 0.76); the second copies the test counts are 0.0% to 8.1% of the file total. All six arms are inconclusive: the test cannot tell whether flagged rows were extra outgoings.
-                Pooled over all four groups the test now has 96 council-years, and every one of its six arms is still inconclusive. No slope is presented as a finding.</p>
+            <p><b>Nine more councils.</b> The group was frozen with 52 eligible council-years (Wakefield, Coventry, Durham, Kirklees, Leicester, Cornwall, Nottingham, Wirral and Newcastle). In 49 of those 52 the file total is below the declared running expenses plus capital and
+                pass-through (0.45 to 1.84 of it, median 0.75); the second copies the test counts are 0.0% to 8.1% of the file total. All six arms are inconclusive: the test cannot tell whether flagged rows were extra outgoings.
+                The current data holds one more eligible council-year, Wirral 2022-23, which became eligible after the group was frozen (a missing month was added). With it the figures are 50 of 53 (median 0.76) and 97 council-years pooled over the four groups. The test keeps its frozen pool, 52 and 96: the added year is not in the statistic.
+                Over the frozen pool of 96 council-years, pooled across the four groups, every one of its six arms is inconclusive. No slope is presented as a finding.</p>
+            <p><b>Seven more councils.</b> The fifth group is Surrey, Essex, Hertfordshire, Stockport, York, Calderdale and Camden, whose government figures were added after the first four groups were run (37 eligible council-years; the group was frozen and committed before its statistic was computed). In 26 of the 37 the file total is below the declared running expenses plus capital and
+                pass-through; in the other 11 it is above it. Across the 37, the file total is 0.64 to 2.57 of that figure (median 0.91). The second copies the test counts are 0.0% to 6.2% of the file total, and zero in 32 of the 37. All six arms are inconclusive: the test cannot tell whether flagged rows were extra outgoings.
+                Pooled over all five groups the test has 133 council-years, and every one of its six arms is inconclusive.</p>
             <p class="caption">Revenue Outturn is revenue only and net of recoverable VAT; this file is gross of payment, includes capital, pass-through payments, loan movements and credits. Employees are not paid through a supplier file.
                 The published files cannot show which bank payments left.</p>
         </div>
@@ -43,7 +47,7 @@
                     </tbody>
                 </table>
             }
-            <p class="caption">Council-years in the first group: 19, from Reading, Bracknell Forest, RBWM and Merton. Wokingham's years are a worked example and are not in the test. Surrey, Essex, Hertfordshire, Stockport and York are in no group: no government figure is held here for them, so none of their years can be compared. Declared figures are the government's Open Government Licence statistics, credited by name and year on each council's page.</p>
+            <p class="caption">Council-years in the first group: 19, from Reading, Bracknell Forest, RBWM and Merton. Wokingham's years are a worked example and are not in the test. Birmingham and West Berkshire have no council-year with both twelve covered months and a published government figure, so none of their years is in a group. Declared figures are the government's Open Government Licence statistics, credited by name and year on each council's page.</p>
         }
     }
 </section>
@@ -67,7 +71,9 @@
             foreach (var (file, title) in new[] { ("budget_test", "First group (Reading, Bracknell Forest, RBWM, Merton)"), ("budget_test_stage2", "Second group (Leeds)"),
                          ("budget_test_stage2b", "Third group (Sheffield, Bradford, Liverpool, Bristol)"),
                          ("budget_test_stage2c", "Fourth group (Wakefield, Coventry, Durham, Kirklees, Leicester, Cornwall, Nottingham, Wirral, Newcastle)"),
-                         ("budget_test_pooled_all", "First three groups pooled (44 council-years)"), ("budget_test_pooled_all2", "All four groups pooled (96 council-years)") })
+                         ("budget_test_stage2d", "Fifth group (Surrey, Essex, Hertfordshire, Stockport, York, Calderdale, Camden)"),
+                         ("budget_test_pooled_all", "First three groups pooled (44 council-years)"), ("budget_test_pooled_all2", "First four groups pooled (96 council-years, the frozen pool)"),
+                         ("budget_test_pooled_all3", "All five groups pooled (133 council-years)") })
             {
                 var t = new Tab(await Data.TableAsync($"cross/{file}.csv", true, co));
                 _sets.Add(new Set { Title = title, Rows = t.Rows.Select(r => new[] { t.G(r, "Arm"), t.G(r, "Role"), t.G(r, "Units"), t.G(r, "Verdict") }).ToList() });

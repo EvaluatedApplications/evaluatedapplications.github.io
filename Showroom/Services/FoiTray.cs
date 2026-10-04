@@ -91,8 +91,10 @@ public static class FoiFacts
                 // facts only: the stated gross and the published rows' total (no class, reading or cause goes in a letter)
                 it.Fact = $"In the {when}, transaction {Txn(slug, l.Tx)} ({l.Supplier}) is published as {NumLines(g.LineCount)} totalling {Gbp(l.Net)}, against a stated gross of {Gbp(l.Gross)}.";
             else
-                // Facts the file shows directly and nothing computed from them: no difference, no VAT adjustment (the "difference" the scanner holds is not yet a figure a letter should quote)
-                it.Fact = $"In the {when}, transaction {Txn(slug, l.Tx)} ({l.Supplier}) is published with a net of {Gbp(l.Net)} and a gross of {Gbp(l.Gross)}.";
+                // The gap is quoted again (2026-10-05): since the engine's Session 52 fix the file's Difference is the stated Gross minus the Gross expected from the net and the VAT type of
+                // the lines (before it was Gross minus Net, which is the VAT itself). No class, reading or cause goes in a letter. A zero gap (or a slice with none) leaves the sentence out.
+                it.Fact = $"In the {when}, transaction {Txn(slug, l.Tx)} ({l.Supplier}) is published with a net of {Gbp(l.Net)} and a gross of {Gbp(l.Gross)}."
+                    + (l.Diff != 0m ? $" The stated gross is {Gbp(Math.Abs(l.Diff))} {(l.Diff > 0m ? "above" : "below")} the gross expected from the net and the VAT type of its lines." : "");
             it.Lines.Add($"transaction {Txn(slug, l.Tx)}, {l.Supplier}, {when}, net {Gbp(l.Net)}, gross {Gbp(l.Gross)}");
         }
         else if (g.Schedule == "D")

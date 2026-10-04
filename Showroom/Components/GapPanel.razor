@@ -20,6 +20,7 @@
             <p>The <b>flagged repeat payments</b> are the second copies of lines listed under a second transaction number and the repeated-payment groups the rules found. Where they would fit inside the difference, the budget figures cannot show whether they were
                 extra, so the budget cannot clear them. <b>This shows the budget cannot clear these payments, not that they were made.</b> The pre-registered test of the same question stays as published: inconclusive, set out below.</p>
         </div>
+        <RulesDisclosure Checks="Rules" />
         @if (_error is not null) { <p class="err">@_error</p> }
         else if (!_loaded) { <p class="hint">Loading the declared-spend figures (small)...</p> }
         else
@@ -46,6 +47,7 @@
 </section>
 
 @code {
+    static readonly string[] Rules = { "BudgetComparison" };
     sealed class HubRow { public string Slug = ""; public GapSummary S = new(); }
 
     bool _open, _loaded;

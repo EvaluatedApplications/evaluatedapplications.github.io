@@ -40,6 +40,7 @@
             <div class="sched">
                 <h4>@ScheduleTitle(sch)</h4>
                 <p class="plain">@ScheduleDefinition(sch)</p>
+                <RulesDisclosure Checks="RuleNames(sch)" />
                 @if (NumberingNote(Slug, sch, U.Year) is { } numNote) { <p class="na">@numNote</p> }
                 @if (na && NotAvailable(Slug, sch, U.Year) is { } naText) { <p class="na">@naText</p> }
                 @if (buckets.Any(b => b.SupplierFurnished))
@@ -95,6 +96,9 @@
 
 @code {
     static readonly string[] Schedules = { "B", "A", "D" };
+    // the rule list's names for the three schedules; the same array every render, so the disclosure is not redrawn for nothing
+    static readonly string[] RulesA = { "ScheduleA" }, RulesB = { "ScheduleB" }, RulesD = { "ScheduleD" };
+    static string[] RuleNames(string sch) => sch == "A" ? RulesA : sch == "B" ? RulesB : RulesD;
 
     [Parameter, EditorRequired] public string Slug { get; set; } = "";
     [Parameter, EditorRequired] public LoadedUnit U { get; set; } = null!;
@@ -155,7 +159,8 @@
         if (g.Class == "NSquaredListing" && g.Lines.Count > 0) return $"{s}: a payment run of {Gbp(g.Value)} as stated; its published rows total {Gbp(g.Lines[0].Net)}";
         if (g.ExplainedBy == "NSquaredRows")
             return $"{s}: a payment run of {Gbp(g.Value)} as stated, under {Plural(g.Lines.Select(l => l.Tx).Distinct().Count(), "transaction number", "transaction numbers")}";
-        return g.Schedule == "A" ? $"{s}: {Gbp(g.Value)} that does not reconcile" : $"{s}: {Gbp(g.Value)} across {NumLines(g.LineCount)}";
+        // Schedule A: the value is the size of the gap between the stated Gross and the Gross expected from the lines' VAT types (the file's Difference column)
+        return g.Schedule == "A" ? $"{s}: a gap of {Gbp(g.Value)}" : $"{s}: {Gbp(g.Value)} across {NumLines(g.LineCount)}";
     }
 
     // a transaction number is shown only where the council's file gives one: a scanner row number or placeholder is shown as "the file gives no transaction number" (CouncilTerms.TxText)
@@ -170,7 +175,7 @@
         {
             var l = g.Lines[0];
             if (g.Class == "NSquaredListing") return $"Transaction {txs}. Published rows total {Gbp(l.Net)}; the stated gross is {Gbp(l.Gross)}. {detail}";
-            return $"Transaction {txs}. Published net {Gbp(l.Net)}, gross {Gbp(l.Gross)}, difference {Gbp(l.Diff)}. {detail}";
+            return $"Transaction {txs}. Published net {Gbp(l.Net)}, stated gross {Gbp(l.Gross)}. The gap (stated gross minus the gross expected from the net and the VAT type of its lines) is {Gbp(l.Diff)}. {detail}";
         }
         if (g.ExplainedBy == "NSquaredRows" && g.Lines.Count > 0)
         {

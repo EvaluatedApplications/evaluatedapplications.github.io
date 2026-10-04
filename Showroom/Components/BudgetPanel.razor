@@ -15,6 +15,7 @@
         Revenue Outturn and Capital Outturn statistics. They are shown so you can see the two sets of numbers side by side, not as a finding.</p>
     @if (_open)
     {
+        <RulesDisclosure Checks="Rules" />
         <ul class="caps">
             <li>Revenue Outturn is revenue only and net of recoverable VAT; this file is gross of payment, includes capital, pass-through payments, loan movements and credits.</li>
             <li>Employees are not paid through a supplier file.</li>
@@ -67,6 +68,7 @@
 
 @code {
     [Parameter, EditorRequired] public string Slug { get; set; } = "";
+    static readonly string[] Rules = { "BudgetComparison" };
 
     sealed class BLine { public string Line = "", Kind = "", Source = "", Note = ""; public decimal Gbp; public string? Url; }
     sealed class BYear { public string Year = "", Headline = "", Status = ""; public List<BLine> Lines = new(); public bool Open; }
@@ -113,7 +115,7 @@
                     ? $"file total {Gbp(f.Value)} against declared plus pass-through {Gbp(k3.Value)}"
                     : "see the lines";
                 var u = units.Rows.FirstOrDefault(r => units.G(r, "Council") == Slug && units.G(r, "Year") == g.Key);
-                y.Status = u is null ? "" : PoolStatus(units.G(u, "Pool"), units.B(u, "Eligible"), units.G(u, "Note"));
+                y.Status = u is null ? "" : PoolStatus(units.G(u, "Pool"), units.B(u, "Eligible"), units.G(u, "Note"), units.G(u, "FrozenEligible"));
                 years.Add(y);
             }
             _why = "";
@@ -131,7 +133,9 @@
         StateHasChanged();
     }
 
-    static string PoolStatus(string pool, bool eligible, string note)
+    // frozenEligible: whether this council-year was eligible in the group's freeze file ("True"/"False"; "" when the data carries no such column). A year that became eligible after the
+    // group was frozen (a missing month was added later) is in the live file but not in the pre-registered statistic.
+    static string PoolStatus(string pool, bool eligible, string note, string frozenEligible)
     {
         string where = pool switch
         {
@@ -140,10 +144,12 @@
             "stage2" => "In the second group (the cities) of the pre-registered test.",
             "stage2b" => "In the third group (four more cities) of the pre-registered test.",
             "stage2c" => "In the fourth group (nine more councils) of the pre-registered test.",
+            "stage2d" => "In the fifth group (seven more councils) of the pre-registered test.",
             _ => "",
         };
+        string late = eligible && frozenEligible == "False" ? " It became eligible after its group was frozen, so the pre-registered statistic does not include it." : "";
         string elig = eligible
-            ? "This year has twelve covered months and a published comparator, so it is eligible for the comparison."
+            ? "This year has twelve covered months and a published comparator, so it is eligible for the comparison." + late
             : "This year is not eligible for the comparison (it needs twelve covered months and a published comparator)." + (string.IsNullOrWhiteSpace(note) ? "" : " " + (note.Length > 260 ? note[..260] + "..." : note));
         return (where + " " + elig).Trim();
     }
