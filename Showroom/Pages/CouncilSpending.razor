@@ -60,6 +60,7 @@
         <h2>Across all twenty-one councils</h2>
         <p class="plain">These checks read small summary files that cover every council. Tap one to open it; each loads only when opened. The same checks, limited to one council, are on each council's own page.</p>
         @foreach (var d in CouncilChecksWeb.All) { <CheckPanel Def="d" Slug="@null" /> }
+        <GapPanel />
         <BudgetTestPanel />
     </section>
 
@@ -131,6 +132,7 @@ else
             @foreach (var d in CouncilChecksWeb.All) { <CheckPanel @key="@(Slug + d.Id)" Def="d" Slug="@Slug" /> }
         </section>
 
+        <GapPanel Slug="@Slug" />
         <BudgetPanel Slug="@Slug" />
         <BudgetTestPanel />
 

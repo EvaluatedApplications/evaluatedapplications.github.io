@@ -1,0 +1,162 @@
+@using System.Diagnostics
+@using Showroom.Services
+@using static Showroom.Services.CouncilTerms
+@inject CouncilWebData Data
+
+@* Declared spend, what the published file itemises, the difference between them, and the flagged repeat payments, per council-year, all drawn on ONE scale
+   per year. Reads only budget_units.csv (small; the same file the pre-registered test reads). One council (Slug set) or the summary of all twenty-one (Slug null).
+   The difference is labelled "declared spend not itemised in the file": it is two totals on different bases, never "undeclared" or "missing". *@
+<section class="budget gappanel">
+    <button type="button" class="check-head" @onclick="Toggle" aria-expanded="@(_open ? "true" : "false")">
+        <span class="arrow" aria-hidden="true">@(_open ? "▾" : "▸")</span>
+        <h2>@(Slug is null ? "Can the budget figures clear the flagged payments?" : "Declared spend, the file, and the flagged payments")</h2>
+    </button>
+    @if (_open)
+    {
+        <div class="verdict">
+            <p><b>What this shows.</b> Each year, the spend a council declared to government is set against the spend its published file itemises. The difference is <b>declared spend not itemised in the file</b>. It is two
+                totals on different bases, not a list of payments: it can hold payments below the publication threshold, card spend, school bank accounts, non-cash charges and timing. Employee pay is not in the declared figure used
+                here, so it is not part of the difference.</p>
+            <p>The <b>flagged repeat payments</b> are the second copies published twice and the repeat-payment leads the rules found. Where they would fit inside the difference, the budget figures cannot show whether they were
+                extra, so the budget cannot clear them. <b>This shows the budget cannot clear these payments, not that they were made.</b> The pre-registered test of the same question stays as published: inconclusive, set out below.</p>
+        </div>
+        @if (_error is not null) { <p class="err">@_error</p> }
+        else if (!_loaded) { <p class="hint">Loading the declared-spend figures (small)...</p> }
+        else if (Slug is null)
+        {
+            <p class="summary">@_allLine</p>
+            <table class="tests gaptable">
+                <thead><tr><th>Council</th><th>Years compared</th><th>File below declared</th><th>Flagged fits inside (median year)</th></tr></thead>
+                <tbody>
+                @foreach (var r in _hub)
+                {
+                    <tr>
+                        <td><a href="/tools/council-spending/@r.Slug">@CouncilWebData.ShortOf(r.Slug)</a></td>
+                        <td>@r.S.N</td>
+                        <td>@(r.S.N == 0 ? "-" : r.S.Below + " of " + r.S.N)</td>
+                        <td>@(r.S.N == 0 ? "no year can be compared yet" : r.S.Fits == 0 ? "in none of its years" : GapYear.Times(r.S.MedFit) + " times over, in " + r.S.Fits + " of " + r.S.N)</td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+            <p class="caption">A year is compared only when the file covers twelve months and the government has published a figure for it. "Times over" is the declared spend not itemised in the file divided by the flagged repeat payments (second copies and repeat-payment leads), in each year where the file itemises less than was declared. Each council's page draws every year on one scale.</p>
+        }
+        else
+        {
+            @foreach (var s in _sentences) { <p class="summary">@s</p> }
+            @foreach (var y in _years.Where(y => y.Eligible))
+            {
+                decimal max = y.Declared > y.File ? y.Declared : y.File;
+                <div class="gyear" @key="y.Year">
+                    <h3>@y.Year @if (y.Worked) { <span class="tag gtag">worked example</span> }</h3>
+                    <div class="gchart" aria-hidden="true">
+                        <div class="gl"><span class="sw sdec"></span>Declared spend <b>@Gbp(y.Declared)</b></div>
+                        <div class="gtrack"><i class="seg sdec" style="left:0;width:@W(y.Declared, max)"></i></div>
+                        <div class="gl"><span class="sw sfile"></span>Itemised in the published file <b>@Gbp(y.File)</b>
+                            @if (y.Gap > 0m) { <span class="sw sgap"></span><span>Declared spend not itemised in the file </span><b>@Gbp(y.Gap)</b> }
+                            else { <span class="sw sover"></span><span>Above the declared spend </span><b>@Gbp(-y.Gap)</b> }
+                        </div>
+                        <div class="gtrack">
+                            @if (y.Gap > 0m)
+                            {
+                                <i class="seg sfile" style="left:0;width:@W(y.File, max)"></i>
+                                <i class="seg sgap" style="left:@W(y.File, max);width:@W(y.Gap, max)"></i>
+                            }
+                            else
+                            {
+                                <i class="seg sfile" style="left:0;width:@W(y.Declared, max)"></i>
+                                <i class="seg sover" style="left:@W(y.Declared, max);width:@W(-y.Gap, max)"></i>
+                            }
+                        </div>
+                        <div class="gl"><span class="sw sta"></span>Second copies published twice <b>@Gbp(y.TA)</b> <span class="sw stb"></span>Repeat-payment leads <b>@Gbp(y.Leads)</b>@if (y.Gap > 0m) { <span class="gnote"> (dashed outline: the size of the not-itemised amount)</span> }</div>
+                        <div class="gtrack">
+                            @if (y.Gap > 0m) { <i class="seg sbox" style="left:0;width:@W(y.Gap, max)"></i> }
+                            @if (y.TA > 0m) { <i class="seg sta flag" style="left:0;width:@W(y.TA, max)"></i> }
+                            @if (y.Leads > 0m) { <i class="seg stb flag" style="left:@W(y.TA, max);width:@W(y.Leads, max)"></i> }
+                        </div>
+                        <div class="gaxis"><span>£0</span><span>@Gbp(max) (one scale for all three bars)</span></div>
+                    </div>
+                    <p class="greading">@y.Reading()</p>
+                    @if (y.Year is "2017-18" or "2018-19") { <p class="hint">For this year the government's split between employees and running expenses is an estimate, not a council return, so the declared figure is rougher.</p> }
+                </div>
+            }
+            @if (_years.Any(y => !y.Eligible))
+            {
+                <details class="verify">
+                    <summary>Years not compared (@_years.Count(y => !y.Eligible))</summary>
+                    <ul class="notelist">
+                        @foreach (var y in _years.Where(y => !y.Eligible)) { <li @key="y.Year"><b>@y.Year</b>: @y.WhyNot.</li> }
+                    </ul>
+                </details>
+            }
+            <ul class="caps">
+                <li>Revenue Outturn is revenue only and net of recoverable VAT; this file is gross of payment, includes capital, pass-through payments, loan movements and credits.</li>
+                <li>Employees are not paid through a supplier file.</li>
+                <li>The published files cannot show which bank payments left.</li>
+                <li>Declared spend here is the government's Revenue Outturn running expenses plus Housing Revenue Account, plus Capital Outturn, plus the pass-through payments seen in the file (for example tax authorities, pension funds, fire and police authorities). The line-by-line arithmetic is in the panel below.</li>
+            </ul>
+            <p class="caption">@OglCredit</p>
+        }
+    }
+</section>
+
+@code {
+    [Parameter] public string? Slug { get; set; }
+
+    sealed class HubRow { public string Slug = ""; public GapSummary S = new(); }
+
+    bool _open, _loaded;
+    string? _error;
+    string _loadedFor = "\0";
+    List<GapYear> _years = new();
+    List<string> _sentences = new();
+    List<HubRow> _hub = new();
+    string _allLine = "";
+    Tab? _units;
+
+    // a council page shows its panel at once (one small file, after the profile has already paid the first-inflate cost); the hub keeps it closed like every other hub panel
+    protected override void OnInitialized() => _open = Slug is not null;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_open && _loadedFor != (Slug ?? "")) await LoadAsync();
+    }
+
+    async Task Toggle()
+    {
+        _open = !_open;
+        if (_open && _loadedFor != (Slug ?? "")) await LoadAsync();
+    }
+
+    async Task LoadAsync()
+    {
+        var sw = Stopwatch.StartNew();
+        _loaded = false; _error = null;
+        try
+        {
+            if (_units is null) _units = new Tab(await Data.TableAsync("cross/budget_units.csv", true, new Cooperative(CancellationToken.None)));
+            if (Slug is null)
+            {
+                _hub = new();
+                var all = GapYear.Build(_units, null);
+                foreach (var c in CouncilWebData.Councils)
+                    _hub.Add(new HubRow { Slug = c.Slug, S = GapSummary.Of(all.FindAll(y => y.Council == c.Slug)) });
+                var tot = GapSummary.Of(all);
+                int councils = 0; foreach (var h in _hub) if (h.S.N > 0) councils++;
+                _allLine = $"{tot.N} council-years across {councils} councils have a full year of payments and a published government figure. In {tot.Below} of them the file itemises less than the declared spend, so there is declared spend not itemised in the file; "
+                    + $"in {tot.Fits} the flagged repeat payments fit inside it, so the budget figures cannot rule them out. In {tot.Above} the file itemises more than was declared.";
+            }
+            else
+            {
+                _years = GapYear.Build(_units, Slug);
+                _sentences = GapSummary.Of(_years).Sentences();
+            }
+            _loadedFor = Slug ?? ""; _loaded = true;
+            await Data.LogAsync($"gap {(Slug ?? "all")} built", sw.ElapsedMilliseconds, Slug is null ? "" : $"({_years.Count} years)");
+        }
+        catch (Exception ex) { _error = "Could not load the declared-spend figures: " + ex.Message; }
+    }
+
+    /// <summary>A bar's left or width as a percentage of the year's one scale.</summary>
+    static string W(decimal part, decimal max) => max <= 0m || part <= 0m ? "0%" : Math.Min(100d, (double)(part / max) * 100d).ToString("0.###", System.Globalization.CultureInfo.InvariantCulture) + "%";
+}

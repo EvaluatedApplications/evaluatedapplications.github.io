@@ -154,6 +154,9 @@ no engine in the browser. Public-audience, mobile-first, not editorial: audit te
   groups opened on demand; reads `ExplainedBy`/`ExplainedMeaning` by header name), `CouncilSource` (`SourceScan`, `SourceState`), `CouncilChecksWeb` (check definitions, plain loops: LINQ over
   decimals/tuples is slow in WASM), `CouncilTerms` (wording, `TryDate` day-first: "03/04/2020" is 3 April), `FoiTray` (`FoiTray`, `FoiFacts`: item sentences and the letter);
   `Components/CheckPanel|MonthView|BudgetPanel|BudgetTestPanel|FoiTrayPanel|SourceBlocks`. Each load logs a `CW-PERF` console line.
+- **Gap panel** (`Components/GapPanel` + `Services/CouncilGap`, 2026-10-04): per eligible council-year, ONE scale: declared (K3) / file (F) / "declared spend not itemised in the file" (K3-F, never
+  "undeclared") / flagged (T_A second copies + T_B-T_A leads), one computed sentence (fits N times over; larger than; or file above declared), council summary, hub table. Reads only
+  `cross/budget_units.csv` (K3 EXCLUDES employee pay, so staff pay is not in the gap). Open on council pages, closed on the hub. Measure: `scripts/gap-perf.mjs <dist> 6 4096 100 <data> [cold]`.
 - **Pattern readings** (item 22, as changed in Session 34): RecurringBatchRate and CadenceCatchUp are NOT classes. An Unclear group carries them in `ExplainedBy` + `ExplainedMeaning`;
   shown as a tag with the meaning as caption, the group stays open. Month summary: "N still open (Unclear + standing-payment surplus), of which K carry a pattern reading".
 - **Request tray** (`FoiTrayPanel`, one letter per council): "Add to request" on every month group and cross-check row (not budget lines). The letter states facts and asks
