@@ -3,10 +3,12 @@ using System.Text;
 using System.Text.Json;
 using CouncilAudit;
 
-// Prepares Showroom/wwwroot/data/council-web from the virtual-customer's web_export. See the csproj comment.
+// Prepares council-web (the Council Spending Scanner data) straight into the website-data repo (C:\Users\dongy\website-data\council-web,
+// served at /website-data/council-web by that repo's own GitHub Pages), from the virtual-customer's web_export. See the csproj comment.
+// Override the target with the first argument or COUNCIL_WEB_OUT. After a run: commit and push website-data; nothing here touches the site repo.
 string webExport = Environment.GetEnvironmentVariable("COUNCIL_WEB_EXPORT") ?? @"C:\Users\dongy\VirtualCustomer\web_export";
 string export = Environment.GetEnvironmentVariable("COUNCIL_EXPORT_DIR") ?? @"C:\Users\dongy\VirtualCustomer\export";
-string outDir = args.Length > 0 ? args[0] : @"C:\Users\dongy\AboutUs\Showroom\wwwroot\data\council-web";
+string outDir = args.Length > 0 ? args[0] : Environment.GetEnvironmentVariable("COUNCIL_WEB_OUT") ?? @"C:\Users\dongy\website-data\council-web";
 
 if (args.Length > 1 && args[1] == "names") { foreach (var c in SupportedCouncils.Everyone) Console.WriteLine(c.Name + " | " + c.Years.Count + " | " + c.KnownQuirks.Count); return 0; }
 if (args.Length > 1 && args[1] == "props")

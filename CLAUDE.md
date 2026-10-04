@@ -1708,6 +1708,26 @@ to be a duplicated-by-hand hex match, not an automatic inheritance.
 
 ## Deploy
 
+**2026-10-04: big files no longer live in this repo.** The user split them into a second repo, `C:\Users\dongy\website-data`
+(GitHub `EvaluatedApplications/website-data`, Pages on main, https://evaluatedapplications.github.io/website-data/, same origin as
+this site so no CORS). It holds `council-web/` (CouncilWebBuilder writes there directly), `prism/` (checkpoint + sidecars) and
+`_framework/` (the Blazor runtime: the 30 MB AOT wasm, assemblies, ICU). This repo's `Showroom/dist/` shrank from 364 MB to 0.7 MB
+(index.html, css, `blazor.webassembly.*.js`, `data/forecaster-history.json`); `Showroom/wwwroot` from 285 MB to 0.3 MB.
+- **Push order, always: website-data first, then this repo.** The new site's `index.html` fetches hashed runtime files from
+  `/website-data/_framework/`; pushing the site first leaves it booting from files that are not live yet. Rolling back the site alone is
+  safe (old runtime files stay in website-data until `publish-site.ps1 -Prune`, run only after the site push is live).
+- `deploy.yml` is unchanged: it still copies `Showroom/dist/` to `/tools`. website-data deploys itself (its own Pages).
+- **A Showroom source change**: `Showroom/scripts/publish-site.ps1` (publish, rebuild `dist/`, write the runtime into website-data), commit
+  both repos, push website-data then this repo. **A checkpoint or council-data refresh**: website-data only, no site commit, no publish.
+- The one data setting is `window.EA_DATA_BASE` in `Showroom/wwwroot/index.html`; local dev needs `Showroom/scripts/link-data.ps1` once.
+  Full recipe: `Showroom/CLAUDE.md` ("Data and runtime live in the website-data repo").
+- The git history of this repo still carries the old data and dist (about 2.6 GB of pack); history was deliberately not rewritten, the
+  repo just stops growing. Pages artifact size per deploy is now the static site plus 0.7 MB of tools.
+- Still in this repo and still growing slowly: `forecaster-history.json` (refreshed by `refresh-forecaster-data.yml`) and `content.wal`.
+  Moving them would need that workflow to push to website-data (a token), not done.
+- The paragraphs below describing `dist/` as a ~55 MB committed build artifact and the SRI/CRLF incident are history; the SRI rule still
+  holds for the files that remain in `dist/` and now ALSO for website-data (its `.gitattributes` is `* -text -diff`).
+
 `.github/workflows/deploy.yml`, triggered on push to `main` (Pages Source must be "GitHub
 Actions", one-time repo setting). You (website-owner) never run this or commit/push — leave
 changes in the working tree; the coordinator batch-commits and pushes to publish.

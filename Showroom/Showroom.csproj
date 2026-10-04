@@ -164,4 +164,13 @@
     </PackageReference>
   </ItemGroup>
 
+  <!-- The big data (council data, Prism checkpoint) lives in the website-data repo and is fetched from its own Pages site
+       (see Services/DataUrl.cs). For local dev, scripts/link-data.ps1 puts a junction at wwwroot/website-data so dotnet run
+       can serve it. A Release publish must never carry it, or dist/ (committed to the site repo) would swell with data again. -->
+  <ItemGroup Condition="'$(Configuration)' == 'Release'">
+    <Content Remove="wwwroot\website-data\**" />
+    <None Remove="wwwroot\website-data\**" />
+    <EmbeddedResource Remove="wwwroot\website-data\**" />
+  </ItemGroup>
+
 </Project>

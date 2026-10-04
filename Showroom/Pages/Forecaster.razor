@@ -244,7 +244,7 @@
             // Mirrors Prism.razor's own oracle-stackk.txt fetch exactly (GetStringAsync -> Trim -> int.Parse),
             // including its degrade-gracefully behaviour: any failure (file missing, malformed, network error)
             // is swallowed and falls back to the same K=1 Prism itself falls back to — never blocks page load.
-            try { _kPass = int.Parse((await Http.GetStringAsync("data/oracle-stackk.txt")).Trim()); }
+            try { _kPass = int.Parse((await Http.GetStringAsync(DataUrl.For("prism/oracle-stackk.txt"))).Trim()); }
             catch { _kPass = 1; }
 
             _loaded = true;

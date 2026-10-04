@@ -5,6 +5,10 @@ name: Deploy site to Pages
 # the .NET runtime only loads when a visitor opens a tool.
 # One-time setup: Settings -> Pages -> Source = "GitHub Actions".
 #
+# 2026-10-04: the big files (council data, Prism checkpoint, the Blazor runtime under _framework) are NOT in this repo any more:
+# they live in the website-data repo, served by its own Pages at /website-data/ on this same origin. Showroom/dist/ is now ~0.7 MB.
+# Push website-data BEFORE this repo (the new index.html fetches hashed runtime files from there). See Showroom/CLAUDE.md.
+#
 # Showroom/dist/ is a PRE-BUILT, COMMITTED publish output (2026-08-28) -- CI does NOT run
 # `dotnet publish` here. This build now runs RunAOTCompilation+PublishTrimmed=true, and AOT's
 # Emscripten/native compile step is slow enough that rebuilding it on every push burns real

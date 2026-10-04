@@ -1,6 +1,6 @@
 # Showroom — CLAUDE.md (showroom-owner)
 
-**Last verified:** 2026-10-04 (council scanner: request tray + letter, source rows from shipped transaction slices, classic page deleted, pattern readings as flags)
+**Last verified:** 2026-10-04 (big data and the Blazor runtime moved to the website-data repo; council scanner: request tray + letter, source rows, classic page deleted)
 
 Blazor WebAssembly app at `C:\Users\dongy\AboutUs\Showroom`, published under `/tools` on the public
 site (`AboutUs` repo, base href `/tools/`). Every tool runs entirely client-side: no server, no
@@ -28,10 +28,8 @@ soon tag, a package `.ver` pill, `.desc`, `.go-in`), **not** a nav entry. `wwwro
 `<base href="/tools/" />`; links `/assets/site.css` (shared design system) + Showroom's own
 `boot.css`/`depth.css`; GitHub Pages SPA deep-link restore; JS interop: `window.analystDownload
 (name, text, mime)` (Blob-URL save), `window.copyText(text)`.
-**CSS pattern**: each tool has its own `Pages/<Tool>.razor.css` (Blazor CSS isolation can't share a
-partial across components) duplicating a shared base block verbatim (`.room`/`.crumb`/`.room-head
-h1`/`.lede`/`.hint`/`.err`/`.go`/`.outro`) before its own classes — copy from `Prism.razor.css`/
-`Analyst.razor.css`. `wwwroot/css/voice.css` is the one real global exception (`TokenVoiceControls`
+**CSS pattern**: each tool has its own `Pages/<Tool>.razor.css` (isolation can't share a partial) duplicating a shared base block (`.room`/`.crumb`/`.room-head h1`/`.lede`/`.hint`/`.err`/`.go`/`.outro`);
+copy from `Prism.razor.css`/`Analyst.razor.css`. `wwwroot/css/voice.css` is the one real global exception (`TokenVoiceControls`
 lives in the HoloKernel RCL). **Parallax depth/glow** (`wwwroot/css/depth.css`): 3 scroll-driven
 tiers, zero JS, reduced-motion-gated, tinted per tool via `[data-cat]` on the outer `.room` (a
 single package name sets `--glow-near`/`--glow-mid`; a multi-package tool uses a chord, e.g.
@@ -59,18 +57,12 @@ package — a `ProjectReference` here is the designed path, not a MonoRepo bound
   reload drops everything.
 - `RefinementLoop.Observe`/`.ObserveSequence` — the live-training pattern (`NewGrads()`->
   `IterAccumulate`/`StackIterAccumulateAllPos`->`Step`), used by Creature/Forecaster only.
-- `Decoding` comes from the **`Prism` package's** `Prism.Inference` namespace — `@using
-  global::Prism.Inference` required on any page referencing it (see Gotchas: namespace-collision
-  rule applies repo-wide, not just to the colliding page).
-- `CheckpointFetch.FetchAndDecompressGzipAsync(http, gzUrl)` — fetch + inflate a `.gz` sidecar (BCL `GZipStream`); Pages serves files uncompressed, so a raw checkpoint needs a hand-shipped
-  `.gz` sibling. The ONE choke point every checkpoint consumer shares (Prism, Stories, Cartographer, Analyst's novelty scan, Prose's "score with Prism"); Creature/Forecaster fetch only
-  small sidecars. `CheckpointF32.Unpack` runs inside it ("PF32" fp32 to plain f64, lossless): **cross-repo byte-exact contract with PrismStudio**, never change the wire format here alone.
-- `TokenVoice`/`TokenVoiceControls.razor` — Prism's per-token voice (face→tone synth), shared
-  byte-for-byte by Prism and Nano Stories; never quantise to a musical scale. `DegenerateTail.
-  Start(ids)`/`.SafePrefix(ids)` trims a repeating tail mid-generation (Prism, Nano Stories only).
-- **Browser contract**: visitors **train**, never **reshape**. `GrowLayers`/`GrowShifts` are real
-  but PrismStudio/server-side only; a better model reaches visitors via a new checkpoint, never a
-  runtime shape mutation.
+- `Decoding` comes from the **`Prism` package's** `Prism.Inference` namespace: `@using global::Prism.Inference` (see the namespace-collision gotcha).
+- `CheckpointFetch.FetchAndDecompressGzipAsync(http, gzUrl)`: fetch + inflate the `.gz` checkpoint (Pages serves it uncompressed, hence the hand-shipped `.gz`); the ONE choke point every
+  checkpoint consumer shares. `CheckpointF32.Unpack` runs inside it ("PF32" fp32 to f64, lossless): **cross-repo byte-exact contract with PrismStudio**, never change the wire format here alone.
+- `TokenVoice`/`TokenVoiceControls.razor`: Prism's per-token voice (face to tone synth), shared byte-for-byte with Nano Stories; never quantise to a musical scale.
+  `DegenerateTail.Start(ids)`/`.SafePrefix(ids)` trims a repeating tail mid-generation (Prism, Stories only).
+- **Browser contract**: visitors **train**, never **reshape** (`GrowLayers`/`GrowShifts` are PrismStudio-only; a better model ships as a new checkpoint).
 
 **Prism/Nano Stories operational constants** (re-measure on every checkpoint re-mint): `MaxReplyStepsConst = 56` (Prism) /
 `MaxStorySteps = 128` (Stories) are PINNED, not `Context/2` (that broke on a checkpoint swap). The checkpoint never emits STOP, so
@@ -79,8 +71,23 @@ every reply/story runs to its cap and ends mid-sentence: train it, no sentence-b
 continuation. `HoloKernel/AsciiPunctuation.Fold` (curly quotes/dashes -> ASCII) runs at every tokenizer entry
 (`SubwordVocab.Fold` blanks non-ASCII).
 
-**Checkpoint refresh** (Prism's `oracle-brain.bin` + sidecars, also Stories/Cartographer): data-only, no publish: copy into `wwwroot/data`+`dist/data`,
-regenerate the `.gz` with `GZipStream`, write sidecars as UTF-8 no BOM, cross-check `-stackk`/`-iterwarm` against PrismStudio.
+**Checkpoint refresh** (Prism's checkpoint + sidecars, shared by Stories/Cartographer/Analyst/Prose): data-only, no publish, NO site-repo change: write `prism/oracle-brain.bin.gz`
+(`GZipStream`; raw `.bin` is not shipped, nothing fetches it) + `oracle-vocab/rounds/stackk/iterwarm.txt` (UTF-8 no BOM; cross-check `-stackk`/`-iterwarm` against PrismStudio) into
+`C:\Users\dongy\website-data\prism\`, commit, push website-data only. Verify: `https://evaluatedapplications.github.io/website-data/prism/oracle-rounds.txt`.
+
+## Data and runtime live in the website-data repo (2026-10-04)
+`C:\Users\dongy\website-data` (GitHub `EvaluatedApplications/website-data`, Pages on main, served at `/website-data/` on the SAME origin as the site: no CORS) holds everything big, so
+the site repo stops growing: `council-web/` (CouncilWebBuilder writes straight there), `prism/` (checkpoint + sidecars), `_framework/` (the Blazor runtime). `.gitattributes` there is
+`* -text` (byte-exact, same reason as `dist/`). Still in the site: `wwwroot/data/forecaster-history.json` (+ its refresh workflow), `content.wal`; `dist/` is now 0.7 MB (was 364), `wwwroot` 0.3 MB (was 285).
+- **ONE setting**: `window.EA_DATA_BASE` at the top of `wwwroot/index.html` (`/website-data/`; `website-data/` on host `localhost`). `Program.cs` reads it into `Services/DataUrl.cs`;
+  every fetch is `DataUrl.For("prism/oracle-vocab.txt")` / `("council-web/...")`. Never write a literal `data/...` URL for these files.
+- **Local dev**: run `scripts/link-data.ps1` once (junction `wwwroot/website-data` -> the repo, gitignored; `Showroom.csproj` drops it from Release publishes).
+- **Runtime split**: `index.html`'s `loadBootResource` returns `EA_FRAMEWORK_BASE + file` (= `/website-data/_framework/`) for dotnetjs/dotnetwasm/assembly/globalization (`name` is already the
+  fingerprinted file; the first call, `dotnet.js`, is resolved through the import map). `blazor.webassembly.*.js` stays in the site. Empty on `localhost` (dev serves its own runtime).
+- **Source change = `scripts/publish-site.ps1`** (publish, rebuild `dist/`, copy the runtime to `website-data/_framework`, plain files only: Pages never serves `.br`/`.gz`). PUSH ORDER:
+  website-data first, then the site. Re-run with `-Prune` after the site push is live (it deletes old runtime files; doing it earlier breaks the still-live site).
+- **Check a build**: `node scripts/boot-check.mjs <dist> <website-data dir>` (headless Edge: Prism boots from the data origin, replies, no off-origin request) and
+  `node scripts/council-perf.mjs <dist> 6 4096 100`.
 
 ## The Analyst — `Pages/Analyst.razor` (route `/analyst`)
 In-browser data profiler + live SQL REPL over **HoloDb** (`Database.Open(null)`, in-memory). Sniffs
@@ -132,12 +139,14 @@ HoloDb `ProseStore` + AlgFormer plausibility (None / Prism's checkpoint / train 
 ## Council Spending Scanner: `Pages/CouncilSpending.razor` (routes `/council-spending`, `/council-spending/{slug}`)
 Built on the virtual-customer's PHONE-SIZED export (`VirtualCustomer\web_export`; SPEC_FOR_SHOWROOM.md items 9-22). Twelve councils, no HoloDb,
 no engine in the browser. Public-audience, mobile-first, not editorial: audit terms, plain prose + counts + GBP, OGL credit, never a cause.
-- **Data** (`wwwroot/data/council-web`, 169.5 MB, 2,254 files, none over 0.24 MB; `AboutUs\CouncilWebBuilder`, `dotnet run -c Release --project CouncilWebBuilder`,
-  about 45 s, wipe the folder first so stale files go; it fails above 50 MB/file; second arg `profiles` rewrites only profiles.json.gz): `index.csv`, per-council `months.csv`,
+- **Data** (`website-data/council-web`, 169.5 MB, 2,254 files, none over 0.24 MB; `AboutUs\CouncilWebBuilder`, `dotnet run -c Release --project CouncilWebBuilder`,
+  about 45 s, writes straight into the data repo (arg 1 / `COUNCIL_WEB_OUT` overrides), wipe the folder first so stale files go; it fails above 50 MB/file; second arg `profiles` rewrites
+  only profiles.json.gz. Then commit + push website-data, nothing else. KNOWN BREAK 2026-10-04: the engine now lists Wakefield and the builder's `Slug()` has no entry, so a run throws
+  until the page takes a 13th council): `index.csv`, per-council `months.csv`,
   month EXCEPTION slices (`<slug>/<YYYY-MM>.exceptions[.N].csv.gz`), month TRANSACTION slices (`<slug>/<YYYY-MM>[.N].csv.gz`, 1,333 files, 13 slim columns, fetched only by "See the
-  source rows"), `cross/*.csv.gz`, `profiles.json.gz`, `PREREG_BUDGET_TEST.txt`. Never load a whole council. After every `phoneexport`/`export`: re-run the builder, publish, refresh `dist/`.
+  source rows"), `cross/*.csv.gz`, `profiles.json.gz`, `PREREG_BUDGET_TEST.txt`. After every `phoneexport`/`export`: re-run the builder (no site publish needed).
   Profile text is cleaned in the BUILDER, never at source: the engine's "Schedule A/B/D" and "the engine" become the page's words, sentences naming working files, sessions or
-  checklists are dropped, empty notes held back; REWORDED/HELD BACK lines print for the profile owner (West Berkshire 3, RBWM 1 held back at last run).
+  checklists are dropped, empty notes held back; REWORDED/HELD BACK lines print for the profile owner (West Berkshire 3, RBWM 1 held back at last run). Never load a whole council.
 - **Code**: `Services/CouncilWebData` (fetch, chunked inflate, caches; keeps the last two months' transaction bytes), `CouncilMonth` (`MonthScan`: byte-level scan, no string per line,
   groups opened on demand; reads `ExplainedBy`/`ExplainedMeaning` by header name), `CouncilSource` (`SourceScan`, `SourceState`), `CouncilChecksWeb` (check definitions, plain loops: LINQ over
   decimals/tuples is slow in WASM), `CouncilTerms` (wording, `TryDate` day-first: "03/04/2020" is 3 April), `FoiTray` (`FoiTray`, `FoiFacts`: item sentences and the letter);
@@ -150,12 +159,11 @@ no engine in the browser. Public-audience, mobile-first, not editorial: audit te
   PLAIN markup with their state on the row (`ExGroup.Source`, `CheckRow.Source`); a component per row cost about 5 ms each on a phone. `FoiTray.ItemsChanged` redraws lists, `Changed` the panel.
 - **Source rows**: the tap fetches that month's transaction slice (all parts), scans the bytes for the group's transaction numbers (`AllTx` cap 80; a repeated-payment group also
   narrows to its supplier when that matches), lists up to 200 lines. Sampled 1,359 groups over 60 months: every one found its lines. A check row without a readable date has none.
-- Measured (`scripts/council-perf.mjs`: headless Edge via CDP on a published AOT build, CPU 6x + 4 Mbps/100 ms, two passes, wall/worst stall): tick one item 55-73/74 ms; open the
+- Measured (`scripts/council-perf.mjs`: headless Edge via CDP on a published AOT build, CPU 6x + 4 Mbps/100 ms, wall/worst stall; re-run 2026-10-04 on the website-data layout, one pass: in range, first open of the twins check stalled 641 ms): tick one item 55-73/74 ms; open the
   tray 365-433/287 ms the first time (profile fetch), about 190/60 with items; letter of 100 items opens 310-540/0; list of 15 groups 166-188/188; show 15 more worst stall 61-139;
   source rows of the first group 0.6 s (Wokingham, stall 104), 2.0-2.1 s (Bradford), 2.4-2.5 s (Leeds, Sheffield: 3-4 parts, about 4.8 MB raw; stall 55-64), a second group in the same month 0.25-0.5 s.
   Weakest: a tick in a 100-row list redraws the list (84-160 ms). First use of a check or month still stalls 0.3-0.5 s.
-- Classic in-browser engine page DELETED 2026-10-04 with `data/councils`. Still on disk and unused (delete when ready): `CouncilAudit/`, `Services/CouncilChecks|PeriodLoader|SlicedSort|SupplierIndex.cs`,
-  `Components/SupplierSearchBox|WorkStatus`, `data/reading` + `data/wokingham` (raw council files, 100 MB, nothing links them), and `AboutUs\CouncilDbBuilder`.
+- Classic in-browser engine page DELETED 2026-10-04 with `data/councils`; the unlinked raw `data/reading` + `data/wokingham` (100 MB) were deleted from wwwroot/dist the same day.
 - Gotchas: `--` in csproj XML comments breaks load; BudgetPanel's `<text>` trick fails in code blocks; CSS is one scoped file using `.cs ::deep`; lists with stateful children need `@key`.
 ## Unlisted: RecycleDAO marketplace prototype — `Pages/RecycleDaoDemo.razor` (`/recycledao-demo`)
 NOT a package-capability demo, NOT in the gallery — a private, link-only client preview
@@ -163,26 +171,14 @@ NOT a package-capability demo, NOT in the gallery — a private, link-only clien
 `Home.razor`/nav, `noindex,nofollow`. Mint invariant: `MintForApproval` is the only method that
 increases `_totalMinted`.
 
-## Dependencies (exact NuGet versions, `Showroom.csproj`)
-- `Microsoft.AspNetCore.Components.WebAssembly` **10.0.11** — **must stay version-equal to the
-  installed WASM runtime pack** (a skew caused a real 2026-09-06 outage: the interpreter hit IL it
-  didn't recognise from a mismatched native runtime and died silently at boot). Check
-  `dotnet --list-runtimes` whenever the SDK moves.
-- `EvaluatedApplications.AlgFormer` **2.20.1** (re-verified against `Showroom.csproj`/
-  `HoloKernel.csproj` 2026-10-03 — both pin the same version, no skew). `SubwordVocab.MaxLen` must
-  be ≥16 to load a freshly-minted checkpoint.
-- `EvaluatedApplications.Prism` **1.3.3**, via `HoloKernel.csproj`'s own `PackageReference` (re-
-  verified 2026-10-03) — `FloorMode.TopP`/`DecodePolicy.P` don't exist before 1.3.0 (needed for the
-  decode-gate retightening below); depends on AlgFormer >=2.15.0, satisfied by this project's 2.20.1.
-- `EvaluatedApplications.HoloDb` **2.1.0** (bumped from 1.10.0, 2026-10-03 — load-bearing for
-  Council Spending Scanner: 2.1.0 is the first version with a working `score` pseudo-column and
-  graded `NEAREST`, holodb-owner's F-04 fix) — Analyst, Prose, Council Spending Scanner.
-- `EvaluatedApplications.Tracer` **2.0.0** (re-verified against `Showroom.csproj` 2026-10-03) —
-  Creature.
-- `EvaluatedApplications.Prose` **1.3.2** (re-verified against `Showroom.csproj` 2026-10-03) —
-  Prose. A multi-package tool's version bump ripples to
-  every other tool in this one `.csproj` (NU1605 otherwise); re-`dotnet build` the whole app after
-  adding/bumping any tool, not just its own page.
+## Dependencies (exact NuGet versions, `Showroom.csproj`, re-verified 2026-10-03)
+- `Microsoft.AspNetCore.Components.WebAssembly` **10.0.11**: **must stay version-equal to the installed WASM runtime pack** (a skew caused the 2026-09-06 outage: the interpreter hit
+  IL from a mismatched native runtime and died silently at boot). Check `dotnet --list-runtimes` whenever the SDK moves.
+- `EvaluatedApplications.AlgFormer` **2.20.1** (same pin in `HoloKernel.csproj`). `SubwordVocab.MaxLen` must be >=16 to load a freshly-minted checkpoint.
+- `EvaluatedApplications.Prism` **1.3.3**, via `HoloKernel.csproj`: `FloorMode.TopP`/`DecodePolicy.P` need >=1.3.0; depends on AlgFormer >=2.15.0.
+- `EvaluatedApplications.HoloDb` **2.1.0**: load-bearing for the Council Scanner (first version with a working `score` pseudo-column and graded `NEAREST`, F-04). Analyst, Prose, Council.
+- `EvaluatedApplications.Tracer` **2.0.0** (Creature); `EvaluatedApplications.Prose` **1.3.2** (Prose). A multi-package tool's bump ripples to every tool in this one `.csproj`
+  (NU1605 otherwise); re-`dotnet build` the whole app after adding/bumping any package.
 - `ProjectReference ..\HoloKernel\HoloKernel.csproj` — Creature, Forecaster, Prism, Stories,
   Analyst, Prose, The Cartographer.
 - `PublishTrimmed=true` + `RunAOTCompilation=true` — **AOT is load-bearing, not a perf luxury**: the
@@ -193,12 +189,9 @@ increases `_totalMinted`.
   package`** — never hand-edit `<Version>`.
 
 ## Boundary (hard, from the agent charter)
-**NuGet only, never MonoRepo `ProjectReference`** — verify API assumptions against the actual
-published package before wiring new code. `HoloKernel` is the one exception (a sibling in-repo
-RCL, itself NuGet-only). Checkpoint hand-off (Prism) is `prismstudio-owner`'s call; Forecaster's
-live top-up needs a Finnhub key this agent can't self-register. Never touch `AboutUs/site/*`, nav,
-or the shared design system — `website-owner`'s. Never launch the app / open a browser —
-build-verify only; demonstrating a tool live is the user's to do.
+**NuGet only, never MonoRepo `ProjectReference`** (`HoloKernel`, a sibling NuGet-only RCL, is the one exception). Checkpoint hand-off is `prismstudio-owner`'s call;
+Forecaster's live top-up needs a Finnhub key. Never touch `AboutUs/site/*`, nav or the shared design system (`website-owner`'s). Never launch the app / open a browser for a demo:
+build-verify only (the headless-Edge scripts above are measurement harnesses, run on a published build).
 
 ## Standing technical facts
 **Shifts must be > 1, always** (S=1 is a pure diagonal); re-derive a floor from `bindRank = shifts·d/2` per tool, never copy another's.

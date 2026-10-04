@@ -17,14 +17,14 @@ public sealed record CouncilProfile(string Slug, string Name, string Page, strin
     string LastChecked, string Verification, string? Foi, int HeldBack);
 
 /// <summary>
-/// Reads the phone-sized council data under wwwroot/data/council-web (built by CouncilWebBuilder from the virtual-customer's
+/// Reads the phone-sized council data under website-data/council-web (built by CouncilWebBuilder from the virtual-customer's
 /// web_export). Rules: never fetch a whole-council file; a month is fetched only when the visitor asks for it; every file is
 /// small enough to read in one go (the largest exception slice is 0.1 MB compressed) and is parsed in time slices.
 /// Each load logs one "CW-PERF" line to the browser console with what it cost, so the timings in the report can be re-measured.
 /// </summary>
 public sealed class CouncilWebData
 {
-    const string Root = "data/council-web/";
+    static string Root => DataUrl.For("council-web/");   // website-data repo, see DataUrl
     readonly HttpClient _http;
     readonly IJSRuntime _js;
     readonly Dictionary<string, List<string[]>> _tables = new();

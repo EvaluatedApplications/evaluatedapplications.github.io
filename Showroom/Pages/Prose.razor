@@ -700,18 +700,18 @@
         if (_prismSession is not null && _prismVocab is not null) return true;
         try
         {
-            var vocabBytes = await Http.GetByteArrayAsync("data/oracle-vocab.txt");
+            var vocabBytes = await Http.GetByteArrayAsync(DataUrl.For("prism/oracle-vocab.txt"));
             var merges = Encoding.UTF8.GetString(vocabBytes).Replace("\r\n", "\n").Split('\n').Where(l => l.Length > 0).ToList();
             _prismVocab = new SubwordVocab(merges);
 
             long? rounds = null; int? stackK = null; int? iterWarm = null;
-            try { rounds = long.Parse((await Http.GetStringAsync("data/oracle-rounds.txt")).Trim()); } catch { }
-            try { stackK = int.Parse((await Http.GetStringAsync("data/oracle-stackk.txt")).Trim()); } catch { }
-            try { iterWarm = int.Parse((await Http.GetStringAsync("data/oracle-iterwarm.txt")).Trim()); } catch { }
+            try { rounds = long.Parse((await Http.GetStringAsync(DataUrl.For("prism/oracle-rounds.txt"))).Trim()); } catch { }
+            try { stackK = int.Parse((await Http.GetStringAsync(DataUrl.For("prism/oracle-stackk.txt"))).Trim()); } catch { }
+            try { iterWarm = int.Parse((await Http.GetStringAsync(DataUrl.For("prism/oracle-iterwarm.txt"))).Trim()); } catch { }
 
             _prismSession = await Sessions.GetOrCreateAsync("prism", async () =>
             {
-                var (bytes, _) = await CheckpointFetch.FetchAndDecompressGzipAsync(Http, "data/oracle-brain.bin.gz");
+                var (bytes, _) = await CheckpointFetch.FetchAndDecompressGzipAsync(Http, DataUrl.For("prism/oracle-brain.bin.gz"));
                 var peek = HoloFormer.Deserialize(bytes);
                 var kPass = stackK ?? 1;
                 var alpha = (peek.Layers == 1 && rounds is not null && iterWarm is > 0)

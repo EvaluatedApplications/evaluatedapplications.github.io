@@ -1,6 +1,8 @@
-// Headless-Edge harness for the Council Spending Scanner (request tray, "See the source rows", month lists). Serves a PUBLISHED wwwroot under /tools/,
+// Headless-Edge harness for the Council Spending Scanner (request tray, "See the source rows", month lists). Serves a PUBLISHED wwwroot (Showroom/dist,
+// or a publish output) under /tools/ and the website-data repo under /website-data/ (one origin, as on Pages),
 // drives the pages over the DevTools protocol with CPU and network throttling, prints wall time and the worst stall (long task) of each action.
-// Usage: node council-perf.mjs <published wwwroot> <cpu slowdown, 1 = none> <download kbit/s, 0 = none> <rtt ms>   (phone bar used so far: 6 4096 100)
+// Usage: node council-perf.mjs <published wwwroot> <cpu slowdown, 1 = none> <download kbit/s, 0 = none> <rtt ms> [<website-data dir, default C:\Users\dongy\website-data>]   (phone bar used so far: 6 4096 100)
+// Note: the throttle is switched on only AFTER boot, so the runtime download (now from website-data/_framework) is not part of the timings.
 // Needs Node 22+ and Edge at the path below. Publish first: dotnet publish Showroom.csproj -c Release -o <dir>.
 import http from 'node:http';
 import fs from 'node:fs';
@@ -11,12 +13,14 @@ const ROOT = process.argv[2];
 const CPU = Number(process.argv[3] ?? 1);
 const NET_KBPS = Number(process.argv[4] ?? 0);
 const RTT = Number(process.argv[5] ?? 0);
+const DATA = process.argv[6] ?? 'C:\\Users\\dongy\\website-data';
 const PORT = 8123 + Math.floor(Math.random() * 500), DBG = 9300 + Math.floor(Math.random() * 500);
 const types = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.wasm': 'application/wasm',
   '.dll': 'application/octet-stream', '.csv': 'text/csv', '.txt': 'text/plain', '.gz': 'application/gzip', '.svg': 'image/svg+xml', '.dat': 'application/octet-stream', '.blat': 'application/octet-stream', '.bin': 'application/octet-stream' };
 const server = http.createServer((req, res) => {
   let p = decodeURIComponent(req.url.split('?')[0]);
   if (p.startsWith('/assets/') || p.startsWith('/SiteKit/')) { const sf = p.startsWith('/assets/') ? path.join('C:\\Users\\dongy\\AboutUs\\site', p) : path.join('C:\\Users\\dongy\\AboutUs', p); if (fs.existsSync(sf)) { res.writeHead(200, { 'Content-Type': types[path.extname(sf)] ?? 'text/plain' }); return fs.createReadStream(sf).pipe(res); } res.writeHead(404); return res.end(); }
+  if (p.startsWith('/website-data/')) { const df = path.join(DATA, p.slice('/website-data/'.length)); if (fs.existsSync(df) && fs.statSync(df).isFile()) { res.writeHead(200, { 'Content-Type': types[path.extname(df)] ?? 'application/octet-stream', 'Cache-Control': 'no-store' }); return fs.createReadStream(df).pipe(res); } res.writeHead(404); return res.end(); }
   if (!p.startsWith('/tools/')) { res.writeHead(404); return res.end(); }
   let f = path.join(ROOT, p.slice('/tools/'.length));
   if (!fs.existsSync(f) || fs.statSync(f).isDirectory()) f = path.join(ROOT, 'index.html');

@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Components.Web;
 using Microsoft.AspNetCore.Components.WebAssembly.Hosting;
 using HoloKernel;
+using Microsoft.JSInterop;
 using Showroom;
 using Showroom.Services;
 
@@ -20,9 +21,13 @@ builder.Services.AddSingleton<SessionHost>();
 // once something calls GetOrLoadAsync, which today is only the spike page itself.
 builder.Services.AddSingleton<ContentDbHost>();
 
-// Council Spending Scanner data (phone-sized files under data/council-web); caches small tables for the page load. See Services/CouncilWebData.cs.
+// Council Spending Scanner data (phone-sized files under website-data/council-web); caches small tables for the page load. See Services/CouncilWebData.cs.
 builder.Services.AddScoped<CouncilWebData>();
 // The visitor's records-request tray (items ticked on the council pages). Lives for the page load; nothing is stored or sent.
 builder.Services.AddScoped<FoiTray>();
 
-await builder.Build().RunAsync();
+// Big data (council data, Prism checkpoint) lives in the website-data repo. ONE setting says where: window.EA_DATA_BASE in
+// wwwroot/index.html (the same value drives the framework redirect there). See Services/DataUrl.cs.
+var host = builder.Build();
+DataUrl.Configure(await host.Services.GetRequiredService<IJSRuntime>().InvokeAsync<string?>("eval", "window.EA_DATA_BASE"));
+await host.RunAsync();

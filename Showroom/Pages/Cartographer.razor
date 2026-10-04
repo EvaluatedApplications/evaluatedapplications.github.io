@@ -235,25 +235,25 @@
     {
         try
         {
-            var s = Begin("data/oracle-vocab.txt");
-            var vocabBytes = await Http.GetByteArrayAsync("data/oracle-vocab.txt");
+            var s = Begin(DataUrl.For("prism/oracle-vocab.txt"));
+            var vocabBytes = await Http.GetByteArrayAsync(DataUrl.For("prism/oracle-vocab.txt"));
             var merges = Encoding.UTF8.GetString(vocabBytes).Replace("\r\n", "\n").Split('\n').Where(l => l.Length > 0).ToList();
             _vocab = new SubwordVocab(merges);
             Finish(s, $"{vocabBytes.Length:N0} B → {_vocab.Size:N0}-symbol vocab");
 
-            s = Begin("data/oracle-rounds.txt");
+            s = Begin(DataUrl.For("prism/oracle-rounds.txt"));
             long? rounds = null;
-            try { rounds = long.Parse((await Http.GetStringAsync("data/oracle-rounds.txt")).Trim()); Finish(s, $"{rounds:N0} rounds trained"); }
+            try { rounds = long.Parse((await Http.GetStringAsync(DataUrl.For("prism/oracle-rounds.txt"))).Trim()); Finish(s, $"{rounds:N0} rounds trained"); }
             catch { Finish(s, "not shipped (optional)", "fail"); }
 
-            s = Begin("data/oracle-stackk.txt");
+            s = Begin(DataUrl.For("prism/oracle-stackk.txt"));
             int? trainedStackK = null;
-            try { trainedStackK = int.Parse((await Http.GetStringAsync("data/oracle-stackk.txt")).Trim()); Finish(s, $"K={trainedStackK}"); }
+            try { trainedStackK = int.Parse((await Http.GetStringAsync(DataUrl.For("prism/oracle-stackk.txt"))).Trim()); Finish(s, $"K={trainedStackK}"); }
             catch { Finish(s, "not shipped (optional)", "fail"); }
 
-            s = Begin("data/oracle-iterwarm.txt");
+            s = Begin(DataUrl.For("prism/oracle-iterwarm.txt"));
             int? trainedIterWarm = null;
-            try { trainedIterWarm = int.Parse((await Http.GetStringAsync("data/oracle-iterwarm.txt")).Trim()); Finish(s, $"{trainedIterWarm:N0}-round ramp"); }
+            try { trainedIterWarm = int.Parse((await Http.GetStringAsync(DataUrl.For("prism/oracle-iterwarm.txt"))).Trim()); Finish(s, $"{trainedIterWarm:N0}-round ramp"); }
             catch { Finish(s, "not shipped (optional)", "fail"); }
 
             var k = PrismCheckpoint.ResolveK(trainedStackK);
@@ -263,14 +263,14 @@
             var reused = Sessions.IsLoaded(PrismCheckpoint.SessionKey);
             _session = await Sessions.GetOrCreateAsync(PrismCheckpoint.SessionKey, async () =>
             {
-                var sb = Begin("data/oracle-brain.bin.gz");
-                var (bytes, gzLen) = await CheckpointFetch.FetchAndDecompressGzipAsync(Http, "data/oracle-brain.bin.gz");
+                var sb = Begin(DataUrl.For("prism/oracle-brain.bin.gz"));
+                var (bytes, gzLen) = await CheckpointFetch.FetchAndDecompressGzipAsync(Http, DataUrl.For("prism/oracle-brain.bin.gz"));
                 var peek = HoloFormer.Deserialize(bytes);
                 Finish(sb, $"{gzLen:N0} B gzip → {bytes.Length:N0} B → {peek.ParamCount:N0} params deserialized");
                 var alpha = PrismCheckpoint.ReconstructAlpha(peek.Layers, rounds, trainedIterWarm);
                 return HoloSession.FromCheckpoint(bytes, k, alpha);
             });
-            if (reused) Finish(Begin("data/oracle-brain.bin.gz"), "reused from earlier this visit (no re-download)");
+            if (reused) Finish(Begin(DataUrl.For("prism/oracle-brain.bin.gz")), "reused from earlier this visit (no re-download)");
             _stats = _session.Stats();
             _loaded = true;
         }

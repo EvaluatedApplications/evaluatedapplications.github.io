@@ -497,8 +497,8 @@
             _voice = new TokenVoice(JS);
             await _voice.InitializeAsync();
 
-            var s = Begin("data/oracle-vocab.txt");
-            var vocabBytes = await Http.GetByteArrayAsync("data/oracle-vocab.txt");
+            var s = Begin(DataUrl.For("prism/oracle-vocab.txt"));
+            var vocabBytes = await Http.GetByteArrayAsync(DataUrl.For("prism/oracle-vocab.txt"));
             var merges = Encoding.UTF8.GetString(vocabBytes).Replace("\r\n", "\n").Split('\n').Where(l => l.Length > 0).ToList();
             _vocab = new SubwordVocab(merges);   // throws (caught below, degrades to _loadError) on a malformed merge line
             Finish(s, $"{vocabBytes.Length:N0} B → {_vocab.Size:N0}-symbol vocab");
@@ -506,16 +506,16 @@
             // Metadata sidecars fetched BEFORE the checkpoint bytes now (was after) — they're tiny and are
             // needed to compute K/alpha, which the SessionHost factory below needs up front (it only ever
             // runs once per model key, so it can't come back later to ask for them).
-            s = Begin("data/oracle-rounds.txt");
-            try { _rounds = long.Parse((await Http.GetStringAsync("data/oracle-rounds.txt")).Trim()); Finish(s, $"{_rounds:N0} rounds trained"); }
+            s = Begin(DataUrl.For("prism/oracle-rounds.txt"));
+            try { _rounds = long.Parse((await Http.GetStringAsync(DataUrl.For("prism/oracle-rounds.txt"))).Trim()); Finish(s, $"{_rounds:N0} rounds trained"); }
             catch { Finish(s, "not shipped (optional)", "fail"); _rounds = null; }
 
-            s = Begin("data/oracle-stackk.txt");
-            try { _trainedStackK = int.Parse((await Http.GetStringAsync("data/oracle-stackk.txt")).Trim()); Finish(s, $"K={_trainedStackK}"); }
+            s = Begin(DataUrl.For("prism/oracle-stackk.txt"));
+            try { _trainedStackK = int.Parse((await Http.GetStringAsync(DataUrl.For("prism/oracle-stackk.txt"))).Trim()); Finish(s, $"K={_trainedStackK}"); }
             catch { Finish(s, "not shipped (optional)", "fail"); _trainedStackK = null; }
 
-            s = Begin("data/oracle-iterwarm.txt");
-            try { _trainedIterWarm = int.Parse((await Http.GetStringAsync("data/oracle-iterwarm.txt")).Trim()); Finish(s, $"{_trainedIterWarm:N0}-round ramp"); }
+            s = Begin(DataUrl.For("prism/oracle-iterwarm.txt"));
+            try { _trainedIterWarm = int.Parse((await Http.GetStringAsync(DataUrl.For("prism/oracle-iterwarm.txt"))).Trim()); Finish(s, $"{_trainedIterWarm:N0}-round ramp"); }
             catch { Finish(s, "not shipped (optional)", "fail"); _trainedIterWarm = null; }
 
             // fixed to the REAL trained depth (falls back to the file's bare K=1 only if the metadata sidecar is
@@ -539,11 +539,11 @@
             bool reused = Sessions.IsLoaded(PrismCheckpoint.SessionKey);
             _session = await Sessions.GetOrCreateAsync(PrismCheckpoint.SessionKey, async () =>
             {
-                var sb = Begin("data/oracle-brain.bin.gz");
+                var sb = Begin(DataUrl.For("prism/oracle-brain.bin.gz"));
                 // gzip-precompressed at rest — GitHub Pages serves this byte-for-byte with no on-the-fly
                 // compression, so shipping a pre-gzipped sidecar + decompressing it here
                 // (HoloKernel.CheckpointFetch) is the only way to actually shrink the transfer.
-                var (bytes, gzLen) = await CheckpointFetch.FetchAndDecompressGzipAsync(Http, "data/oracle-brain.bin.gz");
+                var (bytes, gzLen) = await CheckpointFetch.FetchAndDecompressGzipAsync(Http, DataUrl.For("prism/oracle-brain.bin.gz"));
                 var peek = HoloFormer.Deserialize(bytes);   // one-time peek at Layers/ParamCount for the boot log +
                 // the alpha-reconstruction guard below — HoloSession.FromCheckpoint needs K/alpha as ctor args
                 // (see field comment above), which in turn need Layers, so this has to happen before the session
@@ -554,7 +554,7 @@
                 // "checkpoint doesn't carry them" gotcha by construction rather than a footnote (see field comment).
                 return HoloSession.FromCheckpoint(bytes, _k, alpha);
             });
-            if (reused) Finish(Begin("data/oracle-brain.bin.gz"), "reused from earlier this visit (no re-download)");
+            if (reused) Finish(Begin(DataUrl.For("prism/oracle-brain.bin.gz")), "reused from earlier this visit (no re-download)");
             _stats = _session.Stats();
             // Recomputed from the session actually in hand (not the factory's local "peek"/"alpha", which don't
             // exist on the reused-cache path) — same formula, so identical on a first-ever visit either way.

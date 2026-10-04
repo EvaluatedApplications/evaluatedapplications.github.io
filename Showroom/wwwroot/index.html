@@ -7,6 +7,17 @@
     <title>Tools — Evaluated Applications</title>
     <meta name="description" content="Interactive tools that run Evaluated Applications' .NET libraries entirely in your browser." />
     <base href="/tools/" />
+    <script>
+      // THE ONE DATA SETTING. The big files (council data, the Prism checkpoint) live in the website-data repo and are served
+      // by that repo's own GitHub Pages, at /website-data/ on this same origin (so no CORS). C# reads this value at boot
+      // (Program.cs -> DataUrl). Local dev (`dotnet run`, host "localhost") reads a directory junction under wwwroot instead:
+      // run scripts/link-data.ps1 once. Any other host, including a published build served from 127.0.0.1, uses production paths.
+      window.EA_DATA_BASE = location.hostname === 'localhost' ? 'website-data/' : '/website-data/';
+      // The prebuilt Blazor runtime (_framework: the 30 MB AOT wasm, the assemblies, ICU data; everything except blazor.webassembly.*.js
+      // itself) is served from the same place, website-data/_framework, so every rebuild's new hashed files land in that repo and not in
+      // this one. Empty on localhost, where dotnet run serves its own _framework. Used by loadBootResource in the boot script below.
+      window.EA_FRAMEWORK_BASE = location.hostname === 'localhost' ? '' : window.EA_DATA_BASE + '_framework/';
+    </script>
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%23f0796a'/%3E%3Cstop offset='.166' stop-color='%23f0a15a'/%3E%3Cstop offset='.333' stop-color='%23e6c450'/%3E%3Cstop offset='.5' stop-color='%237bd86a'/%3E%3Cstop offset='.666' stop-color='%234aa3ff'/%3E%3Cstop offset='.833' stop-color='%237d7dff'/%3E%3Cstop offset='1' stop-color='%23c07dff'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='32' height='32' rx='7' fill='%23050608'/%3E%3Cpath d='M16 5L27 26H5Z' fill='none' stroke='url(%23g)' stroke-width='2' stroke-linejoin='round'/%3E%3C/svg%3E" />
     <link rel="stylesheet" href="/assets/site.css" />
     <link rel="stylesheet" href="css/boot.css" />
@@ -445,6 +456,18 @@
               type === 'globalization' ? ['', 'locale data ' + name] :
               type === 'assembly' ? ['', 'assembly ' + name] : null;
             if (label) __bootLine(label[0], label[1]);
+            // Runtime files come from website-data/_framework (see EA_FRAMEWORK_BASE above); `name` is already the fingerprinted file
+            // name, except for the first call, "dotnet.js", which Blazor resolves through the import map (read the same map here).
+            // Anything else, and every file on localhost, is left to Blazor's own default (the file next to this page).
+            var fw = window.EA_FRAMEWORK_BASE;
+            if (fw && label) {
+              var file = name;
+              if (name === 'dotnet.js') {
+                var mapped = JSON.parse(document.querySelector('script[type="importmap"]').textContent).imports['./_framework/dotnet.js'];
+                if (mapped) file = mapped.substring(mapped.lastIndexOf('/') + 1);
+              }
+              return fw + file;
+            }
             return undefined; // pure observation — Blazor still fetches this exact resource itself
           }
         }).then(function () {
