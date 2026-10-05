@@ -4,8 +4,6 @@ The rules engine behind a public audit of UK council spending-over-GBP-500 publi
 publish and flags rows that look like repeated or mismatched payments, then tries to explain each flag by a pattern a reader
 can check (a standing monthly payment, a VAT rounding, a reversed entry, a redacted line).
 
-**Version 1: plain C# engine. A rebuild on EvalApp and HoloDb, including a live in-browser mode, is in progress and will replace this code in place.**
-
 **Licence: source-available under the PolyForm Noncommercial License 1.0.0. It is not open source and it is not licensed for
 commercial use.** See `LICENSE` (a short preamble, then the PolyForm text unchanged). Noncommercial use, including research,
 study, verification of the results, charities, public bodies and councils' own audit work, is permitted. Commercial use, resale
@@ -62,8 +60,7 @@ The test project restores only Microsoft.NET.Test.Sdk, xunit and xunit.runner.vi
 If a rule in `check_rules.csv` or `CHECKLIST.md` is wrong, or a test fixture is not what the council published, open an issue on
 this repository naming the rule or test, the council and month, and what the published file shows. Issues are read, but no
 response time is promised, and a report may be answered by correcting the record rather than the code. A fix is welcome as a
-pull request with a test that fails before and passes after. Pull requests may be declined or reworked, particularly while the
-rebuild described above is under way, because this code is to be replaced. A contribution is accepted under the same licence
+pull request with a test that fails before and passes after. Pull requests may be declined or reworked. A contribution is accepted under the same licence
 terms as the rest of this repository. Please do not put personal data in an issue: if you find a name that should have been
 withheld, say which file and row by number and do not paste the name.
 

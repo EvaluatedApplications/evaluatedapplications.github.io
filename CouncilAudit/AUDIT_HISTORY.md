@@ -77,7 +77,6 @@ public documents, with private review of the source on request. This repository 
 are published under a noncommercial source-available licence, so that "your rule is wrong here" can be checked and a fix tried.
 The method pages are not the same as running the code, and this repository is closer to the second.
 
-This release is version 1, a plain C# engine. A rebuild on EvalApp and HoloDb, including a live in-browser mode, is in progress and will replace this code in place.
 ## Still open at the time of writing
 
 - The Loddon pair (E5) is not on the twins list; it needs a batch test.
