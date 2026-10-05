@@ -53,6 +53,30 @@
                     <button type="button" class="more" @onclick="More">Show @Math.Min(15, _rows.Count - _shown) more (@(_rows.Count - _shown) not shown)</button>
                 }
             }
+            @if (_side.Count > 0 || _sideSummary is not null)
+            {
+                <h4 class="side">@Def.SideTitle</h4>
+                <p class="summary">@_sideSummary</p>
+                <ol class="lines">
+                    @foreach (var r in _side.Take(_sideShown))
+                    {
+                        <li @key="r">
+                            <div class="l1">@r.Line1</div><div class="l2">@r.Line2</div>
+                            @if (r.Foi is not null)
+                            {
+                                bool on = r.Key is not null && Tray.Has(r.Key);
+                                <div class="acts">
+                                    <button type="button" class="tick @(on ? "on" : "")" aria-pressed="@(on ? "true" : "false")" @onclick="() => Tick(r)">@(on ? "In your request (tap to remove)" : "Add to request")</button>
+                                </div>
+                            }
+                        </li>
+                    }
+                </ol>
+                @if (_side.Count > _sideShown)
+                {
+                    <button type="button" class="more" @onclick="() => _sideShown += 15">Show @Math.Min(15, _side.Count - _sideShown) more (@(_side.Count - _sideShown) not shown)</button>
+                }
+            }
             @if (_full) { <p class="err" role="status">Your request already holds @FoiTray.MaxItems items; remove some first.</p> }
             <p class="caption">@Def.Caption</p>
         }
@@ -68,6 +92,9 @@
     int _shown = 15;
     string? _error, _summary, _note;
     List<CheckRow> _rows = new();
+    List<CheckRow> _side = new();
+    string? _sideSummary;
+    int _sideShown = 15;
     List<string> _fileRules = new();
 
     async Task Toggle()
@@ -89,6 +116,14 @@
             _rows = cannot is not null ? new() : rows;   // a check that cannot run for this council lists nothing, and says why instead of "no rows"
             _summary = cannot ?? (mine.Count == 0 ? "This check has no rows for this council." : summary);
             _note = Slug is null ? CouncilTerms.CheckCoverage(Def.Id, CouncilWebData.Councils.Select(c => (c.Slug, c.Short))) : CouncilTerms.CheckNote(Slug, Def.Id);
+            // the check's side list (twins: one transaction number in two files), read only when the check can run for this view
+            if (Def.SideFile is not null && cannot is null)
+            {
+                var st = new Tab(await Data.TableAsync(Def.SideFile, true, co));
+                var sm = Slug is null ? st.Rows : st.Rows.Where(r => Def.Matches(st, r, Slug)).ToList();
+                var (ss, sr) = CouncilChecksWeb.SameNumberRows(st, sm);
+                _side = sr; _sideSummary = ss;
+            }
             _loaded = true;
             await Data.LogAsync($"check {Def.Id} ({(Slug ?? "all")}) built", sw.ElapsedMilliseconds, $"({mine.Count} source rows)");
         }

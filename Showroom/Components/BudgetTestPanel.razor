@@ -17,7 +17,7 @@
                 extra outgoing, and no slope from it is presented as a finding.</p>
             <p><b>The cities.</b> In Leeds the file total is between 11% below and 12% above the declared running expenses plus Housing Revenue Account, and 12% to 28% below once capital and pass-through payments are added.
                 The second copies the test counts are zero in Leeds by its definition, so the test says nothing there, and the repeated-payment groups give a fit the pre-registration calls an unexpected shape, with no verdict
-                (it reflects the size gap, not the flagged rows). The Leeds same-line-in-two-files repeats (£6.35m in 2022-23, £3.07m in 2023-24) are not in the statistic; they were found after the test was written.</p>
+                (it reflects the size gap, not the flagged rows). @(_leeds ?? "The Leeds same-line-in-two-files repeats are not in the statistic; they were found after the test was written.")</p>
             <p><b>Four more cities.</b> In Sheffield, Bradford, Liverpool and Bristol the file total is below the declared running expenses plus capital and pass-through in all 17 city-years (0.56 to 0.99 of it), and the second
                 copies the test counts are zero in Sheffield and 0.00 to 0.85% elsewhere. The test cannot tell whether flagged rows were extra outgoings. All six arms are inconclusive.</p>
             <p><b>Nine more councils.</b> The group was frozen with 52 eligible council-years (Wakefield, Coventry, Durham, Kirklees, Leicester, Cornwall, Nottingham, Wirral and Newcastle). In 49 of those 52 the file total is below the declared running expenses plus capital and
@@ -58,6 +58,33 @@
     string? _error;
     readonly List<Set> _sets = new();
 
+    string? _leeds;
+
+    /// <summary>The Leeds same-line-in-two-files repeats, from the shipped cross-file check (cross/cross_file_repeats.csv), by financial year: the two years that hold the most, then everything else.
+    /// Derived here, never typed, so it moves with the data (the 2026-10-05 re-audit found the typed figures stale). Null when Leeds is not in the file.</summary>
+    async Task<string?> LeedsRepeatsAsync(Cooperative co)
+    {
+        var t = new Tab(await Data.TableAsync("cross/cross_file_repeats.csv", true, co));
+        var rowsBy = new Dictionary<string, long>(StringComparer.Ordinal); var valBy = new Dictionary<string, decimal>(StringComparer.Ordinal);
+        foreach (var r in t.Rows)
+        {
+            if (!t.G(r, "Council").Equals("leeds", StringComparison.OrdinalIgnoreCase)) continue;
+            string fy = CouncilWebData.FinancialYearOf(t.G(r, "File"));
+            rowsBy[fy] = (rowsBy.TryGetValue(fy, out var n) ? n : 0) + t.I(r, "RowsAlsoInEarlierFile");
+            valBy[fy] = (valBy.TryGetValue(fy, out var v) ? v : 0) + t.M(r, "ValueAbsAlsoInEarlierFile");
+        }
+        if (valBy.Count == 0) return null;
+        var top = new List<string>(valBy.Keys);
+        top.Sort((a, b) => valBy[b].CompareTo(valBy[a]));
+        if (top.Count > 2) top.RemoveRange(2, top.Count - 2);
+        top.Sort(string.CompareOrdinal);
+        long restRows = 0; decimal restVal = 0;
+        foreach (var k in valBy.Keys) if (!top.Contains(k)) { restRows += rowsBy[k]; restVal += valBy[k]; }
+        var parts = new List<string>();
+        foreach (var k in top) parts.Add($"{CouncilTerms.Gbp(valBy[k])} ({CouncilTerms.Plural(rowsBy[k], "row", "rows")}) in {k}");
+        return $"The Leeds same-line-in-two-files repeats, counted from the cross-file check as shipped, are {string.Join(" and ", parts)}; every other financial year together holds {CouncilTerms.Gbp(restVal)} ({CouncilTerms.Plural(restRows, "row", "rows")}). They are not in the statistic; they were found after the test was written.";
+    }
+
     static string Verdict(string v) => v == "INCONCLUSIVE" ? "Inconclusive" : v.StartsWith("UNEXPECTED SHAPE") ? "Unexpected shape, no verdict" : v;
 
     async Task Toggle()
@@ -78,6 +105,7 @@
                 var t = new Tab(await Data.TableAsync($"cross/{file}.csv", true, co));
                 _sets.Add(new Set { Title = title, Rows = t.Rows.Select(r => new[] { t.G(r, "Arm"), t.G(r, "Role"), t.G(r, "Units"), t.G(r, "Verdict") }).ToList() });
             }
+            _leeds = await LeedsRepeatsAsync(co);
             _loaded = true;
             await Data.LogAsync("budget test built", sw.ElapsedMilliseconds);
         }

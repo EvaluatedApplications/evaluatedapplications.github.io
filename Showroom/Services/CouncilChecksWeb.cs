@@ -41,6 +41,8 @@ public sealed class CheckDef
     public string[] RuleChecks = Array.Empty<string>();
     /// <summary>A rule the check's own file states on every row (the twins file writes it on each line); given the whole table, returns the distinct texts, shown beside the summary.</summary>
     public Func<Tab, List<string>>? RuleOf;
+    /// <summary>A second small file this check routes pairs to (twins: the same transaction number in two files, which is one transaction published twice and not a pair); listed under the main list.</summary>
+    public string? SideFile, SideTitle;
     /// <summary>Column holding the council this row belongs to; matched against the slug (or the full name when ByName).</summary>
     public string CouncilCol = "Council";
     public bool ByName;
@@ -119,12 +121,37 @@ public static class CouncilChecksWeb
         return false;
     }
 
+    /// <summary>The twins check's side list (cross/same_number_two_files.csv): a transaction number published in two files with the same lines. The twin scan merges these before pairing, so they
+    /// are not "identical lines under two numbers"; they are listed here so they are neither lost nor counted as pairs. Facts only: the file cannot say which file is right or why it repeats.</summary>
+    public static (string Summary, List<CheckRow> Rows) SameNumberRows(Tab t, List<string[]> rows)
+    {
+        var o = new List<CheckRow>(rows.Count); decimal sum = 0; bool many = Many(t, rows);
+        foreach (var r in rows)
+        {
+            decimal v = t.M(r, "TotalValue"); sum += v;
+            string slug = t.G(r, "Council"), tx = TxText(slug, t.G(r, "TransactionId")), a = t.G(r, "FirstFile"), b = t.G(r, "LaterFile");
+            bool same = t.B(r, "SameFirstPayDate");
+            o.Add(new CheckRow(Math.Abs(v), $"{t.G(r, "SupplierName")}: {Gbp(v)}",
+                $"{(many ? S(slug) + ". " : "")}Transaction {tx}, {t.I(r, "Lines")} line(s), in the file tagged {a} and again in the file tagged {b}. {(same ? "The first pay date is the same in both." : "The first pay date differs between the two files.")}")
+            {
+                Key = $"samenum|{slug}|{tx}|{a}|{b}",
+                Foi = () => Item(slug, $"Transaction {tx} ({t.G(r, "SupplierName")}), {t.I(r, "Lines")} line(s) totalling {Gbp(v)}, appears in the file tagged {a} and in the file tagged {b}. {(same ? "The first pay date is the same in both." : "The first pay date differs between the two files.")}",
+                    $"transaction {tx}, files {a} and {b}"),
+            });
+        }
+        SortDesc(o);
+        return (o.Count == 0 ? "No transaction number appears in two files with the same lines." : $"{Plural(o.Count, "transaction number", "transaction numbers")} appear{(o.Count == 1 ? "s" : "")} in two files with the same lines, {Gbp(sum)} in all, each transaction's total counted once. It is one number, so the scan does not pair it as two numbers. Where the first pay dates are the same the repeat is also counted by the cross-file check; where they differ it is a question for the shared-transaction-number check. The file cannot show whether the council paid once or twice.", o);
+    }
+
     public static readonly CheckDef[] All =
     {
         new()
         {
             Id = "twins", Title = "Identical lines under two transaction numbers",
-            Plain = "Two different transaction numbers with the same supplier and the same lines (amount and description). Each row is a pair; three identical transactions give three pairs but two extra copies, so the summary counts groups of identical transactions, not pairs. A pair that does not meet every condition of the rule below is not listed, so this is not a list of every identical pair. Sorted by the value of the second transaction.",
+            Plain = "Two different transaction numbers with the same supplier and the same lines (amount and description), the first pay dates of both published and within seven days of each other. Each transaction must have one payee, at least two lines and a total of at least £10,000 (in absolute value), and lines of that kind may be seen in at most three transactions. "
+                + "Left out: redacted payees, transaction numbers a spreadsheet has mangled, and transactions in which every line is listed an even number of times (a doubled listing, counted by the file-duplication check). A transaction number that appears in two files with the same lines is one number, not two: it is not paired here and is listed separately below. "
+                + "Each row is a pair; three identical transactions give three pairs but two extra copies, so the summary counts groups of identical transactions, not pairs. A pair that does not meet every condition above is not listed, so this is not a list of every identical pair. Sorted by the value of the second transaction.",
+            SideFile = "cross/same_number_two_files.csv", SideTitle = "One transaction number in two files",
             Caption = "The file cannot show whether cash left twice, or whether one payment was published under two numbers. Bracknell Forest pairs dated in the future are forward schedules.",
             File = "cross/transaction_twins.csv", RuleChecks = new[] { "TwinPairs" },
             // the rule the engine writes on every row (TxnTwinScan.RuleText): every condition, including the two-line, GBP 10,000, one-payee, redacted, mangled-number and doubled-listing ones
@@ -227,11 +254,12 @@ public static class CouncilChecksWeb
                 {
                     decimal extra = t.M(r, "ExtraValue"); sum += extra;
                     string slug = t.G(r, "Council"), tx = t.G(r, "TransactionId");
-                    o.Add(new CheckRow(extra, $"{t.G(r, "SupplierName")}: {Gbp(t.M(r, "Net"))} listed {t.I(r, "Copies")} times in transaction {tx}",
+                    string txShown = TxText(slug, tx);   // a placeholder id is never shown as the council's transaction number
+                    o.Add(new CheckRow(extra, $"{t.G(r, "SupplierName")}: {Gbp(t.M(r, "Net"))} listed {t.I(r, "Copies")} times in transaction {txShown}",
                         $"{S(t.G(r, "Council"))}, {t.G(r, "Year")}. Pay date {Date(t.G(r, "PayDate"))}. Extra value {Gbp(extra)}. \"{Trim(t.G(r, "Description"), 90)}\". {Cap(t.G(r, "Reading"))}.")
                     {
                         Key = $"withintxn|{slug}|{t.G(r, "Year")}|{tx}|{t.G(r, "PayDate")}|{t.G(r, "Net")}",
-                        Foi = () => Item(slug, $"Transaction {tx} ({t.G(r, "SupplierName")}), in the file tagged {t.G(r, "Year")}, lists the same line {t.I(r, "Copies")} times: {Gbp(t.M(r, "Net"))}, pay date {Date(t.G(r, "PayDate"))}, description \"{Trim(t.G(r, "Description"), 120)}\". The extra copies come to {Gbp(extra)}."),
+                        Foi = () => Item(slug, $"Transaction {txShown} ({t.G(r, "SupplierName")}), in the file tagged {t.G(r, "Year")}, lists the same line {t.I(r, "Copies")} times: {Gbp(t.M(r, "Net"))}, pay date {Date(t.G(r, "PayDate"))}, description \"{Trim(t.G(r, "Description"), 120)}\". The extra copies come to {Gbp(extra)}."),
                         Src = () => At(slug, (t.G(r, "PayDate"), tx)),
                     });
                 }

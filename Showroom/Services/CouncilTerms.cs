@@ -161,7 +161,18 @@ public static class CouncilTerms
     /// <summary>A line's transaction number as a council would recognise it: the number the file gives, or (when the council publishes none) a plain statement that it gives none.
     /// The scanner's row numbers and placeholders are never shown as a transaction number.</summary>
     public static string TxText(string slug, string tx) =>
-        NoNumber(slug) || tx.StartsWith("(no number published)", StringComparison.Ordinal) || tx.Contains("~row") ? "(the file gives no transaction number)" : tx;
+        NoNumber(slug) || IsPlaceholder(tx) ? "(the file gives no transaction number)" : tx;
+
+    /// <summary>True when an id is the scanner's own placeholder ("(no number published) 2620", "(no number published) 18 CHAPS", or a "~row" id) and not a number the council published. A council
+    /// can publish numbers for most lines and none for some (Reading, RBWM, Nottingham, Leicester, Wakefield), so this is read per line, not per council.</summary>
+    public static bool IsPlaceholder(string tx) => tx.StartsWith("(no number", StringComparison.Ordinal) || tx.Contains("~row");
+
+    /// <summary>The placeholder's own counting number ("(no number published) 2620" is 2620; "... 18 CHAPS" is "18 CHAPS"), for a line that says it is a placeholder.</summary>
+    public static string PlaceholderNumber(string tx)
+    {
+        int c = tx.IndexOf(')');
+        return (c >= 0 ? tx[(c + 1)..] : tx).Trim();
+    }
 
     /// <summary>True when this schedule cannot run for this council ("A": no stated invoice amount to compare; "D": the shared-transaction-number check found nothing). "Not available", never "clean".</summary>
     public static bool IsNa(string slug, string sch) => sch switch { "A" => CouncilFacts.Of(slug).NoA, "D" => CouncilFacts.Of(slug).NoD, _ => false };

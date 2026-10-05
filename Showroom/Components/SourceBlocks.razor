@@ -35,7 +35,10 @@
     static string Tail(string slug, SourceRow r)
     {
         // a council that publishes no transaction number: the id here is the scanner's own row number, and is called that
-        var p = new List<string> { NoNumber(slug) ? $"Scanner row number {r.Tx} (the council publishes no transaction number)." : $"Transaction {r.Tx}." };
+        // a line that carries the scanner's placeholder ("(no number published) N") is labelled as one, never as a transaction number, even in a council that publishes numbers for most lines
+        var p = new List<string> { NoNumber(slug) ? $"Scanner row number {r.Tx} (the council publishes no transaction number)."
+            : IsPlaceholder(r.Tx) ? $"Placeholder {PlaceholderNumber(r.Tx)}, added by the scanner (the file gives no transaction number for this line)."
+            : $"Transaction {r.Tx}." };
         if (r.Gross != 0 || r.Vat != 0) p.Add($"Gross {Gbp(r.Gross)}{(r.Vat != 0 ? ", VAT " + Gbp(r.Vat) : "")}.");
         if (r.Service.Length > 0) p.Add(r.Service + ".");
         if (r.CostCentre.Length > 0) p.Add(r.CostCentre + ".");

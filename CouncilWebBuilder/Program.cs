@@ -18,6 +18,42 @@ if (args.Length > 1 && args[1] == "props")
     return 0;
 }
 
+// CHECKLIST GATE (2026-10-05): nothing is written to council-web unless `CouncilAudit.Cli checklist all` has been run on THESE exports and found nothing. The checklist writes
+// export/checklist_results.csv (Council,Category,Status,Findings,First) on every run; a failing council can never ship again because this run refuses when
+//   (1) the file is missing, (2) any cell is not PASS or HELD (a FAIL, or a STALE-HOLD, which also fails the checklist's own exit code),
+//   (3) a council on the page has no row in it (the run did not cover it), or (4) the file is older than any file in web_export or export (the exports changed after it ran).
+// A held council's cell is HELD only through export/checklist_holds.csv, which this builder already reads, so a hold withholds it here too. There is no override on purpose.
+{
+    string resPath = Path.Combine(export, "checklist_results.csv");
+    var why = new List<string>();
+    if (!File.Exists(resPath)) why.Add($"{resPath} does not exist: run `CouncilAudit.Cli checklist all` in C:\\Users\\dongy\\VirtualCustomer first");
+    else
+    {
+        var cells = ParseCsv(File.ReadAllText(resPath, Encoding.UTF8)).Skip(1).Where(r => r.Count >= 3 && r[0].Length > 0).ToList();
+        var bad = cells.Where(r => r[2] != "PASS" && r[2] != "HELD").ToList();
+        if (bad.Count > 0) why.Add($"{bad.Count} checklist cell(s) are not PASS or HELD, e.g. {string.Join(", ", bad.Take(6).Select(r => r[0] + " " + r[1] + " " + r[2]))}");
+        var covered = cells.Select(r => r[0]).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        foreach (var r in File.ReadAllLines(Path.Combine(webExport, "index.csv"), Encoding.UTF8).Skip(1).Where(l => l.Length > 0).Select(l => l.Split(',')[0]))
+            if (Directory.Exists(Path.Combine(webExport, r)) && !covered.Contains(r)) why.Add($"council '{r}' has no checklist rows");
+        DateTime ran = File.GetLastWriteTimeUtc(resPath), newest = DateTime.MinValue; string newestFile = "";
+        foreach (var dir in new[] { webExport, export })
+            foreach (var f in Directory.EnumerateFiles(dir, "*", SearchOption.AllDirectories))
+            {
+                string nm = Path.GetFileName(f);
+                if (Path.GetDirectoryName(f) == export.TrimEnd('\\') && nm.StartsWith("checklist_", StringComparison.OrdinalIgnoreCase)) continue;   // the checklist's own outputs
+                var t = File.GetLastWriteTimeUtc(f); if (t > newest) { newest = t; newestFile = f; }
+            }
+        if (newest > ran) why.Add($"checklist_results.csv ({ran:u}) is older than {newestFile} ({newest:u}): re-run `CouncilAudit.Cli checklist all`");
+    }
+    if (why.Count > 0)
+    {
+        Console.Error.WriteLine("REFUSED: council-web is not written because the scanner's error checklist has not passed on the current exports.");
+        foreach (var w in why) Console.Error.WriteLine("  - " + w);
+        return 2;
+    }
+    Console.WriteLine("CHECKLIST GATE: export/checklist_results.csv is newer than every export file and every cell is PASS or HELD.");
+}
+
 Directory.CreateDirectory(outDir);
 // The councils the page ships are DISCOVERED, never listed here: a council is shipped when web_export/index.csv has a row for it (the row's first column is
 // its slug, the name of its web_export folder) AND the engine has a profile whose name matches that slug. Nothing to add per council: no slug table, no page edit.
@@ -352,7 +388,7 @@ if (!profilesOnly)
 }
 
 // The small cross-council check files and the declared-spend files (all read whole, each well under 400 KB raw).
-foreach (var n in profilesOnly ? Array.Empty<string>() : new[] { "transaction_twins", "cross_file_repeats", "file_duplication", "within_txn_repeats", "budget_reconciliation",
+foreach (var n in profilesOnly ? Array.Empty<string>() : new[] { "transaction_twins", "cross_file_repeats", "file_duplication", "within_txn_repeats", "same_number_two_files", "budget_reconciliation",
                           "budget_units", "budget_test", "budget_test_stage2", "budget_test_stage2b", "budget_test_stage2c", "budget_test_stage2d", "budget_test_pooled", "budget_test_pooled_all", "budget_test_pooled_all2",
                           "budget_test_pooled_all3", "crossref_alias_flows", "supplier_alias_grades", "debt_ledger", "debt_sink", "payment_misfits",
                           "check_rules" })   // check_rules: the engine's registry of every row filter each check applies (CheckRules.cs); the page shows it as one disclosure per check
