@@ -1,0 +1,25 @@
+<!DOCTYPE html><html><head><meta charset="utf-8"><base href="/tools/"><title>worker spike</title></head><body><pre id="out">idle</pre>
+<script type="module">
+import { WorkerRuntime } from './worker-client.mjs';
+// Module workers do not read the page's import map, so the page resolves the fingerprinted dotnet.js name from the shipped index.html.
+const idx = await (await fetch('index.html')).text();
+const mapped = JSON.parse(idx.match(/<script type="importmap">([\s\S]*?)<\/script>/)[1]).imports['./_framework/dotnet.js'];
+const dotnetUrl = new URL('_framework/' + mapped.substring(mapped.lastIndexOf('/') + 1), location.href).href;
+window.runBench = async function () {
+  const R = {};
+  const gaps = []; let last = performance.now(); const tick = setInterval(() => { const n = performance.now(); gaps.push(n - last); last = n; }, 10);
+  let long = 0; try { new PerformanceObserver(l => { long += l.getEntries().length; }).observe({ entryTypes: ['longtask'] }); } catch {}
+  const t0 = performance.now(); const rt = new WorkerRuntime('worker.js', dotnetUrl, window.__ns); const ready = await rt.init(); R.coldStartMs = Math.round(performance.now() - t0); R.ready = ready;
+  const N = 200; const t1 = performance.now(); for (let i = 0; i < N; i++) await rt.call('Echo', [i]); R.echoRoundTripMs = +((performance.now() - t1) / N).toFixed(3);
+  let prog = 0; gaps.length = 0; long = 0; const t2 = performance.now(); const primes = await rt.call('Primes', [600000], { onProgress: () => prog++ });
+  R.primes = { result: primes, wallMs: Math.round(performance.now() - t2), progressMsgs: prog, mainMaxTickGapMs: Math.round(Math.max(...gaps)), mainLongTasks: long };
+  { const ac = new AbortController(); let at = 0; setTimeout(() => { at = performance.now(); ac.abort(); }, 400); let msg = 'completed'; try { await rt.call('Primes', [50000000], { signal: ac.signal }); } catch (e) { msg = e.message; } R.cancelCooperative = { outcome: msg.slice(0, 60), latencyMs: Math.round(performance.now() - at) }; }
+  { let first = null, items = 0; const t4 = performance.now(); await rt.call('Stream', [2000], { onItem: () => { if (first === null) first = performance.now() - t4; items++; } }); R.stream = { items, firstItemMs: Math.round(first), totalMs: Math.round(performance.now() - t4) }; }
+  { const ac = new AbortController(); const t5 = performance.now(); setTimeout(() => ac.abort(), 300); let o = 'completed'; try { await rt.call('BusyNoYield', [2000], { signal: ac.signal }); } catch (e) { o = e.message; } R.cancelNonYielding = { outcome: o.slice(0, 40), returnedAfterMs: Math.round(performance.now() - t5) }; }
+  R.heapAfterMB = await new Promise(r => { const h = (e) => { if (e.data.kind === 'heap') { rt.w.removeEventListener('message', h); r(e.data.heapMB); } }; rt.w.addEventListener('message', h); rt.w.postMessage({ kind: 'heap' }); });
+  rt.terminate(); const t6 = performance.now(); const rt2 = new WorkerRuntime('worker.js', dotnetUrl, window.__ns); await rt2.init(); R.restartAfterTerminateMs = Math.round(performance.now() - t6); rt2.terminate();
+  clearInterval(tick); R.jsHeapMBMain = performance.memory ? Math.round(performance.memory.usedJSHeapSize / 1048576) : null;
+  window.__bench = R; document.getElementById('out').textContent = JSON.stringify(R, null, 1); return R;
+};
+window.__ready = true;
+</script></body></html>
