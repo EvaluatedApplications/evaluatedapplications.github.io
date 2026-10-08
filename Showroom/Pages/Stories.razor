@@ -97,7 +97,7 @@
             @if (_generating || _story is not null)
             {
                 <p class="story-text">
-                    <span class="story-prompt">@_activePrompt</span>@(_generating ? _pendingContinuation : _story)@if (_generating)
+                    <span class="story-prompt">@_activePrompt</span><span class="story-body">@Paragraphs(_generating ? _pendingContinuation : _story)</span>@if (_generating)
                     {
                         <span class="car" aria-hidden="true"></span>
                     }
@@ -239,7 +239,52 @@
     // HoloKernel.ContextBudget.StoryCap, which leaves an opening-line reserve (an eighth of the window, at least 16 tokens)
     // and shrinks the story to what is left: 512 -> 448 steps (exactly as before, prompt budget 64), a ctx=64 checkpoint -> 48
     // steps with 16 prompt tokens, instead of a negative prompt budget. Read after the model has loaded.
-    int StoryCap => _stats is null ? MaxStorySteps : ContextBudget.StoryCap(_stats.Context, MaxStorySteps);
+    // Steps in a story: the no-roll cap on a window that holds MaxStorySteps (512 -> 448), StoryRollTarget on a smaller one (64 -> 400,
+    // rolled). StoryFitsWindow is the no-roll cap alone, which sizes the opening-line budget.
+    int StoryFitsWindow => _stats is null ? MaxStorySteps : ContextBudget.StoryCap(_stats.Context, MaxStorySteps);
+    int StoryCap => _stats is null ? MaxStorySteps : ContextBudget.RollingStoryCap(_stats.Context, MaxStorySteps, StoryRollTarget);
+    bool Rolls => _stats is not null && StoryCap > StoryFitsWindow;
+    // Opening-line budget: whatever leaves room for the whole story in a window that holds it; half the window on one that rolls
+    // (a longer opening line is kept in full up to there, the first Prime is Context/2 tokens, same size as every later re-Prime).
+    int PromptCap => _stats is null ? 0 : Rolls ? ContextBudget.RollTail(_stats.Context) : ContextBudget.PromptBudget(_stats.Context, StoryFitsWindow);
+
+    // LONGER STORIES BY SLIDING THE WINDOW (2026-10-08, user: "it makes a single sentence"). On a small-context checkpoint
+    // (ctx=64) the no-roll cap above is 48 steps, one sentence. A story is now StoryRollTarget steps whatever the window:
+    // when the serve cache fills (Filled == Context) the page re-Primes on the most recent HALF window (ContextBudget.RollTail)
+    // and carries on with O(1) StepToken calls, so the cost is one Prime of Context/2 tokens per Context/2 steps (ctx=64: 12 primes
+    // of 32 tokens for 400 steps), not one full-window Prime per step. The story forgets text older than the tail, which is the price
+    // of a window this small. A window that already holds MaxStorySteps (ctx=512: 448 + 64 prompt) never rolls, byte-identical to before.
+    //
+    // 400 tokens = the user's "several hundred tokens": about 450-500 characters, a few short paragraphs, and it keeps the
+    // browser responsive (a repaint + yield every few tokens, see GenerateStoryAsync). Raising it is a one-number change; the
+    // degenerate-tail cut and the sentence-boundary trim bound a run that goes wrong long before the budget does.
+    const int StoryRollTarget = 400;
+
+    // The model never emits a newline (its vocab has none; Normalize spaces everything outside 32..126), so "paragraphs" are
+    // layout: after a sentence that takes the running paragraph to ParagraphChars or more, the next sentence starts a new one.
+    // Pure function of the text so far, so the live reveal and the finished story always break in the same places.
+    const int ParagraphChars = 130;
+
+    static string Paragraphs(string? text)
+    {
+        if (string.IsNullOrEmpty(text)) return "";
+        var sb = new StringBuilder(text.Length + 8);
+        var paraStart = 0;
+        for (var i = 0; i < text.Length; i++)
+        {
+            var c = text[i];
+            // a break goes where a sentence ender is followed by a space and then more text
+            if (Array.IndexOf(SentenceEnders, c) >= 0 && i + 2 < text.Length && text[i + 1] == ' ' && i + 1 - paraStart >= ParagraphChars)
+            {
+                sb.Append(c).Append("\n\n");
+                i++;                   // swallow the space the paragraph break replaces
+                paraStart = i + 1;
+                continue;
+            }
+            sb.Append(c);
+        }
+        return sb.ToString();
+    }
 
     // Consumed by the sentence-boundary trim at the end of GenerateStoryAsync — see that comment.
     static readonly char[] SentenceEnders = { '.', '!', '?' };
@@ -287,6 +332,7 @@
                                      // the first generation completes.
     string _pendingContinuation = "";   // the in-flight continuation, streamed live — same pattern as
                                          // Prism.razor's _pendingReply.
+    int _lastReprimes;   // re-Primes in the last generation (window slides); diagnostic, read by the test rig
     int? _lastSeed;
     Variety _lastVariety;
     string? _lastStopReason;   // "stop" | "loop" | "cap" — same three outcomes Prism.razor's StopReason
@@ -378,13 +424,14 @@
         var policy = PolicyFor(PFor(variety));
         var promptTokens = _vocab!.Encode(HoloKernel.AsciiPunctuation.Fold(prompt));
         var seq = new List<int>(promptTokens.Length > 0 ? promptTokens : new[] { 0 });
-        // Prompt + story must fit the window or every step past it re-Primes (~2.9 s each at ctx=512). At ctx=512, 448 steps
-        // leave 64 prompt tokens; a longer opening line (maxlength 120 chars can reach ~100 tokens) keeps only its tail.
-        // The step cap and the budget both come from the loaded model's Context (ContextBudget), so a smaller window
-        // gets a shorter story and a smaller prompt budget rather than a negative one.
+        // A window that holds the story (ctx=512: 448 steps + 64 prompt tokens) never fills, so nothing re-Primes; a longer
+        // opening line (maxlength 120 chars can reach ~100 tokens) keeps only its tail. A window too small for it (ctx=64)
+        // SLIDES instead: see StoryRollTarget. Caps and budgets come from the loaded model's Context (ContextBudget).
         var maxSteps = StoryCap;
-        var promptBudget = ContextBudget.PromptBudget(_stats!.Context, maxSteps);
-        ContextBudget.KeepTail(seq, promptBudget);
+        var window = _stats!.Context;
+        var rolls = Rolls;
+        var rollTail = ContextBudget.RollTail(window);
+        ContextBudget.KeepTail(seq, PromptCap);
         var outIds = new List<int>();
         var vocabLimit = _vocab.Size;
         var guard = new DegenGuard(policy);
@@ -395,16 +442,19 @@
         var reason = "cap";
 
         var cache = _session!.NewServeCache();
-        var logits = _session.Prime(cache, BuildContext(seq, _stats!.Context));
+        var logits = _session.Prime(cache, BuildContext(seq, window));
+        _lastReprimes = 0;
 
         _voice!.ResetBeat();
         for (var step = 0; step < maxSteps; step++)
         {
             if (step > 0)
             {
-                logits = cache.Filled < _stats.Context
-                    ? _session.StepToken(cache, seq[^1])
-                    : _session.Prime(cache, BuildContext(seq, _stats.Context));
+                // Cache full: on a window too small for the story, re-Prime on the most recent half window and carry on
+                // O(1) per token (see StoryRollTarget); otherwise the pre-existing full-window re-Prime (never reached
+                // at ctx=512, where prompt + story fits).
+                if (cache.Filled < window) logits = _session.StepToken(cache, seq[^1]);
+                else { logits = _session.Prime(cache, BuildContext(seq, rolls ? rollTail : window)); _lastReprimes++; }
             }
 
             var decision = Gate.Evaluate(logits, vocabLimit, policy);

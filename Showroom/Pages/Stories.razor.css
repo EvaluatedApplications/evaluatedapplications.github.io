@@ -54,6 +54,9 @@
 
 .story-text { font-size: 1.05rem; line-height: 1.65; color: var(--ink); background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 1rem 1.1rem; margin: 0 0 0.5rem; overflow-wrap: anywhere; }
 .story-prompt { color: var(--accent-ink); font-weight: 600; }
+/* pre-line only on this span (not the <p>): the <p> has source whitespace around its children that must keep collapsing.
+   Paragraphs() puts "\n\n" between paragraphs; the model itself never emits a newline. */
+.story-body { white-space: pre-line; }
 .seed-line { font-family: var(--mono); margin: 0; }
 
 .story-caveat { max-width: 64ch; margin: 1.2rem 0 0; line-height: 1.55; }

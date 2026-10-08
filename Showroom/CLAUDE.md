@@ -1,6 +1,6 @@
 # Showroom — CLAUDE.md (showroom-owner)
 
-**Last verified:** 2026-10-08 (Prism/Stories context-agnostic, ctx=64 checkpoint verified; council scanner DATA-DRIVEN, 28 councils, builder checklist-gated)
+**Last verified:** 2026-10-08 (Prism/Stories context-agnostic, ctx=64 checkpoint verified, Stories slides its window to 400 tokens; council scanner DATA-DRIVEN, 28 councils, builder checklist-gated)
 
 Blazor WebAssembly app at `C:\Users\dongy\AboutUs\Showroom`, published under `/tools` on the public site
 (`AboutUs` repo, base href `/tools/`). Every tool runs entirely client-side: no server, no upload. Charter:
@@ -55,14 +55,22 @@ package (a `ProjectReference` here is the designed path, not a MonoRepo boundary
 2026-10-08**: the caps in force come from the LOADED model's `Context` via `HoloKernel.ContextBudget`
 (`ReplyCap` = min(160, Ctx/2); `StoryCap` = min(448, Ctx - max(Ctx/8, min(Ctx/2,16))); `PromptBudget` = Ctx - cap;
 `KeepTail` clamps an over-budget prompt). ctx=512 gives exactly 160/352 and 448/64 (verified byte-identical story at a
-fixed seed vs the pre-change build); ctx=64 gives 32/32 and 48/16. **THE WINDOW RULE: prompt + reply must stay under
+fixed seed vs the pre-change build); ctx=64 gives reply 32/32. **THE WINDOW RULE: prompt + reply must stay under
 `Context`, or every step past it re-Primes the whole window** (~2.9 s PER STEP at 512/L33; at ctx=64 L9 ~32 ms native, so
-400 re-primes = 13 s: do NOT let a small window roll). Copy states only numbers read off the model (`Stats()`, `TokenVoice.
+400 per-step re-primes = 13 s: never re-Prime per step). **Stories SLIDES instead (2026-10-08)**: `StoryRollTarget = 400`
+tokens; `ContextBudget.RollingStoryCap(ctx, 448, 400)` = max(no-roll cap, min(448, 400)), so ctx=512 stays 448 (never rolls,
+`Rolls` false, 0 re-primes) and ctx=64 writes 400 (no-roll cap was 48 = one sentence). When `cache.Filled == Context` the
+page re-Primes on `ContextBudget.RollTail` (half the window = 32) and carries on with O(1) `StepToken`: 11 re-primes of 32
+tokens per 400-step story, ~0.45 s native. Opening-line budget on a rolling window = `RollTail` (32), else `PromptBudget`.
+`Paragraphs()` lays the text out (the model emits no newline): `ParagraphChars = 130`, break after the sentence that reaches it;
+`.story-body{white-space:pre-line}` is on its own span (not the `<p>`). ~480 chars, 3-4 paragraphs at ctx=64. About 1 story in 5
+ends early (DegenerateTail/loop cut) or drifts unpunctuated and trims to a few chars: the model's, not the roll's. Copy states only numbers read off the model (`Stats()`, `TokenVoice.
 CodecComponents`, `_stats.KPass`), never typed. `Prism.razor` context is the tagged wire format (`user: Q\nprism: A`
 + STOP per turn); Stories is a plain continuation. `AsciiPunctuation.Fold` runs at every tokenizer entry.
 **Test rig** (scratch): console app + real `Renderer` + local HttpListener as website-data, calling the pages' own
 `Ask`/`TellStory`/`Visualize` by reflection on the built `Showroom.dll`.
-Check: `node scripts/chat-turns.mjs <dist> <website-data> 9 6` (flags any turn over 6 s).
+Check: `node scripts/chat-turns.mjs <dist> <website-data> 9 6` (flags any turn over 6 s);
+`node scripts/story-times.mjs <dist> <website-data> 3` (wall time, length, paragraphs, worst frame gap per Stories preset).
 
 **Checkpoint refresh** (data-only, no publish): write `prism/oracle-brain.bin.gz` (`GZipStream`) +
 `oracle-vocab/rounds/stackk/iterwarm.txt` (UTF-8 no BOM) into `C:\Users\dongy\website-data\prism\`,

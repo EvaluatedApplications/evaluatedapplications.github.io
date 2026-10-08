@@ -40,6 +40,23 @@ public static class ContextBudget
         return Math.Max(1, Math.Min(pinnedCap, context - reserve));
     }
 
+    /// <summary>
+    /// Story length when the page SLIDES its window (2026-10-08): the larger of the no-roll cap
+    /// (<see cref="StoryCap"/>, which a small window cannot make longer than one sentence) and a rolling
+    /// target, bounded by the pinned ceiling. On a window big enough to hold the pinned ceiling the first
+    /// term wins and nothing rolls (512 -> 448, as before); on ctx=64 the window cannot hold a story, so the
+    /// target (e.g. 400) applies and the page re-primes on <see cref="RollTail"/> each time the cache fills.
+    /// </summary>
+    public static int RollingStoryCap(int context, int pinnedCap, int rollingTarget) =>
+        Math.Max(StoryCap(context, pinnedCap), Math.Min(pinnedCap, rollingTarget));
+
+    /// <summary>
+    /// Tokens of the most recent text to re-prime on when the serve cache is full: half the window. One
+    /// re-prime of this many tokens buys <c>context - RollTail</c> O(1) steps, so the cost is one Prime per
+    /// half-window of text instead of one per token.
+    /// </summary>
+    public static int RollTail(int context) => Math.Max(1, context / 2);
+
     /// <summary>Tokens the prompt may occupy so that prompt + <paramref name="cap"/> steps fit the window.</summary>
     public static int PromptBudget(int context, int cap) =>
         Math.Clamp(context - cap, Math.Min(MinPromptTokens, context), Math.Max(1, context));
