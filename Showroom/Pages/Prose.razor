@@ -1,4 +1,6 @@
 @page "/prose"
+@attribute [BlazierPage("prose", Title = "Prose — turn any text into training data, in your browser", Layout = typeof(MainLayout), Static = true)]
+@inject IBuildTime Build
 @inject HttpClient Http
 @inject HoloKernel.SessionHost Sessions
 @inject Microsoft.JSInterop.IJSRuntime JS
@@ -34,6 +36,12 @@
         <li><b>4</b> Copy or download</li>
     </ol>
 
+    @if (Build.IsPrerender)
+    {
+        <ToolStart Tool="Prose" />
+    }
+    else
+    {
     <div class="dropzone @(_busy ? "busy" : "")">
         <InputFile OnChange="OnFile" class="file-input" accept=".txt,.md,.text,.log" disabled="@_busy" />
         <div class="dz-inner">
@@ -239,6 +247,7 @@
                 recombines that knowledge into new, grammatical sentences. Everything above ran in this tab.</p>
             <p>Want it in your own pipeline? <code>dotnet add package EvaluatedApplications.Prose</code></p>
         </div>
+    }
     }
 </div>
 

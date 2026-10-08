@@ -4,8 +4,17 @@
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Tools — Evaluated Applications</title>
-    <meta name="description" content="Interactive tools that run Evaluated Applications' .NET libraries entirely in your browser." />
+    <title>Prose — turn any text into training data, in your browser</title>
+    <meta name="description" content="Paste in text and a rules-first English grammar mines it in your browser, then recombines what it learned into sentences and question and answer pairs." />
+    <link rel="canonical" href="https://evaluatedapplications.github.io/tools/prose/" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Evaluated Applications" />
+    <meta property="og:title" content="Prose — turn any text into training data, in your browser" />
+    <meta property="og:description" content="Paste in text and a rules-first English grammar mines it in your browser, then recombines what it learned into sentences and question and answer pairs." />
+    <meta property="og:url" content="https://evaluatedapplications.github.io/tools/prose/" />
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content="Prose — turn any text into training data, in your browser" />
+    <meta name="twitter:description" content="Paste in text and a rules-first English grammar mines it in your browser, then recombines what it learned into sentences and question and answer pairs." />
     <base href="/tools/" />
     <script>
       // THE ONE DATA SETTING. The big files (council data, the Prism checkpoint) live in the website-data repo and are served
@@ -30,7 +39,25 @@
          one definition. See wwwroot/css/voice.css's own header comment. -->
     <link rel="stylesheet" href="css/voice.css" />
     <link href="Showroom.styles.css" rel="stylesheet" />
-    <script type="importmap"></script>
+    <script type="importmap">{
+  "imports": {
+    "./_framework/blazor.webassembly.js": "./_framework/blazor.webassembly.w3qd1tpl0e.js",
+    "./_framework/dotnet.native.js": "./_framework/dotnet.native.mxfenw0hal.js",
+    "./_framework/dotnet.runtime.js": "./_framework/dotnet.runtime.zbexyp8zrs.js",
+    "./_framework/dotnet.js": "./_framework/dotnet.ynd8fk0ts0.js"
+  },
+  "scopes": {},
+  "integrity": {
+    "./_framework/blazor.webassembly.js": "sha256-lDXsDYFgm62F+YUvxES7IOTCXYpiHpU3uR45YdC6mq4=",
+    "./_framework/blazor.webassembly.w3qd1tpl0e.js": "sha256-lDXsDYFgm62F+YUvxES7IOTCXYpiHpU3uR45YdC6mq4=",
+    "./_framework/dotnet.js": "sha256-0ombEWVk3sShUQJJ+o9UUeBUEzFQLfba8k63d+mD8mI=",
+    "./_framework/dotnet.native.js": "sha256-Kn+cHkw/viZfD8NlRisXjV9E24Rg3ehPhHWQyOsBmVI=",
+    "./_framework/dotnet.native.mxfenw0hal.js": "sha256-Kn+cHkw/viZfD8NlRisXjV9E24Rg3ehPhHWQyOsBmVI=",
+    "./_framework/dotnet.runtime.js": "sha256-MZMguyke9CroSQl+L/SHIGFkPTD+LtYGXkXjAvwWx40=",
+    "./_framework/dotnet.runtime.zbexyp8zrs.js": "sha256-MZMguyke9CroSQl+L/SHIGFkPTD+LtYGXkXjAvwWx40=",
+    "./_framework/dotnet.ynd8fk0ts0.js": "sha256-0ombEWVk3sShUQJJ+o9UUeBUEzFQLfba8k63d+mD8mI="
+  }
+}</script>
     <!-- REAL WASM MULTITHREADING — REVERTED 2026-08-28 (see Showroom.csproj's own comment for the
          real-device incident: a laptop's Continue button on /tools/prism stuck permanently disabled,
          a phone loading the exact same deploy was fine). WasmEnableThreads is back to false, so this
@@ -60,7 +87,8 @@
           window.__eaBounced = true;
         }
       }(window.location));
-    </script></head>
+    </script>    <meta name="blazier-scaffold" content="prose" />
+</head>
 
 <body>
     <!-- Blazier (2026-10-08): THIS FILE IS THE TEMPLATE for every static shell. `dotnet publish` renders each [BlazierPage] component to HTML
@@ -68,9 +96,39 @@
          Blazor runtime downloads only on intent: the start button of a tool shell (data-blazier-go), a visitor arriving from another page
          of this site, or a path that has no shell (window.__eaBounced). The script at the end of this file does the starting.
          The placeholder below is what an UNPUBLISHED run (dotnet run) shows; there the loader starts the app straight away. -->
-    <div id="app">
-        <p class="boot-plain" role="status">Loading&hellip;</p>
-    </div>
+    <div id="app"><div class="beam" b-6xrfe1d2ym></div>
+
+<nav class="site-nav" b-6xrfe1d2ym><div class="wrap" b-6xrfe1d2ym><a class="brand" href="/" b-6xrfe1d2ym><svg class="mark" viewBox="0 0 32 32" aria-hidden="true" b-6xrfe1d2ym><defs b-6xrfe1d2ym><linearGradient id="m" x1="0" y1="0" x2="1" y2="1" b-6xrfe1d2ym><stop offset="0" stop-color="#f0796a" b-6xrfe1d2ym></stop><stop offset=".166" stop-color="#f0a15a" b-6xrfe1d2ym></stop><stop offset=".333" stop-color="#e6c450" b-6xrfe1d2ym></stop><stop offset=".5" stop-color="#7bd86a" b-6xrfe1d2ym></stop><stop offset=".666" stop-color="#4aa3ff" b-6xrfe1d2ym></stop><stop offset=".833" stop-color="#7d7dff" b-6xrfe1d2ym></stop><stop offset="1" stop-color="#c07dff" b-6xrfe1d2ym></stop></linearGradient></defs>
+                <path d="M16 5L27 26H5Z" fill="none" stroke="url(#m)" stroke-width="2" stroke-linejoin="round" b-6xrfe1d2ym></path></svg>
+            Evaluated Applications
+        </a>
+        <input type="checkbox" id="navtoggle" class="nav-toggle" b-6xrfe1d2ym>
+        <label for="navtoggle" class="nav-burger" aria-label="Toggle menu" b-6xrfe1d2ym><span b-6xrfe1d2ym></span><span b-6xrfe1d2ym></span><span b-6xrfe1d2ym></span></label>
+        <div class="nav-links" b-6xrfe1d2ym><a href="/" b-6xrfe1d2ym>Home</a>
+            <a href="." b-6xrfe1d2ym>Tools</a>
+            <a href="https://www.nuget.org/profiles/evaluatedapplications" target="_blank" rel="noopener" b-6xrfe1d2ym>NuGet</a></div></div></nav>
+
+<main b-6xrfe1d2ym>
+
+<div class="room" data-cat="holodb-algformer" b-v560z1yp0o><header class="room-head" b-v560z1yp0o><nav class="crumb" b-v560z1yp0o><a href="/" b-v560z1yp0o>Tools</a> <span b-v560z1yp0o>/</span> Prose</nav>
+        <h1 b-v560z1yp0o>Prose</h1>
+        <p class="lede" b-v560z1yp0o>Paste in a body of text — a book, a transcript, your own notes — and a real
+            <strong b-v560z1yp0o>rules-first English grammar</strong> mines it, right here in your browser tab, then
+            recombines what it learned into new sentences and question/answer pairs. Copy the result
+            straight into a training corpus.</p>
+        <div class="badges" b-v560z1yp0o><span b-v560z1yp0o>Free, no sign-up</span><span b-v560z1yp0o>Runs entirely in your browser</span><span b-v560z1yp0o>Real grammar, not templates</span><span b-v560z1yp0o>Copy-paste into <code b-v560z1yp0o>data/pairs</code> or <code b-v560z1yp0o>data/text</code></span></div></header>
+
+    <ol class="steps" b-v560z1yp0o><li b-v560z1yp0o><b b-v560z1yp0o>1</b> Paste or drop your text</li>
+        <li b-v560z1yp0o><b b-v560z1yp0o>2</b> Mine it</li>
+        <li b-v560z1yp0o><b b-v560z1yp0o>3</b> Tick what to generate</li>
+        <li b-v560z1yp0o><b b-v560z1yp0o>4</b> Copy or download</li></ol><section class="tool-start" aria-label="Start Prose" b-kxova46e5k><p class="tool-start-note" b-kxova46e5k>Prose runs on your own device, inside this tab. Starting it downloads the .NET runtime that does the
+        work (about 11 MB the first time); your browser keeps it for next time.</p>
+    <div class="tool-start-actions" b-kxova46e5k><button type="button" class="btn btn-primary" data-blazier-go b-kxova46e5k>Start Prose</button></div>
+    <div class="tool-start-boot" data-boot-slot b-kxova46e5k></div>
+    <noscript b-kxova46e5k><p class="hint" b-kxova46e5k>This tool needs JavaScript to run.</p></noscript></section></div></main>
+
+<footer class="site" b-6xrfe1d2ym><div class="wrap" b-6xrfe1d2ym><span b-6xrfe1d2ym>Evaluated Applications — .NET libraries, England.</span>
+        <span class="mono" b-6xrfe1d2ym>© 2026 · <a href="/" b-6xrfe1d2ym>Home</a></span></div></footer></div>
     <div id="blazor-error-ui">
         An unhandled error has occurred.
         <a href="." class="reload">Reload</a>
@@ -303,7 +361,7 @@
     </script>
     <!-- Blazier's loader. It does nothing until the script below (or a [data-blazier-island] element) asks it to start Blazor.
          data-blazor-script names the fingerprinted blazor.webassembly.js, which is fetched only when the app starts. -->
-    <script src="_content/EvaluatedApplications.Blazier/blazier.js" data-blazor-script="_framework/blazor.webassembly#[.{fingerprint}].js"></script>
+    <script src="_content/EvaluatedApplications.Blazier/blazier.js" data-blazor-script="_framework/blazor.webassembly.w3qd1tpl0e.js"></script>
     <script>
       // ---- Starting the app (Blazier) ---------------------------------------------------------------------------------------------
       // INTENT, in the order the code checks it:

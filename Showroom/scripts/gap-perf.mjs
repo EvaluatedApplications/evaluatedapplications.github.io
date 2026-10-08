@@ -8,6 +8,7 @@ import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
+import { pagesHandler } from './pages-server.mjs';
 
 const ROOT = process.argv[2];
 const CPU = Number(process.argv[3] ?? 1);
@@ -17,17 +18,7 @@ const DATA = process.argv[6] ?? 'C:\\Users\\dongy\\website-data';
 const PORT = 8123 + Math.floor(Math.random() * 500), DBG = 9300 + Math.floor(Math.random() * 500);
 const types = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.wasm': 'application/wasm',
   '.dll': 'application/octet-stream', '.csv': 'text/csv', '.txt': 'text/plain', '.gz': 'application/gzip', '.svg': 'image/svg+xml', '.dat': 'application/octet-stream', '.blat': 'application/octet-stream', '.bin': 'application/octet-stream' };
-const server = http.createServer((req, res) => {
-  let p = decodeURIComponent(req.url.split('?')[0]);
-  if (p.startsWith('/assets/') || p.startsWith('/SiteKit/')) { const sf = p.startsWith('/assets/') ? path.join('C:\\Users\\dongy\\AboutUs\\site', p) : path.join('C:\\Users\\dongy\\AboutUs', p); if (fs.existsSync(sf)) { res.writeHead(200, { 'Content-Type': types[path.extname(sf)] ?? 'text/plain' }); return fs.createReadStream(sf).pipe(res); } res.writeHead(404); return res.end(); }
-  if (p.startsWith('/website-data/')) { const df = path.join(DATA, p.slice('/website-data/'.length)); if (fs.existsSync(df) && fs.statSync(df).isFile()) { res.writeHead(200, { 'Content-Type': types[path.extname(df)] ?? 'application/octet-stream', 'Cache-Control': 'no-store' }); return fs.createReadStream(df).pipe(res); } res.writeHead(404); return res.end(); }
-  if (!p.startsWith('/tools/')) { res.writeHead(404); return res.end(); }
-  let f = path.join(ROOT, p.slice('/tools/'.length));
-  if (!fs.existsSync(f) || fs.statSync(f).isDirectory()) f = path.join(ROOT, 'index.html');
-  const ext = path.extname(f);
-  res.writeHead(200, { 'Content-Type': types[ext] ?? 'application/octet-stream', 'Cache-Control': 'no-store' });
-  fs.createReadStream(f).pipe(res);
-}).listen(PORT);
+const server = http.createServer(pagesHandler(ROOT, DATA)).listen(PORT);   // Pages-shaped: folder index, 404.html bounce, the Start button pressed for us (see pages-server.mjs)
 
 const edge = spawn('C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe',
   ['--headless=new', `--remote-debugging-port=${DBG}`, '--user-data-dir=' + path.join(process.env.TEMP, 'cw-edge-' + DBG), '--no-first-run', '--disable-extensions', '--window-size=412,915', 'about:blank'], { stdio: 'ignore' });
@@ -58,7 +49,8 @@ await send('Page.addScriptToEvaluateOnNewDocument', { source: `
   window.__setVal = (el, v) => { const proto = Object.getPrototypeOf(el); const d = Object.getOwnPropertyDescriptor(proto, 'value'); d.set.call(el, v); el.dispatchEvent(new Event('change', { bubbles: true })); };
 ` });
 
-async function waitBoot() { for (let i = 0; i < 600; i++) { if (await ev(`!!document.querySelector('.room')`)) return; await sleep(200); } throw new Error('boot timeout'); }
+// the static shell already has a .room, so wait for the RUNNING app: Blazier sets data-blazier-state="live" on #app once it has mounted over the shell (a pre-Blazier build, which has no shell, is ready at the first .room)
+async function waitBoot() { for (let i = 0; i < 600; i++) { if (await ev(`!!(document.querySelector('#app[data-blazier-state="live"] .room') || (!document.querySelector('meta[name=blazier-scaffold]') && document.querySelector('.room')))`)) return; await sleep(200); } throw new Error('boot timeout'); }
 const rows = [];
 async function measure(name, js, settleMs = 200) {
   await ev(`window.__lt = []`);

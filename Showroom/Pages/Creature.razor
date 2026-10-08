@@ -1,4 +1,6 @@
 @page "/creature"
+@attribute [BlazierPage("creature", Title = "The Creature — a brain that learns to forage", Layout = typeof(MainLayout), Static = true)]
+@inject IBuildTime Build
 @inject HttpClient Http
 @inject HoloKernel.SessionHost Sessions
 @using System.Text
@@ -26,6 +28,12 @@
         </div>
     </header>
 
+    @if (Build.IsPrerender)
+    {
+        <ToolStart Tool="The Creature" />
+    }
+    else
+    {
     <div class="cr-tools">
         <div class="tool-group">
             <span class="tool-lbl">draw</span>
@@ -117,6 +125,7 @@
                 <div class="log-line">looking back at → @AttentionText(_lastCtx, _lastTrace.Attention[^1])</div>
             </div>
         </div>
+    }
     }
 
     <div class="outro">
@@ -221,6 +230,7 @@
 
     protected override async Task OnInitializedAsync()
     {
+        if (Build.IsPrerender) return;   // the static shell draws no world and fetches nothing (Blazier); the live page starts here
         _cx = _startX; _cy = _startY;
         Scatter();   // start with something to forage
 

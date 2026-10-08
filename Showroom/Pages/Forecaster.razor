@@ -1,4 +1,6 @@
 @page "/forecaster"
+@attribute [BlazierPage("forecaster", Title = "The Forecaster — a price-direction brain that learns live in your browser", Layout = typeof(MainLayout), Static = true)]
+@inject IBuildTime Build
 @inject HttpClient Http
 @inject HoloKernel.SessionHost Sessions
 @using System.Text
@@ -24,7 +26,11 @@
         </div>
     </header>
 
-    @if (_loadError is not null)
+    @if (Build.IsPrerender)
+    {
+        <ToolStart Tool="The Forecaster" Data="the price history" />
+    }
+    else if (_loadError is not null)
     {
         <p class="err">@_loadError</p>
     }
@@ -222,6 +228,7 @@
 
     protected override async Task OnInitializedAsync()
     {
+        if (Build.IsPrerender) return;   // the static shell fetches nothing (Blazier); the live page starts here
         try
         {
             var opts = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };

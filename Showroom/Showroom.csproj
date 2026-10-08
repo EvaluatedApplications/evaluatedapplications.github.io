@@ -5,6 +5,10 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <OverrideHtmlAssetPlaceholders>true</OverrideHtmlAssetPlaceholders>
+    <!-- Blazier (2026-10-08): on publish, every [BlazierPage] component is rendered to a real static HTML shell
+         (tools/prism/index.html and so on) and the Blazor runtime boots only on intent. See Showroom/CLAUDE.md,
+         "Static shells (Blazier)". No lazy assemblies are declared, so Blazier's lazy guard (BLZ001) has nothing to check. -->
+    <BlazierScaffold>true</BlazierScaffold>
   </PropertyGroup>
 
   <PropertyGroup>
@@ -161,6 +165,9 @@
     </PackageReference>
     <PackageReference Include="EvaluatedApplications.Prose">
       <Version>1.3.2</Version>
+    </PackageReference>
+    <PackageReference Include="EvaluatedApplications.Blazier">
+      <Version>1.0.0</Version>
     </PackageReference>
   </ItemGroup>
 

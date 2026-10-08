@@ -1,4 +1,6 @@
 @page "/prism"
+@attribute [BlazierPage("prism", Title = "Prism — a tiny AI that runs in your browser", Layout = typeof(MainLayout), Static = true)]
+@inject IBuildTime Build
 @implements IDisposable
 @inject HttpClient Http
 @inject HoloKernel.SessionHost Sessions
@@ -26,7 +28,11 @@
             so the replies are rough.</p>
     </header>
 
-    @if (_loadError is not null)
+    @if (Build.IsPrerender)
+    {
+        <ToolStart Tool="Prism" Data="the model file" />
+    }
+    else if (_loadError is not null)
     {
         <p class="err">@_loadError</p>
     }
@@ -523,6 +529,7 @@
 
     protected override async Task OnInitializedAsync()
     {
+        if (Build.IsPrerender) return;   // the static shell fetches nothing (Blazier); the live page starts here
         try
         {
             // Restore the sound preference BEFORE anything else — cheap, and TokenVoice.InitializeAsync

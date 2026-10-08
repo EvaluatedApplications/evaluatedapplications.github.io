@@ -4,8 +4,18 @@
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Tools — Evaluated Applications</title>
-    <meta name="description" content="Interactive tools that run Evaluated Applications' .NET libraries entirely in your browser." />
+    <title>RecycleDAO — marketplace prototype (simulation)</title>
+    <meta name="description" content="RecycleDAO marketplace prototype: a private, browser-only simulation." />
+    <meta name="robots" content="noindex,nofollow" />
+    <link rel="canonical" href="https://evaluatedapplications.github.io/tools/recycledao-demo/" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Evaluated Applications" />
+    <meta property="og:title" content="RecycleDAO — marketplace prototype (simulation)" />
+    <meta property="og:description" content="RecycleDAO marketplace prototype: a private, browser-only simulation." />
+    <meta property="og:url" content="https://evaluatedapplications.github.io/tools/recycledao-demo/" />
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content="RecycleDAO — marketplace prototype (simulation)" />
+    <meta name="twitter:description" content="RecycleDAO marketplace prototype: a private, browser-only simulation." />
     <base href="/tools/" />
     <script>
       // THE ONE DATA SETTING. The big files (council data, the Prism checkpoint) live in the website-data repo and are served
@@ -30,7 +40,25 @@
          one definition. See wwwroot/css/voice.css's own header comment. -->
     <link rel="stylesheet" href="css/voice.css" />
     <link href="Showroom.styles.css" rel="stylesheet" />
-    <script type="importmap"></script>
+    <script type="importmap">{
+  "imports": {
+    "./_framework/blazor.webassembly.js": "./_framework/blazor.webassembly.w3qd1tpl0e.js",
+    "./_framework/dotnet.native.js": "./_framework/dotnet.native.mxfenw0hal.js",
+    "./_framework/dotnet.runtime.js": "./_framework/dotnet.runtime.zbexyp8zrs.js",
+    "./_framework/dotnet.js": "./_framework/dotnet.ynd8fk0ts0.js"
+  },
+  "scopes": {},
+  "integrity": {
+    "./_framework/blazor.webassembly.js": "sha256-lDXsDYFgm62F+YUvxES7IOTCXYpiHpU3uR45YdC6mq4=",
+    "./_framework/blazor.webassembly.w3qd1tpl0e.js": "sha256-lDXsDYFgm62F+YUvxES7IOTCXYpiHpU3uR45YdC6mq4=",
+    "./_framework/dotnet.js": "sha256-0ombEWVk3sShUQJJ+o9UUeBUEzFQLfba8k63d+mD8mI=",
+    "./_framework/dotnet.native.js": "sha256-Kn+cHkw/viZfD8NlRisXjV9E24Rg3ehPhHWQyOsBmVI=",
+    "./_framework/dotnet.native.mxfenw0hal.js": "sha256-Kn+cHkw/viZfD8NlRisXjV9E24Rg3ehPhHWQyOsBmVI=",
+    "./_framework/dotnet.runtime.js": "sha256-MZMguyke9CroSQl+L/SHIGFkPTD+LtYGXkXjAvwWx40=",
+    "./_framework/dotnet.runtime.zbexyp8zrs.js": "sha256-MZMguyke9CroSQl+L/SHIGFkPTD+LtYGXkXjAvwWx40=",
+    "./_framework/dotnet.ynd8fk0ts0.js": "sha256-0ombEWVk3sShUQJJ+o9UUeBUEzFQLfba8k63d+mD8mI="
+  }
+}</script>
     <!-- REAL WASM MULTITHREADING — REVERTED 2026-08-28 (see Showroom.csproj's own comment for the
          real-device incident: a laptop's Continue button on /tools/prism stuck permanently disabled,
          a phone loading the exact same deploy was fine). WasmEnableThreads is back to false, so this
@@ -60,7 +88,8 @@
           window.__eaBounced = true;
         }
       }(window.location));
-    </script></head>
+    </script>    <meta name="blazier-scaffold" content="recycledao-demo" />
+</head>
 
 <body>
     <!-- Blazier (2026-10-08): THIS FILE IS THE TEMPLATE for every static shell. `dotnet publish` renders each [BlazierPage] component to HTML
@@ -68,9 +97,73 @@
          Blazor runtime downloads only on intent: the start button of a tool shell (data-blazier-go), a visitor arriving from another page
          of this site, or a path that has no shell (window.__eaBounced). The script at the end of this file does the starting.
          The placeholder below is what an UNPUBLISHED run (dotnet run) shows; there the loader starts the app straight away. -->
-    <div id="app">
-        <p class="boot-plain" role="status">Loading&hellip;</p>
-    </div>
+    <div id="app"><div class="beam" b-6xrfe1d2ym></div>
+
+<nav class="site-nav" b-6xrfe1d2ym><div class="wrap" b-6xrfe1d2ym><a class="brand" href="/" b-6xrfe1d2ym><svg class="mark" viewBox="0 0 32 32" aria-hidden="true" b-6xrfe1d2ym><defs b-6xrfe1d2ym><linearGradient id="m" x1="0" y1="0" x2="1" y2="1" b-6xrfe1d2ym><stop offset="0" stop-color="#f0796a" b-6xrfe1d2ym></stop><stop offset=".166" stop-color="#f0a15a" b-6xrfe1d2ym></stop><stop offset=".333" stop-color="#e6c450" b-6xrfe1d2ym></stop><stop offset=".5" stop-color="#7bd86a" b-6xrfe1d2ym></stop><stop offset=".666" stop-color="#4aa3ff" b-6xrfe1d2ym></stop><stop offset=".833" stop-color="#7d7dff" b-6xrfe1d2ym></stop><stop offset="1" stop-color="#c07dff" b-6xrfe1d2ym></stop></linearGradient></defs>
+                <path d="M16 5L27 26H5Z" fill="none" stroke="url(#m)" stroke-width="2" stroke-linejoin="round" b-6xrfe1d2ym></path></svg>
+            Evaluated Applications
+        </a>
+        <input type="checkbox" id="navtoggle" class="nav-toggle" b-6xrfe1d2ym>
+        <label for="navtoggle" class="nav-burger" aria-label="Toggle menu" b-6xrfe1d2ym><span b-6xrfe1d2ym></span><span b-6xrfe1d2ym></span><span b-6xrfe1d2ym></span></label>
+        <div class="nav-links" b-6xrfe1d2ym><a href="/" b-6xrfe1d2ym>Home</a>
+            <a href="." b-6xrfe1d2ym>Tools</a>
+            <a href="https://www.nuget.org/profiles/evaluatedapplications" target="_blank" rel="noopener" b-6xrfe1d2ym>NuGet</a></div></div></nav>
+
+<main b-6xrfe1d2ym>
+
+
+<div class="room" b-i8eo33h4qb><header class="room-head" b-i8eo33h4qb><nav class="crumb" b-i8eo33h4qb><a href="/" b-i8eo33h4qb>Evaluated Applications</a> <span b-i8eo33h4qb>/</span> RecycleDAO — marketplace prototype</nav>
+        <h1 b-i8eo33h4qb>RecycleDAO — marketplace prototype</h1>
+        <p class="lede" b-i8eo33h4qb>A private, share-by-link preview of RecycleDAO as a working product: a browsable
+            classifieds-style marketplace for material rescued from the waste stream, running on the RCYT reward
+            token. Recycling activity you submit is reviewed by a verifier and mints RCYT; RCYT is what you spend
+            to claim someone else's listing. Everything below is one live, interlinked simulation running in this
+            browser tab — browse, filter, open a listing, claim it, post your own, review the moderation queue,
+            watch the wallet ledger move.</p>
+        <div class="badges" b-i8eo33h4qb><span b-i8eo33h4qb>Browser-only simulation</span><span b-i8eo33h4qb>No wallet · no live chain</span><span b-i8eo33h4qb>Sample marketplace data</span><span b-i8eo33h4qb>Resets on reload</span></div></header>
+
+    <div class="testnet" role="note" b-i8eo33h4qb><strong b-i8eo33h4qb>Testnet only — no real money, ever.</strong>
+        <span b-i8eo33h4qb>RecycleDAO's real contracts are deployed to a public <em b-i8eo33h4qb>test</em> network only. RCYT is a test token
+            with <strong b-i8eo33h4qb>no monetary value</strong>: it cannot be bought, sold, or exchanged for money, and this
+            prototype contains no payment, top-up, or cash-out path of any kind. Every price, balance and
+            transaction on this page is simulated in your browser.</span></div>
+
+    <div class="dao-honesty" b-i8eo33h4qb><strong b-i8eo33h4qb>What this is (and isn't)</strong>
+        <ul b-i8eo33h4qb><li b-i8eo33h4qb>A self-contained browser simulation — no live blockchain, no wallet connection, no real tokens.</li>
+            <li b-i8eo33h4qb>It mirrors the rules already built and tested in this project: only a verifier's approval can mint
+                RCYT (never a submitter alone), and each submission is decided exactly once.</li>
+            <li b-i8eo33h4qb>"Verification" here (and in the real system) is a manual human review step — this project does not
+                claim to have solved real-world recycling fraud detection.</li>
+            <li b-i8eo33h4qb>Reward amounts are a simple, fixed demo schedule (the reward-rate table), not a market-priced
+                calculation. Marketplace prices are asking prices set by whoever posted the listing.</li>
+            <li b-i8eo33h4qb>The other participants, their listings, messages and reviews are <strong b-i8eo33h4qb>seeded sample data</strong>
+                so the marketplace isn't empty on first load. You are the only real user here; anything a
+                "counterparty" does is either seeded or triggered by a clearly-labelled demo control.</li>
+            <li b-i8eo33h4qb>The header, search box, category bar, filters and every card below are <strong b-i8eo33h4qb>live</strong> — they
+                really drive this prototype. Only the small greyed items tagged <em b-i8eo33h4qb>mockup</em> (the top utility
+                strip and the footer link columns) are inert dressing that shows the shape of a finished product.</li>
+            <li b-i8eo33h4qb>There are no referral, invite, or share-to-earn mechanics anywhere in this prototype, by design.</li></ul>
+        <p class="hint" b-i8eo33h4qb>All state lives in this browser tab for this session only. Reload the page and everything
+            resets to the seeded starting point — that's expected, not a bug.</p></div><section class="tool-start" aria-label="Start The marketplace prototype" b-kxova46e5k><p class="tool-start-note" b-kxova46e5k>The marketplace prototype runs on your own device, inside this tab. Starting it downloads the .NET runtime that does the
+        work (about 11 MB the first time); your browser keeps it for next time.</p>
+    <div class="tool-start-actions" b-kxova46e5k><button type="button" class="btn btn-primary" data-blazier-go b-kxova46e5k>Start the prototype</button></div>
+    <div class="tool-start-boot" data-boot-slot b-kxova46e5k></div>
+    <noscript b-kxova46e5k><p class="hint" b-kxova46e5k>This tool needs JavaScript to run.</p></noscript></section><div class="outro" b-i8eo33h4qb><p b-i8eo33h4qb><strong b-i8eo33h4qb>About this prototype.</strong> RecycleDAO's real contract gates minting with an on-chain
+            <code b-i8eo33h4qb>onlyRole(MINTER_ROLE)</code> check — only a designated verifier address can call
+            <code b-i8eo33h4qb>RecycleToken.mint()</code>; a submitter has no path to mint tokens themselves. This prototype has
+            no wallets and no live chain, so it enforces the same shape a different way: <code b-i8eo33h4qb>MintForApproval</code>
+            is the only method on the page that can append to the mint log or increase the token supply, and it is
+            reachable from exactly one place — the verifier queue's Approve action. Marketplace activity moves RCYT
+            between balances but can never create it: claiming an item deducts and escrows, confirming collection
+            releases, cancelling refunds, and a sale credits — no path adds to supply. Once a submission is decided
+            its Approve/Reject controls are removed from the UI for good, so nothing can be minted twice. The
+            greyed <span class="mk-tag" b-i8eo33h4qb>mockup</span> items — the top utility strip, the footer columns, the photo
+            upload box and the notification toggles — carry no logic and say so; everything else on the page is
+            live and interlinked, which is why an action on one screen shows up on four others. Reload the page at
+            any time to reset the session to its seeded starting point.</p></div></div></main>
+
+<footer class="site" b-6xrfe1d2ym><div class="wrap" b-6xrfe1d2ym><span b-6xrfe1d2ym>Evaluated Applications — .NET libraries, England.</span>
+        <span class="mono" b-6xrfe1d2ym>© 2026 · <a href="/" b-6xrfe1d2ym>Home</a></span></div></footer></div>
     <div id="blazor-error-ui">
         An unhandled error has occurred.
         <a href="." class="reload">Reload</a>
@@ -303,7 +396,7 @@
     </script>
     <!-- Blazier's loader. It does nothing until the script below (or a [data-blazier-island] element) asks it to start Blazor.
          data-blazor-script names the fingerprinted blazor.webassembly.js, which is fetched only when the app starts. -->
-    <script src="_content/EvaluatedApplications.Blazier/blazier.js" data-blazor-script="_framework/blazor.webassembly#[.{fingerprint}].js"></script>
+    <script src="_content/EvaluatedApplications.Blazier/blazier.js" data-blazor-script="_framework/blazor.webassembly.w3qd1tpl0e.js"></script>
     <script>
       // ---- Starting the app (Blazier) ---------------------------------------------------------------------------------------------
       // INTENT, in the order the code checks it:

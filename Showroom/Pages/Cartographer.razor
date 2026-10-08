@@ -1,4 +1,6 @@
 @page "/cartographer"
+@attribute [BlazierPage("cartographer", Title = "The Cartographer — watch a model think, live", Layout = typeof(MainLayout), Static = true)]
+@inject IBuildTime Build
 @inject HttpClient Http
 @inject HoloKernel.SessionHost Sessions
 @using System.Text
@@ -18,7 +20,11 @@
             forward pass with <code>DecodeFace</code>.</p>
     </header>
 
-    @if (_loadError is not null)
+    @if (Build.IsPrerender)
+    {
+        <ToolStart Tool="The Cartographer" Data="the model file" />
+    }
+    else if (_loadError is not null)
     {
         <p class="err">@_loadError</p>
     }
@@ -252,6 +258,7 @@
 
     protected override async Task OnInitializedAsync()
     {
+        if (Build.IsPrerender) return;   // the static shell fetches nothing (Blazier); the live page starts here
         try
         {
             var s = Begin(DataUrl.For("prism/oracle-vocab.txt"));

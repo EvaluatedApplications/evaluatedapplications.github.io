@@ -1,15 +1,48 @@
 @page "/council-spending"
 @page "/council-spending/{Slug}"
+@attribute [BlazierPage("council-spending", Title = "Council Spending Scanner — Evaluated Applications", Layout = typeof(MainLayout), Static = true)]
 @using System.Diagnostics
 @using Showroom.Components
 @using Showroom.Services
 @using static Showroom.Services.CouncilTerms
 @inject CouncilWebData Data
+@inject IBuildTime Build
 
 <PageTitle>@(Slug is null ? "Council Spending Scanner" : CouncilWebData.ShortOf(Slug) + " spending") — Evaluated Applications</PageTitle>
 
+@{
+    // Defined words: plain text, no data, so the static shell and the live hub show the same panel.
+    RenderFragment words = @<section class="wordpanel">
+        <h2>What these words mean</h2>
+        <dl>
+            <dt><span class="tag">Exception</span></dt>
+            <dd>The umbrella word for anything a check flags: a row or group of rows that fails a defined test against the published data. An exception is not an accusation; it is a fact about the numbers as published.</dd>
+            <dt><span class="tag">Discrepancy</span></dt>
+            <dd>The published record contradicts itself: a payment that does not match its own stated invoice amount, the same line listed more than once, or one transaction number covering more than one payee or pay date.</dd>
+            <dt><span class="tag">Unreconciled</span></dt>
+            <dd>The published payments for a transaction do not add up to the invoice amount the file states for it, under any of the rules the checks apply. The file does not say why.</dd>
+            <dt><span class="tag">Anomaly</span></dt>
+            <dd>A pattern, not a contradiction: the same supplier, amount, description and date appear more than once under different transaction numbers.</dd>
+        </dl>
+    </section>;
+}
+
 <div class="room cs" data-cat="councilaudit">
-@if (!_catalogReady)
+@if (Build.IsPrerender)
+{
+    @* The static shell (Blazier): nothing here may need index.csv, so no council count or name appears. The live hub below reads them. *@
+    <header class="room-head">
+        <nav class="crumb"><a href="/">Tools</a> <span>/</span> Council Spending Scanner</nav>
+        <h1>Council Spending Scanner</h1>
+        <p class="lede">Councils in England publish every payment over a set amount under the Local Government Transparency Code. This tool reads those published files, prepared ahead of time, and shows where the
+            published numbers do not add up on their own terms. Each check is one stated rule, run the same way for every council. It never says why a number looks the way it does; it shows the numbers and leaves the
+            council to explain.</p>
+    </header>
+    <p class="caveat"><strong>@DiscrepancyNote</strong></p>
+    <ToolStart Tool="The Council Spending Scanner" Label="Open the scanner" Data="a small list of councils" />
+    @words
+}
+else if (!_catalogReady)
 {
     @* nothing below may ask for a council's name, count or facts until index.csv has been read *@
     <header class="room-head">
@@ -31,19 +64,7 @@ else if (Slug is null)
     </header>
     <p class="caveat"><strong>@DiscrepancyNote</strong></p>
 
-    <section class="wordpanel">
-        <h2>What these words mean</h2>
-        <dl>
-            <dt><span class="tag">Exception</span></dt>
-            <dd>The umbrella word for anything a check flags: a row or group of rows that fails a defined test against the published data. An exception is not an accusation; it is a fact about the numbers as published.</dd>
-            <dt><span class="tag">Discrepancy</span></dt>
-            <dd>The published record contradicts itself: a payment that does not match its own stated invoice amount, the same line listed more than once, or one transaction number covering more than one payee or pay date.</dd>
-            <dt><span class="tag">Unreconciled</span></dt>
-            <dd>The published payments for a transaction do not add up to the invoice amount the file states for it, under any of the rules the checks apply. The file does not say why.</dd>
-            <dt><span class="tag">Anomaly</span></dt>
-            <dd>A pattern, not a contradiction: the same supplier, amount, description and date appear more than once under different transaction numbers.</dd>
-        </dl>
-    </section>
+    @words
 
     <section class="picker">
         <h2>Choose a council</h2>
@@ -171,6 +192,7 @@ else
 
     protected override async Task OnParametersSetAsync()
     {
+        if (Build.IsPrerender) return;   // the static shell reads no council data (Blazier); the live page starts here
         _error = null;
         var sw = Stopwatch.StartNew();
         var co = new Cooperative(CancellationToken.None);

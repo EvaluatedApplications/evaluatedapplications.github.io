@@ -1,4 +1,6 @@
 @page "/recycledao-demo"
+@attribute [BlazierPage("recycledao-demo", Title = "RecycleDAO — marketplace prototype (simulation)", Layout = typeof(MainLayout), Static = true)]
+@inject IBuildTime Build
 
 <PageTitle>RecycleDAO — marketplace prototype (simulation)</PageTitle>
 <HeadContent>
@@ -51,6 +53,12 @@
             resets to the seeded starting point — that's expected, not a bug.</p>
     </div>
 
+    @if (Build.IsPrerender)
+    {
+        <ToolStart Tool="The marketplace prototype" Label="Start the prototype" />
+    }
+    else
+    {
     <!-- ===================== THE PRODUCT MOCKUP STARTS HERE ===================== -->
     <div class="mk-shell">
 
@@ -1565,6 +1573,7 @@
         </footer>
     </div>
     <!-- ===================== END OF THE PRODUCT MOCKUP ===================== -->
+    }
 
     <div class="outro">
         <p><strong>About this prototype.</strong> RecycleDAO's real contract gates minting with an on-chain
@@ -2613,6 +2622,7 @@
     // ─────────────────────────────────────────────────────────────────────────────────────────────
     protected override void OnInitialized()
     {
+        if (Build.IsPrerender) return;   // the static shell shows the page's text and a start button; the seeded marketplace is built live (Blazier)
         var now = DateTime.Now;
 
         _people.Add(new Person { Id = 0, Name = "Alex Rivera", Handle = "@alex_r", Location = "Bristol", Since = now.AddYears(-2), SeedRating = 4.8, SeedReviews = 12, Bio = "Flat-dweller trying to bin less. Mostly packaging, jars and the odd bit of e-waste." });

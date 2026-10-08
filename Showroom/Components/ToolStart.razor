@@ -1,0 +1,30 @@
+@* The "start" panel a tool's static shell shows in place of the live tool (Blazier, 2026-10-08).
+
+   Rendered ONLY at build time (the page picks it when IBuildTime.IsPrerender is true), so it lives in the published shell and
+   never in the running app. The button carries data-blazier-go: wwwroot/index.html's loader script boots the Blazor runtime
+   when it is pressed and shows the boot narration inside data-boot-slot. Nothing else on the shell starts the runtime, so
+   reading, scrolling and following links never downloads it. *@
+
+<section class="tool-start" aria-label="Start @Tool">
+    <p class="tool-start-note">@Tool runs on your own device, inside this tab. Starting it downloads the .NET runtime that does the
+        work (about @RuntimeSize the first time@(Data is null ? "" : ", then " + Data)); your browser keeps it for next time.</p>
+    <div class="tool-start-actions">
+        <button type="button" class="btn btn-primary" data-blazier-go>@(Label ?? "Start " + (Tool.StartsWith("The ") ? "t" + Tool[1..] : Tool))</button>
+    </div>
+    <div class="tool-start-boot" data-boot-slot></div>
+    <noscript><p class="hint">This tool needs JavaScript to run.</p></noscript>
+</section>
+
+@code {
+    /// <summary>The runtime's size on the wire (gzip, as GitHub Pages serves it). Measured 2026-10-08 by scripts/shell-metrics.mjs
+    /// on the published build; re-measure when the runtime, the AOT setting or the package set changes.</summary>
+    public const string RuntimeSize = "11 MB";
+
+    [Parameter, EditorRequired] public string Tool { get; set; } = "";
+
+    /// <summary>Button text. Defaults to "Start {Tool}".</summary>
+    [Parameter] public string? Label { get; set; }
+
+    /// <summary>What else the tool fetches once started, for example "the model file (about 1 MB)". Optional.</summary>
+    [Parameter] public string? Data { get; set; }
+}

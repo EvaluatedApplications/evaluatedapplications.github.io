@@ -10,23 +10,14 @@ import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
+import { pagesHandler } from './pages-server.mjs';
 
 const ROOT = process.argv[2], DATA = process.argv[3];
 const PORT = 8123 + Math.floor(Math.random() * 500), DBG = 9300 + Math.floor(Math.random() * 500);
 const types = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.wasm': 'application/wasm',
   '.dll': 'application/octet-stream', '.csv': 'text/csv', '.txt': 'text/plain', '.gz': 'application/gzip', '.svg': 'image/svg+xml', '.dat': 'application/octet-stream', '.bin': 'application/octet-stream' };
 const send404 = res => { res.writeHead(404); res.end(); };
-const server = http.createServer((req, res) => {
-  const p = decodeURIComponent(req.url.split('?')[0]);
-  const serve = f => { res.writeHead(200, { 'Content-Type': types[path.extname(f)] ?? 'application/octet-stream', 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': '*' }); fs.createReadStream(f).pipe(res); };
-  if (p.startsWith('/assets/') || p.startsWith('/SiteKit/')) { const sf = p.startsWith('/assets/') ? path.join('C:\\Users\\dongy\\AboutUs\\site', p) : path.join('C:\\Users\\dongy\\AboutUs', p); return fs.existsSync(sf) ? serve(sf) : send404(res); }
-  if (p.startsWith('/tools/website-data/')) { const f = path.join(DATA, p.slice('/tools/website-data/'.length)); return fs.existsSync(f) && fs.statSync(f).isFile() ? serve(f) : send404(res); }   // what the local-dev junction gives (host localhost)
-  if (p.startsWith('/website-data/')) { const f = path.join(DATA, p.slice('/website-data/'.length)); return fs.existsSync(f) && fs.statSync(f).isFile() ? serve(f) : send404(res); }
-  if (!p.startsWith('/tools/')) return send404(res);
-  let f = path.join(ROOT, p.slice('/tools/'.length));
-  if (!fs.existsSync(f) || fs.statSync(f).isDirectory()) f = path.join(ROOT, 'index.html');   // SPA fallback, as 404.html does on Pages
-  serve(f);
-}).listen(PORT);
+const server = http.createServer(pagesHandler(ROOT, DATA)).listen(PORT);   // Pages-shaped: folder index, 404.html bounce, the Start button pressed for us (see pages-server.mjs)
 
 const edge = spawn('C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe',
   ['--headless=new', `--remote-debugging-port=${DBG}`, '--user-data-dir=' + path.join(process.env.TEMP, 'bc-edge-' + DBG), '--no-first-run', '--disable-extensions', '--window-size=1000,900', 'about:blank'], { stdio: 'ignore' });

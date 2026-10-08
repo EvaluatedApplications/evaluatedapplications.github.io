@@ -1,4 +1,6 @@
 @page "/stories"
+@attribute [BlazierPage("stories", Title = "Nano Stories — the same tiny AI, telling a story", Layout = typeof(MainLayout), Static = true)]
+@inject IBuildTime Build
 @implements IDisposable
 @inject HttpClient Http
 @inject HoloKernel.SessionHost Sessions
@@ -24,7 +26,11 @@
             continue, live, one word piece at a time, right here in your browser.</p>
     </header>
 
-    @if (_loadError is not null)
+    @if (Build.IsPrerender)
+    {
+        <ToolStart Tool="Nano Stories" Data="the model file" />
+    }
+    else if (_loadError is not null)
     {
         <p class="err">@_loadError</p>
     }
@@ -346,6 +352,7 @@
 
     protected override async Task OnInitializedAsync()
     {
+        if (Build.IsPrerender) return;   // the static shell fetches nothing (Blazier); the live page starts here
         try
         {
             _voice = new TokenVoice(JS);

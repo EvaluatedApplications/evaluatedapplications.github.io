@@ -1,4 +1,6 @@
 @page "/analyst"
+@attribute [BlazierPage("analyst", Title = "The Analyst — free in-browser data analytics", Layout = typeof(MainLayout), Static = true)]
+@inject IBuildTime Build
 @inject IJSRuntime JS
 @inject HttpClient Http
 @inject HoloKernel.SessionHost Sessions
@@ -36,6 +38,12 @@
         <li><b>4</b> Export the answer</li>
     </ol>
 
+    @if (Build.IsPrerender)
+    {
+        <ToolStart Tool="The Analyst" />
+    }
+    else
+    {
     <div class="dropzone @(_busy ? "busy" : "")">
         <InputFile OnChange="OnFile" class="file-input" accept=".csv,.tsv,.tab,.txt,.log,.json" disabled="@_busy" />
         <div class="dz-inner">
@@ -391,6 +399,7 @@
             <p>The Analyst runs on <a href="/holodb/">HoloDb</a> — the same embeddable .NET SQL engine, compiled to
                 WebAssembly. Want it in your own app? <code>dotnet add package EvaluatedApplications.HoloDb</code></p>
         </div>
+    }
     }
 </div>
 

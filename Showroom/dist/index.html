@@ -5,7 +5,16 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Tools — Evaluated Applications</title>
-    <meta name="description" content="Interactive tools that run Evaluated Applications' .NET libraries entirely in your browser." />
+    <meta name="description" content="Interactive tools that run Evaluated Applications' .NET libraries entirely in your browser: a small language model, a SQL analyst, a learning creature, a forecaster, a grammar miner and a council spending scanner." />
+    <link rel="canonical" href="https://evaluatedapplications.github.io/tools/" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Evaluated Applications" />
+    <meta property="og:title" content="Tools — Evaluated Applications" />
+    <meta property="og:description" content="Interactive tools that run Evaluated Applications' .NET libraries entirely in your browser: a small language model, a SQL analyst, a learning creature, a forecaster, a grammar miner and a council spending scanner." />
+    <meta property="og:url" content="https://evaluatedapplications.github.io/tools/" />
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content="Tools — Evaluated Applications" />
+    <meta name="twitter:description" content="Interactive tools that run Evaluated Applications' .NET libraries entirely in your browser: a small language model, a SQL analyst, a learning creature, a forecaster, a grammar miner and a council spending scanner." />
     <base href="/tools/" />
     <script>
       // THE ONE DATA SETTING. The big files (council data, the Prism checkpoint) live in the website-data repo and are served
@@ -33,20 +42,20 @@
     <script type="importmap">{
   "imports": {
     "./_framework/blazor.webassembly.js": "./_framework/blazor.webassembly.w3qd1tpl0e.js",
-    "./_framework/dotnet.native.js": "./_framework/dotnet.native.l07z25v5bk.js",
+    "./_framework/dotnet.native.js": "./_framework/dotnet.native.mxfenw0hal.js",
     "./_framework/dotnet.runtime.js": "./_framework/dotnet.runtime.zbexyp8zrs.js",
-    "./_framework/dotnet.js": "./_framework/dotnet.yg1sm7lo42.js"
+    "./_framework/dotnet.js": "./_framework/dotnet.ynd8fk0ts0.js"
   },
   "scopes": {},
   "integrity": {
     "./_framework/blazor.webassembly.js": "sha256-lDXsDYFgm62F+YUvxES7IOTCXYpiHpU3uR45YdC6mq4=",
     "./_framework/blazor.webassembly.w3qd1tpl0e.js": "sha256-lDXsDYFgm62F+YUvxES7IOTCXYpiHpU3uR45YdC6mq4=",
-    "./_framework/dotnet.js": "sha256-jme/wbD36/Pt/anxUZLpiglu8PL6Xs+z2plhXJ+EkUI=",
-    "./_framework/dotnet.native.js": "sha256-u0spWTGI0sbzMty6E04vVnovxdgydwGC8wBA80p/u1Q=",
-    "./_framework/dotnet.native.l07z25v5bk.js": "sha256-u0spWTGI0sbzMty6E04vVnovxdgydwGC8wBA80p/u1Q=",
+    "./_framework/dotnet.js": "sha256-0ombEWVk3sShUQJJ+o9UUeBUEzFQLfba8k63d+mD8mI=",
+    "./_framework/dotnet.native.js": "sha256-Kn+cHkw/viZfD8NlRisXjV9E24Rg3ehPhHWQyOsBmVI=",
+    "./_framework/dotnet.native.mxfenw0hal.js": "sha256-Kn+cHkw/viZfD8NlRisXjV9E24Rg3ehPhHWQyOsBmVI=",
     "./_framework/dotnet.runtime.js": "sha256-MZMguyke9CroSQl+L/SHIGFkPTD+LtYGXkXjAvwWx40=",
     "./_framework/dotnet.runtime.zbexyp8zrs.js": "sha256-MZMguyke9CroSQl+L/SHIGFkPTD+LtYGXkXjAvwWx40=",
-    "./_framework/dotnet.yg1sm7lo42.js": "sha256-jme/wbD36/Pt/anxUZLpiglu8PL6Xs+z2plhXJ+EkUI="
+    "./_framework/dotnet.ynd8fk0ts0.js": "sha256-0ombEWVk3sShUQJJ+o9UUeBUEzFQLfba8k63d+mD8mI="
   }
 }</script>
     <!-- REAL WASM MULTITHREADING — REVERTED 2026-08-28 (see Showroom.csproj's own comment for the
@@ -66,59 +75,84 @@
         }).catch(function () { /* best-effort cleanup only, never block boot on this */ });
       }
     </script>
-    <!-- GitHub Pages SPA: restore the deep-link path that the root 404.html encoded, before Blazor boots. -->
+    <!-- GitHub Pages SPA: restore the deep-link path that the root 404.html encoded. Every tool has a static shell, so 404.html is only
+         reached for a path with none (a council page such as /tools/council-spending/wokingham, or a mistyped one); it bounces that to
+         /tools/?/<path>, which serves the gallery shell. window.__eaBounced tells the loader at the end of this file to start the app
+         at once, because the visitor asked for a page that only the running app can draw. -->
     <script>
       (function (l) {
         if (l.search[1] === '/') {
           var decoded = l.search.slice(1).split('&').map(function (s) { return s.replace(/~and~/g, '&'); }).join('?');
           window.history.replaceState(null, null, l.pathname.slice(0, -1) + decoded + l.hash);
+          window.__eaBounced = true;
         }
       }(window.location));
-    </script>
+    </script>    <meta name="blazier-scaffold" content="" />
 </head>
 
 <body>
-    <div id="app">
-        <!-- Real boot sequence, not decoration: every line below is an actual resource this page is
-             actually fetching (WASM runtime, compiled DLLs) via Blazor's own loadBootResource hook, and
-             the progress bar/percentage are the framework's own real cumulative-bytes figure
-             (--blazor-load-percentage[-text], set by the WASM host as it downloads — see boot.css and
-             the script at the end of this file). Nothing here is fake flavor text: this genuinely is a
-             WebAssembly runtime + compiled binaries landing in your browser tab, not a normal page load.
-             Two more real (not decorative) signals cover the gap after that download finishes but before
-             the AOT-compiled runtime is actually ready to run — a phase with no fetch event to hang a
-             loadBootResource line on: a #boot-phase status line + a WebAssembly.compileStreaming/.compile
-             observer (see the script below) narrate the browser's real CPU-bound module-compile step, and
-             a CSS-only blinking cursor after the log (boot.css) guarantees visible motion through ANY
-             wait regardless of whether a hook exists for it. -->
-        <div class="boot">
-            <div class="boot-crt">
-                <div class="boot-head"><span class="boot-dot" aria-hidden="true"></span>EVALUATED APPLICATIONS <span class="boot-sep">/</span> CLIENT-SIDE RUNTIME</div>
-                <div class="boot-sub">no server round-trip from here on — everything below runs in this browser tab.</div>
-                <pre class="boot-log" id="boot-log" aria-live="polite"></pre>
-                <div class="boot-bar" id="boot-bar"><div class="boot-bar-fill"></div></div>
-                <div class="boot-pct"></div>
-                <div class="boot-phase" id="boot-phase" aria-live="polite"></div>
-                <!-- Real fallback UI, hidden unless the boot script below's Blazor.start() genuinely
-                     fails to start (generic net, not tied to any one cause since 2026-08-28's threading
-                     revert removed the isolation-specific gate this used to cover — see index.html's own
-                     boot script header comment and Showroom.csproj for that incident). Never shown
-                     silently: this is the visible "way forward" so a visitor is never stuck on
-                     "connecting…" forever with nothing to do. -->
-                <div class="boot-fallback" id="boot-fallback" hidden aria-live="polite">
-                    <p class="boot-fallback-title">Can&rsquo;t start here</p>
-                    <p class="boot-fallback-body" id="boot-fallback-reason">This browser couldn&rsquo;t start the runtime this tool needs.</p>
-                    <p class="boot-fallback-body">Try reloading, or copy the link below and open it in a different browser (Chrome, Safari, or Edge).</p>
-                    <div class="boot-fallback-actions">
-                        <button type="button" class="btn btn-primary" id="boot-fallback-retry">Retry</button>
-                        <button type="button" class="btn btn-ghost" id="boot-fallback-copy">Copy link</button>
-                    </div>
-                    <p class="boot-fallback-copied" id="boot-fallback-copied" hidden></p>
-                </div>
-            </div>
-        </div>
-    </div>
+    <!-- Blazier (2026-10-08): THIS FILE IS THE TEMPLATE for every static shell. `dotnet publish` renders each [BlazierPage] component to HTML
+         and writes it into #app of a copy of this file (tools/prism/index.html and so on), so a visitor reads real content at once and the
+         Blazor runtime downloads only on intent: the start button of a tool shell (data-blazier-go), a visitor arriving from another page
+         of this site, or a path that has no shell (window.__eaBounced). The script at the end of this file does the starting.
+         The placeholder below is what an UNPUBLISHED run (dotnet run) shows; there the loader starts the app straight away. -->
+    <div id="app"><div class="beam" b-6xrfe1d2ym></div>
 
+<nav class="site-nav" b-6xrfe1d2ym><div class="wrap" b-6xrfe1d2ym><a class="brand" href="/" b-6xrfe1d2ym><svg class="mark" viewBox="0 0 32 32" aria-hidden="true" b-6xrfe1d2ym><defs b-6xrfe1d2ym><linearGradient id="m" x1="0" y1="0" x2="1" y2="1" b-6xrfe1d2ym><stop offset="0" stop-color="#f0796a" b-6xrfe1d2ym></stop><stop offset=".166" stop-color="#f0a15a" b-6xrfe1d2ym></stop><stop offset=".333" stop-color="#e6c450" b-6xrfe1d2ym></stop><stop offset=".5" stop-color="#7bd86a" b-6xrfe1d2ym></stop><stop offset=".666" stop-color="#4aa3ff" b-6xrfe1d2ym></stop><stop offset=".833" stop-color="#7d7dff" b-6xrfe1d2ym></stop><stop offset="1" stop-color="#c07dff" b-6xrfe1d2ym></stop></linearGradient></defs>
+                <path d="M16 5L27 26H5Z" fill="none" stroke="url(#m)" stroke-width="2" stroke-linejoin="round" b-6xrfe1d2ym></path></svg>
+            Evaluated Applications
+        </a>
+        <input type="checkbox" id="navtoggle" class="nav-toggle" b-6xrfe1d2ym>
+        <label for="navtoggle" class="nav-burger" aria-label="Toggle menu" b-6xrfe1d2ym><span b-6xrfe1d2ym></span><span b-6xrfe1d2ym></span><span b-6xrfe1d2ym></span></label>
+        <div class="nav-links" b-6xrfe1d2ym><a href="/" b-6xrfe1d2ym>Home</a>
+            <a href="." b-6xrfe1d2ym>Tools</a>
+            <a href="https://www.nuget.org/profiles/evaluatedapplications" target="_blank" rel="noopener" b-6xrfe1d2ym>NuGet</a></div></div></nav>
+
+<main b-6xrfe1d2ym>
+
+<header class="hero"><div class="wrap"><span class="eyebrow">Interactive tools · running in your browser</span>
+        <h1>Touch the tech.</h1>
+        <p class="lede">These tools run our .NET libraries client-side, compiled to WebAssembly. No server, no upload —
+            the work happens on your machine and nothing leaves the tab.</p></div></header>
+
+<section class="sec"><div class="wrap"><div class="grid"><a class="card tool" href="/tools/analyst/" style="--cat:var(--c-holodb, #66c1aa)"><div class="card-top"><h3>The Analyst</h3><span class="tag live">live</span><span class="ver">HoloDb</span></div>
+                <p class="desc">Paste any data and profile it with a real SQL database in your browser — types,
+                    distributions, anomalies, hidden entities — then query it at a live SQL prompt.</p>
+                <div class="go-in">Open The Analyst →</div></a>
+            <a class="card tool" href="/tools/creature/" style="--cat:linear-gradient(90deg, var(--c-algformer, #5998ff) 0%, var(--c-algformer, #5998ff) 50%, var(--c-tracer, #f0796a) 50%, var(--c-tracer, #f0796a) 100%); --cat-root:var(--c-algformer, #5998ff)"><div class="card-top"><h3>The Creature</h3><span class="tag live">live</span><span class="ver">AlgFormer · Tracer</span></div>
+                <p class="desc">Raise a creature that learns to navigate a world you draw — a holographic transformer
+                    for its brain, our pathfinder for its feet.</p>
+                <div class="go-in">Open The Creature →</div></a>
+            <a class="card tool" href="/tools/forecaster/" style="--cat:var(--c-algformer, #5998ff)"><div class="card-top"><h3>The Forecaster</h3><span class="tag live">live</span><span class="ver">AlgFormer</span></div>
+                <p class="desc">Train the same holographic transformer on real historical price ticks — click to
+                    train it live, and watch its next-move accuracy climb as it learns the tape.</p>
+                <div class="go-in">Open The Forecaster →</div></a>
+            <a class="card tool" href="/tools/prism/" style="--cat:var(--c-algformer, #5998ff)"><div class="card-top"><h3>Prism</h3><span class="tag live">live</span><span class="ver">AlgFormer</span></div>
+                <p class="desc">Say something to a tiny AI that runs entirely in your browser — a real, trained
+                    model, computed live on your own device. It's still learning, so expect rough replies.</p>
+                <div class="go-in">Open Prism →</div></a>
+            <a class="card tool" href="/tools/stories/" style="--cat:var(--c-algformer, #5998ff)"><div class="card-top"><h3>Nano Stories</h3><span class="tag live">live</span><span class="ver">AlgFormer</span></div>
+                <p class="desc">The exact same model as Prism — same weights, same training run — asked to write
+                    a story instead of hold a conversation. Give it an opening line and watch it continue live.</p>
+                <div class="go-in">Open Nano Stories →</div></a>
+            <a class="card tool" href="/tools/cartographer/" style="--cat:var(--c-algformer, #5998ff)"><div class="card-top"><h3>The Cartographer</h3><span class="tag live">live</span><span class="ver">AlgFormer</span></div>
+                <p class="desc">Watch Prism's own next-word decision take shape — a real 2D map of the path its
+                    representation takes through idea-space, decoded live off one forward pass. Same checkpoint,
+                    no extra download.</p>
+                <div class="go-in">Open The Cartographer →</div></a>
+            <a class="card tool" href="/tools/prose/" style="--cat:linear-gradient(90deg, var(--c-holodb, #66c1aa) 0%, var(--c-holodb, #66c1aa) 50%, var(--c-algformer, #5998ff) 50%, var(--c-algformer, #5998ff) 100%); --cat-root:var(--c-holodb, #66c1aa)"><div class="card-top"><h3>Prose</h3><span class="tag live">live</span><span class="ver">HoloDb · AlgFormer</span></div>
+                <p class="desc">Paste in a body of text and a real English grammar mines it, in your browser, then
+                    recombines what it learned into sentences and Q&amp;A pairs you can copy straight into a
+                    training corpus.</p>
+                <div class="go-in">Open Prose →</div></a>
+            <a class="card tool" href="/tools/council-spending/" style="--cat:var(--ink-faint, #7c869c)"><div class="card-top"><h3>Council Spending Scanner</h3><span class="tag live">live</span><span class="ver">CouncilAudit</span></div>
+                <p class="desc">English councils' published spending data, prepared ahead of time and opened
+                    one small month at a time, so it stays quick on a phone. Mechanical checks, the same rules
+                    for every council, and declared spend set beside the file totals. Nothing is uploaded.</p>
+                <div class="go-in">Open the Scanner →</div></a></div></div></section></main>
+
+<footer class="site" b-6xrfe1d2ym><div class="wrap" b-6xrfe1d2ym><span b-6xrfe1d2ym>Evaluated Applications — .NET libraries, England.</span>
+        <span class="mono" b-6xrfe1d2ym>© 2026 · <a href="/" b-6xrfe1d2ym>Home</a></span></div></footer></div>
     <div id="blazor-error-ui">
         An unhandled error has occurred.
         <a href="." class="reload">Reload</a>
@@ -349,124 +383,150 @@
         };
       })();
     </script>
+    <!-- Blazier's loader. It does nothing until the script below (or a [data-blazier-island] element) asks it to start Blazor.
+         data-blazor-script names the fingerprinted blazor.webassembly.js, which is fetched only when the app starts. -->
+    <script src="_content/EvaluatedApplications.Blazier/blazier.js" data-blazor-script="_framework/blazor.webassembly.w3qd1tpl0e.js"></script>
     <script>
-      // Real boot-log narration: observes the ACTUAL resources Blazor's WASM host fetches (runtime,
-      // loader, compiled assemblies) via the documented loadBootResource hook, and just logs each one
-      // — it never intercepts or replaces the fetch (always returns undefined), so this adds no latency,
-      // it's a pure observer running alongside the real download that was going to happen anyway.
-      window.__bootLine = (function () {
-        var log = document.getElementById('boot-log');
-        var seen = 0, cap = 80;
-        return function line(cls, text) {
+      // ---- Starting the app (Blazier) ---------------------------------------------------------------------------------------------
+      // INTENT, in the order the code checks it:
+      //   1. an unpublished run (no blazier-scaffold meta: dotnet run) or a bounced deep link (window.__eaBounced): start at once;
+      //   2. a visitor who followed a link from another page of this site (document.referrer on this origin) to a tool shell has
+      //      just chosen that tool: start at once. Set AUTO_START_FROM_SITE to false to ask for the button press instead;
+      //   3. anyone else (search result, pasted link, a bookmark) reads the shell and presses the start button.
+      // Scrolling, tapping text and following links never start it, so a reader pays for the HTML and CSS only.
+      // The first start goes through Blazier.mount('#app', 'app'): the routed App is mounted over the shell and takes the current URL,
+      // so from then on it is the same single-page app as before (client-side navigation, one shared SessionHost). A hard navigation
+      // (typed URL, reload, a link followed before the app has started) is a new page load: another shell, a fresh runtime, no models.
+      var AUTO_START_FROM_SITE = true;
+
+      (function () {
+        var B = window.Blazier;
+        var started = false;
+        function el(id) { return document.getElementById(id); }
+
+        // The boot terminal. Every line is an actual resource this page is fetching (loadBootResource below), and the bar and the
+        // percentage are the framework's own cumulative-bytes figure (--blazor-load-percentage[-text], set while it downloads).
+        function panelHtml() {
+          return '<div class="boot-crt ck-boot">' +
+            '<div class="boot-head"><span class="boot-dot" aria-hidden="true"></span>EVALUATED APPLICATIONS <span class="boot-sep">/</span> CLIENT-SIDE RUNTIME</div>' +
+            '<div class="boot-sub">no server round-trip from here on \u2014 everything below runs in this browser tab.</div>' +
+            '<pre class="boot-log" id="boot-log" aria-live="polite"></pre>' +
+            '<div class="boot-bar" id="boot-bar"><div class="boot-bar-fill"></div></div>' +
+            '<div class="boot-pct"></div>' +
+            '<div class="boot-phase" id="boot-phase" aria-live="polite"></div>' +
+            // data-blazier-error: Blazier unhides this block itself when the mount fails
+            '<div class="boot-fallback" id="boot-fallback" data-blazier-error hidden aria-live="polite">' +
+              '<p class="boot-fallback-title">Can\u2019t start here</p>' +
+              '<p class="boot-fallback-body" id="boot-fallback-reason">This browser couldn\u2019t start the runtime this tool needs.</p>' +
+              '<p class="boot-fallback-body">Try reloading, or copy the link below and open it in a different browser (Chrome, Safari, or Edge).</p>' +
+              '<div class="boot-fallback-actions">' +
+                '<button type="button" class="btn btn-primary" id="boot-fallback-retry">Retry</button>' +
+                '<button type="button" class="btn btn-ghost" id="boot-fallback-copy">Copy link</button>' +
+              '</div>' +
+              '<p class="boot-fallback-copied" id="boot-fallback-copied" hidden></p>' +
+            '</div>' +
+          '</div>';
+        }
+
+        window.__bootLine = function (cls, text) {
+          var log = el('boot-log');
           if (!log) return;
-          var el = document.createElement('span');
-          el.className = cls ? 'l ' + cls : 'l';
+          var s = document.createElement('span');
+          s.className = cls ? 'l ' + cls : 'l';
           var p = document.createElement('span'); p.className = 'p'; p.textContent = '>';
-          el.appendChild(p);
-          el.appendChild(document.createTextNode(' ' + text));
-          log.appendChild(el);
-          if (++seen > cap) log.removeChild(log.firstChild);
+          s.appendChild(p);
+          s.appendChild(document.createTextNode(' ' + text));
+          log.appendChild(s);
+          if (log.childNodes.length > 80) log.removeChild(log.firstChild);
           log.scrollTop = log.scrollHeight;
         };
-      })();
-      __bootLine('', 'target ' + (window.location.pathname || '/'));
 
-      // __bootPhase: a state DISTINCT from --blazor-load-percentage[-text] (the framework's own
-      // cumulative-bytes-downloaded figure). Real bytes-downloaded can legitimately sit at/near 100%
-      // while the browser is still genuinely compiling the big AOT-compiled dotnet.native.*.wasm
-      // module — "fully downloaded" isn't "ready". Only the WebAssembly.compileStreaming/.compile
-      // observer below ever calls this with busy=true, so it only shows during that real gap.
-      window.__bootPhase = (function () {
-        var el = document.getElementById('boot-phase');
-        var bar = document.getElementById('boot-bar');
-        return function (busy, text) {
-          if (el) { el.textContent = text || ''; el.className = 'boot-phase' + (busy ? ' compiling' : ''); }
+        // __bootPhase: separate from the percentage (real bytes can sit near 100% while the browser still compiles the big native
+        // module). Only the WebAssembly.compile observer below calls it with busy=true.
+        window.__bootPhase = function (busy, text) {
+          var ph = el('boot-phase'), bar = el('boot-bar');
+          if (ph) { ph.textContent = text || ''; ph.className = 'boot-phase' + (busy ? ' compiling' : ''); }
           if (bar) bar.classList.toggle('busy', !!busy);
         };
-      })();
 
-      // Real narration for the one boot phase that has NO fetch event to hang a loadBootResource line
-      // on: once the big AOT-compiled dotnet.native.*.wasm module finishes downloading, the browser
-      // still has to COMPILE it — genuine, sometimes multi-second CPU work on a slow phone, invisible
-      // to loadBootResource because it isn't a fetch at all. Verified against the real shipped
-      // dotnet.*.js sources for this exact build (not guessed): the WASM host downloads that module
-      // then calls the standard WebAssembly.compileStreaming(response) API (falling back to
-      // WebAssembly.compile(bytes) if streaming compile isn't available), and grepping all three
-      // shipped runtime files confirms neither API is called anywhere else during boot — so wrapping
-      // them targets exactly this one real step. Same contract as loadBootResource: call straight
-      // through to the real implementation, add no latency, no behavior change, self-remove after the
-      // one call dotnet's own loader makes.
-      (function () {
-        if (typeof WebAssembly === 'undefined') return;
-        var announced = false;
-        function wrap(name) {
-          var real = WebAssembly[name];
-          if (typeof real !== 'function') return;
-          WebAssembly[name] = function () {
-            WebAssembly[name] = real; // self-restore — dotnet's loader only calls this once per boot
-            if (!announced) {
-              announced = true;
-              __bootLine('core', 'compiling WebAssembly module (native code — real CPU work, can take a few seconds on a phone)…');
-              __bootPhase(true, 'still working — compiling WebAssembly module…');
-            }
-            var t0 = performance.now();
-            var result = real.apply(WebAssembly, arguments);
-            var finish = function (r) {
-              __bootLine('core', 'WebAssembly module compiled (' + Math.round(performance.now() - t0) + 'ms)');
-              __bootPhase(false, '');
-              return r;
+        // The one boot phase with no fetch to hang a line on: after dotnet.native.wasm downloads the browser still COMPILES it, real
+        // CPU work that can take seconds on a phone. dotnet.js calls WebAssembly.compileStreaming (falling back to .compile) once per
+        // boot and nothing else does, so wrapping exactly those two narrates it. Calls straight through, no added latency; restores itself.
+        (function () {
+          if (typeof WebAssembly === 'undefined') return;
+          var announced = false;
+          function wrap(name) {
+            var real = WebAssembly[name];
+            if (typeof real !== 'function') return;
+            WebAssembly[name] = function () {
+              WebAssembly[name] = real;
+              if (!announced) {
+                announced = true;
+                __bootLine('core', 'compiling WebAssembly module (native code \u2014 real CPU work, can take a few seconds on a phone)\u2026');
+                __bootPhase(true, 'still working \u2014 compiling WebAssembly module\u2026');
+              }
+              var t0 = performance.now();
+              var result = real.apply(WebAssembly, arguments);
+              var finish = function (r) {
+                __bootLine('core', 'WebAssembly module compiled (' + Math.round(performance.now() - t0) + 'ms)');
+                __bootPhase(false, '');
+                return r;
+              };
+              return result.then(finish, function (e) { finish(); throw e; });
             };
-            return result.then(finish, function (e) { finish(); throw e; });
-          };
-        }
-        wrap('compileStreaming');
-        wrap('compile');
-      })();
-    </script>
-    <!-- autostart=false so the loadBootResource hook below can be wired in BEFORE Blazor.start() kicks
-         off the real download — the very next script tag runs immediately after this one loads (classic
-         synchronous <script src>, no event-listener wait), so there's no added latency either way. -->
-    <script src="_framework/blazor.webassembly.w3qd1tpl0e.js" autostart="false"></script>
-    <script>
-      // Boot Blazor directly — SIMPLIFIED 2026-08-28 (was a cross-origin-isolation GATE that waited up
-      // to 7s for coi-serviceworker.js before calling Blazor.start(); see Showroom.csproj's own comment
-      // for the real-device incident that triggered this revert). That gate existed ONLY because a
-      // WasmEnableThreads=true build hard-requires window.crossOriginIsolated/SharedArrayBuffer with no
-      // graceful degraded-mode boot — a real, since-fixed LinkedIn in-app-WebView stall. With
-      // WasmEnableThreads back to false, this build has no such requirement at all: it boots in any
-      // browser, isolated or not, so there is nothing left to gate on. The #boot-fallback panel/CSS and
-      // its Retry/Copy-link buttons are kept, wired to a generic catch, as a real (not decorative) net
-      // for any OTHER unexpected startup failure — not removed outright, since a visible way forward on
-      // a genuine error is still worth having.
-      (function () {
-        var retryBtn = document.getElementById('boot-fallback-retry');
-        if (retryBtn) retryBtn.addEventListener('click', function () { window.location.reload(); });
-        var copyBtn = document.getElementById('boot-fallback-copy');
-        if (copyBtn) copyBtn.addEventListener('click', function () {
-          var copiedEl = document.getElementById('boot-fallback-copied');
-          function report(ok) {
-            if (!copiedEl) return;
-            copiedEl.hidden = false;
-            copiedEl.textContent = ok ? 'Link copied.' : 'Could not copy automatically — copy the address bar link manually.';
           }
-          if (navigator.clipboard && navigator.clipboard.writeText) {
-            navigator.clipboard.writeText(window.location.href).then(function () { report(true); }, function () { report(false); });
-          } else {
-            report(false);
-          }
-        });
+          wrap('compileStreaming');
+          wrap('compile');
+        })();
 
         function showFallback(reason) {
           __bootPhase(false, '');
           __bootLine('warn', 'stopped: ' + reason);
-          var wrap = document.getElementById('boot-fallback');
-          var reasonEl = document.getElementById('boot-fallback-reason');
-          if (reasonEl) reasonEl.textContent = reason;
+          var wrap = el('boot-fallback'), r = el('boot-fallback-reason');
+          if (r) r.textContent = reason;
           if (wrap) wrap.hidden = false;
         }
 
-        __bootLine('', 'requesting WebAssembly runtime + compiled binaries…');
-        Blazor.start({
+        function showPanel() {
+          var slot = document.querySelector('[data-boot-slot]');
+          if (slot) {
+            var actions = document.querySelector('.tool-start-actions');
+            if (actions) actions.hidden = true;
+            slot.innerHTML = panelHtml();
+          } else {
+            el('app').innerHTML = '<div class="boot">' + panelHtml() + '</div>';   // no start panel on this page (gallery, bounced link, dev run)
+          }
+          var retry = el('boot-fallback-retry');
+          if (retry) retry.addEventListener('click', function () { window.location.reload(); });
+          var copy = el('boot-fallback-copy');
+          if (copy) copy.addEventListener('click', function () {
+            var copied = el('boot-fallback-copied');
+            function report(ok) {
+              if (!copied) return;
+              copied.hidden = false;
+              copied.textContent = ok ? 'Link copied.' : 'Could not copy automatically \u2014 copy the address bar link manually.';
+            }
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+              navigator.clipboard.writeText(window.location.href).then(function () { report(true); }, function () { report(false); });
+            } else {
+              report(false);
+            }
+          });
+          __bootLine('', 'target ' + (window.location.pathname || '/'));
+        }
+
+        function start() {
+          if (started) return;
+          started = true;
+          showPanel();
+          __bootLine('', 'requesting WebAssembly runtime + compiled binaries\u2026');
+          B.mount('#app', 'app').then(function () { __bootPhase(false, ''); }, function () { /* shown by the blazier:error listener below */ });
+        }
+
+        // Blazier's own loadBootResource hook: observe every runtime file and send it to website-data/_framework (EA_FRAMEWORK_BASE).
+        // `name` is already the fingerprinted file name, except the first call, "dotnet.js", which Blazor resolves through the import map
+        // (read the same map here). Anything else, and every file on localhost, is left to Blazor's own default (the file next to this page).
+        B.configure({
           loadBootResource: function (type, name) {
             var label =
               type === 'dotnetwasm' ? ['core', 'runtime ' + name] :
@@ -474,9 +534,6 @@
               type === 'globalization' ? ['', 'locale data ' + name] :
               type === 'assembly' ? ['', 'assembly ' + name] : null;
             if (label) __bootLine(label[0], label[1]);
-            // Runtime files come from website-data/_framework (see EA_FRAMEWORK_BASE above); `name` is already the fingerprinted file
-            // name, except for the first call, "dotnet.js", which Blazor resolves through the import map (read the same map here).
-            // Anything else, and every file on localhost, is left to Blazor's own default (the file next to this page).
             var fw = window.EA_FRAMEWORK_BASE;
             if (fw && label) {
               var file = name;
@@ -486,18 +543,23 @@
               }
               return fw + file;
             }
-            return undefined; // pure observation — Blazor still fetches this exact resource itself
+            return undefined;
           }
-        }).then(function () {
-          __bootPhase(false, '');
-          __bootLine('core', 'runtime ready — launching tool');
-        }).catch(function (err) {
-          // Real net: surfaces any startup failure as a visible message instead of an unhandled
-          // promise rejection nobody sees.
-          showFallback('the runtime failed to start (' + (err && err.message ? err.message : String(err)) + ').');
         });
+        document.addEventListener('blazier:error', function (e) {
+          showFallback('the runtime failed to start (' + ((e.detail && e.detail.message) || 'unknown error') + ').');
+        });
+
+        document.addEventListener('click', function (e) {
+          if (e.target && e.target.closest && e.target.closest('[data-blazier-go]')) start();
+        });
+
+        var scaffolded = !!document.querySelector('meta[name=blazier-scaffold]');
+        var hasStartPanel = !!document.querySelector('[data-blazier-go]');
+        var fromSite = false;
+        try { fromSite = !!document.referrer && new URL(document.referrer).origin === location.origin; } catch (err) { }
+        if (!scaffolded || window.__eaBounced || (AUTO_START_FROM_SITE && hasStartPanel && fromSite)) start();
       })();
-    </script>
-</body>
+    </script></body>
 
 </html>
