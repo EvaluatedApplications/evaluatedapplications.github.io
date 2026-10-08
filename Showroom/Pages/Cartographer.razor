@@ -68,7 +68,7 @@
                 identically. A picture needs one definite path, so this view always shows the greedy one.</p>
             @if (_truncated)
             {
-                <p class="hint">Your prompt tokenized longer than this view shows — using only the last @MaxPromptTokens tokens.</p>
+                <p class="hint">Your prompt tokenized longer than this view shows — using only the last @PromptCap tokens.</p>
             }
 
             <div class="cg-panel">
@@ -161,13 +161,16 @@
 </div>
 
 @code {
-    // 24 -> 64 on 2026-10-04: r3,970 emits ~1.15 chars/token, so 24 tokens was ~28 characters, shorter than the page's own
-    // 90-character input. 64 tokens x 100 boundaries is still a few hundred KB of faces and well inside ctx=512.
+    // 24 -> 64 on 2026-10-04: r3,970 emitted ~1.15 chars/token, so 24 tokens was ~28 characters, shorter than the page's own
+    // 90-character input. This is the CEILING; the cap in force is PromptCap, which also never exceeds the loaded model's
+    // Context (a view is one forward pass, so unlike chat/stories it needs no reply room: the whole window is usable).
     const int MaxPromptTokens = 64;
+    int PromptCap => Math.Max(1, Math.Min(MaxPromptTokens, _stats?.Context ?? MaxPromptTokens));
     const int TopKPerBoundary = 3;
-    // r3,970 has 33 layers x K=3 = 100 boundaries (the old checkpoint had ~41). With that many, 4 attention lines per
-    // boundary (400) and a label on every point turn the plot into a smear, so a deep path draws 1 thin faint line per boundary and
-    // labels only the landmarks (embed, FINAL, the crystallisation point, every 11th); the table below still lists them all.
+    // The path has Layers x K + 1 boundaries (33 x 3 = 100 on the old checkpoint, 9 x 3 + 1 = 28 on the ctx=64 one). With many, 4
+    // attention lines per boundary and a label on every point turn the plot into a smear, so a deep path (more than
+    // DeepPathBoundaries) draws 1 thin faint line per boundary and labels only the landmarks (embed, FINAL, the
+    // crystallisation point, every 11th); the table below still lists them all. Read off the loaded model, not typed.
     const int DeepPathBoundaries = 24;
     const int MaxAttendedPerBoundary = 4;
     const int MaxAttendedDeep = 1;
@@ -222,7 +225,7 @@
     List<CloudDot> _cloudDots = new();
 
     static string Fmt(double v) => v.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
-    bool Deep => _trajPoints.Count > DeepPathBoundaries;   // 100 boundaries on r3,970: lighter, thinner attention lines (first render at 2.5 px / 0.67 opacity buried the path)
+    bool Deep => _trajPoints.Count > DeepPathBoundaries;   // many boundaries (100 on the old checkpoint): lighter, thinner attention lines (first render at 2.5 px / 0.67 opacity buried the path)
     bool ShowTrajLabel(TrajPoint t) =>
         _trajPoints.Count <= DeepPathBoundaries || t.IsCrystal || t.IsFinal || t.Boundary == 0 || t.Boundary % LabelEvery == 0;
     string PathPoints() => string.Join(" ", _trajPoints.Select(t => $"{Fmt(t.Sx)},{Fmt(t.Sy)}"));
@@ -275,7 +278,7 @@
             var k = PrismCheckpoint.ResolveK(trainedStackK);
 
             // SessionHost dedupes by MODEL key ("prism") — if Prism or Nano Stories already loaded this
-            // checkpoint this page load, this reuses it instantly instead of re-downloading ~2.9 MB.
+            // checkpoint this page load, this reuses it instantly instead of re-downloading it.
             var reused = Sessions.IsLoaded(PrismCheckpoint.SessionKey);
             _session = await Sessions.GetOrCreateAsync(PrismCheckpoint.SessionKey, async () =>
             {
@@ -318,7 +321,7 @@
             var toks = _vocab.Encode(folded);
             if (toks.Length == 0) { _vizError = "Couldn't tokenize that — try a normal sentence."; return; }
 
-            var capLen = Math.Max(1, Math.Min(MaxPromptTokens, _stats.Context));
+            var capLen = PromptCap;
             _truncated = toks.Length > capLen;
             var capped = _truncated ? toks[^capLen..] : toks;
             _capped = capped;

@@ -117,9 +117,8 @@
         </div>
 
         <p class="hint story-caveat">This is a @_stats!.ParamCount.ToString("N0")-parameter model — remarkable
-            for that size, not remarkable in absolute terms. Expect sentence-shaped output with weak semantics
-            ("Tim loved his mom and his mom and dad." is a real sentence this checkpoint has written), not a
-            coherent plot.</p>
+            for that size, not remarkable in absolute terms. Expect sentence-shaped output with weak semantics,
+            not a coherent plot.</p>
 
         <div class="outro">
             <p>This is the exact same model as <a href="/tools/prism">Prism</a> — same <code>oracle-brain.bin</code>,
@@ -235,6 +234,12 @@
     // overflowed it and re-Primed the whole window EVERY step (~5.7 ms/token x 512 = ~2.9 s a step). 448 leaves 64 prompt
     // tokens, so prompt + story stays under 512 and the cache never fills (GenerateStoryAsync clamps a longer prompt).
     const int MaxStorySteps = 448;
+
+    // CONTEXT-AGNOSTIC (2026-10-08): MaxStorySteps is the CEILING tuned on a ctx=512 checkpoint. The cap actually used is
+    // HoloKernel.ContextBudget.StoryCap, which leaves an opening-line reserve (an eighth of the window, at least 16 tokens)
+    // and shrinks the story to what is left: 512 -> 448 steps (exactly as before, prompt budget 64), a ctx=64 checkpoint -> 48
+    // steps with 16 prompt tokens, instead of a negative prompt budget. Read after the model has loaded.
+    int StoryCap => _stats is null ? MaxStorySteps : ContextBudget.StoryCap(_stats.Context, MaxStorySteps);
 
     // Consumed by the sentence-boundary trim at the end of GenerateStoryAsync — see that comment.
     static readonly char[] SentenceEnders = { '.', '!', '?' };
@@ -373,10 +378,13 @@
         var policy = PolicyFor(PFor(variety));
         var promptTokens = _vocab!.Encode(HoloKernel.AsciiPunctuation.Fold(prompt));
         var seq = new List<int>(promptTokens.Length > 0 ? promptTokens : new[] { 0 });
-        // Prompt + story must fit the window or every step past it re-Primes (~2.9 s each at ctx=512). 448 steps leave 64
-        // prompt tokens; a longer opening line (maxlength 120 chars can reach ~100 tokens) keeps only its tail.
-        var promptBudget = _stats!.Context - MaxStorySteps;
-        if (seq.Count > promptBudget) seq.RemoveRange(0, seq.Count - promptBudget);
+        // Prompt + story must fit the window or every step past it re-Primes (~2.9 s each at ctx=512). At ctx=512, 448 steps
+        // leave 64 prompt tokens; a longer opening line (maxlength 120 chars can reach ~100 tokens) keeps only its tail.
+        // The step cap and the budget both come from the loaded model's Context (ContextBudget), so a smaller window
+        // gets a shorter story and a smaller prompt budget rather than a negative one.
+        var maxSteps = StoryCap;
+        var promptBudget = ContextBudget.PromptBudget(_stats!.Context, maxSteps);
+        ContextBudget.KeepTail(seq, promptBudget);
         var outIds = new List<int>();
         var vocabLimit = _vocab.Size;
         var guard = new DegenGuard(policy);
@@ -390,7 +398,7 @@
         var logits = _session.Prime(cache, BuildContext(seq, _stats!.Context));
 
         _voice!.ResetBeat();
-        for (var step = 0; step < MaxStorySteps; step++)
+        for (var step = 0; step < maxSteps; step++)
         {
             if (step > 0)
             {
@@ -438,7 +446,7 @@
 
             if (onPartial is not null)
             {
-                var isLastStep = step == MaxStorySteps - 1;
+                var isLastStep = step == maxSteps - 1;
                 if (skipping || stopping || isLastStep || TokenVoice.ShouldRepaint(outIds.Count, stopping, isLastStep, _voice.SoundOn))
                     // On any step that ENDS the story, paint the trimmed text rather than the raw prefix, so
                     // the last thing the animation shows is exactly what the finished story will say.

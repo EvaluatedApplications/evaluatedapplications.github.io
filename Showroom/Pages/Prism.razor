@@ -52,8 +52,8 @@
 
         <div class="cr-stats">
             <div class="stat"><div class="n">@_stats!.ParamCount.ToString("N0")</div><div class="l">parameters</div></div>
-            @* 8 bytes per parameter (they are doubles) — this lands on the real prism-holo.bin size, 862,244 B
-               for 107,776 params, so the figure a visitor reads matches the file that was actually downloaded. *@
+            @* 8 bytes per parameter: the size the weights take in memory once loaded (they are doubles). The
+               download is smaller (the checkpoint ships as packed 32-bit values, gzipped); the boot log above shows it. *@
             <div class="stat"><div class="n">@((_stats.ParamCount * 8 / 1024).ToString("N0"))&nbsp;KB</div><div class="l">how big it is, in total</div></div>
             @if (_rounds is not null)
             {
@@ -67,7 +67,7 @@
             <div class="or-run-list" @ref="_scrollBox">
                 @if (_turns.Count == 0)
                 {
-                    <p class="hint">Say hi. It remembers the last few turns, and nothing is saved.</p>
+                    <p class="hint">Say hi. It only remembers the latest stretch of the conversation (as much as fits its window), and nothing is saved.</p>
                 }
                 @foreach (var turn in _turns)
                 {
@@ -108,9 +108,9 @@
         @if (_error is not null) { <p class="err">@_error</p> }
 
         @* Condensed from the site's "Meaning as chords" page (site/holoformer.html), 2026-09-15, on the user's request, plus
-           an honest account of what the audible tokens are. Keep the "What you're hearing" claims in lockstep with
-           HoloKernel.TokenVoice's PlayTone/BaseFrequency: 32 tones = this checkpoint's FrozenPrefix/2 (the codec band), "three times" = its StackK of 3. If either changes on a
-           new checkpoint, update this copy too — and Nano Stories' own copy of the same claim, since it shares this voice. *@
+           an honest account of what the audible tokens are. The "What you're hearing" numbers are READ OFF THE LOADED
+           MODEL, never typed (2026-10-08): the tone count is HoloKernel.TokenVoice.CodecComponents (the codec band PlayTone
+           builds each note from) and "how many times" a layer plays is the K the checkpoint is served at. *@
         <section class="explain" aria-labelledby="explain-title">
             <h2 id="explain-title">How Prism works, as sound</h2>
             <p>Prism is a holographic transformer, and the easiest way to understand one is as music. This is the short
@@ -122,19 +122,25 @@
                     they merge into a new one. Number chords are tuned so that merging them is the arithmetic itself.</li>
                 <li><strong>It remembers like a radio.</strong> Everything it has read folds into one running sound. To recall
                     something it tunes to that frequency, and the match rings out while the rest cancels to silence.</li>
-                <li><strong>It thinks by replaying.</strong> Each layer plays its part three times before handing the sound on. The
-                    early passes sketch, the last turns the sketch into the answer.</li>
+                @if (_stats!.KPass > 1)
+                {
+                    <li><strong>It thinks by replaying.</strong> Each layer plays its part @TimesWord(_stats.KPass) before handing the sound on. The
+                        early passes sketch, the last turns the sketch into the answer.</li>
+                }
             </ul>
-            <h3>What you're hearing</h3>
-            <p>Turn sound on and every piece of a word Prism writes plays its own chord, right as it appears. That chord is not
-                a sound effect someone picked. It is built from the model's own numbers for that word piece: 32 tones, each
-                taking its loudness and starting point from the model, with its frequency worked out from those same numbers.</p>
-            <p>The note and the tone colour come from opposite halves of the model's numbers for that word. The note comes from
-                what Prism has learned about the word, so its pitch moves as Prism keeps training. The tone colour comes from the
-                word's fixed identity, which never changes, so every word keeps its own sound. The one choice we made is where the
-                chord sits in your hearing range.</p>
-            <p>That is also why it doesn't sound like an ordinary instrument. The model's tones aren't tuned to any musical
-                scale, and we left them that way rather than dress them up.</p>
+            @if (_toneCount > 0)
+            {
+                <h3>What you're hearing</h3>
+                <p>Turn sound on and every piece of a word Prism writes plays its own chord, right as it appears. That chord is not
+                    a sound effect someone picked. It is built from the model's own numbers for that word piece: @_toneCount tones, each
+                    taking its loudness and starting point from the model, with its frequency worked out from those same numbers.</p>
+                <p>The note and the tone colour come from opposite halves of the model's numbers for that word. The note comes from
+                    what Prism has learned about the word, so its pitch moves as Prism keeps training. The tone colour comes from the
+                    word's fixed identity, which never changes, so every word keeps its own sound. The one choice we made is where the
+                    chord sits in your hearing range.</p>
+                <p>That is also why it doesn't sound like an ordinary instrument. The model's tones aren't tuned to any musical
+                    scale, and we left them that way rather than dress them up.</p>
+            }
         </section>
         <div class="outro">
             <p><a href="/tools/stories">Nano Stories</a> is this exact model — same weights, same training run — asked to
@@ -191,7 +197,16 @@
     };
     // The real stop condition is CharVocab.End (the model's own stop token) or DegenGuard catching a
     // collapsed repeat run — those are unchanged and still fire first when they fire at all.
-    int MaxReplySteps => MaxReplyStepsConst;
+    //
+    // The cap actually used is CONTEXT-AGNOSTIC (2026-10-08): the pinned constant below is a CEILING, tuned on a
+    // ctx=512 checkpoint, and HoloKernel.ContextBudget.ReplyCap lowers it to half the loaded model's window when the
+    // window is smaller (ctx=64 -> 32 steps). At ctx=512 it is exactly MaxReplyStepsConst, so that behaviour is unchanged.
+    int MaxReplySteps => _stats is null ? MaxReplyStepsConst : ContextBudget.ReplyCap(_stats.Context, MaxReplyStepsConst);
+
+    // Tones per note (the frozen codec band), read off the loaded model; 0 = this checkpoint has no codec band.
+    int _toneCount;
+
+    static string TimesWord(int k) => k switch { 2 => "twice", 3 => "three times", 4 => "four times", 5 => "five times", _ => k + " times" };
 
     // Per-reply token-step cap — one HoloFormer step, NOT one character (a subword emits several chars
     // per step). Renamed off `MaxReplyChars` on 2026-09-14: the old name said characters, the loop
@@ -222,8 +237,9 @@
     // heuristic — chat quality gets fixed by training, not by trimming (see AboutUs CLAUDE.md).
     //
     // 56 -> 160 on 2026-10-04 (r3,970, V=320 d=64 L=33 ctx=512, ~1.15 chars/token): the model now emits its own STOP in
-    // ~45% of replies, so this is a backstop, not the usual ending. It ALSO sets the prompt budget (Context - this, see
-    // GenerateReplyAsync), so keep it well under Context or no history fits.
+    // ~45% of replies, so this is a backstop, not the usual ending. It ALSO sets the prompt budget (Context - the cap
+    // in force, see GenerateReplyAsync). This is only the CEILING: see MaxReplySteps, which never lets it exceed half
+    // of the loaded model's window, so any checkpoint shape leaves room for history.
     const int MaxReplyStepsConst = 160;
     //
     // HALVED 2026-09-12, from one full context window to half of one, because the full window was
@@ -391,10 +407,18 @@
     // stream, since it renders as an already-complete turn the first time the chat UI paints at all.
     async Task<(string Text, StopReason Reason)> GenerateReplyAsync(Func<string, Task>? onPartial)
     {
-        // BUDGET = Context - MaxReplySteps (2026-10-04, r3,970 ctx=512): the prompt must leave room for a full reply or the
-        // cache fills mid-reply and every remaining step re-Primes the whole window (~5.7 ms/token x 512 = ~2.9 s PER STEP,
-        // a measured 163.5 s turn). With prompt <= 512-160 the cache never reaches Context and the loop is O(1)/token.
-        var seq = BuildContextTokens(_vocab!, _turns, _stats!.Context - MaxReplySteps);   // packed-turn context: finished exchanges end in STOP, see BuildContextTokens
+        // BUDGET = Context - the reply cap in force (2026-10-04, r3,970 ctx=512): the prompt must leave room for a full reply
+        // or the cache fills mid-reply and every remaining step re-Primes the whole window (~5.7 ms/token x 512 = ~2.9 s PER
+        // STEP, a measured 163.5 s turn). With prompt <= 512-160 the cache never reaches Context and the loop is O(1)/token.
+        // Both numbers come from the LOADED model's Context (2026-10-08, ContextBudget): 512 -> 160 steps / 352 prompt tokens
+        // exactly as before; a ctx=64 checkpoint -> 32 steps / 32 prompt tokens instead of a negative budget.
+        var maxSteps = MaxReplySteps;
+        var promptBudget = ContextBudget.PromptBudget(_stats!.Context, maxSteps);
+        var seq = BuildContextTokens(_vocab!, _turns, promptBudget);   // packed-turn context: finished exchanges end in STOP, see BuildContextTokens
+        // BuildContextTokens always keeps the newest exchange, even when that one exchange alone is over budget (a 140-char
+        // question is ~120 tokens, more than a small window's whole prompt budget). Keep its TAIL, which still ends in
+        // "prism: ", so the cache starts under budget and the reply loop stays O(1)/token. A no-op whenever it already fits.
+        ContextBudget.KeepTail(seq, promptBudget);
         var outIds = new List<int>();
         var vocabLimit = _vocab!.Size;
         var guard = new DegenGuard(Policy);
@@ -422,7 +446,7 @@
         var logits = _session.Prime(cache, primedTail);
 
         _voice!.ResetBeat();   // fresh pacing beat for this reply — see TokenVoice.ResetBeat
-        for (var step = 0; step < MaxReplySteps; step++)
+        for (var step = 0; step < maxSteps; step++)
         {
             if (step > 0)
             {
@@ -473,7 +497,7 @@
                 // Batch the RENDER, not the compute (2026-08-30 OOM fix, still load-bearing here): every token
                 // is computed and appended to `outIds` unconditionally; the DOM only actually repaints once
                 // every RenderBatch tokens, or on the stopping/final token so the visitor never sees stale state.
-                var isLastStep = step == MaxReplySteps - 1;
+                var isLastStep = step == maxSteps - 1;
                 if (TokenVoice.ShouldRepaint(outIds.Count, stopping, isLastStep, _voice.SoundOn))
                     await onPartial(_vocab.Decode(PaintPrefix(outIds)));
             }
@@ -567,6 +591,7 @@
             });
             if (reused) Finish(Begin(DataUrl.For("prism/oracle-brain.bin.gz")), "reused from earlier this visit (no re-download)");
             _stats = _session.Stats();
+            _toneCount = TokenVoice.CodecComponents(_session);
             // Recomputed from the session actually in hand (not the factory's local "peek"/"alpha", which don't
             // exist on the reused-cache path) — same formula, so identical on a first-ever visit either way.
             _trainedAlpha = PrismCheckpoint.ReconstructAlpha(_stats.Layers, _rounds, _trainedIterWarm);

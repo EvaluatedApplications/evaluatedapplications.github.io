@@ -1,6 +1,6 @@
 # Showroom — CLAUDE.md (showroom-owner)
 
-**Last verified:** 2026-10-05 (r3,970 window fix; council scanner DATA-DRIVEN, 28 councils; virtual-customer sessions 52-54 built in; Bradford back, builder checklist-gated)
+**Last verified:** 2026-10-08 (Prism/Stories context-agnostic, ctx=64 checkpoint verified; council scanner DATA-DRIVEN, 28 councils, builder checklist-gated)
 
 Blazor WebAssembly app at `C:\Users\dongy\AboutUs\Showroom`, published under `/tools` on the public site
 (`AboutUs` repo, base href `/tools/`). Every tool runs entirely client-side: no server, no upload. Charter:
@@ -51,12 +51,17 @@ package (a `ProjectReference` here is the designed path, not a MonoRepo boundary
   PrismStudio-only; a better model ships as a new checkpoint).
 
 **Prism/Stories constants** (re-measure on every re-mint): `MaxReplyStepsConst = 160` /
-`MaxStorySteps = 448` are PINNED, not `Context/2` (r3,970: ctx=512 K=3, ~1.15 chars/token). **THE WINDOW
-RULE: prompt + reply must stay under `Context`, or
-every step past it re-Primes the whole window** (~2.9 s PER STEP at 512; a measured 163.5 s chat turn). So
-Prism builds history with budget `Context - MaxReplySteps` (352), Stories clamps the prompt to `Context -
-MaxStorySteps` (64 tokens, tail kept). `Prism.razor` context is the tagged wire format (`user: Q\nprism: A`
+`MaxStorySteps = 448` are CEILINGS pinned on ctx=512 K=3 (~1.15 chars/token), **context-agnostic since
+2026-10-08**: the caps in force come from the LOADED model's `Context` via `HoloKernel.ContextBudget`
+(`ReplyCap` = min(160, Ctx/2); `StoryCap` = min(448, Ctx - max(Ctx/8, min(Ctx/2,16))); `PromptBudget` = Ctx - cap;
+`KeepTail` clamps an over-budget prompt). ctx=512 gives exactly 160/352 and 448/64 (verified byte-identical story at a
+fixed seed vs the pre-change build); ctx=64 gives 32/32 and 48/16. **THE WINDOW RULE: prompt + reply must stay under
+`Context`, or every step past it re-Primes the whole window** (~2.9 s PER STEP at 512/L33; at ctx=64 L9 ~32 ms native, so
+400 re-primes = 13 s: do NOT let a small window roll). Copy states only numbers read off the model (`Stats()`, `TokenVoice.
+CodecComponents`, `_stats.KPass`), never typed. `Prism.razor` context is the tagged wire format (`user: Q\nprism: A`
 + STOP per turn); Stories is a plain continuation. `AsciiPunctuation.Fold` runs at every tokenizer entry.
+**Test rig** (scratch): console app + real `Renderer` + local HttpListener as website-data, calling the pages' own
+`Ask`/`TellStory`/`Visualize` by reflection on the built `Showroom.dll`.
 Check: `node scripts/chat-turns.mjs <dist> <website-data> 9 6` (flags any turn over 6 s).
 
 **Checkpoint refresh** (data-only, no publish): write `prism/oracle-brain.bin.gz` (`GZipStream`) +

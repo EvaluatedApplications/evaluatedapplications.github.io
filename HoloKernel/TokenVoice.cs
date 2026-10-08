@@ -145,6 +145,14 @@ public sealed class TokenVoice : IDisposable
     public static bool ShouldRepaint(int revealedCount, bool stopping, bool isLastStep, bool soundOn) =>
         stopping || isLastStep || soundOn || revealedCount % RenderBatch == 0;
 
+    /// <summary>The number of frozen codec components a note is built from, read off the loaded model:
+    /// FrozenPrefix/2, clipped to the face's component count. This is the number the page copy states
+    /// ("N tones"), so the sentence cannot drift from the voice. NOTE: <see cref="PlayTone"/> additionally
+    /// needs a learned tail beside this band; a checkpoint whose FrozenPrefix covers the whole face
+    /// (Dim == FrozenPrefix, as both d=64 checkpoints so far) has none, and PlayTone is then silent.</summary>
+    public static int CodecComponents(HoloSession session) =>
+        Math.Min(session.Model.FrozenPrefix / 2, session.Model.Face(0).Length / 2);
+
     /// <summary>
     /// Play the tone for one just-revealed token, straight from that token's own phasor face — no
     /// forward pass, deterministic, the same face every time this id is ever emitted on this
