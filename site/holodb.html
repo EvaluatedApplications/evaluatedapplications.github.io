@@ -131,7 +131,7 @@ CREATE TABLE invoices (
   <p>The <strong>maintained aggregates</strong> — the whole-ledger total and count, and the single-column <code>GROUP BY</code> rollups (revenue by status, month, region) — resolve in <strong>microseconds and are constant-time</strong>: a kept tally is read instead of scanning, so response holds as the ledger grows. The single-invoice lookup resolves from the primary-key index. In-process, HoloDb leads on the six rollups and the lookup; as a networked service against SQL&nbsp;Server it leads on <strong>15 of the 16</strong>, including all five joins by 5× to 51× (the name-grouped join finishes in 806&nbsp;ms, well under SQL&nbsp;Server's 4.2&nbsp;s).</p>
   <p>The five cross-table <strong>JOINs</strong> fan out in parallel across every core (through the same EvalApp-gated pool the scans use): HoloDb <strong>wins revenue by segment</strong> outright and lands within ~1.4–3.3× of DuckDB on the rest — down from 15–92× before — all verified identical. DuckDB's pure-columnar engine keeps a modest lead on the single-table scans (a filtered sum, a top-K, a multi-column group). HoloDb targets the <strong>mixed</strong> transactional, analytics and vector workload, durable and larger-than-memory, in a single embeddable dependency.</p>
 
-  <p style="margin-top:2rem"><a href="/holodb/">← Back to HoloDb</a> &nbsp;·&nbsp; <a href="/tools/analyst">Run it in the browser →</a></p>
+  <p style="margin-top:2rem"><a href="/holodb/">← Back to HoloDb</a> &nbsp;·&nbsp; <a href="/tools/analyst/">Run it in the browser →</a></p>
 </article>
 </main>
 
