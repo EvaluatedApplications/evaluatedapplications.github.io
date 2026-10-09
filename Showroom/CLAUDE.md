@@ -1,6 +1,6 @@
 # Showroom — CLAUDE.md (showroom-owner)
 
-**Last verified:** 2026-10-08 (every /tools page is now a static HTML shell, runtime boots on intent: Blazier 1.0.0; Prism/Stories context-agnostic, ctx=64 checkpoint; council scanner DATA-DRIVEN, 28 councils, builder checklist-gated)
+**Last verified:** 2026-10-09 (every /tools page is now a static HTML shell, runtime boots on intent: Blazier 1.0.0; Prism/Stories context-agnostic, ctx=64 checkpoint; council scanner DATA-DRIVEN, 28 councils, builder checklist-gated)
 
 Blazor WebAssembly app at `C:\Users\dongy\AboutUs\Showroom`, published under `/tools` on the public site
 (`AboutUs` repo, base href `/tools/`). Every tool runs entirely client-side: no server, no upload. Charter:
@@ -221,4 +221,5 @@ live behaviour is the user's (`dotnet run`, or the deployed `/tools/`).
 - Razor reserves the bare `<text>` tag (cannot carry attributes, `RZ1023`): build an SVG `<text>` as a
   `MarkupString`, HTML-encoding interpolated content by hand.
 - A shell's words come from the page's own markup (one source), but a page's prerender branch must not need data: no council count,
-  no model number. Copy that says "free" (Analyst title/lede/badges, Prose badge) is now also static HTML: editorial-owner's call.
+  no model number. Shell copy is indexable HTML, so the licence rule applies: never "free"/"free to use" about price (removed from Analyst
+  title/lede/badge and Prose badge 2026-10-09; the privacy claim stays, worded without it).
