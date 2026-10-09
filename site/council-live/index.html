@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- Deployment settings. council-live-base: where worker.js, manifest.json, estimates.json, terms.json, inputs.csv, _framework/ and data/ are (same origin as this page; the default is this page's own folder).
+     council-live-precomputed: the Council Spending Scanner's address, the council's slug is appended for its prepared results.
+     Structure: shared site nav, hero (div#sitebar holds the back links), main (the page's own sections), footer. -->
+<meta name="council-live-base" content="/website-data/council-live/">
+<meta name="council-live-precomputed" content="/tools/council-spending/">
+<title>Council spending check, run in your browser — Evaluated Applications</title>
+<meta name="description" content="Run the Council Spending Scanner's checks on your own device and see every row they flag, with the council's own transaction number and file so you can look each one up yourself.">
+<link rel="canonical" href="https://evaluatedapplications.github.io/council-live/">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Council spending check, run in your browser — Evaluated Applications">
+<meta property="og:description" content="Run the Council Spending Scanner's checks on your own device and see every row they flag, with the council's own transaction number and file.">
+<meta property="og:url" content="https://evaluatedapplications.github.io/council-live/">
+<meta name="twitter:card" content="summary">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%23f0796a'/%3E%3Cstop offset='.166' stop-color='%23f0a15a'/%3E%3Cstop offset='.333' stop-color='%23e6c450'/%3E%3Cstop offset='.5' stop-color='%237bd86a'/%3E%3Cstop offset='.666' stop-color='%234aa3ff'/%3E%3Cstop offset='.833' stop-color='%237d7dff'/%3E%3Cstop offset='1' stop-color='%23c07dff'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='32' height='32' rx='7' fill='%23050608'/%3E%3Cpath d='M16 5L27 26H5Z' fill='none' stroke='url(%23g)' stroke-width='2' stroke-linejoin='round'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="/assets/site.css">
+<style>
+  /* Page-local layer on the shared design system: only what the live-check widgets need (tables, form controls, status line). Tokens only, no new colours. */
+  [hidden]{display:none !important}
+  .live-hero h1{font-size:clamp(1.7rem,4.4vw,2.7rem); max-width:28ch}
+  .live-hero .lede{max-width:70ch}
+  .live-hero .note{margin:14px 0 0}
+  .related.councils a[aria-current="page"]{color:var(--ink); border-color:var(--accent); background:var(--surface-2); font-weight:700}
+  .live p{margin:0 0 14px}
+  .live .note{color:var(--ink-soft); font-size:.96rem; line-height:1.55}
+  .live .small{font-size:.85rem}
+  .live h2.sub{font-size:1.15rem; margin:28px 0 14px}
+  .live .box{border:1px solid var(--border-2); border-radius:var(--radius); background:var(--surface); padding:14px 18px; margin:14px 0}
+  .live .box p:last-child{margin-bottom:0}
+  #precomputed:empty{display:none}
+  #reason{color:var(--warn); margin:0 0 14px}
+  #reason:empty{display:none}
+  #status{white-space:pre-wrap; font:13px/1.45 var(--mono); color:var(--ink-soft); margin:0 0 14px; overflow-wrap:anywhere}
+  #status:empty,#result:empty{display:none}
+  .live button.btn{font-family:var(--font)}
+  .live button.btn:disabled{opacity:.5; cursor:not-allowed; filter:none}
+  .live button.btn:focus-visible,.live select:focus-visible,.live input:focus-visible,.live a:focus-visible{outline:2px solid var(--accent-ink); outline-offset:2px}
+  .live table{border-collapse:collapse; width:100%; font-size:.9rem; line-height:1.45}
+  .live caption{text-align:left; color:var(--ink-faint); padding:0 0 7px}
+  .live th,.live td{border-bottom:1px solid var(--border); padding:6px 9px; text-align:left; vertical-align:top}
+  .live th{color:var(--ink-faint); font-family:var(--mono); font-size:.76rem; font-weight:600; letter-spacing:.04em; text-transform:uppercase; background:var(--surface-2)}
+  .live td.num,.live th.num{text-align:right; font-variant-numeric:tabular-nums}
+  .live td.id{font-variant-numeric:tabular-nums; white-space:nowrap; font-family:var(--mono); font-size:.85rem}
+  .live .detail{font-size:.8rem; color:var(--ink-faint)}
+  .live .scroll{overflow-x:auto; border:1px solid var(--border); border-radius:10px; padding:10px 10px 4px; -webkit-overflow-scrolling:touch}
+  .live .scroll table{min-width:640px}
+  .live .controls{display:flex; flex-wrap:wrap; gap:12px 18px; align-items:end; margin:14px 0}
+  .live .controls label{display:flex; flex-direction:column; gap:4px; font-size:.85rem; color:var(--ink-soft); min-width:0; max-width:100%}
+  .live select,.live input[type="search"]{font:inherit; font-size:.92rem; color:var(--ink); background:var(--bg-2); border:1px solid var(--border-2); border-radius:8px; padding:7px 10px; max-width:100%}
+  .live #count{color:var(--ink-faint); font-family:var(--mono); font-size:.82rem}
+  .live .pager{display:flex; flex-wrap:wrap; gap:10px; margin:14px 0 0}
+  .live .actions{display:flex; flex-wrap:wrap; gap:10px; margin:14px 0 0}
+  .live .err{color:var(--bad)}
+  .live-credit{flex-basis:100%; margin:0; font-size:.85rem; line-height:1.55}
+  .live-credit a{text-decoration:underline; text-underline-offset:2px}
+  @media (max-width:640px){
+    .live .controls label,.live .controls input[type="search"],.live .controls select{width:100%}
+    .live .btn{padding:10px 1.2rem}
+    .live .pager .btn{flex:1}
+  }
+</style>
+</head>
+<body class="os-chrome live">
+<div class="beam"></div>
+
+<nav class="site-nav">
+  <div class="wrap">
+    <a class="brand" href="/">
+      <svg class="mark" viewBox="0 0 32 32" aria-hidden="true"><defs><linearGradient id="m" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#f0796a"/><stop offset=".166" stop-color="#f0a15a"/><stop offset=".333" stop-color="#e6c450"/><stop offset=".5" stop-color="#7bd86a"/><stop offset=".666" stop-color="#4aa3ff"/><stop offset=".833" stop-color="#7d7dff"/><stop offset="1" stop-color="#c07dff"/></linearGradient></defs><path d="M16 5L27 26H5Z" fill="none" stroke="url(#m)" stroke-width="2" stroke-linejoin="round"/></svg>
+      Evaluated Applications
+    </a>
+    <input type="checkbox" id="navtoggle" class="nav-toggle">
+    <label for="navtoggle" class="nav-burger" aria-label="Toggle menu"><span></span><span></span><span></span></label>
+    <div class="nav-links">
+      <a href="/">Home</a>
+      <a href="/packages.html">Packages</a>
+      <a href="https://www.nuget.org/profiles/evaluatedapplications" target="_blank" rel="noopener">NuGet</a>
+    </div>
+  </div>
+</nav>
+
+<header class="hero live-hero">
+  <div class="wrap">
+    <div class="hero-bar" aria-hidden="true">
+      <span class="win-dots"><i></i><i></i><i></i></span>
+      <span class="hero-bar-title">council-live.app</span>
+    </div>
+    <div class="hero-body">
+      <div id="sitebar" class="crumb"><a id="siteHome" href="/">Evaluated Applications</a><span>/</span><a id="backScanner" href="/tools/council-spending">Back to the Council Spending Scanner</a></div>
+      <h1 id="title">Council spending check, run in your browser</h1>
+      <nav class="related councils" aria-label="Councils that can be run here" id="councils"></nav>
+      <p class="lede" id="intro">This page runs the Council Spending Scanner's checks on your own device for the council above and lists every row the checks flag. Each flagged row shows the council's own transaction number and the council's file it comes from, so you can look it up in the council's published file yourself. The scanner's other councils are shown as prepared results only.</p>
+      <p class="note"><a id="precomputedLink" href="#">See this council's prepared results in the Council Spending Scanner</a></p>
+    </div>
+  </div>
+</header>
+
+<main class="live">
+<section class="sec" id="check">
+  <div class="wrap">
+    <div class="sec-head"><span class="dot" style="background:var(--c-foundation)"></span><h2>Run the check</h2><p>on your device</p></div>
+    <div id="precomputed" aria-live="polite"><p id="reason"></p></div>
+
+    <div id="runbox" class="box" hidden>
+      <p id="what" class="note"></p>
+      <p id="cost" class="note"></p>
+      <p class="actions"><button id="run" class="btn btn-primary" disabled>Run this check in my browser</button> <button id="cancel" class="btn btn-ghost" hidden>Cancel</button></p>
+    </div>
+    <pre id="status" aria-live="polite"></pre>
+    <p id="result" class="note" role="status"></p>
+  </div>
+</section>
+
+<section class="sec" id="results" hidden>
+  <div class="wrap">
+    <div class="sec-head"><span class="dot" style="background:var(--c-holodb)"></span><h2>What the checks flagged</h2><p>results of this run</p></div>
+    <p id="resultsLead"></p>
+    <p class="note" id="discrepancy"></p>
+    <div class="scroll"><table id="summary"><caption class="small">Flagged rows by rule. Unexplained rules come first. Choose a rule to filter the list below.</caption><thead><tr><th>Rule</th><th>Schedule</th><th class="num">Rows</th><th>What the rule says</th></tr></thead><tbody></tbody></table></div>
+
+    <h2 class="sub">Every flagged row</h2>
+    <p class="note" id="howto"></p>
+    <div class="controls">
+      <label>Rule <select id="fRule"></select></label>
+      <label>File <select id="fFile"></select></label>
+      <label>Transaction number or supplier contains <input id="fSearch" type="search" size="24"></label>
+      <span id="count" role="status"></span>
+    </div>
+    <div class="scroll"><table id="flagged"><caption class="small">Flagged rows, as the checks produced them in this run. The transaction number is the number in the council's file, unchanged.</caption>
+      <thead><tr><th>Rule</th><th>Council's transaction number</th><th>Supplier as published</th><th class="num">Net (£)</th><th class="num">Stated gross (£)</th><th class="num">Gap (£)</th><th id="fileHead">File</th></tr></thead><tbody></tbody></table></div>
+    <p class="pager"><button id="prev" class="btn btn-ghost">Previous 50</button> <button id="next" class="btn btn-ghost">Next 50</button></p>
+  </div>
+</section>
+
+<section class="sec" id="tested">
+  <div class="wrap">
+    <div class="sec-head"><span class="dot" style="background:var(--c-tracer)"></span><h2>What has and has not been tested</h2><p>the limits, stated plainly</p></div>
+    <p class="note" id="testedText">Tested on a Windows 11 desktop computer, in Microsoft Edge 154 and in Google Chrome 155 (the Chrome for Testing build, not the everyday release). We recorded at least 79 complete runs of the whole check in these two browsers, from our own computer and from a public web host. Every run started from a newly created browser profile, with nothing saved from an earlier visit; 36 of them loaded the page straight after the browser launched, with the page's automatic retries switched off, and the slowest of all of them took 35 seconds (Bracknell Forest, over the internet, in Edge). Every one of these runs finished, and in every one the export files the program produced were the same as the original desktop program's, as compared by a separate test program (this page does not compare anything for you). The time each run took is in the line above the button.</p>
+    <p class="note">We also looked up every flagged row's transaction number in the council's file named for it, with a separate program: all 49,300 rows of Wokingham and all 56,723 rows of Bracknell Forest were found in the TransNo column of that file, the column the council uses for its transaction number.</p>
+    <p class="note">We also ran it in Mozilla Firefox 155 on the same Windows computer (the build that comes with the Playwright test tool, run without a window): at least 3 runs of each council, all finished, with the same export files as the desktop program. The other tests (cancelling, a failed download, fresh-profile starts) were not repeated in Firefox.</p>
+    <p class="note"><strong>Not tested:</strong> phones and tablets, Safari (on a Mac or an iPhone), any other version of Firefox, and anything other than Windows. Before it downloads anything the page checks that your browser can set aside the memory the check needs (the most we measured was <span id="memFigures">a few hundred MiB</span>, on the computer we tested; the page asks for a little more than that to be safe) and shows the prepared results when it cannot. That check has not been run on a phone or in Safari, so there a run may be refused, may be slow, or may fail in a way we have not seen.</p>
+    <p class="note"><strong>What this page does not do.</strong> It lists the rows our checks flag in the copies of the council's files we saved. It does not check the council's current files and it does not check our results for you: to check a row, look up its transaction number in the council's file.</p>
+  </div>
+</section>
+
+<section class="sec" id="privacy">
+  <div class="wrap">
+    <div class="sec-head"><span class="dot" style="background:var(--c-algformer)"></span><h2>What this page fetches, and from where</h2><p>privacy</p></div>
+    <p class="note" id="privacyText">Opening this page fetches the page itself and three small files (the list of councils, the timing figures and the wording of the rules) from this site. Nothing else is fetched until you press the button.</p>
+  </div>
+</section>
+
+<section class="sec" id="report">
+  <div class="wrap">
+    <div class="sec-head"><span class="dot" style="background:var(--c-holovoxel)"></span><h2>Report a problem, or ask for a file to be removed</h2><p>corrections</p></div>
+    <p class="note">If a figure on this page looks wrong, or you are a council and would like a file taken off this page, open an issue on <a href="https://github.com/EvaluatedApplications/evaluatedapplications.github.io/issues">the public issue tracker of this site</a>, naming the council, the file and the row number, and please do not paste personal data into it. You can also use the contact on <a href="/#build-with-us">the home page</a> (under "Build with our stack"). A rule that looks wrong can be reported as described in <a href="https://github.com/EvaluatedApplications/evaluatedapplications.github.io/blob/main/CouncilAudit/README.md#report-a-wrong-rule">Report a wrong rule</a>. Reports are read; no response time is promised.</p>
+  </div>
+</section>
+</main>
+
+<footer class="site">
+  <div class="wrap">
+    <p class="live-credit" id="credit">Contains public sector information licensed under the <a href="https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/">Open Government Licence v3.0</a>. Source: <a href="https://www.wokingham.gov.uk/foi/supplier-spend-data">Wokingham Borough Council</a> (its data-sets page says its data sets may be re-used under the Open Government Licence) and <a href="https://www.bracknell-forest.gov.uk/council-and-democracy/finance-and-transparency/publication-scheme/what-we-spend-and-how-we-spend-it">Bracknell Forest Council</a> (its website terms page says its content is available under the Open Government Licence v3.0). Council payment data is published by each council under the Local Government Transparency Code. Where each file we hold came from, and the licence statement we relied on, is in <a id="inputsLink" href="inputs.csv">inputs.csv</a> (the file list of this page).</p>
+    <span>Evaluated Applications — .NET libraries, England.</span>
+    <span class="mono">© <span id="yr"></span> · <a href="/">Home</a> · <a href="/packages.html">Packages</a> · <a href="/articles.html">Articles</a> · <a href="https://www.nuget.org/profiles/evaluatedapplications" target="_blank" rel="noopener">NuGet</a></span>
+  </div>
+</footer>
+
+<script>document.getElementById('yr').textContent = new Date().getFullYear();</script>
+<script type="module" src="main.js"></script>
+</body>
+</html>
