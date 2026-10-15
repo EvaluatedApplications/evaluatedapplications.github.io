@@ -1,0 +1,19 @@
+@* Four headline tiles for the current slice. Count and sum come from one statement; the average is their quotient. *@
+@using Showroom.Services
+
+<div class="tiles" role="group" aria-label="Totals for the current slice">
+    <div class="tile"><span class="n">@DashboardFormat.N(T.Count)</span><span class="l">orders <PanelRoute R="_route" /></span></div>
+    <div class="tile"><span class="n">@DashboardFormat.Money(T.Sum)</span><span class="l">revenue</span></div>
+    <div class="tile"><span class="n">£@DashboardFormat.N(T.Count == 0 ? 0 : (long)Math.Round((double)T.Sum / T.Count))</span><span class="l">average order</span></div>
+    <div class="tile"><span class="n">@Share</span><span class="l">of all @DashboardFormat.N(S.Engine.Rows) orders</span></div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public DashboardSession S { get; set; } = default!;
+
+    (long Count, long Sum) T => S.Totals;
+    StmtResult? _route;
+    string Share => S.Engine.Rows == 0 ? "" : (100.0 * T.Count / S.Engine.Rows).ToString(T.Count == S.Engine.Rows ? "0" : "0.0", System.Globalization.CultureInfo.InvariantCulture) + "%";
+
+    protected override void OnParametersSet() => _route = S.Result("tiles");
+}

@@ -1,0 +1,66 @@
+@* One categorical chart of the dashboard (region, category or status). Each row is a real button: click or press Enter to filter every
+   other panel to it. The table view is the same rows as a table. The statement behind it is read from the session's results. *@
+@using OrdersDemo
+@using Showroom.Services
+
+<section class="panel" aria-labelledby="@_id">
+    <h3 id="@_id">@Title <PanelRoute R="S.Result(Dim)" /></h3>
+    @if (S.AsTable)
+    {
+        <div class="table-scroll"><table class="data">
+            <caption class="sr-only">@Title</caption>
+            <thead><tr><th scope="col">@Singular</th><th scope="col" class="num">Orders</th><th scope="col" class="num">Revenue</th><th scope="col" class="num">Average</th></tr></thead>
+            <tbody>
+            @foreach (var s in _rows)
+            {
+                <tr class="@(Picked(s) ? "on" : "")">
+                    <th scope="row"><button type="button" class="link" aria-pressed="@Pressed(s)" @onclick="() => S.ToggleAsync(Dim, s.Key)">@s.Key</button></th>
+                    <td class="num">@DashboardFormat.N(s.Count)</td><td class="num">@DashboardFormat.Money(s.Sum)</td><td class="num">£@DashboardFormat.N(s.Average)</td>
+                </tr>
+            }
+            </tbody></table></div>
+    }
+    else
+    {
+        <ul class="bars">
+        @foreach (var s in _rows)
+        {
+            <li><button type="button" class="bar @(Picked(s) ? "on" : _muted ? "muted" : "")" aria-pressed="@Pressed(s)"
+                        aria-label="@($"{s.Key}: {Text(s)}. Press to filter by {s.Key}")" @onclick="() => S.ToggleAsync(Dim, s.Key)">
+                <span class="lbl">@s.Key</span>
+                <span class="track"><span class="fill" style="width:@Width(s)%"></span></span>
+                <span class="val">@Text(s)</span>
+            </button></li>
+        }
+        </ul>
+    }
+</section>
+
+@code {
+    [Parameter, EditorRequired] public DashboardSession S { get; set; } = default!;
+    [Parameter, EditorRequired] public string Dim { get; set; } = "";
+    [Parameter, EditorRequired] public string Title { get; set; } = "";
+    [Parameter, EditorRequired] public string Singular { get; set; } = "";
+    [Parameter, EditorRequired] public string[] Universe { get; set; } = [];
+    /// <summary>True for a ranked chart (largest first); false keeps the natural order (status runs placed to returned).</summary>
+    [Parameter] public bool Ranked { get; set; }
+
+    readonly string _id = "bl-" + Guid.NewGuid().ToString("N")[..6];
+    IReadOnlyList<Slice> _rows = [];
+    long _max;
+    bool _muted;
+
+    protected override void OnParametersSet()
+    {
+        var all = S.Slices(Dim, Universe);
+        _rows = Ranked ? all.OrderByDescending(Val).ToList() : all;
+        _max = _rows.Count == 0 ? 0 : _rows.Max(Val);
+        _muted = S.Filter.Set(Dim).Count > 0;
+    }
+
+    bool Picked(Slice s) => S.Filter.Set(Dim).Contains(s.Key);
+    string Pressed(Slice s) => Picked(s) ? "true" : "false";
+    long Val(Slice s) => S.Metric switch { "orders" => s.Count, "average" => s.Average, _ => s.Sum };
+    string Text(Slice s) => S.Metric switch { "orders" => DashboardFormat.N(s.Count), "average" => "£" + DashboardFormat.N(s.Average), _ => DashboardFormat.Money(s.Sum) };
+    string Width(Slice s) => _max <= 0 ? "0" : (100.0 * Val(s) / _max).ToString("0.#", System.Globalization.CultureInfo.InvariantCulture);
+}

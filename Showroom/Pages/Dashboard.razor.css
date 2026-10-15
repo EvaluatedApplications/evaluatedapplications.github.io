@@ -1,0 +1,110 @@
+/* Page base block (same as Prism/Analyst), then the dashboard. The child components in Components/ have no CSS file of their own:
+   their rules live here under .dash ::deep, the pattern the council components use. No rule here sets opacity (depth.css). */
+.room { max-width: 1080px; margin: 0 auto; padding: 3rem 24px 4rem; }
+.crumb { font-family: var(--mono); font-size: 0.82rem; color: var(--ink-faint); margin-bottom: 0.75rem; }
+.crumb a { color: var(--ink-soft); }
+.crumb span { margin: 0 0.4rem; opacity: 0.6; }
+.room-head h1 { font-size: clamp(2rem, 4.5vw, 2.6rem); font-weight: 700; letter-spacing: -0.02em; margin: 0 0 0.5rem; }
+.lede { font-size: 1.08rem; line-height: 1.55; color: var(--ink-soft); margin: 0 0 1.2rem; max-width: 64ch; }
+.badges { display: flex; flex-wrap: wrap; gap: 0.5rem; margin: 0 0 1.4rem; }
+.badges span { font-family: var(--mono); font-size: 0.78rem; color: var(--ink-soft); border: 1px solid var(--border-2); border-radius: 999px; padding: 0.3rem 0.75rem; background: var(--surface); }
+.outro { margin-top: 2.4rem; padding-top: 1.2rem; border-top: 1px solid var(--border); max-width: 70ch; }
+.outro p { color: var(--ink-soft); font-size: 0.92rem; line-height: 1.55; margin: 0 0 1rem; }
+.stack { display: grid; gap: 1rem; }
+.sec { font-size: 1.15rem; font-weight: 650; margin: 2rem 0 0.8rem; }
+.sr-only, .dash ::deep .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/* shared pieces */
+.dash ::deep .hint { color: var(--ink-faint); font-size: 0.88rem; line-height: 1.5; margin: 0.4rem 0; }
+.dash ::deep .err { color: var(--bad); margin: 0.6rem 0 0; }
+.dash ::deep code { font-family: var(--mono); font-size: 0.85em; color: var(--accent-ink); background: var(--bg-2); padding: 0.1rem 0.35rem; border-radius: 5px; }
+.dash ::deep button:focus-visible, .dash ::deep select:focus-visible, .dash ::deep pre:focus-visible { outline: 2px solid var(--accent-ink); outline-offset: 2px; }
+.dash ::deep .panel { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1rem 1rem; min-width: 0; }
+.dash ::deep .panel h2 { font-size: 1.15rem; font-weight: 650; margin: 0 0 0.6rem; }
+.dash ::deep .panel h3 { font-size: 0.95rem; font-weight: 650; margin: 0 0 0.6rem; display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 0.4rem; }
+.dash ::deep .build { margin-bottom: 1rem; }
+.dash ::deep .row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem; margin: 0.6rem 0 0; }
+.dash ::deep select { background: var(--bg-2); color: var(--ink); border: 1px solid var(--border-2); border-radius: 9px; padding: 0.55rem 0.7rem; font-size: 0.95rem; min-height: 2.6rem; }
+.dash ::deep .btn { min-height: 2.6rem; }
+.dash ::deep .route { font-family: var(--mono); font-size: 0.7rem; font-weight: 500; color: var(--ink-soft); border: 1px solid var(--border-2); border-radius: 999px; padding: 0.1rem 0.5rem; white-space: nowrap; }
+.dash ::deep .route.plane { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 50%, transparent); }
+.dash ::deep .route.engine { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 50%, transparent); }
+
+/* progress and facts */
+.dash ::deep .progress { height: 0.7rem; margin: 0.9rem 0 0.3rem; background: var(--surface-2); border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+.dash ::deep .progress span { display: block; height: 100%; background: var(--spectrum); }
+.dash ::deep .facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 0.6rem; margin: 0.9rem 0 0.4rem; }
+.dash ::deep .facts div { background: var(--bg-2); border: 1px solid var(--border); border-radius: 10px; padding: 0.55rem 0.75rem; min-width: 0; }
+.dash ::deep .facts dt { font-family: var(--mono); font-size: 0.7rem; color: var(--ink-faint); text-transform: uppercase; letter-spacing: 0.04em; }
+.dash ::deep .facts dd { margin: 0.15rem 0 0; font-weight: 700; color: var(--ink); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+
+/* filter bar, tiles, controls */
+.dash ::deep .filterbar { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 0.7rem; margin: 0 0 0.9rem; }
+.dash ::deep .chips, .dash ::deep .toggles, .dash ::deep .years { display: flex; flex-wrap: wrap; align-items: center; gap: 0.45rem; }
+.dash ::deep .years { margin: 0 0 0.6rem; }
+.dash ::deep .chip { background: transparent; color: var(--ink-soft); border: 1px solid var(--border-2); border-radius: 999px; padding: 0.35rem 0.8rem; font-size: 0.84rem; cursor: pointer; min-height: 2.2rem; }
+.dash ::deep .chip.on { color: var(--ink); border-color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, var(--surface)); }
+.dash ::deep .chip b { margin-left: 0.4rem; color: var(--ink-faint); }
+.dash ::deep .seg { display: inline-flex; border: 1px solid var(--border-2); border-radius: 9px; overflow: hidden; }
+.dash ::deep .seg button { background: transparent; color: var(--ink-soft); border: none; padding: 0.45rem 0.9rem; font-size: 0.86rem; font-weight: 600; cursor: pointer; min-height: 2.4rem; }
+.dash ::deep .seg button.on { background: var(--accent); color: #fff; }
+.dash ::deep .seg.tabs { flex-wrap: wrap; margin: 0 0 0.7rem; }
+.dash ::deep .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 0.8rem; margin: 0 0 1rem; }
+.dash ::deep .tile { background: var(--surface); border: 1px solid var(--border); border-left: 3px solid var(--accent); border-radius: 12px; padding: 0.8rem 1rem; }
+.dash ::deep .tile .n { display: block; font-size: 1.7rem; font-weight: 800; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+.dash ::deep .tile .l { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; color: var(--ink-soft); font-size: 0.86rem; margin-top: 0.2rem; }
+
+/* grid */
+.dash ::deep .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; margin: 0 0 1.4rem; }
+.dash ::deep .grid .wide { grid-column: 1 / -1; }
+
+/* bars */
+.dash ::deep .bars { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.15rem; }
+.dash ::deep .bar { display: grid; grid-template-columns: 7.2rem minmax(0, 1fr) 4.6rem; align-items: center; gap: 0.55rem; width: 100%; background: transparent; border: none; border-radius: 7px; padding: 0.3rem 0.4rem; cursor: pointer; text-align: left; font: inherit; color: inherit; min-height: 2.1rem; }
+.dash ::deep .bar:hover { background: color-mix(in srgb, var(--accent) 9%, transparent); }
+.dash ::deep .bar .lbl { font-size: 0.86rem; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dash ::deep .bar .track { background: var(--surface-2); border: 1px solid var(--border); border-radius: 6px; height: 0.85rem; overflow: hidden; }
+.dash ::deep .bar .fill { display: block; height: 100%; background: var(--accent); border-radius: 6px; }
+.dash ::deep .bar.muted .fill { background: var(--ink-faint); }
+.dash ::deep .bar.on { background: color-mix(in srgb, var(--accent) 14%, transparent); outline: 1px solid var(--accent); }
+.dash ::deep .bar .val { font-size: 0.82rem; color: var(--ink-soft); text-align: right; font-variant-numeric: tabular-nums; }
+
+/* month columns */
+.dash ::deep .cols { display: flex; gap: 2px; height: 11rem; }
+.dash ::deep .col { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; padding: 0; background: transparent; border: none; border-radius: 3px; cursor: pointer; }
+.dash ::deep .col:hover { background: color-mix(in srgb, var(--accent) 9%, transparent); }
+.dash ::deep .col .well { flex: 1; display: flex; align-items: flex-end; width: 100%; }
+.dash ::deep .col .stick { display: block; width: 100%; background: var(--accent); border-radius: 2px 2px 0 0; }
+.dash ::deep .col.muted .stick { background: var(--ink-faint); }
+.dash ::deep .col.on { background: color-mix(in srgb, var(--accent) 14%, transparent); outline: 1px solid var(--accent); }
+.dash ::deep .col .tick { height: 1.1rem; font-family: var(--mono); font-size: 0.66rem; color: var(--ink-faint); white-space: nowrap; overflow: visible; text-align: left; }
+
+/* tables */
+.dash ::deep .table-scroll { overflow-x: auto; border: 1px solid var(--border); border-radius: 10px; margin-top: 0.4rem; }
+.dash ::deep .table-scroll.tall { max-height: 22rem; overflow-y: auto; }
+.dash ::deep table.data { border-collapse: collapse; width: 100%; font-size: 0.84rem; }
+.dash ::deep table.data th, .dash ::deep table.data td { padding: 0.4rem 0.7rem; border-bottom: 1px solid var(--border); text-align: left; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.dash ::deep table.data thead th { background: var(--surface-2); color: var(--ink); font-family: var(--mono); position: sticky; top: 0; }
+.dash ::deep table.data tbody th { font-weight: 600; color: var(--ink); }
+.dash ::deep table.data td { color: var(--ink-soft); }
+.dash ::deep table.data .num { text-align: right; }
+.dash ::deep table.data tr.on { background: color-mix(in srgb, var(--accent) 12%, transparent); }
+.dash ::deep button.link { background: none; border: none; padding: 0.25rem 0; color: inherit; font: inherit; font-weight: 600; text-decoration: underline dotted; cursor: pointer; min-height: 1.8rem; }
+
+/* code */
+.dash ::deep pre.code { margin: 0.5rem 0; padding: 0.8rem 1rem; max-height: 26rem; overflow: auto; background: var(--bg-2); border: 1px solid var(--border); border-radius: 10px; font-family: var(--mono); font-size: 0.8rem; line-height: 1.5; color: var(--ink-soft); tab-size: 4; }
+.dash ::deep pre.code code { background: none; padding: 0; color: inherit; font-size: inherit; }
+
+@media (prefers-reduced-motion: no-preference) {
+    .dash ::deep .fill, .dash ::deep .stick { transition: width 0.18s ease, height 0.18s ease; }
+}
+
+@media (max-width: 700px) {
+    .room { padding-left: 12px; padding-right: 12px; }
+    .dash ::deep .grid { grid-template-columns: minmax(0, 1fr); }
+    .dash ::deep .bar { grid-template-columns: 5.6rem minmax(0, 1fr) 3.9rem; gap: 0.4rem; }
+    .dash ::deep .cols { gap: 1px; height: 9rem; }
+    .dash ::deep .tiles { grid-template-columns: 1fr 1fr; gap: 0.55rem; }
+    .dash ::deep .tile .n { font-size: 1.35rem; }
+    .dash ::deep .facts { grid-template-columns: 1fr 1fr; }
+}

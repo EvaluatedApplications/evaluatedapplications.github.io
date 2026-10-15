@@ -1,0 +1,72 @@
+@* "How this is built". Every line is produced from the same constants the page executes (DashboardSql, DashboardCode, OrdersGenerator),
+   so what is shown cannot drift from what ran. The generator tab is the embedded source file itself. *@
+@using System.Reflection
+@using System.Text
+@using OrdersDemo
+@using Showroom.Services
+@inject IJSRuntime JS
+
+<section class="panel" aria-labelledby="code-h">
+    <h2 id="code-h">3. How this is built</h2>
+    <p class="hint">The SQL below is the text HoloDb just executed for the filters you have set; it changes as you click. The console program is the same calls,
+        rendered from the same constants, compiled and run against the published package <code>@DashboardCode.Package</code> @DashboardCode.PackageVersion.</p>
+    <div class="seg tabs" role="group" aria-label="Code view">
+        @foreach (var (key, text) in Tabs)
+        {
+            var k = key;
+            <button type="button" class="@(_tab == k ? "on" : "")" aria-pressed="@(_tab == k ? "true" : "false")" @onclick="() => Pick(k)">@text</button>
+        }
+    </div>
+    <pre class="code" tabindex="0" aria-label="@CurrentName"><code>@Current</code></pre>
+    <div class="row">
+        <button type="button" class="btn btn-ghost" @onclick="Copy">Copy</button>
+        <span class="hint" role="status">@_note</span>
+    </div>
+</section>
+
+@code {
+    [Parameter, EditorRequired] public DashboardSession S { get; set; } = default!;
+
+    static readonly (string, string)[] Tabs =
+    {
+        ("sql", "Queries for this state"), ("build", "Build the database"), ("program", "Console program"), ("gen", "OrdersGenerator.cs"),
+    };
+    static string? _generatorSource;
+    string _tab = "sql", _note = "";
+
+    string CurrentName => Tabs.First(t => t.Item1 == _tab).Item2;
+
+    string Current => _tab switch
+    {
+        "sql" => Queries(),
+        "build" => DashboardCode.BuildListing(S.Engine.Rows),
+        "program" => DashboardCode.MinimalProgram(S.Filter, S.Engine.Rows),
+        _ => GeneratorSource(),
+    };
+
+    void Pick(string k) { _tab = k; _note = ""; }
+
+    string Queries()
+    {
+        var sb = new StringBuilder("// Exactly what ran for the current filters. Database.RouteTrace names the path that answered each one.\n");
+        foreach (var r in S.AllResults)
+            sb.Append("\n-- ").Append(r.Stmt.Title).Append("  [").Append(r.Error ?? (r.Route.Length == 0 ? "no route" : r.Route)).Append(", ")
+              .Append(DashboardFormat.Ms(r.Ms)).Append("]\n").Append(r.Stmt.Sql).Append(";\n");
+        return sb.ToString();
+    }
+
+    static string GeneratorSource()
+    {
+        if (_generatorSource is not null) return _generatorSource;
+        using var s = typeof(OrdersGenerator).Assembly.GetManifestResourceStream("OrdersGenerator.cs");
+        if (s is null) return "// OrdersGenerator.cs is not embedded in this build.";
+        using var rd = new StreamReader(s);
+        return _generatorSource = rd.ReadToEnd();
+    }
+
+    async Task Copy()
+    {
+        try { await JS.InvokeVoidAsync("copyText", Current); _note = "Copied."; }
+        catch { _note = "Copy is not available here; select the text instead."; }
+    }
+}

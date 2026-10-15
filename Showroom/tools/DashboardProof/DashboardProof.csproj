@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Proof for the Dashboard tool. It links the pure files the page itself uses (Services/Dashboard/*.cs), so it checks the page's own
+       SQL and renders the page's own "console program", then compiles and runs that program against the published package.
+       Usage (small, a correctness check and not a benchmark): dotnet run, project tools/DashboardProof, one argument = the row count (20000).  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="..\..\Services\Dashboard\*.cs" LinkBase="Linked" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="EvaluatedApplications.HoloDb" Version="5.1.2" />
+  </ItemGroup>
+
+</Project>

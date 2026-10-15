@@ -1,0 +1,47 @@
+@* The two panels the plane does not answer: the top customers (a GROUP BY on a column that is not a plane dimension) and the
+   largest orders (a top-K). They are answered by the engine's own scans, run after the plane panels have painted, and each
+   tag shows the route HoloDb reported and the ms it took. Tables by nature, so they are their own table alternative. *@
+@using OrdersDemo
+@using Showroom.Services
+
+<section class="panel" aria-labelledby="tc-h">
+    <h3 id="tc-h">Top 10 customers by revenue <PanelRoute R="Customers" /></h3>
+    @if (S.DetailPending) { <p class="hint" role="status">Scanning the table for this slice...</p> }
+    else if (Customers is { Rows.Length: > 0 })
+    {
+        <div class="table-scroll"><table class="data">
+            <caption class="sr-only">Top 10 customers by revenue</caption>
+            <thead><tr><th scope="col">Customer</th><th scope="col" class="num">Orders</th><th scope="col" class="num">Revenue</th></tr></thead>
+            <tbody>
+            @foreach (var r in Customers.Rows)
+            {
+                <tr><th scope="row">#@DashboardSession.ToLong(r[0])</th><td class="num">@DashboardFormat.N(DashboardSession.ToLong(r[1]))</td><td class="num">@DashboardFormat.Money(DashboardSession.ToLong(r[2]))</td></tr>
+            }
+            </tbody></table></div>
+    }
+    else { <p class="hint">No orders in this slice.</p> }
+</section>
+
+<section class="panel" aria-labelledby="lo-h">
+    <h3 id="lo-h">Ten largest orders <PanelRoute R="Largest" /></h3>
+    @if (S.DetailPending) { <p class="hint" role="status">Scanning the table for this slice...</p> }
+    else if (Largest is { Rows.Length: > 0 })
+    {
+        <div class="table-scroll"><table class="data">
+            <caption class="sr-only">Ten largest orders</caption>
+            <thead><tr><th scope="col">Order</th><th scope="col">Month</th><th scope="col">Region</th><th scope="col">Category</th><th scope="col">Status</th><th scope="col" class="num">Amount</th></tr></thead>
+            <tbody>
+            @foreach (var r in Largest.Rows)
+            {
+                <tr><th scope="row">#@DashboardSession.ToLong(r[0])</th><td>@OrdersGenerator.MonthLabel((int)DashboardSession.ToLong(r[1]))</td><td>@r[2]</td><td>@r[3]</td><td>@r[4]</td><td class="num">£@DashboardFormat.N(DashboardSession.ToLong(r[5]))</td></tr>
+            }
+            </tbody></table></div>
+    }
+    else { <p class="hint">No orders in this slice.</p> }
+</section>
+
+@code {
+    [Parameter, EditorRequired] public DashboardSession S { get; set; } = default!;
+    StmtResult? Customers => S.Result("customers");
+    StmtResult? Largest => S.Result("largest");
+}

@@ -1,0 +1,48 @@
+@* The visitor's own timings. Every figure here was measured by this tab a moment ago; none is typed. *@
+@using Showroom.Services
+
+<section class="panel" aria-labelledby="lat-h">
+    <h2 id="lat-h">2. What that cost, measured here</h2>
+    <dl class="facts">
+        <div><dt>Last interaction, plane panels (@Count(S.Summary))</dt><dd>@DashboardFormat.Ms(S.SummaryMs)</dd></div>
+        <div><dt>Last interaction, engine scans (@Count(S.Detail))</dt><dd>@(S.DetailPending ? "running" : DashboardFormat.Ms(S.DetailMs))</dd></div>
+        <div><dt>Your interactions so far</dt><dd>@S.Latency.Count</dd></div>
+        <div><dt>Plane panels p50 / p95</dt><dd>@Pair(S.Latency.Summary)</dd></div>
+        <div><dt>Engine scans p50 / p95</dt><dd>@Pair(S.Latency.Detail)</dd></div>
+    </dl>
+    <p class="hint">Time is HoloDb executing the statements and this page reading the rows back; painting is not counted. Click around, then read p50 and p95.</p>
+    <div class="table-scroll"><table class="data">
+        <caption class="sr-only">Every statement of the last interaction</caption>
+        <thead><tr><th scope="col">Statement</th><th scope="col">Route HoloDb reported</th><th scope="col" class="num">Time</th></tr></thead>
+        <tbody>
+        @foreach (var r in S.AllResults)
+        {
+            <tr><th scope="row">@r.Stmt.Title</th><td>@(r.Error ?? r.Route)</td><td class="num">@DashboardFormat.Ms(r.Ms)</td></tr>
+        }
+        </tbody></table></div>
+
+    <h3>Same questions with the plane switched off</h3>
+    <p class="hint">Runs the plane panels again through the engine's own column scans (<code>PleromaMode.Off</code>), checks the answers match, and times both. @(S.Engine.Rows <= 1_000_000 ? "Median of 3 runs each." : "One run each at this size.")</p>
+    <button type="button" class="btn btn-ghost" @onclick="S.CompareAsync" disabled="@(S.Comparing || S.Building || S.DetailPending)">@(S.Comparing ? "Running..." : "Compare plane and engine")</button>
+    @if (S.Compare is { } c)
+    {
+        <div class="table-scroll"><table class="data">
+            <caption class="sr-only">Plane against engine scan, per statement</caption>
+            <thead><tr><th scope="col">Statement</th><th scope="col" class="num">Plane</th><th scope="col" class="num">Engine scan</th><th scope="col" class="num">Ratio</th></tr></thead>
+            <tbody>
+            @foreach (var r in c.Rows)
+            {
+                <tr><th scope="row">@r.Title</th><td class="num">@DashboardFormat.Ms(r.PlaneMs)</td><td class="num">@DashboardFormat.Ms(r.EngineMs)</td><td class="num">@Ratio(r)</td></tr>
+            }
+            </tbody></table></div>
+        <p class="hint" role="status">@(c.SameAnswers ? "Both routes returned the same answers." : "The routes returned different answers: this is a bug, please report it.")</p>
+    }
+</section>
+
+@code {
+    [Parameter, EditorRequired] public DashboardSession S { get; set; } = default!;
+
+    static int Count(IReadOnlyList<StmtResult> l) => l.Count;
+    static string Pair((double P50, double P95) p) => DashboardFormat.Ms(p.P50) + " / " + DashboardFormat.Ms(p.P95);
+    static string Ratio(CompareRow r) => r.PlaneMs <= 0 ? "-" : (r.EngineMs / r.PlaneMs).ToString(r.EngineMs / r.PlaneMs >= 10 ? "0" : "0.0", System.Globalization.CultureInfo.InvariantCulture) + "x";
+}
