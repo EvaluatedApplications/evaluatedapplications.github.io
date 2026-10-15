@@ -15,7 +15,7 @@
 <meta name="twitter:card" content="summary">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%23f0796a'/%3E%3Cstop offset='.5' stop-color='%237bd86a'/%3E%3Cstop offset='1' stop-color='%23c07dff'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='32' height='32' rx='7' fill='%23050608'/%3E%3Cpath d='M16 5L27 26H5Z' fill='none' stroke='url(%23g)' stroke-width='2' stroke-linejoin='round'/%3E%3C/svg%3E">
 <script>document.documentElement.classList.add('js')</script>
-<link rel="stylesheet" href="/assets/ea.css?v=93cf72d0">
+<link rel="stylesheet" href="/assets/ea.css?v=4eb85a7c">
 <script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Home","item":"https://evaluatedapplications.github.io/"},{"@type":"ListItem","position":2,"name":"Products","item":"https://evaluatedapplications.github.io/products/"},{"@type":"ListItem","position":3,"name":"HoloDb","item":"https://evaluatedapplications.github.io/holodb/"},{"@type":"ListItem","position":4,"name":"Docs","item":"https://evaluatedapplications.github.io/holodb/docs/"}]}</script>
 
 </head>
@@ -52,6 +52,7 @@
   
   
   
+  
   <div class="code"><div class="code-bar"><span>C#</span><button class="copy" type="button" aria-label="Copy C#">copy</button></div><pre><code class="language-csharp">using HoloDb;
 
 var db = new HoloDbService(new HoloDbOptions());           // in memory
@@ -75,6 +76,7 @@ Linus
   
   
   
+  
   <div class="prose-block"><p>One column may be PRIMARY KEY, and it is enforced unique. For money, store integer minor units, cents as an INT: it is exact, and it lets the constant-time integer aggregates serve your revenue totals.</p></div>
   <div class="code"><div class="code-bar"><span>SQL</span><button class="copy" type="button" aria-label="Copy SQL">copy</button></div><pre><code class="language-sql">CREATE TABLE sales (
   id     INT PRIMARY KEY,
@@ -90,6 +92,7 @@ Linus
   
   
   
+  
   <div class="prose-block"><p>Every Execute also takes positional ? placeholders. The arguments are quoted and escaped for you, before the statement is parsed. A null argument, a wrong argument count or an unsupported type throws.</p></div>
   <div class="code"><div class="code-bar"><span>SQL</span><button class="copy" type="button" aria-label="Copy SQL">copy</button></div><pre><code class="language-sql">INSERT INTO sales VALUES (1, &#39;EU&#39;, 42.50)</code></pre></div><div class="code"><div class="code-bar"><span>SQL</span><button class="copy" type="button" aria-label="Copy SQL">copy</button></div><pre><code class="language-sql">INSERT INTO sales (id, region, amount) VALUES (2, &#39;US&#39;, 17.00), (3, &#39;EU&#39;, 61.10)</code></pre></div><div class="code"><div class="code-bar"><span>SQL</span><button class="copy" type="button" aria-label="Copy SQL">copy</button></div><pre><code class="language-sql">UPDATE sales SET amount = 0 WHERE region = &#39;US&#39;</code></pre></div><div class="code"><div class="code-bar"><span>SQL</span><button class="copy" type="button" aria-label="Copy SQL">copy</button></div><pre><code class="language-sql">DELETE FROM sales WHERE amount = 0</code></pre></div>
   
@@ -97,6 +100,7 @@ Linus
 </div></section><section class="sec doc-sec" aria-labelledby="parameters"><div class="wrap">
   <div class="sec-head"><span class="sec-dot cat-holodb" aria-hidden="true"></span><h2 id="parameters">Parameterized queries</h2></div>
   <div class="prose-block"><p>Use ? placeholders instead of building SQL text yourself.</p></div>
+  
   
   
   
@@ -122,6 +126,7 @@ O&#39;Neil</code></pre></div>
   
   
   
+  
   <div class="code"><div class="code-bar"><span>C#</span><button class="copy" type="button" aria-label="Copy C#">copy</button></div><pre><code class="language-csharp">using HoloDb;
 
 var db = new HoloDbService(new HoloDbOptions());
@@ -141,6 +146,7 @@ US: 1 rows, 17</code></pre></div>
 </div></section><section class="sec doc-sec" aria-labelledby="dialect"><div class="wrap">
   <div class="sec-head"><span class="sec-dot cat-holodb" aria-hidden="true"></span><h2 id="dialect">Querying: the dialect</h2></div>
   <div class="prose-block"><p>A SELECT supports aggregates (COUNT, SUM, AVG, MIN, MAX), a full boolean WHERE (AND, OR, NOT, parentheses, the comparisons = != &lt; &gt; &lt;= &gt;=, LIKE, IN, IN (SELECT ...) and BETWEEN ... AND ...), GROUP BY with HAVING, ORDER BY with several keys, LIMIT, DISTINCT and INNER JOIN.</p></div>
+  
   
   
   
@@ -170,9 +176,11 @@ ORDER BY orders.total DESC</code></pre></div>
   
   
   
+  
 </div></section><section class="sec doc-sec" aria-labelledby="ways"><div class="wrap">
   <div class="sec-head"><span class="sec-dot cat-holodb" aria-hidden="true"></span><h2 id="ways">Three ways to ask one store</h2></div>
   <div class="prose-block"><p>Exact lookup by key, similarity by content and constant-time aggregates all read the same rows. The program below shows each, and the usage meter shows the aggregate scanned no rows.</p></div>
+  
   
   
   
@@ -212,6 +220,7 @@ rows scanned by the aggregate: 0</code></pre></div>
   
   
   
+  
   <div class="code"><div class="code-bar"><span>SQL</span><button class="copy" type="button" aria-label="Copy SQL">copy</button></div><pre><code class="language-sql">SELECT id, title
 FROM articles
 NEAREST (title = &#39;holographic database&#39;)
@@ -221,6 +230,7 @@ LIMIT 5</code></pre></div>
 </div></section><section class="sec doc-sec" aria-labelledby="transactions"><div class="wrap">
   <div class="sec-head"><span class="sec-dot cat-holodb" aria-hidden="true"></span><h2 id="transactions">Transactions</h2></div>
   <div class="prose-block"><p>ACID transactions with explicit control: wrap statements in BEGIN and COMMIT, or discard them with ROLLBACK. BEGIN costs the same at any table size, because rows are journaled as they change instead of the table being copied, and ROLLBACK replays the journal. With a WalPath set, a committed transaction is durable.</p></div>
+  
   
   
   
@@ -261,6 +271,7 @@ after rollback: 400, 200</code></pre></div>
   
   
   
+  
   <div class="code"><div class="code-bar"><span>C#</span><button class="copy" type="button" aria-label="Copy C#">copy</button></div><pre><code class="language-csharp">using HoloDb;
 
 var wal = Path.Combine(Path.GetTempPath(), &quot;holodb-docs-&quot; + Guid.NewGuid().ToString(&quot;N&quot;) + &quot;.wal&quot;);
@@ -286,6 +297,7 @@ finally
 </div></section><section class="sec doc-sec" aria-labelledby="paged"><div class="wrap">
   <div class="sec-head"><span class="sec-dot cat-holodb" aria-hidden="true"></span><h2 id="paged">Larger than memory: paged tables</h2></div>
   <div class="prose-block"><p>The default engine keeps everything in RAM. When a table needs to outgrow memory, create it as a paged table. It lives on an 8 KB buffer-pool page store with a redo-only write-ahead log, so cold pages spill to disk, and the constant-time aggregates stay maintained on disk. Once created, a paged table is driven through the same Execute call as an in-memory table.</p><p>The buffer-pool size (bufferFrames, 8,192 frames of 8 KB by default) bounds how much stays resident. The one structure that scales with row count is the primary-key index, which stays in RAM at about 35 bytes per row, measured at 39 and 34 bytes per entry for 1,000,000 and 10,000,000 entries. That index, not the buffer pool, bounds how far a single paged table can grow past memory.</p></div>
+  
   
   
   
@@ -323,6 +335,7 @@ odd: 500 rows, sum 250000
   
   
   
+  
   <div class="code"><div class="code-bar"><span>SQL</span><button class="copy" type="button" aria-label="Copy SQL">copy</button></div><pre><code class="language-sql">CREATE INDEX ON sales (region)</code></pre></div>
   
   <p class="more-link"><a href="/holodb/pleroma/#index-sql">The plane, index SQL and EXPLAIN</a></p>
@@ -334,12 +347,14 @@ odd: 500 rows, sum 250000
   
   
   
+  
   <div class="code"><div class="code-bar"><span>SQL</span><button class="copy" type="button" aria-label="Copy SQL">copy</button></div><pre><code class="language-sql">ALTER TABLE sales ADD COLUMN note TEXT DEFAULT &#39;&#39;</code></pre></div>
   
   
 </div></section><section class="sec doc-sec" aria-labelledby="di"><div class="wrap">
   <div class="sec-head"><span class="sec-dot cat-holodb" aria-hidden="true"></span><h2 id="di">Dependency injection and EvalApp</h2></div>
   <div class="prose-block"><p>Register HoloDb in a .NET host and inject HoloDbService wherever you need it. HoloDb also runs inside an EvalApp harness: WithHoloDb attaches a service to a pipeline, so heavy queries execute as compiled, resource-gated, self-tuning pipeline steps and any step can reach the service.</p></div>
+  
   
   
   
@@ -371,9 +386,11 @@ US: 5</code></pre></div>
   
   
   
+  
 </div></section><section class="sec doc-sec" aria-labelledby="browser-and-network"><div class="wrap">
   <div class="sec-head"><span class="sec-dot cat-holodb" aria-hidden="true"></span><h2 id="browser-and-network">In the browser, and over the network</h2></div>
   <div class="prose-block"><p>HoloDb is plain managed .NET with no native dependencies, so it compiles to WebAssembly and runs client-side with no server and nothing leaving the device. The Analyst tool is exactly that: a real HoloDb in your browser tab, profiling and querying whatever you paste in.</p><p>The same engine runs as a server, and a typed client talks to it over TLS with the same surface as the in-process engine.</p></div>
+  
   
   
   

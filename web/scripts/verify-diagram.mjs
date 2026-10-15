@@ -1,7 +1,9 @@
 #!/usr/bin/env node
 // Browser checks for the Tracer diagram: keyboard operation, reduced motion, no console errors, no overflow.
 //   node web/scripts/verify-diagram.mjs
-import { OUT } from './lib/data.mjs';
+import fs from 'node:fs';
+import path from 'node:path';
+import { OUT, DATA } from './lib/data.mjs';
 import { serve, launch } from './lib/cdp.mjs';
 
 const { server, port } = await serve(OUT);
@@ -103,34 +105,83 @@ try {
   ok('home phone 390: no horizontal overflow', hw.sw <= hw.cw, JSON.stringify(hw));
   ok('home phone 390: chips scroll inside their row and are at least 24px tall', await b.evaluate("[...document.querySelectorAll('.stack-chips .chip')].every(e=>e.getBoundingClientRect().height>=24)"));
 
-  // ================= phasor: the map, the replay, the capacity demo =================
+  // ================= phasor overview: the superposition scene and the coverage meter =================
   const ph = `http://127.0.0.1:${port}/phasor/`, pl = `http://127.0.0.1:${port}/phasor/pleroma/`;
+  const sceneD = JSON.parse(fs.readFileSync(path.join(DATA, 'diagrams', 'superposition-scene.json'), 'utf8'));
+  const covD = JSON.parse(fs.readFileSync(path.join(DATA, 'diagrams', 'coverage-meter.json'), 'utf8'));
+  const mapD = JSON.parse(fs.readFileSync(path.join(DATA, 'diagrams', 'pleroma-map.json'), 'utf8'));
+  const SC = "[data-diagram=superposition-scene]", CM = "[data-diagram=coverage-meter]";
+  const PREADY = `document.querySelector('${SC}').dataset.ready==='true' && document.querySelector('${CM}').dataset.ready==='true'`;
+  await b.goto(ph, { width: 1280, height: 900, reducedMotion: true, wait: PREADY });
+  ok('phasor: scene and meter mount without console errors', b.errors.length === 0, JSON.stringify(b.errors));
+  ok('phasor: reduced motion shows the final state and does not autoplay', await b.evaluate(`document.querySelector('${SC}').dataset.view==='after'`));
+  await new Promise((r) => setTimeout(r, 1200));
+  ok('phasor: the scene is still on its final state after a wait under reduced motion', await b.evaluate(`document.querySelector('${SC}').dataset.view==='after'`));
+  ok('phasor: the final total is the recorded total', await b.evaluate(`document.querySelector('${SC} [data-ctl=readout]').textContent.includes('to ${sceneD.result.totalCount} ')`));
+  for (const [tab, re] of [['before', 'add to ' + sceneD.store.totalCount], ['kernel', 'one kernel'], ['cost', String(sceneD.cost.applyMs[0])]]) {
+    await b.evaluate(`document.querySelector('${SC} [data-mode=${tab}]').click()`);
+    ok(`phasor: tab ${tab} selects and the readout follows`, await b.evaluate(`document.querySelector('${SC}').dataset.view==='${tab}' && document.querySelector('${SC} [data-mode=${tab}]').getAttribute('aria-selected')==='true' && document.querySelector('${SC} [data-ctl=readout]').textContent.includes(${JSON.stringify(re)})`));
+  }
+  ok('phasor: the cost view states its conditions on the chart', await b.evaluate(`document.querySelector('${SC} svg').textContent.includes('GF(13,879)') && document.querySelector('${SC} svg').textContent.includes('warm-up')`));
+  await b.evaluate(`document.querySelector('${SC} [data-mode=after]').focus()`);
+  await b.key('ArrowLeft', 'ArrowLeft', 37);
+  ok('phasor: arrow keys move between the tabs', await b.evaluate(`document.activeElement.dataset.mode==='kernel'`));
+  await b.evaluate(`document.querySelector('${SC} [data-ctl=replay]').click()`);
+  ok('phasor: Replay under reduced motion lands on the final state', await b.evaluate(`document.querySelector('${SC}').dataset.view==='after'`));
+  // normal motion: Replay runs the sweep and ends on the final state
+  await b.goto(ph, { width: 1280, height: 900, wait: PREADY });
+  await b.evaluate(`document.querySelector('${SC} [data-ctl=replay]').click()`);
+  await new Promise((r) => setTimeout(r, 600));
+  ok('phasor: Replay shows the sweep part-way', await b.evaluate(`document.querySelector('${SC}').dataset.view==='sweep'`));
+  await new Promise((r) => setTimeout(r, 3600));
+  ok('phasor: Replay ends on the final state', await b.evaluate(`document.querySelector('${SC}').dataset.view==='after'`));
+  // the coverage meter
+  const cs = covD.summary;
+  ok('phasor: the meter headline is the record\'s text', await b.evaluate(`document.querySelector('${CM} .cm-head').textContent.trim()===${JSON.stringify(covD.headline.text)}`));
+  ok('phasor: one square per operator', await b.evaluate(`document.querySelectorAll('${CM} .cm-sq').length===${cs.operatorCount}`));
+  ok('phasor: kernel squares match the recorded count', await b.evaluate(`document.querySelectorAll('${CM} .cm-sq.cm-kernel').length===${cs.kernelCount}`));
+  ok('phasor: the reads fact sits apart from the score', await b.evaluate(`document.querySelector('${CM} .cm-reads').textContent.includes('${cs.readCount} reads') && document.querySelectorAll('${CM} .cm-sq').length===${cs.operatorCount}`));
+  await b.evaluate(`document.querySelector('${CM} .cm-chip[data-class=pass-per-term]').click()`);
+  ok('phasor: choosing a class lists its operations with their evidence', await b.evaluate(`document.querySelectorAll('${CM} .cm-ops li').length===${cs.classCounts['pass-per-term']} && document.querySelector('${CM} .cm-chip[data-class=pass-per-term]').getAttribute('aria-pressed')==='true'`));
+  await b.evaluate(`document.querySelector('${CM} .cm-sq.cm-write').dispatchEvent(new MouseEvent('click',{bubbles:true}))`);
+  ok('phasor: clicking a square chooses its class', await b.evaluate(`document.querySelectorAll('${CM} .cm-ops li').length===${cs.classCounts.write}`));
+  ok('phasor: the brick table has one row per brick', await b.evaluate(`document.querySelectorAll('.bricks tbody tr').length===${covD.construction.length}`));
+  ok('phasor: the numbers disclosure is closed above the fold', await b.evaluate(`!document.querySelector('.numbers-more').open`));
+  ok('phasor: the hero promise is the first heading and the demo is next', await b.evaluate(`document.querySelector('h1').textContent.startsWith('Do a thousand things') && document.querySelector('main section#demo').getBoundingClientRect().top < 900`));
+  ok('phasor: no console errors after use', b.errors.length === 0, JSON.stringify(b.errors));
+  await b.goto(ph, { width: 390, height: 844, mobile: true, wait: PREADY });
+  const pw = await b.evaluate('({sw:document.documentElement.scrollWidth,cw:document.documentElement.clientWidth})');
+  ok('phasor phone 390: no horizontal overflow', pw.sw <= pw.cw, JSON.stringify(pw));
+  ok('phasor phone 390: the scene uses the narrow layout', await b.evaluate(`document.querySelector('${SC} svg').viewBox.baseVal.width===360`));
+  await b.evaluate(`document.querySelector('${SC} [data-mode=cost]').click()`);
+  const cr = await b.evaluate(`(()=>{const s=document.querySelector('${SC} svg').getBoundingClientRect();return [...document.querySelectorAll('${SC} svg text')].filter(t=>{const r=t.getBoundingClientRect();return r.right>s.right+1||r.left<s.left-1}).map(t=>t.textContent)})()`);
+  ok('phasor phone 390: no chart text is cut off in the cost view', cr.length === 0, JSON.stringify(cr));
+  ok('phasor phone 390: tabs are at least 24px tall', await b.evaluate(`[...document.querySelectorAll('${SC} [role=tab]')].every(e=>e.getBoundingClientRect().height>=24)`));
+
+  // ================= the Pleroma page: the pyramid, the replay, the capacity demo =================
   const MREADY = "document.querySelector('[data-diagram=pleroma-map]').dataset.ready==='true'";
-  await b.goto(ph, { width: 1280, height: 900, wait: MREADY });
-  ok('phasor: map mounts without console errors', b.errors.length === 0, JSON.stringify(b.errors));
-  await b.evaluate("document.querySelector('.dia-stage').focus()");
+  await b.goto(pl, { width: 1280, height: 900, wait: MREADY });
+  ok('pleroma: map mounts without console errors', b.errors.length === 0, JSON.stringify(b.errors));
+  await b.evaluate("document.querySelector('[data-diagram=pleroma-map] .dia-stage').focus()");
   await b.key('Home', 'Home', 36);
-  ok('phasor: Home selects the first cell and fills the panel', await b.evaluate("/Signed insertion and deletion/.test(document.querySelector('[data-ctl=panel]').textContent)"));
+  ok('pleroma: Home selects the first cell and fills the panel', await b.evaluate("/Signed insertion and deletion/.test(document.querySelector('[data-ctl=panel]').textContent)"));
   await b.key('ArrowUp', 'ArrowUp', 38);
-  ok('phasor: Up moves one rung up on the same face', await b.evaluate("/Binary choice|Rung 2/.test(document.querySelector('[data-ctl=panel]').textContent) || /Key on the cycle/.test(document.querySelector('[data-ctl=panel]').textContent)"));
+  ok('pleroma: Up moves one rung up on the same face', await b.evaluate("/Binary choice|Rung 2/.test(document.querySelector('[data-ctl=panel]').textContent) || /Key on the cycle/.test(document.querySelector('[data-ctl=panel]').textContent)"));
   await b.key('ArrowRight', 'ArrowRight', 39);
-  ok('phasor: Right moves to the next face', await b.evaluate("/Monad|One-hot/.test(document.querySelector('[data-ctl=panel]').textContent)"));
+  ok('pleroma: Right moves to the next face', await b.evaluate("/Monad|One-hot/.test(document.querySelector('[data-ctl=panel]').textContent)"));
   await b.key('End', 'End', 35);
-  ok('phasor: End selects the lid, with its read-time status', await b.evaluate("/READ-TIME/.test(document.querySelector('[data-ctl=panel]').textContent)"));
+  ok('pleroma: End selects the lid, with its read-time kind', await b.evaluate("/Read-time/.test(document.querySelector('[data-ctl=panel]').textContent)"));
   await b.key('Escape', 'Escape', 27);
-  ok('phasor: Escape clears the selection', await b.evaluate("/Pick a cell/.test(document.querySelector('[data-ctl=panel]').textContent)"));
+  ok('pleroma: Escape clears the selection', await b.evaluate("/Pick a cell/.test(document.querySelector('[data-ctl=panel]').textContent)"));
   await b.evaluate("document.querySelector('[data-color=status]').click()");
-  ok('phasor: colour by status toggles', await b.evaluate("document.querySelector('[data-color=status]').getAttribute('aria-pressed')==='true'"));
-  ok('phasor: all cells are in the table alternative', await b.evaluate("document.querySelectorAll('.dia-data tbody tr').length===25"));
-  await b.goto(ph, { width: 1280, height: 900, reducedMotion: true, wait: MREADY });
+  ok('pleroma: colour by kind toggles', await b.evaluate("document.querySelector('[data-color=status]').getAttribute('aria-pressed')==='true'"));
+  ok('pleroma: every cell is in the table alternative', await b.evaluate(`document.querySelectorAll('[data-diagram=pleroma-map] .dia-data tbody tr').length===${mapD.totalCells + 1}`));
+  ok('pleroma: the page shows no history or ledger words', await b.evaluate("!/PROOF STATUS|NOT BUILT|COVERED|\\bprogress\\b/i.test(document.querySelector('main').innerText)"));
+  await b.goto(pl, { width: 1280, height: 900, reducedMotion: true, wait: MREADY });
   const m1 = await b.evaluate("document.querySelector('.dia-canvas').toDataURL().slice(4000,4300)");
   await new Promise((r) => setTimeout(r, 1200));
   const m2 = await b.evaluate("document.querySelector('.dia-canvas').toDataURL().slice(4000,4300)");
-  ok('phasor: reduced motion keeps the pyramid still', m1 === m2);
-  await b.goto(ph, { width: 390, height: 844, mobile: true, wait: MREADY });
-  const pw = await b.evaluate('({sw:document.documentElement.scrollWidth,cw:document.documentElement.clientWidth})');
-  ok('phasor phone 390: no horizontal overflow', pw.sw <= pw.cw, JSON.stringify(pw));
-
+  ok('pleroma: reduced motion keeps the pyramid still', m1 === m2);
   const SREADY = "document.querySelector('[data-diagram=pleroma-superposition]').dataset.ready==='true'";
   await b.goto(pl, { width: 1280, height: 900, reducedMotion: true, wait: SREADY });
   ok('pleroma: reduced motion shows the final state and does not autoplay', await b.evaluate("document.querySelector('[data-diagram=pleroma-superposition]').dataset.state==='after'"));

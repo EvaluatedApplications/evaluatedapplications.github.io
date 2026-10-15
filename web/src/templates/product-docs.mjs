@@ -1,9 +1,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { html, raw } from '../../scripts/lib/html.mjs';
-import { DATA } from '../../scripts/lib/data.mjs';
+import { DATA, readJson } from '../../scripts/lib/data.mjs';
 import { pageHead, secHead, crumbsLd } from '../layout.mjs';
-import { codeBlock, productSubnav, matrixTable } from '../partials.mjs';
+import { codeBlock, productSubnav, matrixTable, ladderTable } from '../partials.mjs';
 import { diagramFigure } from '../diagram.mjs';
 
 const read = (rel) => fs.readFileSync(path.join(DATA, rel), 'utf8').replace(/\r\n/g, '\n').trimEnd();
@@ -34,9 +34,10 @@ export default function productSubpage(ctx, p, sp) {
   ${secHead({ title: s.title, cat: p.cat, id: s.id })}
   ${(s.paragraphs || []).length ? html`<div class="prose-block">${s.paragraphs.map((t) => html`<p>${fill(t)}</p>`)}</div>` : ''}
   ${s.list ? html`<dl class="term-list">${s.list.map((x) => html`<dt>${x.term}</dt><dd>${x.text}</dd>`)}</dl>` : ''}
-  ${s.grid ? gridTable(ctx.diagrams[s.grid]) : ''}
   ${s.table ? matrixTable(s.table) : ''}
+  ${s.ladder ? ladderTable(readJson(path.join(DATA, 'generated', 'phasor-ladder.json')).rungs) : ''}
   ${fig}
+  ${s.grid ? gridTable(ctx.diagrams[s.grid]) : ''}
   ${(s.paragraphsAfter || []).length ? html`<div class="prose-block">${s.paragraphsAfter.map((t) => html`<p>${fill(t)}</p>`)}</div>` : ''}
   ${(s.snippets || []).map((sn) => (sn.text ? codeBlock({ code: sn.text.trim(), lang: sn.lang || 'sql', label: sn.label || 'SQL' }) : html`${codeBlock({ code: read(sn.source), label: sn.label || 'C#' })}${sn.output ? codeBlock({ code: read(sn.output), label: 'Output', out: true, lang: 'text' }) : ''}`))}
   ${s.listAfter ? html`<dl class="term-list">${s.listAfter.map((x) => html`<dt>${x.term}</dt><dd>${x.text}</dd>`)}</dl>` : ''}

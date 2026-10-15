@@ -15,7 +15,7 @@
 <meta name="twitter:card" content="summary">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%23f0796a'/%3E%3Cstop offset='.5' stop-color='%237bd86a'/%3E%3Cstop offset='1' stop-color='%23c07dff'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='32' height='32' rx='7' fill='%23050608'/%3E%3Cpath d='M16 5L27 26H5Z' fill='none' stroke='url(%23g)' stroke-width='2' stroke-linejoin='round'/%3E%3C/svg%3E">
 <script>document.documentElement.classList.add('js')</script>
-<link rel="stylesheet" href="/assets/ea.css?v=93cf72d0">
+<link rel="stylesheet" href="/assets/ea.css?v=4eb85a7c">
 <script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Home","item":"https://evaluatedapplications.github.io/"},{"@type":"ListItem","position":2,"name":"Products","item":"https://evaluatedapplications.github.io/products/"},{"@type":"ListItem","position":3,"name":"EvalApp","item":"https://evaluatedapplications.github.io/evalapp/"},{"@type":"ListItem","position":4,"name":"Docs","item":"https://evaluatedapplications.github.io/evalapp/docs/"}]}</script>
 
 </head>
@@ -55,9 +55,11 @@
   
   
   
+  
 </div></section><section class="sec doc-sec" aria-labelledby="import"><div class="wrap">
   <div class="sec-head"><span class="sec-dot cat-foundation" aria-hidden="true"></span><h2 id="import">One namespace</h2></div>
   <div class="prose-block"><p>Everything you need lives in the root EvalApp namespace: Eval, IAppBuilder, ResourceKind, Tunable, PipelineResult&lt;T&gt;, ICompiledPipeline&lt;T&gt;, the step base classes and licensing. The engine underneath lives in a separate EvalAppEngine namespace that is not part of the supported public surface. If something you need is not reachable from EvalApp, that is a gap to report, not a reason to reach into the engine.</p></div>
+  
   
   
   
@@ -77,10 +79,12 @@
   
   
   
+  
 </div></section><section class="sec doc-sec" aria-labelledby="design"><div class="wrap">
   <div class="sec-head"><span class="sec-dot cat-foundation" aria-hidden="true"></span><h2 id="design">Design before you build</h2></div>
   <div class="prose-block"><p>The biggest lever on whether a pipeline reads cleanly is answering these questions before touching the builder. Each answer constrains the next.</p></div>
   <dl class="term-list"><dt>1. What is the unit of work?</dt><dd>One sentence: one order, one invoice, one request, one batch.</dd><dt>2. What does it start with, carry and produce?</dt><dd>List every piece of information that exists at any point and encode it as a record. A non-nullable field is a required input, a nullable one is an output that appears once its step runs, and a bool is control (loop, branch, skip). If you cannot describe the whole lifecycle by reading the fields, the design is not finished.</dd><dt>3. What resource does each operation touch?</dt><dd>Classify each operation as Network, DiskIO, Cpu, Database, a custom ResourceKind.Of(&quot;name&quot;), or none. This decides which operations need a gate.</dd><dt>4. What runs per item in parallel?</dt><dd>Independent items in a collection, which must not read each other&#39;s unfinished state, are ForEach boundaries.</dd><dt>5. What conditional branches exist?</dt><dd>For every If and Else, the condition, what each side does, and whether both write the same fields.</dd><dt>6. What must be rolled back on failure?</dt><dd>Walk the steps asking what has happened outside the process by the time each completes: money moved, mail sent, a record written. Only external effects need compensation.</dd><dt>7. Wire it together</dt><dd>Only now write the fluent declaration. If it does not read like a plain description of the process, the data model needs more work, not more code.</dd></dl>
+  
   
   
   
@@ -91,6 +95,7 @@
 </div></section><section class="sec doc-sec" aria-labelledby="steps"><div class="wrap">
   <div class="sec-head"><span class="sec-dot cat-foundation" aria-hidden="true"></span><h2 id="steps">Steps: pure, async and side-effecting</h2></div>
   <div class="prose-block"><p>PureStep&lt;T&gt; is a synchronous transform with no side effects, and AsyncStep&lt;T&gt; is the same for work that waits on a network, a disk or a database. A step whose job is a side effect (a database write, a published event, an email) derives from SideEffectStep&lt;T&gt; and declares the ResourceKind it touches.</p><p>A SideEffectStep&lt;T&gt; cannot be added with the plain AddStep(name, instance) overload, which fails to compile. Add it with AddStep&lt;TStep&gt;(), which gates it on its declared resource, or with AddStep&lt;TStep&gt;(name, factory) when it needs a constructor-injected dependency. The resource has to be registered on the app first, with WithResource. If you would rather gate explicitly, write the side effect as an async lambda inside a Gate and the gate supplies the resource. Either way there is no path to an ungated side effect.</p></div>
+  
   
   
   
@@ -165,6 +170,7 @@ public sealed class PublishEventStep(IOrderEventBus bus) : CrossDomainStep&lt;Or
   
   
   
+  
   <div class="code"><div class="code-bar"><span>Global and domain context</span><button class="copy" type="button" aria-label="Copy Global and domain context">copy</button></div><pre><code class="language-csharp">using EvalApp;
 
 Eval.App(&quot;Context&quot;)
@@ -209,6 +215,7 @@ public sealed class NotifyStep : ContextSideEffectStep&lt;AppGlobal, OrderDomain
   
   
   
+  
   <div class="code"><div class="code-bar"><span>Gates on a built-in kind and on a pool of your own</span><button class="copy" type="button" aria-label="Copy Gates on a built-in kind and on a pool of your own">copy</button></div><pre><code class="language-csharp">using EvalApp;
 
 Eval.App(&quot;Gate&quot;)
@@ -234,6 +241,7 @@ public sealed record OrderData(string CustomerName, decimal Total, string Status
   <div class="sec-head"><span class="sec-dot cat-foundation" aria-hidden="true"></span><h2 id="foreach">Parallel collections: ForEach</h2></div>
   <div class="prose-block"><p>ForEach runs an independent pipeline over each item of a collection and merges the results back in source order. select extracts the collection, merge combines the results into the parent, and configure builds the per-item pipeline. Parallelism can be a plain number, a function re-read on each run, or a Tunable that the tuner can move.</p><p>A ForEach with fewer items than its minimum for parallel work runs inline on the calling thread, whatever the bound says, and the same is true when adaptive dispatch has learned that the items are cheap. The bound caps a fan-out; it never forces one. maxParallelism of 1 is always strictly sequential. Report() shows which path each ForEach took.</p></div>
   <dl class="term-list"><dt>CollectAndThrow</dt><dd>The default. Every item runs and, if any failed, the result is a Failure carrying every exception.</dd><dt>FailFast</dt><dd>Remaining items are cancelled as soon as one fails.</dd><dt>ContinueOnError</dt><dd>Failed items are dropped and the result is a Success with the survivors.</dd></dl>
+  
   
   
   
@@ -268,6 +276,7 @@ public sealed record LineItemsData(List&lt;LineItem&gt; Items);</code></pre></di
 </div></section><section class="sec doc-sec" aria-labelledby="branches"><div class="wrap">
   <div class="sec-head"><span class="sec-dot cat-foundation" aria-hidden="true"></span><h2 id="branches">Conditional and parallel branches</h2></div>
   <div class="prose-block"><p>If takes a condition and builder actions for the then and else sides. Without an else and with a false condition the step reports Skipped. Classify is a first-match-wins cascade that names the pattern instead of repeating near-identical If blocks.</p><p>AddParallelGroup runs a fixed set of branches at once, as opposed to ForEach, which runs one pipeline per item. Branches that write different fields merge cleanly by default. When two branches might write the same field and that should be a conflict, pass an IMergeStrategy&lt;T&gt;.</p></div>
+  
   
   
   
@@ -331,6 +340,7 @@ VIP: total 160.0, tax 12.800, shipping 9.99, handling 1.5</code></pre></div>
   
   
   
+  
   <div class="code"><div class="code-bar"><span>A saga that compensates in reverse order</span><button class="copy" type="button" aria-label="Copy A saga that compensates in reverse order">copy</button></div><pre><code class="language-csharp">using EvalApp;
 
 Eval.App(&quot;Saga&quot;)
@@ -387,9 +397,11 @@ failed: True, status after compensation New</code></pre></div>
   
   
   
+  
 </div></section><section class="sec doc-sec" aria-labelledby="di"><div class="wrap">
   <div class="sec-head"><span class="sec-dot cat-foundation" aria-hidden="true"></span><h2 id="di">Dependency injection</h2></div>
   <div class="prose-block"><p>AddStep&lt;TStep&gt;(name) and AddBranch&lt;TStep&gt;(name) resolve the step through an IStepFactory. The default creates it with a public parameterless constructor. ServiceProviderStepFactory asks your container first and falls back to that for anything not registered.</p><p>The compiler enforces the new() constraint whichever factory you register, so a type needs a literal parameterless constructor even if the container always supplies the real one. The factory path is for plain IStep&lt;T&gt; implementers. A side-effect step that needs a constructor-injected dependency uses AddStep&lt;TStep&gt;(name, factory) instead.</p></div>
+  
   
   
   
@@ -443,9 +455,11 @@ public sealed class SimpleServiceProvider : IServiceProvider
   
   
   
+  
 </div></section><section class="sec doc-sec" aria-labelledby="exclusive"><div class="wrap">
   <div class="sec-head"><span class="sec-dot cat-foundation" aria-hidden="true"></span><h2 id="exclusive">Exclusive resources</h2></div>
   <div class="prose-block"><p>Some things are not thread-safe: a GPU context, a native handle, a file with one writer. Declare an ExclusiveResource once and guard a scope, or named parallel branches, with Exclusive. A second concurrent entry fails loudly with ExclusiveViolationException, or queues if you choose that policy. The guard is re-entrant for recursion, and forks inside a held scope exclude each other instead of silently inheriting it.</p></div>
+  
   
   
   
@@ -465,9 +479,11 @@ public sealed class SimpleServiceProvider : IServiceProvider
   
   
   
+  
 </div></section><section class="sec doc-sec" aria-labelledby="licensing"><div class="wrap">
   <div class="sec-head"><span class="sec-dot cat-foundation" aria-hidden="true"></span><h2 id="licensing">Licensing</h2></div>
   <div class="prose-block"><p>No feature in EvalApp is gated behind a tier or a licence key. Every pipeline shape on this page runs at its full declared concurrency whether or not you pass a key, the tuner attaches whenever you call WithTuning, and Build(null) behaves exactly like Build(key).</p><p>The licence check exists so that every Evaluated Applications package validates a key the same way. LicenseValidator.ForEvalApp().Check(key) returns Unlicensed or Licensed and never throws, and CheckPeriodic(key, interval) is cheap enough for a hot loop. Verification is entirely offline, with ECDsa P-256, and makes no network call.</p><p>EvalApp is proprietary software under a commercial licence. Evaluation and non-commercial development are licensed without a key; commercial, production or revenue-generating use needs a separate licence.</p></div>
+  
   
   
   
@@ -479,6 +495,7 @@ public sealed class SimpleServiceProvider : IServiceProvider
 </div></section><section class="sec doc-sec" aria-labelledby="tuning"><div class="wrap">
   <div class="sec-head"><span class="sec-dot cat-foundation" aria-hidden="true"></span><h2 id="tuning">Tuning and inspecting</h2></div>
   <div class="prose-block"><p>Two opt-in modes. WithTuning is reactive: it rediscovers the operating point on each start, which suits a long-running, stable, single-instance service. WithBayesianTuning is predictive: a performance model persists across restarts, which suits frequent restarts and many instances. Both take an optional store path and share one phase machine, so switching between them does not reset what was learned.</p><p>The defaults come from a simulation harness and are what WithTuning uses out of the box. To override them, load your own JSON file with WithTunerSettings(path); the file is read when you call it, and a missing or invalid path throws at that point.</p><p>ICompiledPipeline&lt;T&gt; is opaque on purpose: a name and RunAsync. The read-only window on a plan is pipeline.Report(), which lists the plan&#39;s nodes and, for each ForEach, how many calls ran inline and how many fanned out. ExecutionHost.Yields counts the yields a process has taken.</p></div>
+  
   
   
   
@@ -526,9 +543,11 @@ public sealed record Batch(List&lt;int&gt; Items);</code></pre></div><div class=
   
   
   
+  
 </div></section><section class="sec doc-sec" aria-labelledby="architecture"><div class="wrap">
   <div class="sec-head"><span class="sec-dot cat-foundation" aria-hidden="true"></span><h2 id="architecture">Extension seams</h2></div>
   <div class="prose-block"><p>Beyond the fluent API and the step base classes, four extension points are public: GlobalContext and DomainContext (subclass them for WithContext and DefineDomain), IMergeStrategy&lt;T&gt; (custom conflict handling for AddParallelGroup) and IPressureResource (a soft, non-blocking budget signal for Pressure and WithPressure). Everything else is internal to the engine.</p></div>
+  
   
   
   

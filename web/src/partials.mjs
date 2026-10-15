@@ -116,3 +116,20 @@ export function matrixTable(tb) {
 <thead><tr>${tb.columns.map((h) => html`<th scope="col">${h}</th>`)}</tr></thead>
 <tbody>${tb.rows.map((r) => html`<tr><th scope="row">${r[0]}</th>${r.slice(1).map((c) => html`<td>${c}</td>`)}</tr>`)}</tbody></table></div>`;
 }
+
+// Text with `code` spans (backticks), escaped first.
+export const codeSpans = (s) => raw(esc(s).replace(/`([^`]+)`/g, '<code>$1</code>'));
+
+// The eight rungs as a ladder: what one pass can do, the thing superposed, the operator and what it was checked against.
+export function ladderTable(rows) {
+  return html`<div class="tbl-wrap"><table class="tbl ladder"><caption>Each rung adds one thing a single pass can do</caption>
+<thead><tr><th scope="col">Rung</th><th scope="col">What one pass can do</th><th scope="col">Superposed thing</th><th scope="col">Operator</th><th scope="col">Checked by</th></tr></thead>
+<tbody>${rows.map((r) => html`<tr><th scope="row">${r.rung}</th><td>${codeSpans(r.can)}</td><td>${codeSpans(r.superposed)}</td><td>${codeSpans(r.operator)}</td><td>${codeSpans(r.checked)}</td></tr>`)}</tbody></table></div>`;
+}
+
+// A table of credited bricks: what each offers alone, the Pleroma operation that carries it, and the check.
+export function brickTable(rows) {
+  return html`<div class="tbl-wrap"><table class="tbl bricks"><caption>Established ideas, and the operation of the Pleroma that carries each</caption>
+<thead><tr><th scope="col">Brick (credited)</th><th scope="col">Alone it offers</th><th scope="col">In the Pleroma</th><th scope="col">Proof</th></tr></thead>
+<tbody>${rows.map((r) => html`<tr><th scope="row">${r.brick}</th><td>${codeSpans(r.alone)}</td><td>${codeSpans(r.pleroma)}</td><td>${codeSpans(r.proof)}</td></tr>`)}</tbody></table></div>`;
+}

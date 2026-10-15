@@ -20,7 +20,7 @@ Layout: `data/` (products, tools, evidence, research, pages, redirects, generate
 
 Versions are read from `MonoRepo/<Pkg>/<Pkg>.csproj` when it exists and written to `data/generated/versions.json`. CI never sees MonoRepo, so commit that file with the output, or build with `--versions=nuget`.
 
-Regenerate the Pleroma replay and capacity data: `dotnet run -c Release --project web/generators/pleroma-demos -- web/data/diagrams/pleroma-superposition.json web/data/diagrams/pleroma-capacity.json`. The map data is migrated from the Phasor owner's `pleroma-map.json` by `scripts/migrate/extract-pleroma-map.mjs`. The home scene data is written by the build (`data/generated/stack-map.json`).
+Regenerate the Pleroma replay and capacity data: `dotnet run -c Release --project web/generators/pleroma-demos -- web/data/diagrams/pleroma-superposition.json web/data/diagrams/pleroma-capacity.json`. The Phasor pyramid, superposition scene, coverage meter and ladder table are copied from the Phasor owner's `pleroma-map.json`, `superposition-coverage.json` and `site.md` by `scripts/migrate/extract-superposition.mjs` (nothing is typed). The sizzle-first pattern for product pages, with the Phasor copy, is in `data/copy/phasor-sizzle.md`. The home scene data is written by the build (`data/generated/stack-map.json`).
 
 Regenerate the HoloDb diagram data: `dotnet run -c Release --project web/generators/holodb-demo -- web/data/diagrams/holodb-store.json`. The HoloDb evidence record is migrated from the owner doc by `scripts/migrate/extract-holodb-evidence.mjs`. `verify-labels.mjs` checks label collisions.
 

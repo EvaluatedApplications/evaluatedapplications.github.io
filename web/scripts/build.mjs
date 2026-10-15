@@ -11,6 +11,7 @@ import { loadAll, WEB, ROOT, OUT as DEFAULT_OUT } from './lib/data.mjs';
 import { document_ } from '../src/layout.mjs';
 import home from '../src/templates/home.mjs';
 import product from '../src/templates/product.mjs';
+import phasorPage from '../src/templates/phasor.mjs';
 import productDocs from '../src/templates/product-docs.mjs';
 import productsIndex from '../src/templates/products-index.mjs';
 import toolsIndex from '../src/templates/tools-index.mjs';
@@ -61,8 +62,9 @@ async function main() {
   // numbers quoted in prose that come from diagram data
   ctx.limitFacts = {};
   for (const p of ctx.products) {
-    const d = p.doc?.diagram;
-    if (d) { const mod = diagramModule(d.id); ctx.limitFacts[p.id] = mod.limitFacts ? mod.limitFacts(mod.metrics(ctx.diagrams[d.id])) : {}; }
+    const ids = [p.doc?.diagram?.id, ...(p.doc?.factDiagrams || [])].filter(Boolean);
+    ctx.limitFacts[p.id] = {};
+    for (const id of ids) { const mod = diagramModule(id); if (mod.limitFacts) Object.assign(ctx.limitFacts[p.id], mod.limitFacts(mod.metrics(ctx.diagrams[id]))); }
   }
 
   // ---- clean output ----
@@ -93,7 +95,7 @@ async function main() {
   pages.push(home(ctx));
   pages.push(productsIndex(ctx));
   for (const p of ctx.products) if (p.status === 'migrated') {
-    pages.push(product(ctx, p));
+    pages.push((p.doc?.template === 'phasor' ? phasorPage : product)(ctx, p));
     for (const sp of p.subpages) pages.push(productDocs(ctx, p, sp));
   }
   pages.push(toolsIndex(ctx));

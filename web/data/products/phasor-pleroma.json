@@ -1,17 +1,16 @@
 {
   "title": "The Pleroma",
   "label": "Pleroma",
-  "description": "The Pleroma is a fixed-size array of exact integers that stores a multiset of items and answers many kinds of query exactly, refusing past its key capacity.",
-  "h1": "The Pleroma: one exact hologram, many views",
-  "intro": "A fixed-size array of exact integers that stores a multiset of items, and answers counts by key, by flag word, by Hamming distance and by time from slices of that one array.",
-  "maturity": "Experimental API",
+  "description": "The Pleroma is one array of exact integers that holds a multiset of items, answers counts by key, flag, order and time, and applies many operators in one pass.",
+  "h1": "The Pleroma: one array, every question",
+  "intro": "One array of exact integers holds your items. Ask it for counts by key, by flag word, by Hamming distance, by arrangement and by time. Apply a thousand operators in one pass.",
   "sections": [
     {
       "id": "what-it-is",
       "title": "What it is",
       "paragraphs": [
-        "The Pleroma is a fixed-size array of exact integers (finite-field arithmetic) that stores a multiset of items. Each item is a key, optionally with flag bits, an ordering and a timestamp. One array answers many queries: counts by key, by flag word, by Hamming distance, and joint flag-and-time counts. Key queries refuse past capacity. The others never return a wrong count within the field's range.",
-        "The store holds a harmonic transform on the product of these groups: the key cycle, the flag cube, the symmetric group and the time cycle. A hologram is the transform itself, and each component of the transform is called a harmonic. The store keeps only the harmonics its views need, and each view reads its own slice of the array and nothing else."
+        "The Pleroma is a fixed-size array of exact integers (finite-field arithmetic) that holds a multiset of items. Each item is a key, optionally with a flag word, an arrangement and a tick. One array answers many questions: counts by key, by flag word, by Hamming distance, by arrangement, by tick, and joint counts over any chosen faces.",
+        "The store holds a harmonic transform on the product of the key cycle, the flag cube, the symmetric group and the time cycle. Each component of the transform is a harmonic. The store keeps only the harmonics its views need, and each view reads its own slice of the array."
       ]
     },
     {
@@ -19,26 +18,32 @@
       "title": "The three faces",
       "paragraphs": [ "A Pleroma view is one of three faces of the same array." ],
       "list": [
-        { "term": "Syzygy (the key cycle)", "text": "Key-addressed lookup: counts per key, and whole items (key, flags, arrangement and time together) with signed counts. It refuses past KeyCapacity distinct keys, returning false rather than a wrong answer." },
-        { "term": "Monad (the order face, S_k, 2 to 5)", "text": "Counts per arrangement of up to 5 things, even minus odd, and superposed readings of arrangement queries. Exact while counts stay within the field's range." },
-        { "term": "Ouroboros (the flag cube, up to 16 bits)", "text": "Counts per flag word, items within Hamming distance r of a query, the nearest words, and joint counts over flags and time. Exact while counts stay within the field's range." }
+        { "term": "Syzygy (the key cycle, and the time cycle for tick views)", "text": "Key-addressed lookup: counts per key, whole items with signed counts, and the relation face. Key views refuse past KeyCapacity distinct keys, returning false rather than a wrong answer." },
+        { "term": "Monad (the arrangements, S_k, 2 to 5 things)", "text": "Counts per arrangement, even minus odd, tick maps, and the composition and conjugation of arrangements." },
+        { "term": "Ouroboros (the flag cube, up to 16 bits)", "text": "Counts per flag word, Hamming retrieval, Boolean predicates through the Walsh spectrum, bit maps and parity." }
       ]
     },
     {
-      "id": "grid",
-      "title": "The operation grid",
+      "id": "pyramid",
+      "title": "The pyramid",
       "paragraphs": [
-        "The Pleroma implements a grid of operations on one exact hologram: {cells} cells, {rungs} rungs by 3 faces, plus a lid and the relation and charge lattices. Each rung is a family of operations, one per face. Every cell is a public member of Pleroma with property tests against brute-force or naive implementations, and every whole-store operation applies to all items in one pass.",
-        "The pyramid on the Phasor page draws the same grid in three dimensions, with each cell's API and evidence."
+        "The operations form a grid of 8 rungs by 3 faces, plus one read-time operation (the lid): {cells} cells in all. Every cell is a public member of Pleroma, checked against a brute-force or naive rebuild of the same answer, and every whole-store operation applies to all items in one pass.",
+        "Turn the pyramid, select a cell, or colour it by kind. Each cell shows its API and what it was checked against."
       ],
-      "grid": "pleroma-map",
-      "more": { "label": "Open the interactive map", "href": "/phasor/#overview" }
+      "diagram": { "id": "pleroma-map", "title": "Every operation, one pyramid", "stageLabel": "Interactive 3D pyramid of the Pleroma operation grid. Drag to turn it. Use the arrow keys to move between cells.", "lede": "Three faces, {rungs} rungs and a lid. Each rung adds one thing a single pass can do." },
+      "grid": "pleroma-map"
+    },
+    {
+      "id": "ladder",
+      "title": "The rungs as a ladder",
+      "paragraphs": [ "Read down the table: each rung adds one thing a single pass can do, and names what it superposes and the operator that does it." ],
+      "ladder": true
     },
     {
       "id": "superposition",
-      "title": "Superposition: one store, many items",
+      "title": "One store, many items",
       "paragraphs": [
-        "One Pleroma holds many items at once. Every whole-store operation then applies to all of them in a single pass, and the cost of that pass does not depend on the number of items stored. Mixing different harmonic permutations (key scaling, bit maps and conjugation, rung 5) costs one pass per term.",
+        "One Pleroma holds many items at once. Every whole-store operation applies to all of them in a single pass, and the cost of that pass does not depend on the number of items stored. A mix of different harmonic permutations (key scaling, bit maps and conjugation, rung 5) costs one pass per term.",
         "The example holds three items with key capacity 4, then applies one kernel of 1x identity plus 2x (flip flag bit 0, age 1 tick). Press Replay to watch the pass move through the store, or switch between the counts before and after."
       ],
       "diagram": { "id": "pleroma-superposition", "title": "One pass, every item", "lede": "Counts per flag word, counts per tick and the flags by time cells, before and after the pass. Every number is read from the real store." },
@@ -83,13 +88,26 @@
       "more": { "label": "HoloDb", "href": "/holodb/" }
     },
     {
+      "id": "limits",
+      "title": "Limits",
+      "list": [
+        { "term": "Keys", "text": "The key view is exact recovery of a multiset of keys, not similarity search. Capacity K keeps 2K+1 harmonics per key line and decodes up to K distinct keys." },
+        { "term": "Range", "text": "Counts are exact within the field's signed range, about 1.15 x 10^18 on the default field. No read detects a wrap past that range." },
+        { "term": "Kernels", "text": "A kernel is refused on a store with a check prime." },
+        { "term": "Hardware", "text": "The Pleroma runs on the CPU. There is no GPU kernel." },
+        { "term": "Speed", "text": "Exact arithmetic is not faster than a float bundle for a single read. The Pleroma gives you exactness and many views on one array." },
+        { "term": "Relations", "text": "Locating the contradiction on a relation face is not provided." }
+      ]
+    },
+    {
       "id": "prior-art",
       "title": "Prior art",
       "list": [
         { "term": "Reed-Solomon and BCH codes", "text": "Syndrome decoding (Reed and Solomon 1960, Berlekamp 1968, Massey 1969)." },
         { "term": "Berlekamp-Massey", "text": "The algorithm for finding minimal polynomials that the key decode uses." },
         { "term": "PinSketch and minisketch", "text": "Set sketches built on the same construction (Talbot and others 2012, Poinsot and others 2017)." },
-        { "term": "Holographic reduced representations", "text": "Plate's 1995 representation and its phase refinement, the approximate store the Pleroma is compared with." }
+        { "term": "Holographic reduced representations", "text": "Plate's 1995 representation, the approximate store the Pleroma is compared with." },
+        { "term": "Fourier analysis on finite groups", "text": "Fourier analysis on finite groups and Krawtchouk polynomials underlie the views." }
       ]
     }
   ]

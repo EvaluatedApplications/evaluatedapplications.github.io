@@ -16,80 +16,114 @@ To ask for a commercial licence, or to ask which of your uses needs one, write t
 
 ## Products
 
-### Phasor: exact holograms and vector-symbolic computing for .NET
+### Phasor: do a thousand things in one pass
 
-The Pleroma stores items in one fixed array and answers key, flag, order and time questions exactly, refusing past capacity. Under it, a phasor codec for bind, bundle and unbind.
+Build stores that answer exactly, replicas that sync by their differences and tables that repair themselves. One pass applies a thousand operators.
 
 Page: https://evaluatedapplications.github.io/phasor/
 - Package EvaluatedApplications.Phasor, release 2.17.0: `dotnet add package EvaluatedApplications.Phasor`
 - Used by: HoloDb, AlgFormer, HoloVoxel
 
-Phasor's main object is the Pleroma. An item is a key plus, optionally, a flag word of up to 16 bits, an arrangement of up to 5 things and a tick on a clock. One array of finite-field harmonics answers exact counts per key and whole items (refusing past the key capacity), exact counts per flag word, how many items lie within r bits of a query and which stored words are nearest, counts per arrangement, counts per tick, and opt-in joint counts over flags, order and time. Everything except the key views stays exact at any load.
+Do a thousand things in one pass.
 
-The whole store relabels, shifts keys, ages and diffuses over time in place with every view still exact, and a weighted superposition of flips, relabellings and time shifts applies to the whole store in one pass. Under the Pleroma is the phasor codec, a vector symbolic codec that encodes numbers and symbols as unit-complex faces and composes them with bind, unbind, bundle and correlate.
+Build stores that answer exactly, replicas that sync by sending only what differs, and tables that repair themselves. Every item and every operator lives in one array, so one sweep moves all of it.
 
-Why use it:
-- Exact where others approximate. At equal storage, the exact key view recovered 64 items with no errors where Plate's holographic reduced representations held 95% or better only up to 4. Past capacity it refuses, where the baseline answers wrongly every time.
-- One array, many questions. Counts per key, flag word, arrangement and tick, nearness, joint counts and any predicate are read from slices of one array, so adding a view does not add a second store.
-- Whole-store operations in one pass. A weighted superposition of flips, relabellings and time shifts applies to every item at once, at a cost that does not depend on how many elements the kernel holds.
+- 0.17 to 0.44 ms: for one pass that applies from 1 to 10,368 operators at once
+- 200 of 200: trials recovering 64 stored items exactly, where a float baseline held 4 at the same storage
+- 12,800 of 12,800: reads past capacity answered with a clear no. It never guesses
+- 0.6 ms: to read a whole 3,150-slot page, exactly
 
-Capabilities:
-- Views of one store. TryKeys and TryItems for exact counts per key and whole items, Flags, Near and Nearest for flag words and closeness, Arrangements and SignBalance for order, Times for ticks, and JointCounts over any set of faces.
-- Any predicate, one read. CountWhere counts the items whose flag word satisfies any predicate, linear or not, exactly and at any load, with one inner product. Attend returns exact counts, shares and parity from one read.
-- Whole-store operations. Tick and Diffuse age every item, RelabelFlags, RelabelArrangements and ShiftKeys relabel the store without reading items back, and a PleromaKernel applies a weighted sum of such moves in one pass.
-- Bind two stores. Bind adds keys, XORs flags, composes arrangements and adds ticks for every pair of items at once. Binding with a one-item store shifts the whole store on every face together.
-- Pages, sparse and dense. A dense page reads every one of up to 4,096 slots exactly in one transform, and joins two pages exactly in one read. A sparse page holds exact counts over a huge key set in memory proportional to the keys present.
-- Redundancy and repair. Reserved keys detect and repair lost harmonics, a mirror in a second prime detects corruption in either copy, and an exact-sum parity rebuilds any one lost store.
-- Keys only. CycleHologram is the Pleroma with keys only. It returns every stored symbol and count exactly up to its capacity, refuses past it, and adds and subtracts exactly, so two replicas can find what differs by exchanging one small hologram.
-- The phasor codec. PhasorCodec, HoloCodec and Hologram encode numbers and symbols as faces and compose them with bind, unbind, bundle and correlate. One operator set works on numbers, text and their mixtures.
+The numbers:
+- One pass, from 1 to 10,368 operators. Apply took 0.17 to 0.44 ms per call over two runs, with no trend in the number of elements. Building the same store from the moved items took 3 ms at 1 element and 1,916 ms at 1,000. Conditions: a 10,464-cell store (GF(13,879), 6 flag bits, S_3, time period 27, joint flags by order by time, key capacity 4, a continuous component, 10 items on four keys), random kernels, the mean of 20 calls after one warm-up, Release build, a loaded i9-11950H.
+- 64 items recovered exactly. At equal storage (about 2,000 to 2,600 bits), the exact key view recovered 64 items in 200 of 200 trials. The best float baseline reached 95 percent at 4 items. That is 16 times the items at these budgets. The benchmark is not part of the shipped package.
+- A clear no past capacity. Past capacity (65 to 96 items), the keys-only hologram refused 12,800 of 12,800 trials with no wrong answer. Every float baseline answered wrongly every time.
+- A whole page in 0.6 ms. With a complete key band, reading a 3,150-slot page costs about 0.6 ms (188 to 246 ns per slot). Building a page from a count vector is about 100 times faster than adding its keys one by one.
+
+What you can build:
+- Database answers in a millisecond. Read a whole 3,150-slot page of exact counts in about 0.6 ms. HoloDb serves COUNT, SUM, GROUP BY and joins from slices of a store like this.
+- Replicas that sync by their differences. Send one small message sized to what differs, not to your data. Ten thousand shared items and one different on each side take 192 bytes, and the other side reads the exact difference.
+- A store that repairs itself. Lose up to five values and get them back, 300 of 300 times. Catch one corrupted cell in either copy, 10,000 of 10,000 times. Rebuild a lost store from its group, 100 of 100 times.
+- A memory that reads exactly. Store pairs and read them back without drift. At equal storage, recall held at 100 percent from 2 to 32 pairs, where a float bundle fell to 21.9 percent at 32.
+- Age and reshape everything at once. Age, relabel, diffuse or bind every item in one pass. The cost follows the size of the store, not the number of items in it.
+- Any question, one read. Count the items that match any condition on their flags, however tangled, in one read. Ask for counts, shares and parity from one query.
 
 Quick start:
 
 ```csharp
 using Phasor;
 
-var store = new Pleroma(new HologramShape
-{
-    KeyCapacity = 16,                                       // whole items come back for up to 16 distinct keys
-    FlagBits = 8,                                           // an 8-bit flag word per item
-    TimePeriod = 63,                                        // a 63-tick clock
-    JointFaces = HologramFaces.Flags | HologramFaces.Time,  // also store flags x time joint counts
-});
-store.Add(new HologramItem(Key: 1001, Flags: 0b0000_0101, Time: 0), 3);
-store.Add(new HologramItem(Key: 2002, Flags: 0b1000_0001, Time: 5), 2);
+var shape = new HologramShape { KeyCapacity = 4, FlagBits = 3, TimePeriod = 7, JointFaces = HologramFaces.Flags | HologramFaces.Time };
+var store = new Pleroma(shape);                          // 96 cells for this shape, whatever the item count
+store.Add(new HologramItem(Key: 10, Flags: 0b001, Time: 0), 3);
+store.Add(new HologramItem(Key: 20, Flags: 0b010, Time: 2), 2);
+store.Add(new HologramItem(Key: 30, Flags: 0b100, Time: 4), 1);
 
-if (store.TryItems(out var items))                          // refuses past 16 keys instead of answering wrongly
+if (store.TryItems(out var items))
     foreach (var (item, count) in items)
-        Console.WriteLine($"{item.Key}: flags {item.Flags}, time {item.Time}, count {count}");
+        Console.WriteLine($"key {item.Key} flags {item.Flags} time {item.Time} count {count}");
 
-long[] perFlagWord = store.Flags();                         // exact at any load
-long near = store.Near(0b0000_0100, radius: 1);             // items whose flags differ from 0b100 in at most 1 bit
-long[] joint = store.JointCounts(HologramFaces.Flags | HologramFaces.Time);   // index = word * 63 + tick
-Console.WriteLine($"{perFlagWord[5]} {near} {joint[5 * 63 + 0]} {joint[129 * 63 + 5]}");
+var kernel = new PleromaKernel(shape);
+kernel.Add(weight: 1L);                                  // keep every item
+kernel.Add(flagMask: 0b001, timeShift: 1, weight: 2L);   // and twice: flip bit 0, age one tick
+store.Apply(kernel);                                     // one pass over all 96 cells
 
-store.Diffuse(stayNumerator: 1, stayDenominator: 3);        // each item stays with probability 1/3, else moves one tick
-long[] perTick = store.Times();                             // TimeScale (3) times the exact expected counts
-Console.WriteLine($"scale {store.TimeScale}: {perTick[0]} {perTick[1]} {perTick[5]} {perTick[6]}");
+if (store.TryKeys(out var keys))
+    foreach (var k in keys)
+        Console.WriteLine($"key total {k}");
+Console.WriteLine(string.Join(" ", store.Flags()));
+Console.WriteLine(string.Join(" ", store.Times()));
 ```
 
 Output:
 
 ```text
-1001: flags 5, time 0, count 3
-2002: flags 129, time 5, count 2
-3 3 3 2
-scale 3: 3 6 2 4
+key 10 flags 1 time 0 count 3
+key 20 flags 2 time 2 count 2
+key 30 flags 4 time 4 count 1
+key total (10, 9)
+key total (20, 6)
+key total (30, 3)
+6 3 2 4 1 2 0 0
+3 6 2 4 1 2 0
 ```
 
-Limits:
-- There is no key-addressed attention. The key view returns exact whole items up to capacity. It is not a similarity search on keys.
-- A store of key capacity K holds 2K+1 harmonics per key line and decodes up to K distinct keys. Past that it refuses.
-- Counts must stay within the field's range. On a small prime field, weighted queries scale counts by the weight, so keep totals times the weight below half the field.
+7 of 36 operators that transform the store join one kernel: a weighted sum of them applies to every stored item in one shared pass. All 45 reads answer from the store array in one pass each (CausalReads is the stated exception: one pass per prefix). This is a fact about reads, not part of the score.
+
+11 established ideas, one store. The Pleroma is a new construction. It is one store that satisfies every brick in the table below. Each brick is established work and is credited in its row. Each row gives what the brick offers on its own, the operation of the Pleroma that carries it, and the check that the operation passes.
+- Reed-Solomon and BCH syndrome decoding (Reed and Solomon 1960; Bose and Ray-Chaudhuri 1960): Recovers up to K distinct symbols exactly from 2K+1 power sums, and refuses beyond that. In the Pleroma: The key view: `TryKeys` and `TryItems` read the key line by syndrome decoding and refuse past `KeyCapacity`. Proof: Keys exact in 30 of 30 trials at 16 keys, and refused in 30 of 30 trials at 17 and 20 keys.
+- Berlekamp-Massey (Berlekamp 1968; Massey 1969): Finds the shortest recurrence that generates a syndrome sequence. In the Pleroma: The decoder of the key view (`CycleDecoder`), with a re-encode check on every decode. CycleHologram uses the same decoder. Proof: CycleHologram decodes exactly across the capacity sweeps; the Pleroma key view and CycleHologram agree on one decoder.
+- PinSketch and minisketch set reconciliation (Talbot et al. 2012; Poinsot et al. 2017): A sketch sized to the difference of two sets decodes that difference. In the Pleroma: Replica reconciliation: two holograms subtract exactly and the signed difference decodes. The Pleroma subtracts exactly, and its key view decodes the difference up to `KeyCapacity`. Proof: CycleHologram decodes the exact signed multiset difference across the tested cases; Pleroma `Subtract` is exact across a sequence of merge, tick, relabel and serialize steps.
+- Walsh-Hadamard transform (Fourier analysis on Z_2^m): The spectrum of a Boolean function on flag words, from which the count under any predicate is one inner product. In the Pleroma: `CountWhere`, `CountWhereByTime` and `CountWhereByArrangement` count the items under any predicate of the flag word in one read; `Attend` uses the same contraction. Proof: Predicate counts equal direct counting in 1,515 of 1,515 cases on three fields.
+- Group convolution (Fourier analysis on finite groups): The product of two group-algebra elements is a convolution, and in the Fourier domain it is a product on each block. In the Pleroma: `Bind` (keys add, flags XOR, arrangements compose, ticks add, counts multiply) and kernel `Apply` (a product on each block of stored harmonics). Proof: `Bind` equals the store of all pairs, cell for cell and view for view, in 35 of 35 cases across five shapes. `Apply` equals the store of moved items, cell for cell, for kernels of 1, 10, 100 and 1,000 elements and for the whole group.
+- Chinese remainder theorem (classical): Joins residues modulo coprime moduli into one residue modulo their product. In the Pleroma: `CombineCycles` joins two coprime complete key cycles into one key space. Each pair of keys becomes the key with both residues. Proof: `CombineCycles` equals the store of Chinese-remainder pairs in 12 of 12 cases on two fields.
+- Hamming codes and their syndromes (Hamming 1950): The syndrome of a word locates a single error. In the Pleroma: `Syndrome` counts the stored words per Hamming syndrome, for 3, 7 or 15 flag bits. Proof: All 112 single errors of Hamming(7,4) are located, and all 336 double errors are sent to a wrong third position.
+- Galois linear feedback shift registers: A linear recurrence over GF(2) with a period set by its polynomial. In the Pleroma: `ShiftRegister` steps every stored flag word through the register, for any number of steps in one pass. Proof: The stepped store equals the store of stepped words. The recorded periods are 255 and 63 for primitive polynomials.
+- Frobenius map on GF(2^m) (finite field arithmetic): Squaring in a binary field is a linear map on its elements. In the Pleroma: `Frobenius` squares every stored flag word modulo a polynomial, for any number of steps in one pass. Proof: The store equals the store of squared words. Its order on GF(2^8) is exactly 8.
+- Time diffusion on a cycle (Markov chains): A walk that stays with some probability and otherwise moves one step. In the Pleroma: `Diffuse` runs the walk on every item at once and gives exact expected counts, scaled by `TimeScale`. `Tick` ages every item exactly. Proof: Expected counts are exact over 20 steps on two fields, and the recorded run is exact over 600 steps.
+- Holographic Reduced Representations: binding and bundling (Plate 1995): Key-value pairs superposed by a sum and read back by correlation. The read is approximate, and its noise grows with load. In the Pleroma: The continuous component is the bundle. `Density`, `Similarity` and `FadedTimes` read it with graded similarity. The exact cells are read by decoding. Proof: The continuous bundle is a slice of the store, and its similarity is the kernel of the component (`PleromaContinuousTests`, CF1).
+
+Its structure follows three families of symmetry, taken in a fixed order: the cyclic key group, the flag cube Z_2^m and the symmetric group S_k. The time cycle is a cyclic family of the same kind. The eight rungs run in that order, and each one adds operations to those before it. Every operation is checked against a brute-force rebuild of the same answer.
+
+Put it to work:
+- HoloDb aggregate plane. Database.EnablePleroma(table, options) derives a Pleroma from a table's columns and serves COUNT, SUM, GROUP BY, WHERE, COUNT DISTINCT, MIN and MAX of dimensions, HAVING, and a single equi-join COUNT or SUM from exact slices. It holds in-RAM tables and is not persisted, so call it again after Open. AVG and other shapes use the engine.
+- Page store, larger than memory. Pages of one shape are stored as records with a check prime that verifies every record, parity groups that rebuild one lost record each, restore points, and journal numbers so replay applies each add once. It needs a complete key band, and a reader may see a batch half applied while it runs.
+- Replica reconciliation. Two replicas each hold a CycleHologram. The one with the difference sends its hologram, and the other subtracts its own and decodes the exact signed difference. The message is sized to the difference, not to the data. It decodes when the difference has at most the capacity's worth of distinct symbols, so size the capacity to the largest difference you expect.
+- Batch relabel, age and diffuse. Tick, Diffuse, RelabelFlags, RelabelArrangements, ShiftKeys, ScaleKeys (on a complete key band) and Apply(kernel) each act on every stored item at once. A mix of different harmonic permutations costs one pass per term. Diffuse readbacks need TimeScale times the total to stay within half the field.
+
+When another tool fits better:
+- A single item, or a few keys. Each Add touches every cell of the store. A dictionary is cheaper for one lookup, and the sparse page (PleromaSparsePage) suits a few keys.
+- Floating-point similarity at high dimension. The Pleroma is exact and has no key-addressed similarity. For graded similarity use the continuous component (ContinuousFade) or the HoloCodec similarity search.
+- More distinct keys than the capacity, without a bigger shape. The key view refuses past KeyCapacity. Raising it costs 2K+1 numbers per key line.
+- Choices. argmax, softmax and sampling are not linear, so they are read-time steps (Attend's shares, Sample), not kernel elements.
+- Counts past the field's range. Weighted kernels on a small field need headroom. On a large field the limit is about 1.15 x 10^18 per count.
+
+Know before you start:
+- The key view is exact recovery of a multiset of keys, not similarity search. There is no key-addressed attention.
+- Counts are exact within the field's signed range. No read detects a wrap past that range.
 - The Pleroma runs on the CPU. There is no GPU kernel.
-- It is a data structure and a set of operations, not a trainable embedding engine. The continuous phasor bundle is the approximate store; the Pleroma is the exact one.
-- Exact arithmetic is not faster in general. A Pleroma read costs one or more transforms, while a float bundle read is one correlation. At equal bits float reads are often faster, and at large loads the two converge.
-- The two codec layouts do not mix. Hologram and PhasorCodec use the interleaved layout, HoloCodec the planar one.
-- PhasorCodec needs an even dimension of at least 128.
+- Exact arithmetic is not faster in general. A Pleroma read costs one or more transforms, and a float bundle read is one correlation. The Pleroma gives you exactness and many views on one array.
+- A kernel is refused on a store with a check prime.
+- Locating the contradiction on a relation face is not provided.
 
 #### Phasor docs (https://evaluatedapplications.github.io/phasor/docs/)
 
@@ -394,33 +428,37 @@ accumulated 256 components
 - .Reals is live: The Reals property returns the internal array, not a copy, so changing it changes the hologram. Use it read-only or pass it to the in-place methods.
 - Small fields wrap: Every view's count must lie within half the field per prime. On a small test field, large kernel weights wrap, so compare cells there instead of counts.
 
-#### The Pleroma: one exact hologram, many views (https://evaluatedapplications.github.io/phasor/pleroma/)
+#### The Pleroma: one array, every question (https://evaluatedapplications.github.io/phasor/pleroma/)
 
-A fixed-size array of exact integers that stores a multiset of items, and answers counts by key, by flag word, by Hamming distance and by time from slices of that one array.
+One array of exact integers holds your items. Ask it for counts by key, by flag word, by Hamming distance, by arrangement and by time. Apply a thousand operators in one pass.
 
 ##### What it is
 
-The Pleroma is a fixed-size array of exact integers (finite-field arithmetic) that stores a multiset of items. Each item is a key, optionally with flag bits, an ordering and a timestamp. One array answers many queries: counts by key, by flag word, by Hamming distance, and joint flag-and-time counts. Key queries refuse past capacity. The others never return a wrong count within the field's range.
+The Pleroma is a fixed-size array of exact integers (finite-field arithmetic) that holds a multiset of items. Each item is a key, optionally with a flag word, an arrangement and a tick. One array answers many questions: counts by key, by flag word, by Hamming distance, by arrangement, by tick, and joint counts over any chosen faces.
 
-The store holds a harmonic transform on the product of these groups: the key cycle, the flag cube, the symmetric group and the time cycle. A hologram is the transform itself, and each component of the transform is called a harmonic. The store keeps only the harmonics its views need, and each view reads its own slice of the array and nothing else.
+The store holds a harmonic transform on the product of the key cycle, the flag cube, the symmetric group and the time cycle. Each component of the transform is a harmonic. The store keeps only the harmonics its views need, and each view reads its own slice of the array.
 
 ##### The three faces
 
 A Pleroma view is one of three faces of the same array.
 
-- Syzygy (the key cycle): Key-addressed lookup: counts per key, and whole items (key, flags, arrangement and time together) with signed counts. It refuses past KeyCapacity distinct keys, returning false rather than a wrong answer.
-- Monad (the order face, S_k, 2 to 5): Counts per arrangement of up to 5 things, even minus odd, and superposed readings of arrangement queries. Exact while counts stay within the field's range.
-- Ouroboros (the flag cube, up to 16 bits): Counts per flag word, items within Hamming distance r of a query, the nearest words, and joint counts over flags and time. Exact while counts stay within the field's range.
+- Syzygy (the key cycle, and the time cycle for tick views): Key-addressed lookup: counts per key, whole items with signed counts, and the relation face. Key views refuse past KeyCapacity distinct keys, returning false rather than a wrong answer.
+- Monad (the arrangements, S_k, 2 to 5 things): Counts per arrangement, even minus odd, tick maps, and the composition and conjugation of arrangements.
+- Ouroboros (the flag cube, up to 16 bits): Counts per flag word, Hamming retrieval, Boolean predicates through the Walsh spectrum, bit maps and parity.
 
-##### The operation grid
+##### The pyramid
 
-The Pleroma implements a grid of operations on one exact hologram: 25 cells, 8 rungs by 3 faces, plus a lid and the relation and charge lattices. Each rung is a family of operations, one per face. Every cell is a public member of Pleroma with property tests against brute-force or naive implementations, and every whole-store operation applies to all items in one pass.
+The operations form a grid of 8 rungs by 3 faces, plus one read-time operation (the lid): 25 cells in all. Every cell is a public member of Pleroma, checked against a brute-force or naive rebuild of the same answer, and every whole-store operation applies to all items in one pass.
 
-The pyramid on the Phasor page draws the same grid in three dimensions, with each cell's API and evidence.
+Turn the pyramid, select a cell, or colour it by kind. Each cell shows its API and what it was checked against.
 
-##### Superposition: one store, many items
+##### The rungs as a ladder
 
-One Pleroma holds many items at once. Every whole-store operation then applies to all of them in a single pass, and the cost of that pass does not depend on the number of items stored. Mixing different harmonic permutations (key scaling, bit maps and conjugation, rung 5) costs one pass per term.
+Read down the table: each rung adds one thing a single pass can do, and names what it superposes and the operator that does it.
+
+##### One store, many items
+
+One Pleroma holds many items at once. Every whole-store operation applies to all of them in a single pass, and the cost of that pass does not depend on the number of items stored. A mix of different harmonic permutations (key scaling, bit maps and conjugation, rung 5) costs one pass per term.
 
 The example holds three items with key capacity 4, then applies one kernel of 1x identity plus 2x (flip flag bit 0, age 1 tick). Press Replay to watch the pass move through the store, or switch between the counts before and after.
 
@@ -509,12 +547,22 @@ Output:
 
 The HoloDb holographic plane uses the Pleroma as its data store. COUNT, SUM, MIN, MAX, GROUP BY, HAVING, COUNT DISTINCT, WHERE, JOIN and any Boolean predicate are exact on it.
 
+##### Limits
+
+- Keys: The key view is exact recovery of a multiset of keys, not similarity search. Capacity K keeps 2K+1 harmonics per key line and decodes up to K distinct keys.
+- Range: Counts are exact within the field's signed range, about 1.15 x 10^18 on the default field. No read detects a wrap past that range.
+- Kernels: A kernel is refused on a store with a check prime.
+- Hardware: The Pleroma runs on the CPU. There is no GPU kernel.
+- Speed: Exact arithmetic is not faster than a float bundle for a single read. The Pleroma gives you exactness and many views on one array.
+- Relations: Locating the contradiction on a relation face is not provided.
+
 ##### Prior art
 
 - Reed-Solomon and BCH codes: Syndrome decoding (Reed and Solomon 1960, Berlekamp 1968, Massey 1969).
 - Berlekamp-Massey: The algorithm for finding minimal polynomials that the key decode uses.
 - PinSketch and minisketch: Set sketches built on the same construction (Talbot and others 2012, Poinsot and others 2017).
-- Holographic reduced representations: Plate's 1995 representation and its phase refinement, the approximate store the Pleroma is compared with.
+- Holographic reduced representations: Plate's 1995 representation, the approximate store the Pleroma is compared with.
+- Fourier analysis on finite groups: Fourier analysis on finite groups and Krawtchouk polynomials underlie the views.
 
 Licence: Commercial licence for commercial use. Evaluation and non-commercial use are permitted. Terms at https://evaluatedapplications.github.io/licence/
 
@@ -2776,8 +2824,8 @@ Measured costs and checks
 
 | Operation | Workload | Result |
 |---|---|---|
-| Superposed kernel apply | 10,464-cell store, 1 to 10,368 kernel elements | 0.17 to 0.44 ms per call, with no trend in the number of elements |
-| The same store built item by item | 1 element and 1,000 elements | 3 ms and 1,916 ms |
+| Superposed kernel apply | 10,464-cell store (GF(13,879), 6 flag bits, S_3, time period 27, joint flags by order by time, key capacity 4, a continuous component, 10 items on four keys), random kernels of 1 to 10,368 elements, the mean of 20 calls after one warm-up | 0.17 to 0.44 ms per call, with no trend in the number of elements |
+| The same store built item by item | The same store, rebuilt from the moved items, at 1 element and at 1,000 elements | 3 ms and 1,916 ms |
 | Counts on a dense page | 2,925 or 3,150 keys, a full page read | 188 to 246 ns per slot (0.6 to 0.7 ms per page) |
 | FromCounts | Build a page from a count vector, 3,150 slots | 758 ns per slot |
 | AddCounts | Add a count vector to a page | 758 ns per slot, against 77 to 91 microseconds per slot for sequential Add (about 100 times faster) |

@@ -15,7 +15,7 @@
 <meta name="twitter:card" content="summary">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%23f0796a'/%3E%3Cstop offset='.5' stop-color='%237bd86a'/%3E%3Cstop offset='1' stop-color='%23c07dff'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='32' height='32' rx='7' fill='%23050608'/%3E%3Cpath d='M16 5L27 26H5Z' fill='none' stroke='url(%23g)' stroke-width='2' stroke-linejoin='round'/%3E%3C/svg%3E">
 <script>document.documentElement.classList.add('js')</script>
-<link rel="stylesheet" href="/assets/ea.css?v=93cf72d0">
+<link rel="stylesheet" href="/assets/ea.css?v=4eb85a7c">
 <script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Home","item":"https://evaluatedapplications.github.io/"},{"@type":"ListItem","position":2,"name":"Products","item":"https://evaluatedapplications.github.io/products/"},{"@type":"ListItem","position":3,"name":"HoloDb","item":"https://evaluatedapplications.github.io/holodb/"},{"@type":"ListItem","position":4,"name":"Built on Pleroma","item":"https://evaluatedapplications.github.io/holodb/pleroma/"}]}</script>
 
 </head>
@@ -54,6 +54,7 @@
   
   
   
+  
   <p class="more-link"><a href="/holodb/evidence/#dashboard">Plane results and costs</a></p>
 </div></section><section class="sec doc-sec" aria-labelledby="plane"><div class="wrap">
   <div class="sec-head"><span class="sec-dot cat-holodb" aria-hidden="true"></span><h2 id="plane">The aggregate plane: exact answers from a derived summary</h2></div>
@@ -66,9 +67,11 @@
   
   
   
+  
 </div></section><section class="sec doc-sec" aria-labelledby="index-sql"><div class="wrap">
   <div class="sec-head"><span class="sec-dot cat-holodb" aria-hidden="true"></span><h2 id="index-sql">Index SQL and EXPLAIN: build it and see why</h2></div>
   <div class="prose-block"><p>The plane has a SQL form, so a remote client can build it through the server like any statement. SHOW INDEXES reports its size and how many queries it served and declined, and EXPLAIN reports why a query was served or declined, without running it.</p><p>EXPLAIN runs the engine&#39;s own routing code in a mode that stops before the heavy work, so what it reports is the decision the real statement takes. It does not run an IN (SELECT ...) subquery, which it shows unresolved. A binary older than the release that added this SQL cannot open a log or snapshot that contains it.</p></div>
+  
   
   
   
@@ -109,6 +112,7 @@ plane equals a rebuild from the columns
   
   
   
+  
   <div class="prose-block"><p>Limits: one shape per store, and it must be CompleteKeys and admissible for a check prime. Shapes with a continuous component or a relation face cannot be saved. One process opens a store at a time and one writer works at a time. A batch is applied page by page, so a reader sees every page whole but may see a batch on some pages and not on others. The sparse store has no parity groups, restore points or event journal. Page-store throughput is not reported.</p></div>
   <div class="code"><div class="code-bar"><span>C#</span><button class="copy" type="button" aria-label="Copy C#">copy</button></div><pre><code class="language-csharp">using HoloDb;
 using Phasor;
@@ -139,6 +143,7 @@ True
 </div></section><section class="sec doc-sec" aria-labelledby="exactness"><div class="wrap">
   <div class="sec-head"><span class="sec-dot cat-holodb" aria-hidden="true"></span><h2 id="exactness">Exactness</h2></div>
   <div class="prose-block"><p>The plane returns row-for-row the same answers as the engine and SQLite across its parity suite, including a random insert, update, delete, rollback and reopen log, and sums past 64 bits, and the page store passes its fault suite. The checks, and the deliberate mutations that turned them red, are listed with the figures.</p></div>
+  
   
   
   

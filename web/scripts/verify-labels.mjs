@@ -36,14 +36,14 @@ try {
   }
   // ---- the Pleroma pyramid: face names stay readable at every turn, the legend follows the colour mode ----
   for (const [name, opt] of [['desktop 1280', { width: 1280, height: 900 }], ['phone 390', { width: 390, height: 844, mobile: true }]]) {
-    await b.goto(`http://127.0.0.1:${port}/phasor/`, { ...opt, wait: "document.querySelector('[data-diagram=pleroma-map]').dataset.ready==='true'" });
+    await b.goto(`http://127.0.0.1:${port}/phasor/pleroma/`, { ...opt, wait: "document.querySelector('[data-diagram=pleroma-map]').dataset.ready==='true'" });
     await b.evaluate("document.querySelector('[data-diagram=pleroma-map] [data-ctl=play]').click()");
     for (const mode of ['face', 'status']) {
       await b.evaluate(`document.querySelector('[data-color=${mode}]').click()`);
       const legend = await b.evaluate("[...document.querySelectorAll('[data-legend]')].filter(l=>!l.hidden).map(l=>l.dataset.legend+':'+l.textContent).join('|')");
       checks++;
       if (mode === 'face' && !(/face:/.test(legend) && /Syzygy/.test(legend) && /Monad/.test(legend) && /Ouroboros/.test(legend))) { bad++; console.log(`LEGEND ${name}: face legend missing a face: ${legend}`); }
-      if (mode === 'status' && !(/status:/.test(legend) && /COVERED/.test(legend) && /READ-TIME/.test(legend) && !/face:/.test(legend))) { bad++; console.log(`LEGEND ${name}: status legend wrong: ${legend}`); }
+      if (mode === 'status' && !(/status:/.test(legend) && /Checked/.test(legend) && /Read-time/.test(legend) && !/face:/.test(legend))) { bad++; console.log(`LEGEND ${name}: status legend wrong: ${legend}`); }
       for (let a = 0; a < 8; a++) {
         const yaw = -180 + a * 45;
         const res = await b.evaluate(`(()=>{const r=document.querySelector('[data-diagram=pleroma-map]');const y=r.querySelector('[data-ctl=yaw]');y.value=${yaw};y.dispatchEvent(new Event('input'));const st=r.querySelector('.dia-stage').getBoundingClientRect();return {st:{w:st.width,h:st.height},l:r._labels()}})()`);

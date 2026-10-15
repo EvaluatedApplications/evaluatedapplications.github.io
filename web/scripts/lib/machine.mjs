@@ -61,11 +61,21 @@ export function composeLlmsFull(ctx, stamp) {
     L.push('');
     const d = p.doc;
     if (d) {
-      L.push([].concat(d.intro).join('\n\n'), '');
-      if (d.why) L.push('Why use it:', ...d.why.map((w) => `- ${w.title}. ${w.text}`), '');
-      if (d.capabilities) L.push('Capabilities:', ...d.capabilities.map((c) => `- ${c.title}. ${c.text}`), '');
-      if (d.quickstart) L.push('Quick start:', '', '```csharp', readSnip(d.quickstart.source), '```', '', 'Output:', '', '```text', readSnip(d.quickstart.output), '```', '');
-      if (d.limits) L.push('Limits:', ...d.limits.map((l) => `- ${l.replace(/\{(\w+)\}/g, (_, k) => (ctx.limitFacts[p.id] || {})[k] ?? `{${k}}`)}`), '');
+      if (d.template === 'phasor') {
+        const fact = ctx.limitFacts[p.id] || {}, fl = (x) => String(x).replace(/\{(\w+)\}/g, (_, k) => fact[k] ?? `{${k}}`);
+        L.push(d.headline, '', d.sub, '', ...d.stats.map((x) => `- ${fl(x.value)}: ${fl(x.label)}`), '', 'The numbers:', ...d.numbers.items.map((n) => `- ${fl(n.claim)}. ${fl(n.text)}`), '');
+        L.push(`${d.build.title}:`, ...d.build.items.map((c) => `- ${c.title}. ${c.text}`), '');
+        L.push('Quick start:', '', '```csharp', readSnip(d.code.source), '```', '', 'Output:', '', '```text', readSnip(d.code.output), '```', '');
+        const cv = ctx.diagrams['coverage-meter'];
+        L.push(`${cv.headline.text} ${cv.headline.reads}`, '', `${fl(d.bricks.title)}. ${d.bricks.opening}`, ...cv.construction.map((b) => `- ${b.brick}: ${b.alone} In the Pleroma: ${b.pleroma} Proof: ${b.proof}`), '', d.bricks.claim, '');
+        L.push(`${d.uses.title}:`, ...d.uses.items.map((u) => `- ${u.title}. ${u.text}`), '', `${d.wrongTool.title}:`, ...d.wrongTool.items.map((l) => `- ${l}`), '', `${d.limits.title}:`, ...d.limits.items.map((l) => `- ${l}`), '');
+      } else {
+        L.push([].concat(d.intro).join('\n\n'), '');
+        if (d.why) L.push('Why use it:', ...d.why.map((w) => `- ${w.title}. ${w.text}`), '');
+        if (d.capabilities) L.push('Capabilities:', ...d.capabilities.map((c) => `- ${c.title}. ${c.text}`), '');
+        if (d.quickstart) L.push('Quick start:', '', '```csharp', readSnip(d.quickstart.source), '```', '', 'Output:', '', '```text', readSnip(d.quickstart.output), '```', '');
+        if (d.limits) L.push('Limits:', ...d.limits.map((l) => `- ${l.replace(/\{(\w+)\}/g, (_, k) => (ctx.limitFacts[p.id] || {})[k] ?? `{${k}}`)}`), '');
+      }
     }
     for (const sp of p.subpages || []) {
       const sd = sp.doc, fact = ctx.limitFacts[p.id] || {};

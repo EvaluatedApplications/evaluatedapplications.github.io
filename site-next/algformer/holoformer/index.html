@@ -15,7 +15,7 @@
 <meta name="twitter:card" content="summary">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%23f0796a'/%3E%3Cstop offset='.5' stop-color='%237bd86a'/%3E%3Cstop offset='1' stop-color='%23c07dff'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='32' height='32' rx='7' fill='%23050608'/%3E%3Cpath d='M16 5L27 26H5Z' fill='none' stroke='url(%23g)' stroke-width='2' stroke-linejoin='round'/%3E%3C/svg%3E">
 <script>document.documentElement.classList.add('js')</script>
-<link rel="stylesheet" href="/assets/ea.css?v=93cf72d0">
+<link rel="stylesheet" href="/assets/ea.css?v=4eb85a7c">
 <script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Home","item":"https://evaluatedapplications.github.io/"},{"@type":"ListItem","position":2,"name":"Products","item":"https://evaluatedapplications.github.io/products/"},{"@type":"ListItem","position":3,"name":"AlgFormer","item":"https://evaluatedapplications.github.io/algformer/"},{"@type":"ListItem","position":4,"name":"How HoloFormer works","item":"https://evaluatedapplications.github.io/algformer/holoformer/"}]}</script>
 
 </head>
@@ -55,9 +55,11 @@
   
   
   
+  
 </div></section><section class="sec doc-sec" aria-labelledby="bind"><div class="wrap">
   <div class="sec-head"><span class="sec-dot cat-algformer" aria-hidden="true"></span><h2 id="bind">Combining is playing together</h2></div>
   <div class="prose-block"><p>The model has essentially one core move. To join two things it plays their chords together, and they merge into a single new chord. That is how a word is tied to its role, or a question to its subject.</p><p>Numbers are chords tuned so that playing two of them together adds their values. The chord for 5 played with the chord for 3 decodes as 8. The arithmetic is in the sound itself, so the model does not have to memorise a times table the way an ordinary transformer would. The program below is the Phasor codec that supplies the chords.</p></div>
+  
   
   
   
@@ -100,10 +102,12 @@ HoloCodec self-similarity is positive: True</code></pre></div>
   
   
   
+  
 </div></section><section class="sec doc-sec" aria-labelledby="layers"><div class="wrap">
   <div class="sec-head"><span class="sec-dot cat-algformer" aria-hidden="true"></span><h2 id="layers">A chain of arrangers</h2></div>
   <div class="prose-block"><p>The sound is not shaped all at once. It flows through several stages in a row, and each stage restyles it with its own set of moves before handing it on, the way a melody passes through a chain of arrangers.</p></div>
   <dl class="term-list"><dt>In the model</dt><dd>The stages are the layers. Depth is how many times the sound is reworked.</dd></dl>
+  
   
   
   
@@ -122,6 +126,7 @@ HoloCodec self-similarity is positive: True</code></pre></div>
   
   
   
+  
 </div></section><section class="sec doc-sec" aria-labelledby="memory"><div class="wrap">
   <div class="sec-head"><span class="sec-dot cat-algformer" aria-hidden="true"></span><h2 id="memory">One shared sound you tune into</h2></div>
   <div class="prose-block"><p>This is where HoloFormer parts company with an ordinary transformer. A transformer makes every position compare itself with every earlier position: a crowded room in which everyone talks to everyone, and the effort grows with the square of the conversation.</p><p>HoloFormer folds everything it has heard into one running sound per layer. Each position binds its key to its value and adds the result to the bundle. To recall something, the query is unbound from the bundle: the matching part rings out and the rest averages toward silence, like finding one station on a radio dial.</p><p>One bundle holds the whole context, so reading a prompt grows with its length rather than its square, and each new token costs the same however long the context has become. The chart on the overview page measures both cores. The held memory can also be listened to: the inspectors read off what the final query resonated with and decode it to tokens.</p></div>
@@ -133,9 +138,11 @@ HoloCodec self-similarity is positive: True</code></pre></div>
   
   
   
+  
 </div></section><section class="sec doc-sec" aria-labelledby="capacity"><div class="wrap">
   <div class="sec-head"><span class="sec-dot cat-algformer" aria-hidden="true"></span><h2 id="capacity">How much one sound can hold</h2></div>
   <div class="prose-block"><p>Many bound pairs summed into one vector crosstalk: each read comes back with a little noise from all the others. A bundle can therefore hold a limited number of items cleanly. HoloShape reports two numbers for a shape. The crosstalk edge is the number of shifts times the width, halved. The clean capacity is the number of tokens that read back at least 90 percent clean, which is about 12 percent of the edge.</p><p>Models are sized so that the context sits at a chosen fraction of the edge, and the default is a quarter. At a width of 128, HoloShape derives a context of 2,048 tokens. The crosstalk edge there is 8,192 tokens and 983 tokens read back clean. The constants behind the derived shapes are single measurements, so treat the shape as a starting point.</p></div>
+  
   
   
   
@@ -165,10 +172,11 @@ Derive(256): shifts 256, context 8192, layers 8</code></pre></div>
   <div class="sec-head"><span class="sec-dot cat-algformer" aria-hidden="true"></span><h2 id="compare">Side by side with an ordinary transformer</h2></div>
   
   
-  
   <div class="tbl-wrap"><table class="tbl"><caption>What differs between the two attention cores</caption>
 <thead><tr><th scope="col">Aspect</th><th scope="col">Ordinary transformer (softmax attention)</th><th scope="col">HoloFormer (holographic attention)</th></tr></thead>
 <tbody><tr><th scope="row">Meaning</th><td>A point in a learned space.</td><td>A chord: a vector of phases.</td></tr><tr><th scope="row">Combining ideas</th><td>Learned tables, taught every combination.</td><td>Binding: chords played together. For numbers it adds.</td></tr><tr><th scope="row">Remembering</th><td>Every position compares with every earlier position.</td><td>One running bundle per layer, read by resonance.</td></tr><tr><th scope="row">Cost of attention</th><td>Reading a prompt grows with the square of its length, and the cache grows with it.</td><td>Reading a prompt grows with its length, and the cache stays the same size.</td></tr><tr><th scope="row">Thinking longer</th><td>More layers, so more parameters.</td><td>Replay the same layer, with no new parameters.</td></tr><tr><th scope="row">Looking inside</th><td>Hidden numbers.</td><td>Inspectors read off what a query resonated with and decode it to tokens.</td></tr></tbody></table></div>
+  
+  
   
   <div class="prose-block"><p>An ordinary transformer memorises the music. This one plays it.</p></div>
   
@@ -177,6 +185,7 @@ Derive(256): shifts 256, context 8192, layers 8</code></pre></div>
 </div></section><section class="sec doc-sec" aria-labelledby="try"><div class="wrap">
   <div class="sec-head"><span class="sec-dot cat-algformer" aria-hidden="true"></span><h2 id="try">Try it</h2></div>
   <div class="prose-block"><p>The holographic core takes the same constructor as the softmax core. This program trains one, serves it through the incremental cache and reads what its final query resonated with.</p></div>
+  
   
   
   

@@ -1,15 +1,17 @@
 // Phasor signature diagram: "The map". A 3D pyramid with 3 faces (Syzygy, Monad, Ouroboros), 8 rungs and a lid:
-// 25 cells, each a public Pleroma operation with its status, API and evidence.
-// Data in: pleroma-map.json (migrated from the Phasor owner's map data; statuses drive the colours, never assumed).
+// one cell per public Pleroma operation, with its kind, API and evidence.
+// Data in: pleroma-map.json (the Phasor map data; the kind of each cell drives the colours, never assumed).
 // Module contract: metrics / staticSvg / controlsHtml / tablesHtml / mount / verify (see docs/design-language.md).
 import { hasDom, prefersReducedMotion, readTokens, rgba, fitCanvas, loop } from './core.js';
 
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const FACES = ['Syzygy', 'Monad', 'Ouroboros'];
 const GLOSS = {
-  COVERED: 'A public member of Pleroma, checked by property tests against brute-force or naive implementations.',
+  COVERED: 'A public member of Pleroma, checked against a brute-force or naive rebuild of the same answer.',
   'READ-TIME': 'Not superposable by nature: a choice made once, when the store is read.',
 };
+
+const KIND = { COVERED: 'Checked', 'READ-TIME': 'Read-time' };
 
 export function cells(d) {
   const out = [];
@@ -50,21 +52,21 @@ export function controlsHtml(id, m) {
     controls: `<div class="dia-controls dia-ui" hidden>
 <label class="dia-field">Turn <input type="range" min="-180" max="180" step="1" value="-52" data-ctl="yaw"></label>
 <label class="dia-field">Tilt <input type="range" min="-8" max="58" step="1" value="24" data-ctl="tilt"></label>
-<span class="dia-seg" role="group" aria-label="Colour by"><button type="button" class="chip" data-color="face" aria-pressed="true">Face</button><button type="button" class="chip" data-color="status" aria-pressed="false">Status</button></span>
+<span class="dia-seg" role="group" aria-label="Colour by"><button type="button" class="chip" data-color="face" aria-pressed="true">Face</button><button type="button" class="chip" data-color="status" aria-pressed="false">Kind</button></span>
 <button type="button" class="btn btn-ghost btn-sm" data-ctl="play" aria-pressed="true">Pause motion</button>
 <button type="button" class="btn btn-ghost btn-sm" data-ctl="reset">Reset view</button>
 </div>
 <div class="map-legend dia-ui" hidden data-legend="face" aria-label="Colour key: faces"><span class="lg f0">Syzygy: the key cycle and its signed counts</span><span class="lg f1">Monad: the order face</span><span class="lg f2">Ouroboros: the flag cube</span><span class="lg lid">Lid</span></div>
-<div class="map-legend dia-ui" hidden data-legend="status" aria-label="Colour key: status"><span class="lg st-ok">COVERED: a public member with property tests</span><span class="lg st-warn">READ-TIME: a choice made once, on reading</span><span class="lg st-other">Dashed edge: any other status</span></div>
+<div class="map-legend dia-ui" hidden data-legend="status" aria-label="Colour key: kind"><span class="lg st-ok">Checked: a public member checked against a brute-force rebuild</span><span class="lg st-warn">Read-time: a choice made once, on reading</span><span class="lg st-other">Dashed edge: any other kind</span></div>
 <p class="dia-hint dia-ui" hidden>Drag to turn. Select a cell. With the view focused: arrows move between cells, Shift and arrows turn it, space pauses, Escape clears.</p>
 <div class="map-panel dia-ui" hidden data-ctl="panel" role="region" aria-label="Selected cell" aria-live="polite"></div>`,
   };
 }
 
 export function tablesHtml(d, m) {
-  const rows = m.cells.map((c) => `<tr><th scope="row">${c.lid ? 'Lid' : 'R' + c.rung}</th><td>${esc(c.face || 'Lid')}</td><td>${esc(c.name)}</td><td>${esc(c.description)}</td><td><code>${esc(c.api)}</code></td><td>${esc(c.status)}</td><td>${esc(c.evidence)}</td></tr>`).join('');
+  const rows = m.cells.map((c) => `<tr><th scope="row">${c.lid ? 'Lid' : 'R' + c.rung}</th><td>${esc(c.face || 'Lid')}</td><td>${esc(c.name)}</td><td>${esc(c.description)}</td><td><code>${esc(c.api)}</code></td><td>${esc(KIND[c.status] || c.status)}</td><td>${esc(c.evidence)}</td></tr>`).join('');
   return `<details class="dia-data"><summary>All ${m.total} cells as a table</summary><div class="tbl-wrap"><table class="tbl"><caption>The operation grid: ${m.rungs} rungs by ${FACES.length} faces, plus the lid</caption>
-<thead><tr><th scope="col">Rung</th><th scope="col">Face</th><th scope="col">Cell</th><th scope="col">What it does</th><th scope="col">API</th><th scope="col">Status</th><th scope="col">Evidence</th></tr></thead><tbody>${rows}</tbody></table></div></details>`;
+<thead><tr><th scope="col">Rung</th><th scope="col">Face</th><th scope="col">Cell</th><th scope="col">What it does</th><th scope="col">API</th><th scope="col">Kind</th><th scope="col">Evidence</th></tr></thead><tbody>${rows}</tbody></table></div></details>`;
 }
 
 export function verify(d, body) {
@@ -235,16 +237,16 @@ export function mount(root, d) {
     const p = ui.panel; p.textContent = '';
     const el = (tag, cls, txt) => { const e = document.createElement(tag); if (cls) e.className = cls; if (txt != null) e.textContent = txt; return e; };
     if (!c) {
-      p.append(el('h3', null, 'Pick a cell'), el('p', 'muted', `Select a cell on the pyramid, or focus it and use the arrow keys. The panel shows the cell's name, what it does, its API, its status and the evidence. ${m.rungs} rungs by ${FACES.length} faces is ${m.total - 1} cells, plus the lid.`));
+      p.append(el('h3', null, 'Pick a cell'), el('p', 'muted', `Select a cell on the pyramid, or focus it and use the arrow keys. The panel shows the cell's name, what it does, its API, its kind and the evidence. ${m.rungs} rungs by ${FACES.length} faces is ${m.total - 1} cells, plus the lid.`));
       return;
     }
     p.append(el('p', 'eyebrow', c.lid ? 'Lid' : `Rung ${c.rung} · ${c.rungName}`));
     p.append(el('h3', null, c.name));
     const chips = el('div', 'map-chips');
-    chips.append(el('span', 'pill ' + (c.lid ? '' : 'f' + c.fi), c.lid ? 'Lid' : c.face), el('span', 'pill st-' + (c.status === 'COVERED' ? 'ok' : c.status === 'READ-TIME' ? 'warn' : 'other'), c.status));
+    chips.append(el('span', 'pill ' + (c.lid ? '' : 'f' + c.fi), c.lid ? 'Lid' : c.face), el('span', 'pill st-' + (c.status === 'COVERED' ? 'ok' : c.status === 'READ-TIME' ? 'warn' : 'other'), KIND[c.status] || c.status));
     p.append(chips);
     const dl = el('dl', 'map-dl');
-    [[c.lid ? 'About the lid' : 'Rung', c.rungCaption], ['What it does', c.description], ['API', c.api], ['Status', GLOSS[c.status] || `Status as listed: ${c.status}.`], ['Evidence', c.evidence]].forEach(([k, v]) => {
+    [[c.lid ? 'About the lid' : 'Rung', c.rungCaption], ['What it does', c.description], ['API', c.api], ['Kind', GLOSS[c.status] || `Kind as listed: ${c.status}.`], ['Evidence', c.evidence]].forEach(([k, v]) => {
       dl.append(el('dt', null, k)); dl.append(k === 'API' ? (() => { const dd = el('dd'); dd.append(el('code', null, v)); return dd; })() : el('dd', null, v));
     });
     p.append(dl);
