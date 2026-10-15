@@ -33,7 +33,7 @@ export default function phasorPage(ctx, p) {
 
   const main = html`<div class="phasor-page">
 ${pageHead({
-    crumbs, eyebrow: 'Phasor for .NET', h1: doc.headline, wide: true, lede: doc.sub,
+    crumbs, eyebrow: `${p.name}, ${p.tagline}`, h1: doc.headline, wide: true, lede: doc.sub,
     extra: html`
 <div class="hero-row"><div class="install-row hero-cta">${installLine(`dotnet add package ${primary.id}`)}</div>
 <div class="actions"><a class="btn btn-primary" href="#demo">See it run</a><a class="btn btn-ghost" href="#code">Get the code</a><a class="btn btn-ghost" href="${primary.nuget}" rel="noopener">View on NuGet</a></div></div>

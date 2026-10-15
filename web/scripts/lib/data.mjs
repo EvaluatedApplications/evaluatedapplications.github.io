@@ -121,6 +121,11 @@ export async function loadAll(opts = {}) {
     for (const pid of t.poweredBy) if (!byId[pid]) throw new Error(`tool ${t.id} references unknown product ${pid}`);
   }
   for (const p of products) p.tools = tools.filter((t) => t.poweredBy.includes(p.id));
+  // The platform product (Blazier) hosts every tool as a static shell, so its page lists the whole set.
+  if (toolsFile.platform) {
+    if (!byId[toolsFile.platform]) throw new Error('tools.json platform references unknown product ' + toolsFile.platform);
+    byId[toolsFile.platform].tools = tools;
+  }
 
   // Content blocks authored per product (only migrated products have one).
   for (const p of products) {

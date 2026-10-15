@@ -8,11 +8,17 @@ import { plain } from '../../src/inline.mjs';
 import { blocksOf } from '../../src/blocks.mjs';
 import { resolveStats } from '../../src/partials.mjs';
 
+const list = (a) => (a.length > 1 ? a.slice(0, -1).join(', ') + ' and ' + a[a.length - 1] : a.join(''));
 const abs = (ctx, u) => (u.startsWith('http') ? u : ctx.site.url + u);
 const readSnip = (rel) => fs.readFileSync(path.join(DATA, rel), 'utf8').replace(/\r\n/g, '\n').trimEnd();
 
 export function composeSitemap(ctx, pages) {
-  const urls = pages.filter((p) => !p.noindex && !p.hidden).map((p) => abs(ctx, p.url));
+  // The tool pages are published by Showroom, not built here, but they are real indexable pages: list them right after /tools/.
+  const urls = [];
+  for (const p of pages.filter((q) => !q.noindex && !q.hidden)) {
+    urls.push(abs(ctx, p.url));
+    if (p.url === '/tools/') for (const t of ctx.tools) urls.push(abs(ctx, t.href));
+  }
   return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls.map((u) => `  <url><loc>${u}</loc></url>`).join('\n')}\n</urlset>\n`;
 }
 
@@ -31,7 +37,7 @@ export function composeLlms(ctx, stamp) {
   const L = [];
   L.push(`# ${s.name}`, '', `> ${s.description} ${ctx.licence.oneLine}`, '', `Updated: ${stamp}`, '');
   L.push('## Products', '', ...ctx.products.map((p) => productLine(ctx, p)), '');
-  L.push('## Tools', '', ...ctx.tools.map((t) => `- [${t.name}](${abs(ctx, t.href)}): ${t.line}${t.poweredBy.length ? ` Powered by ${t.poweredBy.map((id) => ctx.byId[id].name).join(' and ')}.` : ''}`), '');
+  L.push('## Tools', '', ...ctx.tools.map((t) => `- [${t.name}](${abs(ctx, t.href)}): ${t.line}${t.poweredBy.length ? ` Powered by ${list(t.poweredBy.map((id) => ctx.byId[id].name))}.` : ''}`), '');
   if (ctx.evidence.length) L.push('## Evidence', '', ...ctx.evidence.map((e) => `- [${e.title}](${abs(ctx, e.slug)}): ${e.claim}`), '');
   L.push('## Research', '', ...ctx.research.map((r) => `- [${r.title}](${abs(ctx, r.href)}): ${r.summary}`), '');
   if (ctx.pageList) L.push('## Every page', '', ...ctx.pageList.filter((p) => !p.noindex && !p.hidden && p.url !== '/').map((p) => `- [${p.title}](${abs(ctx, p.url)})`), '');
@@ -101,7 +107,7 @@ export function composeLlmsFull(ctx, stamp) {
     L.push(`Licence: ${ctx.licence.ribbon} Terms at ${s.url}/licence/`, '');
   }
   L.push('## Tools', '');
-  for (const t of ctx.tools) L.push(`### ${t.name}`, '', t.line, '', `Page: ${abs(ctx, t.href)}`, t.poweredBy.length ? `Powered by ${t.poweredBy.map((id) => ctx.byId[id].name).join(' and ')}.` : '', '');
+  for (const t of ctx.tools) L.push(`### ${t.name}`, '', t.line, '', `Page: ${abs(ctx, t.href)}`, t.poweredBy.length ? `Powered by ${list(t.poweredBy.map((id) => ctx.byId[id].name))}.` : '', '');
   if (ctx.evidence.length) {
     L.push('## Evidence', '');
     for (const e of ctx.evidence) {

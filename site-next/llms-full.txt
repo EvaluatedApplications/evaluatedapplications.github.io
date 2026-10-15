@@ -16,7 +16,7 @@ To ask for a commercial licence, or to ask which of your uses needs one, write t
 
 ## Products
 
-### Phasor: do a thousand things in one pass
+### Phasor: exact stores with one-pass operators for .NET
 
 Build stores that answer exactly, replicas that sync by their differences and tables that repair themselves. One pass applies a thousand operators.
 
@@ -125,7 +125,7 @@ Know before you start:
 - A kernel is refused on a store with a check prime.
 - Locating the contradiction on a relation face is not provided.
 
-#### Phasor docs (https://evaluatedapplications.github.io/phasor/docs/)
+#### Phasor docs: stores, kernels and codecs (https://evaluatedapplications.github.io/phasor/docs/)
 
 Task-oriented notes with complete programs. Each example was compiled and run against the published package, and the output shown is what it printed.
 
@@ -1197,7 +1197,7 @@ Put a SQL database inside your app that rolls up a ledger in a blink, ranks rows
 
 - 0.02 ms: to total 10,000,000 invoices by status. DuckDB took 41.63 ms, out of the box
 - More than 1,600 times: faster than out-of-the-box DuckDB on that rollup, and more than 120 times faster on all five dashboard rollups
-- 3.3 times: faster than DuckDB on a join of 10,000,000 invoices to 200,000 customers
+- 3.3 times: faster than out-of-the-box DuckDB on a join of 10,000,000 invoices to 200,000 customers
 - 16 of 16: queries that returned the same rows as SQLite and DuckDB. The ones where HoloDb is slower are listed too
 
 HoloDb is an embeddable SQL database for .NET with ACID transactions, similarity search and maintained aggregates. It stores data as holograms in a single associative store: every value is encoded as a phase vector and a row's columns are bound into one hologram, so the same copy of the data can be retrieved three ways. Exact lookup by primary key is ordinary SQL. Similarity search by content is the NEAREST clause. Analytics read a maintained total instead of scanning.
@@ -1255,7 +1255,7 @@ Limits:
 - The optional plane works on in-memory tables only, and a plane attached through the API is not persisted: call it again after opening. A paged table refuses a plane, and paged tables support a single join only, with no GROUP BY over a join.
 - The package ships compiled, without XML documentation.
 
-#### HoloDb docs (https://evaluatedapplications.github.io/holodb/docs/)
+#### HoloDb docs: tables, SQL, transactions (https://evaluatedapplications.github.io/holodb/docs/)
 
 The practical guide: put data in, get answers out. Every program on this page was compiled and run against the published package, and the output shown is what it printed.
 
@@ -1351,7 +1351,7 @@ O'Neil
 
 ##### Bulk loading
 
-For large loads, skip the SQL parser and hand the engine one typed array per column (long[], double[] or string[]). It is atomic and validates primary-key uniqueness before committing. Load in chunks for very large data sets, as the Analyst tool does with a large paste.
+For large loads, skip the SQL parser and hand the engine one typed array per column (long[], double[] or string[]). It is atomic and validates primary-key uniqueness before committing. Load in chunks for very large data sets, as The Analyst does with a large paste.
 
 ```csharp
 using HoloDb;
@@ -1616,7 +1616,7 @@ After each query, static per-thread readings report what the engine actually pro
 
 ##### In the browser, and over the network
 
-HoloDb is plain managed .NET with no native dependencies, so it compiles to WebAssembly and runs client-side with no server and nothing leaving the device. The Analyst tool is exactly that: a real HoloDb in your browser tab, profiling and querying whatever you paste in.
+HoloDb is plain managed .NET with no native dependencies, so it compiles to WebAssembly and runs client-side with no server and nothing leaving the device. The Analyst is exactly that: a real HoloDb in your browser tab, profiling and querying whatever you paste in.
 
 The same engine runs as a server, and a typed client talks to it over TLS with the same surface as the in-process engine.
 
@@ -2156,6 +2156,7 @@ Three novels in, nearly two thousand checked new sentences out. Mines grammar in
 Page: https://evaluatedapplications.github.io/prose/
 - Package EvaluatedApplications.Prose, release 1.4.0: `dotnet add package EvaluatedApplications.Prose`
 - Builds on: EvalApp, HoloDb, AlgFormer
+- Tools: Prose
 
 Three novels in. Nearly two thousand checked new sentences out.
 
@@ -2219,7 +2220,7 @@ Limits:
 
 Licence: Commercial licence for commercial use. Evaluation and non-commercial use are permitted. Terms at https://evaluatedapplications.github.io/licence/
 
-### HoloGenome: DNA vectors from measured helix physics for .NET
+### HoloGenome: DNA as a hologram of measured helix physics for .NET
 
 Turn DNA into a vector that winds like the real helix, then check it against laboratory measurements it never saw. The wins and the losses are published.
 
@@ -2489,6 +2490,7 @@ Blazor pages that read at once and download .NET only when a visitor presses Sta
 
 Page: https://evaluatedapplications.github.io/blazier/
 - Package EvaluatedApplications.Blazier, release 1.1.0: `dotnet add package EvaluatedApplications.Blazier`
+- Tools: The Dashboard, The Analyst, The Creature, The Forecaster, Prism, Nano Stories, The Cartographer, Prose, Council Spending Scanner
 
 Show the page now. Download .NET when they press Start.
 
@@ -2709,7 +2711,7 @@ Powered by AlgFormer.
 Paste in a body of text, mine its grammar in your browser, and recombine it into sentences and question and answer pairs for a training corpus.
 
 Page: https://evaluatedapplications.github.io/tools/prose/
-Powered by HoloDb and AlgFormer.
+Powered by Prose, HoloDb and AlgFormer.
 
 ### Council Spending Scanner
 

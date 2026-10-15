@@ -133,8 +133,10 @@ for (const [url, p] of real) {
 const sm = fs.existsSync(path.join(dir, 'sitemap.xml')) ? fs.readFileSync(path.join(dir, 'sitemap.xml'), 'utf8') : '';
 const smUrls = new Set([...sm.matchAll(/<loc>([^<]+)<\/loc>/g)].map((m) => m[1].replace(site.url, '')));
 const want = new Set(real.filter(([, p]) => !p.noindex).map(([u]) => u));
+const toolSlugs = new Set(readJson(path.join(DATA, 'tools.json')).tools.map((t) => t.slug));
 for (const u of want) if (!smUrls.has(u)) err('sitemap.xml', `missing ${u}`);
-for (const u of smUrls) if (!want.has(u)) err('sitemap.xml', `lists ${u}, which is not an indexable page in the build`);
+for (const t of toolSlugs) if (!smUrls.has(t)) err('sitemap.xml', `missing tool page ${t}`);
+for (const u of smUrls) if (!want.has(u) && !toolSlugs.has(u)) err('sitemap.xml', `lists ${u}, which is not an indexable page in the build`);
 
 // ---- redirect stubs ----
 for (const [url, p] of pages) if (p.stub) {
