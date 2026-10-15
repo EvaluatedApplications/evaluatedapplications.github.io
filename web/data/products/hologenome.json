@@ -1,0 +1,109 @@
+{
+  "title": "HoloGenome: DNA from measured physics",
+  "description": "Encode DNA as a fixed-width vector that follows the measured twist of the helix, graded against held-out laboratory measurements, with the losses published.",
+  "sizzle": {
+    "eyebrow": "HoloGenome, DNA as a hologram of measured helix physics",
+    "headline": "Turn DNA into a vector that winds like the real helix.",
+    "sub": "HoloGenome reads a stretch of A, C, G and T and gives you one fixed-width vector. Its phase turns by the measured twist of each base pair step, so the order along the helix is in the vector. Then it is graded against laboratory measurements it never saw, with the losses published beside the wins.",
+    "cta": "See how it scores",
+    "mechanismTitle": "How it works",
+    "stats": [
+      { "evidence": "hologenome-scores", "tile": 0 },
+      { "evidence": "hologenome-scores", "tile": 1 },
+      { "evidence": "hologenome-scores", "tile": 2 },
+      { "evidence": "hologenome-scores", "tile": 3 }
+    ],
+    "numbers": {
+      "summary": "See the numbers",
+      "items": [
+        { "claim": "Measured twist beats a constant twist: {rTwist} against {rConstant}", "text": "A linear readout trained on {trainSet} and tested on {testSet} ({overlap}). The difference is {dTwist}, with a 95% interval of {dTwistLo} to {dTwistHi}. Adding the local-shape layer lifted r to {rShape}, a further {dShape} (interval {dShapeLo} to {dShapeHi})." },
+        { "claim": "Order matters, not just composition", "text": "The same readout on counts of 1-, 2- and 3-base words scored r = {rWords}, and on vectors built from dinucleotide-shuffled sequence it scored {rShuffled}. Label-permutation checks landed at zero, as designed." },
+        { "claim": "A zero-parameter score finds the helix", "text": "The strength of the AA/TT step pattern at the helical period of {periodRound} bases per turn is a closed-form number with nothing fitted. It correlates with bendability at r = {zeroLo} to {zeroHi} across five independent libraries. The same score at a 7-base or 15-base period is slightly negative (r = {offNear} to {offFar}) on every library." },
+        { "claim": "The helical period falls out of the data", "text": "A small phasor model that was allowed to choose its own period, starting from a neutral {startPeriod} bases, settled at {periods} bases per turn on four independent libraries (the crystallographic value is {periodRef}). With the base order or the labels scrambled it stayed near {nullPeriod}. The basin is narrow: runs started at {basinFound} bases found it, and runs started at {basinMissed} bases found nothing." },
+        { "claim": "Where it was measured", "text": "{measurement}. Each figure is a Pearson correlation between prediction and measurement on sequences the model had not seen. The measurements were never used to build the encoding." }
+      ]
+    },
+    "build": {
+      "title": "What you can build",
+      "line": "Made from what the package ships: the encoder, the twist tables and the window store.",
+      "items": [
+        { "title": "A strand-aware DNA vector for any window of sequence", "text": "One call turns A/C/G/T text into a fixed-width vector whose phase follows the published twist of each base pair step, so order along the helix is in the vector, not just which letters are present." },
+        { "title": "Physical features for your own models", "text": "Feed the vectors to any regression or classifier. On a held-out bendability test, a plain linear readout on these vectors beats the same readout on constant-twist vectors and on base-composition counts." },
+        { "title": "A queryable window store", "text": "Slide a window along a sequence, store each hologram in HoloDb next to ordinary SQL columns (source, start, sequence), and read them back or compare them by dot product." },
+        { "title": "A helix-aware teaching tool", "text": "Show where a sequence winds tighter or looser, how many turns it makes, and why the helix repeats about every 10.5 bases, all computed from published tables." },
+        { "title": "Your own shape layer", "text": "Load a minor-groove, propeller-twist, roll and helix-twist pentamer table and add it to the encoding. On the held-out test, the shape layer added measurable accuracy." },
+        { "title": "A measure-it-yourself harness", "text": "The encoding takes its numbers from published tables, so any score you derive from it can be compared with an independent laboratory measurement, with no fitted constants hiding in the encoder." }
+      ]
+    }
+  },
+  "intro": [
+    "A stretch of DNA becomes one list of phase angles. Each base is a Phasor symbol. As you move along the sequence a carrier phase advances by the measured twist of each pair of neighbouring bases (the published table of Olson et al. 1998), so the vector records how the real double helix winds, not just which letters are present.",
+    "An optional second layer adds local shape (minor-groove width, propeller twist, roll, helix twist) from a pentamer table you supply, weighted in as extra signal beside the helical phase. Everything is bound and summed into a single fixed-width vector."
+  ],
+  "facts": ["Built on Phasor and HoloDb", "Twist tables built in", "net8.0 and net10.0"],
+  "why": [
+    { "title": "Each base is a Phasor symbol", "text": "The encoder uses the Phasor codec, so a window is one vector you can bind, sum, store and compare by dot product like any other Phasor value." },
+    { "title": "The carrier follows the measured twist", "text": "The phase advances by the measured twist of each pair of neighbouring bases, taken from a published table that is built in. The vector records how the helix winds along the window." },
+    { "title": "Shape is optional and yours", "text": "Supply a pentamer table and its minor-groove, propeller-twist, roll and helix-twist values are weighted in beside the helical phase. No third-party shape data ships in the package." },
+    { "title": "Nothing in the encoding is invented", "text": "Each number comes from a cited measurement. The one constant twist of {constantDegrees} degrees exists only as the sequence-blind control." }
+  ],
+  "diagram": {
+    "id": "hologenome-scores",
+    "title": "How it scores",
+    "stageLabel": "Charts of the graded runs. Choose a view with the tabs.",
+    "lede": "Four views of the same graded runs: the vectors against their own controls, the best trained network (where HoloGenome loses), the helical period a small model finds by itself, and the measured twist along one window.",
+    "caption": "Scores are from graded runs against Loop-seq bendability measurements that were never used to build the encoding. The twist view is generated by running the published package (release {version}). Every bar, dot and figure on this page is read from the same data file."
+  },
+  "losses": {
+    "title": "Where it did not win",
+    "line": "The results that went against it, stated in full.",
+    "items": [
+      { "title": "It does not beat the best trained model", "text": "DNAcycP, {dnacycpDesc}, reaches r = {dnacycp} on the libraries where it has published scores (published figures). The best {fittedSize}-parameter physical model here reached {fitted} on the same libraries, trailing by {gapLo} to {gapHi}." },
+      { "title": "More training did not help", "text": "Training the hologram readouts with iterative optimisation left accuracy where it was (r {trainLo} to {trainHi} across the libraries tested). Running the phasor models for {stepFactor} times as many steps moved their scores by at most {stepChange}." },
+      { "title": "The measurement itself has a ceiling", "text": "Loop-seq replicates agree at roughly r = {ceilingLo} to {ceilingHi}, so no model can score near 1.0 on it." },
+      { "title": "The simplest zero-parameter score is modest", "text": "At r = {zeroLo} to {zeroHi} it is well below any trained readout. Its value is that it needs no fitting and matches the known periodicity of the double helix." }
+    ]
+  },
+  "quickstart": {
+    "lede": "Encode a 50-base window, count its helix turns, read the mean twist, and store the window beside ordinary SQL columns.",
+    "source": "snippets/hologenome-quickstart.cs",
+    "output": "snippets/hologenome-quickstart.out.txt"
+  },
+  "capabilities": [
+    { "title": "GenomeEncoder", "text": "Encode(window) gives the fixed-width vector, EncodeWindow(sequence, start, length) encodes a window and uses the bases outside it only as shape context, and HelixPhases(window) returns the cumulative helix angle along the window." },
+    { "title": "Twist models", "text": "OlsonTwist is the measured table, with all six step parameters per pair of bases. ConstantTwist is the sequence-blind control. Setting no twist model turns the helix off." },
+    { "title": "Local-shape layer", "text": "PentamerShapeTable loads or parses a table you supply, falls back to the reverse complement when a pentamer is missing, and counts the misses. Nothing from a third-party shape table is in the package." },
+    { "title": "Window store", "text": "GenomeWindowStore keeps windows in a HoloDb table with ordinary SQL columns beside the hologram: bulk and atomic puts, reads by id, and float32 packing." },
+    { "title": "Strict input", "text": "Dna.Normalise accepts A, C, G and T and throws on anything else. Reverse complement and complement helpers are included." }
+  ],
+  "otherTools": {
+    "title": "When another tool fits better",
+    "items": [
+      "You need the most accurate bendability predictor. Use DNAcycP, which is trained for exactly that and scores far higher on Loop-seq.",
+      "You need shape tracks for a whole genome. Use a dedicated shape predictor such as DNAshapeR; HoloGenome only reads a table of shape values you load.",
+      "You need alignment, variant calling or annotation. HoloGenome is not an aligner or a caller. It encodes windows of sequence for physical comparison.",
+      "You need clinical or consumer results. It makes no health, disease-risk, drug-response or ancestry claims."
+    ]
+  },
+  "limits": [
+    "Sequences must be A, C, G and T. Anything else is rejected, not guessed.",
+    "The hologram is an unnormalised sum, so compare windows of equal length.",
+    "The encoding is strand-specific: a sequence and its reverse complement give different vectors (cosine {rcCosine} for the example above).",
+    "Stored holograms are float32, exact to about 6e-8 relative error.",
+    "All grading so far uses one kind of measurement (Loop-seq bendability in yeast-derived and random sequence). Nothing is claimed for other organisms, other assays or chromatin in the living cell.",
+    "The graded scores on this page (the linear readout, the zero-parameter helical score and the fitted phasor models) come from a research harness and are not in the shipped package. The package ships the encoder, the twist tables and the window store.",
+    "The shape layer was graded with a pentamer table from the DNAshapeR project. That table is not shipped because its licence does not allow it, so you load your own.",
+    "The Loop-seq data is not redistributed with the package.",
+    "Early-stage package: the public surface may change."
+  ],
+  "sources": {
+    "title": "Data and sources",
+    "items": [
+      "Dinucleotide twist and roll: Olson, Gorin, Lu, Hock and Zhurkin, PNAS 95(19):11163 (1998), Table 1, built in.",
+      "Local shape: the DNAshape method (Zhou et al. 2013, NAR) as distributed in DNAshapeR (Chiu et al. 2016), supplied by you at run time.",
+      "Held-out measurements: Basu et al. 2021, Nature 589:462 (Loop-seq).",
+      "Comparison model: DNAcycP (published accuracy figures)."
+    ]
+  },
+  "reference": "Every public type is documented in the package readme on NuGet."
+}

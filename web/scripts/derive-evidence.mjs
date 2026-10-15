@@ -11,6 +11,7 @@ import * as cost from '../src/assets/diagrams/algformer-cost.js';
 import * as vox from '../src/assets/diagrams/holovoxel-lod.js';
 import * as prose from '../src/assets/diagrams/prose-pipeline.js';
 import * as boot from '../src/assets/diagrams/blazier-boot.js';
+import * as hg from '../src/assets/diagrams/hologenome-scores.js';
 
 const out = (name, rec) => { fs.writeFileSync(path.join(DATA, 'evidence', name + '.json'), JSON.stringify(rec, null, 2) + '\n', 'utf8'); console.log('wrote evidence/' + name + '.json'); };
 const n0 = (n) => Number(n).toLocaleString('en-GB');
@@ -221,5 +222,56 @@ const dg = (n) => readJson(path.join(DATA, 'diagrams', n + '.json'));
       'The Showroom tool pages are built this way, but their shell sizes and timings are not part of this record.',
     ],
     internal: { source: 'web/data/diagrams/blazier-boot.json, web/scripts/derive-evidence.mjs' },
+  });
+}
+
+// ---------------------------------------------------------------- HoloGenome: how the vectors score against held-out measurements
+{
+  const d = dg('hologenome-scores'), m = hg.metrics(d), F = hg.limitFacts(m);
+  const f2 = (v) => Number(v).toFixed(2), f3 = (v) => Number(v).toFixed(3);
+  const ctl = m.views.find((v) => v.id === 'controls'), best = m.views.find((v) => v.id === 'best'), per = m.views.find((v) => v.id === 'period');
+  const fitName = `${m.method.fitted.size}-parameter fit`;
+  out('hologenome-scores', {
+    id: 'hologenome-scores', product: 'hologenome', slug: '/hologenome/evidence/', scope: 'Held-out Loop-seq bendability measurements',
+    title: 'How HoloGenome scores against the lab',
+    lossTitle: 'Where it did not win',
+    description: `Measured helix twist scores r = ${F.rTwist} against held-out bendability measurements, against ${F.rConstant} for a constant twist. The best trained network scores higher.`,
+    claim: `A linear readout trained on ${F.trainSet} and tested on ${F.testSet} (${F.overlap}) scores r = ${F.rTwist} with vectors that use the measured twist, against ${F.rConstant} with one constant twist (difference ${F.dTwist}, 95% interval ${F.dTwistLo} to ${F.dTwistHi}). Adding the local-shape layer lifts it to ${F.rShape}, a further ${F.dShape}. A small phasor model that chose its own period, starting from ${F.startPeriod} bases, settled at ${F.periods} bases per turn on four independent libraries, against the crystallographic ${F.periodRef}. The best trained network scores higher: the ${F.fittedSize}-parameter fit trails it by ${F.gapLo} to ${F.gapHi}.`,
+    headline: [
+      { value: `${F.periodLo} to ${F.periodHi}`, label: `bases per turn found by a small model that was never told the helical period, on four independent libraries (the crystallographic value is ${F.periodRef})` },
+      { value: `${F.rTwist} vs ${F.rConstant}`, label: 'correlation with held-out bendability using the measured twist of each base pair step, against one constant twist' },
+      { value: F.rShape, label: `correlation with held-out bendability once the local-shape layer is added, against ${F.rWords} for counts of short words` },
+      { value: `${F.gapLo} to ${F.gapHi}`, label: `behind the best trained network, DNAcycP, on every library where it has published scores (${F.dnacycp} against ${F.fitted})` },
+    ],
+    method: {
+      workload: `${F.measurement}. Each vector is one window of sequence encoded by HoloGenome. A linear readout is trained on ${F.trainSet} and tested on ${F.testSet} with ${F.overlap}. The period search fits a small phasor model to one library's measurements, starting from ${F.startPeriod} bases per turn, and is repeated on independent libraries.`,
+      engines: ['HoloGenome vectors with a linear readout', 'A fitted phasor model', 'A zero-parameter score', `DNAcycP, ${F.dnacycpDesc} (published scores)`],
+      verification: 'Each score is a correlation on sequences the model had not seen. Label-permutation checks land at zero, as designed, and scrambled-order controls fall to the level of base counts alone. The period search is repeated with the base order scrambled and with the labels scrambled.',
+      statistic: `${m.method.statistic}, with a 95% interval from resampling whole gene blocks. The DNAcycP figures are published.`,
+      memory: 'The Loop-seq measurements are not redistributed.',
+    },
+    tables: [
+      { id: 'controls', kind: 'matrix', caption: ctl.label + '. ' + ctl.note, columns: ['Vectors built with', 'Correlation r', '95% interval'], rows: ctl.rows.map((r) => [r.label, f3(r.r), `${f3(r.lo)} to ${f3(r.hi)}`]) },
+      { id: 'deltas', kind: 'matrix', caption: 'Differences between those readouts', columns: ['Contrast', 'Difference in r', '95% interval'], rows: ctl.deltas.map((r) => [r.label, f3(r.d), `${f3(r.lo)} to ${f3(r.hi)}`]) },
+      { id: 'best', kind: 'matrix', caption: best.label + '. ' + best.note, columns: ['Library', ...best.series.map((s) => (s.id === 'fitted' ? fitName : s.label))], rows: best.groups.map((g) => [g.label, ...best.series.map((s) => f2(g.values[s.id]))]) },
+      { id: 'period', kind: 'matrix', caption: per.label + '. ' + per.note, columns: ['Library', 'Found from real data', 'Order scrambled', 'Labels scrambled'], rows: per.libraries.map((l) => [l.label, f2(l.real), f2(l.order), f2(l.labels)]) },
+      { id: 'basin', kind: 'matrix', caption: 'Where the period search started, yeast tiling library', columns: ['Started at (bases per turn)', 'Settled at (bases per turn)'], rows: per.basin.map((b) => [String(b.start), f2(b.end)]) },
+      { id: 'helix-score', kind: 'matrix', caption: m.helixScore.label, columns: ['Library', ...m.helixScore.periods.map((p) => p.label)], rows: m.helixScore.libraries.map((l) => [l.label, ...m.helixScore.periods.map((p) => f3(l[p.id]))]) },
+      { id: 'training', kind: 'matrix', caption: `${m.training.label}: held-out correlation after training the readouts with iterative optimisation`, columns: ['Vectors built with', 'Random sequence', 'Chromosome V tiling', 'Nucleosome'], rows: m.training.readouts.map((r) => [r.label, f3(r.random), f3(r.chrv), f3(r.nuc)]) },
+    ],
+    losses: [
+      `It does not beat the best trained model. DNAcycP, ${F.dnacycpDesc}, reaches r = ${F.dnacycp} on the libraries where it has published scores. The best ${F.fittedSize}-parameter model here reached ${F.fitted} on the same libraries, trailing by ${F.gapLo} to ${F.gapHi}.`,
+      `More training did not help. Training the vector readouts with iterative optimisation left accuracy where it was (r ${F.trainLo} to ${F.trainHi} across the libraries tested), and running the phasor models for ${F.stepFactor} times as many steps moved their scores by at most ${F.stepChange}.`,
+      `The measurement itself has a ceiling. Loop-seq replicates agree at roughly r = ${F.ceilingLo} to ${F.ceilingHi}, so no model can score near 1.0 on it.`,
+      `The simplest zero-parameter score is modest. At r = ${F.zeroLo} to ${F.zeroHi} it is well below any trained readout. Its value is that it needs no fitting and matches the known periodicity of the double helix.`,
+    ],
+    limits: [
+      `The period search has a narrow basin. Runs started at ${F.basinFound} bases found the helical period, and runs started at ${F.basinMissed} bases found nothing.`,
+      'All grading uses one kind of measurement: Loop-seq bendability in yeast-derived and random sequence. Nothing is claimed for other organisms, other assays or chromatin in the living cell.',
+      'The graded readouts (the linear model, the zero-parameter helical score and the fitted phasor models) run in the research harness and are not in the shipped package. The package ships the encoder, the twist tables and the window store.',
+      'The shape layer was graded with a pentamer table from the DNAshapeR project. That table is not shipped because its licence does not allow it, so you load your own.',
+      'The correlations are Pearson r. The intervals come from resampling whole gene blocks, because neighbouring windows overlap.',
+    ],
+    internal: { source: 'web/data/diagrams/hologenome-scores.json, web/scripts/derive-evidence.mjs' },
   });
 }

@@ -1,0 +1,290 @@
+{
+  "id": "hologenome-scores",
+  "product": "hologenome",
+  "slug": "/hologenome/evidence/",
+  "scope": "Held-out Loop-seq bendability measurements",
+  "title": "How HoloGenome scores against the lab",
+  "lossTitle": "Where it did not win",
+  "description": "Measured helix twist scores r = 0.529 against held-out bendability measurements, against 0.483 for a constant twist. The best trained network scores higher.",
+  "claim": "A linear readout trained on 12,472 random-sequence constructs and tested on 82,368 yeast-gene constructs (no shared sequence, forward or reverse complement) scores r = 0.529 with vectors that use the measured twist, against 0.483 with one constant twist (difference 0.046, 95% interval 0.041 to 0.050). Adding the local-shape layer lifts it to 0.600, a further 0.071. A small phasor model that chose its own period, starting from 12 bases, settled at 10.49, 10.51, 10.48 and 10.51 bases per turn on four independent libraries, against the crystallographic 10.534. The best trained network scores higher: the 22-parameter fit trails it by 0.28 to 0.39.",
+  "headline": [
+    {
+      "value": "10.48 to 10.51",
+      "label": "bases per turn found by a small model that was never told the helical period, on four independent libraries (the crystallographic value is 10.534)"
+    },
+    {
+      "value": "0.529 vs 0.483",
+      "label": "correlation with held-out bendability using the measured twist of each base pair step, against one constant twist"
+    },
+    {
+      "value": "0.600",
+      "label": "correlation with held-out bendability once the local-shape layer is added, against 0.253 for counts of short words"
+    },
+    {
+      "value": "0.28 to 0.39",
+      "label": "behind the best trained network, DNAcycP, on every library where it has published scores (0.93, 0.77 and 0.89 against 0.54, 0.50 and 0.60)"
+    }
+  ],
+  "method": {
+    "workload": "Loop-seq DNA cyclizability: how readily a 50-base stretch of DNA bends into a loop (Basu et al. 2021, Nature 589:462). Each vector is one window of sequence encoded by HoloGenome. A linear readout is trained on 12,472 random-sequence constructs and tested on 82,368 yeast-gene constructs with no shared sequence, forward or reverse complement. The period search fits a small phasor model to one library's measurements, starting from 12 bases per turn, and is repeated on independent libraries.",
+    "engines": [
+      "HoloGenome vectors with a linear readout",
+      "A fitted phasor model",
+      "A zero-parameter score",
+      "DNAcycP, an approximately 94,000-parameter trained neural network (published scores)"
+    ],
+    "verification": "Each score is a correlation on sequences the model had not seen. Label-permutation checks land at zero, as designed, and scrambled-order controls fall to the level of base counts alone. The period search is repeated with the base order scrambled and with the labels scrambled.",
+    "statistic": "Pearson correlation between prediction and measurement, on sequences the model had not seen, with a 95% interval from resampling whole gene blocks. The DNAcycP figures are published.",
+    "memory": "The Loop-seq measurements are not redistributed."
+  },
+  "tables": [
+    {
+      "id": "controls",
+      "kind": "matrix",
+      "caption": "Linear readout on vectors, held-out correlation. Trained on random sequence, tested on yeast genes it never saw",
+      "columns": [
+        "Vectors built with",
+        "Correlation r",
+        "95% interval"
+      ],
+      "rows": [
+        [
+          "Measured twist plus shape",
+          "0.600",
+          "0.591 to 0.609"
+        ],
+        [
+          "Measured twist",
+          "0.529",
+          "0.520 to 0.539"
+        ],
+        [
+          "One constant twist",
+          "0.483",
+          "0.473 to 0.494"
+        ],
+        [
+          "Dinucleotide-shuffled sequence",
+          "0.260",
+          "0.249 to 0.272"
+        ],
+        [
+          "Counts of 1-, 2- and 3-base words",
+          "0.253",
+          "0.239 to 0.267"
+        ]
+      ]
+    },
+    {
+      "id": "deltas",
+      "kind": "matrix",
+      "caption": "Differences between those readouts",
+      "columns": [
+        "Contrast",
+        "Difference in r",
+        "95% interval"
+      ],
+      "rows": [
+        [
+          "Measured twist over constant twist",
+          "0.046",
+          "0.041 to 0.050"
+        ],
+        [
+          "Shape layer over measured twist",
+          "0.071",
+          "0.063 to 0.078"
+        ]
+      ]
+    },
+    {
+      "id": "best",
+      "kind": "matrix",
+      "caption": "Held-out correlation, by library. The fitted model was trained on the yeast tiling library and scored on each library with shared sequence removed. The DNAcycP scores are published figures",
+      "columns": [
+        "Library",
+        "DNAcycP, trained network",
+        "22-parameter fit",
+        "Zero-parameter score"
+      ],
+      "rows": [
+        [
+          "Random sequence",
+          "0.93",
+          "0.54",
+          "0.31"
+        ],
+        [
+          "Chromosome V tiling",
+          "0.77",
+          "0.50",
+          "0.36"
+        ],
+        [
+          "Nucleosome",
+          "0.89",
+          "0.60",
+          "0.46"
+        ]
+      ]
+    },
+    {
+      "id": "period",
+      "kind": "matrix",
+      "caption": "Helical period a small phasor model settled on, bases per turn. Every run starts from a neutral 12 bases and is never told the helical period",
+      "columns": [
+        "Library",
+        "Found from real data",
+        "Order scrambled",
+        "Labels scrambled"
+      ],
+      "rows": [
+        [
+          "Yeast tiling",
+          "10.49",
+          "12.03",
+          "12.05"
+        ],
+        [
+          "Random sequence",
+          "10.51",
+          "12.01",
+          "12.01"
+        ],
+        [
+          "Chromosome V tiling",
+          "10.48",
+          "12.03",
+          "12.04"
+        ],
+        [
+          "Nucleosome",
+          "10.51",
+          "11.96",
+          "12.03"
+        ]
+      ]
+    },
+    {
+      "id": "basin",
+      "kind": "matrix",
+      "caption": "Where the period search started, yeast tiling library",
+      "columns": [
+        "Started at (bases per turn)",
+        "Settled at (bases per turn)"
+      ],
+      "rows": [
+        [
+          "6",
+          "6.01"
+        ],
+        [
+          "9",
+          "10.49"
+        ],
+        [
+          "12",
+          "10.49"
+        ],
+        [
+          "18",
+          "18.01"
+        ],
+        [
+          "24",
+          "24.48"
+        ]
+      ]
+    },
+    {
+      "id": "helix-score",
+      "kind": "matrix",
+      "caption": "Zero-parameter score: strength of the AA/TT step pattern at three periods, correlation with bendability",
+      "columns": [
+        "Library",
+        "Helical period",
+        "7 bases",
+        "15 bases"
+      ],
+      "rows": [
+        [
+          "Random sequence",
+          "0.307",
+          "-0.013",
+          "-0.022"
+        ],
+        [
+          "Yeast tiling",
+          "0.430",
+          "-0.065",
+          "-0.090"
+        ],
+        [
+          "Chromosome V tiling",
+          "0.364",
+          "-0.060",
+          "-0.065"
+        ],
+        [
+          "Nucleosome",
+          "0.465",
+          "-0.037",
+          "-0.053"
+        ],
+        [
+          "50-base library",
+          "0.221",
+          "-0.058",
+          "-0.054"
+        ]
+      ]
+    },
+    {
+      "id": "training",
+      "kind": "matrix",
+      "caption": "More training, same accuracy: held-out correlation after training the readouts with iterative optimisation",
+      "columns": [
+        "Vectors built with",
+        "Random sequence",
+        "Chromosome V tiling",
+        "Nucleosome"
+      ],
+      "rows": [
+        [
+          "Measured twist plus shape",
+          "0.544",
+          "0.524",
+          "0.620"
+        ],
+        [
+          "Measured twist",
+          "0.570",
+          "0.483",
+          "0.578"
+        ],
+        [
+          "One constant twist",
+          "0.529",
+          "0.462",
+          "0.558"
+        ]
+      ]
+    }
+  ],
+  "losses": [
+    "It does not beat the best trained model. DNAcycP, an approximately 94,000-parameter trained neural network, reaches r = 0.93, 0.77 and 0.89 on the libraries where it has published scores. The best 22-parameter model here reached 0.54, 0.50 and 0.60 on the same libraries, trailing by 0.28 to 0.39.",
+    "More training did not help. Training the vector readouts with iterative optimisation left accuracy where it was (r 0.46 to 0.62 across the libraries tested), and running the phasor models for 2.5 times as many steps moved their scores by at most 0.0001.",
+    "The measurement itself has a ceiling. Loop-seq replicates agree at roughly r = 0.84 to 0.87, so no model can score near 1.0 on it.",
+    "The simplest zero-parameter score is modest. At r = 0.22 to 0.46 it is well below any trained readout. Its value is that it needs no fitting and matches the known periodicity of the double helix."
+  ],
+  "limits": [
+    "The period search has a narrow basin. Runs started at 9 or 12 bases found the helical period, and runs started at 6, 18 or 24 bases found nothing.",
+    "All grading uses one kind of measurement: Loop-seq bendability in yeast-derived and random sequence. Nothing is claimed for other organisms, other assays or chromatin in the living cell.",
+    "The graded readouts (the linear model, the zero-parameter helical score and the fitted phasor models) run in the research harness and are not in the shipped package. The package ships the encoder, the twist tables and the window store.",
+    "The shape layer was graded with a pentamer table from the DNAshapeR project. That table is not shipped because its licence does not allow it, so you load your own.",
+    "The correlations are Pearson r. The intervals come from resampling whole gene blocks, because neighbouring windows overlap."
+  ],
+  "internal": {
+    "source": "web/data/diagrams/hologenome-scores.json, web/scripts/derive-evidence.mjs"
+  }
+}

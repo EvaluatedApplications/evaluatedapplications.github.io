@@ -141,3 +141,13 @@ the full feature list, limits, evidence, related.
 - Tiles (from the evidence record `blazier-boot`, derived from `data/diagrams/blazier-boot.json`): 6.8 KB / 416 to 484 ms / 14 to 19 ms / 0.49 to 0.57 ms. Sample-app figures only; no Showroom shell figure is recorded
 - Sections after the proven program: How it works, Everything in the package, What exists today (typed Web Worker bridge built and measured; EvalApp host seam not built), When another tool fits better, Know before you start
 - Meta: Blazor WebAssembly pages that read at once on a static host and download .NET only when a visitor presses Start, plus a typed Web Worker bridge.
+
+## /hologenome/
+
+- Eyebrow: HoloGenome, DNA as a hologram of measured helix physics
+- H1: Turn DNA into a vector that winds like the real helix.
+- Sub: HoloGenome reads a stretch of A, C, G and T and gives you one fixed-width vector. Its phase turns by the measured twist of each base pair step, so the order along the helix is in the vector. Then it is graded against laboratory measurements it never saw, with the losses published beside the wins.
+- CTA: install line, "See how it scores" (the `hologenome-scores` chart, id demo), "Get the code". No Showroom tool exists, so no tool band.
+- Tiles (evidence record `hologenome-scores`, derived from `data/diagrams/hologenome-scores.json`): 10.48 to 10.51 bases per turn / 0.529 vs 0.483 / 0.600 / 0.28 to 0.39 behind DNAcycP (a loss tile on purpose)
+- Sections: See the numbers, Where it did not win (`doc.losses`), What you can build, Run it yourself (proven program), How it works, Everything in the package, When another tool fits better, Know before you start (graded scores are not in the package), Data and sources (`doc.sources`), Evidence
+- Meta: Encode DNA as a fixed-width vector that follows the measured twist of the helix, graded against held-out laboratory measurements, with the losses published.

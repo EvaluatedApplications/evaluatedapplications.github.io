@@ -22,7 +22,7 @@ Build stores that answer exactly, replicas that sync by their differences and ta
 
 Page: https://evaluatedapplications.github.io/phasor/
 - Package EvaluatedApplications.Phasor, release 2.17.0: `dotnet add package EvaluatedApplications.Phasor`
-- Used by: HoloDb, AlgFormer, HoloVoxel
+- Used by: HoloDb, AlgFormer, HoloGenome, HoloVoxel
 
 Do a thousand things in one pass.
 
@@ -1188,7 +1188,7 @@ Page: https://evaluatedapplications.github.io/holodb/
 - Package EvaluatedApplications.HoloDb.Client, release 1.5.2: `dotnet add package EvaluatedApplications.HoloDb.Client`
 - Package EvaluatedApplications.HoloDb.Protocol, release 1.1.2: `dotnet add package EvaluatedApplications.HoloDb.Protocol`
 - Builds on: EvalApp, Phasor
-- Used by: Prose
+- Used by: Prose, HoloGenome
 - Tools: The Dashboard, The Analyst, Prose
 
 Ten million rows. Dashboard answers in microseconds.
@@ -2219,6 +2219,91 @@ Limits:
 
 Licence: Commercial licence for commercial use. Evaluation and non-commercial use are permitted. Terms at https://evaluatedapplications.github.io/licence/
 
+### HoloGenome: DNA vectors from measured helix physics for .NET
+
+Turn DNA into a vector that winds like the real helix, then check it against laboratory measurements it never saw. The wins and the losses are published.
+
+Page: https://evaluatedapplications.github.io/hologenome/
+- Package EvaluatedApplications.HoloGenome, release 0.1.1: `dotnet add package EvaluatedApplications.HoloGenome`
+- Builds on: Phasor, HoloDb
+
+Turn DNA into a vector that winds like the real helix.
+
+HoloGenome reads a stretch of A, C, G and T and gives you one fixed-width vector. Its phase turns by the measured twist of each base pair step, so the order along the helix is in the vector. Then it is graded against laboratory measurements it never saw, with the losses published beside the wins.
+
+- 10.48 to 10.51: bases per turn found by a small model that was never told the helical period, on four independent libraries (the crystallographic value is 10.534)
+- 0.529 vs 0.483: correlation with held-out bendability using the measured twist of each base pair step, against one constant twist
+- 0.600: correlation with held-out bendability once the local-shape layer is added, against 0.253 for counts of short words
+- 0.28 to 0.39: behind the best trained network, DNAcycP, on every library where it has published scores (0.93, 0.77 and 0.89 against 0.54, 0.50 and 0.60)
+
+A stretch of DNA becomes one list of phase angles. Each base is a Phasor symbol. As you move along the sequence a carrier phase advances by the measured twist of each pair of neighbouring bases (the published table of Olson et al. 1998), so the vector records how the real double helix winds, not just which letters are present.
+
+An optional second layer adds local shape (minor-groove width, propeller twist, roll, helix twist) from a pentamer table you supply, weighted in as extra signal beside the helical phase. Everything is bound and summed into a single fixed-width vector.
+
+Why use it:
+- Each base is a Phasor symbol. The encoder uses the Phasor codec, so a window is one vector you can bind, sum, store and compare by dot product like any other Phasor value.
+- The carrier follows the measured twist. The phase advances by the measured twist of each pair of neighbouring bases, taken from a published table that is built in. The vector records how the helix winds along the window.
+- Shape is optional and yours. Supply a pentamer table and its minor-groove, propeller-twist, roll and helix-twist values are weighted in beside the helical phase. No third-party shape data ships in the package.
+- Nothing in the encoding is invented. Each number comes from a cited measurement. The one constant twist of {constantDegrees} degrees exists only as the sequence-blind control.
+
+Capabilities:
+- GenomeEncoder. Encode(window) gives the fixed-width vector, EncodeWindow(sequence, start, length) encodes a window and uses the bases outside it only as shape context, and HelixPhases(window) returns the cumulative helix angle along the window.
+- Twist models. OlsonTwist is the measured table, with all six step parameters per pair of bases. ConstantTwist is the sequence-blind control. Setting no twist model turns the helix off.
+- Local-shape layer. PentamerShapeTable loads or parses a table you supply, falls back to the reverse complement when a pentamer is missing, and counts the misses. Nothing from a third-party shape table is in the package.
+- Window store. GenomeWindowStore keeps windows in a HoloDb table with ordinary SQL columns beside the hologram: bulk and atomic puts, reads by id, and float32 packing.
+- Strict input. Dna.Normalise accepts A, C, G and T and throws on anything else. Reverse complement and complement helpers are included.
+
+Quick start:
+
+```csharp
+using HoloDb;
+using HoloGenome;
+
+var encoder = new GenomeEncoder(new GenomeEncoderOptions { Dim = 512, Twist = OlsonTwist.Instance });
+string seq = "ATGCGTACGTTAGCAAAAATTTTTGCGCGATCGATCGTAGCTAGCTAGCA";
+double[] h = encoder.Encode(seq);
+
+// How many turns does the helix make along this sequence?
+Console.WriteLine($"{h.Length} reals; helix turns: {encoder.HelixPhases(seq)[^1] / (2 * Math.PI):F2}");
+
+// The mean measured twist gives the helical repeat.
+double sum = 0;
+foreach (char a in "ACGT") foreach (char b in "ACGT") sum += OlsonTwist.Instance.TwistDegrees(a, b);
+Console.WriteLine($"{360 / (sum / 16):F4} bases per turn");
+
+// Store the window beside ordinary SQL columns and read it back.
+var store = new GenomeWindowStore(new HoloDbService(new HoloDbOptions()));
+store.Put([new GenomeWindow(1, "demo", 0, seq, h)]);
+Console.WriteLine(store.Get(1)!.Sequence == seq);
+```
+
+Output:
+
+```text
+512 reals; helix turns: 4.68
+10.5340 bases per turn
+True
+```
+
+When another tool fits better:
+- You need the most accurate bendability predictor. Use DNAcycP, which is trained for exactly that and scores far higher on Loop-seq.
+- You need shape tracks for a whole genome. Use a dedicated shape predictor such as DNAshapeR; HoloGenome only reads a table of shape values you load.
+- You need alignment, variant calling or annotation. HoloGenome is not an aligner or a caller. It encodes windows of sequence for physical comparison.
+- You need clinical or consumer results. It makes no health, disease-risk, drug-response or ancestry claims.
+
+Limits:
+- Sequences must be A, C, G and T. Anything else is rejected, not guessed.
+- The hologram is an unnormalised sum, so compare windows of equal length.
+- The encoding is strand-specific: a sequence and its reverse complement give different vectors (cosine 0.23 for the example above).
+- Stored holograms are float32, exact to about 6e-8 relative error.
+- All grading so far uses one kind of measurement (Loop-seq bendability in yeast-derived and random sequence). Nothing is claimed for other organisms, other assays or chromatin in the living cell.
+- The graded scores on this page (the linear readout, the zero-parameter helical score and the fitted phasor models) come from a research harness and are not in the shipped package. The package ships the encoder, the twist tables and the window store.
+- The shape layer was graded with a pentamer table from the DNAshapeR project. That table is not shipped because its licence does not allow it, so you load your own.
+- The Loop-seq data is not redistributed with the package.
+- Early-stage package: the public surface may change.
+
+Licence: Commercial licence for commercial use. Evaluation and non-commercial use are permitted. Terms at https://evaluatedapplications.github.io/licence/
+
 ### Tracer: pathfinding and game AI for .NET
 
 Send a whole crowd to one exit with a single search. Navmesh pathfinding with dynamic obstacles, line of sight and combat.
@@ -3031,6 +3116,96 @@ Limits:
 - The first DDL statement inside a transaction takes a snapshot of every in-memory table, so it costs time proportional to the data. After a ROLLBACK of deleted rows the table holds the same rows but not necessarily in the same internal order.
 - The plane does not help the billing joins (200,000 join keys against the limit of 4,095) or the top-customers query. A plane join over fewer keys is served, as in the tenant workload.
 - Page-store throughput is not reported here.
+
+### How HoloGenome scores against the lab
+
+A linear readout trained on 12,472 random-sequence constructs and tested on 82,368 yeast-gene constructs (no shared sequence, forward or reverse complement) scores r = 0.529 with vectors that use the measured twist, against 0.483 with one constant twist (difference 0.046, 95% interval 0.041 to 0.050). Adding the local-shape layer lifts it to 0.600, a further 0.071. A small phasor model that chose its own period, starting from 12 bases, settled at 10.49, 10.51, 10.48 and 10.51 bases per turn on four independent libraries, against the crystallographic 10.534. The best trained network scores higher: the 22-parameter fit trails it by 0.28 to 0.39.
+
+Page: https://evaluatedapplications.github.io/hologenome/evidence/
+
+Method:
+- Workload: Loop-seq DNA cyclizability: how readily a 50-base stretch of DNA bends into a loop (Basu et al. 2021, Nature 589:462). Each vector is one window of sequence encoded by HoloGenome. A linear readout is trained on 12,472 random-sequence constructs and tested on 82,368 yeast-gene constructs with no shared sequence, forward or reverse complement. The period search fits a small phasor model to one library's measurements, starting from 12 bases per turn, and is repeated on independent libraries.
+- Engines: HoloGenome vectors with a linear readout; A fitted phasor model; A zero-parameter score; DNAcycP, an approximately 94,000-parameter trained neural network (published scores)
+- Check: Each score is a correlation on sequences the model had not seen. Label-permutation checks land at zero, as designed, and scrambled-order controls fall to the level of base counts alone. The period search is repeated with the base order scrambled and with the labels scrambled.
+- Statistic: Pearson correlation between prediction and measurement, on sequences the model had not seen, with a 95% interval from resampling whole gene blocks. The DNAcycP figures are published.
+- Memory and logging: The Loop-seq measurements are not redistributed.
+
+Where it loses:
+- It does not beat the best trained model. DNAcycP, an approximately 94,000-parameter trained neural network, reaches r = 0.93, 0.77 and 0.89 on the libraries where it has published scores. The best 22-parameter model here reached 0.54, 0.50 and 0.60 on the same libraries, trailing by 0.28 to 0.39.
+- More training did not help. Training the vector readouts with iterative optimisation left accuracy where it was (r 0.46 to 0.62 across the libraries tested), and running the phasor models for 2.5 times as many steps moved their scores by at most 0.0001.
+- The measurement itself has a ceiling. Loop-seq replicates agree at roughly r = 0.84 to 0.87, so no model can score near 1.0 on it.
+- The simplest zero-parameter score is modest. At r = 0.22 to 0.46 it is well below any trained readout. Its value is that it needs no fitting and matches the known periodicity of the double helix.
+
+#### Results
+
+Linear readout on vectors, held-out correlation. Trained on random sequence, tested on yeast genes it never saw
+
+| Vectors built with | Correlation r | 95% interval |
+|---|---|---|
+| Measured twist plus shape | 0.600 | 0.591 to 0.609 |
+| Measured twist | 0.529 | 0.520 to 0.539 |
+| One constant twist | 0.483 | 0.473 to 0.494 |
+| Dinucleotide-shuffled sequence | 0.260 | 0.249 to 0.272 |
+| Counts of 1-, 2- and 3-base words | 0.253 | 0.239 to 0.267 |
+
+Differences between those readouts
+
+| Contrast | Difference in r | 95% interval |
+|---|---|---|
+| Measured twist over constant twist | 0.046 | 0.041 to 0.050 |
+| Shape layer over measured twist | 0.071 | 0.063 to 0.078 |
+
+Held-out correlation, by library. The fitted model was trained on the yeast tiling library and scored on each library with shared sequence removed. The DNAcycP scores are published figures
+
+| Library | DNAcycP, trained network | 22-parameter fit | Zero-parameter score |
+|---|---|---|---|
+| Random sequence | 0.93 | 0.54 | 0.31 |
+| Chromosome V tiling | 0.77 | 0.50 | 0.36 |
+| Nucleosome | 0.89 | 0.60 | 0.46 |
+
+Helical period a small phasor model settled on, bases per turn. Every run starts from a neutral 12 bases and is never told the helical period
+
+| Library | Found from real data | Order scrambled | Labels scrambled |
+|---|---|---|---|
+| Yeast tiling | 10.49 | 12.03 | 12.05 |
+| Random sequence | 10.51 | 12.01 | 12.01 |
+| Chromosome V tiling | 10.48 | 12.03 | 12.04 |
+| Nucleosome | 10.51 | 11.96 | 12.03 |
+
+Where the period search started, yeast tiling library
+
+| Started at (bases per turn) | Settled at (bases per turn) |
+|---|---|
+| 6 | 6.01 |
+| 9 | 10.49 |
+| 12 | 10.49 |
+| 18 | 18.01 |
+| 24 | 24.48 |
+
+Zero-parameter score: strength of the AA/TT step pattern at three periods, correlation with bendability
+
+| Library | Helical period | 7 bases | 15 bases |
+|---|---|---|---|
+| Random sequence | 0.307 | -0.013 | -0.022 |
+| Yeast tiling | 0.430 | -0.065 | -0.090 |
+| Chromosome V tiling | 0.364 | -0.060 | -0.065 |
+| Nucleosome | 0.465 | -0.037 | -0.053 |
+| 50-base library | 0.221 | -0.058 | -0.054 |
+
+More training, same accuracy: held-out correlation after training the readouts with iterative optimisation
+
+| Vectors built with | Random sequence | Chromosome V tiling | Nucleosome |
+|---|---|---|---|
+| Measured twist plus shape | 0.544 | 0.524 | 0.620 |
+| Measured twist | 0.570 | 0.483 | 0.578 |
+| One constant twist | 0.529 | 0.462 | 0.558 |
+
+Limits:
+- The period search has a narrow basin. Runs started at 9 or 12 bases found the helical period, and runs started at 6, 18 or 24 bases found nothing.
+- All grading uses one kind of measurement: Loop-seq bendability in yeast-derived and random sequence. Nothing is claimed for other organisms, other assays or chromatin in the living cell.
+- The graded readouts (the linear model, the zero-parameter helical score and the fitted phasor models) run in the research harness and are not in the shipped package. The package ships the encoder, the twist tables and the window store.
+- The shape layer was graded with a pentamer table from the DNAshapeR project. That table is not shipped because its licence does not allow it, so you load your own.
+- The correlations are Pearson r. The intervals come from resampling whole gene blocks, because neighbouring windows overlap.
 
 ### Detail against components read
 

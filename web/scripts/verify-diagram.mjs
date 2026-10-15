@@ -402,6 +402,32 @@ try {
   ok('blazier phone 390: no horizontal overflow', ow.sw <= ow.cw, JSON.stringify(ow));
   ow = await overflow('/blazier/evidence/');
   ok('blazier evidence phone 390: no horizontal overflow', ow.sw <= ow.cw, JSON.stringify(ow));
+  // ================= HoloGenome: the score views =================
+  const HG = "document.querySelector('[data-diagram=hologenome-scores]').dataset.ready==='true'";
+  const hgTab = (mode) => b.evaluate(`document.querySelector('[data-diagram=hologenome-scores] [role=tab][data-mode="${mode}"]').click()`);
+  const hgRead = () => b.evaluate("document.querySelector('[data-diagram=hologenome-scores] [data-ctl=readout]').textContent");
+  // every label and value sits inside the drawing, in every view, on desktop and on a phone
+  const hgFit = "(()=>{const s=document.querySelector('[data-diagram=hologenome-scores] .hg-svg'); const vb=s.viewBox.baseVal; return [...s.querySelectorAll('text')].every(t=>{const r=t.getBBox(); return r.x>=-1 && r.x+r.width<=vb.width+1 && r.y>=-1 && r.y+r.height<=vb.height+1;});})()";
+  for (const [label, opts] of [['desktop', { width: 1280, height: 900 }], ['phone 390', { width: 390, height: 844, mobile: true }]]) {
+    await b.goto(`${base}/hologenome/`, { ...opts, wait: HG });
+    ok(`hologenome ${label}: charts mount without console errors`, b.errors.length === 0, JSON.stringify(b.errors));
+    ok(`hologenome ${label}: first view reads the measured twist against the constant twist`, await hgRead().then((t) => /0\.529/.test(t) && /0\.483/.test(t)));
+    ok(`hologenome ${label}: controls view fits the drawing`, await b.evaluate(hgFit));
+    await hgTab('best');
+    ok(`hologenome ${label}: best-model view states the gap`, await hgRead().then((t) => /trailing by 0\.28 to 0\.39/.test(t)) && await b.evaluate("document.querySelectorAll('[data-diagram=hologenome-scores] .hg-svg .bar').length===9"));
+    ok(`hologenome ${label}: best-model view fits the drawing`, await b.evaluate(hgFit));
+    await hgTab('period');
+    ok(`hologenome ${label}: period view reads the four libraries`, await hgRead().then((t) => /10\.49, 10\.51, 10\.48 and 10\.51/.test(t)) && await b.evaluate("document.querySelectorAll('[data-diagram=hologenome-scores] .hg-svg .dot.real').length>=4"));
+    ok(`hologenome ${label}: period view fits the drawing`, await b.evaluate(hgFit));
+    await hgTab('twist');
+    ok(`hologenome ${label}: twist view draws one point per base`, await b.evaluate("document.querySelectorAll('[data-diagram=hologenome-scores] .hg-svg .pt').length===50"));
+    ok(`hologenome ${label}: twist view fits the drawing`, await b.evaluate(hgFit));
+    ok(`hologenome ${label}: table alternative holds every table`, await b.evaluate("document.querySelectorAll('[data-diagram=hologenome-scores] .dia-data table').length===8"));
+  }
+  ow = await overflow('/hologenome/');
+  ok('hologenome phone 390: no horizontal overflow', ow.sw <= ow.cw, JSON.stringify(ow));
+  ow = await overflow('/hologenome/evidence/');
+  ok('hologenome evidence phone 390: no horizontal overflow', ow.sw <= ow.cw, JSON.stringify(ow));
 } finally { b.close(); server.close(); }
 process.exitCode = results.every(Boolean) ? 0 : 1;
 

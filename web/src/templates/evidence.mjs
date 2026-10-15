@@ -49,7 +49,7 @@ ${pageHead({ crumbs, eyebrow: `${p.name} evidence`, h1: e.title, lede: e.claim, 
     extra: html`<ul class="facts"><li class="fact">${e.scope === 'engine' ? 'Engine alone, without the optional plane' : e.scope}</li><li class="fact">Losses shown</li></ul>` })}
 ${productSubnav(p, e.slug === p.evidence[0]?.slug ? 'evidence' : 'evidence')}
 ${e.sections && e.sections.length > 2 ? html`<section class="sec"><div class="wrap">
-  <nav class="toc" aria-labelledby="toc-h"><h2 id="toc-h">On this page</h2><ul><li><a href="#h-head">Headline</a></li><li><a href="#h-loss">Where it is slower</a></li><li><a href="#h-method">How it was measured</a></li>${sections.map((s) => html`<li><a href="#${s.id}">${s.title}</a></li>`)}<li><a href="#h-lim">Limits</a></li></ul></nav>
+  <nav class="toc" aria-labelledby="toc-h"><h2 id="toc-h">On this page</h2><ul><li><a href="#h-head">Headline</a></li><li><a href="#h-loss">${e.lossTitle || 'Where it is slower'}</a></li><li><a href="#h-method">How it was measured</a></li>${sections.map((s) => html`<li><a href="#${s.id}">${s.title}</a></li>`)}<li><a href="#h-lim">Limits</a></li></ul></nav>
 </div></section>` : ''}
 
 <section class="sec" aria-labelledby="h-head"><div class="wrap">
@@ -58,7 +58,7 @@ ${e.sections && e.sections.length > 2 ? html`<section class="sec"><div class="wr
 </div></section>
 
 <section class="sec" aria-labelledby="h-loss"><div class="wrap">
-  ${secHead({ title: 'Where it is slower', line: 'Every loss in this record, stated once', cat: p.cat, id: 'h-loss' })}
+  ${secHead({ title: e.lossTitle || 'Where it is slower', line: 'Every loss in this record, stated once', cat: p.cat, id: 'h-loss' })}
   ${losses.length ? html`<ul class="limits">${losses.map((l) => html`<li>${l.sec && (e.sections || []).length ? html`<a href="#${l.sec.id}">${l.sec.title}</a>: ` : ''}${l.text}</li>`)}</ul>` : html`<p class="prose-block">This record measures one implementation, so no other engine is faster in it.</p>`}
 </div></section>
 

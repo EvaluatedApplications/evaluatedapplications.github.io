@@ -15,7 +15,7 @@
 <meta name="twitter:card" content="summary">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%23f0796a'/%3E%3Cstop offset='.5' stop-color='%237bd86a'/%3E%3Cstop offset='1' stop-color='%23c07dff'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='32' height='32' rx='7' fill='%23050608'/%3E%3Cpath d='M16 5L27 26H5Z' fill='none' stroke='url(%23g)' stroke-width='2' stroke-linejoin='round'/%3E%3C/svg%3E">
 <script>document.documentElement.classList.add('js')</script>
-<link rel="stylesheet" href="/assets/ea.css?v=200900a0">
+<link rel="stylesheet" href="/assets/ea.css?v=63c2f828">
 <script type="application/ld+json">{"@context":"https://schema.org","@type":"SoftwareApplication","name":"EvaluatedApplications.HoloDb","alternateName":"HoloDb","description":"Put a SQL database inside your .NET app that totals ten million invoices in 0.02 ms, ranks rows by resemblance and survives a crash.","applicationCategory":"DeveloperApplication","operatingSystem":".NET","softwareVersion":"5.1.2","url":"https://evaluatedapplications.github.io/holodb/","downloadUrl":"https://www.nuget.org/packages/EvaluatedApplications.HoloDb","license":"https://evaluatedapplications.github.io/licence/","author":{"@id":"https://evaluatedapplications.github.io/#org"}}</script><script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Home","item":"https://evaluatedapplications.github.io/"},{"@type":"ListItem","position":2,"name":"Products","item":"https://evaluatedapplications.github.io/products/"},{"@type":"ListItem","position":3,"name":"HoloDb","item":"https://evaluatedapplications.github.io/holodb/"}]}</script>
 
 </head>
@@ -78,6 +78,7 @@
   </details>
   <p class="licence-ribbon"><span>Release <b data-gen="version">5.1.2</b></span><span>ACID with a write-ahead log · Larger-than-memory tables · Runs in the browser · net8.0 and net10.0</span></p>
 </div></section>
+
 <section class="sec doc-sec" id="build" aria-labelledby="h-build"><div class="wrap">
   <div class="sec-head"><span class="sec-dot cat-holodb" aria-hidden="true"></span><h2 id="h-build">What you can build</h2><span class="sec-line">Each one is in the package today.</span></div>
   <ul class="points build-points"><li><h3>Live dashboards with no cache layer</h3><p>Totals, counts, minimums, maximums and single-column group-bys over integer columns read a maintained value, so the answer stays flat from a thousand rows to tens of millions.</p></li><li><h3>Search by resemblance, in SQL</h3><p>Rank rows by how closely they match a partial description, over the rows the table already holds. A close number or date, or a near-identical string, ranks ahead of a far one, with no separate vector index.</p></li><li><h3>A database that survives a crash</h3><p>Write-ahead logging with an fsync on each durable commit, and recovery bounded by your live data, not by how much you have ever written.</p></li><li><h3>Tables bigger than memory</h3><p>Paged tables spill cold pages to disk through an 8 KB buffer pool and keep the maintained totals accurate there.</p></li><li><h3>One database, in process or over the network</h3><p>Use it inside your app, or run it as a server with a typed client and a columnar wire protocol. The same managed code also runs in a browser tab, which is how The Analyst works.</p></li><li><h3>Exact answers from a small summary</h3><p>Attach an optional plane to chosen columns and filters, group-bys and joins are answered without scanning the table.</p><p class="more-link"><a href="/holodb/pleroma/">See HoloDb on the Pleroma</a></p></li></ul>
@@ -121,6 +122,7 @@ Linus
   <ul class="limits"><li>There is no UPSERT: inserting an existing primary key throws. Delete then insert, or check existence first.</li><li>A table has one PRIMARY KEY, an INT or TEXT column. Joins are inner joins, with one INNER JOIN per query.</li><li>ALTER TABLE supports ADD COLUMN with a DEFAULT only. There is no DROP, rename or type change.</li><li>There is no NULL and no column aliasing with AS. Table aliases in a join are not supported, so qualify columns with the table name.</li><li>NEAREST with a WHERE filters first and then ranks the survivors, and NEAREST does not combine with GROUP BY.</li><li>Only integer aggregates are constant time. Real-number aggregates scan.</li><li>The optional plane works on in-memory tables only, and a plane attached through the API is not persisted: call it again after opening. A paged table refuses a plane, and paged tables support a single join only, with no GROUP BY over a join.</li><li>The package ships compiled, without XML documentation.</li></ul>
   <p class="muted tool-note">Every public type is documented with a worked example in the package readme on NuGet. <a href="https://www.nuget.org/packages/EvaluatedApplications.HoloDb" rel="noopener">Open the NuGet page</a>.</p>
 </div></section>
+
 <section class="sec doc-sec" aria-labelledby="h-ev"><div class="wrap">
   <div class="sec-head"><span class="sec-dot cat-holodb" aria-hidden="true"></span><h2 id="h-ev">Evidence</h2><a class="sec-more" href="/holodb/evidence/">Method and every number</a></div>
   <p class="prose-block">On a 10,000,000-invoice ledger joined to 200,000 customers, the dashboard rollups read in microseconds in the embedded engine, and every result is identical across the engines. The queries where HoloDb is slower are listed beside the wins.</p>
@@ -129,7 +131,7 @@ Linus
   <div class="sec-head"><span class="sec-dot cat-holodb" aria-hidden="true"></span><h2 id="h-rel">Related</h2></div>
   <div class="related">
     <div><h3>Builds on</h3><ul><li><a class="pill" href="/evalapp/">EvalApp</a></li><li><a class="pill" href="/phasor/">Phasor</a></li></ul></div>
-    <div><h3>Used by</h3><ul><li><a class="pill" href="/prose/">Prose</a></li></ul></div>
+    <div><h3>Used by</h3><ul><li><a class="pill" href="/prose/">Prose</a></li><li><a class="pill" href="/hologenome/">HoloGenome</a></li></ul></div>
     <div><h3>Try it in the browser</h3><ul><li><a class="pill" href="/tools/dashboard/">The Dashboard</a></li><li><a class="pill" href="/tools/analyst/">The Analyst</a></li><li><a class="pill" href="/tools/prose/">Prose</a></li></ul></div>
     
     <div><h3>Elsewhere</h3><ul><li><a class="pill" href="/products/">All products</a></li><li><a class="pill" href="https://www.nuget.org/packages/EvaluatedApplications.HoloDb" rel="noopener">NuGet package</a></li></ul></div>
@@ -143,7 +145,7 @@ Linus
 </main>
 <footer class="site-footer"><div class="wrap">
   <div class="foot-grid">
-    <div><h2>Products</h2><ul><li><a href="/phasor/">Phasor</a></li><li><a href="/evalapp/">EvalApp</a></li><li><a href="/holodb/">HoloDb</a></li><li><a href="/algformer/">AlgFormer</a></li><li><a href="/prism/">Prism</a></li><li><a href="/prose/">Prose</a></li><li><a href="/tracer/">Tracer</a></li><li><a href="/holovoxel/">HoloVoxel</a></li><li><a href="/blazier/">Blazier</a></li></ul></div>
+    <div><h2>Products</h2><ul><li><a href="/phasor/">Phasor</a></li><li><a href="/evalapp/">EvalApp</a></li><li><a href="/holodb/">HoloDb</a></li><li><a href="/algformer/">AlgFormer</a></li><li><a href="/prism/">Prism</a></li><li><a href="/prose/">Prose</a></li><li><a href="/hologenome/">HoloGenome</a></li><li><a href="/tracer/">Tracer</a></li><li><a href="/holovoxel/">HoloVoxel</a></li><li><a href="/blazier/">Blazier</a></li></ul></div>
     <div><h2>Tools</h2><ul><li><a href="/tools/dashboard/">The Dashboard</a></li><li><a href="/tools/analyst/">The Analyst</a></li><li><a href="/tools/creature/">The Creature</a></li><li><a href="/tools/forecaster/">The Forecaster</a></li><li><a href="/tools/prism/">Prism</a></li><li><a href="/tools/stories/">Nano Stories</a></li><li><a href="/tools/cartographer/">The Cartographer</a></li><li><a href="/tools/prose/">Prose</a></li><li><a href="/tools/council-spending/">Council Spending Scanner</a></li></ul></div>
     <div><h2>Learn</h2><ul><li><a href="/evidence/">Evidence</a></li><li><a href="/research/">Research</a></li><li><a href="/products/">All products</a></li><li><a href="/tools/">All tools</a></li></ul></div>
     <div><h2>Company</h2><ul><li><a href="/partner/">Partner with us</a></li><li><a href="/licence/">Licence</a></li><li><a href="/ai/">For AI readers</a></li><li><a href="https://www.nuget.org/profiles/evaluatedapplications" rel="noopener">NuGet</a></li></ul></div>

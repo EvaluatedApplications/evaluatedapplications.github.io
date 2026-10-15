@@ -34,3 +34,4 @@ Regenerate the batch 4 diagram data (each runs the published package; all are ti
 - Then `node web/scripts/derive-evidence.mjs` rewrites the four evidence records (`evalapp-gate`, `algformer-cost`, `holovoxel-lod`, `prose-gate`) from that data, so no evidence number is typed.
 
 Design rules: `docs/design-language.md`.
+- HoloGenome: scores are typed once in `data/diagrams/hologenome-scores.json` (from the owner's results tables); `dotnet run -c Release --project web/generators/hologenome-helix -- web/data/diagrams/hologenome-scores.json` adds the `helix` block and package version from the published package; then `derive-evidence`, `prove-snippets hologenome-quickstart`, `run.mjs`, `verify-diagram`.

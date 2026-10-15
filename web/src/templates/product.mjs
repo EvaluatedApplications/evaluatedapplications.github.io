@@ -97,6 +97,16 @@ export default function product(ctx, p) {
   <ul class="points build-points">${sz.build.items.map((c) => html`<li><h3>${c.title}</h3><p>${fill(c.text)}</p>${c.link ? html`<p class="more-link"><a href="${c.link.href}">${c.link.label}</a></p>` : ''}</li>`)}</ul>
 </div></section>` : '';
 
+  // Results that went against the product, stated in full right under the numbers (sizzle pages only): the losses are part of the pitch.
+  const lossSec = sz && doc.losses ? html`<section class="sec doc-sec" id="losses" aria-labelledby="h-losses"><div class="wrap">
+  ${secHead({ title: doc.losses.title, line: doc.losses.line, cat: p.cat, id: 'h-losses' })}
+  <ul class="points">${doc.losses.items.map((w) => html`<li><h3>${w.title}</h3><p>${fill(w.text)}</p></li>`)}</ul>
+</div></section>` : '';
+  const srcSec = doc.sources ? html`<section class="sec doc-sec" id="sources" aria-labelledby="h-src"><div class="wrap">
+  ${secHead({ title: doc.sources.title, cat: p.cat, id: 'h-src' })}
+  <ul class="limits">${doc.sources.items.map((l) => html`<li>${fill(l)}</li>`)}</ul>
+</div></section>` : '';
+
   const whatSec = html`<section class="sec doc-sec" aria-labelledby="h-what"><div class="wrap">
   ${secHead({ title: sz ? (sz.mechanismTitle || `How ${p.name} works`) : `What ${p.name} is`, cat: p.cat, id: 'h-what' })}
   ${[].concat(doc.intro).map((t) => html`<p class="prose-block">${fill(t)}</p>`)}
@@ -175,6 +185,7 @@ ${productSubnav(p, 'overview')}
 ${bandSec}
 ${figSec}
 ${numbersSec}
+${lossSec}
 ${buildSec}
 ${qsSec}
 ${whatSec}
@@ -183,6 +194,7 @@ ${extSecs}
 ${todaySec}
 ${otherSec}
 ${limSec}
+${srcSec}
 ${evSec}
 ${relSec}
 ${licSec}
