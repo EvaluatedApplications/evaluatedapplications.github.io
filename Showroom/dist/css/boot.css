@@ -1,0 +1,111 @@
+/* Showroom's own boot screen — Showroom-owned (wwwroot/css/boot.css), NOT part of AboutUs/site/assets/
+   site.css (website-owner's territory, never touched). Reuses the SAME design tokens that stylesheet
+   already exposes globally (--bg/--ink/--accent/--ok/--mono/--spectrum-*, loaded first in index.html)
+   so this stays on-brand with the sitewide Prism/spectrum motif, without needing to touch that file.
+   Retro-terminal styling for a real boot log (see index.html's script — every line it prints is an
+   actual resource fetch, and the bar/percentage below are the framework's own real download progress
+   via --blazor-load-percentage[-text], the same mechanism site.css's old spinner used). */
+
+#app:has(.boot) { min-height: 100vh; display: flex; align-items: center; justify-content: center; background: var(--bg); padding: 2rem 1rem; }
+
+.boot { width: min(640px, 100%); font-family: var(--mono); }
+/* what an unpublished run (dotnet run) shows in #app until the loader starts the app; every published page has a real static shell instead */
+.boot-plain { margin: 0; padding: 2rem 1rem; font-family: var(--mono); font-size: .82rem; color: var(--ink-faint); }
+.boot-crt {
+  position: relative;
+  overflow: hidden;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 1.4rem 1.5rem 1.2rem;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, .4), 0 30px 80px -30px rgba(0, 0, 0, .85);
+}
+/* faint scanline texture — static, not animated, so it needs no reduced-motion gate */
+.boot-crt::before {
+  content: "";
+  position: absolute; inset: 0; pointer-events: none;
+  background: repeating-linear-gradient(180deg, rgba(255, 255, 255, .025) 0px, rgba(255, 255, 255, .025) 1px, transparent 1px, transparent 3px);
+}
+
+.boot-head { display: flex; align-items: center; gap: .5rem; font-size: .82rem; letter-spacing: .04em; color: var(--ink); }
+.boot-dot {
+  flex: 0 0 auto; width: .5rem; height: .5rem; border-radius: 50%;
+  background: var(--ok); box-shadow: 0 0 8px var(--ok);
+  animation: boot-pulse 1.4s ease-in-out infinite;
+}
+.boot-sep { color: var(--ink-faint); }
+.boot-sub { margin: .3rem 0 .9rem; font-size: .74rem; color: var(--ink-faint); }
+
+.boot-log {
+  margin: 0; height: 220px; overflow-y: auto; white-space: pre-wrap; word-break: break-all;
+  font-family: var(--mono); font-size: .76rem; line-height: 1.6; color: var(--ink-soft);
+}
+/* Always-on sign of life: a continuously blinking terminal cursor after the last log line, CSS-only
+   and independent of any JS/lifecycle state, so there's never a moment (including gaps with no
+   loadBootResource event at all, e.g. the WASM compile step below) that reads as frozen rather than
+   working. Guaranteed to cover any wait, not just ones a hook happens to exist for. */
+.boot-log::after {
+  content: "\2588"; display: inline-block; color: var(--ok);
+  animation: boot-cursor 1s steps(2) infinite;
+}
+@media (prefers-reduced-motion: reduce) { .boot-log::after { animation: none; opacity: .55; } }
+.boot-log .l { display: block; }
+.boot-log .l .p { margin-right: .4rem; color: var(--ink-faint); }
+.boot-log .l.core { color: var(--ink); }
+.boot-log .l.core .p { color: var(--ok); }
+.boot-log .l.fail { color: var(--ink-soft); }
+.boot-log .l.fail .p { color: var(--bad); }
+/* real WASM multithreading diagnostic line (index.html) — reports crossOriginIsolated/hardwareConcurrency */
+.boot-log .l.warn { color: var(--ink-soft); }
+.boot-log .l.warn .p { color: var(--warn); }
+.boot-log .boot-status { margin-left: .5rem; color: var(--ink-faint); }
+
+/* compact variant — used in-page (e.g. Prism's own checkpoint fetch) rather than the full-viewport
+   app-shell boot; same visual language, just sized to sit inline in a page instead of centering #app. */
+.ck-boot { margin: 0 0 1.4rem; }
+.ck-boot .boot-log { height: auto; max-height: 170px; }
+
+.boot-bar { margin-top: .9rem; height: 4px; border-radius: 4px; overflow: hidden; background: var(--border-2); }
+.boot-bar-fill {
+  height: 100%; width: var(--blazor-load-percentage, 0%);
+  background: linear-gradient(90deg, var(--spectrum-5, #4aa3ff), var(--spectrum-2, #f0a15a));
+  transition: width .15s ease-out;
+}
+/* Busy stripe, toggled by index.html's real WebAssembly.compileStreaming/.compile observer via
+   #boot-bar.busy. The bar's WIDTH still reflects real cumulative bytes downloaded (unchanged) — this
+   only overlays motion for the real post-download/pre-ready compile gap, so a plateaued width (can
+   legitimately sit near 100% while the browser is still compiling) doesn't read as frozen. */
+#boot-bar.busy .boot-bar-fill {
+  background-image:
+    linear-gradient(90deg, var(--spectrum-5, #4aa3ff), var(--spectrum-2, #f0a15a)),
+    repeating-linear-gradient(115deg, rgba(255, 255, 255, .38) 0 10px, rgba(255, 255, 255, 0) 10px 20px);
+  background-size: 100% 100%, 40px 100%;
+  animation: boot-stripes 1s linear infinite;
+}
+@media (prefers-reduced-motion: reduce) { #boot-bar.busy .boot-bar-fill { animation: none; } }
+
+.boot-pct { margin-top: .5rem; font-size: .72rem; color: var(--ink-faint); }
+.boot-pct::after { content: var(--blazor-load-percentage-text, "connecting\2026"); }
+
+/* Distinct state for "downloaded but not actually ready" (see #boot-phase's own comment in
+   index.html) — separate element from .boot-pct so it never fights the framework-owned
+   --blazor-load-percentage-text var, empty/invisible except during the real compile gap. */
+.boot-phase { margin-top: .35rem; min-height: 1em; font-size: .72rem; color: var(--ink-faint); }
+.boot-phase.compiling { color: var(--ok); animation: boot-pulse 1.2s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) { .boot-phase.compiling { animation: none; } }
+
+/* Fallback UI (2026-08-28, LinkedIn in-app-browser stall fix) — shown by index.html's boot script
+   only when cross-origin isolation genuinely cannot activate on this browser (see that script's own
+   header comment). Hidden by default via the [hidden] attribute; JS reveals it, never CSS alone. */
+.boot-fallback { margin-top: 1rem; padding-top: .9rem; border-top: 1px solid var(--border); }
+.boot-fallback-title { margin: 0 0 .4rem; font-size: .92rem; font-weight: 700; color: var(--ink); }
+.boot-fallback-body { margin: 0 0 .55rem; font-size: .78rem; line-height: 1.55; color: var(--ink-soft); }
+.boot-fallback-actions { display: flex; flex-wrap: wrap; gap: .6rem; margin-top: .6rem; }
+.boot-fallback-actions .btn { font-size: .82rem; padding: .55rem 1rem; }
+.boot-fallback-copied { margin: .55rem 0 0; font-size: .74rem; color: var(--ok); }
+
+@keyframes boot-pulse { 0%, 100% { opacity: 1 } 50% { opacity: .35 } }
+@keyframes boot-cursor { 0%, 49% { opacity: 1 } 50%, 100% { opacity: 0 } }
+@keyframes boot-stripes { to { background-position: 0 0, 40px 0; } }
+@media (prefers-reduced-motion: reduce) { .boot-dot { animation: none; } }
+@media (max-width: 480px) { .boot-log { height: 170px; } }

@@ -1,0 +1,78 @@
+{
+  "title": "EvalApp: self-tuning pipelines for .NET",
+  "description": "EvalApp compiles a process into one pipeline, gates every resource it touches at a real bound and can tune concurrency itself. No broker, no dependencies.",
+  "headline": "Stop hand-writing concurrency coordination.",
+  "intro": [
+    "EvalApp replaces the plumbing that every real async .NET codebase ends up writing by hand: a SemaphoreSlim to stop a flood of requests hammering a database, a guessed constant for how many things run at once, a Task.WhenAll inside a try and catch to collect failures, and a rollback path bolted on after something breaks halfway through.",
+    "You describe a process as a plain data record and a sequence of steps. EvalApp compiles that into one reusable execution path and gates every resource it touches (CPU, network, disk, database or a pool of your own) at a real bound. When you turn tuning on, it looks for the concurrency that works on the hardware it runs on, instead of a number someone picked once. It is the runtime under the other Evaluated Applications libraries, and it works on its own: no broker, no external service, no config store."
+  ],
+  "facts": ["Zero dependencies", "net8.0 and net10.0", "Binary-only package"],
+  "why": [
+    { "title": "One dependency instead of a stack", "text": "Where you would reach for a DI container, MediatR, Polly and TPL Dataflow, EvalApp is a single compiled pipeline that covers fan-out, resource gating, fallback steps and compensation together." },
+    { "title": "The tuner probes, it does not wait for a failure", "text": "A circuit breaker waits for something to break and then responds. The adaptive tuner keeps probing for the operating point that stops things breaking, independently for each instance and with no coordination. A Bayesian mode keeps what it learned across restarts." },
+    { "title": "Whole categories of coordination bugs do not compile", "text": "A saga you open has to be closed before the pipeline builds. A step with a side effect cannot be added without declaring the resource it touches, so there is no way to write an ungated side effect." },
+    { "title": "The builder chain is the architecture", "text": "Read the fluent declaration from top to bottom and it reads like the process it describes. It is the code, not documentation about the code, so it cannot drift out of date the way a diagram does." },
+    { "title": "Nothing to stand up first", "text": "It is a package reference, not infrastructure. Most pipeline libraries want a broker or a database before the first item is processed. EvalApp does not." }
+  ],
+  "diagram": {
+    "id": "evalapp-gate",
+    "title": "The gate",
+    "stageLabel": "Interactive view of one recorded run. Drag, or use the arrow keys to turn and tilt it.",
+    "lede": "{jobs} jobs are queued at once and every one needs the network. The gate lets a declared number through at a time. Pick a bound and replay the run: all {jobs} finish in {oneMs} ms at a bound of 1, in {fastestMs} ms at {fastestBound}, and in {widestMs} ms when all {jobs} run at once, because the simulated service slows when it is crowded.",
+    "caption": "Recorded by running the published EvaluatedApplications.EvalApp package (release {version}). The gate, the queueing and every timestamp are the package's behaviour. Each download is a simulated wait of {baseMs} ms that stretches once more than {knee} are in flight."
+  },
+  "quickstart": {
+    "lede": "Define a record, describe the process as steps, build once, then run it as often as you like.",
+    "source": "snippets/evalapp-quickstart.cs",
+    "output": "snippets/evalapp-quickstart.out.txt"
+  },
+  "capabilities": [
+    { "title": "Fluent pipeline builder", "text": "Eval.App(...) leads to domains, tasks and steps, compiled once into an immutable, reusable ICompiledPipeline<T>." },
+    { "title": "Resource-gated concurrency", "text": "Declare Network, DiskIO, Cpu, Database or a named pool of your own, and every step that touches it contends for the same bound." },
+    { "title": "Adaptive and Bayesian tuning", "text": "A hill-climbing tuner that rediscovers the optimum on each run, or a Bayesian tuner whose performance model survives restarts. Both are opt-in and stay inside the bounds you declare." },
+    { "title": "Parallel ForEach and parallel branches", "text": "Bounded per-item fan-out over a collection, where Tunable.ForItems() lets the tuner pick the count, and a fixed set of concurrent branches with configurable merge strategies." },
+    { "title": "Sagas with compensation", "text": "Chain steps with an undo. When a later step fails, every earlier compensation runs in reverse order." },
+    { "title": "Middleware", "text": "Wrap any step for retry, timing or audit by implementing IStepMiddleware<T>. It is a seam you implement, not a library of ready-made ones." },
+    { "title": "Pipelines that run pipelines", "text": "A compiled pipeline is a value. A step can run another pipeline or itself, so an outer schedule loop can drive an inner per-batch pipeline, or a pipeline can recurse through a tree, with no orchestration code of your own. PipelineRef<T> forward-declares a pipeline, PipelineTrace tells same-named steps apart across levels, and runaway recursion fails cleanly instead of overflowing the stack." },
+    { "title": "A harness for things that are not thread-safe", "text": "Declare an ExclusiveResource once (a GPU context, a native handle, a single-writer file), guard a scope or named branches with it, and a second concurrent entry fails loudly or queues, as you choose. It is re-entrant for recursion, and forks inside a held scope exclude each other." },
+    { "title": "Single-thread hosts", "text": "In a browser, on a one-core process or when you say so, EvalApp detects it once and stops fanning out. ForEach, parallel groups and ChunkedWork run inline, and long runs hand the thread back every few milliseconds so a page stays responsive. On a multi-core host none of it is active." },
+    { "title": "Results as data", "text": "PipelineResult<T> is Success, Failure or Skipped, matched with a switch instead of caught." },
+    { "title": "Offline licence check", "text": "The licence validator every Evaluated Applications package embeds is part of the package. It runs entirely offline with ECDsa P-256 and makes no network call." }
+  ],
+  "extensions": [
+    {
+      "id": "neural", "nav": "EvalApp.Neural", "packageId": "EvaluatedApplications.EvalApp.Neural",
+      "title": "EvalApp.Neural: a tuner that keeps learning",
+      "line": "A learned policy in place of the built-in heuristic",
+      "paragraphs": [
+        "The built-in tuner is a heuristic. EvalApp.Neural swaps it for a small neural policy that reads each gate's recent history and keeps learning from its own decisions while the program runs. It starts from a model that ships with the package and is never frozen.",
+        "It is meant for pipelines with several gates that interact, such as a database, a CPU pool and a disk contending together, where moving one gate changes what the others should do. For a single obvious fan-out the built-in tuner is enough."
+      ],
+      "points": [
+        { "title": "One line to turn on", "text": "Call WithNeuralTuning() on the app builder, after WithResource and before DefineDomain. Nothing else changes." },
+        { "title": "One model for the process", "text": "NeuralTuning.UseGlobally installs a shared model for every app in the process that has tuning enabled. UseGloballyPersisted saves it to a file as it trains and loads it next time." },
+        { "title": "Coordinated moves", "text": "With several gates it credits the gate it moved last and moves only the one under the most contention, so coupled gates are not all changed at once." },
+        { "title": "No licence key", "text": "It runs the same with or without a licence key." }
+      ],
+      "snippet": {
+        "lede": "The same ForEach pipeline, with the learned tuner switched on.",
+        "source": "snippets/evalapp-neural.cs",
+        "output": "snippets/evalapp-neural.out.txt"
+      },
+      "good": [
+        "It depends on EvalApp and AlgFormer, which are pulled in with it, and it needs .NET 8 or later.",
+        "UseGlobally and UseGloballyPersisted change a process-wide default, so drive one workload at a time under them.",
+        "If the EVALAPP_NEURAL_MODEL environment variable is set, any process that loads the assembly installs the persisted tuner and trains against that file. Leave it unset unless you mean it.",
+        "A model file that does not match the expected shape is replaced silently by a fresh one, so a run that seems to have forgotten what it learned may have discarded a stale file."
+      ]
+    }
+  ],
+  "limits": [
+    "Work that has to survive a process restart over hours or days belongs to a workflow engine such as Temporal. EvalApp runs in process.",
+    "Purely reactive resilience, which detects a break and responds to it, is what Polly is for. EvalApp is for the case in between: no infrastructure to stand up, throughput that matters and concurrency that tunes itself.",
+    "ICompiledPipeline<T> is opaque. It exposes a name and RunAsync. Report() gives a read-only view of the plan, with call counts for each ForEach node.",
+    "The builder and step-construction path is safe to trim and to compile ahead of time. The tuner's file persistence and a couple of internal caches still use reflection-based JSON and raise trimmer warnings under PublishTrimmed, so leave WithTuning off if that matters for your build.",
+    "The package ships as a binary with no source and no XML documentation. Author against the root EvalApp namespace; everything public lives there."
+  ],
+  "reference": "Every public type is documented with a worked example in the package readme on NuGet."
+}

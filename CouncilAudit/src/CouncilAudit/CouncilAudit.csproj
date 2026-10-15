@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <!-- Browser-safe: no file system, no Process, no P/Invoke. This library takes only
+         byte[] in and returns POCOs/strings out, so it can run unmodified inside a
+         Blazor WebAssembly page (the Showroom). Do not add a dependency here that
+         breaks that - check any new NuGet reference against wasm-tools first. -->
+    <WasmEnableSIMD>false</WasmEnableSIMD>
+  </PropertyGroup>
+
+  <!-- Windows-1252 decoding (several councils, Wokingham among them, publish this instead of
+       UTF-8) needs System.Text.Encoding.CodePages. On net10.0 it's part of the shared framework
+       already, so no PackageReference is needed - CsvReader.RegisterCodePages() just calls
+       Encoding.RegisterProvider. If targeting an older TFM ever breaks this, add the package
+       back explicitly. -->
+
+</Project>

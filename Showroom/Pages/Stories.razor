@@ -1,0 +1,598 @@
+@page "/stories"
+@attribute [BlazierPage("stories", Title = "Nano Stories — the same tiny AI, telling a story", Layout = typeof(MainLayout), Static = true)]
+@inject IBuildTime Build
+@implements IDisposable
+@inject HttpClient Http
+@inject HoloKernel.SessionHost Sessions
+@inject Microsoft.JSInterop.IJSRuntime JS
+@using System.Text
+@using PrismFormer
+@using HoloKernel
+@* global:: required — same reason as Prism.razor/Prose.razor: this page's own generated class,
+   Showroom.Pages.Stories, is compiled into the SAME Showroom.Pages namespace as Showroom.Pages.Prism
+   (the sibling page), and that sibling class shadows the "Prism" NuGet package's root namespace for
+   every file in Showroom.Pages, not just Prism.razor itself — an unqualified @using Prism.Inference
+   here would resolve "Prism" to the page class instead of the package. *@
+@using global::Prism.Inference
+
+<PageTitle>Nano Stories — the same tiny AI, telling a story</PageTitle>
+
+<div class="room" data-cat="algformer">
+    <header class="room-head">
+        <nav class="crumb"><a href="/">Evaluated Applications</a> <span>/</span> Nano Stories</nav>
+        <h1>Nano Stories</h1>
+        <p class="lede"><a href="/tools/prism">Prism</a>'s exact model — same weights, same single training run —
+            asked to write a story instead of hold a conversation. Give it an opening line and watch it
+            continue, live, one word piece at a time, right here in your browser.</p>
+    </header>
+
+    @if (Build.IsPrerender)
+    {
+        <ToolStart Tool="Nano Stories" Data="the model file" />
+    }
+    else if (_loadError is not null)
+    {
+        <p class="err">@_loadError</p>
+    }
+    else if (!_loaded)
+    {
+        <div class="boot-crt ck-boot">
+            <div class="boot-head"><span class="boot-dot" aria-hidden="true"></span>downloading the model</div>
+            <div class="boot-sub">one time only — your browser keeps it after this. Already opened
+                <a href="/tools/prism">Prism</a> in this tab? This reuses that same download, not a second one.</div>
+            <div class="boot-log">
+                @foreach (var s in _loadSteps)
+                {
+                    <span class="l @s.Cls"><span class="p">&gt;</span> @s.Label <span class="boot-status">@s.Status</span></span>
+                }
+            </div>
+        </div>
+    }
+    else
+    {
+        <TokenVoiceControls Voice="_voice!" />
+        <p class="sound-note hint">Each word piece plays a short chord as it's written — the exact same voice
+            as <a href="/tools/prism">Prism</a>, same tuning, nothing retuned for this page. Off by default.</p>
+
+        <div class="cr-stats">
+            <div class="stat"><div class="n">@_stats!.ParamCount.ToString("N0")</div><div class="l">parameters</div></div>
+            @* 8 bytes per parameter (they are doubles) — same figure Prism.razor shows, for the same checkpoint. *@
+            <div class="stat"><div class="n">@((_stats.ParamCount * 8 / 1024).ToString("N0"))&nbsp;KB</div><div class="l">how big it is, in total</div></div>
+            @if (_rounds is not null)
+            {
+                <div class="stat"><div class="n">@_rounds.Value.ToString("N0")</div><div class="l">practice rounds so far</div></div>
+            }
+        </div>
+
+        <div class="ns-panel">
+            <label class="prompt-field">
+                opening line
+                <input class="prompt-input" @bind="_promptInput" @bind:event="oninput" maxlength="120"
+                       placeholder="@DefaultPrompt" disabled="@_generating" />
+            </label>
+
+            <div class="variety-row" role="group" aria-label="Variety">
+                <span class="variety-label">variety</span>
+                @foreach (var opt in VarietyOptions)
+                {
+                    <button type="button" class="variety-btn @(_variety == opt.Value ? "on" : "")"
+                            title="@opt.Hint" disabled="@_generating" @onclick="() => _variety = opt.Value">@opt.Label</button>
+                }
+            </div>
+
+            <div class="ns-controls">
+                <button class="go" @onclick="() => TellStory(reuseSeed: false)"
+                        disabled="@(_generating || string.IsNullOrWhiteSpace(_promptInput))">
+                    @(_generating ? "writing…" : _story is null ? "Tell me a story" : "Tell me another")
+                </button>
+                @if (_generating)
+                {
+                    <button class="ghost" @onclick="SkipToEnd" disabled="@_skipRequested">
+                        @(_skipRequested ? "finishing…" : "Skip to the end")
+                    </button>
+                }
+                else if (_story is not null)
+                {
+                    <button class="ghost" @onclick="() => TellStory(reuseSeed: true)"
+                            title="Same prompt, same variety, same seed — reproduces this exact story">
+                        Replay this seed
+                    </button>
+                }
+            </div>
+
+            @if (_generating || _story is not null)
+            {
+                <p class="story-text">
+                    <span class="story-prompt">@_activePrompt</span><span class="story-body">@Paragraphs(_generating ? _pendingContinuation : _story)</span>@if (_generating)
+                    {
+                        <span class="car" aria-hidden="true"></span>
+                    }
+                </p>
+                @if (_lastSeed is not null && !_generating)
+                {
+                    <p class="seed-line hint">seed @_lastSeed.Value · @VarietyLabel(_lastVariety) variety@(_lastStopReason == "loop" ? " · stopped early, it started repeating" : _lastStopReason == "cap" ? " · ran on until it was stopped" : "")</p>
+                }
+            }
+            else
+            {
+                <p class="hint">Write an opening line above, or keep the one already there, and press
+                    Tell me a story.</p>
+            }
+
+            @if (_error is not null) { <p class="err">@_error</p> }
+        </div>
+
+        <p class="hint story-caveat">This is a @_stats!.ParamCount.ToString("N0")-parameter model — remarkable
+            for that size, not remarkable in absolute terms. Expect sentence-shaped output with weak semantics,
+            not a coherent plot.</p>
+
+        <div class="outro">
+            <p>This is the exact same model as <a href="/tools/prism">Prism</a> — same <code>oracle-brain.bin</code>,
+                same weights, the same single training run, not a fine-tune and not a sibling. Its training text
+                is mostly TinyStories plus a smaller mix of chat, reasoning, maths and Q&amp;A pairs, so one
+                small model learned to both hold a conversation and tell a story — <a href="/tools/prism">Prism</a> is
+                this checkpoint asked to do the first; this page is the same checkpoint asked to do the second.</p>
+        </div>
+    }
+</div>
+
+@code {
+    // ---- decode policy — deliberately its OWN DecodePolicy, constructed explicitly rather than via
+    // `Prism.Inference.DecodePolicy.Default with {...}` (which is how Prism.razor builds its own),
+    // per the diagnosis this tool originally shipped with: HoloEngine's decode GATE, not the model, is
+    // why a generator reads as deterministic. This page used to run FloorMode.ResonanceSigma with a
+    // per-preset FloorK (see the retired table below, kept for history) — RETIGHTENED 2026-09-24
+    // (matches the same fix in PrismStudio's host and in Prism.razor here): ResonanceSigma is mean +
+    // FloorK*sigma computed over the FULL vocab INCLUDING every suppressed token, which degenerates to
+    // an effective top-1 filter at 78-84% of positions on this checkpoint and makes Temperature inert
+    // there — FloorK stopped meaning what the old table said it meant. Switched to FloorMode.TopP;
+    // FloorK is now vestigial once Floor=TopP (confirmed by direct test against the real Prism 1.3.0
+    // Gate.Evaluate: identical GateDecision for FloorK=0/3/99 under TopP), no longer passed at all.
+    //
+    // Nucleus mass re-measured directly against the CURRENTLY deployed checkpoint (r84,639, wwwroot/
+    // data + dist/data refreshed 2026-09-24 — the first EVE-trained model, NOT the prior r635,618 one;
+    // re-measure this table if the checkpoint is re-minted). Cumulative softmax mass needed at the
+    // FINAL face to admit N candidates:
+    //
+    //     N=3 -> 0.303   N=5 -> 0.390   N=8 -> 0.466   N=12 -> 0.539   N=20 -> 0.635   N=40 -> 0.752
+    //
+    // P(top1) is 0.199 (~57 effective candidates). Re-measure this table (and reconsider every P below)
+    // if P(top1) ever moves off ~0.2 on a future checkpoint. NEVER change Prism.razor's own Policy to
+    // fix this — that would change Prism's live chat behaviour, which nobody asked for. This is a
+    // per-tool policy, scoped to this page only.
+    static DecodePolicy PolicyFor(double p) => new()
+    {
+        ConfidentThreshold = 0.60,   // unchanged production gate — still commit greedily above 60% confidence
+        Temperature = 0.80,          // unchanged production sampling temperature
+        Floor = FloorMode.TopP,
+        P = p,
+        DegenRepeat = 4,
+        DegenNonGreedyRun = 0,       // same reasoning as Prism.razor: preserve the site's existing stop behaviour
+    };
+
+    // Three named presets rather than a raw P slider -- a visitor doesn't know what nucleus mass is, so
+    // the control is "Focused / Balanced / Wild", not a number. RETIGHTENED 2026-09-24 -- this used to
+    // be a FloorK sweep against FloorMode.ResonanceSigma; that table is meaningless now Floor=TopP (see
+    // git history if it's ever wanted). Values read directly off the SAME measured table Prism.razor's
+    // own comment carries, cumulative softmax mass needed at the FINAL face to admit N candidates on
+    // the currently deployed checkpoint (r84,639):
+    //
+    //     N=3 -> 0.303   N=5 -> 0.390   N=8 -> 0.466   N=12 -> 0.539   N=20 -> 0.635   N=40 -> 0.752
+    //
+    // P(top1) is 0.199 (~57 effective candidates). Focused = N~3 (P=0.30, the SAME value Prism.razor's
+    // own chat policy now uses -- "closest to Prism's own chat behaviour" was already this preset's own
+    // description, and it is now literally true). Balanced = N~8 (P=0.466, real everyday variety
+    // without the old policy's word-salad risk). Wild = N~20 (P=0.635, the widest spread still
+    // comfortably short of N=40's 0.752, which starts admitting enough of the tail to read as noise on
+    // a model this small). Tuned by reasoning from the measured table, not by generating and
+    // listening -- this agent cannot open a browser (Showroom charter boundary) -- flagged in the
+    // hand-off for the user to try live and retune the three presets' P values below if a round of
+    // listening says otherwise. Re-measure the whole table if the checkpoint is re-minted or P(top1)
+    // moves off ~0.2.
+    enum Variety { Focused, Balanced, Wild }
+    static double PFor(Variety v) => v switch
+    {
+        Variety.Focused => 0.43,
+        Variety.Wild => 0.89,
+        _ => 0.77,
+    };
+    // 2026-10-04: the three values above are re-measured on r3,970 (V=320 d=64 L=33 ctx=512 K=3) by the same cumulative-mass
+    // rule (Focused 0.43 = Prism chat's P, Balanced 0.77, Wild 0.89). They are CHECKPOINT-SPECIFIC: the r84,639 table above
+    // no longer applies, and these must be re-measured as training continues.
+    sealed record VarietyOption(Variety Value, string Label, string Hint);
+    static readonly VarietyOption[] VarietyOptions =
+    {
+        new(Variety.Focused, "Focused", "Closest to Prism's own chat behaviour — occasional variety"),
+        new(Variety.Balanced, "Balanced", "The default — real variety without drifting into noise"),
+        new(Variety.Wild, "Wild", "The widest spread this checkpoint's own ranking still supports"),
+    };
+    static string VarietyLabel(Variety v) => v switch { Variety.Focused => "Focused", Variety.Wild => "Wild", _ => "Balanced" };
+    Variety _variety = Variety.Balanced;
+
+    const string DefaultPrompt = "Once upon a time,";
+    // The strongest opening this checkpoint has, per the user's own testing — not guessed. Held as the
+    // input's actual (editable) value, not just a placeholder, per the brief.
+    string _promptInput = DefaultPrompt;
+    string _activePrompt = DefaultPrompt;   // frozen at the start of a generation, so editing the input
+    // mid-story (or after) never retroactively relabels a story already on screen.
+
+    // RAISED 128 -> 512 on 2026-09-22 (user: "let it go wild"), because 128 had become the thing doing
+    // the clipping. Once the 5-sentence cap came off and the r526,366 checkpoint landed with its final
+    // context position finally trained, a Balanced run produced TWELVE sentences with zero invented words
+    // and was still going cleanly when the step budget cut it off — so 128 was hiding the answer to the
+    // only question this tool is currently being used to ask, which is where the model actually gives out.
+    //
+    // At the ~10.7 steps/sentence that run measured, 512 is roughly 48 sentences, far past any plausible
+    // coherence limit, so the model should now break before the budget does. That is the point: this
+    // constant is deliberately NOT a quality judgement any more, just a bound that stops a browser tab
+    // looping forever, which is needed because this checkpoint almost never emits its own stop token.
+    // The real stops are DegenerateTail (cuts a repeating tail live, mid-animation) and the
+    // sentence-boundary trim in Trim().
+    //
+    // Cost is fine: past ctx (71) the serve cache re-primes each step, so 512 steps is ~4x the compute of
+    // 128, single-digit seconds in WASM, and the paced reveal dominates wall-clock anyway. "Skip to the
+    // end" is there for a visitor who does not want to wait out a long one.
+    //
+    // 512 x 3.13 measured bytes/token (Prism's figure, same vocab) is ~1,600 characters. Re-measure
+    // bytes/token alongside Prism's own MaxReplySteps on the next re-mint, since both depend on it.
+    //
+    // 512 -> 448 on 2026-10-04 (r3,970, ctx=512): the context window is now 512, so a story of 512 steps plus any prompt
+    // overflowed it and re-Primed the whole window EVERY step (~5.7 ms/token x 512 = ~2.9 s a step). 448 leaves 64 prompt
+    // tokens, so prompt + story stays under 512 and the cache never fills (GenerateStoryAsync clamps a longer prompt).
+    const int MaxStorySteps = 448;
+
+    // CONTEXT-AGNOSTIC (2026-10-08): MaxStorySteps is the CEILING tuned on a ctx=512 checkpoint. The cap actually used is
+    // HoloKernel.ContextBudget.StoryCap, which leaves an opening-line reserve (an eighth of the window, at least 16 tokens)
+    // and shrinks the story to what is left: 512 -> 448 steps (exactly as before, prompt budget 64), a ctx=64 checkpoint -> 48
+    // steps with 16 prompt tokens, instead of a negative prompt budget. Read after the model has loaded.
+    // Steps in a story: the no-roll cap on a window that holds MaxStorySteps (512 -> 448), StoryRollTarget on a smaller one (64 -> 400,
+    // rolled). StoryFitsWindow is the no-roll cap alone, which sizes the opening-line budget.
+    int StoryFitsWindow => _stats is null ? MaxStorySteps : ContextBudget.StoryCap(_stats.Context, MaxStorySteps);
+    int StoryCap => _stats is null ? MaxStorySteps : ContextBudget.RollingStoryCap(_stats.Context, MaxStorySteps, StoryRollTarget);
+    bool Rolls => _stats is not null && StoryCap > StoryFitsWindow;
+    // Opening-line budget: whatever leaves room for the whole story in a window that holds it; half the window on one that rolls
+    // (a longer opening line is kept in full up to there, the first Prime is Context/2 tokens, same size as every later re-Prime).
+    int PromptCap => _stats is null ? 0 : Rolls ? ContextBudget.RollTail(_stats.Context) : ContextBudget.PromptBudget(_stats.Context, StoryFitsWindow);
+
+    // LONGER STORIES BY SLIDING THE WINDOW (2026-10-08, user: "it makes a single sentence"). On a small-context checkpoint
+    // (ctx=64) the no-roll cap above is 48 steps, one sentence. A story is now StoryRollTarget steps whatever the window:
+    // when the serve cache fills (Filled == Context) the page re-Primes on the most recent HALF window (ContextBudget.RollTail)
+    // and carries on with O(1) StepToken calls, so the cost is one Prime of Context/2 tokens per Context/2 steps (ctx=64: 12 primes
+    // of 32 tokens for 400 steps), not one full-window Prime per step. The story forgets text older than the tail, which is the price
+    // of a window this small. A window that already holds MaxStorySteps (ctx=512: 448 + 64 prompt) never rolls, byte-identical to before.
+    //
+    // 400 tokens = the user's "several hundred tokens": about 450-500 characters, a few short paragraphs, and it keeps the
+    // browser responsive (a repaint + yield every few tokens, see GenerateStoryAsync). Raising it is a one-number change; the
+    // degenerate-tail cut and the sentence-boundary trim bound a run that goes wrong long before the budget does.
+    const int StoryRollTarget = 400;
+
+    // The model never emits a newline (its vocab has none; Normalize spaces everything outside 32..126), so "paragraphs" are
+    // layout: after a sentence that takes the running paragraph to ParagraphChars or more, the next sentence starts a new one.
+    // Pure function of the text so far, so the live reveal and the finished story always break in the same places.
+    const int ParagraphChars = 130;
+
+    static string Paragraphs(string? text)
+    {
+        if (string.IsNullOrEmpty(text)) return "";
+        var sb = new StringBuilder(text.Length + 8);
+        var paraStart = 0;
+        for (var i = 0; i < text.Length; i++)
+        {
+            var c = text[i];
+            // a break goes where a sentence ender is followed by a space and then more text
+            if (Array.IndexOf(SentenceEnders, c) >= 0 && i + 2 < text.Length && text[i + 1] == ' ' && i + 1 - paraStart >= ParagraphChars)
+            {
+                sb.Append(c).Append("\n\n");
+                i++;                   // swallow the space the paragraph break replaces
+                paraStart = i + 1;
+                continue;
+            }
+            sb.Append(c);
+        }
+        return sb.ToString();
+    }
+
+    // Consumed by the sentence-boundary trim at the end of GenerateStoryAsync — see that comment.
+    static readonly char[] SentenceEnders = { '.', '!', '?' };
+
+    // SENTENCE CAP REMOVED 2026-09-22 (user request), was MaxSentences = 5.
+    //
+    // It was counted by eye on live output: stories held coherence for about five or six sentences
+    // and then started inventing words. The count was honest, but the cause was almost certainly not
+    // the model running out of ability. It was a genuine defect in the engine: the LAST position of a
+    // full context window was structurally untrainable, so its prediction head was never trained and
+    // decoded as confident noise (MEASURED on the deployed checkpoint, 26.6 bits with P(top-1) 0.60
+    // at that position against ~5.7 bits at every other one). With a five-token prompt this window
+    // fills around token 66 of generation, which is roughly where a fifth sentence lands. So the cap
+    // was very likely measuring where the bug bit, not where the model gives out.
+    //
+    // Fixed in AlgFormer 2.12.1 (the scorer now accepts one token of overflow so that position gets
+    // a loss) and 2.12.2 (the corpus window draw can now actually reach its own ceiling, without
+    // which 2.12.1 never fired). Both are training as of 2026-09-22.
+    //
+    // THE CURRENTLY DEPLOYED CHECKPOINT STILL HAS THE UNTRAINED POSITION, so until a post-fix
+    // checkpoint ships, stories will visibly degrade past roughly five sentences rather than being
+    // cut there. That is the point: it makes the real onset visible so it can be re-counted honestly
+    // on the next refresh instead of being hidden behind a constant that was fitted to a bug.
+    //
+    // MaxStorySteps still bounds generation, and the sentence-boundary trim in Trim() still drops an
+    // incomplete trailing fragment. Only the sentence COUNT cap is gone.
+
+    TokenVoice? _voice;
+    HoloSession? _session;
+    ModelStats? _stats;
+    SubwordVocab? _vocab;
+    bool _loaded; string? _loadError; string? _error;
+    long? _rounds;
+    int? _trainedStackK;
+    int? _trainedIterWarm;
+    int _k = 1;
+
+    bool _generating;
+    bool _skipRequested;   // set by "Skip to the end" — read inside GenerateStoryAsync's loop to drop
+                            // pacing/sound for the rest of THIS generation only; cleared at the start of
+                            // the next one. Chosen over speeding the cadence up: the cadence is part of
+                            // the character (per the brief), so a long story gets an escape hatch rather
+                            // than a faster voice.
+    string? _story;                 // the finished continuation (not including the prompt); null until
+                                     // the first generation completes.
+    string _pendingContinuation = "";   // the in-flight continuation, streamed live — same pattern as
+                                         // Prism.razor's _pendingReply.
+    int _lastReprimes;   // re-Primes in the last generation (window slides); diagnostic, read by the test rig
+    int? _lastSeed;
+    Variety _lastVariety;
+    string? _lastStopReason;   // "stop" | "loop" | "cap" — same three outcomes Prism.razor's StopReason
+                                // names, kept as plain strings here since there's no chat-turn record to
+                                // hang an enum member off.
+
+    sealed class LoadStep { public string Label = ""; public string Status = "fetching…"; public string Cls = ""; }
+    readonly List<LoadStep> _loadSteps = new();
+    LoadStep Begin(string label) { var s = new LoadStep { Label = label }; _loadSteps.Add(s); StateHasChanged(); return s; }
+    void Finish(LoadStep s, string status, string cls = "core") { s.Status = status; s.Cls = cls; StateHasChanged(); }
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (Build.IsPrerender) return;   // the static shell fetches nothing (Blazier); the live page starts here
+        try
+        {
+            _voice = new TokenVoice(JS);
+            await _voice.InitializeAsync();
+
+            var s = Begin(DataUrl.For("prism/oracle-vocab.txt"));
+            var vocabBytes = await Http.GetByteArrayAsync(DataUrl.For("prism/oracle-vocab.txt"));
+            var merges = Encoding.UTF8.GetString(vocabBytes).Replace("\r\n", "\n").Split('\n').Where(l => l.Length > 0).ToList();
+            _vocab = new SubwordVocab(merges);
+            Finish(s, $"{vocabBytes.Length:N0} B → {_vocab.Size:N0}-symbol vocab");
+
+            s = Begin(DataUrl.For("prism/oracle-rounds.txt"));
+            try { _rounds = long.Parse((await Http.GetStringAsync(DataUrl.For("prism/oracle-rounds.txt"))).Trim()); Finish(s, $"{_rounds:N0} rounds trained"); }
+            catch { Finish(s, "not shipped (optional)", "fail"); _rounds = null; }
+
+            s = Begin(DataUrl.For("prism/oracle-stackk.txt"));
+            try { _trainedStackK = int.Parse((await Http.GetStringAsync(DataUrl.For("prism/oracle-stackk.txt"))).Trim()); Finish(s, $"K={_trainedStackK}"); }
+            catch { Finish(s, "not shipped (optional)", "fail"); _trainedStackK = null; }
+
+            s = Begin(DataUrl.For("prism/oracle-iterwarm.txt"));
+            try { _trainedIterWarm = int.Parse((await Http.GetStringAsync(DataUrl.For("prism/oracle-iterwarm.txt"))).Trim()); Finish(s, $"{_trainedIterWarm:N0}-round ramp"); }
+            catch { Finish(s, "not shipped (optional)", "fail"); _trainedIterWarm = null; }
+
+            _k = PrismCheckpoint.ResolveK(_trainedStackK);
+
+            // SessionHost keys by MODEL, not tool ("prism", the same key Prism.razor uses) — whichever of
+            // the two tools a visitor opens first pays the real download; the other reuses that same
+            // in-memory HoloSession instantly. This is the entire mechanism; nothing else here needs to
+            // know or care which tool loaded it first.
+            bool reused = Sessions.IsLoaded(PrismCheckpoint.SessionKey);
+            _session = await Sessions.GetOrCreateAsync(PrismCheckpoint.SessionKey, async () =>
+            {
+                var sb = Begin(DataUrl.For("prism/oracle-brain.bin.gz"));
+                var (bytes, gzLen) = await CheckpointFetch.FetchAndDecompressGzipAsync(Http, DataUrl.For("prism/oracle-brain.bin.gz"));
+                var peek = HoloFormer.Deserialize(bytes);
+                Finish(sb, $"{gzLen:N0} B gzip → {bytes.Length:N0} B → {peek.ParamCount:N0} params deserialized");
+                var alpha = PrismCheckpoint.ReconstructAlpha(peek.Layers, _rounds, _trainedIterWarm);
+                return HoloSession.FromCheckpoint(bytes, _k, alpha);
+            });
+            if (reused) Finish(Begin(DataUrl.For("prism/oracle-brain.bin.gz")), "reused from earlier this visit (no re-download)");
+            _stats = _session.Stats();
+
+            // Silent warm-up — same reasoning as Prism.razor: pay WASM's cold-start cost for the
+            // generation path before the visitor's first real click, discard the result, show nothing.
+            try
+            {
+                var warm = _session.NewServeCache();
+                var warmTokens = _vocab!.Encode(DefaultPrompt);
+                var warmCtx = BuildContext(new List<int>(warmTokens.Length > 0 ? warmTokens : new[] { 0 }), _stats.Context);
+                _ = _session.Prime(warm, warmCtx);
+                _ = _session.StepToken(warm, warmCtx[^1]);
+            }
+            catch { /* warm-up only, never user-visible, never blocks page load */ }
+
+            _loaded = true;
+        }
+        catch (Exception ex) { _loadError = "Couldn't load the checkpoint: " + ex.Message; }
+    }
+
+    static int[] BuildContext(List<int> seq, int maxContext)
+    {
+        var take = Math.Min(seq.Count, maxContext);
+        if (take == 0) return new[] { 0 };
+        var ctx = new int[take];
+        seq.CopyTo(seq.Count - take, ctx, 0, take);
+        return ctx;
+    }
+
+    // One-shot continuation from a plain prompt — deliberately NOT the "user: .../prism: ..." chat wire
+    // format Prism.razor's BuildContextTokens builds. This model's corpus is mostly plain narrative text
+    // (TinyStories), so a story prompt is encoded as ordinary continuation text, exactly the shape that
+    // slice of training data actually looked like — tagging it as a chat turn would be asking the wrong
+    // half of the same model.
+    async Task<(string Text, string StopReason)> GenerateStoryAsync(string prompt, int seed, Variety variety, Func<string, Task>? onPartial)
+    {
+        var policy = PolicyFor(PFor(variety));
+        var promptTokens = _vocab!.Encode(HoloKernel.AsciiPunctuation.Fold(prompt));
+        var seq = new List<int>(promptTokens.Length > 0 ? promptTokens : new[] { 0 });
+        // A window that holds the story (ctx=512: 448 steps + 64 prompt tokens) never fills, so nothing re-Primes; a longer
+        // opening line (maxlength 120 chars can reach ~100 tokens) keeps only its tail. A window too small for it (ctx=64)
+        // SLIDES instead: see StoryRollTarget. Caps and budgets come from the loaded model's Context (ContextBudget).
+        var maxSteps = StoryCap;
+        var window = _stats!.Context;
+        var rolls = Rolls;
+        var rollTail = ContextBudget.RollTail(window);
+        ContextBudget.KeepTail(seq, PromptCap);
+        var outIds = new List<int>();
+        var vocabLimit = _vocab.Size;
+        var guard = new DegenGuard(policy);
+        // Seeded per generation (per the brief): "tell me another" gets a genuinely different Random
+        // instance each time, and replaying the SAME seed (the "Replay this seed" button) reproduces the
+        // exact same draws from Gate.Pick, hence the exact same story, for the same prompt/variety.
+        var rng = new Random(seed);
+        var reason = "cap";
+
+        var cache = _session!.NewServeCache();
+        var logits = _session.Prime(cache, BuildContext(seq, window));
+        _lastReprimes = 0;
+
+        _voice!.ResetBeat();
+        for (var step = 0; step < maxSteps; step++)
+        {
+            if (step > 0)
+            {
+                // Cache full: on a window too small for the story, re-Prime on the most recent half window and carry on
+                // O(1) per token (see StoryRollTarget); otherwise the pre-existing full-window re-Prime (never reached
+                // at ctx=512, where prompt + story fits).
+                if (cache.Filled < window) logits = _session.StepToken(cache, seq[^1]);
+                else { logits = _session.Prime(cache, BuildContext(seq, rolls ? rollTail : window)); _lastReprimes++; }
+            }
+
+            var decision = Gate.Evaluate(logits, vocabLimit, policy);
+            var t = Gate.Pick(logits, vocabLimit, policy, rng);
+
+            if (t == CharVocab.End)
+            {
+                reason = "stop";
+                if (onPartial is not null) await onPartial(Trim(outIds));   // leave the animation on the finished text
+                break;
+            }
+
+            outIds.Add(t); seq.Add(t);
+
+            // DEGENERATE-TAIL CUT, live per step (2026-09-22, user request — it used to run only after
+            // the loop, so the repeat was typed out in full and then vanished when the finished story
+            // replaced the streaming one). Now it cuts the moment the repeat completes, and PaintPrefix
+            // holds a still-FORMING repeat back from the DOM, so the doomed tokens are normally never
+            // painted at all. See HoloKernel.DegenerateTail for why this isn't just DegenGuard again.
+            var cut = DegenerateTail.Start(outIds);
+            if (cut < outIds.Count)
+            {
+                outIds.RemoveRange(cut, outIds.Count - cut);
+                reason = "loop";
+                if (onPartial is not null) await onPartial(Trim(outIds));
+                break;
+            }
+
+            // SKIP TO THE END: once requested, drop pacing and per-token sound for the REST of this
+            // generation — the story still streams to completion (just without the wait or the notes),
+            // rather than jumping straight to a finished block. See _skipRequested's own field comment
+            // for why this was chosen over speeding the cadence up.
+            var skipping = _skipRequested;
+            if (onPartial is not null && _voice.SoundOn && !skipping)
+                await _voice.WaitForBeatAsync();
+
+            var stopping = guard.Observe(t, decision.Greedy);
+            if (stopping) reason = "loop";
+
+            if (onPartial is not null)
+            {
+                var isLastStep = step == maxSteps - 1;
+                if (skipping || stopping || isLastStep || TokenVoice.ShouldRepaint(outIds.Count, stopping, isLastStep, _voice.SoundOn))
+                    // On any step that ENDS the story, paint the trimmed text rather than the raw prefix, so
+                    // the last thing the animation shows is exactly what the finished story will say.
+                    await onPartial(stopping || isLastStep ? Trim(outIds) : _vocab.Decode(PaintPrefix(outIds)));
+            }
+            if (!skipping) _voice.PlayTone(_session, t);
+            if (stopping) break;
+        }
+
+        return (Trim(outIds), reason);
+    }
+
+    // The whole output-trimming policy in ONE place, so the live token-by-token reveal and the finished
+    // story can never disagree — the live loop above calls this on every story-ending step, and again for
+    // the value it returns.
+    //
+    // The sentence-boundary trim exists because this checkpoint never emits its own stop token (see
+    // MaxStorySteps's own comment / Showroom/CLAUDE.md's "Reply cap" note), so a story that runs out of
+    // steps ends wherever the drift happened to land — often mid-word, in a run of NOVEL non-words rather
+    // than a repeat (a live example ended on "Onhvedemerdm"), which DegenerateTail can't see since nothing
+    // there repeats. Guard: with no sentence-ending punctuation at all, keep the untrimmed text rather than
+    // emit nothing. The sentence COUNT cap that used to follow this was removed 2026-09-22 (user request) —
+    // see the block where MaxSentences used to be declared for why it was probably fitted to an engine bug.
+    string Trim(List<int> ids)
+    {
+        var text = _vocab!.Decode(ids).TrimEnd();
+
+        var lastEnd = text.LastIndexOfAny(SentenceEnders);
+        if (lastEnd >= 0) text = text[..(lastEnd + 1)];
+
+        return text;
+    }
+
+    // The tokens a streaming repaint is allowed to show: everything except a repeat that is still forming
+    // and might be cut a token or two from now. Held-back tokens are never lost — they paint on the next
+    // step as soon as the repeat breaks. See HoloKernel.DegenerateTail.SafePrefix.
+    static List<int> PaintPrefix(List<int> ids)
+    {
+        var n = DegenerateTail.SafePrefix(ids);
+        return n >= ids.Count ? ids : ids.GetRange(0, n);
+    }
+
+    async Task TellStory(bool reuseSeed)
+    {
+        if (_session is null || _vocab is null || _generating) return;
+
+        string prompt; int seed; Variety variety;
+        if (reuseSeed && _lastSeed is not null)
+        {
+            // Exact reproduction: the prompt/variety the LAST story actually used, not whatever the
+            // prompt box or variety buttons currently show — those may have changed since, and the
+            // "Replay this seed" button's whole promise is reproducing that specific story.
+            prompt = _activePrompt; seed = _lastSeed.Value; variety = _lastVariety;
+        }
+        else
+        {
+            prompt = string.IsNullOrWhiteSpace(_promptInput) ? DefaultPrompt : _promptInput.Trim();
+            seed = Random.Shared.Next();
+            variety = _variety;
+        }
+
+        _skipRequested = false;
+        _activePrompt = prompt;
+        _pendingContinuation = "";
+        _generating = true; _error = null;
+        StateHasChanged();
+        await Task.Yield();   // let the disabled/"writing…" state paint before the first real compute call blocks the thread
+
+        try
+        {
+            var (text, reason) = await GenerateStoryAsync(prompt, seed, variety, async partial =>
+            {
+                _pendingContinuation = partial;
+                StateHasChanged();
+                await Task.Yield();
+            });
+            _story = text;
+            _lastSeed = seed;
+            _lastVariety = variety;
+            _lastStopReason = reason;
+        }
+        catch (Exception ex) { _error = "Nano Stories stumbled: " + ex.Message; }
+        finally
+        {
+            _generating = false; _pendingContinuation = ""; StateHasChanged();
+        }
+    }
+
+    void SkipToEnd() => _skipRequested = true;
+
+    public void Dispose() => _voice?.Dispose();
+}

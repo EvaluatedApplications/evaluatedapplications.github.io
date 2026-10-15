@@ -1,0 +1,181 @@
+{
+  "id": "context-four",
+  "title": "The Four-Token Ceiling",
+  "summary": "What a language model builds when it can only ever see four tokens at a time, where its output metrics stop moving, and which internal measures keep changing after that.",
+  "description": "A language model limited to four tokens of context stops improving its top-guess margin at about round 48,000 while calibration keeps changing.",
+  "topics": [
+    "context length",
+    "small models"
+  ],
+  "order": 1,
+  "status": "migrated",
+  "legacyUrl": "/articles/ctx4-plateau.html",
+  "voice": "pending-editorial",
+  "finding": "A holographic language model pinned to four tokens of context stops improving its top-guess margin at about round 48,000 and stops adding spelled words between rounds 15,000 and 21,000, while calibration and the specialisation of one weight bank keep changing through more than 80,000 rounds.",
+  "refutedBy": "The finding fails if the margin between the top and second-best guess is higher in the final third of a longer run than in the middle third, if the count of reliably spelled words grows after round 21,000, or if the specialisation trend of the weight bank reverses.",
+  "related": [
+    "ctx8-and-the-reverse-grow"
+  ],
+  "references": [],
+  "sections": [
+    {
+      "id": "finding",
+      "title": "The finding",
+      "paragraphs": [
+        "A holographic language model pinned to four tokens of context stops improving its top-guess margin at about round 48,000 and stops adding spelled words between rounds 15,000 and 21,000. Calibration and the specialisation of one weight bank keep changing through more than 80,000 rounds."
+      ]
+    },
+    {
+      "id": "setup",
+      "title": "Setup",
+      "paragraphs": [
+        "The model is a fresh set of weights with the same shape and the same real corpus as the main lineage. Its context is fixed at exactly 4 tokens for the whole run, and no schedule grows it. The architecture runs one fixed weight matrix through eight refinement passes on every token, and the state after each pass can be inspected as well as the final answer.",
+        "Four tokens of context cannot carry long-range coherence: a model that sees only the last four tokens has no mechanism for staying consistent with a subject from six tokens back. The run is therefore graded on spelling and on local structure, not on whether it writes a sensible paragraph.",
+        "The extrapolation multiplier is the length of the longest correct stretch of output divided by the four-token window. A correct stretch longer than the window cannot be read off the input and has to be reconstructed from the weights, so the multiplier separates building from repeating within the window.",
+        "A permanent battery of tests runs directly against saved checkpoints. It was run every 3,000 rounds on a fresh checkpoint out past 80,000 rounds, and every snapshot from the run is kept."
+      ]
+    },
+    {
+      "id": "evidence-plateau",
+      "title": "Evidence: what stopped moving",
+      "paragraphs": [
+        "Three measures stopped moving. The primary signal is the gap between the model's top guess and its second-best guess, a proxy for whether the runner-up is still catching the winner. It plateaued at about round 48,000. Splitting the run into thirds and comparing the middle third's average with the final third's gives equal values: the signal is flat, not slowly rising.",
+        "The effective vocabulary, the set of corpus words the model reliably spells, capped between rounds 15,000 and 21,000 and did not grow in the 60,000 or more rounds after. The measurement was made twice, independently, and both gave the same result.",
+        "The rate at which plain generation falls into a repeat loop reached a floor. At the latest checkpoints a plain generation run falls into a repeat loop in the large majority of runs. A long-form test on this run shows the collapse rate was already high at the earliest checkpoints and stayed in that band. A lower collapse rate at larger contexts, seen in a different and longer run, does not carry over to this one."
+      ],
+      "tables": [
+        {
+          "id": "plateau-signals",
+          "caption": "Measures that stopped moving at a context of four tokens",
+          "columns": [
+            "Measure",
+            "Behaviour",
+            "Round"
+          ],
+          "rows": [
+            [
+              "Gap between top and second-best guess",
+              "Flat; middle-third average equals final-third average",
+              "about 48,000"
+            ],
+            [
+              "Effective vocabulary",
+              "Capped; no growth in the following 60,000 or more rounds; confirmed by two independent measurements",
+              "15,000 to 21,000"
+            ],
+            [
+              "Collapse into a repeat loop",
+              "High at the earliest checkpoints and unchanged through the run",
+              "Present from the first checkpoint"
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "evidence-moving",
+      "title": "Evidence: what kept moving",
+      "paragraphs": [
+        "Two things never plateaued across the 80,000 or more rounds. The first is the specialisation of one weight bank: its channels specialise harder throughout the run, with zero reversals. One channel in that bank, the no-relative-shift channel, was the most active channel in two separate investigations on two different checkpoints.",
+        "That channel is consistent with a gate: it appears to decide, per token, how much of the eight-pass iterative budget is spent on real work and how much is served from an embedding-level guess. Part of the model's numeric encoding is a fixed codec that has not been trained since round one, and the model routes through it more over time. The codec does not change; the model leans on it more. This reading is an interpretation of the channel's activity, not a separately measured result.",
+        "The second is calibration. When the top guess is wrong, the rank of the correct answer and the probability mass placed near it kept improving after the primary metric went flat. The model did not get better at being right; it got better at being usefully wrong.",
+        "The specialisation trend is steady and linear, not accelerating. Acceleration is the signature of an approaching sudden transition of the kind called grokking, so the trend gives no sign of one approaching. The general phenomenon of a flat visible output over a reorganising interior is the grokking pattern; what this run adds is its observation in this architecture."
+      ],
+      "tables": [
+        {
+          "id": "kept-moving",
+          "caption": "Measures that kept changing after the primary metric went flat",
+          "columns": [
+            "Measure",
+            "Behaviour over 80,000 or more rounds"
+          ],
+          "rows": [
+            [
+              "Specialisation of one weight bank",
+              "Rises throughout, zero reversals, linear and not accelerating"
+            ],
+            [
+              "No-relative-shift channel",
+              "Most active channel on two checkpoints in two separate investigations"
+            ],
+            [
+              "Calibration (rank and probability mass of the correct answer when the top guess is wrong)",
+              "Keeps improving after the primary metric is flat"
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "evidence-failures",
+      "title": "Evidence: measurements that did not measure what they appeared to",
+      "paragraphs": [
+        "Raw accuracy under corrupted input rises with more training, which reads as growing robustness. It is not robustness: the model increasingly echoes the last visible token regardless of what was corrupted, and the corruption filler used coincided with the model's favourite echo target. The rise is an artefact of the test design.",
+        "The reduced collapse rate remembered from a different run does not appear in this run when tested directly with a long-form test (see the plateau section)."
+      ]
+    },
+    {
+      "id": "practice",
+      "title": "What this means for a small model",
+      "paragraphs": [
+        "Compare the middle and final thirds of the margin signal before deciding a size is finished; a slow climb and a plateau look alike on a curve and differ in that comparison.",
+        "Once the effective vocabulary has capped, more rounds at the same context do not add spelled words. Further capability needs a change other than more rounds at that size.",
+        "Track calibration separately from top-guess accuracy. It can keep improving under a flat headline metric.",
+        "Do not read a rise in accuracy under corrupted input as robustness unless the filler is different from the token the model echoes."
+      ]
+    },
+    {
+      "id": "limits",
+      "title": "Limits",
+      "paragraphs": [
+        "One lineage, one shape and one corpus. The window is four tokens, so nothing here concerns long-range coherence. The extrapolation multiplier is defined here and used as the stopping test, but its measured values are not reported in this article. The gating and codec-reliance readings of the no-relative-shift channel are interpretations of activity, not isolated causal tests."
+      ]
+    },
+    {
+      "id": "refuted-by",
+      "title": "Refuted by",
+      "paragraphs": [
+        "A longer run in which the margin between the top and second-best guess is higher in the final third than in the middle third; a count of reliably spelled words that grows after round 21,000; or a reversal in the specialisation trend of the weight bank."
+      ]
+    }
+  ],
+  "diagram": {
+    "kind": "round-timeline",
+    "title": "What stopped moving, and when",
+    "lede": "Each row is a measure from the run. Solid means it was still changing, dashed means it had stopped. Move the round to see which measures were flat at that point. Every round is taken from the article.",
+    "end": 80000,
+    "battery": 3000,
+    "items": [
+      {
+        "label": "Gap between top and second-best guess",
+        "state": "stopped",
+        "stop": 48000,
+        "note": "Flat from about round 48,000: the middle-third and final-third averages are equal."
+      },
+      {
+        "label": "Effective vocabulary",
+        "state": "stopped",
+        "capFrom": 15000,
+        "stop": 21000,
+        "note": "Capped between rounds 15,000 and 21,000, with no growth in the 60,000 or more rounds after."
+      },
+      {
+        "label": "Collapse into a repeat loop",
+        "state": "flat",
+        "note": "High at the earliest checkpoint and unchanged through the run."
+      },
+      {
+        "label": "Specialisation of one weight bank",
+        "state": "moving",
+        "note": "Rises throughout, with zero reversals, linear and not accelerating."
+      },
+      {
+        "label": "Calibration",
+        "state": "moving",
+        "from": 48000,
+        "note": "Keeps improving after the primary metric goes flat."
+      }
+    ],
+    "stageLabel": "Timeline of five measures across 80,000 rounds. Use the slider to choose a round."
+  }
+}

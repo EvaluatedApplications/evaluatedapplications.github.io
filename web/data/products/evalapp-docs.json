@@ -1,0 +1,192 @@
+{
+  "title": "EvalApp docs: steps, gates and sagas",
+  "label": "Docs",
+  "description": "A practical guide to EvalApp: design the data record, add steps, gate resources, fan out with ForEach, compensate with sagas and switch tuning on.",
+  "h1": "EvalApp docs",
+  "intro": "A practical guide to building with EvalApp. Describe a process as a typed data record and a sequence of steps, gate every resource it touches, and let tuning find the concurrency that suits the hardware. Every program on this page is compiled and run against the published package.",
+  "sections": [
+    {
+      "id": "install", "title": "Install",
+      "paragraphs": [
+        "Add the package with dotnet add package EvaluatedApplications.EvalApp. It targets net8.0 and net10.0 and has no dependencies, so the package reference is the whole installation.",
+        "The package ships as a binary, without source or XML documentation. Author against the EvalApp namespace and let IntelliSense on the public types be your reference.",
+        "The fluent builder and the AddStep<TStep>() and AddBranch<TStep>() step-construction paths are safe to trim and to compile ahead of time. The tuner's JSON file persistence and a couple of internal reflection caches are not fully trim-clean, so leave WithTuning off if you publish trimmed and that matters to you."
+      ]
+    },
+    {
+      "id": "import", "title": "One namespace",
+      "paragraphs": [
+        "Everything you need lives in the root EvalApp namespace: Eval, IAppBuilder, ResourceKind, Tunable, PipelineResult<T>, ICompiledPipeline<T>, the step base classes and licensing. The engine underneath lives in a separate EvalAppEngine namespace that is not part of the supported public surface. If something you need is not reachable from EvalApp, that is a gap to report, not a reason to reach into the engine."
+      ]
+    },
+    {
+      "id": "first-pipeline", "title": "Your first pipeline",
+      "paragraphs": [ "The quick start on the overview page builds a three-step order pipeline. Four things in it carry through everything below." ],
+      "list": [
+        { "term": "AddStep", "text": "Takes a name and a lambda, an async lambda, an IStep<T> instance or a PureStep<T> or AsyncStep<T> subclass." },
+        { "term": "Records and with", "text": "Each step returns a new value. That is what makes a parallel ForEach safe without locks: no step can see another step's unfinished state." },
+        { "term": "Run, then Build", "text": "Run(out pipeline) hands you the compiled, reusable pipeline, and Build finalizes the whole app. Build once at startup and call RunAsync many times. Rebuilding per request throws away everything the tuner has learned." },
+        { "term": "Results as a union", "text": "PipelineResult<T> is Success, Failure or Skipped. Pattern-match it, or use GetData(), IsSuccess, IsFailure and IsSkipped when you only need the value." }
+      ]
+    },
+    {
+      "id": "design", "title": "Design before you build",
+      "paragraphs": [ "The biggest lever on whether a pipeline reads cleanly is answering these questions before touching the builder. Each answer constrains the next." ],
+      "list": [
+        { "term": "1. What is the unit of work?", "text": "One sentence: one order, one invoice, one request, one batch." },
+        { "term": "2. What does it start with, carry and produce?", "text": "List every piece of information that exists at any point and encode it as a record. A non-nullable field is a required input, a nullable one is an output that appears once its step runs, and a bool is control (loop, branch, skip). If you cannot describe the whole lifecycle by reading the fields, the design is not finished." },
+        { "term": "3. What resource does each operation touch?", "text": "Classify each operation as Network, DiskIO, Cpu, Database, a custom ResourceKind.Of(\"name\"), or none. This decides which operations need a gate." },
+        { "term": "4. What runs per item in parallel?", "text": "Independent items in a collection, which must not read each other's unfinished state, are ForEach boundaries." },
+        { "term": "5. What conditional branches exist?", "text": "For every If and Else, the condition, what each side does, and whether both write the same fields." },
+        { "term": "6. What must be rolled back on failure?", "text": "Walk the steps asking what has happened outside the process by the time each completes: money moved, mail sent, a record written. Only external effects need compensation." },
+        { "term": "7. Wire it together", "text": "Only now write the fluent declaration. If it does not read like a plain description of the process, the data model needs more work, not more code." }
+      ],
+      "paragraphsAfter": [ "A single-item pipeline with no branches and no external effects skips straight to a flat sequence of steps. That means the problem was simple, not that the method failed." ]
+    },
+    {
+      "id": "steps", "title": "Steps: pure, async and side-effecting",
+      "paragraphs": [
+        "PureStep<T> is a synchronous transform with no side effects, and AsyncStep<T> is the same for work that waits on a network, a disk or a database. A step whose job is a side effect (a database write, a published event, an email) derives from SideEffectStep<T> and declares the ResourceKind it touches.",
+        "A SideEffectStep<T> cannot be added with the plain AddStep(name, instance) overload, which fails to compile. Add it with AddStep<TStep>(), which gates it on its declared resource, or with AddStep<TStep>(name, factory) when it needs a constructor-injected dependency. The resource has to be registered on the app first, with WithResource. If you would rather gate explicitly, write the side effect as an async lambda inside a Gate and the gate supplies the resource. Either way there is no path to an ungated side effect."
+      ],
+      "snippets": [ { "source": "snippets/evalapp-steps.cs", "output": "snippets/evalapp-steps.out.txt", "label": "Pure, async and side-effect steps" } ]
+    },
+    {
+      "id": "context", "title": "Context-aware steps",
+      "paragraphs": [
+        "When a step needs data that is constant for a whole app run (a configuration, a connection factory) or for a whole domain (a tenant, a region), subclass GlobalContext or DomainContext instead of threading it through every record. The context is populated on the step before it runs."
+      ],
+      "snippets": [ { "source": "snippets/evalapp-context.cs", "output": "snippets/evalapp-context.out.txt", "label": "Global and domain context" } ],
+      "list": [
+        { "term": "Add with AddStep<TStep>()", "text": "ContextPureStep and ContextSideEffectStep do not implement the plain IStep<T> that the instance overload expects, so AddStep(name, instance) does not compile for them." },
+        { "term": "No StepContext parameter", "text": "The public base classes never take one. A type of that name belongs to the internal engine and does not compile against the published package." },
+        { "term": "Exceptions become results", "text": "Context steps catch their own exceptions and report a Failure, unlike the plain step kinds, which let the exception reach the pipeline." }
+      ]
+    },
+    {
+      "id": "gates", "title": "Gates and resource kinds",
+      "paragraphs": [
+        "A Gate declares that everything inside it contends for a named, shared resource. The built-in kinds are Network, DiskIO, Cpu and Database, and ResourceKind.Of(\"name\") defines a pool of your own. Declare a resource's bounds at the app level with WithResource, then gate any block of steps against it.",
+        "Without tuning, a gate holds at its declared default. With tuning on, the tuner moves it inside the declared minimum and maximum."
+      ],
+      "list": [
+        { "term": "Tunable.Between(min, max, default)", "text": "Explicit bounds." },
+        { "term": "Tunable.FixedAt(value)", "text": "Minimum, maximum and default are the same, so there is nothing to tune." },
+        { "term": "Tunable.ForCpu()", "text": "Scales with the number of processors." },
+        { "term": "Tunable.ForItems()", "text": "A bound for per-item fan-out, which the tuner can move." },
+        { "term": "Tunable.ModelOps()", "text": "Fixed at 1, for exclusive access such as GPU training." },
+        { "term": "Tunable.DiskIo() and Tunable.Network()", "text": "Starting points for those two resource kinds." }
+      ],
+      "snippets": [ { "source": "snippets/evalapp-gates.cs", "output": "snippets/evalapp-gates.out.txt", "label": "Gates on a built-in kind and on a pool of your own" } ]
+    },
+    {
+      "id": "foreach", "title": "Parallel collections: ForEach",
+      "paragraphs": [
+        "ForEach runs an independent pipeline over each item of a collection and merges the results back in source order. select extracts the collection, merge combines the results into the parent, and configure builds the per-item pipeline. Parallelism can be a plain number, a function re-read on each run, or a Tunable that the tuner can move.",
+        "A ForEach with fewer items than its minimum for parallel work runs inline on the calling thread, whatever the bound says, and the same is true when adaptive dispatch has learned that the items are cheap. The bound caps a fan-out; it never forces one. maxParallelism of 1 is always strictly sequential. Report() shows which path each ForEach took."
+      ],
+      "snippets": [ { "source": "snippets/evalapp-foreach.cs", "output": "snippets/evalapp-foreach.out.txt", "label": "ForEach with a tunable bound and a per-item progress hook" } ],
+      "list": [
+        { "term": "CollectAndThrow", "text": "The default. Every item runs and, if any failed, the result is a Failure carrying every exception." },
+        { "term": "FailFast", "text": "Remaining items are cancelled as soon as one fails." },
+        { "term": "ContinueOnError", "text": "Failed items are dropped and the result is a Success with the survivors." }
+      ],
+      "paragraphsAfter": [ "For a tight, pure-CPU loop over many cheap rows, repeated many times, use ChunkedWork instead. It fans out in chunks with scratch space allocated once per chunk, which is the right cost model when a per-item pipeline would dominate the work." ]
+    },
+    {
+      "id": "branches", "title": "Conditional and parallel branches",
+      "paragraphs": [
+        "If takes a condition and builder actions for the then and else sides. Without an else and with a false condition the step reports Skipped. Classify is a first-match-wins cascade that names the pattern instead of repeating near-identical If blocks.",
+        "AddParallelGroup runs a fixed set of branches at once, as opposed to ForEach, which runs one pipeline per item. Branches that write different fields merge cleanly by default. When two branches might write the same field and that should be a conflict, pass an IMergeStrategy<T>."
+      ],
+      "snippets": [ { "source": "snippets/evalapp-branches.cs", "output": "snippets/evalapp-branches.out.txt", "label": "If, then a parallel group with a merge strategy" } ]
+    },
+    {
+      "id": "sagas", "title": "Sagas: compensation on failure",
+      "paragraphs": [
+        "A saga chains steps that each declare an undo. If a later step fails, every earlier compensation runs in reverse order. BeginSaga and EndSaga bracket the block, and the compiler refuses a pipeline whose saga is left open."
+      ],
+      "snippets": [ { "source": "snippets/evalapp-saga.cs", "output": "snippets/evalapp-saga.out.txt", "label": "A saga that compensates in reverse order" } ],
+      "list": [
+        { "term": "BestEffort", "text": "The default. Every compensation runs even if one of them throws." },
+        { "term": "AbortOnFirst", "text": "Stop compensating at the first compensation that fails." },
+        { "term": "SwallowErrors", "text": "Run every compensation and swallow any exception from them." }
+      ]
+    },
+    {
+      "id": "middleware", "title": "Middleware",
+      "paragraphs": [
+        "IStepMiddleware<T> wraps each named step individually, for timing, retry, audit or per-step tracing. No middleware ships ready-made; it is a seam you implement. To wrap the steps of a ForEach item pipeline, register an IStepMiddleware for the item type on that sub-builder.",
+        "An exception thrown by a step comes back as a Failure. An exception thrown by middleware outside the call to next is thrown from RunAsync on a top-level pipeline, and is a Failure only when the pipeline is nested in another. A ForEach whose item pipeline is a single synchronous step normally runs as one fused loop, and attaching middleware turns that fast path off."
+      ]
+    },
+    {
+      "id": "di", "title": "Dependency injection",
+      "paragraphs": [
+        "AddStep<TStep>(name) and AddBranch<TStep>(name) resolve the step through an IStepFactory. The default creates it with a public parameterless constructor. ServiceProviderStepFactory asks your container first and falls back to that for anything not registered.",
+        "The compiler enforces the new() constraint whichever factory you register, so a type needs a literal parameterless constructor even if the container always supplies the real one. The factory path is for plain IStep<T> implementers. A side-effect step that needs a constructor-injected dependency uses AddStep<TStep>(name, factory) instead."
+      ],
+      "snippets": [ { "source": "snippets/evalapp-di.cs", "output": "snippets/evalapp-di.out.txt", "label": "Resolving a step from a service provider" } ]
+    },
+    {
+      "id": "composing", "title": "Pipelines that run pipelines",
+      "paragraphs": [
+        "A compiled pipeline is a value. A step can run another pipeline or itself, and a context can hold a registry of them, so an outer schedule loop drives an inner per-batch pipeline, or a pipeline recurses through a tree, without a hand-written loop around RunAsync. A loop of that kind is invisible to gates and to the tuner; this is how it becomes visible.",
+        "PipelineRef<T> forward-declares a pipeline before it is built, PipelineTrace tells same-named steps apart across levels, and a recursion that runs away fails cleanly with PipelineRecursionException instead of overflowing the stack."
+      ]
+    },
+    {
+      "id": "exclusive", "title": "Exclusive resources",
+      "paragraphs": [
+        "Some things are not thread-safe: a GPU context, a native handle, a file with one writer. Declare an ExclusiveResource once and guard a scope, or named parallel branches, with Exclusive. A second concurrent entry fails loudly with ExclusiveViolationException, or queues if you choose that policy. The guard is re-entrant for recursion, and forks inside a held scope exclude each other instead of silently inheriting it."
+      ]
+    },
+    {
+      "id": "one-thread", "title": "One-thread hosts",
+      "paragraphs": [
+        "Fanning out only pays when there is a second thread to fan out to. EvalApp detects a single-thread host once, at startup: a browser running Blazor WebAssembly, a process with one processor or one allowed CPU, or a host you declare with ExecutionHost.OverrideSingleThreaded or WithSingleThread. In that mode ForEach, parallel groups and ChunkedWork run inline on the caller, and long runs hand the thread back to the host every few milliseconds (ExecutionHost.YieldBudget) so a page or UI stays responsive. The cancellation token is checked at each yield.",
+        "A single very long synchronous step cannot be sliced. Split it into smaller steps or items. Inside a UI, use ChunkedWork.ForAsync and ChunkedWork.RunAsync, which work in time slices. On a multi-core host none of this is active and nothing is added to the fast path."
+      ]
+    },
+    {
+      "id": "licensing", "title": "Licensing",
+      "paragraphs": [
+        "No feature in EvalApp is gated behind a tier or a licence key. Every pipeline shape on this page runs at its full declared concurrency whether or not you pass a key, the tuner attaches whenever you call WithTuning, and Build(null) behaves exactly like Build(key).",
+        "The licence check exists so that every Evaluated Applications package validates a key the same way. LicenseValidator.ForEvalApp().Check(key) returns Unlicensed or Licensed and never throws, and CheckPeriodic(key, interval) is cheap enough for a hot loop. Verification is entirely offline, with ECDsa P-256, and makes no network call.",
+        "EvalApp is proprietary software under a commercial licence. Evaluation and non-commercial development are licensed without a key; commercial, production or revenue-generating use needs a separate licence."
+      ],
+      "more": { "href": "/licence/", "label": "Read the licence terms" }
+    },
+    {
+      "id": "tuning", "title": "Tuning and inspecting",
+      "paragraphs": [
+        "Two opt-in modes. WithTuning is reactive: it rediscovers the operating point on each start, which suits a long-running, stable, single-instance service. WithBayesianTuning is predictive: a performance model persists across restarts, which suits frequent restarts and many instances. Both take an optional store path and share one phase machine, so switching between them does not reset what was learned.",
+        "The defaults come from a simulation harness and are what WithTuning uses out of the box. To override them, load your own JSON file with WithTunerSettings(path); the file is read when you call it, and a missing or invalid path throws at that point.",
+        "ICompiledPipeline<T> is opaque on purpose: a name and RunAsync. The read-only window on a plan is pipeline.Report(), which lists the plan's nodes and, for each ForEach, how many calls ran inline and how many fanned out. ExecutionHost.Yields counts the yields a process has taken."
+      ],
+      "snippets": [ { "source": "snippets/evalapp-tuning.cs", "output": "snippets/evalapp-tuning.out.txt", "label": "Tuning on, then reading the plan report" } ]
+    },
+    {
+      "id": "anti-patterns", "title": "Anti-patterns to avoid",
+      "paragraphs": [ "The tuner and the gates can only account for work they can see. Anything that happens outside the declared pipeline is invisible to both." ],
+      "list": [
+        { "term": "Task.WhenAll in a step", "text": "Use a declared ForEach instead." },
+        { "term": "A background Task kept on the record", "text": "It races the pipeline, ungated." },
+        { "term": "Async work around RunAsync", "text": "Work before or after the call, outside the pipeline, is unthrottled and untuned." },
+        { "term": "A shared collection written from a ForEach item", "text": "It is not thread-safe. Let each item own its result and collect results in merge." },
+        { "term": "Mutating the record", "text": "Use with. Mutation breaks the guarantee that makes parallel ForEach safe without locks." },
+        { "term": "State in step instance fields", "text": "Steps are reused by every concurrent run. Per-run state belongs on the record." },
+        { "term": "Rebuilding the pipeline per request", "text": "It discards everything the tuner has learned. Build once, run many times." },
+        { "term": "Blocking calls in a synchronous step", "text": "Use the async overload, and pass the cancellation token to every awaited call." },
+        { "term": "A hand-written loop or recursion around RunAsync", "text": "The loop is invisible to gates and the tuner. Layer and recurse through context instead." },
+        { "term": "Guarding a non-thread-safe singleton with a comment", "text": "Use an ExclusiveResource." }
+      ]
+    },
+    {
+      "id": "architecture", "title": "Extension seams",
+      "paragraphs": [
+        "Beyond the fluent API and the step base classes, four extension points are public: GlobalContext and DomainContext (subclass them for WithContext and DefineDomain), IMergeStrategy<T> (custom conflict handling for AddParallelGroup) and IPressureResource (a soft, non-blocking budget signal for Pressure and WithPressure). Everything else is internal to the engine."
+      ]
+    }
+  ]
+}

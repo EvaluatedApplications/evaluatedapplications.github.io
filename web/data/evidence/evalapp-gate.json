@@ -1,0 +1,109 @@
+{
+  "id": "evalapp-gate",
+  "product": "evalapp",
+  "slug": "/evalapp/evidence/",
+  "scope": "A resource gate on simulated downloads",
+  "title": "What a gate bound does",
+  "description": "A gate held concurrency at its declared bound in every run, and 24 queued jobs finished in 139 ms at the best bound against 1,113 ms at 1.",
+  "claim": "The gate never admitted more downloads than its bound: in every recorded run the most in flight equalled the bound. The time to finish 24 queued jobs fell from 1,113 ms at a bound of 1 to 139 ms at 8, then rose again to 410 ms when all 24 ran at once, because the simulated service slows when it is crowded.",
+  "headline": [
+    {
+      "value": "7 of 7",
+      "label": "recorded runs where the most downloads in flight equalled the gate bound"
+    },
+    {
+      "value": "1,113 ms to 139 ms",
+      "label": "time to finish 24 jobs at a bound of 1 and at the best bound, 8"
+    },
+    {
+      "value": "2.9 times",
+      "label": "slower with all 24 jobs running at once than at the best bound"
+    }
+  ],
+  "method": {
+    "workload": "24 jobs are queued at once through a ForEach. Each passes a Network gate and awaits a simulated download of 40 ms. The simulated service stretches the wait once more than 6 downloads are in flight. 7 fixed gate bounds from 1 to 24, one recorded run each, after a warm-up run.",
+    "engines": [
+      "EvalApp pipeline with Gate and ForEach"
+    ],
+    "verification": "Every job records its own timestamps, and the number of downloads in flight is counted inside the gated step, so the bound is checked against what actually ran.",
+    "statistic": "One recording per bound, in milliseconds. A repeated recording varies by a few percent.",
+    "memory": "Nothing is retained between runs."
+  },
+  "tables": [
+    {
+      "id": "bounds",
+      "kind": "matrix",
+      "caption": "24 queued jobs, by gate bound",
+      "columns": [
+        "Gate bound",
+        "All jobs finished in (ms)",
+        "Most running at once",
+        "Longest wait at the gate (ms)",
+        "Jobs per second"
+      ],
+      "rows": [
+        [
+          "1",
+          "1,113",
+          "1",
+          "1,067",
+          "22"
+        ],
+        [
+          "2",
+          "557",
+          "2",
+          "511",
+          "43"
+        ],
+        [
+          "4",
+          "280",
+          "4",
+          "233",
+          "86"
+        ],
+        [
+          "6",
+          "189",
+          "6",
+          "143",
+          "127"
+        ],
+        [
+          "8",
+          "139",
+          "8",
+          "92",
+          "173"
+        ],
+        [
+          "12",
+          "187",
+          "12",
+          "93",
+          "128"
+        ],
+        [
+          "24",
+          "410",
+          "24",
+          "0",
+          "59"
+        ]
+      ]
+    }
+  ],
+  "losses": [
+    "A bound of 1 took 1,113 ms, 8.0 times the best bound. The gate does not choose its bound for you, and a bound set too low is the slowest result here.",
+    "A bound of 24, the whole batch at once, took 410 ms, 2.9 times the best bound. A higher bound is not faster when the thing behind the gate slows under load."
+  ],
+  "limits": [
+    "The work is a simulated wait, not a real network. It shows how the gate and its queue behave, not the speed of any real service.",
+    "The best bound here is a property of the simulated service, which slows past 6 in flight. A real service has its own shape, which is what the tuner exists to find.",
+    "It measures the gate and does not compare EvalApp with another library."
+  ],
+  "internal": {
+    "source": "web/generators/evalapp-gate, web/scripts/derive-evidence.mjs"
+  }
+}

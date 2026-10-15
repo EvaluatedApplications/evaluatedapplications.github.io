@@ -1,0 +1,67 @@
+name: Deploy site to Pages
+
+# PROPOSED replacement for .github/workflows/deploy.yml, used at cutover (see web/CUTOVER.md, runbook step 4).
+# Assembly order matters: later copies win. web/scripts/cutover-dry-run.mjs assembles the same tree locally and checks it.
+#   1. Showroom/dist -> _site/tools          (tool shells, the /tools/app/ boot shell for deep links, boot files; no root index.html, the gallery is generated)
+#   2. site-next     -> _site               (the generated site, including /tools/index.html, the gallery)
+#   3. site/council-live -> _site/council-live   (unlinked client page, unchanged)
+#   4. site/assets/site.css -> _site/assets/site.css   (the LEGACY stylesheet the tool shells still link; the new site uses /assets/ea.css)
+#   5. SiteKit/tokens -> _site/SiteKit/tokens        (imported by the legacy stylesheet)
+# CI never sees MonoRepo, so it cannot regenerate versions: the guard rebuilds from committed data and fails if site-next is stale.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Guard that site-next is what the data produces
+        run: |
+          D=$(grep -m1 '^Updated:' site-next/llms.txt | sed 's/^Updated: //')
+          node web/scripts/build.mjs --versions=committed --out="$RUNNER_TEMP/site-check" --date="$D"
+          diff -r site-next "$RUNNER_TEMP/site-check"
+          node web/scripts/lint-voice.mjs
+          node web/scripts/check-site.mjs site-next
+
+      - name: Assemble site
+        run: |
+          mkdir -p _site/tools
+          cp -r Showroom/dist/. _site/tools/
+          cp -r site-next/. _site/
+          mkdir -p _site/council-live
+          cp -r site/council-live/. _site/council-live/
+          mkdir -p _site/assets
+          cp site/assets/site.css _site/assets/site.css
+          mkdir -p _site/SiteKit/tokens
+          cp -r SiteKit/tokens/. _site/SiteKit/tokens/
+          test -f _site/.nojekyll
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

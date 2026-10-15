@@ -1,0 +1,48 @@
+{
+  "id": "phasor-pleroma-costs",
+  "product": "phasor",
+  "slug": "/phasor/evidence/costs/",
+  "scope": "Pleroma operations",
+  "title": "Pleroma costs and checks",
+  "description": "Measured costs of Pleroma operations, a superposed kernel against item-by-item building, dense and sparse pages, and the repair and corruption checks.",
+  "claim": "A superposed kernel applies in 0.17 to 0.44 ms on a 10,464-cell store whether it holds 1 or 10,368 elements, and the repair and corruption checks recovered or detected every case tried.",
+  "headline": [
+    { "value": "0.17 to 0.44 ms", "label": "one kernel pass on a 10,464-cell store, from 1 to 10,368 elements" },
+    { "value": "300 of 300", "label": "lost harmonics rebuilt for each of 1 to 5 with 5 reserved keys" },
+    { "value": "10,000 of 10,000", "label": "single corrupted cells detected in either copy" }
+  ],
+  "method": {
+    "workload": "Each row is one operation on one store shape, timed or checked on the shape named in the row. Checks are exhaustive or random within the stated count.",
+    "engines": ["Pleroma, release build"],
+    "verification": "Every timed operation is compared with a brute-force or naive implementation, and each check counts the cases that matched.",
+    "statistic": "Per-call times, warmed up, with the range across repeated runs where one is shown.",
+    "machine": "One laptop CPU (Intel i9-11950H), release build, with other work running.",
+    "memory": "Page and kernel figures use the default field.",
+    "tie": null
+  },
+  "tables": [
+    {
+      "id": "costs", "kind": "matrix",
+      "caption": "Measured costs and checks",
+      "columns": ["Operation", "Workload", "Result"],
+      "rows": [
+        ["Superposed kernel apply", "10,464-cell store, 1 to 10,368 kernel elements", "0.17 to 0.44 ms per call, with no trend in the number of elements"],
+        ["The same store built item by item", "1 element and 1,000 elements", "3 ms and 1,916 ms"],
+        ["Counts on a dense page", "2,925 or 3,150 keys, a full page read", "188 to 246 ns per slot (0.6 to 0.7 ms per page)"],
+        ["FromCounts", "Build a page from a count vector, 3,150 slots", "758 ns per slot"],
+        ["AddCounts", "Add a count vector to a page", "758 ns per slot, against 77 to 91 microseconds per slot for sequential Add (about 100 times faster)"],
+        ["Sparse page, one key", "One key read and sample", "183 bytes, 0.4 microseconds per read"],
+        ["Sparse page, 50 keys", "50 keys", "About 2.2 KB, 19 to 41 microseconds per read"],
+        ["Reserved-key repair", "Lost harmonics, r = 5", "Any of 1 to 5 lost harmonics rebuilt, 300 of 300 each"],
+        ["Check-prime mirror", "One corrupted cell in either copy", "Detected 10,000 of 10,000"],
+        ["Exact-sum parity", "Any one lost store of a group", "Rebuilt 100 of 100, with incremental updates"]
+      ]
+    }
+  ],
+  "losses": [],
+  "limits": [
+    "Times are warm, single-call figures on one machine. Cold-start costs, including compilation, are larger.",
+    "Every row is the Pleroma alone, without a database or a model around it."
+  ],
+  "internal": { "source": "Phasor/docs/pleroma-map.json measurements (migrated)" }
+}

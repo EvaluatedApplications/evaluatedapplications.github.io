@@ -1,0 +1,95 @@
+# Evaluated Applications
+
+> High-performance .NET libraries: an embeddable SQL database, a transformer engine, pathfinding and a pipeline runtime, plus tools that run in your browser. Proprietary. Every package ships as a compiled library. Evaluation and non-commercial development or testing are permitted; commercial, production or revenue-generating use needs a commercial licence from the owner.
+
+Updated: 2026-10-15
+
+## Products
+
+- [Phasor](https://evaluatedapplications.github.io/phasor/): The Pleroma stores items in one fixed array and answers key, flag, order and time questions exactly, refusing past capacity. Under it, a phasor codec for bind, bundle and unbind. `dotnet add package EvaluatedApplications.Phasor` (release 2.17.0).
+- [EvalApp](https://evaluatedapplications.github.io/evalapp/): Resource-gated concurrency that tunes itself, sagas with compensation, middleware and a fluent builder. The execution engine under the other libraries. `dotnet add package EvaluatedApplications.EvalApp` (release 4.4.1).
+- [HoloDb](https://evaluatedapplications.github.io/holodb/): Answers exact, similarity and aggregate queries from one store, with transactions, a larger-than-memory paged engine, and a networked client. `dotnet add package EvaluatedApplications.HoloDb` (release 5.1.2).
+- [AlgFormer](https://evaluatedapplications.github.io/algformer/): Two interchangeable attention cores, classic softmax and holographic, in pure managed code, with optional GPU acceleration. `dotnet add package EvaluatedApplications.AlgFormer` (release 3.3.0).
+- [Prism](https://evaluatedapplications.github.io/prism/): The package behind the Prism tool: a confidence-gated decode policy, an append-only lineage journal and growth tools for AlgFormer models. `dotnet add package EvaluatedApplications.Prism` (release 1.3.4).
+- [Prose](https://evaluatedapplications.github.io/prose/): Mines real text with deterministic grammar rules into a HoloDb database, then recombines it into new sentences and question and answer pairs. `dotnet add package EvaluatedApplications.Prose` (release 1.4.0).
+- [Tracer](https://evaluatedapplications.github.io/tracer/): Navmesh pathfinding for crowds: swarms that share goals, dynamic obstacles, line of sight and combat, tuned to your frame budget. `dotnet add package EvaluatedApplications.Tracer` (release 2.0.2).
+- [HoloVoxel](https://evaluatedapplications.github.io/holovoxel/): Level of detail is a property of the read: near data stays crisp and far data degrades gracefully, with SIMD throughout. `dotnet add package EvaluatedApplications.HoloVoxel` (release 1.5.2).
+
+## Tools
+
+- [The Analyst](https://evaluatedapplications.github.io/tools/analyst/): Paste any data and profile it with a real SQL database in your browser: types, distributions, anomalies and hidden entities, then query it at a live SQL prompt. Powered by HoloDb.
+- [The Creature](https://evaluatedapplications.github.io/tools/creature/): Raise a creature that learns to navigate a world you draw. A holographic transformer is its brain and the pathfinder is its feet. Powered by AlgFormer and Tracer.
+- [The Forecaster](https://evaluatedapplications.github.io/tools/forecaster/): Train a holographic transformer live on a real hourly price tape and watch its next-move accuracy climb. Powered by AlgFormer.
+- [Prism](https://evaluatedapplications.github.io/tools/prism/): Chat with a small language model that runs entirely in your browser, and look under the hood at every layer it passes through. Powered by AlgFormer and Prism.
+- [Nano Stories](https://evaluatedapplications.github.io/tools/stories/): The same model as Prism, asked to write a story instead of hold a conversation. Give it an opening line and watch it continue. Powered by AlgFormer and Prism.
+- [The Cartographer](https://evaluatedapplications.github.io/tools/cartographer/): A map of one next-word decision: the path the model's representation takes through idea-space, decoded live from a single forward pass. Powered by AlgFormer.
+- [Prose](https://evaluatedapplications.github.io/tools/prose/): Paste in a body of text, mine its grammar in your browser, and recombine it into sentences and question and answer pairs for a training corpus. Powered by HoloDb and AlgFormer.
+- [Council Spending Scanner](https://evaluatedapplications.github.io/tools/council-spending/): English councils' published spending data, prepared ahead of time and opened one month at a time, with the same mechanical checks for every council.
+
+## Evidence
+
+- [What attention costs](https://evaluatedapplications.github.io/algformer/evidence/): At the same shape and the same parameter count, reading a 1,984-token prompt takes 182 ms with softmax attention and 7.08 ms with holographic attention. Each further token takes 181 µs against 3.60 µs, and the serve cache holds 2,253 KB against 3.40 KB. Softmax reading grows with the square of the length (exponent 1.9) and holographic reading grows in step with it (1.0).
+- [What a gate bound does](https://evaluatedapplications.github.io/evalapp/evidence/): The gate never admitted more downloads than its bound: in every recorded run the most in flight equalled the bound. The time to finish 24 queued jobs fell from 1,113 ms at a bound of 1 to 139 ms at 8, then rose again to 410 ms when all 24 ran at once, because the simulated service slows when it is crowded.
+- [HoloDb benchmarks](https://evaluatedapplications.github.io/holodb/evidence/): On a 10,000,000-invoice ledger joined to 200,000 customers, the dashboard rollups read in microseconds in the embedded engine, and every result is identical across the engines. The queries where HoloDb is slower are listed beside the wins.
+- [Detail against components read](https://evaluatedapplications.github.io/holovoxel/evidence/): One 16 by 16 chunk stored as a single hologram decodes 98.4 percent of its cells correctly at the full budget of 8,192 components, 131,072 bytes and 17.0 ms. Reading fewer components is cheaper and fuzzier: 67.1 percent at 1,568 components, and 19.5 percent at 24, which takes 384 bytes and 0.09 ms.
+- [Exact recall and refusal](https://evaluatedapplications.github.io/phasor/evidence/): At equal storage the exact key view recovered 64 items with no errors where holographic reduced representations held 95 percent or better only up to 4. Past capacity the exact store refused every time, while the baseline answered wrongly every time.
+- [Pleroma costs and checks](https://evaluatedapplications.github.io/phasor/evidence/costs/): A superposed kernel applies in 0.17 to 0.44 ms on a 10,464-cell store whether it holds 1 or 10,368 elements, and the repair and corruption checks recovered or detected every case tried.
+- [Generated sentences pass the gate](https://evaluatedapplications.github.io/prose/evidence/): Of 2,000 sentences requested in one run, 1,966 different ones came back. Every one passed the package's validity gate on a fresh parse, and every word in every one was observed in the corpus.
+
+## Research
+
+- [The Four-Token Ceiling](https://evaluatedapplications.github.io/research/context-four/): What a language model builds when it can only ever see four tokens at a time, where its output metrics stop moving, and which internal measures keep changing after that.
+- [Growing the Wrong Way](https://evaluatedapplications.github.io/research/context-eight/): Seeding an eight-token model from fully trained four-token weights gave it no head start, and appending new context slots after the most-trained one is a structural cost that inserting them before the oldest one removes.
+- [The Model Learns Back To Front](https://evaluatedapplications.github.io/research/back-to-front/): In a six-layer holographic lineage only the last layer computed anything: the earlier passes were exact copies of their input, so growing from four layers to six added padding and not capability.
+- [Smaller Than TinyStories](https://evaluatedapplications.github.io/research/smaller-than-tinystories/): A small holographic language model set against the published TinyStories reference sizes on parameter count, with spelling, looping and weight-motion measurements and an unedited writing sample.
+- [Nobody Read the Warning](https://evaluatedapplications.github.io/research/nobody-read-the-warning/): An argument that the surviving accounts of collapsed civilisations record a loss of effective independence, which the design effect describes, and that sacred transmission preserved the accounts while removing their comprehension.
+
+## Every page
+
+- [Products](https://evaluatedapplications.github.io/products/)
+- [Phasor: exact holograms for .NET](https://evaluatedapplications.github.io/phasor/)
+- [Phasor docs](https://evaluatedapplications.github.io/phasor/docs/)
+- [The Pleroma](https://evaluatedapplications.github.io/phasor/pleroma/)
+- [EvalApp: self-tuning pipelines for .NET](https://evaluatedapplications.github.io/evalapp/)
+- [EvalApp docs: steps, gates and sagas](https://evaluatedapplications.github.io/evalapp/docs/)
+- [HoloDb: embeddable SQL database for .NET](https://evaluatedapplications.github.io/holodb/)
+- [HoloDb docs](https://evaluatedapplications.github.io/holodb/docs/)
+- [HoloDb on Pleroma](https://evaluatedapplications.github.io/holodb/pleroma/)
+- [HoloDb client and wire protocol](https://evaluatedapplications.github.io/holodb/client/)
+- [AlgFormer: a transformer engine for .NET](https://evaluatedapplications.github.io/algformer/)
+- [How HoloFormer works](https://evaluatedapplications.github.io/algformer/holoformer/)
+- [Prism: decode gate and model lineage](https://evaluatedapplications.github.io/prism/)
+- [Prose: grammar-driven text for .NET](https://evaluatedapplications.github.io/prose/)
+- [Tracer: pathfinding and game AI for .NET](https://evaluatedapplications.github.io/tracer/)
+- [HoloVoxel: LOD-native voxels for .NET](https://evaluatedapplications.github.io/holovoxel/)
+- [Tools](https://evaluatedapplications.github.io/tools/)
+- [Evidence](https://evaluatedapplications.github.io/evidence/)
+- [What attention costs](https://evaluatedapplications.github.io/algformer/evidence/)
+- [What a gate bound does](https://evaluatedapplications.github.io/evalapp/evidence/)
+- [HoloDb benchmarks](https://evaluatedapplications.github.io/holodb/evidence/)
+- [Detail against components read](https://evaluatedapplications.github.io/holovoxel/evidence/)
+- [Exact recall and refusal](https://evaluatedapplications.github.io/phasor/evidence/)
+- [Pleroma costs and checks](https://evaluatedapplications.github.io/phasor/evidence/costs/)
+- [Generated sentences pass the gate](https://evaluatedapplications.github.io/prose/evidence/)
+- [Research](https://evaluatedapplications.github.io/research/)
+- [The Four-Token Ceiling](https://evaluatedapplications.github.io/research/context-four/)
+- [Growing the Wrong Way](https://evaluatedapplications.github.io/research/context-eight/)
+- [The Model Learns Back To Front](https://evaluatedapplications.github.io/research/back-to-front/)
+- [Smaller Than TinyStories](https://evaluatedapplications.github.io/research/smaller-than-tinystories/)
+- [Nobody Read the Warning](https://evaluatedapplications.github.io/research/nobody-read-the-warning/)
+- [Partner with us](https://evaluatedapplications.github.io/partner/)
+- [Licence](https://evaluatedapplications.github.io/licence/)
+- [For AI readers](https://evaluatedapplications.github.io/ai/)
+
+## Company
+
+- [Partner with us](https://evaluatedapplications.github.io/partner/): A lot of useful products can be built on small models that run entirely in the browser: no server, no GPU bill and no user data leaving the device. Our libraries are the stack for that.
+- [Licence](https://evaluatedapplications.github.io/licence/): Commercial licence for commercial use. Evaluation and non-commercial use are permitted.
+- [For AI readers](https://evaluatedapplications.github.io/ai/): a plain summary for AI systems
+- [NuGet profile](https://www.nuget.org/profiles/evaluatedapplications): every package we publish
+- Contact: dongyang.stephen.chen@gmail.com
+
+## Machine-readable
+
+- [llms-full.txt](https://evaluatedapplications.github.io/llms-full.txt): every product described in plain text
+- [sitemap.xml](https://evaluatedapplications.github.io/sitemap.xml)

@@ -1,0 +1,17 @@
+@* The boot shell: published at /tools/app/ (dist/app/index.html), NOT a page a visitor is sent to on purpose.
+   The generated gallery owns /tools/ (web/ in this repo, site-next/tools/index.html). A path that has no static shell
+   (today only /tools/council-spending/<slug>) is bounced by the site's 404 page to /tools/app/?/<path>; the restore script
+   in wwwroot/index.html puts the original path back in the address bar and starts the app, which routes it. Not routed
+   (no @page): the running app never shows it. Static = true: nothing on it starts the runtime. noindex is added by
+   scripts/finish-shells.mjs. *@
+@attribute [BlazierPage("app", Static = true, Title = "Starting the tool — Evaluated Applications", Layout = typeof(MainLayout))]
+
+<PageTitle>Starting the tool — Evaluated Applications</PageTitle>
+
+<header class="hero">
+    <div class="wrap">
+        <h1>Starting the tool&hellip;</h1>
+        <p class="lede">This page loads the in-browser runtime for the tool you asked for. If nothing happens,
+            <a href="/tools/">open the tools gallery</a> and pick a tool from there.</p>
+    </div>
+</header>

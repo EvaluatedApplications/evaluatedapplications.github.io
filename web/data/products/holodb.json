@@ -1,0 +1,49 @@
+{
+  "title": "HoloDb: embeddable SQL database for .NET",
+  "description": "HoloDb is an embeddable .NET SQL database with ACID transactions, similarity search and maintained aggregates, all answered from one store.",
+  "headline": "One store. Query it by key, by content, or by aggregate.",
+  "intro": [
+    "HoloDb is an embeddable SQL database for .NET with ACID transactions, similarity search and maintained aggregates. It stores data as holograms in a single associative store: every value is encoded as a phase vector and a row's columns are bound into one hologram, so the same copy of the data can be retrieved three ways. Exact lookup by primary key is ordinary SQL. Similarity search by content is the NEAREST clause. Analytics read a maintained total instead of scanning.",
+    "Applications that need relational storage, similarity search and fast dashboard rollups normally reach for three systems, a row store, a vector index and a cube or a pile of scans, and pay to keep them consistent. HoloDb is one embeddable package: a transactional store, an in-SQL similarity search, and aggregates whose response time does not grow with the table."
+  ],
+  "facts": ["ACID with a write-ahead log", "Larger-than-memory tables", "Runs in the browser", "net8.0 and net10.0"],
+  "why": [
+    { "title": "No separate vector index", "text": "NEAREST ranks rows by resemblance to a partial description, in SQL, over the rows the table already holds. A close number or date, or a near-identical string, ranks ahead of a far or unrelated one, and the score is readable as a column." },
+    { "title": "Aggregates do not scan", "text": "An integer column's running total is itself one maintained vector, so whole-table COUNT, SUM, MIN and MAX and single-column GROUP BY read that value directly, flat as the table grows from a thousand rows to tens of millions." },
+    { "title": "Real ACID, and past RAM", "text": "Write-ahead logging with an fsync on each durable commit, crash recovery bounded by live data and not by write history, reader and writer locking, and paged tables on an 8 KB buffer pool that let a table exceed memory." }
+  ],
+  "diagram": {
+    "id": "holodb-store",
+    "title": "One store, three ways to ask",
+    "stageLabel": "Interactive 3D view of the invoices table. Drag to turn it, or use the arrow keys. Choose a way to query above.",
+    "lede": "The same 24 rows answer a key lookup, a similarity ranking and an aggregate. Each answer, route and usage-meter reading was captured from a run of the package; the bars use the benchmark's own medians.",
+    "latency": { "evidence": "holodb", "table": "inprocess", "key": ["look up one invoice"], "aggregate": ["invoices by status", "total invoiced"] }
+  },
+  "quickstart": {
+    "lede": "Create a service, run some SQL and read the rows back.",
+    "source": "snippets/holodb-quickstart.cs",
+    "output": "snippets/holodb-quickstart.out.txt"
+  },
+  "capabilities": [
+    { "title": "A substantial SQL dialect", "text": "CREATE TABLE, INSERT, UPDATE, DELETE, SELECT with DISTINCT, COUNT, SUM, MIN, MAX and AVG, a single INNER JOIN, WHERE with AND, OR, NOT, LIKE, IN, BETWEEN and IN (SELECT ...), GROUP BY and HAVING, ORDER BY, LIMIT, ALTER TABLE ADD COLUMN, indexes, EXPLAIN, and explicit BEGIN, COMMIT and ROLLBACK." },
+    { "title": "Parameterized queries", "text": "Every Execute has a ? placeholder overload with positional binding, correctly quoted and escaped, beside the raw SQL string form." },
+    { "title": "Content similarity in SQL", "text": "NEAREST ranks by graded closeness for numbers, dates and text, with a score column on request. From 8,000 rows an approximate sublinear index ranks candidates, and below that or whenever the query has a WHERE the ranking is an exact scan." },
+    { "title": "Constant-time exact aggregates", "text": "COUNT, SUM, MIN, MAX and single-column GROUP BY over integer columns are exact, not approximate. Real-number aggregates use a fast SIMD scan." },
+    { "title": "Durable and larger than memory", "text": "A snapshot plus a short log gives recovery that tracks live data. Paged tables spill cold pages to disk and keep the maintained aggregates accurate there." },
+    { "title": "Fast scans", "text": "A WHERE is evaluated over raw column arrays in tight loops, GROUP BY over INT and TEXT columns uses dense codes, and an equi-join on TEXT keys is a columnar hash join." },
+    { "title": "Metering", "text": "A per-query usage meter reports the rows and bytes actually processed, for billing or observability." },
+    { "title": "Embedded or networked", "text": "Use it in process, or run it as a server with a matching typed client and a columnar wire protocol. The same managed code also runs in a browser tab." },
+    { "title": "The optional Pleroma plane and page store", "text": "Attach an exact, derived summary to chosen columns to answer filters, group-bys, distinct counts and joins without scanning, or keep exact Pleroma pages durably as the data itself." }
+  ],
+  "limits": [
+    "There is no UPSERT: inserting an existing primary key throws. Delete then insert, or check existence first.",
+    "A table has one PRIMARY KEY, an INT or TEXT column. Joins are inner joins, with one INNER JOIN per query.",
+    "ALTER TABLE supports ADD COLUMN with a DEFAULT only. There is no DROP, rename or type change.",
+    "There is no NULL and no column aliasing with AS. Table aliases in a join are not supported, so qualify columns with the table name.",
+    "NEAREST with a WHERE filters first and then ranks the survivors, and NEAREST does not combine with GROUP BY.",
+    "Only integer aggregates are constant time. Real-number aggregates scan.",
+    "The optional plane works on in-memory tables only, and a plane attached through the API is not persisted: call it again after opening. A paged table refuses a plane, and paged tables support a single join only, with no GROUP BY over a join.",
+    "The package ships compiled, without XML documentation."
+  ],
+  "reference": "Every public type is documented with a worked example in the package readme on NuGet."
+}

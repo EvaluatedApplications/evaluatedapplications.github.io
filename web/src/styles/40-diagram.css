@@ -1,0 +1,34 @@
+/* Diagram contract styles. Everything a diagram needs lives here so a renderer ships only JS and data. */
+.dia-tabs{display:flex;gap:var(--sp-1);overflow-x:auto;padding:0 0 var(--sp-2);scrollbar-width:none}
+.dia-tabs [role="tab"]{flex:none;font:inherit;font-size:.9rem;color:var(--ink-soft);background:var(--bg-2);border:1px solid var(--border-2);border-radius:999px;padding:6px 14px;cursor:pointer;transition:all var(--dur) var(--ease)}
+.dia-tabs [role="tab"]:hover{color:var(--ink);border-color:var(--cat-solid)}
+.dia-tabs [role="tab"][aria-selected="true"]{color:var(--ink);background:color-mix(in srgb,var(--cat-solid) 18%,var(--bg-2));border-color:var(--cat-solid)}
+.dia-stage{position:relative;aspect-ratio:2/1.02;min-height:260px;background:radial-gradient(600px 300px at 50% 40%,color-mix(in srgb,var(--cat-solid) 8%,var(--bg-2)),var(--bg-2));border:1px solid var(--border);border-radius:12px;overflow:hidden;touch-action:pan-y}
+.dia-stage:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+.dia-stage .dia-canvas{position:absolute;inset:0;width:100%;height:100%;display:block;cursor:grab;touch-action:pan-y}
+.dia-stage .dia-canvas:active{cursor:grabbing}
+.dia-plan{position:absolute;inset:0;width:100%;height:100%}
+.dia-plan .walls rect{fill:var(--border-2)}
+.dia-plan .paths polyline{fill:none;stroke-width:1.6;stroke-linejoin:round;opacity:.85}
+.dia-plan .goal{fill:none;stroke:var(--ink);stroke-width:1.6}
+.dia-plan .starts circle{stroke:none}
+.a0{stroke:var(--spectrum-1);fill:var(--spectrum-1)}.a1{stroke:var(--spectrum-2);fill:var(--spectrum-2)}.a2{stroke:var(--spectrum-3);fill:var(--spectrum-3)}
+.a3{stroke:var(--spectrum-4);fill:var(--spectrum-4)}.a4{stroke:var(--spectrum-5);fill:var(--spectrum-5)}.a5{stroke:var(--spectrum-6);fill:var(--spectrum-6)}.a6{stroke:var(--spectrum-7);fill:var(--spectrum-7)}
+.dia-plan polyline[class^="a"]{fill:none}
+.dia-controls{display:flex;flex-wrap:wrap;align-items:center;gap:var(--sp-2) var(--sp-3);padding:var(--sp-2) 0}
+.dia-field,.dia-check{display:flex;align-items:center;gap:var(--sp-1);font-size:.88rem;color:var(--ink-soft)}
+.dia-field input[type=range]{width:120px;accent-color:var(--cat-solid)}
+.dia-field select{font:inherit;font-size:.88rem;color:var(--ink);background:var(--bg-2);border:1px solid var(--border-2);border-radius:8px;padding:4px 8px}
+.dia-field select:disabled{opacity:.5}
+.dia-check input{accent-color:var(--cat-solid)}
+.dia-hint{font-size:var(--fs-sm);color:var(--ink-faint)}
+.dia-readout{margin:var(--sp-1) 0 var(--sp-2);color:var(--ink-soft);font-size:.94rem;max-width:80ch;min-height:3.3em}
+.dia-stats{margin-top:var(--sp-1)}
+.dia-data{margin-top:var(--sp-3)}
+.dia-data summary{cursor:pointer;color:var(--accent-ink);font-size:.92rem}
+@media (max-width:640px){
+  .dia-stage{aspect-ratio:4/5;min-height:0}
+  .dia-field input[type=range]{width:96px}
+  .dia-readout{min-height:5.2em}
+  .stats.dia-stats{grid-template-columns:repeat(2,1fr)}
+}

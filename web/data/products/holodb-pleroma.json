@@ -1,0 +1,63 @@
+{
+  "title": "HoloDb on Pleroma",
+  "label": "Built on Pleroma",
+  "description": "How HoloDb uses the Pleroma: an optional aggregate plane for exact answers from a derived summary, index SQL with EXPLAIN, and a durable checksummed page store.",
+  "h1": "HoloDb is built with Pleroma",
+  "intro": "HoloDb is built with Pleroma, the exact count-and-sum structure in the Phasor package. Three parts of HoloDb are Pleroma parts. This page says what each gives you and what it costs. The first two are optional and off until you ask for them.",
+  "sections": [
+    {
+      "id": "framing",
+      "title": "Engine results and plane results",
+      "paragraphs": [
+        "The headline results on the evidence page are the engine's, not the plane's. The 10,000,000-invoice billing comparison against SQLite, DuckDB and SQL Server, and the single-row write tables against SQLite, were run on the HoloDb engine alone, with no plane attached. The plane is a separate, opt-in feature, measured in its own runs, where its costs sit beside its wins."
+      ],
+      "more": { "label": "Plane results and costs", "href": "/holodb/evidence/#dashboard" }
+    },
+    {
+      "id": "plane",
+      "title": "The aggregate plane: exact answers from a derived summary",
+      "paragraphs": [
+        "You name a few small-domain columns (dimensions, INT or TEXT) and the INT columns to sum (measures). HoloDb keeps a Pleroma summary of them, updated by every write, and answers filters, multi-column GROUP BY, COUNT(DISTINCT), MIN and MAX of a dimension, and equi-join COUNT and SUM from it, without scanning the table."
+      ],
+      "list": [
+        { "term": "Exact and derived", "text": "The columns stay the source of truth, and the plane is rebuilt from them. PleromaVerify rebuilds it and compares, and returns nothing when they agree. Sums are held exactly past 64 bits: the plane raises an error rather than wrap, and PleromaSumExact returns the exact 128-bit total." },
+        { "term": "It declines safely", "text": "Anything the plane does not hold (AVG, a column that is not a dimension or measure, a dimension over its cap of distinct values, a join over 4,095 keys) goes to the engine, so a query returns the same rows with the plane on or off. The default routing, PleromaMode.Auto, also leaves to the engine the shapes where it already reads a maintained total (whole-table counts and sums, single-column GROUP BY) and GROUP BY with a WHERE below 140,000 rows, because the engine is faster there." },
+        { "term": "What it costs", "text": "On a 1,000,000-row table the plane is slower than the engine alone on whole-table COUNT, whole-table SUM, single-column GROUP BY and MIN and MAX, because the engine reads a maintained total in microseconds there. It adds to single-row INSERT and UPDATE, and to bulk load a little. Every cost is in the evidence record beside the wins." },
+        { "term": "Limits", "text": "Memory-resident tables only: a paged table refuses a plane. A plane attached with EnablePleroma is not persisted, so call it again after Open. A plane created with SQL is replayed from the log and survives Checkpoint. It is opt-in per table." }
+      ]
+    },
+    {
+      "id": "index-sql",
+      "title": "Index SQL and EXPLAIN: build it and see why",
+      "paragraphs": [
+        "The plane has a SQL form, so a remote client can build it through the server like any statement. SHOW INDEXES reports its size and how many queries it served and declined, and EXPLAIN reports why a query was served or declined, without running it.",
+        "EXPLAIN runs the engine's own routing code in a mode that stops before the heavy work, so what it reports is the decision the real statement takes. It does not run an IN (SELECT ...) subquery, which it shows unresolved. A binary older than the release that added this SQL cannot open a log or snapshot that contains it."
+      ],
+      "snippets": [ { "source": "snippets/holodb-index-explain.cs", "output": "snippets/holodb-index-explain.out.txt" } ],
+      "more": { "label": "Watch queries route to the plane or the engine", "href": "/holodb/#overview" }
+    },
+    {
+      "id": "page-store",
+      "title": "The Pleroma page store: durable, checksummed pages",
+      "paragraphs": [
+        "PleromaPageStore holds many exact Pleroma pages as the data itself, durably and larger than memory, with no columns behind them. PleromaSparsePageStore does the same for sparse pages over a large vocabulary."
+      ],
+      "list": [
+        { "term": "Checksummed pages", "text": "Every page carries a check prime, a mirror of its cells in a second prime, and a header hash. Verify proves every record and parity group intact. VerifyOnLoad does the same on every load and is off by default (about 100 microseconds for a 110-key page)." },
+        { "term": "Parity repair", "text": "Records are grouped (8 by default) with one exact-sum parity record per group, and the members of a group sit on different 8 KB pager pages. Any one lost pager page, or any one damaged record per group, is rebuilt by Repair. A rebuilt page must pass its own check before it is written, and a page whose group parity is also damaged is reported as unrecoverable, never rebuilt wrong." },
+        { "term": "Restore points", "text": "Checkpoint returns a restore point, and RestoreTo returns the store to exactly that state with no recount. It is copy-on-write, so a restore point costs one before-image per page changed since, not a copy of the data. Eight are kept by default." },
+        { "term": "Exactly-once replay", "text": "Every AddBatch is journaled (fsynced by default) before it is applied, and each page remembers the last batch applied to it, so crash recovery applies a logged add exactly once, even over pages already flushed. A torn journal tail is discarded, so a batch survives whole or not at all." }
+      ],
+      "snippets": [ { "source": "snippets/holodb-pagestore.cs", "output": "snippets/holodb-pagestore.out.txt" } ],
+      "paragraphsAfter": [
+        "Limits: one shape per store, and it must be CompleteKeys and admissible for a check prime. Shapes with a continuous component or a relation face cannot be saved. One process opens a store at a time and one writer works at a time. A batch is applied page by page, so a reader sees every page whole but may see a batch on some pages and not on others. The sparse store has no parity groups, restore points or event journal. Page-store throughput is not reported."
+      ]
+    },
+    {
+      "id": "exactness",
+      "title": "Exactness",
+      "paragraphs": [ "The plane returns row-for-row the same answers as the engine and SQLite across its parity suite, including a random insert, update, delete, rollback and reopen log, and sums past 64 bits, and the page store passes its fault suite. The checks, and the deliberate mutations that turned them red, are listed with the figures." ],
+      "more": { "label": "Checks behind the figures", "href": "/holodb/evidence/#checks" }
+    }
+  ]
+}

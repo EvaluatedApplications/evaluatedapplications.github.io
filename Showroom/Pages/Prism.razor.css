@@ -1,0 +1,89 @@
+.room { max-width: 880px; margin: 0 auto; padding: 3rem 24px 4rem; }
+.crumb { font-family: var(--mono); font-size: 0.82rem; color: var(--ink-faint); margin-bottom: 0.75rem; }
+.crumb a { color: var(--ink-soft); }
+.crumb span { margin: 0 0.4rem; opacity: 0.6; }
+.room-head h1 { font-size: clamp(2rem, 4.5vw, 2.6rem); font-weight: 700; letter-spacing: -0.02em; margin: 0 0 0.5rem; }
+.lede { font-size: 1.08rem; line-height: 1.55; color: var(--ink-soft); margin: 0 0 1.2rem; max-width: 64ch; }
+.badges { display: flex; flex-wrap: wrap; gap: 0.5rem; margin: 0 0 1.4rem; }
+.badges span { font-family: var(--mono); font-size: 0.78rem; color: var(--ink-soft); border: 1px solid var(--border-2); border-radius: 999px; padding: 0.3rem 0.75rem; background: var(--surface); }
+.err { color: var(--bad); margin: 0.6rem 0 0; }
+.hint { color: var(--ink-faint); font-size: 0.9rem; }
+.boot-note { margin: 0.8rem 0 0; padding: 0.7rem 0.9rem; border: 1px solid var(--border-2); border-left: 3px solid var(--accent); border-radius: 8px; background: var(--surface); color: var(--ink-soft); font-size: 0.84rem; line-height: 1.5; }
+
+/* sound toggle — moved to wwwroot/css/voice.css 2026-09-21 (shared with Nano Stories via
+   HoloKernel's TokenVoiceControls component; see that file's own header comment). .sound-note stays
+   there too since it styles the same component's trailing hint line. */
+
+/* stats */
+.cr-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 0.8rem; margin: 0 0 0.6rem; }
+.stat { background: var(--surface); border: 1px solid var(--border); border-left: 3px solid var(--accent); border-radius: 12px; padding: 0.9rem 1rem; }
+.stat .n { font-size: 1.7rem; font-weight: 800; letter-spacing: -0.02em; color: var(--ink); font-variant-numeric: tabular-nums; }
+.stat .l { color: var(--ink-soft); font-size: 0.86rem; margin-top: 0.2rem; }
+.or-shape { margin: 0 0 1.4rem; }
+
+/* turn-based chat — each .or-turn is one real message, "you" or "prism", rendered in order; the
+   rolling context cap (what the model actually sees) is computed in C# (Prism.razor), not here */
+.or-runs { border: 1px solid var(--border); border-radius: 14px; background: var(--bg-2); overflow: hidden; }
+.or-run-list { max-height: 420px; overflow-y: auto; padding: 0.9rem 1rem; display: flex; flex-direction: column; gap: 0.6rem; }
+/* overflow-wrap:anywhere is load-bearing, not defensive. A degenerate reply is one unbroken run with no
+   spaces ("ANTANTERERERERE..."), so there is NO break opportunity in it: max-width can't cap a box whose
+   content refuses to wrap, and .or-run-list sets overflow-y:auto, which per spec computes overflow-x to
+   auto as well — so the whole chat column scrolled sideways on mobile instead of the text wrapping.
+   `anywhere` (not break-word) is the right keyword: it also shrinks the box's min-content size, which is
+   what a flex item's width is actually resolved against. min-width:0 removes the flex-item auto minimum
+   for the same reason. Reported from a real phone, 2026-09-09. */
+.or-turn { font-size: 0.95rem; line-height: 1.6; max-width: 88%; min-width: 0; overflow-wrap: anywhere; padding: 0.55rem 0.8rem; border-radius: 12px; border: 1px solid var(--border-2); }
+.or-turn.user { align-self: flex-end; background: var(--surface); color: var(--ink); border-bottom-right-radius: 3px; }
+.or-turn.prism { align-self: flex-start; background: var(--bg); color: var(--ink); border-bottom-left-radius: 3px; }
+.or-who { display: block; font-family: var(--mono); font-size: 0.7rem; letter-spacing: 0.04em; text-transform: uppercase; color: var(--ink-faint); margin-bottom: 0.15rem; }
+.or-turn.prism .or-text { color: var(--accent-ink); }
+.or-turn.pending .or-text { opacity: 0.9; }
+.car { display: inline-block; width: 0.5em; height: 1em; margin-left: 1px; vertical-align: -0.15em; background: var(--accent-ink); animation: car-blink 0.9s steps(1) infinite; }
+@keyframes car-blink { 0%, 49% { opacity: 1; } 50%, 100% { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .car { animation: none; opacity: 0.6; } }
+.or-note { display: block; font-size: 0.78rem; color: var(--ink-faint); margin-top: 0.3rem; }
+.or-input-row { display: flex; gap: 0.6rem; padding: 0.8rem 1rem; border-top: 1px solid var(--border); background: var(--surface); }
+/* min-width:0 is load-bearing, not defensive. A flex item's automatic minimum size is its INTRINSIC
+   width, so `flex: 1` alone will not let this input shrink past the width its own padding + font
+   demand — the row then pushes wider than the viewport and the Clear button hangs off the right edge
+   on a phone (reported from a real device, 2026-09-10). Same failure as the site-wide .grid 330px
+   overflow already on record: the fix is always to let the item shrink, never to clip the parent. */
+.or-input { flex: 1; min-width: 0; background: var(--bg-2); border: 1px solid var(--border-2); border-radius: 9px; padding: 0.55rem 0.8rem; color: var(--ink); font-size: 0.95rem; }
+.or-input:focus { outline: none; border-color: var(--accent); }
+.go { background: var(--accent); color: #fff; border: none; border-radius: 10px; padding: 0.55rem 1.2rem; font-size: 0.95rem; font-weight: 600; cursor: pointer; transition: filter 0.15s; }
+.go:hover:not(:disabled) { filter: brightness(1.08); }
+.go:disabled { opacity: 0.5; cursor: default; }
+.ghost { background: transparent; color: var(--ink-soft); border: 1px solid var(--border-2); border-radius: 10px; padding: 0.55rem 1rem; font-size: 0.9rem; cursor: pointer; }
+.ghost:hover:not(:disabled) { border-color: var(--accent); color: var(--ink); }
+.ghost:disabled { opacity: 0.4; cursor: default; }
+
+.outro { margin-top: 2.4rem; padding-top: 1.2rem; border-top: 1px solid var(--border); }
+.outro p { color: var(--ink-soft); font-size: 0.92rem; line-height: 1.55; margin: 0 0 1rem; }
+.outro code { font-family: var(--mono); font-size: 0.85rem; color: var(--accent-ink); background: var(--bg-2); padding: 0.1rem 0.4rem; border-radius: 5px; }
+
+@media (max-width: 640px) {
+    /* narrow phones only — tighten the outer gutter and each stat card's own inner padding; the
+       desktop/tablet .room/.stat rules above (24px / 1rem) are left alone since real-device feedback
+       was specifically about wasted side space on a narrow screen, not about wider viewports. */
+    .room { padding-left: 12px; padding-right: 12px; }
+    .cr-stats { grid-template-columns: 1fr 1fr; gap: 0.55rem; }
+    .stat { padding: 0.7rem 0.6rem; }
+
+    /* Even with min-width:0 the input becomes unusably narrow once two buttons share its row on a
+       360px phone. Give the input the full width and drop the buttons onto a second row, so nothing
+       has to shrink and nothing can overflow regardless of button label length. */
+    .or-input-row { flex-wrap: wrap; padding: 0.7rem 0.8rem; }
+    .or-input { flex: 1 1 100%; }
+    .go, .ghost { flex: 1 1 0; white-space: nowrap; padding-left: 0.8rem; padding-right: 0.8rem; }
+}
+
+/* "How Prism works, as sound": a condensed Meaning-as-chords explainer under the chat, same quiet
+   type ramp as .outro so it reads as page copy, not another panel */
+.explain { margin-top: 2.4rem; padding-top: 1.2rem; border-top: 1px solid var(--border); max-width: 70ch; }
+.explain h2 { font-size: 1.25rem; font-weight: 700; letter-spacing: -0.01em; margin: 0 0 0.5rem; color: var(--ink); }
+.explain h3 { font-size: 1rem; font-weight: 700; margin: 1.5rem 0 0.4rem; color: var(--ink); }
+.explain p { color: var(--ink-soft); font-size: 0.95rem; line-height: 1.6; margin: 0 0 0.8rem; }
+.explain ul { margin: 0.4rem 0 0; padding-left: 1.1rem; display: grid; gap: 0.55rem; }
+.explain li { color: var(--ink-soft); font-size: 0.95rem; line-height: 1.6; }
+.explain strong { color: var(--ink); }
+.explain a, .sound-note a { color: var(--accent-ink); }

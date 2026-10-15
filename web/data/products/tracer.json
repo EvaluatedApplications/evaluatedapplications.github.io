@@ -1,0 +1,42 @@
+{
+  "title": "Tracer: pathfinding and game AI for .NET",
+  "description": "Tracer is a .NET SDK for navmesh pathfinding with many moving agents: swarms that share goals, dynamic obstacles, line of sight, fog of war and combat.",
+  "headline": "Pathfinding is the easy part. Tracer does the rest.",
+  "intro": "Tracer is a pathfinding and game-AI SDK for real-time simulations with many moving agents: crowds, RTS-style unit groups and tactical squads. It bakes triangle navmeshes, routes single agents and whole swarms across them, reacts to obstacles that appear or vanish mid-game, and adds the game-AI toolkit around pathfinding: line of sight, fog of war, influence maps and combat engagement.",
+  "facts": ["Triangle navmesh and a bake-free tile lane", "Self-tuning concurrency", "net8.0 and net10.0"],
+  "why": [
+    { "title": "A swarm costs close to one agent", "text": "Agents that share a goal share one solve, so five hundred agents heading to the same point cost close to one. Adaptive path budgeting keeps large swarms inside a frame-time budget under pressure." },
+    { "title": "Obstacles change without a re-bake", "text": "Block and unblock regions of a baked mesh while the game runs. The mesh handle is immutable, so you swap the new one in between ticks." },
+    { "title": "Everything around the path", "text": "Line of sight, fog of war, influence maps, congestion analysis, steering behaviors and combat resolution ship in the same SDK, on the same pipeline runtime." }
+  ],
+  "diagram": {
+    "id": "tracer-field",
+    "title": "The field",
+    "stageLabel": "Interactive view of the level. Drag, or use the arrow keys to turn and tilt it.",
+    "lede": "A baked level, fourteen agents and the paths Tracer returned. Switch the view to close a doorway, compare single queries with the swarm tick, or flood a tile range. Every line is package output."
+  },
+  "quickstart": {
+    "lede": "Bake a small room with a doorway, query a path, run a swarm, then close the doorway.",
+    "source": "snippets/tracer-quickstart.cs",
+    "output": "snippets/tracer-quickstart.out.txt"
+  },
+  "capabilities": [
+    { "title": "Navmesh baking", "text": "Turn triangle geometry into a queryable navmesh, with obstacle-polygon exclusion and an optional hierarchical bake for large levels, or layered meshes for ground, air and water." },
+    { "title": "Single and multi-agent paths", "text": "One-shot smoothed paths, batches in parallel, or a swarm tick where agents with the same goal reuse one solve." },
+    { "title": "Dynamic obstacles", "text": "Block and unblock circular zones of a baked mesh at runtime without a full bake." },
+    { "title": "Line of sight, fog of war, influence maps", "text": "Visibility and area-control queries for perception and decision-making, with congestion analysis alongside." },
+    { "title": "Combat engagement", "text": "Spatially hashed attacker and defender resolution with pluggable damage, dodge and block formulas." },
+    { "title": "Steering behaviors", "text": "Seek, Wander, Patrol, Flee, Queue and FlowLane, composed through a fluent navigator builder." },
+    { "title": "Grid tactics", "text": "A separate bake-free lane for tile games: line of sight, movement range, cover and target selection over any tilemap." },
+    { "title": "Adaptive budgeting and populations", "text": "Cluster large agent counts and path only representatives when the frame budget is tight, or run several named populations under one shared budget." }
+  ],
+  "limits": [
+    "The navmesh is made of triangles, not tiles. A tile game bakes two triangles per walkable cell, or uses the bake-free tile lane.",
+    "An unreachable or off-mesh goal never throws. A single query returns an empty list, and a swarm result reports that no path was found.",
+    "Blocking a zone at runtime isolates triangles in place, so the triangle count does not change. Baking with blocked zones excludes them instead.",
+    "Pressure is a meaningful signal only when a frame-time target is set.",
+    "Swarm waypoints are shared guidance. On the level in the diagram they cut doorway corners by up to {swarmCorner} of a cell; single-agent queries stay within {singleCorner} of a cell. Use single queries where exact corner clearance matters.",
+    "Mesh handles are immutable and safe to read from any thread. Services that persist tuner state should not be driven concurrently under one service key."
+  ],
+  "reference": "Every public type is documented with a worked example in the package readme on NuGet."
+}

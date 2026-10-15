@@ -1,0 +1,84 @@
+﻿@using System.Diagnostics
+@using Showroom.Services
+@using static Showroom.Services.CouncilTerms
+@inject CouncilWebData Data
+
+@* The hub's summary of the declared-spend comparison across all twenty-six councils. Reads only budget_units.csv (small; the same file the pre-registered test reads).
+   On a council page the same comparison is drawn inside each year you load (YearBlock + GapBars), so a loaded year lines up with its own declared total.
+   The difference is labelled "declared spend not itemised in the file": it is two totals on different bases, never "undeclared" or "missing". *@
+<section class="budget gappanel">
+    <button type="button" class="check-head" @onclick="Toggle" aria-expanded="@(_open ? "true" : "false")">
+        <span class="arrow" aria-hidden="true">@(_open ? "▾" : "▸")</span>
+        <h2>Can the budget figures clear the flagged payments?</h2>
+    </button>
+    @if (_open)
+    {
+        <div class="verdict">
+            <p><b>What this shows.</b> Each year, the spend a council declared to government is set against the spend its published file itemises. The difference is <b>declared spend not itemised in the file</b>. It is two
+                totals on different bases, not a list of payments: it can hold payments below the publication threshold, card spend, school bank accounts, non-cash charges and timing. Employee pay is not in the declared figure used
+                here, so it is not part of the difference.</p>
+            <p>The <b>flagged repeat payments</b> are the second copies of lines listed under a second transaction number and the repeated-payment groups the rules found. Where they would fit inside the difference, the budget figures cannot show whether they were
+                extra, so the budget cannot clear them. <b>This shows the budget cannot clear these payments, not that they were made.</b> The pre-registered test of the same question stays as published: inconclusive, set out below.</p>
+        </div>
+        <RulesDisclosure Checks="Rules" />
+        @if (_error is not null) { <p class="err">@_error</p> }
+        else if (!_loaded) { <p class="hint">Loading the declared-spend figures (small)...</p> }
+        else
+        {
+            <p class="summary">@_allLine</p>
+            <table class="tests gaptable">
+                <thead><tr><th>Council</th><th>Years compared</th><th>File below declared</th><th>Flagged fits inside (median year)</th></tr></thead>
+                <tbody>
+                @foreach (var r in _hub)
+                {
+                    <tr>
+                        <td><a href="/tools/council-spending/@r.Slug">@CouncilWebData.ShortOf(r.Slug)</a></td>
+                        <td>@r.S.N</td>
+                        <td>@(r.S.N == 0 ? "-" : r.S.Below + " of " + r.S.N)</td>
+                        <td>@(r.S.N == 0 ? "no year can be compared yet" : r.S.Fits == 0 ? "in none of its years" : GapYear.Times(r.S.MedFit) + " times over, in " + r.S.Fits + " of " + r.S.N)</td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+            <p class="caption">A year is compared only when the file covers twelve months and the government has published a figure for it. "Times over" is the declared spend not itemised in the file divided by the flagged repeat payments (second copies and repeated-payment groups), in each year where the file itemises less than was declared. Each council's page draws each year you load on one scale, beside its own declared total.</p>
+            <p class="caption">@OglCredit</p>
+        }
+    }
+</section>
+
+@code {
+    static readonly string[] Rules = { "BudgetComparison" };
+    sealed class HubRow { public string Slug = ""; public GapSummary S = new(); }
+
+    bool _open, _loaded;
+    string? _error;
+    List<HubRow> _hub = new();
+    string _allLine = "";
+
+    async Task Toggle()
+    {
+        _open = !_open;
+        if (_open && !_loaded) await LoadAsync();
+    }
+
+    async Task LoadAsync()
+    {
+        var sw = Stopwatch.StartNew();
+        _error = null;
+        try
+        {
+            var units = new Tab(await Data.TableAsync("cross/budget_units.csv", true, new Cooperative(CancellationToken.None)));
+            _hub = new();
+            var all = GapYear.Build(units, null);
+            foreach (var c in CouncilWebData.Councils)
+                _hub.Add(new HubRow { Slug = c.Slug, S = GapSummary.Of(all.FindAll(y => y.Council == c.Slug)) });
+            var tot = GapSummary.Of(all);
+            int councils = 0; foreach (var h in _hub) if (h.S.N > 0) councils++;
+            _allLine = $"{tot.N} council-years across {councils} councils have a full year of payments and a published government figure. In {tot.Below} of them the file itemises less than the declared spend, so there is declared spend not itemised in the file; "
+                + $"in {tot.Fits} the flagged repeat payments fit inside it, so the budget figures cannot rule them out. In {tot.Above} the file itemises more than was declared.";
+            _loaded = true;
+            await Data.LogAsync("gap all built", sw.ElapsedMilliseconds);
+        }
+        catch (Exception ex) { _error = "Could not load the declared-spend figures: " + ex.Message; }
+    }
+}

@@ -1,0 +1,34 @@
+name: Refresh Forecaster data
+
+# Periodically re-pulls AAPL hourly OHLC candles for the Showroom Forecaster tool's bundled
+# historical dataset (Showroom/wwwroot/data/forecaster-history.json), via
+# Showroom/scripts/fetch-forecaster-history.ps1 (server-side, where Yahoo's CORS block doesn't
+# matter). This keeps the SOURCE data fresh -- it does NOT touch Showroom/dist/, the actually-
+# deployed artifact (see deploy.yml's own note on that coupling). A refreshed
+# forecaster-history.json only reaches production the next time someone rebuilds Showroom/dist/
+# locally and commits it -- this workflow alone is not sufficient to deploy new data.
+
+on:
+  schedule:
+    - cron: '17 6 * * 1-5'   # weekdays, off-peak UTC
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  refresh:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch fresh candles
+        run: pwsh -File Showroom/scripts/fetch-forecaster-history.ps1
+
+      - name: Commit if changed
+        run: |
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+          git add Showroom/wwwroot/data/forecaster-history.json
+          git diff --cached --quiet || git commit -m "Refresh Forecaster historical data"
+          git diff --cached --quiet || git push

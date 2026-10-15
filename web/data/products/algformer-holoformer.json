@@ -1,0 +1,86 @@
+{
+  "title": "How HoloFormer works",
+  "label": "How HoloFormer works",
+  "description": "HoloFormer is AlgFormer's holographic attention core. This page explains in plain terms how it stores meaning, combines ideas and remembers a whole context.",
+  "h1": "How HoloFormer works",
+  "intro": "HoloFormer is the holographic attention core in AlgFormer. This page explains it in plain terms: how a token is stored, how ideas are combined, how the model thinks longer and how it remembers a whole context in one place. Each idea ends by naming the part of the model it describes.",
+  "sections": [
+    {
+      "id": "chord", "title": "A token is a chord",
+      "paragraphs": [
+        "Give the model a letter, a word or a number and it writes it down as a chord: a particular stack of pure tones played together. Each tone is one channel of a complex-valued vector, and the chord is the whole vector. One word is one chord and another word is another.",
+        "How many tones can a chord stack? That is the size of the instrument. A small instrument has few strings, so chords blur into one another and the model cannot tell things apart. A bigger instrument keeps chords crisp and distinct."
+      ],
+      "list": [ { "term": "In the model", "text": "The tones are the channels, set by dModel when you construct the model. More channels keep meanings distinct." } ]
+    },
+    {
+      "id": "bind", "title": "Combining is playing together",
+      "paragraphs": [
+        "The model has essentially one core move. To join two things it plays their chords together, and they merge into a single new chord. That is how a word is tied to its role, or a question to its subject.",
+        "Numbers are chords tuned so that playing two of them together adds their values. The chord for 5 played with the chord for 3 decodes as 8. The arithmetic is in the sound itself, so the model does not have to memorise a times table the way an ordinary transformer would. The program below is the Phasor codec that supplies the chords."
+      ],
+      "snippets": [ { "source": "snippets/phasor-codec-minimal.cs", "output": "snippets/phasor-codec-minimal.out.txt", "label": "Binding two numbers and reading a bundle back" } ],
+      "listAfter": [ { "term": "In the model", "text": "This one move is binding. For numbers, binding is addition. The codec comes from the Phasor package." } ]
+    },
+    {
+      "id": "moves", "title": "Chord moves",
+      "paragraphs": [
+        "Stacking chords is not enough. The model also has to transform them, steering a question toward its answer. It does this with a small set of learned moves, each of which blends in tones from elsewhere on the instrument.",
+        "More moves let it express richer relationships. The moves are spread across the instrument rather than only nudging neighbouring strings, so it can connect distant ideas and not only adjacent notes. At least two are needed: with one move every tone only ever reads itself, and nothing can route between tones."
+      ],
+      "list": [ { "term": "In the model", "text": "The moves are the shifts of the relation bank, spread by golden-ratio spacing so a few of them cover the whole range. HoloShape.ShiftsFor chooses how many a given context needs." } ]
+    },
+    {
+      "id": "layers", "title": "A chain of arrangers",
+      "paragraphs": [ "The sound is not shaped all at once. It flows through several stages in a row, and each stage restyles it with its own set of moves before handing it on, the way a melody passes through a chain of arrangers." ],
+      "list": [ { "term": "In the model", "text": "The stages are the layers. Depth is how many times the sound is reworked." } ]
+    },
+    {
+      "id": "replay", "title": "Play it through twice",
+      "paragraphs": [
+        "Thinking, for this model, is replaying. Each stage can play its part again over what it just laid down, and only then hand the sound on. The first pass sketches and the second develops the sketch.",
+        "Replaying costs no extra parameters, because the same stage is simply applied again. The model can think harder about a short input by playing it through more times, and a newly added stage can be eased in by letting its replay weight start at zero and ramp up."
+      ],
+      "list": [ { "term": "In the model", "text": "The repeats are the K weight-tied iterations of each layer (the StackIter family), with a per-layer alpha that ramps a new layer in." } ]
+    },
+    {
+      "id": "memory", "title": "One shared sound you tune into",
+      "paragraphs": [
+        "This is where HoloFormer parts company with an ordinary transformer. A transformer makes every position compare itself with every earlier position: a crowded room in which everyone talks to everyone, and the effort grows with the square of the conversation.",
+        "HoloFormer folds everything it has heard into one running sound per layer. Each position binds its key to its value and adds the result to the bundle. To recall something, the query is unbound from the bundle: the matching part rings out and the rest averages toward silence, like finding one station on a radio dial.",
+        "One bundle holds the whole context, so reading a prompt grows with its length rather than its square, and each new token costs the same however long the context has become. The chart on the overview page measures both cores. The held memory can also be listened to: the inspectors read off what the final query resonated with and decode it to tokens."
+      ],
+      "list": [ { "term": "In the model", "text": "This is holographic memory: retrieval by resonance instead of every-position-to-every-position comparison. The incremental cache of this core is one running bundle per layer." } ]
+    },
+    {
+      "id": "capacity", "title": "How much one sound can hold",
+      "paragraphs": [
+        "Many bound pairs summed into one vector crosstalk: each read comes back with a little noise from all the others. A bundle can therefore hold a limited number of items cleanly. HoloShape reports two numbers for a shape. The crosstalk edge is the number of shifts times the width, halved. The clean capacity is the number of tokens that read back at least 90 percent clean, which is about {cleanFrac} percent of the edge.",
+        "Models are sized so that the context sits at a chosen fraction of the edge, and the default is a quarter. At a width of 128, HoloShape derives a context of {ctx128} tokens. The crosstalk edge there is {edge128} tokens and {clean128} tokens read back clean. The constants behind the derived shapes are single measurements, so treat the shape as a starting point."
+      ],
+      "snippets": [ { "source": "snippets/algformer-holoshape.cs", "output": "snippets/algformer-holoshape.out.txt", "label": "Sizing a shape with HoloShape" } ]
+    },
+    {
+      "id": "compare", "title": "Side by side with an ordinary transformer",
+      "table": {
+        "caption": "What differs between the two attention cores",
+        "columns": ["Aspect", "Ordinary transformer (softmax attention)", "HoloFormer (holographic attention)"],
+        "rows": [
+          ["Meaning", "A point in a learned space.", "A chord: a vector of phases."],
+          ["Combining ideas", "Learned tables, taught every combination.", "Binding: chords played together. For numbers it adds."],
+          ["Remembering", "Every position compares with every earlier position.", "One running bundle per layer, read by resonance."],
+          ["Cost of attention", "Reading a prompt grows with the square of its length, and the cache grows with it.", "Reading a prompt grows with its length, and the cache stays the same size."],
+          ["Thinking longer", "More layers, so more parameters.", "Replay the same layer, with no new parameters."],
+          ["Looking inside", "Hidden numbers.", "Inspectors read off what a query resonated with and decode it to tokens."]
+        ]
+      },
+      "paragraphsAfter": [ "An ordinary transformer memorises the music. This one plays it." ]
+    },
+    {
+      "id": "try", "title": "Try it",
+      "paragraphs": [ "The holographic core takes the same constructor as the softmax core. This program trains one, serves it through the incremental cache and reads what its final query resonated with." ],
+      "snippets": [ { "source": "snippets/algformer-holoformer.cs", "output": "snippets/algformer-holoformer.out.txt", "label": "HoloFormer: train, serve and inspect" } ],
+      "more": { "href": "/algformer/", "label": "Back to AlgFormer" }
+    }
+  ]
+}

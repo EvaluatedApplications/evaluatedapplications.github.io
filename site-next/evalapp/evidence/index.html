@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>What a gate bound does | Evaluated Applications</title>
+<meta name="description" content="A gate held concurrency at its declared bound in every run, and 24 queued jobs finished in 139 ms at the best bound against 1,113 ms at 1.">
+<link rel="canonical" href="https://evaluatedapplications.github.io/evalapp/evidence/">
+
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Evaluated Applications">
+<meta property="og:title" content="What a gate bound does | Evaluated Applications">
+<meta property="og:description" content="A gate held concurrency at its declared bound in every run, and 24 queued jobs finished in 139 ms at the best bound against 1,113 ms at 1.">
+<meta property="og:url" content="https://evaluatedapplications.github.io/evalapp/evidence/">
+<meta name="twitter:card" content="summary">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%23f0796a'/%3E%3Cstop offset='.5' stop-color='%237bd86a'/%3E%3Cstop offset='1' stop-color='%23c07dff'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='32' height='32' rx='7' fill='%23050608'/%3E%3Cpath d='M16 5L27 26H5Z' fill='none' stroke='url(%23g)' stroke-width='2' stroke-linejoin='round'/%3E%3C/svg%3E">
+<script>document.documentElement.classList.add('js')</script>
+<link rel="stylesheet" href="/assets/ea.css?v=93cf72d0">
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Home","item":"https://evaluatedapplications.github.io/"},{"@type":"ListItem","position":2,"name":"Evidence","item":"https://evaluatedapplications.github.io/evidence/"},{"@type":"ListItem","position":3,"name":"What a gate bound does","item":"https://evaluatedapplications.github.io/evalapp/evidence/"}]}</script>
+
+</head>
+<body class="cat-foundation" data-page="evidence">
+<a class="skip" href="#main">Skip to content</a>
+<div class="beam" aria-hidden="true"></div>
+<header class="site-header"><div class="wrap nav" data-nav>
+  <a class="brand" href="/"><svg class="mark" viewBox="0 0 32 32" aria-hidden="true"><defs><linearGradient id="m" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#f0796a"/><stop offset=".166" stop-color="#f0a15a"/><stop offset=".333" stop-color="#e6c450"/><stop offset=".5" stop-color="#7bd86a"/><stop offset=".666" stop-color="#4aa3ff"/><stop offset=".833" stop-color="#7d7dff"/><stop offset="1" stop-color="#c07dff"/></linearGradient></defs><path d="M16 5L27 26H5Z" fill="none" stroke="url(#m)" stroke-width="2" stroke-linejoin="round"/></svg>Evaluated Applications</a>
+  <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="site-links">Menu</button>
+  <nav aria-label="Main"><ul class="nav-links" id="site-links">
+    <li><a href="/products/">Products</a></li><li><a href="/tools/">Tools</a></li><li><a href="/evidence/" aria-current="page">Evidence</a></li><li><a href="/research/">Research</a></li>
+    <li><a class="nav-cta" href="/partner/">Partner with us</a></li>
+    <li><a href="https://www.nuget.org/profiles/evaluatedapplications" rel="noopener">NuGet<span class="sr-only"> (external)</span></a></li>
+  </ul></nav>
+</div></header>
+<main id="main" tabindex="-1">
+
+<header class="page-head"><div class="wrap">
+<nav class="crumbs" aria-label="Breadcrumb"><ol><li><a href="/">Home</a></li><li><a href="/evidence/">Evidence</a></li><li aria-current="page">What a gate bound does</li></ol></nav>
+<p class="eyebrow">EvalApp evidence</p>
+<h1 class="wide">What a gate bound does</h1>
+<p class="lede">The gate never admitted more downloads than its bound: in every recorded run the most in flight equalled the bound. The time to finish 24 queued jobs fell from 1,113 ms at a bound of 1 to 139 ms at 8, then rose again to 410 ms when all 24 ran at once, because the simulated service slows when it is crowded.</p>
+<ul class="facts"><li class="fact">A resource gate on simulated downloads</li><li class="fact">Losses shown</li></ul>
+</div></header>
+<nav class="subnav" aria-label="EvalApp sections"><div class="wrap"><ul><li><a href="/evalapp/">Overview</a></li><li><a href="/evalapp/#quick-start">Quick start</a></li><li><a href="/evalapp/#neural">EvalApp.Neural</a></li><li><a href="/evalapp/docs/">Docs</a></li><li><a href="/evalapp/evidence/" aria-current="page">Evidence</a></li></ul></div></nav>
+
+
+<section class="sec" aria-labelledby="h-head"><div class="wrap">
+  <div class="sec-head"><span class="sec-dot cat-foundation" aria-hidden="true"></span><h2 id="h-head">Headline</h2></div>
+  <dl class="stats"><div class="stat"><dt>recorded runs where the most downloads in flight equalled the gate bound</dt><dd>7 of 7</dd></div><div class="stat"><dt>time to finish 24 jobs at a bound of 1 and at the best bound, 8</dt><dd>1,113 ms to 139 ms</dd></div><div class="stat"><dt>slower with all 24 jobs running at once than at the best bound</dt><dd>2.9 times</dd></div></dl>
+</div></section>
+
+<section class="sec" aria-labelledby="h-loss"><div class="wrap">
+  <div class="sec-head"><span class="sec-dot cat-foundation" aria-hidden="true"></span><h2 id="h-loss">Where it is slower</h2><span class="sec-line">Every loss in this record, stated once</span></div>
+  <ul class="limits"><li>A bound of 1 took 1,113 ms, 8.0 times the best bound. The gate does not choose its bound for you, and a bound set too low is the slowest result here.</li><li>A bound of 24, the whole batch at once, took 410 ms, 2.9 times the best bound. A higher bound is not faster when the thing behind the gate slows under load.</li></ul>
+</div></section>
+
+<section class="sec method" aria-labelledby="h-method"><div class="wrap">
+  <div class="sec-head"><span class="sec-dot cat-foundation" aria-hidden="true"></span><h2 id="h-method">How it was measured</h2><span class="sec-line">Stated once, for every figure on this page</span></div>
+  <dl><dt>Workload</dt><dd>24 jobs are queued at once through a ForEach. Each passes a Network gate and awaits a simulated download of 40 ms. The simulated service stretches the wait once more than 6 downloads are in flight. 7 fixed gate bounds from 1 to 24, one recorded run each, after a warm-up run.</dd><dt>Engines</dt><dd>EvalApp pipeline with Gate and ForEach</dd><dt>Check</dt><dd>Every job records its own timestamps, and the number of downloads in flight is counted inside the gated step, so the bound is checked against what actually ran.</dd><dt>Statistic</dt><dd>One recording per bound, in milliseconds. A repeated recording varies by a few percent.</dd><dt>Memory and logging</dt><dd>Nothing is retained between runs.</dd></dl>
+</div></section>
+
+<section class="sec" aria-labelledby="results"><div class="wrap">
+  <div class="sec-head"><span class="sec-dot cat-foundation" aria-hidden="true"></span><h2 id="results">Results</h2></div>
+  
+  <div class="tbl-wrap"><table class="tbl"><caption>24 queued jobs, by gate bound</caption>
+<thead><tr><th scope="col">Gate bound</th><th scope="col">All jobs finished in (ms)</th><th scope="col">Most running at once</th><th scope="col">Longest wait at the gate (ms)</th><th scope="col">Jobs per second</th></tr></thead>
+<tbody><tr><th scope="row">1</th><td>1,113</td><td>1</td><td>1,067</td><td>22</td></tr><tr><th scope="row">2</th><td>557</td><td>2</td><td>511</td><td>43</td></tr><tr><th scope="row">4</th><td>280</td><td>4</td><td>233</td><td>86</td></tr><tr><th scope="row">6</th><td>189</td><td>6</td><td>143</td><td>127</td></tr><tr><th scope="row">8</th><td>139</td><td>8</td><td>92</td><td>173</td></tr><tr><th scope="row">12</th><td>187</td><td>12</td><td>93</td><td>128</td></tr><tr><th scope="row">24</th><td>410</td><td>24</td><td>0</td><td>59</td></tr></tbody></table></div>
+  
+</div></section>
+
+<section class="sec" aria-labelledby="h-lim"><div class="wrap">
+  <div class="sec-head"><span class="sec-dot cat-foundation" aria-hidden="true"></span><h2 id="h-lim">Limits</h2></div>
+  <ul class="limits"><li>The work is a simulated wait, not a real network. It shows how the gate and its queue behave, not the speed of any real service.</li><li>The best bound here is a property of the simulated service, which slows past 6 in flight. A real service has its own shape, which is what the tuner exists to find.</li><li>It measures the gate and does not compare EvalApp with another library.</li></ul>
+</div></section>
+
+<section class="sec" aria-labelledby="h-rel"><div class="wrap">
+  <div class="sec-head"><span class="sec-dot cat-foundation" aria-hidden="true"></span><h2 id="h-rel">Related</h2></div>
+  <div class="related"><div><h3>Product</h3><ul><li><a class="pill" href="/evalapp/">EvalApp</a></li></ul></div><div><h3>More evidence</h3><ul><li><a class="pill" href="/evidence/">All evidence</a></li></ul></div></div>
+</div></section>
+</main>
+<footer class="site-footer"><div class="wrap">
+  <div class="foot-grid">
+    <div><h2>Products</h2><ul><li><a href="/phasor/">Phasor</a></li><li><a href="/evalapp/">EvalApp</a></li><li><a href="/holodb/">HoloDb</a></li><li><a href="/algformer/">AlgFormer</a></li><li><a href="/prism/">Prism</a></li><li><a href="/prose/">Prose</a></li><li><a href="/tracer/">Tracer</a></li><li><a href="/holovoxel/">HoloVoxel</a></li></ul></div>
+    <div><h2>Tools</h2><ul><li><a href="/tools/analyst/">The Analyst</a></li><li><a href="/tools/creature/">The Creature</a></li><li><a href="/tools/forecaster/">The Forecaster</a></li><li><a href="/tools/prism/">Prism</a></li><li><a href="/tools/stories/">Nano Stories</a></li><li><a href="/tools/cartographer/">The Cartographer</a></li><li><a href="/tools/prose/">Prose</a></li><li><a href="/tools/council-spending/">Council Spending Scanner</a></li></ul></div>
+    <div><h2>Learn</h2><ul><li><a href="/evidence/">Evidence</a></li><li><a href="/research/">Research</a></li><li><a href="/products/">All products</a></li><li><a href="/tools/">All tools</a></li></ul></div>
+    <div><h2>Company</h2><ul><li><a href="/partner/">Partner with us</a></li><li><a href="/licence/">Licence</a></li><li><a href="/ai/">For AI readers</a></li><li><a href="https://www.nuget.org/profiles/evaluatedapplications" rel="noopener">NuGet</a></li></ul></div>
+    <div><h2>Machine-readable</h2><ul><li><a href="/llms.txt">llms.txt</a></li><li><a href="/llms-full.txt">llms-full.txt</a></li><li><a href="/sitemap.xml">sitemap.xml</a></li></ul></div>
+  </div>
+  <div class="foot-base"><span>Evaluated Applications · .NET libraries · England</span><span class="mono">© 2026 Evaluated Applications</span></div>
+</div></footer>
+
+<script src="/assets/site.js?v=3190ebab" defer></script>
+
+</body>
+</html>

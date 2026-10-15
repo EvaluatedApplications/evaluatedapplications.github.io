@@ -1,0 +1,243 @@
+@page "/council-spending"
+@page "/council-spending/{Slug}"
+@attribute [BlazierPage("council-spending", Title = "Council Spending Scanner — Evaluated Applications", Layout = typeof(MainLayout), Static = true)]
+@using System.Diagnostics
+@using Showroom.Components
+@using Showroom.Services
+@using static Showroom.Services.CouncilTerms
+@inject CouncilWebData Data
+@inject IBuildTime Build
+
+<PageTitle>@(Slug is null ? "Council Spending Scanner" : CouncilWebData.ShortOf(Slug) + " spending") — Evaluated Applications</PageTitle>
+
+@{
+    // Defined words: plain text, no data, so the static shell and the live hub show the same panel.
+    RenderFragment words = @<section class="wordpanel">
+        <h2>What these words mean</h2>
+        <dl>
+            <dt><span class="tag">Exception</span></dt>
+            <dd>The umbrella word for anything a check flags: a row or group of rows that fails a defined test against the published data. An exception is not an accusation; it is a fact about the numbers as published.</dd>
+            <dt><span class="tag">Discrepancy</span></dt>
+            <dd>The published record contradicts itself: a payment that does not match its own stated invoice amount, the same line listed more than once, or one transaction number covering more than one payee or pay date.</dd>
+            <dt><span class="tag">Unreconciled</span></dt>
+            <dd>The published payments for a transaction do not add up to the invoice amount the file states for it, under any of the rules the checks apply. The file does not say why.</dd>
+            <dt><span class="tag">Anomaly</span></dt>
+            <dd>A pattern, not a contradiction: the same supplier, amount, description and date appear more than once under different transaction numbers.</dd>
+        </dl>
+    </section>;
+}
+
+<div class="room cs" data-cat="councilaudit">
+@if (Build.IsPrerender)
+{
+    @* The static shell (Blazier): nothing here may need index.csv, so no council count or name appears. The live hub below reads them. *@
+    <header class="room-head">
+        <nav class="crumb"><a href="/">Tools</a> <span>/</span> Council Spending Scanner</nav>
+        <h1>Council Spending Scanner</h1>
+        <p class="lede">Councils in England publish every payment over a set amount under the Local Government Transparency Code. This tool reads those published files, prepared ahead of time, and shows where the
+            published numbers do not add up on their own terms. Each check is one stated rule, run the same way for every council. It never says why a number looks the way it does; it shows the numbers and leaves the
+            council to explain.</p>
+    </header>
+    <p class="caveat"><strong>@DiscrepancyNote</strong></p>
+    <ToolStart Tool="The Council Spending Scanner" Label="Open the scanner" Data="a small list of councils" />
+    @words
+}
+else if (!_catalogReady)
+{
+    @* nothing below may ask for a council's name, count or facts until index.csv has been read *@
+    <header class="room-head">
+        <nav class="crumb"><a href="/">Tools</a> <span>/</span> Council Spending Scanner</nav>
+        <h1>Council Spending Scanner</h1>
+    </header>
+    @if (_error is not null) { <p class="err">@_error</p> }
+    else { <p class="hint" role="status">Loading...</p> }
+}
+else if (Slug is null)
+{
+    @* ============================ the councils (count and list from index.csv) ============================ *@
+    <header class="room-head">
+        <nav class="crumb"><a href="/">Tools</a> <span>/</span> Council Spending Scanner</nav>
+        <h1>Council Spending Scanner</h1>
+        <p class="lede">Councils in England publish every payment over a set amount under the Local Government Transparency Code. This tool reads @Words(CouncilWebData.Councils.Count) councils' published files, prepared ahead of time, and shows where the
+            published numbers do not add up on their own terms. Each check is one stated rule, run the same way for every council. It never says why a number looks the way it does; it shows the numbers and leaves the
+            council to explain. If you want the council's records, tap "Add to request" under any item and build a letter at the bottom of the page.</p>
+    </header>
+    <p class="caveat"><strong>@DiscrepancyNote</strong></p>
+
+    @words
+
+    <section class="picker">
+        <h2>Choose a council</h2>
+        @if (_error is not null) { <p class="err">@_error</p> }
+        <div class="picker-grid">
+            @foreach (var c in CouncilWebData.Councils)
+            {
+                var ix = _index?.FirstOrDefault(i => i.Slug == c.Slug);
+                <a class="pick-card" href="/tools/council-spending/@c.Slug">
+                    <h3>@c.Name</h3>
+                    @if (ix is not null)
+                    {
+                        <p>@Plural(ix.Months, "month", "months") of payments, @NumLines(ix.TxRows) published, @NumLines(ix.ExceptionRows) flagged by the rules.</p>
+                    }
+                    else { <p class="hint">Loading...</p> }
+                    <span class="go-in">Open this council</span>
+                </a>
+            }
+        </div>
+        <p class="hint">On a council's page you tick the financial years to load (the size is shown first); nothing is loaded until you press Load, and never a whole council unless you tick every year, so it stays quick on a phone.</p>
+    </section>
+
+    <section class="cross">
+        <h2>Across all @Words(CouncilWebData.Councils.Count) councils</h2>
+        <p class="plain">These checks read small summary files that cover every council. Tap one to open it; each loads only when opened. The same checks, limited to one council, are on each council's own page.</p>
+        @foreach (var d in CouncilChecksWeb.All) { <CheckPanel Def="d" Slug="@null" /> }
+        <GapPanel />
+        <BudgetTestPanel />
+    </section>
+
+    <FoiTrayPanel />
+}
+else if (_notFound)
+{
+    <header class="room-head">
+        <nav class="crumb"><a href="/">Tools</a> <span>/</span> <a href="/tools/council-spending">Council Spending Scanner</a></nav>
+        <h1>No such council</h1>
+        <p class="lede"><a href="/tools/council-spending">Back to the @Words(CouncilWebData.Councils.Count) councils.</a></p>
+    </header>
+}
+else
+{
+    @* ============================ one council ============================ *@
+    <header class="room-head">
+        <nav class="crumb"><a href="/">Tools</a> <span>/</span> <a href="/tools/council-spending">Council Spending Scanner</a> <span>/</span> @CouncilWebData.ShortOf(Slug)</nav>
+        <h1>@CouncilWebData.NameOf(Slug)</h1>
+        <p class="lede">What this council's published payments file shows, checked by the same rules as every other council. Facts about the published numbers only; the council is the one who can explain them.</p>
+    </header>
+    <p class="caveat"><strong>@DiscrepancyNote</strong></p>
+
+    @if (_error is not null) { <p class="err">@_error</p> }
+    @if (!_ready && _error is null) { <p class="hint" role="status">Loading this council...</p> }
+    @if (_ready)
+    {
+        <section class="about">
+            <h2>About this council's files</h2>
+            @if (_profile is not null)
+            {
+                <p>Where the council publishes them: <a href="@_profile.Page" target="_blank" rel="noopener">@_profile.Page</a></p>
+                <p class="plain">@_profile.HowTo</p>
+                @if (_profile.Foi is not null) { <p class="plain">If you want to raise a finding formally, here is where to send a request: <a href="mailto:@_profile.Foi">@_profile.Foi</a>. Ask for the records and the reason.</p> }
+            }
+            <ul class="facts">
+                @foreach (var f in _facts) { <li>@f</li> }
+            </ul>
+            @if (CannotCheck(Slug).Count > 0)
+            {
+                <h3>What cannot be checked for this council</h3>
+                <ul class="notelist">@foreach (var c in CannotCheck(Slug)) { <li>@c</li> }</ul>
+            }
+            <RulesDisclosure Checks="RawRules" Label="Which published rows the scanner leaves out, and why" />
+        </section>
+
+        @if (_profile is not null)
+        {
+            <section class="notes">
+                <h2>How this council's files are published</h2>
+                <p class="plain">These are the notes kept on this council's profile, written when its files were first checked. They describe how the files are laid out and what they hold; a note is not a finding about any payment.</p>
+                @if (_profile.Quirks.Count > 0)
+                {
+                    <ul class="notelist">@foreach (var q in _profile.Quirks) { <li>@q</li> }</ul>
+                }
+                else { <p class="hint">No notes are kept for this council.</p> }
+                <details class="verify">
+                    <summary>How the checks on this council were verified</summary>
+                    <p class="plain">@_profile.Verification</p>
+                    <p class="plain">Profile last checked: @_profile.LastChecked.</p>
+                </details>
+            </section>
+        }
+
+        <LoadPicker Slug="@Slug" Months="_months" Years="_years" />
+
+        <section class="cross">
+            <h2>Other checks for @CouncilWebData.ShortOf(Slug)</h2>
+            <p class="plain">Each loads a small file only when opened. The same-day reversals and the council's own migration label are not separate lists: they appear as explained groups inside each month above.</p>
+            @foreach (var d in CouncilChecksWeb.All) { <CheckPanel @key="@(Slug + d.Id)" Def="d" Slug="@Slug" /> }
+        </section>
+
+        @if (Slug == "wokingham") { <SocialCarePanel /> }
+
+        <BudgetPanel Slug="@Slug" />
+        <BudgetTestPanel />
+
+        <FoiTrayPanel />
+
+        <p class="licence">@OglCredit</p>
+    }
+}
+</div>
+
+@code {
+    [Parameter] public string? Slug { get; set; }
+
+    static readonly string[] RawRules = { "RawReconciliation" };
+    List<CouncilIndexRow>? _index;
+    List<MonthRow> _months = new();
+    List<YearRow> _years = new();
+    CouncilProfile? _profile;
+    List<string> _facts = new();
+    bool _ready, _notFound;
+    string? _error;
+    string _loadedSlug = "";
+    bool _catalogReady;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (Build.IsPrerender) return;   // the static shell reads no council data (Blazier); the live page starts here
+        _error = null;
+        var sw = Stopwatch.StartNew();
+        var co = new Cooperative(CancellationToken.None);
+        try
+        {
+            _index ??= await Data.IndexAsync(co);   // the council list, its count and its names (CouncilWebData.Councils) come from here
+            _catalogReady = true;
+            if (Slug is null)
+            {
+                await Data.LogAsync("hub ready", sw.ElapsedMilliseconds);
+                return;
+            }
+            _notFound = !CouncilWebData.Councils.Any(c => c.Slug == Slug);
+            if (_notFound || _loadedSlug == Slug) return;
+            _ready = false;
+            _months = await Data.MonthsAsync(Slug, co);
+            _years = await Data.YearsAsync(Slug, co);
+            _profile = await Data.ProfileAsync(Slug);   // also registers every council's measured facts (CouncilFacts)
+            BuildFacts();
+            _loadedSlug = Slug;
+            _ready = true;
+            await Data.LogAsync($"council page {Slug} ready", sw.ElapsedMilliseconds);
+        }
+        catch (Exception ex) { _error = "Could not load the data for this page: " + ex.Message; }
+    }
+
+    void BuildFacts()
+    {
+        _facts = new();
+        // no note is labelled a "fault": a first word in capitals ("CSV", "ONE signed Amount column") says nothing about whether a note describes a fault, and the profile carries no such flag
+        var dated = _months.Where(m => m.Month != "undated").OrderBy(m => m.Month).ToList();
+        if (dated.Count > 0)
+        {
+            _facts.Add($"{Num(dated.Count)} months hold payments dated {MonthName(dated[0].Month)} to {MonthName(dated[^1].Month)}: {Num(_months.Sum(m => m.TxRows))} published lines, {Gbp(_months.Sum(m => m.Net))} of Net in all.");
+            var have = dated.Select(m => m.Month).ToHashSet();
+            var missing = new List<string>();
+            var cur = DateTime.ParseExact(dated[0].Month, "yyyy-MM", System.Globalization.CultureInfo.InvariantCulture);
+            var end = DateTime.ParseExact(dated[^1].Month, "yyyy-MM", System.Globalization.CultureInfo.InvariantCulture);
+            for (; cur <= end; cur = cur.AddMonths(1)) if (!have.Contains(cur.ToString("yyyy-MM"))) missing.Add(MonthName(cur.ToString("yyyy-MM")));
+            if (missing.Count > 0)
+                _facts.Add($"No published line carries a payment date in {(missing.Count <= 12 ? string.Join(", ", missing) : Num(missing.Count) + " of those months")}.");
+        }
+        var und = _months.FirstOrDefault(m => m.Month == "undated");
+        if (und is not null) _facts.Add($"{NumLines(und.TxRows)} {(und.TxRows == 1 ? "has" : "have")} no readable payment date and {(und.TxRows == 1 ? "is" : "are")} listed under \"No readable date\" in the list of years to load.");
+        int flaggedAll = _months.Sum(m => m.ExceptionRows);
+        _facts.Add($"The rules flag {NumLines(flaggedAll)} in all, as published, {(flaggedAll == 1 ? "and it is not" : "none of them")} a finding.");
+    }
+}

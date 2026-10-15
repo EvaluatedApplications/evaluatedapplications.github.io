@@ -1,0 +1,556 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>EvalApp docs: steps, gates and sagas | Evaluated Applications</title>
+<meta name="description" content="A practical guide to EvalApp: design the data record, add steps, gate resources, fan out with ForEach, compensate with sagas and switch tuning on.">
+<link rel="canonical" href="https://evaluatedapplications.github.io/evalapp/docs/">
+
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Evaluated Applications">
+<meta property="og:title" content="EvalApp docs: steps, gates and sagas | Evaluated Applications">
+<meta property="og:description" content="A practical guide to EvalApp: design the data record, add steps, gate resources, fan out with ForEach, compensate with sagas and switch tuning on.">
+<meta property="og:url" content="https://evaluatedapplications.github.io/evalapp/docs/">
+<meta name="twitter:card" content="summary">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%23f0796a'/%3E%3Cstop offset='.5' stop-color='%237bd86a'/%3E%3Cstop offset='1' stop-color='%23c07dff'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='32' height='32' rx='7' fill='%23050608'/%3E%3Cpath d='M16 5L27 26H5Z' fill='none' stroke='url(%23g)' stroke-width='2' stroke-linejoin='round'/%3E%3C/svg%3E">
+<script>document.documentElement.classList.add('js')</script>
+<link rel="stylesheet" href="/assets/ea.css?v=93cf72d0">
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Home","item":"https://evaluatedapplications.github.io/"},{"@type":"ListItem","position":2,"name":"Products","item":"https://evaluatedapplications.github.io/products/"},{"@type":"ListItem","position":3,"name":"EvalApp","item":"https://evaluatedapplications.github.io/evalapp/"},{"@type":"ListItem","position":4,"name":"Docs","item":"https://evaluatedapplications.github.io/evalapp/docs/"}]}</script>
+
+</head>
+<body class="cat-foundation" data-page="product-docs">
+<a class="skip" href="#main">Skip to content</a>
+<div class="beam" aria-hidden="true"></div>
+<header class="site-header"><div class="wrap nav" data-nav>
+  <a class="brand" href="/"><svg class="mark" viewBox="0 0 32 32" aria-hidden="true"><defs><linearGradient id="m" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#f0796a"/><stop offset=".166" stop-color="#f0a15a"/><stop offset=".333" stop-color="#e6c450"/><stop offset=".5" stop-color="#7bd86a"/><stop offset=".666" stop-color="#4aa3ff"/><stop offset=".833" stop-color="#7d7dff"/><stop offset="1" stop-color="#c07dff"/></linearGradient></defs><path d="M16 5L27 26H5Z" fill="none" stroke="url(#m)" stroke-width="2" stroke-linejoin="round"/></svg>Evaluated Applications</a>
+  <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="site-links">Menu</button>
+  <nav aria-label="Main"><ul class="nav-links" id="site-links">
+    <li><a href="/products/" aria-current="page">Products</a></li><li><a href="/tools/">Tools</a></li><li><a href="/evidence/">Evidence</a></li><li><a href="/research/">Research</a></li>
+    <li><a class="nav-cta" href="/partner/">Partner with us</a></li>
+    <li><a href="https://www.nuget.org/profiles/evaluatedapplications" rel="noopener">NuGet<span class="sr-only"> (external)</span></a></li>
+  </ul></nav>
+</div></header>
+<main id="main" tabindex="-1">
+
+<header class="page-head"><div class="wrap">
+<nav class="crumbs" aria-label="Breadcrumb"><ol><li><a href="/">Home</a></li><li><a href="/products/">Products</a></li><li><a href="/evalapp/">EvalApp</a></li><li aria-current="page">Docs</li></ol></nav>
+<p class="eyebrow">EvalApp docs</p>
+<h1 class="wide">EvalApp docs</h1>
+<p class="lede">A practical guide to building with EvalApp. Describe a process as a typed data record and a sequence of steps, gate every resource it touches, and let tuning find the concurrency that suits the hardware. Every program on this page is compiled and run against the published package.</p>
+
+</div></header>
+<nav class="subnav" aria-label="EvalApp sections"><div class="wrap"><ul><li><a href="/evalapp/">Overview</a></li><li><a href="/evalapp/#quick-start">Quick start</a></li><li><a href="/evalapp/#neural">EvalApp.Neural</a></li><li><a href="/evalapp/docs/" aria-current="page">Docs</a></li><li><a href="/evalapp/evidence/">Evidence</a></li></ul></div></nav>
+<section class="sec"><div class="wrap">
+  <nav class="toc" aria-labelledby="toc-h"><h2 id="toc-h">On this page</h2><ul><li><a href="#install">Install</a></li><li><a href="#import">One namespace</a></li><li><a href="#first-pipeline">Your first pipeline</a></li><li><a href="#design">Design before you build</a></li><li><a href="#steps">Steps: pure, async and side-effecting</a></li><li><a href="#context">Context-aware steps</a></li><li><a href="#gates">Gates and resource kinds</a></li><li><a href="#foreach">Parallel collections: ForEach</a></li><li><a href="#branches">Conditional and parallel branches</a></li><li><a href="#sagas">Sagas: compensation on failure</a></li><li><a href="#middleware">Middleware</a></li><li><a href="#di">Dependency injection</a></li><li><a href="#composing">Pipelines that run pipelines</a></li><li><a href="#exclusive">Exclusive resources</a></li><li><a href="#one-thread">One-thread hosts</a></li><li><a href="#licensing">Licensing</a></li><li><a href="#tuning">Tuning and inspecting</a></li><li><a href="#anti-patterns">Anti-patterns to avoid</a></li><li><a href="#architecture">Extension seams</a></li></ul></nav>
+</div></section>
+<section class="sec doc-sec" aria-labelledby="install"><div class="wrap">
+  <div class="sec-head"><span class="sec-dot cat-foundation" aria-hidden="true"></span><h2 id="install">Install</h2></div>
+  <div class="prose-block"><p>Add the package with dotnet add package EvaluatedApplications.EvalApp. It targets net8.0 and net10.0 and has no dependencies, so the package reference is the whole installation.</p><p>The package ships as a binary, without source or XML documentation. Author against the EvalApp namespace and let IntelliSense on the public types be your reference.</p><p>The fluent builder and the AddStep&lt;TStep&gt;() and AddBranch&lt;TStep&gt;() step-construction paths are safe to trim and to compile ahead of time. The tuner&#39;s JSON file persistence and a couple of internal reflection caches are not fully trim-clean, so leave WithTuning off if you publish trimmed and that matters to you.</p></div>
+  
+  
+  
+  
+  
+  
+  
+  
+</div></section><section class="sec doc-sec" aria-labelledby="import"><div class="wrap">
+  <div class="sec-head"><span class="sec-dot cat-foundation" aria-hidden="true"></span><h2 id="import">One namespace</h2></div>
+  <div class="prose-block"><p>Everything you need lives in the root EvalApp namespace: Eval, IAppBuilder, ResourceKind, Tunable, PipelineResult&lt;T&gt;, ICompiledPipeline&lt;T&gt;, the step base classes and licensing. The engine underneath lives in a separate EvalAppEngine namespace that is not part of the supported public surface. If something you need is not reachable from EvalApp, that is a gap to report, not a reason to reach into the engine.</p></div>
+  
+  
+  
+  
+  
+  
+  
+  
+</div></section><section class="sec doc-sec" aria-labelledby="first-pipeline"><div class="wrap">
+  <div class="sec-head"><span class="sec-dot cat-foundation" aria-hidden="true"></span><h2 id="first-pipeline">Your first pipeline</h2></div>
+  <div class="prose-block"><p>The quick start on the overview page builds a three-step order pipeline. Four things in it carry through everything below.</p></div>
+  <dl class="term-list"><dt>AddStep</dt><dd>Takes a name and a lambda, an async lambda, an IStep&lt;T&gt; instance or a PureStep&lt;T&gt; or AsyncStep&lt;T&gt; subclass.</dd><dt>Records and with</dt><dd>Each step returns a new value. That is what makes a parallel ForEach safe without locks: no step can see another step&#39;s unfinished state.</dd><dt>Run, then Build</dt><dd>Run(out pipeline) hands you the compiled, reusable pipeline, and Build finalizes the whole app. Build once at startup and call RunAsync many times. Rebuilding per request throws away everything the tuner has learned.</dd><dt>Results as a union</dt><dd>PipelineResult&lt;T&gt; is Success, Failure or Skipped. Pattern-match it, or use GetData(), IsSuccess, IsFailure and IsSkipped when you only need the value.</dd></dl>
+  
+  
+  
+  
+  
+  
+  
+</div></section><section class="sec doc-sec" aria-labelledby="design"><div class="wrap">
+  <div class="sec-head"><span class="sec-dot cat-foundation" aria-hidden="true"></span><h2 id="design">Design before you build</h2></div>
+  <div class="prose-block"><p>The biggest lever on whether a pipeline reads cleanly is answering these questions before touching the builder. Each answer constrains the next.</p></div>
+  <dl class="term-list"><dt>1. What is the unit of work?</dt><dd>One sentence: one order, one invoice, one request, one batch.</dd><dt>2. What does it start with, carry and produce?</dt><dd>List every piece of information that exists at any point and encode it as a record. A non-nullable field is a required input, a nullable one is an output that appears once its step runs, and a bool is control (loop, branch, skip). If you cannot describe the whole lifecycle by reading the fields, the design is not finished.</dd><dt>3. What resource does each operation touch?</dt><dd>Classify each operation as Network, DiskIO, Cpu, Database, a custom ResourceKind.Of(&quot;name&quot;), or none. This decides which operations need a gate.</dd><dt>4. What runs per item in parallel?</dt><dd>Independent items in a collection, which must not read each other&#39;s unfinished state, are ForEach boundaries.</dd><dt>5. What conditional branches exist?</dt><dd>For every If and Else, the condition, what each side does, and whether both write the same fields.</dd><dt>6. What must be rolled back on failure?</dt><dd>Walk the steps asking what has happened outside the process by the time each completes: money moved, mail sent, a record written. Only external effects need compensation.</dd><dt>7. Wire it together</dt><dd>Only now write the fluent declaration. If it does not read like a plain description of the process, the data model needs more work, not more code.</dd></dl>
+  
+  
+  
+  <div class="prose-block"><p>A single-item pipeline with no branches and no external effects skips straight to a flat sequence of steps. That means the problem was simple, not that the method failed.</p></div>
+  
+  
+  
+</div></section><section class="sec doc-sec" aria-labelledby="steps"><div class="wrap">
+  <div class="sec-head"><span class="sec-dot cat-foundation" aria-hidden="true"></span><h2 id="steps">Steps: pure, async and side-effecting</h2></div>
+  <div class="prose-block"><p>PureStep&lt;T&gt; is a synchronous transform with no side effects, and AsyncStep&lt;T&gt; is the same for work that waits on a network, a disk or a database. A step whose job is a side effect (a database write, a published event, an email) derives from SideEffectStep&lt;T&gt; and declares the ResourceKind it touches.</p><p>A SideEffectStep&lt;T&gt; cannot be added with the plain AddStep(name, instance) overload, which fails to compile. Add it with AddStep&lt;TStep&gt;(), which gates it on its declared resource, or with AddStep&lt;TStep&gt;(name, factory) when it needs a constructor-injected dependency. The resource has to be registered on the app first, with WithResource. If you would rather gate explicitly, write the side effect as an async lambda inside a Gate and the gate supplies the resource. Either way there is no path to an ungated side effect.</p></div>
+  
+  
+  
+  
+  
+  <div class="code"><div class="code-bar"><span>Pure, async and side-effect steps</span><button class="copy" type="button" aria-label="Copy Pure, async and side-effect steps">copy</button></div><pre><code class="language-csharp">using EvalApp;
+
+Eval.App(&quot;StepKinds&quot;)
+    .WithResource(ResourceKind.Network)   // a side-effect step is gated on its declared resource
+    .DefineDomain(&quot;Orders&quot;)
+        .DefineTask&lt;OrderData&gt;(&quot;ProcessOrder&quot;)
+            .AddStep(&quot;Tax&quot;, new ApplyTaxStep())                  // PureStep&lt;T&gt; instance
+            .AddStep(&quot;Fetch&quot;, new FetchTotalStep())              // AsyncStep&lt;T&gt; instance
+            .AddStep&lt;SendConfirmationStep&gt;(&quot;SendConfirmation&quot;)   // SideEffectStep&lt;T&gt;: AddStep&lt;TStep&gt;() only
+            .AddStep&lt;PublishEventStep&gt;(&quot;Publish&quot;, () =&gt; new PublishEventStep(new InMemoryBus()))
+        .Run(out ICompiledPipeline&lt;OrderData&gt; pipeline)
+    .Build();
+
+var result = await pipeline.RunAsync(new OrderData(&quot;Alice&quot;, 100m));
+var data = result.GetData();
+Console.WriteLine($&quot;{data.Status}: total {data.Total}, tax {data.Tax}&quot;);
+
+public sealed record OrderData(string CustomerName, decimal Total, string Status = &quot;New&quot;, decimal Tax = 0m);
+
+public sealed class ApplyTaxStep : PureStep&lt;OrderData&gt;
+{
+    public override OrderData Execute(OrderData data) =&gt; data with { Tax = data.Total * 0.08m };
+}
+
+public sealed class FetchTotalStep : AsyncStep&lt;OrderData&gt;
+{
+    public override async ValueTask&lt;OrderData&gt; ExecuteAsync(OrderData data, CancellationToken ct)
+    {
+        await Task.Yield();                       // real code: await the actual I/O here
+        return data with { Total = data.Total + 1m };
+    }
+}
+
+public sealed class SendConfirmationStep : SideEffectStep&lt;OrderData&gt;
+{
+    public override ResourceKind? ResourceKind =&gt; EvalApp.ResourceKind.Network;
+    public override async ValueTask&lt;OrderData&gt; ExecuteAsync(OrderData data, CancellationToken ct)
+    {
+        await Task.Yield();
+        return data with { Status = &quot;Confirmed&quot; };
+    }
+}
+
+public interface IOrderEventBus { ValueTask PublishAsync(string evt, CancellationToken ct); }
+public sealed class InMemoryBus : IOrderEventBus
+{
+    public ValueTask PublishAsync(string evt, CancellationToken ct) =&gt; ValueTask.CompletedTask;
+}
+
+// A constructor-injected dependency: AddStep&lt;TStep&gt;(name, factory) builds it without a parameterless constructor.
+public sealed class PublishEventStep(IOrderEventBus bus) : CrossDomainStep&lt;OrderData, IOrderEventBus&gt;(bus)
+{
+    public override ResourceKind? ResourceKind =&gt; EvalApp.ResourceKind.Network;
+    public override async ValueTask&lt;OrderData&gt; ExecuteAsync(OrderData data, CancellationToken ct)
+    {
+        await Shared.PublishAsync(&quot;OrderPlaced&quot;, ct);
+        return data with { Status = &quot;Published&quot; };
+    }
+}</code></pre></div><div class="code out"><div class="code-bar"><span>Output</span><button class="copy" type="button" aria-label="Copy Output">copy</button></div><pre><code class="language-text">Published: total 101, tax 8.00</code></pre></div>
+  
+  
+</div></section><section class="sec doc-sec" aria-labelledby="context"><div class="wrap">
+  <div class="sec-head"><span class="sec-dot cat-foundation" aria-hidden="true"></span><h2 id="context">Context-aware steps</h2></div>
+  <div class="prose-block"><p>When a step needs data that is constant for a whole app run (a configuration, a connection factory) or for a whole domain (a tenant, a region), subclass GlobalContext or DomainContext instead of threading it through every record. The context is populated on the step before it runs.</p></div>
+  <dl class="term-list"><dt>Add with AddStep&lt;TStep&gt;()</dt><dd>ContextPureStep and ContextSideEffectStep do not implement the plain IStep&lt;T&gt; that the instance overload expects, so AddStep(name, instance) does not compile for them.</dd><dt>No StepContext parameter</dt><dd>The public base classes never take one. A type of that name belongs to the internal engine and does not compile against the published package.</dd><dt>Exceptions become results</dt><dd>Context steps catch their own exceptions and report a Failure, unlike the plain step kinds, which let the exception reach the pipeline.</dd></dl>
+  
+  
+  
+  
+  <div class="code"><div class="code-bar"><span>Global and domain context</span><button class="copy" type="button" aria-label="Copy Global and domain context">copy</button></div><pre><code class="language-csharp">using EvalApp;
+
+Eval.App(&quot;Context&quot;)
+    .WithContext(new AppGlobal { Prefix = &quot;ORD&quot; })
+    .DefineDomain(&quot;Orders&quot;, new OrderDomain { Region = &quot;US&quot; })
+        .DefineTask&lt;OrderData&gt;(&quot;ProcessOrder&quot;)
+            .AddStep&lt;TagWithRegionStep&gt;(&quot;TagRegion&quot;)   // context steps are added with AddStep&lt;TStep&gt;() only
+            .AddStep&lt;NotifyStep&gt;(&quot;Notify&quot;)
+        .Run(out ICompiledPipeline&lt;OrderData&gt; pipeline)
+    .Build();
+
+var result = await pipeline.RunAsync(new OrderData(&quot;Alice&quot;, 10m));
+Console.WriteLine(result.GetData().Status);
+
+public sealed record OrderData(string CustomerName, decimal Total, string Status = &quot;New&quot;);
+public sealed class AppGlobal : GlobalContext { public string Prefix { get; init; } = &quot;&quot;; }
+public sealed class OrderDomain : DomainContext { public string Region { get; init; } = &quot;&quot;; }
+
+public sealed class TagWithRegionStep : ContextPureStep&lt;AppGlobal, OrderDomain, OrderData&gt;
+{
+    protected override ValueTask&lt;OrderData&gt; TransformAsync(
+        OrderData data, AppGlobal global, OrderDomain domain, CancellationToken ct)
+        =&gt; ValueTask.FromResult(data with { Status = $&quot;{global.Prefix}:{domain.Region}&quot; });
+}
+
+public sealed class NotifyStep : ContextSideEffectStep&lt;AppGlobal, OrderDomain, OrderData&gt;
+{
+    protected override async ValueTask&lt;OrderData&gt; ExecuteAsync(
+        OrderData data, AppGlobal global, OrderDomain domain, CancellationToken ct)
+    {
+        await Task.Yield();   // real code: the actual notification I/O
+        return data with { Status = data.Status + &quot;:Notified&quot; };
+    }
+}</code></pre></div><div class="code out"><div class="code-bar"><span>Output</span><button class="copy" type="button" aria-label="Copy Output">copy</button></div><pre><code class="language-text">ORD:US:Notified</code></pre></div>
+  
+  
+</div></section><section class="sec doc-sec" aria-labelledby="gates"><div class="wrap">
+  <div class="sec-head"><span class="sec-dot cat-foundation" aria-hidden="true"></span><h2 id="gates">Gates and resource kinds</h2></div>
+  <div class="prose-block"><p>A Gate declares that everything inside it contends for a named, shared resource. The built-in kinds are Network, DiskIO, Cpu and Database, and ResourceKind.Of(&quot;name&quot;) defines a pool of your own. Declare a resource&#39;s bounds at the app level with WithResource, then gate any block of steps against it.</p><p>Without tuning, a gate holds at its declared default. With tuning on, the tuner moves it inside the declared minimum and maximum.</p></div>
+  <dl class="term-list"><dt>Tunable.Between(min, max, default)</dt><dd>Explicit bounds.</dd><dt>Tunable.FixedAt(value)</dt><dd>Minimum, maximum and default are the same, so there is nothing to tune.</dd><dt>Tunable.ForCpu()</dt><dd>Scales with the number of processors.</dd><dt>Tunable.ForItems()</dt><dd>A bound for per-item fan-out, which the tuner can move.</dd><dt>Tunable.ModelOps()</dt><dd>Fixed at 1, for exclusive access such as GPU training.</dd><dt>Tunable.DiskIo() and Tunable.Network()</dt><dd>Starting points for those two resource kinds.</dd></dl>
+  
+  
+  
+  
+  <div class="code"><div class="code-bar"><span>Gates on a built-in kind and on a pool of your own</span><button class="copy" type="button" aria-label="Copy Gates on a built-in kind and on a pool of your own">copy</button></div><pre><code class="language-csharp">using EvalApp;
+
+Eval.App(&quot;Gate&quot;)
+    .WithResource(ResourceKind.Database, Tunable.Between(1, 8, 2))
+    .WithResource(ResourceKind.Of(&quot;report-engine&quot;), maxConcurrency: 1)
+    .DefineDomain(&quot;Orders&quot;)
+        .DefineTask&lt;OrderData&gt;(&quot;ProcessOrder&quot;)
+            .Gate(ResourceKind.Database, onWaiting: null, configure: g =&gt; g
+                .AddStep(&quot;CheckInventory&quot;, d =&gt; d with { Status = &quot;Checked&quot; }))
+            .Gate(&quot;CustomPool&quot;, Tunable.FixedAt(1),
+                onWaiting: null,
+                configure: g =&gt; g.AddStep(&quot;RunReport&quot;, d =&gt; d with { Status = &quot;Reported&quot; }))
+        .Run(out ICompiledPipeline&lt;OrderData&gt; pipeline)
+    .Build();
+
+var result = await pipeline.RunAsync(new OrderData(&quot;Alice&quot;, 10m));
+Console.WriteLine(result.GetData().Status);
+
+public sealed record OrderData(string CustomerName, decimal Total, string Status = &quot;New&quot;);</code></pre></div><div class="code out"><div class="code-bar"><span>Output</span><button class="copy" type="button" aria-label="Copy Output">copy</button></div><pre><code class="language-text">Reported</code></pre></div>
+  
+  
+</div></section><section class="sec doc-sec" aria-labelledby="foreach"><div class="wrap">
+  <div class="sec-head"><span class="sec-dot cat-foundation" aria-hidden="true"></span><h2 id="foreach">Parallel collections: ForEach</h2></div>
+  <div class="prose-block"><p>ForEach runs an independent pipeline over each item of a collection and merges the results back in source order. select extracts the collection, merge combines the results into the parent, and configure builds the per-item pipeline. Parallelism can be a plain number, a function re-read on each run, or a Tunable that the tuner can move.</p><p>A ForEach with fewer items than its minimum for parallel work runs inline on the calling thread, whatever the bound says, and the same is true when adaptive dispatch has learned that the items are cheap. The bound caps a fan-out; it never forces one. maxParallelism of 1 is always strictly sequential. Report() shows which path each ForEach took.</p></div>
+  <dl class="term-list"><dt>CollectAndThrow</dt><dd>The default. Every item runs and, if any failed, the result is a Failure carrying every exception.</dd><dt>FailFast</dt><dd>Remaining items are cancelled as soon as one fails.</dd><dt>ContinueOnError</dt><dd>Failed items are dropped and the result is a Success with the survivors.</dd></dl>
+  
+  
+  
+  <div class="prose-block"><p>For a tight, pure-CPU loop over many cheap rows, repeated many times, use ChunkedWork instead. It fans out in chunks with scratch space allocated once per chunk, which is the right cost model when a per-item pipeline would dominate the work.</p></div>
+  <div class="code"><div class="code-bar"><span>ForEach with a tunable bound and a per-item progress hook</span><button class="copy" type="button" aria-label="Copy ForEach with a tunable bound and a per-item progress hook">copy</button></div><pre><code class="language-csharp">using EvalApp;
+
+var progress = 0;
+
+Eval.App(&quot;ForEach&quot;)
+    .DefineDomain(&quot;Orders&quot;)
+        .DefineTask&lt;LineItemsData&gt;(&quot;CalcLineTotals&quot;)
+            .ForEach(
+                select: d =&gt; d.Items,
+                merge: (d, items) =&gt; d with { Items = items.ToList() },
+                collectionName: &quot;Items&quot;,
+                parallelism: Tunable.ForItems(),
+                configure: sub =&gt; sub
+                    .OnItemCompleted((item, result) =&gt; Interlocked.Increment(ref progress))
+                    .AddStep(&quot;Calc&quot;, (LineItem i) =&gt; i with { LineTotal = i.Price * i.Quantity }))
+        .Run(out ICompiledPipeline&lt;LineItemsData&gt; pipeline)
+    .Build();
+
+var items = Enumerable.Range(1, 12).Select(n =&gt; new LineItem($&quot;item-{n}&quot;, n, 2.5m)).ToList();
+var result = await pipeline.RunAsync(new LineItemsData(items));
+var total = result.GetData().Items.Sum(i =&gt; i.LineTotal);
+Console.WriteLine($&quot;items: {result.GetData().Items.Count}, progress callbacks: {progress}, total: {total}&quot;);
+
+public sealed record LineItem(string Name, int Quantity, decimal Price, decimal LineTotal = 0m);
+public sealed record LineItemsData(List&lt;LineItem&gt; Items);</code></pre></div><div class="code out"><div class="code-bar"><span>Output</span><button class="copy" type="button" aria-label="Copy Output">copy</button></div><pre><code class="language-text">items: 12, progress callbacks: 12, total: 195.0</code></pre></div>
+  
+  
+</div></section><section class="sec doc-sec" aria-labelledby="branches"><div class="wrap">
+  <div class="sec-head"><span class="sec-dot cat-foundation" aria-hidden="true"></span><h2 id="branches">Conditional and parallel branches</h2></div>
+  <div class="prose-block"><p>If takes a condition and builder actions for the then and else sides. Without an else and with a false condition the step reports Skipped. Classify is a first-match-wins cascade that names the pattern instead of repeating near-identical If blocks.</p><p>AddParallelGroup runs a fixed set of branches at once, as opposed to ForEach, which runs one pipeline per item. Branches that write different fields merge cleanly by default. When two branches might write the same field and that should be a conflict, pass an IMergeStrategy&lt;T&gt;.</p></div>
+  
+  
+  
+  
+  
+  <div class="code"><div class="code-bar"><span>If, then a parallel group with a merge strategy</span><button class="copy" type="button" aria-label="Copy If, then a parallel group with a merge strategy">copy</button></div><pre><code class="language-csharp">using EvalApp;
+
+Eval.App(&quot;Branches&quot;)
+    .DefineDomain(&quot;Orders&quot;)
+        .DefineTask&lt;OrderData&gt;(&quot;ProcessOrder&quot;)
+            .If(d =&gt; d.Total &gt; 100,
+                then: b =&gt; b.AddStep(&quot;VipDiscount&quot;, d =&gt; d with { Total = d.Total * 0.8m, Status = &quot;VIP&quot; }),
+                @else: b =&gt; b.AddStep(&quot;StandardProcess&quot;, d =&gt; d with { Status = &quot;Standard&quot; }))
+            .AddParallelGroup(
+                pg =&gt; pg
+                    .AddBranch(&quot;CalcTax&quot;, d =&gt; d with { Tax = d.Total * 0.08m })
+                    .AddBranch&lt;CalcShippingBranch&gt;(&quot;CalcShipping&quot;)
+                    .AddBranch(&quot;CalcHandling&quot;, new CalcHandlingFeeStep()),
+                mergeStrategy: new SumNumericFieldsMerge())
+        .Run(out ICompiledPipeline&lt;OrderData&gt; pipeline)
+    .Build();
+
+foreach (var total in new[] { 50m, 200m })
+{
+    var d = (await pipeline.RunAsync(new OrderData(&quot;Alice&quot;, total))).GetData();
+    Console.WriteLine($&quot;{d.Status}: total {d.Total}, tax {d.Tax}, shipping {d.Shipping}, handling {d.Handling}&quot;);
+}
+
+public sealed record OrderData(string CustomerName, decimal Total, string Status = &quot;New&quot;,
+    decimal Tax = 0m, decimal Shipping = 0m, decimal Handling = 0m);
+
+public sealed class CalcShippingBranch : PureStep&lt;OrderData&gt;
+{
+    public override OrderData Execute(OrderData data) =&gt; data with { Shipping = 9.99m };
+}
+
+public sealed class CalcHandlingFeeStep : IStep&lt;OrderData&gt;
+{
+    public ValueTask&lt;OrderData&gt; ExecuteAsync(OrderData data, CancellationToken ct = default)
+        =&gt; ValueTask.FromResult(data with { Handling = 1.5m });
+}
+
+public sealed class SumNumericFieldsMerge : IMergeStrategy&lt;OrderData&gt;
+{
+    public OrderData Merge(OrderData original, IReadOnlyList&lt;OrderData&gt; results)
+        =&gt; original with
+        {
+            Tax      = results.Max(r =&gt; r.Tax),
+            Shipping = results.Max(r =&gt; r.Shipping),
+            Handling = results.Max(r =&gt; r.Handling),
+        };
+}</code></pre></div><div class="code out"><div class="code-bar"><span>Output</span><button class="copy" type="button" aria-label="Copy Output">copy</button></div><pre><code class="language-text">Standard: total 50, tax 4.00, shipping 9.99, handling 1.5
+VIP: total 160.0, tax 12.800, shipping 9.99, handling 1.5</code></pre></div>
+  
+  
+</div></section><section class="sec doc-sec" aria-labelledby="sagas"><div class="wrap">
+  <div class="sec-head"><span class="sec-dot cat-foundation" aria-hidden="true"></span><h2 id="sagas">Sagas: compensation on failure</h2></div>
+  <div class="prose-block"><p>A saga chains steps that each declare an undo. If a later step fails, every earlier compensation runs in reverse order. BeginSaga and EndSaga bracket the block, and the compiler refuses a pipeline whose saga is left open.</p></div>
+  <dl class="term-list"><dt>BestEffort</dt><dd>The default. Every compensation runs even if one of them throws.</dd><dt>AbortOnFirst</dt><dd>Stop compensating at the first compensation that fails.</dd><dt>SwallowErrors</dt><dd>Run every compensation and swallow any exception from them.</dd></dl>
+  
+  
+  
+  
+  <div class="code"><div class="code-bar"><span>A saga that compensates in reverse order</span><button class="copy" type="button" aria-label="Copy A saga that compensates in reverse order">copy</button></div><pre><code class="language-csharp">using EvalApp;
+
+Eval.App(&quot;Saga&quot;)
+    .WithResource(ResourceKind.Database, Tunable.FixedAt(2))
+    .DefineDomain(&quot;Orders&quot;)
+        .DefineTask&lt;OrderData&gt;(&quot;ProcessOrder&quot;)
+            .BeginSaga(CompensationPolicy.BestEffort)
+                .AddStepWithCompensation(
+                    &quot;ReserveInventory&quot;,
+                    forward:    d =&gt; d with { Status = &quot;Reserved&quot; },
+                    compensate: d =&gt; { Console.WriteLine(&quot;compensate: release the inventory&quot;); return d with { Status = &quot;Unreserved&quot; }; })
+                .AddGate(
+                    ResourceKind.Database,
+                    onWaiting: null,
+                    configure: g =&gt; g.AddStep(&quot;WriteLedger&quot;, d =&gt; d with { Total = d.Total }),
+                    compensate: new RevertLedgerStep())
+                .AddStep(
+                    &quot;ChargePayment&quot;,
+                    d =&gt; d.Total &gt; 1_000_000m
+                        ? throw new InvalidOperationException(&quot;Payment declined&quot;)
+                        : d with { Status = &quot;Charged&quot; })
+            .EndSaga()
+        .Run(out ICompiledPipeline&lt;OrderData&gt; pipeline)
+    .Build();
+
+var ok = await pipeline.RunAsync(new OrderData(&quot;Ivy&quot;, 10m));
+var failed = await pipeline.RunAsync(new OrderData(&quot;Jin&quot;, 2_000_000m));
+Console.WriteLine($&quot;ok: {ok.IsSuccess}, status {ok.GetData().Status}&quot;);
+Console.WriteLine($&quot;failed: {failed.IsFailure}, status after compensation {failed.GetData().Status}&quot;);
+
+public sealed record OrderData(string CustomerName, decimal Total, string Status = &quot;New&quot;);
+
+public sealed class RevertLedgerStep : IStep&lt;OrderData&gt;
+{
+    public ValueTask&lt;OrderData&gt; ExecuteAsync(OrderData data, CancellationToken ct = default)
+    {
+        Console.WriteLine(&quot;compensate: revert the ledger entry&quot;);
+        return ValueTask.FromResult(data with { Status = &quot;LedgerReverted&quot; });
+    }
+}</code></pre></div><div class="code out"><div class="code-bar"><span>Output</span><button class="copy" type="button" aria-label="Copy Output">copy</button></div><pre><code class="language-text">compensate: revert the ledger entry
+compensate: release the inventory
+ok: True, status Charged
+failed: True, status after compensation New</code></pre></div>
+  
+  
+</div></section><section class="sec doc-sec" aria-labelledby="middleware"><div class="wrap">
+  <div class="sec-head"><span class="sec-dot cat-foundation" aria-hidden="true"></span><h2 id="middleware">Middleware</h2></div>
+  <div class="prose-block"><p>IStepMiddleware&lt;T&gt; wraps each named step individually, for timing, retry, audit or per-step tracing. No middleware ships ready-made; it is a seam you implement. To wrap the steps of a ForEach item pipeline, register an IStepMiddleware for the item type on that sub-builder.</p><p>An exception thrown by a step comes back as a Failure. An exception thrown by middleware outside the call to next is thrown from RunAsync on a top-level pipeline, and is a Failure only when the pipeline is nested in another. A ForEach whose item pipeline is a single synchronous step normally runs as one fused loop, and attaching middleware turns that fast path off.</p></div>
+  
+  
+  
+  
+  
+  
+  
+  
+</div></section><section class="sec doc-sec" aria-labelledby="di"><div class="wrap">
+  <div class="sec-head"><span class="sec-dot cat-foundation" aria-hidden="true"></span><h2 id="di">Dependency injection</h2></div>
+  <div class="prose-block"><p>AddStep&lt;TStep&gt;(name) and AddBranch&lt;TStep&gt;(name) resolve the step through an IStepFactory. The default creates it with a public parameterless constructor. ServiceProviderStepFactory asks your container first and falls back to that for anything not registered.</p><p>The compiler enforces the new() constraint whichever factory you register, so a type needs a literal parameterless constructor even if the container always supplies the real one. The factory path is for plain IStep&lt;T&gt; implementers. A side-effect step that needs a constructor-injected dependency uses AddStep&lt;TStep&gt;(name, factory) instead.</p></div>
+  
+  
+  
+  
+  
+  <div class="code"><div class="code-bar"><span>Resolving a step from a service provider</span><button class="copy" type="button" aria-label="Copy Resolving a step from a service provider">copy</button></div><pre><code class="language-csharp">using EvalApp;
+
+// Any real IServiceProvider works; this minimal one keeps the sample dependency-free.
+var services = new SimpleServiceProvider();
+services.Register(typeof(ValidateOrderStep), new ValidateOrderStep(&quot;DI-resolved&quot;));
+
+Eval.App(&quot;Di&quot;)
+    .WithStepFactory(new ServiceProviderStepFactory(services))
+    .DefineDomain(&quot;Orders&quot;)
+        .DefineTask&lt;OrderData&gt;(&quot;ProcessOrder&quot;)
+            .AddStep&lt;ValidateOrderStep&gt;(&quot;Validate&quot;)     // resolved from the container, not Activator
+        .Run(out ICompiledPipeline&lt;OrderData&gt; pipeline)
+    .Build();
+
+var result = await pipeline.RunAsync(new OrderData(&quot;Alice&quot;, 10m));
+Console.WriteLine(result.GetData().Status);
+
+public sealed record OrderData(string CustomerName, decimal Total, string Status = &quot;New&quot;);
+
+public sealed class ValidateOrderStep : IStep&lt;OrderData&gt;
+{
+    private readonly string _tag;
+    // AddStep&lt;TStep&gt;() needs a literal parameterless constructor; the tagged one is what the container supplies.
+    public ValidateOrderStep() : this(&quot;default&quot;) { }
+    public ValidateOrderStep(string tag) =&gt; _tag = tag;
+    public ValueTask&lt;OrderData&gt; ExecuteAsync(OrderData data, CancellationToken ct = default)
+        =&gt; ValueTask.FromResult(data with { Status = _tag });
+}
+
+public sealed class SimpleServiceProvider : IServiceProvider
+{
+    private readonly Dictionary&lt;Type, object&gt; _services = new();
+    public void Register(Type type, object instance) =&gt; _services[type] = instance;
+    public object? GetService(Type serviceType) =&gt; _services.TryGetValue(serviceType, out var s) ? s : null;
+}</code></pre></div><div class="code out"><div class="code-bar"><span>Output</span><button class="copy" type="button" aria-label="Copy Output">copy</button></div><pre><code class="language-text">DI-resolved</code></pre></div>
+  
+  
+</div></section><section class="sec doc-sec" aria-labelledby="composing"><div class="wrap">
+  <div class="sec-head"><span class="sec-dot cat-foundation" aria-hidden="true"></span><h2 id="composing">Pipelines that run pipelines</h2></div>
+  <div class="prose-block"><p>A compiled pipeline is a value. A step can run another pipeline or itself, and a context can hold a registry of them, so an outer schedule loop drives an inner per-batch pipeline, or a pipeline recurses through a tree, without a hand-written loop around RunAsync. A loop of that kind is invisible to gates and to the tuner; this is how it becomes visible.</p><p>PipelineRef&lt;T&gt; forward-declares a pipeline before it is built, PipelineTrace tells same-named steps apart across levels, and a recursion that runs away fails cleanly with PipelineRecursionException instead of overflowing the stack.</p></div>
+  
+  
+  
+  
+  
+  
+  
+  
+</div></section><section class="sec doc-sec" aria-labelledby="exclusive"><div class="wrap">
+  <div class="sec-head"><span class="sec-dot cat-foundation" aria-hidden="true"></span><h2 id="exclusive">Exclusive resources</h2></div>
+  <div class="prose-block"><p>Some things are not thread-safe: a GPU context, a native handle, a file with one writer. Declare an ExclusiveResource once and guard a scope, or named parallel branches, with Exclusive. A second concurrent entry fails loudly with ExclusiveViolationException, or queues if you choose that policy. The guard is re-entrant for recursion, and forks inside a held scope exclude each other instead of silently inheriting it.</p></div>
+  
+  
+  
+  
+  
+  
+  
+  
+</div></section><section class="sec doc-sec" aria-labelledby="one-thread"><div class="wrap">
+  <div class="sec-head"><span class="sec-dot cat-foundation" aria-hidden="true"></span><h2 id="one-thread">One-thread hosts</h2></div>
+  <div class="prose-block"><p>Fanning out only pays when there is a second thread to fan out to. EvalApp detects a single-thread host once, at startup: a browser running Blazor WebAssembly, a process with one processor or one allowed CPU, or a host you declare with ExecutionHost.OverrideSingleThreaded or WithSingleThread. In that mode ForEach, parallel groups and ChunkedWork run inline on the caller, and long runs hand the thread back to the host every few milliseconds (ExecutionHost.YieldBudget) so a page or UI stays responsive. The cancellation token is checked at each yield.</p><p>A single very long synchronous step cannot be sliced. Split it into smaller steps or items. Inside a UI, use ChunkedWork.ForAsync and ChunkedWork.RunAsync, which work in time slices. On a multi-core host none of this is active and nothing is added to the fast path.</p></div>
+  
+  
+  
+  
+  
+  
+  
+  
+</div></section><section class="sec doc-sec" aria-labelledby="licensing"><div class="wrap">
+  <div class="sec-head"><span class="sec-dot cat-foundation" aria-hidden="true"></span><h2 id="licensing">Licensing</h2></div>
+  <div class="prose-block"><p>No feature in EvalApp is gated behind a tier or a licence key. Every pipeline shape on this page runs at its full declared concurrency whether or not you pass a key, the tuner attaches whenever you call WithTuning, and Build(null) behaves exactly like Build(key).</p><p>The licence check exists so that every Evaluated Applications package validates a key the same way. LicenseValidator.ForEvalApp().Check(key) returns Unlicensed or Licensed and never throws, and CheckPeriodic(key, interval) is cheap enough for a hot loop. Verification is entirely offline, with ECDsa P-256, and makes no network call.</p><p>EvalApp is proprietary software under a commercial licence. Evaluation and non-commercial development are licensed without a key; commercial, production or revenue-generating use needs a separate licence.</p></div>
+  
+  
+  
+  
+  
+  
+  
+  <p class="more-link"><a href="/licence/">Read the licence terms</a></p>
+</div></section><section class="sec doc-sec" aria-labelledby="tuning"><div class="wrap">
+  <div class="sec-head"><span class="sec-dot cat-foundation" aria-hidden="true"></span><h2 id="tuning">Tuning and inspecting</h2></div>
+  <div class="prose-block"><p>Two opt-in modes. WithTuning is reactive: it rediscovers the operating point on each start, which suits a long-running, stable, single-instance service. WithBayesianTuning is predictive: a performance model persists across restarts, which suits frequent restarts and many instances. Both take an optional store path and share one phase machine, so switching between them does not reset what was learned.</p><p>The defaults come from a simulation harness and are what WithTuning uses out of the box. To override them, load your own JSON file with WithTunerSettings(path); the file is read when you call it, and a missing or invalid path throws at that point.</p><p>ICompiledPipeline&lt;T&gt; is opaque on purpose: a name and RunAsync. The read-only window on a plan is pipeline.Report(), which lists the plan&#39;s nodes and, for each ForEach, how many calls ran inline and how many fanned out. ExecutionHost.Yields counts the yields a process has taken.</p></div>
+  
+  
+  
+  
+  
+  <div class="code"><div class="code-bar"><span>Tuning on, then reading the plan report</span><button class="copy" type="button" aria-label="Copy Tuning on, then reading the plan report">copy</button></div><pre><code class="language-csharp">using EvalApp;
+
+var store = Path.Combine(Path.GetTempPath(), &quot;evalapp-tuning-sample.json&quot;);
+
+Eval.App(&quot;Tuned&quot;)
+    .WithResource(ResourceKind.Network, Tunable.Between(1, 8, 2))
+    .WithTuning(storePath: store)
+    .DefineDomain(&quot;Orders&quot;)
+        .DefineTask&lt;Batch&gt;(&quot;Fetch&quot;)
+            .ForEach(
+                select: b =&gt; b.Items,
+                merge: (b, items) =&gt; b with { Items = items.ToList() },
+                collectionName: &quot;Items&quot;,
+                configure: sub =&gt; sub
+                    .Gate(ResourceKind.Network, onWaiting: null, configure: g =&gt; g
+                        .AddStep(&quot;Download&quot;, async (int i, CancellationToken ct) =&gt; { await Task.Delay(5, ct); return i + 1; })))
+        .Run(out ICompiledPipeline&lt;Batch&gt; pipeline)
+    .Build();
+
+for (var run = 0; run &lt; 5; run++)
+    await pipeline.RunAsync(new Batch(Enumerable.Range(0, 16).ToList()));
+
+// A read-only window on the compiled plan: each ForEach node counts its calls (and, in Inline and FanOut, how they ran).
+foreach (var node in pipeline.Report().Of(&quot;ForEach&quot;))
+    Console.WriteLine($&quot;{node.Label}: {node.Calls} calls&quot;);
+
+File.Delete(store);
+
+public sealed record Batch(List&lt;int&gt; Items);</code></pre></div><div class="code out"><div class="code-bar"><span>Output</span><button class="copy" type="button" aria-label="Copy Output">copy</button></div><pre><code class="language-text">Items: 5 calls</code></pre></div>
+  
+  
+</div></section><section class="sec doc-sec" aria-labelledby="anti-patterns"><div class="wrap">
+  <div class="sec-head"><span class="sec-dot cat-foundation" aria-hidden="true"></span><h2 id="anti-patterns">Anti-patterns to avoid</h2></div>
+  <div class="prose-block"><p>The tuner and the gates can only account for work they can see. Anything that happens outside the declared pipeline is invisible to both.</p></div>
+  <dl class="term-list"><dt>Task.WhenAll in a step</dt><dd>Use a declared ForEach instead.</dd><dt>A background Task kept on the record</dt><dd>It races the pipeline, ungated.</dd><dt>Async work around RunAsync</dt><dd>Work before or after the call, outside the pipeline, is unthrottled and untuned.</dd><dt>A shared collection written from a ForEach item</dt><dd>It is not thread-safe. Let each item own its result and collect results in merge.</dd><dt>Mutating the record</dt><dd>Use with. Mutation breaks the guarantee that makes parallel ForEach safe without locks.</dd><dt>State in step instance fields</dt><dd>Steps are reused by every concurrent run. Per-run state belongs on the record.</dd><dt>Rebuilding the pipeline per request</dt><dd>It discards everything the tuner has learned. Build once, run many times.</dd><dt>Blocking calls in a synchronous step</dt><dd>Use the async overload, and pass the cancellation token to every awaited call.</dd><dt>A hand-written loop or recursion around RunAsync</dt><dd>The loop is invisible to gates and the tuner. Layer and recurse through context instead.</dd><dt>Guarding a non-thread-safe singleton with a comment</dt><dd>Use an ExclusiveResource.</dd></dl>
+  
+  
+  
+  
+  
+  
+  
+</div></section><section class="sec doc-sec" aria-labelledby="architecture"><div class="wrap">
+  <div class="sec-head"><span class="sec-dot cat-foundation" aria-hidden="true"></span><h2 id="architecture">Extension seams</h2></div>
+  <div class="prose-block"><p>Beyond the fluent API and the step base classes, four extension points are public: GlobalContext and DomainContext (subclass them for WithContext and DefineDomain), IMergeStrategy&lt;T&gt; (custom conflict handling for AddParallelGroup) and IPressureResource (a soft, non-blocking budget signal for Pressure and WithPressure). Everything else is internal to the engine.</p></div>
+  
+  
+  
+  
+  
+  
+  
+  
+</div></section>
+</main>
+<footer class="site-footer"><div class="wrap">
+  <div class="foot-grid">
+    <div><h2>Products</h2><ul><li><a href="/phasor/">Phasor</a></li><li><a href="/evalapp/">EvalApp</a></li><li><a href="/holodb/">HoloDb</a></li><li><a href="/algformer/">AlgFormer</a></li><li><a href="/prism/">Prism</a></li><li><a href="/prose/">Prose</a></li><li><a href="/tracer/">Tracer</a></li><li><a href="/holovoxel/">HoloVoxel</a></li></ul></div>
+    <div><h2>Tools</h2><ul><li><a href="/tools/analyst/">The Analyst</a></li><li><a href="/tools/creature/">The Creature</a></li><li><a href="/tools/forecaster/">The Forecaster</a></li><li><a href="/tools/prism/">Prism</a></li><li><a href="/tools/stories/">Nano Stories</a></li><li><a href="/tools/cartographer/">The Cartographer</a></li><li><a href="/tools/prose/">Prose</a></li><li><a href="/tools/council-spending/">Council Spending Scanner</a></li></ul></div>
+    <div><h2>Learn</h2><ul><li><a href="/evidence/">Evidence</a></li><li><a href="/research/">Research</a></li><li><a href="/products/">All products</a></li><li><a href="/tools/">All tools</a></li></ul></div>
+    <div><h2>Company</h2><ul><li><a href="/partner/">Partner with us</a></li><li><a href="/licence/">Licence</a></li><li><a href="/ai/">For AI readers</a></li><li><a href="https://www.nuget.org/profiles/evaluatedapplications" rel="noopener">NuGet</a></li></ul></div>
+    <div><h2>Machine-readable</h2><ul><li><a href="/llms.txt">llms.txt</a></li><li><a href="/llms-full.txt">llms-full.txt</a></li><li><a href="/sitemap.xml">sitemap.xml</a></li></ul></div>
+  </div>
+  <div class="foot-base"><span>Evaluated Applications · .NET libraries · England</span><span class="mono">© 2026 Evaluated Applications</span></div>
+</div></footer>
+
+<script src="/assets/site.js?v=3190ebab" defer></script>
+
+</body>
+</html>

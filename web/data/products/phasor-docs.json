@@ -1,0 +1,120 @@
+{
+  "title": "Phasor docs",
+  "description": "How to use Phasor: build and read a Pleroma, bind and apply kernels, use the keys-only CycleHologram, and work with the phasor codecs, with compiled examples.",
+  "intro": "Task-oriented notes with complete programs. Each example was compiled and run against the published package, and the output shown is what it printed.",
+  "sections": [
+    {
+      "id": "pleroma-views",
+      "title": "Reading a Pleroma",
+      "paragraphs": [
+        "A store is built item by item with Add, which takes a signed count, and Remove erases one copy. The key view keeps exactly the items with distinct keys up to KeyCapacity and refuses past that. Every other view reads its own slice of the array and stays exact at any load, within the field's range.",
+        "TryKeys returns the key, total count and the flag word, arrangement or tick when there is one per key. TryItems returns whole items when each key has one value per face factor. Both return false past capacity, never a wrong answer."
+      ],
+      "list": [
+        { "term": "Flags, Near, Nearest", "text": "Flags returns the exact count at every flag word. Near(x, r) counts items whose flags differ from x in at most r bits, and Nearest(x) returns the nearest stored words with their distances." },
+        { "term": "Arrangements, SignBalance", "text": "Counts per arrangement of up to 5 things, and the even-minus-odd balance." },
+        { "term": "Times, Tick, Diffuse", "text": "Counts per tick. Tick ages every item, and Diffuse runs a lazy random walk over time on every item at once. Time views then return TimeScale times the exact expected counts." },
+        { "term": "JointCounts", "text": "Set JointFaces, for example Flags and Time, and JointCounts returns the exact joint counts. The joint slice holds the product of the faces' sizes, so size it deliberately." },
+        { "term": "CountWhere, Compile", "text": "Count the items whose flag word satisfies any predicate with one inner product. Compile prepares a predicate for repeated queries, and CountWhereByTime and CountWhereByArrangement give the count per tick or per arrangement." },
+        { "term": "BitCounts, FlagParity, TryFindConflicts", "text": "Per-bit counts and the XOR of every stored word from a few cells, and the keys that carry more than one flag word or arrangement." }
+      ]
+    },
+    {
+      "id": "bind",
+      "title": "Bind two stores",
+      "paragraphs": [
+        "store.Bind(other) binds every pair of items at once: keys add, flag words XOR, arrangements compose, ticks add, and counts multiply. The cost is one product per order representation, not per pair of items. Binding with a one-item store shifts the whole store on every face together, and binding with a larger store applies the mix of all those shifts."
+      ],
+      "snippets": [ { "source": "snippets/phasor-bind.cs", "output": "snippets/phasor-bind.out.txt" } ]
+    },
+    {
+      "id": "kernel",
+      "title": "Apply a weighted kernel in one pass",
+      "paragraphs": [
+        "A PleromaKernel is a weighted sum of any number of flag flips, arrangement relabellings and time shifts, held as one harmonic factor per stored harmonic. store.Apply(kernel) gives exactly the store you would get by moving every item by every element and adding the copies, at a cost that does not depend on how many elements the kernel holds. Kernels add and compose, and Diffuse is the two-element case.",
+        "The example applies one identity plus two copies of an item that has a flag flipped and a tick added, to three items. Every flag and time count changes at once."
+      ],
+      "snippets": [ { "source": "snippets/phasor-superposition.cs", "output": "snippets/phasor-superposition.out.txt" } ],
+      "more": { "label": "Watch the pass as a diagram", "href": "/phasor/pleroma/#superposition" }
+    },
+    {
+      "id": "parity",
+      "title": "Bit counts and parity",
+      "paragraphs": [ "BitCounts gives the exact count of items with each bit set, and FlagParity gives the XOR of every stored word, both from a handful of cells." ],
+      "snippets": [ { "source": "snippets/phasor-parity.cs", "output": "snippets/phasor-parity.out.txt" } ]
+    },
+    {
+      "id": "more-operations",
+      "title": "More operations",
+      "list": [
+        { "term": "ScaleKeys, CombineCycles", "text": "With CompleteKeys a store keeps every harmonic of a small key cycle. ScaleKeys(u) relabels every key a to u a in place, and CombineCycles joins two stores on coprime cycles into one on their product, by the Chinese remainder theorem." },
+        { "term": "Frobenius, ShiftRegister", "text": "On a store built without per-bit item lines, Frobenius squares every flag word in GF(2^m) and ShiftRegister steps every word through a linear shift register, exactly, any number of steps in one pass." },
+        { "term": "Syndrome, IsIndependent, Sample", "text": "Count stored words per Hamming syndrome, test in exact integers whether joint counts are the product of their marginals, and draw one value of any view with probability count over total." },
+        { "term": "RelationFace, ChargeLattice", "text": "Store relations between a small set of keys and read a loop's winding, its frustration parity and the direction of its net circulation. Integer offsets on a periodic lattice give each cube an exact charge." },
+        { "term": "Eliminate", "text": "With one flag bit as a label, every stored word is an example, and Eliminate solves for the parity rule over GF(2) that fits every example, or reports that none does." },
+        { "term": "Dense pages", "text": "With CompleteKeys a store is a page of up to 4,096 slots in which every slot reads back exactly. FromCounts and AddCounts build a page from a count vector in one transform, CountWhereKey sums any function of the key in one read, and InnerProduct gives the exact equi-join sum of two pages." },
+        { "term": "Sparse pages", "text": "PleromaSparsePage keeps exact counts over keys anywhere in a huge key set in memory proportional to the keys present, with exact merges and draws." },
+        { "term": "Redundancy", "text": "ReservedKeys with Verify and Repair detect and rebuild lost harmonics, CheckPrime and VerifyCheck detect corruption of either copy, and PleromaParity rebuilds any one lost store of a group." },
+        { "term": "SQL-style compositions", "text": "Restrict, Support (and so COUNT DISTINCT), MapCounts, sums per group and joins are exact, built from the operations above." }
+      ]
+    },
+    {
+      "id": "cyclehologram",
+      "title": "CycleHologram: the keys-only case",
+      "paragraphs": [
+        "CycleHologram is the Pleroma with keys only, kept as its own type. The phasor bundle, a sum of phasors, is a hologram: many items superposed in one fixed-size vector, read out approximately, with crosstalk that grows with load. CycleHologram is the same superposition on the discrete cycle of a finite field. Each symbol is an element of the cycle, the hologram holds power sums of the stored elements, and the readout is algebraic instead of statistical, so there is no similarity threshold and no rounding.",
+        "A hologram of capacity k holds 2k+1 eight-byte elements, and TryDecode returns every stored symbol with its signed count when at most k distinct symbols are stored. With k+1 distinct symbols decode always refuses. Every decode is re-encoded and must reproduce every stored element. Holograms add as a multiset union, subtract as an exact signed difference, and serialize with their field metadata."
+      ],
+      "snippets": [
+        { "source": "snippets/phasor-cyclehologram-stock.cs", "output": "snippets/phasor-cyclehologram-stock.out.txt", "label": "Exact counts" },
+        { "source": "snippets/phasor-cyclehologram-replicas.cs", "output": "snippets/phasor-cyclehologram-replicas.out.txt", "label": "Replica reconciliation" }
+      ],
+      "paragraphsAfter": [
+        "Each replica in the second example holds 10,000 items and the hologram has capacity 4, so it finds what differs by exchanging one small hologram sized to the difference, not to the data. If the replicas differ in more than the capacity, TryDecode returns false, so size the capacity to the largest difference you expect.",
+        "The decoder is the syndrome decoder of Reed-Solomon and BCH codes (Berlekamp-Massey), the construction behind the PinSketch set sketch and the minisketch library."
+      ]
+    },
+    {
+      "id": "codecs",
+      "title": "The phasor codecs",
+      "paragraphs": [
+        "Phasor gives you two operations. Encode turns a number into a face with its value as phase, and gives a symbol a salted hash-based random signature. Compose with bind (complex multiply per component) to build relationships, bundle (sum) to collect sets, and unbind (conjugate) to extract parts, and read out with correlation. On the linear band of a face, bind is addition. On the log band it is multiplication. There is no separate calculator: arithmetic is the composition.",
+        "PhasorCodec has a fixed width of 256 reals, with a frozen identity prefix and a learned orbital tail, and is built for neural models. HoloCodec has a configurable width, uses SIMD, has a planar layout and a memoized number cache, and is built for holographic storage and similarity search at scale. Do not mix faces between the two."
+      ],
+      "snippets": [ { "source": "snippets/phasor-codec-minimal.cs", "output": "snippets/phasor-codec-minimal.out.txt", "label": "Encode, bind, bundle, unbind" } ]
+    },
+    {
+      "id": "hologram",
+      "title": "Hologram: readable algebra with operators",
+      "paragraphs": [
+        "Hologram wraps a phasor face with operators for readability and prototyping. It is a readonly struct around a double array, so it converts freely to and from arrays without copying.",
+        "Bind is the operator *, per-component complex multiply. Bundle is +, a component-wise sum that merges holograms into one superposition. Unbind is /, multiplying by the conjugate. Correlate is a method that gives a dot product, and ~ flips the sign of the imaginary parts. Readout by correlation is approximate. For an exact readout use Pleroma, or CycleHologram for keys only."
+      ],
+      "snippets": [ { "source": "snippets/phasor-hologram-record.cs", "output": "snippets/phasor-hologram-record.out.txt", "label": "A record of role and value pairs" } ],
+      "paragraphsAfter": [
+        "Read those four numbers carefully, because the two fields behave differently. The name field separates completely: 128.59 for the right value against -1.96 for the wrong one. Two symbols get independent random signatures, so an unrelated symbol correlates at the noise floor, near zero.",
+        "The age field separates by less than 3x: 32.59 for 7 against 13.39 for 5. That is the codec telling the truth. A number is encoded as a phase proportional to its value, so 5 and 7 are similar faces and 5 and 500 are not. Numbers carry a metric and symbols do not. If you want numbers to behave like symbols, encode them with FromSymbol instead of FromNumber, and give up arithmetic to get it.",
+        "So correlation separates signal from noise for symbols, and separates signal from nearby signal only by distance for numbers. Design the readout accordingly: take an argmax over candidate values rather than a threshold, which is what DecodeSum and DecodeProduct do."
+      ]
+    },
+    {
+      "id": "arithmetic",
+      "title": "Arithmetic with numbers",
+      "paragraphs": [ "When you bind two numbers their bands compose. The face carries both operations at once, and you read out the band you care about. Arithmetic is composition, not calculation." ],
+      "snippets": [ { "source": "snippets/phasor-hologram-arithmetic.cs", "output": "snippets/phasor-hologram-arithmetic.out.txt" } ],
+      "paragraphsAfter": [
+        "The operators allocate a new array per operation. In tight loops or accumulation, use the in-place static methods BindInto, BundleInto and UnbindInto with a buffer you allocate once. At typical dimensions the allocating Bind operator is about 1.7 times slower than BindInto."
+      ]
+    },
+    {
+      "id": "gotchas",
+      "title": "Things to know",
+      "list": [
+        { "term": "Layouts do not mix", "text": "Hologram uses the interleaved layout, the same as PhasorCodec. HoloCodec is planar, with all reals then all imaginary parts, and produces garbage if given an interleaved face." },
+        { "term": "Dimension floor", "text": "PhasorCodec requires an even dimension of at least 128: 64 frozen reals and at least 64 orbital. Odd dimensions align down, and anything below 128 throws an ArgumentException." },
+        { "term": ".Reals is live", "text": "The Reals property returns the internal array, not a copy, so changing it changes the hologram. Use it read-only or pass it to the in-place methods." },
+        { "term": "Small fields wrap", "text": "Every view's count must lie within half the field per prime. On a small test field, large kernel weights wrap, so compare cells there instead of counts." }
+      ]
+    }
+  ]
+}

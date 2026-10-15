@@ -1,0 +1,47 @@
+{
+  "id": "phasor-exact-recall",
+  "product": "phasor",
+  "slug": "/phasor/evidence/",
+  "scope": "Exact store against holographic reduced representations",
+  "title": "Exact recall and refusal",
+  "description": "At equal storage the Pleroma's exact key view recovered 64 items where Plate's holographic reduced representations held 95 percent only up to 4.",
+  "claim": "At equal storage the exact key view recovered 64 items with no errors where holographic reduced representations held 95 percent or better only up to 4. Past capacity the exact store refused every time, while the baseline answered wrongly every time.",
+  "headline": [
+    { "value": "64 against 4", "label": "items recovered exactly, against the baseline's 95 percent point, at equal storage" },
+    { "value": "12,800 of 12,800", "label": "queries refused past capacity, none answered wrongly" },
+    { "value": "100%", "label": "exact recall up to 32 stored pairs, against 21.9% for the float bundle" }
+  ],
+  "method": {
+    "workload": "Two measurements of a keys-only store, the Pleroma's single-face special case. Exact recovery: store k distinct symbols from vocabularies of 4,096 and 2^20 symbols and read them back, at capacities from 1 to 96. Associative recall: store n key and value pairs from a codebook of 256 values and recall each value from its key.",
+    "engines": ["Pleroma keys-only store (CycleHologram)", "Plate's holographic reduced representations with correlation clean-up", "The same representations with a stronger peeling decoder (orthogonal matching pursuit)", "A float bundle of complex phasors, at full and half the bits (recall table)"],
+    "verification": "Every exact decode is re-encoded and must reproduce every stored element before it is returned.",
+    "statistic": "200 trials per capacity point. Associative recall uses 20 random seeds, with a chance level of 0.39 percent.",
+    "machine": "CPU only, one core.",
+    "memory": "Stores are compared at equal storage: about 2,064 and 2,580 bits for exact recovery, and 3,965 bits for the exact arm against 3,904 bits for the float arm in the recall table. The 7,869-bit budget was not measured.",
+    "tie": "The exact read in the recall table is decode then test, not a ShiftKeys read. It measures recall, not model quality: a trained model can learn around float noise."
+  },
+  "tables": [
+    {
+      "id": "recall", "kind": "matrix",
+      "caption": "Associative recall at equal bits: share of values recalled correctly",
+      "columns": ["Pairs stored", "Exact store (K=32)", "Float bundle (d=61)", "Float bundle (d=30, half the bits)"],
+      "rows": [
+        ["2", "100%", "100%", "100%"],
+        ["4", "100%", "100%", "93.8%"],
+        ["8", "100%", "87.5%", "53.8%"],
+        ["16", "100%", "48.1%", "20.9%"],
+        ["32", "100%", "21.9%", "8.0%"],
+        ["64", "0 (refuses every query)", "9.5% (never refuses)", "3.1%"]
+      ]
+    }
+  ],
+  "losses": [
+    "At 64 pairs the exact store is past its capacity and refuses every query, so it recalls none, while the float bundle still recalls 9.5 percent of values, though it never says when it is wrong.",
+    "Exact arithmetic is not faster in general. A Pleroma read costs one or more transforms, while a float bundle read is one correlation. At equal bits float reads are often faster."
+  ],
+  "limits": [
+    "The exact store holds a number of entries proportional to the number of pairs and grows with context, while the float bundle has a fixed size.",
+    "Recall only, not model quality."
+  ],
+  "internal": { "source": "Phasor/docs/pleroma-site.md, Phasor/docs/pleroma-map.json (migrated)" }
+}

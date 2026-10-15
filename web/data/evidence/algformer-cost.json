@@ -1,0 +1,172 @@
+{
+  "id": "algformer-cost",
+  "product": "algformer",
+  "slug": "/algformer/evidence/",
+  "scope": "Two attention cores at one shape",
+  "title": "What attention costs",
+  "description": "At one shape, reading a 1,984-token prompt takes 182 ms with softmax attention and 7.08 ms with holographic attention.",
+  "claim": "At the same shape and the same parameter count, reading a 1,984-token prompt takes 182 ms with softmax attention and 7.08 ms with holographic attention. Each further token takes 181 µs against 3.60 µs, and the serve cache holds 2,253 KB against 3.40 KB. Softmax reading grows with the square of the length (exponent 1.9) and holographic reading grows in step with it (1.0).",
+  "headline": [
+    {
+      "value": "26 times",
+      "label": "less time to read a 1,984-token prompt with holographic attention"
+    },
+    {
+      "value": "50 times",
+      "label": "less time for each further token, which stays flat as the context grows"
+    },
+    {
+      "value": "663 times",
+      "label": "smaller serve cache, constant in the length of the context"
+    }
+  ],
+  "method": {
+    "workload": "Both cores are built at 32 channels, 8 shifts and 2 layers, which gives them the same parameter count, and driven with the same random tokens. For each context length the run reads the prompt through the serve cache, then produces 16 more tokens and averages them. Cache memory is the managed memory kept alive by the primed cache.",
+    "engines": [
+      "AlgFormer (softmax attention)",
+      "HoloFormer (holographic attention)"
+    ],
+    "verification": "Both cores are warmed at every length before timing, so compilation has settled. The two have identical parameter counts.",
+    "statistic": "Median of 7 runs per length, on one thread.",
+    "machine": "16 logical processors; the run used one thread.",
+    "tie": "This measures cost only. It says nothing about which core predicts better."
+  },
+  "tables": [
+    {
+      "id": "cost",
+      "kind": "matrix",
+      "caption": "Time and memory by context length",
+      "columns": [
+        "Tokens in context",
+        "Read the prompt, softmax (ms)",
+        "Read the prompt, holographic (ms)",
+        "One more token, softmax (µs)",
+        "One more token, holographic (µs)",
+        "Cache, softmax (KB)",
+        "Cache, holographic (KB)"
+      ],
+      "rows": [
+        [
+          "64",
+          "0.35",
+          "0.21",
+          "7.60",
+          "3.20",
+          "90.6",
+          "3.40"
+        ],
+        [
+          "128",
+          "1.01",
+          "0.45",
+          "12.5",
+          "3.50",
+          "163",
+          "3.40"
+        ],
+        [
+          "256",
+          "3.37",
+          "0.99",
+          "22.4",
+          "3.80",
+          "307",
+          "3.40"
+        ],
+        [
+          "512",
+          "12.2",
+          "2.44",
+          "45.6",
+          "4.10",
+          "595",
+          "3.40"
+        ],
+        [
+          "1,024",
+          "44.2",
+          "4.16",
+          "97.2",
+          "3.90",
+          "1,171",
+          "3.40"
+        ],
+        [
+          "1,984",
+          "182",
+          "7.08",
+          "181",
+          "3.60",
+          "2,253",
+          "3.40"
+        ]
+      ]
+    },
+    {
+      "id": "capacity",
+      "kind": "matrix",
+      "caption": "The shape HoloShape derives from a width, and the capacity of a holographic bundle at that shape",
+      "columns": [
+        "Width",
+        "Shifts",
+        "Layers",
+        "Derived context (tokens)",
+        "Crosstalk edge (tokens)",
+        "Reads back 90% clean (tokens)"
+      ],
+      "rows": [
+        [
+          "32",
+          "32",
+          "1",
+          "128",
+          "512",
+          "61"
+        ],
+        [
+          "64",
+          "64",
+          "3",
+          "512",
+          "2,048",
+          "245"
+        ],
+        [
+          "128",
+          "128",
+          "6",
+          "2,048",
+          "8,192",
+          "983"
+        ],
+        [
+          "256",
+          "256",
+          "8",
+          "8,192",
+          "32,768",
+          "3,932"
+        ],
+        [
+          "512",
+          "512",
+          "11",
+          "32,768",
+          "131,072",
+          "15,728"
+        ]
+      ]
+    }
+  ],
+  "losses": [
+    "Holographic attention holds a limited number of items cleanly in one bundle, and HoloShape reports how many for a shape (the capacity table). Softmax attention has no such bound, at the cost of everything above."
+  ],
+  "limits": [
+    "Absolute times depend on the machine. The way each cost grows with the context length is the finding.",
+    "One shape and one random token stream. The growth exponents are fitted between the 128-token and the longest measurement.",
+    "Cost only, not quality."
+  ],
+  "internal": {
+    "source": "web/generators/algformer-cost, web/scripts/derive-evidence.mjs"
+  }
+}

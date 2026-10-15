@@ -1,0 +1,280 @@
+{
+  "id": "back-to-front",
+  "title": "The Model Learns Back To Front",
+  "summary": "In a six-layer holographic lineage only the last layer computed anything: the earlier passes were exact copies of their input, so growing from four layers to six added padding and not capability.",
+  "description": "In a six-layer model grown from one layer only the last layer computed anything: the earlier passes were exact copies of their input.",
+  "topics": [
+    "growth",
+    "layers"
+  ],
+  "order": 3,
+  "status": "migrated",
+  "legacyUrl": "/articles/learns-back-to-front.html",
+  "voice": "pending-editorial",
+  "finding": "In a holographic model grown from one layer to six, only the last layer's two passes carried information: reading every intermediate state against the vocabulary shows the earlier passes name a single token at confidence 0.9740 to 1.0000, and the four-layer and six-layer snapshots are identical to two decimal places over their last four read points.",
+  "refutedBy": "The finding fails if a grown layer, read the same way, shows more than one effective candidate at its first pass while the final layer is unchanged, or if a four-layer and a six-layer snapshot from one run differ in their last four read points.",
+  "related": [],
+  "references": [],
+  "sections": [
+    {
+      "id": "finding",
+      "title": "The finding",
+      "paragraphs": [
+        "In a holographic model grown from one layer to six, only the last layer's two passes carried information. Reading every intermediate state against the vocabulary shows the earlier passes name a single token at confidence 0.9740 to 1.0000, and the four-layer and six-layer snapshots are identical to two decimal places over their last four read points."
+      ]
+    },
+    {
+      "id": "setup",
+      "title": "Setup",
+      "paragraphs": [
+        "The models grow while they train. They start as a single layer and gain layers as they go, each new layer inserted at the front and initialised to be an exact no-op so it cannot disturb what already works. One lineage went from one layer to six.",
+        "Every intermediate state in this architecture can be read against the vocabulary directly, because the table that turns a state into a prediction is the same table that turns a token into a state. In a conventional transformer an intermediate activation has no privileged interpretation; here it has one, and reading it costs nothing.",
+        "Two numbers are taken at every step of the computation. Confidence is how strongly the state names a single token. At 1.0000 nothing has been computed and the state is a copy of its input. Effective candidates is two to the power of the entropy of that reading: 1 means pinned to a single token, 3 means weighing three, and several hundred means the state has fallen off the vocabulary and resolves to nothing useful. Together they separate three kinds of state: a copy, a real computation and noise.",
+        "The six-layer snapshot has thirteen read points: the raw embedding, then the state after each of its twelve passes (two passes per layer). A snapshot of the four-layer model from earlier in the same run is compared against it."
+      ]
+    },
+    {
+      "id": "evidence-inert",
+      "title": "Evidence: the work sits in the last layer",
+      "paragraphs": [
+        "Six-layer snapshot, confidence and effective candidates at each read point: embedding 1.0000 and 1.00; layer 0 pass 0, 1.0000 and 1.00; layer 0 pass 1, 1.0000 and 1.00; layer 1 pass 0, 1.0000 and 1.00; layer 1 pass 1, 1.0000 and 1.00; layer 2 pass 0, 0.9992 and 1.00; layer 2 pass 1, 0.9999 and 1.00; layer 3 pass 0, 0.9952 and 1.02; layer 3 pass 1, 0.9916 and 1.03; layer 4 pass 0, 0.9740 and 1.11; layer 4 pass 1, 0.9622 and 1.20; layer 5 pass 0, 0.4785 and 11.94; final, 0.3124 and 27.14.",
+        "Four consecutive passes sit at 1.0000 to four decimal places. That is a copy, not an approximation of one. Two entire layers and most of a third contribute nothing measurable. The last layer's two passes take the state from naming one token to weighing 27, and everything before them is padding."
+      ],
+      "tables": [
+        {
+          "id": "six-layer-readout",
+          "caption": "Six-layer snapshot, read at each of thirteen points",
+          "columns": [
+            "Point",
+            "Confidence",
+            "Effective candidates"
+          ],
+          "rows": [
+            [
+              "embedding",
+              "1.0000",
+              "1.00"
+            ],
+            [
+              "layer 0, pass 0",
+              "1.0000",
+              "1.00"
+            ],
+            [
+              "layer 0, pass 1",
+              "1.0000",
+              "1.00"
+            ],
+            [
+              "layer 1, pass 0",
+              "1.0000",
+              "1.00"
+            ],
+            [
+              "layer 1, pass 1",
+              "1.0000",
+              "1.00"
+            ],
+            [
+              "layer 2, pass 0",
+              "0.9992",
+              "1.00"
+            ],
+            [
+              "layer 2, pass 1",
+              "0.9999",
+              "1.00"
+            ],
+            [
+              "layer 3, pass 0",
+              "0.9952",
+              "1.02"
+            ],
+            [
+              "layer 3, pass 1",
+              "0.9916",
+              "1.03"
+            ],
+            [
+              "layer 4, pass 0",
+              "0.9740",
+              "1.11"
+            ],
+            [
+              "layer 4, pass 1",
+              "0.9622",
+              "1.20"
+            ],
+            [
+              "layer 5, pass 0",
+              "0.4785",
+              "11.94"
+            ],
+            [
+              "final",
+              "0.3124",
+              "27.14"
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "evidence-padding",
+      "title": "Evidence: growing added padding",
+      "paragraphs": [
+        "The last four read points of the four-layer and six-layer snapshots, as confidence and effective candidates. Fourth from last: 0.9774 and 1.11 against 0.9740 and 1.11. Third from last: 0.9592 and 1.22 against 0.9622 and 1.20. Second from last: 0.4771 and 12.35 against 0.4785 and 11.94. Final: 0.3135 and 27.03 against 0.3124 and 27.14. The two are identical to two decimal places across all four.",
+        "Going from four layers to six did not make the model deeper in any sense that mattered. It reproduced the same working window and prepended four passes that did nothing. The part computing stayed the same size, and what grew was the number of weight matrices taking gradient, competing, and perturbing a stream they were contributing nothing to.",
+        "Passes carrying real information: the six-layer model has 2 of 12, the four-layer model has 2 of 8, and a two-layer model has 4 of 4. The two-layer model uses every pass it has, and the six-layer model used a sixth of itself. By that measure the small model is the bigger one."
+      ],
+      "tables": [
+        {
+          "id": "last-four-points",
+          "caption": "Last four read points, confidence / effective candidates",
+          "columns": [
+            "Position from the end",
+            "Four-layer",
+            "Six-layer"
+          ],
+          "rows": [
+            [
+              "fourth from last",
+              "0.9774 / 1.11",
+              "0.9740 / 1.11"
+            ],
+            [
+              "third from last",
+              "0.9592 / 1.22",
+              "0.9622 / 1.20"
+            ],
+            [
+              "second from last",
+              "0.4771 / 12.35",
+              "0.4785 / 11.94"
+            ],
+            [
+              "final",
+              "0.3135 / 27.03",
+              "0.3124 / 27.14"
+            ]
+          ]
+        },
+        {
+          "id": "passes-doing-work",
+          "caption": "Passes that carry real information",
+          "columns": [
+            "Model",
+            "Passes doing work",
+            "Total passes"
+          ],
+          "rows": [
+            [
+              "six layers",
+              "2",
+              "12"
+            ],
+            [
+              "four layers",
+              "2",
+              "8"
+            ],
+            [
+              "two layers",
+              "4",
+              "4"
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "evidence-failure",
+      "title": "Evidence: the six-layer run diverged",
+      "paragraphs": [
+        "Loss spiked into the thousands and recovered, repeatedly, for about 43,000 rounds. Then in a single step every trainable parameter became NaN: 764,288 values of 829,825. The 65,537 that survived include the frozen numeric identity band of 1024 tokens by 64 fixed dimensions, which survives because nothing writes to it.",
+        "Gradient clipping was switched on throughout and delivered the failure. Clipping computes the size of the gradient and scales it down if the size exceeds the limit. If any part of the gradient is NaN, the size is NaN, a NaN is not greater than anything, the test is false, and the gradient is applied at full strength. If the size overflows to infinity, the scale factor is the limit divided by infinity, which is zero, and an infinite gradient multiplied by zero is a new NaN that a skip-if-zero check does not catch.",
+        "Two guards close both paths. The step is refused when the gradient size is not a finite number, so a bad batch is dropped and counted instead of being fatal, and the learning-rate schedule does not respond to a loss spike by going to maximum.",
+        "The deeper cause was that half the model had never crystallised while more layers were being added."
+      ]
+    },
+    {
+      "id": "evidence-front-layer",
+      "title": "Evidence: a front layer that carries candidates",
+      "paragraphs": [
+        "A two-layer lineage, left alone, has a front layer unlike the front layers of the older models. Front layer, second pass: four-layer snapshot 1.0000 confidence and 1.00 candidates; six-layer snapshot 1.0000 and 1.00; two-layer model 0.8692 and 1.46. A confidence of 1.0000 is zero information, so the front layers of the two older models were absent in effect. The two-layer model's front layer carries a genuine candidate set, and it is better than the best early pass either older model had anywhere in its stack.",
+        "The value is 1.46 candidates, not twelve. It has not moved since about round 99,000, so what formed, formed early and has held since. The state is far from one where adding another layer would be justified.",
+        "This model is at 320,000 rounds with two layers and a parameter count of 369,664. It answers in complete sentences with correct punctuation and contractions, and loses the thread across more than about fifty characters. Its context reach did not move in three separate measurements."
+      ],
+      "tables": [
+        {
+          "id": "front-layer",
+          "caption": "Front layer, second pass",
+          "columns": [
+            "Model",
+            "Confidence",
+            "Effective candidates"
+          ],
+          "rows": [
+            [
+              "four-layer snapshot",
+              "1.0000",
+              "1.00"
+            ],
+            [
+              "six-layer snapshot",
+              "1.0000",
+              "1.00"
+            ],
+            [
+              "two-layer model",
+              "0.8692",
+              "1.46"
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "evidence-measurement",
+      "title": "Evidence: two measurements that misled",
+      "paragraphs": [
+        "Context reach measured with 25 sample windows showed the model still improving at the edge of the window, which implies more context would help. The identical measurement with 220 windows reverses it: the model saturates at roughly 16 tokens and everything past that carries nothing measurable. The 25-window result did not look noisy and was confidently wrong.",
+        "Front-layer progress tracked by how often its output names a different token from its input more than doubled over 223,000 rounds. On the confidence and candidates measure, which separates computation from copying, it had not moved. Both are true: the front layer increasingly picks a different single token, and a single token carries no alternatives forward whichever token it is. The rate of change in the named token counts motion, not work."
+      ]
+    },
+    {
+      "id": "practice",
+      "title": "What this means for a small model",
+      "paragraphs": [
+        "Read every intermediate state against the vocabulary before adding a layer. If a pass names one token at 1.0000, it is a copy and a further layer on top of it adds nothing.",
+        "Count the passes that carry real information, not the layers. A model with fewer layers all in use can out-compute a deeper one with most layers inert.",
+        "Let a layer finish before another starts. The rule is not a round count or schedule: the front layer's candidate count has to stop climbing, then the pair has to settle together, and only then does a new front layer go in at zero.",
+        "Check that gradient clipping tests for a finite gradient size. A clip that tests only whether the size exceeds the limit passes a NaN through at full strength and turns an infinity into a NaN.",
+        "Measure context reach with hundreds of windows, not tens, and judge a front layer by candidates carried, not by how often its output differs from its input."
+      ]
+    },
+    {
+      "id": "limits",
+      "title": "Limits",
+      "paragraphs": [
+        "One lineage, with snapshots at four, six and two layers. The reading says which passes carry information, not why the front layers failed to crystallise: whether patience is enough, or whether the training data has to change before a front layer forms, is untested. The two-layer front layer sits at 1.46 candidates and has been flat since about round 99,000."
+      ]
+    },
+    {
+      "id": "refuted-by",
+      "title": "Refuted by",
+      "paragraphs": [
+        "A grown layer that, read the same way, shows more than one effective candidate at its first pass while the final layer is unchanged; or a four-layer and a six-layer snapshot from one run that differ in their last four read points."
+      ]
+    }
+  ],
+  "diagram": {
+    "kind": "layer-stack",
+    "title": "Which pass carries information",
+    "lede": "Each block is one read point of the six-layer snapshot. Height is the number of effective candidates on a log scale, and colour says whether the state is an exact copy of its input, pinned to one token, or weighing several. Only the last layer weighs anything.",
+    "readoutTable": "six-layer-readout",
+    "lastTable": "last-four-points",
+    "passesTable": "passes-doing-work",
+    "stageLabel": "Stack of thirteen read points of a six-layer model. Use the slider or the tabs to read each one."
+  }
+}

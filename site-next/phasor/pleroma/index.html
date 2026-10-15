@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The Pleroma | Evaluated Applications</title>
+<meta name="description" content="The Pleroma is a fixed-size array of exact integers that stores a multiset of items and answers many kinds of query exactly, refusing past its key capacity.">
+<link rel="canonical" href="https://evaluatedapplications.github.io/phasor/pleroma/">
+
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Evaluated Applications">
+<meta property="og:title" content="The Pleroma | Evaluated Applications">
+<meta property="og:description" content="The Pleroma is a fixed-size array of exact integers that stores a multiset of items and answers many kinds of query exactly, refusing past its key capacity.">
+<meta property="og:url" content="https://evaluatedapplications.github.io/phasor/pleroma/">
+<meta name="twitter:card" content="summary">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%23f0796a'/%3E%3Cstop offset='.5' stop-color='%237bd86a'/%3E%3Cstop offset='1' stop-color='%23c07dff'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='32' height='32' rx='7' fill='%23050608'/%3E%3Cpath d='M16 5L27 26H5Z' fill='none' stroke='url(%23g)' stroke-width='2' stroke-linejoin='round'/%3E%3C/svg%3E">
+<script>document.documentElement.classList.add('js')</script>
+<link rel="stylesheet" href="/assets/ea.css?v=93cf72d0">
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Home","item":"https://evaluatedapplications.github.io/"},{"@type":"ListItem","position":2,"name":"Products","item":"https://evaluatedapplications.github.io/products/"},{"@type":"ListItem","position":3,"name":"Phasor","item":"https://evaluatedapplications.github.io/phasor/"},{"@type":"ListItem","position":4,"name":"Pleroma","item":"https://evaluatedapplications.github.io/phasor/pleroma/"}]}</script>
+
+</head>
+<body class="cat-foundation" data-page="product-docs">
+<a class="skip" href="#main">Skip to content</a>
+<div class="beam" aria-hidden="true"></div>
+<header class="site-header"><div class="wrap nav" data-nav>
+  <a class="brand" href="/"><svg class="mark" viewBox="0 0 32 32" aria-hidden="true"><defs><linearGradient id="m" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#f0796a"/><stop offset=".166" stop-color="#f0a15a"/><stop offset=".333" stop-color="#e6c450"/><stop offset=".5" stop-color="#7bd86a"/><stop offset=".666" stop-color="#4aa3ff"/><stop offset=".833" stop-color="#7d7dff"/><stop offset="1" stop-color="#c07dff"/></linearGradient></defs><path d="M16 5L27 26H5Z" fill="none" stroke="url(#m)" stroke-width="2" stroke-linejoin="round"/></svg>Evaluated Applications</a>
+  <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="site-links">Menu</button>
+  <nav aria-label="Main"><ul class="nav-links" id="site-links">
+    <li><a href="/products/" aria-current="page">Products</a></li><li><a href="/tools/">Tools</a></li><li><a href="/evidence/">Evidence</a></li><li><a href="/research/">Research</a></li>
+    <li><a class="nav-cta" href="/partner/">Partner with us</a></li>
+    <li><a href="https://www.nuget.org/profiles/evaluatedapplications" rel="noopener">NuGet<span class="sr-only"> (external)</span></a></li>
+  </ul></nav>
+</div></header>
+<main id="main" tabindex="-1">
+
+<header class="page-head"><div class="wrap">
+<nav class="crumbs" aria-label="Breadcrumb"><ol><li><a href="/">Home</a></li><li><a href="/products/">Products</a></li><li><a href="/phasor/">Phasor</a></li><li aria-current="page">Pleroma</li></ol></nav>
+<p class="eyebrow">Phasor pleroma</p>
+<h1 class="wide">The Pleroma: one exact hologram, many views</h1>
+<p class="lede">A fixed-size array of exact integers that stores a multiset of items, and answers counts by key, by flag word, by Hamming distance and by time from slices of that one array.</p>
+<ul class="facts"><li class="fact">Experimental API</li></ul>
+</div></header>
+<nav class="subnav" aria-label="Phasor sections"><div class="wrap"><ul><li><a href="/phasor/">Overview</a></li><li><a href="/phasor/#quick-start">Quick start</a></li><li><a href="/phasor/docs/">Docs</a></li><li><a href="/phasor/pleroma/" aria-current="page">Pleroma</a></li><li><a href="/phasor/evidence/">Evidence</a></li></ul></div></nav>
+<section class="sec"><div class="wrap">
+  <nav class="toc" aria-labelledby="toc-h"><h2 id="toc-h">On this page</h2><ul><li><a href="#what-it-is">What it is</a></li><li><a href="#faces">The three faces</a></li><li><a href="#grid">The operation grid</a></li><li><a href="#superposition">Superposition: one store, many items</a></li><li><a href="#capacity">The capacity rule: 2K+1, and the refusal</a></li><li><a href="#bind-attend">Bind and Attend</a></li><li><a href="#keys-and-bits">Keys, bit maps and exact checks</a></li><li><a href="#used-by">Built on the Pleroma</a></li><li><a href="#prior-art">Prior art</a></li></ul></nav>
+</div></section>
+<section class="sec doc-sec" aria-labelledby="what-it-is"><div class="wrap">
+  <div class="sec-head"><span class="sec-dot cat-foundation" aria-hidden="true"></span><h2 id="what-it-is">What it is</h2></div>
+  <div class="prose-block"><p>The Pleroma is a fixed-size array of exact integers (finite-field arithmetic) that stores a multiset of items. Each item is a key, optionally with flag bits, an ordering and a timestamp. One array answers many queries: counts by key, by flag word, by Hamming distance, and joint flag-and-time counts. Key queries refuse past capacity. The others never return a wrong count within the field&#39;s range.</p><p>The store holds a harmonic transform on the product of these groups: the key cycle, the flag cube, the symmetric group and the time cycle. A hologram is the transform itself, and each component of the transform is called a harmonic. The store keeps only the harmonics its views need, and each view reads its own slice of the array and nothing else.</p></div>
+  
+  
+  
+  
+  
+  
+  
+  
+</div></section><section class="sec doc-sec" aria-labelledby="faces"><div class="wrap">
+  <div class="sec-head"><span class="sec-dot cat-foundation" aria-hidden="true"></span><h2 id="faces">The three faces</h2></div>
+  <div class="prose-block"><p>A Pleroma view is one of three faces of the same array.</p></div>
+  <dl class="term-list"><dt>Syzygy (the key cycle)</dt><dd>Key-addressed lookup: counts per key, and whole items (key, flags, arrangement and time together) with signed counts. It refuses past KeyCapacity distinct keys, returning false rather than a wrong answer.</dd><dt>Monad (the order face, S_k, 2 to 5)</dt><dd>Counts per arrangement of up to 5 things, even minus odd, and superposed readings of arrangement queries. Exact while counts stay within the field&#39;s range.</dd><dt>Ouroboros (the flag cube, up to 16 bits)</dt><dd>Counts per flag word, items within Hamming distance r of a query, the nearest words, and joint counts over flags and time. Exact while counts stay within the field&#39;s range.</dd></dl>
+  
+  
+  
+  
+  
+  
+  
+</div></section><section class="sec doc-sec" aria-labelledby="grid"><div class="wrap">
+  <div class="sec-head"><span class="sec-dot cat-foundation" aria-hidden="true"></span><h2 id="grid">The operation grid</h2></div>
+  <div class="prose-block"><p>The Pleroma implements a grid of operations on one exact hologram: 25 cells, 8 rungs by 3 faces, plus a lid and the relation and charge lattices. Each rung is a family of operations, one per face. Every cell is a public member of Pleroma with property tests against brute-force or naive implementations, and every whole-store operation applies to all items in one pass.</p><p>The pyramid on the Phasor page draws the same grid in three dimensions, with each cell&#39;s API and evidence.</p></div>
+  
+  <div class="tbl-wrap"><table class="tbl"><caption>Each rung is a family of operations, one per face</caption>
+<thead><tr><th scope="col">Rung</th><th scope="col">Syzygy</th><th scope="col">Monad</th><th scope="col">Ouroboros</th></tr></thead>
+<tbody><tr><th scope="row">1. Pair (Logic)<br><span class="muted">Signed insertion, deletion, and bit toggle. Two copies cancel.</span></th><td>Signed insertion and deletion</td><td>Binary choice</td><td>Flag toggle via XOR</td></tr><tr><th scope="row">2. Identity (Sets)<br><span class="muted">Lookup, one-hot categories, exact flag words at any load.</span></th><td>Key on the cycle</td><td>One-hot category</td><td>Binary codes and Hamming retrieval</td></tr><tr><th scope="row">3. Relation (Algebra)<br><span class="muted">Bind: keys add, flags XOR, arrangements compose. All pairs in one pass.</span></th><td>Multiset composition via binding</td><td>Arrangement composition</td><td>Parity: odd-occurrence XOR</td></tr><tr><th scope="row">4. Function (Transforms)<br><span class="muted">Store as lookup table. Shifts as harmonics. Time-valued maps with opt-in TimeSpectrum.</span></th><td>Table and Fourier shift</td><td>One-to-one map and balance check</td><td>Boolean function and Walsh spectrum</td></tr><tr><th scope="row">5. Symmetry (Automorphisms)<br><span class="muted">ScaleKeys (permute or gather). Conjugate arrangements. Frobenius x^2 on GF(2).</span></th><td>Key permutation and gather</td><td>Conjugation of arrangements</td><td>GF(2) Frobenius: bit squaring</td></tr><tr><th scope="row">6. Composition (Products, Codes)<br><span class="muted">CRT pairing of key cycles. Linear bit maps. Hamming syndromes.</span></th><td>Chinese remainder theorem pairing</td><td>Independence test</td><td>Hamming syndromes</td></tr><tr><th scope="row">7. Turning (Dynamics)<br><span class="muted">Tick (exact rotation). Diffuse (Markov mixing). LFSR (shift registers).</span></th><td>Spiral on the time circle</td><td>Diffusion: Markov mixing</td><td>Shift-register cycles (Galois LFSR)</td></tr><tr><th scope="row">8. Circulation (Topology)<br><span class="muted">Holonomy (winding). Current (Kolmogorov). Frustration (parity).</span></th><td>Winding number around a loop</td><td>Steady-state current direction</td><td>Frustration: loop parity</td></tr></tbody></table></div>
+  
+  
+  
+  
+  
+  <p class="more-link"><a href="/phasor/#overview">Open the interactive map</a></p>
+</div></section><section class="sec doc-sec" aria-labelledby="superposition"><div class="wrap">
+  <div class="sec-head"><span class="sec-dot cat-foundation" aria-hidden="true"></span><h2 id="superposition">Superposition: one store, many items</h2></div>
+  <div class="prose-block"><p>One Pleroma holds many items at once. Every whole-store operation then applies to all of them in a single pass, and the cost of that pass does not depend on the number of items stored. Mixing different harmonic permutations (key scaling, bit maps and conjugation, rung 5) costs one pass per term.</p><p>The example holds three items with key capacity 4, then applies one kernel of 1x identity plus 2x (flip flag bit 0, age 1 tick). Press Replay to watch the pass move through the store, or switch between the counts before and after.</p></div>
+  
+  
+  
+  <figure class="fig" data-diagram="pleroma-superposition" data-diagram-id="dg-superposition">
+  <div class="fig-head"><h3>One pass, every item</h3><p>Counts per flag word, counts per tick and the flags by time cells, before and after the pass. Every number is read from the real store.</p></div>
+  <div class="fig-body">
+    
+    <div class="dia-stage" id="dg-superposition-stage"><svg class="dia-plan sp-plan" viewBox="0 0 360 230" role="img" aria-labelledby="sp-t sp-d"><title id="sp-t">Counts after the pass</title><desc id="sp-d">Count per flag word: 000 is 6, 001 is 3, 010 is 2, 011 is 4, 100 is 1, 101 is 2, 110 is 0, 111 is 0. Count per time tick: 0 is 3, 1 is 6, 2 is 2, 3 is 4, 4 is 1, 5 is 2, 6 is 0.</desc>
+<text class="lab" x="20" y="14">Count per flag word</text><rect class="bar" x="20" y="30" width="32" height="60" rx="3"/><text x="36" y="104" text-anchor="middle">000</text><text class="val" x="36" y="26" text-anchor="middle">6</text><rect class="bar" x="60" y="60" width="32" height="30" rx="3"/><text x="76" y="104" text-anchor="middle">001</text><text class="val" x="76" y="56" text-anchor="middle">3</text><rect class="bar" x="100" y="70" width="32" height="20" rx="3"/><text x="116" y="104" text-anchor="middle">010</text><text class="val" x="116" y="66" text-anchor="middle">2</text><rect class="bar" x="140" y="50" width="32" height="40" rx="3"/><text x="156" y="104" text-anchor="middle">011</text><text class="val" x="156" y="46" text-anchor="middle">4</text><rect class="bar" x="180" y="80" width="32" height="10" rx="3"/><text x="196" y="104" text-anchor="middle">100</text><text class="val" x="196" y="76" text-anchor="middle">1</text><rect class="bar" x="220" y="70" width="32" height="20" rx="3"/><text x="236" y="104" text-anchor="middle">101</text><text class="val" x="236" y="66" text-anchor="middle">2</text><rect class="bar" x="260" y="90" width="32" height="0.5" rx="3"/><text x="276" y="104" text-anchor="middle">110</text><rect class="bar" x="300" y="90" width="32" height="0.5" rx="3"/><text x="316" y="104" text-anchor="middle">111</text>
+<text class="lab" x="20" y="134">Count per time tick</text><rect class="bar t" x="20" y="180" width="32" height="30" rx="3"/><text x="36" y="224" text-anchor="middle">0</text><text class="val" x="36" y="176" text-anchor="middle">3</text><rect class="bar t" x="60" y="150" width="32" height="60" rx="3"/><text x="76" y="224" text-anchor="middle">1</text><text class="val" x="76" y="146" text-anchor="middle">6</text><rect class="bar t" x="100" y="190" width="32" height="20" rx="3"/><text x="116" y="224" text-anchor="middle">2</text><text class="val" x="116" y="186" text-anchor="middle">2</text><rect class="bar t" x="140" y="170" width="32" height="40" rx="3"/><text x="156" y="224" text-anchor="middle">3</text><text class="val" x="156" y="166" text-anchor="middle">4</text><rect class="bar t" x="180" y="200" width="32" height="10" rx="3"/><text x="196" y="224" text-anchor="middle">4</text><text class="val" x="196" y="196" text-anchor="middle">1</text><rect class="bar t" x="220" y="190" width="32" height="20" rx="3"/><text x="236" y="224" text-anchor="middle">5</text><text class="val" x="236" y="186" text-anchor="middle">2</text><rect class="bar t" x="260" y="210" width="32" height="0.5" rx="3"/><text x="276" y="224" text-anchor="middle">6</text></svg></div>
+    <div class="sp-side"><h3 class="sp-h">Three items</h3><div class="sp-items"><div class="sp-item i0 in done"><b>Key 10</b>, flags 001, time 0, count 3<span class="sp-after"><span>1x to key 10, flags 001, time 0, count 3</span><span>2x to key 10, flags 000, time 1, count 6</span></span></div><div class="sp-item i1 in done"><b>Key 20</b>, flags 010, time 2, count 2<span class="sp-after"><span>1x to key 20, flags 010, time 2, count 2</span><span>2x to key 20, flags 011, time 3, count 4</span></span></div><div class="sp-item i2 in done"><b>Key 30</b>, flags 100, time 4, count 1<span class="sp-after"><span>1x to key 30, flags 100, time 4, count 1</span><span>2x to key 30, flags 101, time 5, count 2</span></span></div></div>
+<p class="sp-kernel">kernel = 1x identity + 2x (flip flag bit 0, age 1 tick)</p>
+<div class="dia-controls dia-ui" hidden><span class="dia-seg" role="group" aria-label="Show"><button type="button" class="chip" data-state="before" aria-pressed="false">Before the pass</button><button type="button" class="chip" data-state="after" aria-pressed="true">After the pass</button></span><button type="button" class="btn btn-ghost btn-sm" data-ctl="replay">Replay</button></div>
+<p class="dia-readout dia-ui" data-ctl="readout" role="status" hidden>One pass changed every item at once. Total count 6 + 2*6 = 18. Every flag and time count is exact, and the cost of the pass does not depend on how many items are stored.</p></div>
+    <details class="dia-data"><summary>Counts before and after the pass</summary>
+<div class="tbl-wrap"><table class="tbl"><caption>Count per flag word</caption><thead><tr><th scope="col">Flag word</th><th scope="col">Before</th><th scope="col">After</th></tr></thead><tbody><tr><th scope="row">000</th><td>0</td><td>6</td></tr><tr><th scope="row">001</th><td>3</td><td>3</td></tr><tr><th scope="row">010</th><td>2</td><td>2</td></tr><tr><th scope="row">011</th><td>0</td><td>4</td></tr><tr><th scope="row">100</th><td>1</td><td>1</td></tr><tr><th scope="row">101</th><td>0</td><td>2</td></tr><tr><th scope="row">110</th><td>0</td><td>0</td></tr><tr><th scope="row">111</th><td>0</td><td>0</td></tr></tbody></table></div>
+<div class="tbl-wrap"><table class="tbl"><caption>Count per time tick</caption><thead><tr><th scope="col">Tick</th><th scope="col">Before</th><th scope="col">After</th></tr></thead><tbody><tr><th scope="row">0</th><td>3</td><td>3</td></tr><tr><th scope="row">1</th><td>0</td><td>6</td></tr><tr><th scope="row">2</th><td>2</td><td>2</td></tr><tr><th scope="row">3</th><td>0</td><td>4</td></tr><tr><th scope="row">4</th><td>1</td><td>1</td></tr><tr><th scope="row">5</th><td>0</td><td>2</td></tr><tr><th scope="row">6</th><td>0</td><td>0</td></tr></tbody></table></div>
+<div class="tbl-wrap"><table class="tbl"><caption>Flags by time joint cells that are not zero after the pass</caption><thead><tr><th scope="col">Cell</th><th scope="col">Before</th><th scope="col">After</th></tr></thead><tbody><tr><th scope="row">flags 000, tick 1</th><td>0</td><td>6</td></tr><tr><th scope="row">flags 001, tick 0</th><td>3</td><td>3</td></tr><tr><th scope="row">flags 010, tick 2</th><td>2</td><td>2</td></tr><tr><th scope="row">flags 011, tick 3</th><td>0</td><td>4</td></tr><tr><th scope="row">flags 100, tick 4</th><td>1</td><td>1</td></tr><tr><th scope="row">flags 101, tick 5</th><td>0</td><td>2</td></tr></tbody></table></div>
+</details>
+    <script type="application/json" data-diagram-data>{"schema":"ea-diagram/1","kind":"pleroma-superposition","generator":"web/generators/pleroma-demos","package":{"id":"EvaluatedApplications.Phasor","version":"2.17.0"},"shape":{"keyCapacity":4,"flagBits":3,"timePeriod":7,"harmonicsPerKeyLine":9,"flagWords":8,"jointCells":56,"cellCount":96,"components":1},"items":[{"key":10,"flags":1,"time":0,"count":3},{"key":20,"flags":2,"time":2,"count":2},{"key":30,"flags":4,"time":4,"count":1}],"kernel":[{"flagMask":0,"timeShift":0,"weight":1},{"flagMask":1,"timeShift":1,"weight":2}],"before":{"total":6,"flags":[0,3,2,0,1,0,0,0],"times":[3,0,2,0,1,0,0],"joint":[0,0,0,0,0,0,0,3,0,0,0,0,0,0,0,0,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]},"after":{"total":18,"flags":[6,3,2,4,1,2,0,0],"times":[3,6,2,4,1,2,0],"joint":[0,6,0,0,0,0,0,3,0,0,0,0,0,0,0,0,2,0,0,0,0,0,0,0,4,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]},"mapping":[{"key":10,"from":{"flags":1,"time":0,"count":3},"weight":1,"to":{"flags":1,"time":0,"count":3}},{"key":10,"from":{"flags":1,"time":0,"count":3},"weight":2,"to":{"flags":0,"time":1,"count":6}},{"key":20,"from":{"flags":2,"time":2,"count":2},"weight":1,"to":{"flags":2,"time":2,"count":2}},{"key":20,"from":{"flags":2,"time":2,"count":2},"weight":2,"to":{"flags":3,"time":3,"count":4}},{"key":30,"from":{"flags":4,"time":4,"count":1},"weight":1,"to":{"flags":4,"time":4,"count":1}},{"key":30,"from":{"flags":4,"time":4,"count":1},"weight":2,"to":{"flags":5,"time":5,"count":2}}]}</script>
+  </div>
+  <figcaption class="fig-cap">Generated by running the published EvaluatedApplications.Phasor package (release <span data-gen="version">2.17.0</span>). Every number is the package's own output.</figcaption>
+</figure>
+  <div class="prose-block"><p>The kernel applies exactly the store you would get by moving every item by every element and adding the copies. The measured cost of the pass is on the evidence page, beside the cost of doing it item by item.</p></div>
+  <div class="code"><div class="code-bar"><span>The code behind the example</span><button class="copy" type="button" aria-label="Copy The code behind the example">copy</button></div><pre><code class="language-csharp">using Phasor;
+
+var store = new Pleroma(new HologramShape
+{
+    KeyCapacity = 4,
+    FlagBits = 3,
+    TimePeriod = 7,
+    JointFaces = HologramFaces.Flags | HologramFaces.Time,
+});
+store.Add(new HologramItem(Key: 10, Flags: 0b001, Time: 0), 3);
+store.Add(new HologramItem(Key: 20, Flags: 0b010, Time: 2), 2);
+store.Add(new HologramItem(Key: 30, Flags: 0b100, Time: 4), 1);
+Console.WriteLine(&quot;before flags &quot; + string.Join(&quot; &quot;, store.Flags()));
+Console.WriteLine(&quot;before times &quot; + string.Join(&quot; &quot;, store.Times()));
+
+// One kernel: 1x identity plus 2x (flip flag bit 0 and age one tick), applied to every item in one pass.
+var kernel = new PleromaKernel(store.Shape);
+kernel.Add(weight: 1L);
+kernel.Add(flagMask: 0b001, timeShift: 1, weight: 2L);
+store.Apply(kernel);
+
+Console.WriteLine(&quot;after flags  &quot; + string.Join(&quot; &quot;, store.Flags()));
+Console.WriteLine(&quot;after times  &quot; + string.Join(&quot; &quot;, store.Times()));</code></pre></div><div class="code out"><div class="code-bar"><span>Output</span><button class="copy" type="button" aria-label="Copy Output">copy</button></div><pre><code class="language-text">before flags 0 3 2 0 1 0 0 0
+before times 3 0 2 0 1 0 0
+after flags  6 3 2 4 1 2 0 0
+after times  3 6 2 4 1 2 0</code></pre></div>
+  
+  <p class="more-link"><a href="/phasor/evidence/costs/">Costs and checks</a></p>
+</div></section><section class="sec doc-sec" aria-labelledby="capacity"><div class="wrap">
+  <div class="sec-head"><span class="sec-dot cat-foundation" aria-hidden="true"></span><h2 id="capacity">The capacity rule: 2K+1, and the refusal</h2></div>
+  <div class="prose-block"><p>A Pleroma with key capacity K stores exactly 2K+1 harmonics per key line. Any store of K or fewer keys is decoded exactly, by Berlekamp-Massey syndrome decoding as in Reed-Solomon codes. All K items are held at once in one 2K+1 entry array, and reading any face (flags, arrangements, times) gives exact counts for all of them.</p><p>Past capacity, decoding fails at K+1 keys and returns false instead of guessing, so the store never returns a wrong answer. Add keys below to see what the package returned for each number of distinct keys.</p></div>
+  
+  
+  
+  <figure class="fig" data-diagram="pleroma-capacity" data-diagram-id="dg-capacity">
+  <div class="fig-head"><h3>Capacity K = 4</h3><p>TryKeys results recorded from the real store for 0 to 9 distinct keys.</p></div>
+  <div class="fig-body">
+    
+    <div class="dia-stage" id="dg-capacity-stage"><svg class="dia-plan cap-plan" viewBox="0 0 360 70" role="img" aria-labelledby="cp-t cp-d"><title id="cp-t">TryKeys result for 1 to 9 distinct keys</title><desc id="cp-d">With key capacity 4, TryKeys decodes exactly up to 4 keys and refuses from 5 keys.</desc><g><rect class="ok" x="10" y="20" width="36" height="26" rx="5"/><text x="28" y="37" text-anchor="middle">1</text></g><g><rect class="ok" x="48" y="20" width="36" height="26" rx="5"/><text x="66" y="37" text-anchor="middle">2</text></g><g><rect class="ok" x="86" y="20" width="36" height="26" rx="5"/><text x="104" y="37" text-anchor="middle">3</text></g><g><rect class="ok" x="124" y="20" width="36" height="26" rx="5"/><text x="142" y="37" text-anchor="middle">4</text></g><g><rect class="no" x="162" y="20" width="36" height="26" rx="5"/><text x="180" y="37" text-anchor="middle">5</text></g><g><rect class="no" x="200" y="20" width="36" height="26" rx="5"/><text x="218" y="37" text-anchor="middle">6</text></g><g><rect class="no" x="238" y="20" width="36" height="26" rx="5"/><text x="256" y="37" text-anchor="middle">7</text></g><g><rect class="no" x="276" y="20" width="36" height="26" rx="5"/><text x="294" y="37" text-anchor="middle">8</text></g><g><rect class="no" x="314" y="20" width="36" height="26" rx="5"/><text x="332" y="37" text-anchor="middle">9</text></g></svg></div>
+    <div class="cap-box dia-ui" hidden data-over="0">
+<h3 class="sp-h">K = 4: <span data-ctl="n">3</span> keys in the store, 2K+1 = 9 harmonics per key line</h3>
+<div class="cap-keys" data-ctl="keys"></div>
+<p class="dia-readout" data-ctl="verdict" role="status"></p>
+<div class="dia-controls"><button type="button" class="btn btn-ghost btn-sm" data-ctl="add">Add a key</button><button type="button" class="btn btn-ghost btn-sm" data-ctl="remove">Remove a key</button><button type="button" class="btn btn-ghost btn-sm" data-ctl="reset">Reset</button></div>
+</div>
+    <details class="dia-data"><summary>What TryKeys returned for each number of keys</summary><div class="tbl-wrap"><table class="tbl"><caption>Key capacity 4: distinct keys added and the result of TryKeys</caption><thead><tr><th scope="col">Distinct keys</th><th scope="col">TryKeys returned</th><th scope="col">Keys decoded</th></tr></thead><tbody><tr><th scope="row">0</th><td>true</td><td>0</td></tr><tr><th scope="row">1</th><td>true</td><td>1</td></tr><tr><th scope="row">2</th><td>true</td><td>2</td></tr><tr><th scope="row">3</th><td>true</td><td>3</td></tr><tr><th scope="row">4</th><td>true</td><td>4</td></tr><tr><th scope="row">5</th><td>false</td><td>0</td></tr><tr><th scope="row">6</th><td>false</td><td>0</td></tr><tr><th scope="row">7</th><td>false</td><td>0</td></tr><tr><th scope="row">8</th><td>false</td><td>0</td></tr><tr><th scope="row">9</th><td>false</td><td>0</td></tr></tbody></table></div></details>
+    <script type="application/json" data-diagram-data>{"schema":"ea-diagram/1","kind":"pleroma-capacity","generator":"web/generators/pleroma-demos","package":{"id":"EvaluatedApplications.Phasor","version":"2.17.0"},"capacity":4,"harmonicsPerKeyLine":9,"rows":[{"capacity":4,"keys":0,"decoded":true,"exact":true,"returned":0},{"capacity":4,"keys":1,"decoded":true,"exact":true,"returned":1},{"capacity":4,"keys":2,"decoded":true,"exact":true,"returned":2},{"capacity":4,"keys":3,"decoded":true,"exact":true,"returned":3},{"capacity":4,"keys":4,"decoded":true,"exact":true,"returned":4},{"capacity":4,"keys":5,"decoded":false,"exact":false,"returned":0},{"capacity":4,"keys":6,"decoded":false,"exact":false,"returned":0},{"capacity":4,"keys":7,"decoded":false,"exact":false,"returned":0},{"capacity":4,"keys":8,"decoded":false,"exact":false,"returned":0},{"capacity":4,"keys":9,"decoded":false,"exact":false,"returned":0}]}</script>
+  </div>
+  <figcaption class="fig-cap">Generated by running the published EvaluatedApplications.Phasor package (release <span data-gen="version">2.17.0</span>). Every number is the package's own output.</figcaption>
+</figure>
+  
+  
+  
+  
+</div></section><section class="sec doc-sec" aria-labelledby="bind-attend"><div class="wrap">
+  <div class="sec-head"><span class="sec-dot cat-foundation" aria-hidden="true"></span><h2 id="bind-attend">Bind and Attend</h2></div>
+  <div class="prose-block"><p>store.Bind(other) binds every pair of items from two stores in one pass: keys add (mod the key space), flags XOR, arrangements compose, ticks add and counts multiply. The cost is one matrix product per order representation, not per pair of items.</p><p>Attend(query, face) reads three things from one contraction of the store for a flag predicate (an exact match, a partial match on a mask, or any Boolean function). Counts per value are the exact counts at each matched flag word, arrangement or tick. Shares are those counts divided by the total, summing to 1. Parity is the sign of the total. The cost is one spectrum and one inner product, whatever the number of items.</p></div>
+  
+  
+  
+  
+  
+  <div class="code"><div class="code-bar"><span>Bind with a one-item store</span><button class="copy" type="button" aria-label="Copy Bind with a one-item store">copy</button></div><pre><code class="language-csharp">using Phasor;
+
+var shape = new HologramShape { KeyCapacity = 8, FlagBits = 4, TimePeriod = 9 };
+var store = new Pleroma(shape);
+store.Add(new HologramItem(Key: 10, Flags: 0b0011, Time: 2), 3);
+store.Add(new HologramItem(Key: 20, Flags: 0b0111, Time: 5), 1);
+
+// Bind with a one-item store: every item moves by the same key, flags and time shift.
+var shift = new Pleroma(shape);
+shift.Add(new HologramItem(Key: 1, Flags: 0b0001, Time: 1));
+store.Bind(shift);
+
+if (store.TryItems(out var items))
+    foreach (var (item, count) in items)
+        Console.WriteLine($&quot;{item.Key}: flags {item.Flags}, time {item.Time}, count {count}&quot;);</code></pre></div><div class="code out"><div class="code-bar"><span>Output</span><button class="copy" type="button" aria-label="Copy Output">copy</button></div><pre><code class="language-text">11: flags 2, time 3, count 3
+21: flags 6, time 6, count 1</code></pre></div>
+  
+  
+</div></section><section class="sec doc-sec" aria-labelledby="keys-and-bits"><div class="wrap">
+  <div class="sec-head"><span class="sec-dot cat-foundation" aria-hidden="true"></span><h2 id="keys-and-bits">Keys, bit maps and exact checks</h2></div>
+  
+  <dl class="term-list"><dt>Shift, scale and combine keys</dt><dd>ShiftKeys(k) adds k to every key in place. ScaleKeys(u) multiplies every key by a unit, or gathers several keys to one for a non-unit. CombineCycles(a, b) joins two stores on coprime key cycles by the Chinese remainder theorem. Scaling and combining need the optional CompleteKeys configuration.</dd><dt>Frobenius and shift registers</dt><dd>Frobenius(modulus, steps) squares every flag word as a polynomial over GF(2), and ShiftRegister(polynomial, steps) steps every word through a linear shift register, each exactly and in one pass.</dd><dt>Exact repair and redundancy</dt><dd>ReservedKeys lets Verify detect and Repair rebuild up to r lost or corrupted key-line harmonics. CheckPrime mirrors every cell in a second prime so VerifyCheck detects any corruption of one copy. PleromaParity keeps the exact sum of a group of stores and rebuilds any one lost store.</dd><dt>Dense and sparse pages</dt><dd>With CompleteKeys, a store is a dense page of up to 4,096 slots where Count and Counts read every slot exactly in one transform. PleromaSparsePage holds exact counts over keys anywhere in a huge key set in memory proportional to the keys present.</dd></dl>
+  
+  
+  
+  
+  
+  
+  
+</div></section><section class="sec doc-sec" aria-labelledby="used-by"><div class="wrap">
+  <div class="sec-head"><span class="sec-dot cat-foundation" aria-hidden="true"></span><h2 id="used-by">Built on the Pleroma</h2></div>
+  <div class="prose-block"><p>The HoloDb holographic plane uses the Pleroma as its data store. COUNT, SUM, MIN, MAX, GROUP BY, HAVING, COUNT DISTINCT, WHERE, JOIN and any Boolean predicate are exact on it.</p></div>
+  
+  
+  
+  
+  
+  
+  
+  <p class="more-link"><a href="/holodb/">HoloDb</a></p>
+</div></section><section class="sec doc-sec" aria-labelledby="prior-art"><div class="wrap">
+  <div class="sec-head"><span class="sec-dot cat-foundation" aria-hidden="true"></span><h2 id="prior-art">Prior art</h2></div>
+  
+  <dl class="term-list"><dt>Reed-Solomon and BCH codes</dt><dd>Syndrome decoding (Reed and Solomon 1960, Berlekamp 1968, Massey 1969).</dd><dt>Berlekamp-Massey</dt><dd>The algorithm for finding minimal polynomials that the key decode uses.</dd><dt>PinSketch and minisketch</dt><dd>Set sketches built on the same construction (Talbot and others 2012, Poinsot and others 2017).</dd><dt>Holographic reduced representations</dt><dd>Plate&#39;s 1995 representation and its phase refinement, the approximate store the Pleroma is compared with.</dd></dl>
+  
+  
+  
+  
+  
+  
+  
+</div></section>
+</main>
+<footer class="site-footer"><div class="wrap">
+  <div class="foot-grid">
+    <div><h2>Products</h2><ul><li><a href="/phasor/">Phasor</a></li><li><a href="/evalapp/">EvalApp</a></li><li><a href="/holodb/">HoloDb</a></li><li><a href="/algformer/">AlgFormer</a></li><li><a href="/prism/">Prism</a></li><li><a href="/prose/">Prose</a></li><li><a href="/tracer/">Tracer</a></li><li><a href="/holovoxel/">HoloVoxel</a></li></ul></div>
+    <div><h2>Tools</h2><ul><li><a href="/tools/analyst/">The Analyst</a></li><li><a href="/tools/creature/">The Creature</a></li><li><a href="/tools/forecaster/">The Forecaster</a></li><li><a href="/tools/prism/">Prism</a></li><li><a href="/tools/stories/">Nano Stories</a></li><li><a href="/tools/cartographer/">The Cartographer</a></li><li><a href="/tools/prose/">Prose</a></li><li><a href="/tools/council-spending/">Council Spending Scanner</a></li></ul></div>
+    <div><h2>Learn</h2><ul><li><a href="/evidence/">Evidence</a></li><li><a href="/research/">Research</a></li><li><a href="/products/">All products</a></li><li><a href="/tools/">All tools</a></li></ul></div>
+    <div><h2>Company</h2><ul><li><a href="/partner/">Partner with us</a></li><li><a href="/licence/">Licence</a></li><li><a href="/ai/">For AI readers</a></li><li><a href="https://www.nuget.org/profiles/evaluatedapplications" rel="noopener">NuGet</a></li></ul></div>
+    <div><h2>Machine-readable</h2><ul><li><a href="/llms.txt">llms.txt</a></li><li><a href="/llms-full.txt">llms-full.txt</a></li><li><a href="/sitemap.xml">sitemap.xml</a></li></ul></div>
+  </div>
+  <div class="foot-base"><span>Evaluated Applications · .NET libraries · England</span><span class="mono">© 2026 Evaluated Applications</span></div>
+</div></footer>
+
+<script src="/assets/site.js?v=3190ebab" defer></script>
+<script type="module" src="/assets/diagrams/pleroma-superposition.js"></script><script type="module" src="/assets/diagrams/pleroma-capacity.js"></script>
+</body>
+</html>

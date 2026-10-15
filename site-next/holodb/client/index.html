@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HoloDb client and wire protocol | Evaluated Applications</title>
+<meta name="description" content="HoloDb.Client connects a .NET app to a HoloDb server over TLS with the same API as the embedded engine; HoloDb.Protocol is the columnar wire format underneath.">
+<link rel="canonical" href="https://evaluatedapplications.github.io/holodb/client/">
+
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Evaluated Applications">
+<meta property="og:title" content="HoloDb client and wire protocol | Evaluated Applications">
+<meta property="og:description" content="HoloDb.Client connects a .NET app to a HoloDb server over TLS with the same API as the embedded engine; HoloDb.Protocol is the columnar wire format underneath.">
+<meta property="og:url" content="https://evaluatedapplications.github.io/holodb/client/">
+<meta name="twitter:card" content="summary">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%23f0796a'/%3E%3Cstop offset='.5' stop-color='%237bd86a'/%3E%3Cstop offset='1' stop-color='%23c07dff'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='32' height='32' rx='7' fill='%23050608'/%3E%3Cpath d='M16 5L27 26H5Z' fill='none' stroke='url(%23g)' stroke-width='2' stroke-linejoin='round'/%3E%3C/svg%3E">
+<script>document.documentElement.classList.add('js')</script>
+<link rel="stylesheet" href="/assets/ea.css?v=93cf72d0">
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Home","item":"https://evaluatedapplications.github.io/"},{"@type":"ListItem","position":2,"name":"Products","item":"https://evaluatedapplications.github.io/products/"},{"@type":"ListItem","position":3,"name":"HoloDb","item":"https://evaluatedapplications.github.io/holodb/"},{"@type":"ListItem","position":4,"name":"Client","item":"https://evaluatedapplications.github.io/holodb/client/"}]}</script>
+
+</head>
+<body class="cat-holodb" data-page="product-docs">
+<a class="skip" href="#main">Skip to content</a>
+<div class="beam" aria-hidden="true"></div>
+<header class="site-header"><div class="wrap nav" data-nav>
+  <a class="brand" href="/"><svg class="mark" viewBox="0 0 32 32" aria-hidden="true"><defs><linearGradient id="m" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#f0796a"/><stop offset=".166" stop-color="#f0a15a"/><stop offset=".333" stop-color="#e6c450"/><stop offset=".5" stop-color="#7bd86a"/><stop offset=".666" stop-color="#4aa3ff"/><stop offset=".833" stop-color="#7d7dff"/><stop offset="1" stop-color="#c07dff"/></linearGradient></defs><path d="M16 5L27 26H5Z" fill="none" stroke="url(#m)" stroke-width="2" stroke-linejoin="round"/></svg>Evaluated Applications</a>
+  <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="site-links">Menu</button>
+  <nav aria-label="Main"><ul class="nav-links" id="site-links">
+    <li><a href="/products/" aria-current="page">Products</a></li><li><a href="/tools/">Tools</a></li><li><a href="/evidence/">Evidence</a></li><li><a href="/research/">Research</a></li>
+    <li><a class="nav-cta" href="/partner/">Partner with us</a></li>
+    <li><a href="https://www.nuget.org/profiles/evaluatedapplications" rel="noopener">NuGet<span class="sr-only"> (external)</span></a></li>
+  </ul></nav>
+</div></header>
+<main id="main" tabindex="-1">
+
+<header class="page-head"><div class="wrap">
+<nav class="crumbs" aria-label="Breadcrumb"><ol><li><a href="/">Home</a></li><li><a href="/products/">Products</a></li><li><a href="/holodb/">HoloDb</a></li><li aria-current="page">Client</li></ol></nav>
+<p class="eyebrow">HoloDb client</p>
+<h1 class="wide">HoloDb over the network: the client and the wire protocol</h1>
+<p class="lede">HoloDb.Client connects your .NET app to a HoloDb server over TCP with mandatory TLS and token authentication. HoloDb.Protocol is the columnar wire protocol between the two.</p>
+
+</div></header>
+<nav class="subnav" aria-label="HoloDb sections"><div class="wrap"><ul><li><a href="/holodb/">Overview</a></li><li><a href="/holodb/#quick-start">Quick start</a></li><li><a href="/holodb/docs/">Docs</a></li><li><a href="/holodb/pleroma/">Built on Pleroma</a></li><li><a href="/holodb/client/" aria-current="page">Client</a></li><li><a href="/holodb/evidence/">Evidence</a></li></ul></div></nav>
+<section class="sec"><div class="wrap">
+  <nav class="toc" aria-labelledby="toc-h"><h2 id="toc-h">On this page</h2><ul><li><a href="#client">The client</a></li><li><a href="#connect">Connect and query</a></li><li><a href="#notes">Things to know</a></li><li><a href="#protocol">The wire protocol</a></li></ul></nav>
+</div></section>
+<section class="sec doc-sec" aria-labelledby="client"><div class="wrap">
+  <div class="sec-head"><span class="sec-dot cat-holodb" aria-hidden="true"></span><h2 id="client">The client</h2></div>
+  <div class="prose-block"><p>Run SQL queries and bulk-load data with the same API as the embedded, in-process HoloDbService, so you can move from embedded to networked by changing only how you create the handle. Building a data-driven app usually means choosing between speed (embed the database) and scale (run it on its own server), with two APIs that behave differently. The client gives you one code path for both.</p><p>Install it with dotnet add package EvaluatedApplications.HoloDb.Client. It targets .NET 8 and .NET 10 and needs a HoloDb server it can reach over TLS.</p></div>
+  <dl class="term-list"><dt>Same API, embedded or networked</dt><dd>Execute, ExecuteAsync, BulkLoadAsync, GetStatsAsync and PingAsync have the same surface whether you talk to the in-process service or a remote server.</dd><dt>Columnar over the wire</dt><dd>Results are typed column arrays that match the in-process engine&#39;s QueryResult. There is no row buffering and no JSON serialization.</dd><dt>Secure by default</dt><dd>TLS is on. Trust a self-signed server by pinning its certificate thumbprint, or skip it in development only.</dd><dt>Resilience when you opt in</dt><dd>Exponential backoff with full jitter, a circuit breaker and a per-operation deadline budget across retries.</dd><dt>Built for concurrency</dt><dd>One client per concurrent worker, or pool clients up front with HoloDbClientPool.</dd></dl>
+  
+  
+  
+  
+  
+  
+  
+</div></section><section class="sec doc-sec" aria-labelledby="connect"><div class="wrap">
+  <div class="sec-head"><span class="sec-dot cat-holodb" aria-hidden="true"></span><h2 id="connect">Connect and query</h2></div>
+  <div class="prose-block"><p>These examples are compiled against the published package. Running them needs a HoloDb server.</p></div>
+  
+  
+  
+  
+  
+  <div class="code"><div class="code-bar"><span>Connect and run a query</span><button class="copy" type="button" aria-label="Copy Connect and run a query">copy</button></div><pre><code class="language-csharp">using HoloDb.Client;
+
+// Connect to a server (compile-checked here: running it needs a HoloDb server)
+var client = await HoloDbClient.ConnectAsync(&quot;db.example.com&quot;, 5433);
+try
+{
+    // The same surface as the in-process HoloDbService
+    var result = await client.ExecuteAsync(&quot;SELECT id, value FROM data LIMIT 10&quot;);
+    foreach (var row in result.Rows)
+        Console.WriteLine($&quot;id={row[&quot;id&quot;]}, value={row[&quot;value&quot;]}&quot;);
+}
+finally
+{
+    await client.DisposeAsync();
+}</code></pre></div><div class="code"><div class="code-bar"><span>Retry and circuit breaker</span><button class="copy" type="button" aria-label="Copy Retry and circuit breaker">copy</button></div><pre><code class="language-csharp">using HoloDb.Client;
+
+// Wraps the client with exponential backoff and a circuit breaker (compile-checked)
+var resilient = await ResilientHoloDbClient.ConnectAsync(
+    &quot;db.example.com&quot;, 5433,
+    retryDelay: TimeSpan.FromMilliseconds(200),
+    maxAttempts: 3,
+    breakerFailureThreshold: 5);
+
+// Retries transport failures; SQL and authentication errors are not retried
+var result = await resilient.ExecuteAsync(&quot;SELECT COUNT(*) FROM data&quot;);
+Console.WriteLine(result.RowCount);</code></pre></div><div class="code"><div class="code-bar"><span>Pin the server certificate</span><button class="copy" type="button" aria-label="Copy Pin the server certificate">copy</button></div><pre><code class="language-csharp">using HoloDb.Client;
+
+// Pin the server certificate by thumbprint, for a self-hosted server (compile-checked)
+var options = new HoloDbClientOptions
+{
+    AuthToken = &quot;your-token&quot;,
+    UseTls = true,
+    PinnedThumbprint = &quot;ABC123DEF456&quot;,
+};
+var client = await HoloDbClient.ConnectAsync(&quot;localhost&quot;, 5433, options);
+await client.DisposeAsync();</code></pre></div>
+  
+  
+</div></section><section class="sec doc-sec" aria-labelledby="notes"><div class="wrap">
+  <div class="sec-head"><span class="sec-dot cat-holodb" aria-hidden="true"></span><h2 id="notes">Things to know</h2></div>
+  
+  <dl class="term-list"><dt>One client is one session</dt><dd>Requests serialize through an internal queue, and concurrent callers share the same TCP connection. Use one client per worker, or a pool.</dd><dt>No automatic reconnect</dt><dd>A dropped socket raises an exception, and you reconnect explicitly. ResilientHoloDbClient does this for you when you use it.</dd><dt>Transient and application errors differ</dt><dd>HoloRemoteException (SQL errors, authentication failures) is not retried. The resilient client retries only transport failures such as IOException and SocketException.</dd><dt>Timeouts</dt><dd>ConnectAsync takes a TimeSpan for the connection only. The resilient client adds an operation timeout to every method, a budget across all its retries.</dd></dl>
+  
+  
+  
+  
+  
+  
+  
+</div></section><section class="sec doc-sec" aria-labelledby="protocol"><div class="wrap">
+  <div class="sec-head"><span class="sec-dot cat-holodb" aria-hidden="true"></span><h2 id="protocol">The wire protocol</h2></div>
+  <div class="prose-block"><p>HoloDb.Protocol defines how the server and client communicate. Instead of sending results as JSON or row objects it keeps the columnar shape: a long[], double[] or string[] travels as a typed array. That keeps the engine&#39;s columnar advantage intact when data moves between processes. You normally get the package through HoloDb.Client. Depend on it directly only to implement a server.</p><p>The wire format is stable: opcode byte values never change, and field order and types are fixed. Clients and servers from different builds negotiate a version and fail cleanly when incompatible.</p></div>
+  <dl class="term-list"><dt>Length-prefixed TCP framing</dt><dd>Safe message boundaries, with frame size limits and count bounds checks that stop a hostile length prefix from forcing a huge allocation.</dd><dt>Binary columnar codec</dt><dd>Typed long, double and string arrays in little-endian format. Non-columnar results (joins, GROUP BY) are packed in a compact binary row format.</dd><dt>Request and response dispatch</dt><dd>Opcodes for Hello (handshake), Exec (SQL), BulkLoad, Stats and Ping.</dd><dt>Error semantics</dt><dd>Protocol errors (corrupt or malformed bytes) are distinct from query errors (bad SQL, a constraint violation), so a caller knows whether to retry.</dd><dt>Transport-agnostic</dt><dd>It works over TCP, TLS or any duplex Stream. The protocol provides no encryption: TLS is the transport layer&#39;s job, and the authentication token travels in the Hello handshake as UTF-8, so run it over TLS.</dd></dl>
+  
+  
+  
+  <div class="prose-block"><p>A columnar query returns column arrays, not rows. If you expect row-by-row iteration, read the columns by position as above, or use Rows to materialise dictionaries.</p></div>
+  <div class="code"><div class="code-bar"><span>Read a columnar result without row unpacking</span><button class="copy" type="button" aria-label="Copy Read a columnar result without row unpacking">copy</button></div><pre><code class="language-csharp">using HoloDb.Client;
+
+// Reading a columnar result without row unpacking (compile-checked here; it needs a server to run)
+await using var client = await HoloDbClient.ConnectAsync(&quot;localhost&quot;, 5433, new HoloDbClientOptions { AuthToken = &quot;mytoken&quot; });
+var result = await client.ExecuteAsync(&quot;SELECT id, price FROM prices&quot;);
+
+if (result.IsColumnar)
+{
+    // column 0 is a long, column 1 is a double
+    for (int r = 0; r &lt; result.RowCount; r++)
+        Console.WriteLine($&quot;ID {result.GetLong(r, 0)}: price {result.GetDouble(r, 1)}&quot;);
+}</code></pre></div><div class="code"><div class="code-bar"><span>One request in a server loop</span><button class="copy" type="button" aria-label="Copy One request in a server loop">copy</button></div><pre><code class="language-csharp">using HoloDb;
+using HoloDb.Protocol;
+
+// A server loop built on the wire protocol (compile-checked here; it needs a connected stream to run)
+async Task HandleOneRequest(Stream networkStream, HoloDbService engine, CancellationToken ct)
+{
+    var payload = await Wire.ReadFrameAsync(networkStream, ct);
+    var request = HoloProtocol.DecodeRequest(payload);
+
+    if (request.Op == WireOp.Exec)
+    {
+        var result = await engine.ExecuteAsync(request.Sql);
+        var response = HoloProtocol.Result(result);
+        await Wire.WriteFrameAsync(networkStream, response, ct);
+    }
+}
+Console.WriteLine(nameof(HandleOneRequest));</code></pre></div>
+  
+  
+</div></section>
+</main>
+<footer class="site-footer"><div class="wrap">
+  <div class="foot-grid">
+    <div><h2>Products</h2><ul><li><a href="/phasor/">Phasor</a></li><li><a href="/evalapp/">EvalApp</a></li><li><a href="/holodb/">HoloDb</a></li><li><a href="/algformer/">AlgFormer</a></li><li><a href="/prism/">Prism</a></li><li><a href="/prose/">Prose</a></li><li><a href="/tracer/">Tracer</a></li><li><a href="/holovoxel/">HoloVoxel</a></li></ul></div>
+    <div><h2>Tools</h2><ul><li><a href="/tools/analyst/">The Analyst</a></li><li><a href="/tools/creature/">The Creature</a></li><li><a href="/tools/forecaster/">The Forecaster</a></li><li><a href="/tools/prism/">Prism</a></li><li><a href="/tools/stories/">Nano Stories</a></li><li><a href="/tools/cartographer/">The Cartographer</a></li><li><a href="/tools/prose/">Prose</a></li><li><a href="/tools/council-spending/">Council Spending Scanner</a></li></ul></div>
+    <div><h2>Learn</h2><ul><li><a href="/evidence/">Evidence</a></li><li><a href="/research/">Research</a></li><li><a href="/products/">All products</a></li><li><a href="/tools/">All tools</a></li></ul></div>
+    <div><h2>Company</h2><ul><li><a href="/partner/">Partner with us</a></li><li><a href="/licence/">Licence</a></li><li><a href="/ai/">For AI readers</a></li><li><a href="https://www.nuget.org/profiles/evaluatedapplications" rel="noopener">NuGet</a></li></ul></div>
+    <div><h2>Machine-readable</h2><ul><li><a href="/llms.txt">llms.txt</a></li><li><a href="/llms-full.txt">llms-full.txt</a></li><li><a href="/sitemap.xml">sitemap.xml</a></li></ul></div>
+  </div>
+  <div class="foot-base"><span>Evaluated Applications · .NET libraries · England</span><span class="mono">© 2026 Evaluated Applications</span></div>
+</div></footer>
+
+<script src="/assets/site.js?v=3190ebab" defer></script>
+
+</body>
+</html>

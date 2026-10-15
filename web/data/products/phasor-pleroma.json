@@ -1,0 +1,96 @@
+{
+  "title": "The Pleroma",
+  "label": "Pleroma",
+  "description": "The Pleroma is a fixed-size array of exact integers that stores a multiset of items and answers many kinds of query exactly, refusing past its key capacity.",
+  "h1": "The Pleroma: one exact hologram, many views",
+  "intro": "A fixed-size array of exact integers that stores a multiset of items, and answers counts by key, by flag word, by Hamming distance and by time from slices of that one array.",
+  "maturity": "Experimental API",
+  "sections": [
+    {
+      "id": "what-it-is",
+      "title": "What it is",
+      "paragraphs": [
+        "The Pleroma is a fixed-size array of exact integers (finite-field arithmetic) that stores a multiset of items. Each item is a key, optionally with flag bits, an ordering and a timestamp. One array answers many queries: counts by key, by flag word, by Hamming distance, and joint flag-and-time counts. Key queries refuse past capacity. The others never return a wrong count within the field's range.",
+        "The store holds a harmonic transform on the product of these groups: the key cycle, the flag cube, the symmetric group and the time cycle. A hologram is the transform itself, and each component of the transform is called a harmonic. The store keeps only the harmonics its views need, and each view reads its own slice of the array and nothing else."
+      ]
+    },
+    {
+      "id": "faces",
+      "title": "The three faces",
+      "paragraphs": [ "A Pleroma view is one of three faces of the same array." ],
+      "list": [
+        { "term": "Syzygy (the key cycle)", "text": "Key-addressed lookup: counts per key, and whole items (key, flags, arrangement and time together) with signed counts. It refuses past KeyCapacity distinct keys, returning false rather than a wrong answer." },
+        { "term": "Monad (the order face, S_k, 2 to 5)", "text": "Counts per arrangement of up to 5 things, even minus odd, and superposed readings of arrangement queries. Exact while counts stay within the field's range." },
+        { "term": "Ouroboros (the flag cube, up to 16 bits)", "text": "Counts per flag word, items within Hamming distance r of a query, the nearest words, and joint counts over flags and time. Exact while counts stay within the field's range." }
+      ]
+    },
+    {
+      "id": "grid",
+      "title": "The operation grid",
+      "paragraphs": [
+        "The Pleroma implements a grid of operations on one exact hologram: {cells} cells, {rungs} rungs by 3 faces, plus a lid and the relation and charge lattices. Each rung is a family of operations, one per face. Every cell is a public member of Pleroma with property tests against brute-force or naive implementations, and every whole-store operation applies to all items in one pass.",
+        "The pyramid on the Phasor page draws the same grid in three dimensions, with each cell's API and evidence."
+      ],
+      "grid": "pleroma-map",
+      "more": { "label": "Open the interactive map", "href": "/phasor/#overview" }
+    },
+    {
+      "id": "superposition",
+      "title": "Superposition: one store, many items",
+      "paragraphs": [
+        "One Pleroma holds many items at once. Every whole-store operation then applies to all of them in a single pass, and the cost of that pass does not depend on the number of items stored. Mixing different harmonic permutations (key scaling, bit maps and conjugation, rung 5) costs one pass per term.",
+        "The example holds three items with key capacity 4, then applies one kernel of 1x identity plus 2x (flip flag bit 0, age 1 tick). Press Replay to watch the pass move through the store, or switch between the counts before and after."
+      ],
+      "diagram": { "id": "pleroma-superposition", "title": "One pass, every item", "lede": "Counts per flag word, counts per tick and the flags by time cells, before and after the pass. Every number is read from the real store." },
+      "paragraphsAfter": [ "The kernel applies exactly the store you would get by moving every item by every element and adding the copies. The measured cost of the pass is on the evidence page, beside the cost of doing it item by item." ],
+      "snippets": [ { "source": "snippets/phasor-superposition.cs", "output": "snippets/phasor-superposition.out.txt", "label": "The code behind the example" } ],
+      "more": { "label": "Costs and checks", "href": "/phasor/evidence/costs/" }
+    },
+    {
+      "id": "capacity",
+      "title": "The capacity rule: 2K+1, and the refusal",
+      "paragraphs": [
+        "A Pleroma with key capacity K stores exactly 2K+1 harmonics per key line. Any store of K or fewer keys is decoded exactly, by Berlekamp-Massey syndrome decoding as in Reed-Solomon codes. All K items are held at once in one 2K+1 entry array, and reading any face (flags, arrangements, times) gives exact counts for all of them.",
+        "Past capacity, decoding fails at K+1 keys and returns false instead of guessing, so the store never returns a wrong answer. Add keys below to see what the package returned for each number of distinct keys."
+      ],
+      "diagram": { "id": "pleroma-capacity", "title": "Capacity K = 4", "lede": "TryKeys results recorded from the real store for 0 to 9 distinct keys." }
+    },
+    {
+      "id": "bind-attend",
+      "title": "Bind and Attend",
+      "paragraphs": [
+        "store.Bind(other) binds every pair of items from two stores in one pass: keys add (mod the key space), flags XOR, arrangements compose, ticks add and counts multiply. The cost is one matrix product per order representation, not per pair of items.",
+        "Attend(query, face) reads three things from one contraction of the store for a flag predicate (an exact match, a partial match on a mask, or any Boolean function). Counts per value are the exact counts at each matched flag word, arrangement or tick. Shares are those counts divided by the total, summing to 1. Parity is the sign of the total. The cost is one spectrum and one inner product, whatever the number of items."
+      ],
+      "snippets": [ { "source": "snippets/phasor-bind.cs", "output": "snippets/phasor-bind.out.txt", "label": "Bind with a one-item store" } ]
+    },
+    {
+      "id": "keys-and-bits",
+      "title": "Keys, bit maps and exact checks",
+      "list": [
+        { "term": "Shift, scale and combine keys", "text": "ShiftKeys(k) adds k to every key in place. ScaleKeys(u) multiplies every key by a unit, or gathers several keys to one for a non-unit. CombineCycles(a, b) joins two stores on coprime key cycles by the Chinese remainder theorem. Scaling and combining need the optional CompleteKeys configuration." },
+        { "term": "Frobenius and shift registers", "text": "Frobenius(modulus, steps) squares every flag word as a polynomial over GF(2), and ShiftRegister(polynomial, steps) steps every word through a linear shift register, each exactly and in one pass." },
+        { "term": "Exact repair and redundancy", "text": "ReservedKeys lets Verify detect and Repair rebuild up to r lost or corrupted key-line harmonics. CheckPrime mirrors every cell in a second prime so VerifyCheck detects any corruption of one copy. PleromaParity keeps the exact sum of a group of stores and rebuilds any one lost store." },
+        { "term": "Dense and sparse pages", "text": "With CompleteKeys, a store is a dense page of up to 4,096 slots where Count and Counts read every slot exactly in one transform. PleromaSparsePage holds exact counts over keys anywhere in a huge key set in memory proportional to the keys present." }
+      ]
+    },
+    {
+      "id": "used-by",
+      "title": "Built on the Pleroma",
+      "paragraphs": [
+        "The HoloDb holographic plane uses the Pleroma as its data store. COUNT, SUM, MIN, MAX, GROUP BY, HAVING, COUNT DISTINCT, WHERE, JOIN and any Boolean predicate are exact on it."
+      ],
+      "more": { "label": "HoloDb", "href": "/holodb/" }
+    },
+    {
+      "id": "prior-art",
+      "title": "Prior art",
+      "list": [
+        { "term": "Reed-Solomon and BCH codes", "text": "Syndrome decoding (Reed and Solomon 1960, Berlekamp 1968, Massey 1969)." },
+        { "term": "Berlekamp-Massey", "text": "The algorithm for finding minimal polynomials that the key decode uses." },
+        { "term": "PinSketch and minisketch", "text": "Set sketches built on the same construction (Talbot and others 2012, Poinsot and others 2017)." },
+        { "term": "Holographic reduced representations", "text": "Plate's 1995 representation and its phase refinement, the approximate store the Pleroma is compared with." }
+      ]
+    }
+  ]
+}

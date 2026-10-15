@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The Four-Token Ceiling | Evaluated Applications</title>
+<meta name="description" content="A language model limited to four tokens of context stops improving its top-guess margin at about round 48,000 while calibration keeps changing.">
+<link rel="canonical" href="https://evaluatedapplications.github.io/research/context-four/">
+
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Evaluated Applications">
+<meta property="og:title" content="The Four-Token Ceiling | Evaluated Applications">
+<meta property="og:description" content="A language model limited to four tokens of context stops improving its top-guess margin at about round 48,000 while calibration keeps changing.">
+<meta property="og:url" content="https://evaluatedapplications.github.io/research/context-four/">
+<meta name="twitter:card" content="summary">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%23f0796a'/%3E%3Cstop offset='.5' stop-color='%237bd86a'/%3E%3Cstop offset='1' stop-color='%23c07dff'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='32' height='32' rx='7' fill='%23050608'/%3E%3Cpath d='M16 5L27 26H5Z' fill='none' stroke='url(%23g)' stroke-width='2' stroke-linejoin='round'/%3E%3C/svg%3E">
+<script>document.documentElement.classList.add('js')</script>
+<link rel="stylesheet" href="/assets/ea.css?v=93cf72d0">
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"Article","headline":"The Four-Token Ceiling","description":"What a language model builds when it can only ever see four tokens at a time, where its output metrics stop moving, and which internal measures keep changing after that.","url":"https://evaluatedapplications.github.io/research/context-four/","keywords":"context length, small models","about":["context length","small models"],"author":{"@id":"https://evaluatedapplications.github.io/#org"},"publisher":{"@id":"https://evaluatedapplications.github.io/#org"},"mainEntityOfPage":"https://evaluatedapplications.github.io/research/context-four/"}</script><script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Home","item":"https://evaluatedapplications.github.io/"},{"@type":"ListItem","position":2,"name":"Research","item":"https://evaluatedapplications.github.io/research/"},{"@type":"ListItem","position":3,"name":"The Four-Token Ceiling","item":"https://evaluatedapplications.github.io/research/context-four/"}]}</script>
+
+</head>
+<body class="" data-page="research-article">
+<a class="skip" href="#main">Skip to content</a>
+<div class="beam" aria-hidden="true"></div>
+<header class="site-header"><div class="wrap nav" data-nav>
+  <a class="brand" href="/"><svg class="mark" viewBox="0 0 32 32" aria-hidden="true"><defs><linearGradient id="m" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#f0796a"/><stop offset=".166" stop-color="#f0a15a"/><stop offset=".333" stop-color="#e6c450"/><stop offset=".5" stop-color="#7bd86a"/><stop offset=".666" stop-color="#4aa3ff"/><stop offset=".833" stop-color="#7d7dff"/><stop offset="1" stop-color="#c07dff"/></linearGradient></defs><path d="M16 5L27 26H5Z" fill="none" stroke="url(#m)" stroke-width="2" stroke-linejoin="round"/></svg>Evaluated Applications</a>
+  <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="site-links">Menu</button>
+  <nav aria-label="Main"><ul class="nav-links" id="site-links">
+    <li><a href="/products/">Products</a></li><li><a href="/tools/">Tools</a></li><li><a href="/evidence/">Evidence</a></li><li><a href="/research/" aria-current="page">Research</a></li>
+    <li><a class="nav-cta" href="/partner/">Partner with us</a></li>
+    <li><a href="https://www.nuget.org/profiles/evaluatedapplications" rel="noopener">NuGet<span class="sr-only"> (external)</span></a></li>
+  </ul></nav>
+</div></header>
+<main id="main" tabindex="-1">
+
+<header class="page-head"><div class="wrap">
+<nav class="crumbs" aria-label="Breadcrumb"><ol><li><a href="/">Home</a></li><li><a href="/research/">Research</a></li><li aria-current="page">The Four-Token Ceiling</li></ol></nav>
+<p class="eyebrow">context length, small models</p>
+<h1 class="wide">The Four-Token Ceiling</h1>
+<p class="lede">What a language model builds when it can only ever see four tokens at a time, where its output metrics stop moving, and which internal measures keep changing after that.</p>
+<ul class="facts"><li class="fact">4 min read</li><li class="fact">6 sections</li><li class="fact">2 tables</li></ul>
+</div></header>
+<section class="sec" id="finding" aria-labelledby="h-finding"><div class="wrap">
+  <div class="finding"><h2 id="h-finding" class="finding-label">Finding</h2><p class="finding-text">A holographic language model pinned to four tokens of context stops improving its top-guess margin at about round 48,000 and stops adding spelled words between rounds 15,000 and 21,000, while calibration and the specialisation of one weight bank keep changing through more than 80,000 rounds.</p></div>
+</div></section>
+<section class="sec fig-sec" id="diagram" aria-label="What stopped moving, and when"><div class="wrap"><figure class="fig" data-diagram="round-timeline" data-diagram-id="dg">
+  <div class="fig-head"><h2>What stopped moving, and when</h2><p>Each row is a measure from the run. Solid means it was still changing, dashed means it had stopped. Move the round to see which measures were flat at that point. Every round is taken from the article.</p></div>
+  <div class="fig-body">
+    
+    <div class="dia-stage" id="dg-stage"><svg class="rt-svg" viewBox="0 0 760 280" role="img" aria-labelledby="rt-t rt-d" preserveAspectRatio="xMidYMid meet"><title id="rt-t">What stopped moving, and when</title><desc id="rt-d">At round 80,000: flat or capped: Gap between top and second-best guess; Effective vocabulary; Collapse into a repeat loop. Still changing: Specialisation of one weight bank; Calibration. The table below lists each measure with its rounds.</desc><line class="gl" x1="262.0" y1="20" x2="262.0" y2="252"/><text class="tk" x="262.0" y="266" text-anchor="middle">0</text><line class="gl" x1="376.5" y1="20" x2="376.5" y2="252"/><text class="tk" x="376.5" y="266" text-anchor="middle">20,000</text><line class="gl" x1="491.0" y1="20" x2="491.0" y2="252"/><text class="tk" x="491.0" y="266" text-anchor="middle">40,000</text><line class="gl" x1="605.5" y1="20" x2="605.5" y2="252"/><text class="tk" x="605.5" y="266" text-anchor="middle">60,000</text><line class="gl" x1="720.0" y1="20" x2="720.0" y2="252"/><text class="tk" x="720.0" y="266" text-anchor="middle">80,000</text><text class="ax" x="262" y="14">A battery of tests ran on a fresh checkpoint every 3,000 rounds</text><g><text class="rl" x="252" y="52" text-anchor="end">Gap between top and second-best guess</text><rect class="bar stopped" x="262.0" y="38" width="274.8" height="14" rx="3"/><line class="dash" x1="536.8" y1="45" x2="720.0" y2="45"/><text class="st flat" x="726.0" y="35">flat</text></g><g><text class="rl" x="252" y="96" text-anchor="end">Effective vocabulary</text><rect class="bar stopped" x="262.0" y="82" width="120.2" height="14" rx="3"/><rect class="bar cap" x="347.9" y="82" width="34.4" height="14" rx="3"/><line class="dash" x1="382.2" y1="89" x2="720.0" y2="89"/><text class="st flat" x="726.0" y="79">flat</text></g><g><text class="rl" x="252" y="140" text-anchor="end">Collapse into a repeat loop</text><line class="dash" x1="262.0" y1="133" x2="720.0" y2="133"/><text class="st flat" x="726.0" y="123">flat</text></g><g><text class="rl" x="252" y="184" text-anchor="end">Specialisation of one weight bank</text><rect class="bar moving" x="262.0" y="170" width="458.0" height="14" rx="3"/><text class="st changing" x="726.0" y="167">changing</text></g><g><text class="rl" x="252" y="228" text-anchor="end">Calibration</text><rect class="bar moving" x="536.8" y="214" width="183.2" height="14" rx="3"/><text class="st changing" x="726.0" y="211">changing</text></g><line class="mk" x1="720.0" y1="20" x2="720.0" y2="252"/><text class="ax" x="491" y="279" text-anchor="middle">training rounds</text></svg></div>
+    <div class="dia-controls dia-ui" hidden><label class="dia-field">Round <input type="range" min="0" max="80000" step="1000" value="80000" data-ctl="round" aria-describedby="dg-read"></label><output class="dia-field" data-ctl="rv">80,000</output></div>
+<p class="dia-readout dia-ui" id="dg-read" data-ctl="readout" role="status" hidden>At round 80,000: flat or capped: Gap between top and second-best guess; Effective vocabulary; Collapse into a repeat loop. Still changing: Specialisation of one weight bank; Calibration.</p>
+    <details class="dia-data"><summary>Data behind the diagram</summary><div class="tbl-wrap"><table class="tbl"><caption>Each measure and the round at which it stopped changing, restated from the article</caption><thead><tr><th scope="col">Measure</th><th scope="col">When</th><th scope="col">Note</th></tr></thead><tbody><tr><th scope="row">Gap between top and second-best guess</th><td>Stopped at about round 48,000</td><td>Flat from about round 48,000: the middle-third and final-third averages are equal.</td></tr><tr><th scope="row">Effective vocabulary</th><td>Stopped at about round 21,000</td><td>Capped between rounds 15,000 and 21,000, with no growth in the 60,000 or more rounds after.</td></tr><tr><th scope="row">Collapse into a repeat loop</th><td>Flat throughout</td><td>High at the earliest checkpoint and unchanged through the run.</td></tr><tr><th scope="row">Specialisation of one weight bank</th><td>Still changing at round 80,000</td><td>Rises throughout, with zero reversals, linear and not accelerating.</td></tr><tr><th scope="row">Calibration</th><td>Still changing at round 80,000</td><td>Keeps improving after the primary metric goes flat.</td></tr></tbody></table></div></details>
+    <script type="application/json" data-diagram-data>{"schema":"ea-diagram/1","kind":"round-timeline","article":"context-four","end":80000,"battery":3000,"items":[{"label":"Gap between top and second-best guess","state":"stopped","stop":48000,"note":"Flat from about round 48,000: the middle-third and final-third averages are equal."},{"label":"Effective vocabulary","state":"stopped","capFrom":15000,"stop":21000,"note":"Capped between rounds 15,000 and 21,000, with no growth in the 60,000 or more rounds after."},{"label":"Collapse into a repeat loop","state":"flat","note":"High at the earliest checkpoint and unchanged through the run."},{"label":"Specialisation of one weight bank","state":"moving","note":"Rises throughout, with zero reversals, linear and not accelerating."},{"label":"Calibration","state":"moving","from":48000,"note":"Keeps improving after the primary metric goes flat."}]}</script>
+  </div>
+  <figcaption class="fig-cap">Drawn from the numbers in this article: the tables below and the figures in its text. Nothing is measured on this page.</figcaption>
+</figure></div></section>
+<section class="sec"><div class="wrap">
+  <nav class="toc" aria-labelledby="toc-h"><h2 id="toc-h">On this page</h2><ul><li><a href="#finding">The finding</a></li><li><a href="#diagram">What stopped moving, and when</a></li><li><a href="#setup">Setup</a></li><li><a href="#evidence-plateau">Evidence: what stopped moving</a></li><li><a href="#evidence-moving">Evidence: what kept moving</a></li><li><a href="#evidence-failures">Evidence: measurements that did not measure what they appeared to</a></li><li><a href="#practice">What this means for a small model</a></li><li><a href="#limits">Limits</a></li><li><a href="#refuted-by">Refuted by</a></li><li><a href="#related">Related</a></li></ul></nav>
+</div></section>
+<section class="sec" id="setup" aria-labelledby="h-setup"><div class="wrap">
+  <div class="sec-head"><h2 id="h-setup">Setup</h2></div>
+  <div class="prose-block"><p>The model is a fresh set of weights with the same shape and the same real corpus as the main lineage. Its context is fixed at exactly 4 tokens for the whole run, and no schedule grows it. The architecture runs one fixed weight matrix through eight refinement passes on every token, and the state after each pass can be inspected as well as the final answer.</p><p>Four tokens of context cannot carry long-range coherence: a model that sees only the last four tokens has no mechanism for staying consistent with a subject from six tokens back. The run is therefore graded on spelling and on local structure, not on whether it writes a sensible paragraph.</p><p>The extrapolation multiplier is the length of the longest correct stretch of output divided by the four-token window. A correct stretch longer than the window cannot be read off the input and has to be reconstructed from the weights, so the multiplier separates building from repeating within the window.</p><p>A permanent battery of tests runs directly against saved checkpoints. It was run every 3,000 rounds on a fresh checkpoint out past 80,000 rounds, and every snapshot from the run is kept.</p></div>
+  
+  
+</div></section><section class="sec" id="evidence-plateau" aria-labelledby="h-evidence-plateau"><div class="wrap">
+  <div class="sec-head"><h2 id="h-evidence-plateau">Evidence: what stopped moving</h2></div>
+  <div class="prose-block"><p>Three measures stopped moving. The primary signal is the gap between the model&#39;s top guess and its second-best guess, a proxy for whether the runner-up is still catching the winner. It plateaued at about round 48,000. Splitting the run into thirds and comparing the middle third&#39;s average with the final third&#39;s gives equal values: the signal is flat, not slowly rising.</p><p>The effective vocabulary, the set of corpus words the model reliably spells, capped between rounds 15,000 and 21,000 and did not grow in the 60,000 or more rounds after. The measurement was made twice, independently, and both gave the same result.</p><p>The rate at which plain generation falls into a repeat loop reached a floor. At the latest checkpoints a plain generation run falls into a repeat loop in the large majority of runs. A long-form test on this run shows the collapse rate was already high at the earliest checkpoints and stayed in that band. A lower collapse rate at larger contexts, seen in a different and longer run, does not carry over to this one.</p></div>
+  
+  <div class="tbl-wrap"><table class="tbl"><caption>Measures that stopped moving at a context of four tokens</caption>
+<thead><tr><th scope="col">Measure</th><th scope="col" class="num-h">Behaviour</th><th scope="col" class="num-h">Round</th></tr></thead>
+<tbody><tr><th scope="row">Gap between top and second-best guess</th><td>Flat; middle-third average equals final-third average</td><td>about 48,000</td></tr><tr><th scope="row">Effective vocabulary</th><td>Capped; no growth in the following 60,000 or more rounds; confirmed by two independent measurements</td><td>15,000 to 21,000</td></tr><tr><th scope="row">Collapse into a repeat loop</th><td>High at the earliest checkpoints and unchanged through the run</td><td>Present from the first checkpoint</td></tr></tbody></table></div>
+</div></section><section class="sec" id="evidence-moving" aria-labelledby="h-evidence-moving"><div class="wrap">
+  <div class="sec-head"><h2 id="h-evidence-moving">Evidence: what kept moving</h2></div>
+  <div class="prose-block"><p>Two things never plateaued across the 80,000 or more rounds. The first is the specialisation of one weight bank: its channels specialise harder throughout the run, with zero reversals. One channel in that bank, the no-relative-shift channel, was the most active channel in two separate investigations on two different checkpoints.</p><p>That channel is consistent with a gate: it appears to decide, per token, how much of the eight-pass iterative budget is spent on real work and how much is served from an embedding-level guess. Part of the model&#39;s numeric encoding is a fixed codec that has not been trained since round one, and the model routes through it more over time. The codec does not change; the model leans on it more. This reading is an interpretation of the channel&#39;s activity, not a separately measured result.</p><p>The second is calibration. When the top guess is wrong, the rank of the correct answer and the probability mass placed near it kept improving after the primary metric went flat. The model did not get better at being right; it got better at being usefully wrong.</p><p>The specialisation trend is steady and linear, not accelerating. Acceleration is the signature of an approaching sudden transition of the kind called grokking, so the trend gives no sign of one approaching. The general phenomenon of a flat visible output over a reorganising interior is the grokking pattern; what this run adds is its observation in this architecture.</p></div>
+  
+  <div class="tbl-wrap"><table class="tbl"><caption>Measures that kept changing after the primary metric went flat</caption>
+<thead><tr><th scope="col">Measure</th><th scope="col" class="num-h">Behaviour over 80,000 or more rounds</th></tr></thead>
+<tbody><tr><th scope="row">Specialisation of one weight bank</th><td>Rises throughout, zero reversals, linear and not accelerating</td></tr><tr><th scope="row">No-relative-shift channel</th><td>Most active channel on two checkpoints in two separate investigations</td></tr><tr><th scope="row">Calibration (rank and probability mass of the correct answer when the top guess is wrong)</th><td>Keeps improving after the primary metric is flat</td></tr></tbody></table></div>
+</div></section><section class="sec" id="evidence-failures" aria-labelledby="h-evidence-failures"><div class="wrap">
+  <div class="sec-head"><h2 id="h-evidence-failures">Evidence: measurements that did not measure what they appeared to</h2></div>
+  <div class="prose-block"><p>Raw accuracy under corrupted input rises with more training, which reads as growing robustness. It is not robustness: the model increasingly echoes the last visible token regardless of what was corrupted, and the corruption filler used coincided with the model&#39;s favourite echo target. The rise is an artefact of the test design.</p><p>The reduced collapse rate remembered from a different run does not appear in this run when tested directly with a long-form test (see the plateau section).</p></div>
+  
+  
+</div></section><section class="sec" id="practice" aria-labelledby="h-practice"><div class="wrap">
+  <div class="sec-head"><h2 id="h-practice">What this means for a small model</h2></div>
+  <div class="prose-block"><p>Compare the middle and final thirds of the margin signal before deciding a size is finished; a slow climb and a plateau look alike on a curve and differ in that comparison.</p><p>Once the effective vocabulary has capped, more rounds at the same context do not add spelled words. Further capability needs a change other than more rounds at that size.</p><p>Track calibration separately from top-guess accuracy. It can keep improving under a flat headline metric.</p><p>Do not read a rise in accuracy under corrupted input as robustness unless the filler is different from the token the model echoes.</p></div>
+  
+  
+</div></section><section class="sec" id="limits" aria-labelledby="h-limits"><div class="wrap">
+  <div class="sec-head"><h2 id="h-limits">Limits</h2></div>
+  <div class="prose-block"><p>One lineage, one shape and one corpus. The window is four tokens, so nothing here concerns long-range coherence. The extrapolation multiplier is defined here and used as the stopping test, but its measured values are not reported in this article. The gating and codec-reliance readings of the no-relative-shift channel are interpretations of activity, not isolated causal tests.</p></div>
+  
+  
+</div></section>
+<section class="sec" id="refuted-by" aria-labelledby="h-refuted"><div class="wrap">
+  <aside class="callout warn refuted"><h2 id="h-refuted">Refuted by</h2><p>A longer run in which the margin between the top and second-best guess is higher in the final third than in the middle third; a count of reliably spelled words that grows after round 21,000; or a reversal in the specialisation trend of the weight bank.</p></aside>
+</div></section>
+<section class="sec" id="related" aria-labelledby="h-related"><div class="wrap">
+  <div class="sec-head"><h2 id="h-related">Related</h2></div>
+  <ul class="related-list"><li><a href="/research/context-eight/">Growing the Wrong Way</a><span>Seeding an eight-token model from fully trained four-token weights gave it no head start, and appending new context slots after the most-trained one is a structural cost that inserting them before the oldest one removes.</span></li></ul>
+</div></section>
+
+</main>
+<footer class="site-footer"><div class="wrap">
+  <div class="foot-grid">
+    <div><h2>Products</h2><ul><li><a href="/phasor/">Phasor</a></li><li><a href="/evalapp/">EvalApp</a></li><li><a href="/holodb/">HoloDb</a></li><li><a href="/algformer/">AlgFormer</a></li><li><a href="/prism/">Prism</a></li><li><a href="/prose/">Prose</a></li><li><a href="/tracer/">Tracer</a></li><li><a href="/holovoxel/">HoloVoxel</a></li></ul></div>
+    <div><h2>Tools</h2><ul><li><a href="/tools/analyst/">The Analyst</a></li><li><a href="/tools/creature/">The Creature</a></li><li><a href="/tools/forecaster/">The Forecaster</a></li><li><a href="/tools/prism/">Prism</a></li><li><a href="/tools/stories/">Nano Stories</a></li><li><a href="/tools/cartographer/">The Cartographer</a></li><li><a href="/tools/prose/">Prose</a></li><li><a href="/tools/council-spending/">Council Spending Scanner</a></li></ul></div>
+    <div><h2>Learn</h2><ul><li><a href="/evidence/">Evidence</a></li><li><a href="/research/">Research</a></li><li><a href="/products/">All products</a></li><li><a href="/tools/">All tools</a></li></ul></div>
+    <div><h2>Company</h2><ul><li><a href="/partner/">Partner with us</a></li><li><a href="/licence/">Licence</a></li><li><a href="/ai/">For AI readers</a></li><li><a href="https://www.nuget.org/profiles/evaluatedapplications" rel="noopener">NuGet</a></li></ul></div>
+    <div><h2>Machine-readable</h2><ul><li><a href="/llms.txt">llms.txt</a></li><li><a href="/llms-full.txt">llms-full.txt</a></li><li><a href="/sitemap.xml">sitemap.xml</a></li></ul></div>
+  </div>
+  <div class="foot-base"><span>Evaluated Applications · .NET libraries · England</span><span class="mono">© 2026 Evaluated Applications</span></div>
+</div></footer>
+
+<script src="/assets/site.js?v=3190ebab" defer></script>
+<script type="module" src="/assets/diagrams/round-timeline.js"></script>
+</body>
+</html>

@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>How HoloFormer works | Evaluated Applications</title>
+<meta name="description" content="HoloFormer is AlgFormer&#39;s holographic attention core. This page explains in plain terms how it stores meaning, combines ideas and remembers a whole context.">
+<link rel="canonical" href="https://evaluatedapplications.github.io/algformer/holoformer/">
+
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Evaluated Applications">
+<meta property="og:title" content="How HoloFormer works | Evaluated Applications">
+<meta property="og:description" content="HoloFormer is AlgFormer&#39;s holographic attention core. This page explains in plain terms how it stores meaning, combines ideas and remembers a whole context.">
+<meta property="og:url" content="https://evaluatedapplications.github.io/algformer/holoformer/">
+<meta name="twitter:card" content="summary">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%23f0796a'/%3E%3Cstop offset='.5' stop-color='%237bd86a'/%3E%3Cstop offset='1' stop-color='%23c07dff'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='32' height='32' rx='7' fill='%23050608'/%3E%3Cpath d='M16 5L27 26H5Z' fill='none' stroke='url(%23g)' stroke-width='2' stroke-linejoin='round'/%3E%3C/svg%3E">
+<script>document.documentElement.classList.add('js')</script>
+<link rel="stylesheet" href="/assets/ea.css?v=93cf72d0">
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Home","item":"https://evaluatedapplications.github.io/"},{"@type":"ListItem","position":2,"name":"Products","item":"https://evaluatedapplications.github.io/products/"},{"@type":"ListItem","position":3,"name":"AlgFormer","item":"https://evaluatedapplications.github.io/algformer/"},{"@type":"ListItem","position":4,"name":"How HoloFormer works","item":"https://evaluatedapplications.github.io/algformer/holoformer/"}]}</script>
+
+</head>
+<body class="cat-algformer" data-page="product-docs">
+<a class="skip" href="#main">Skip to content</a>
+<div class="beam" aria-hidden="true"></div>
+<header class="site-header"><div class="wrap nav" data-nav>
+  <a class="brand" href="/"><svg class="mark" viewBox="0 0 32 32" aria-hidden="true"><defs><linearGradient id="m" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#f0796a"/><stop offset=".166" stop-color="#f0a15a"/><stop offset=".333" stop-color="#e6c450"/><stop offset=".5" stop-color="#7bd86a"/><stop offset=".666" stop-color="#4aa3ff"/><stop offset=".833" stop-color="#7d7dff"/><stop offset="1" stop-color="#c07dff"/></linearGradient></defs><path d="M16 5L27 26H5Z" fill="none" stroke="url(#m)" stroke-width="2" stroke-linejoin="round"/></svg>Evaluated Applications</a>
+  <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="site-links">Menu</button>
+  <nav aria-label="Main"><ul class="nav-links" id="site-links">
+    <li><a href="/products/" aria-current="page">Products</a></li><li><a href="/tools/">Tools</a></li><li><a href="/evidence/">Evidence</a></li><li><a href="/research/">Research</a></li>
+    <li><a class="nav-cta" href="/partner/">Partner with us</a></li>
+    <li><a href="https://www.nuget.org/profiles/evaluatedapplications" rel="noopener">NuGet<span class="sr-only"> (external)</span></a></li>
+  </ul></nav>
+</div></header>
+<main id="main" tabindex="-1">
+
+<header class="page-head"><div class="wrap">
+<nav class="crumbs" aria-label="Breadcrumb"><ol><li><a href="/">Home</a></li><li><a href="/products/">Products</a></li><li><a href="/algformer/">AlgFormer</a></li><li aria-current="page">How HoloFormer works</li></ol></nav>
+<p class="eyebrow">AlgFormer how holoformer works</p>
+<h1 class="wide">How HoloFormer works</h1>
+<p class="lede">HoloFormer is the holographic attention core in AlgFormer. This page explains it in plain terms: how a token is stored, how ideas are combined, how the model thinks longer and how it remembers a whole context in one place. Each idea ends by naming the part of the model it describes.</p>
+
+</div></header>
+<nav class="subnav" aria-label="AlgFormer sections"><div class="wrap"><ul><li><a href="/algformer/">Overview</a></li><li><a href="/algformer/#quick-start">Quick start</a></li><li><a href="/algformer/#gpu">AlgFormer.Gpu</a></li><li><a href="/algformer/holoformer/" aria-current="page">How HoloFormer works</a></li><li><a href="/algformer/evidence/">Evidence</a></li></ul></div></nav>
+<section class="sec"><div class="wrap">
+  <nav class="toc" aria-labelledby="toc-h"><h2 id="toc-h">On this page</h2><ul><li><a href="#chord">A token is a chord</a></li><li><a href="#bind">Combining is playing together</a></li><li><a href="#moves">Chord moves</a></li><li><a href="#layers">A chain of arrangers</a></li><li><a href="#replay">Play it through twice</a></li><li><a href="#memory">One shared sound you tune into</a></li><li><a href="#capacity">How much one sound can hold</a></li><li><a href="#compare">Side by side with an ordinary transformer</a></li><li><a href="#try">Try it</a></li></ul></nav>
+</div></section>
+<section class="sec doc-sec" aria-labelledby="chord"><div class="wrap">
+  <div class="sec-head"><span class="sec-dot cat-algformer" aria-hidden="true"></span><h2 id="chord">A token is a chord</h2></div>
+  <div class="prose-block"><p>Give the model a letter, a word or a number and it writes it down as a chord: a particular stack of pure tones played together. Each tone is one channel of a complex-valued vector, and the chord is the whole vector. One word is one chord and another word is another.</p><p>How many tones can a chord stack? That is the size of the instrument. A small instrument has few strings, so chords blur into one another and the model cannot tell things apart. A bigger instrument keeps chords crisp and distinct.</p></div>
+  <dl class="term-list"><dt>In the model</dt><dd>The tones are the channels, set by dModel when you construct the model. More channels keep meanings distinct.</dd></dl>
+  
+  
+  
+  
+  
+  
+  
+</div></section><section class="sec doc-sec" aria-labelledby="bind"><div class="wrap">
+  <div class="sec-head"><span class="sec-dot cat-algformer" aria-hidden="true"></span><h2 id="bind">Combining is playing together</h2></div>
+  <div class="prose-block"><p>The model has essentially one core move. To join two things it plays their chords together, and they merge into a single new chord. That is how a word is tied to its role, or a question to its subject.</p><p>Numbers are chords tuned so that playing two of them together adds their values. The chord for 5 played with the chord for 3 decodes as 8. The arithmetic is in the sound itself, so the model does not have to memorise a times table the way an ordinary transformer would. The program below is the Phasor codec that supplies the chords.</p></div>
+  
+  
+  
+  
+  
+  <div class="code"><div class="code-bar"><span>Binding two numbers and reading a bundle back</span><button class="copy" type="button" aria-label="Copy Binding two numbers and reading a bundle back">copy</button></div><pre><code class="language-csharp">using Phasor;
+
+// Encode a number and some symbols
+double[] five = PhasorCodec.Encode(&quot;5&quot;);
+double[] three = PhasorCodec.Encode(&quot;3&quot;);
+double[] age = PhasorCodec.Encode(&quot;age&quot;);
+double[] name = PhasorCodec.Encode(&quot;name&quot;);
+double[] hello = PhasorCodec.Encode(&quot;hello&quot;);
+
+// Bind two numbers: adds them on the linear band
+double[] fivePlusThree = PhasorCodec.Bind(five, three);
+Console.WriteLine($&quot;5 + 3 = {PhasorCodec.DecodeSum(fivePlusThree, max: 10)}&quot;);
+
+// Bind each value to a role, bundle the pairs into one record, then unbind a role to read its value back
+double[] record = PhasorCodec.Bundle(PhasorCodec.Bind(age, five), PhasorCodec.Bind(name, hello));
+double[] ageField = PhasorCodec.Unbind(record, age);
+Console.WriteLine($&quot;age field matches 5 better than 3: {PhasorCodec.Correlate(ageField, five) &gt; PhasorCodec.Correlate(ageField, three)}&quot;);
+
+// For larger workloads and similarity search, HoloCodec is SIMD and configurable in width
+var codec = new HoloCodec(dim: 1024);
+double[] encoded = codec.Encode(&quot;hello&quot;);
+Console.WriteLine($&quot;HoloCodec self-similarity is positive: {HoloCodec.Dot(encoded, codec.Encode(&quot;hello&quot;)) &gt; 0}&quot;);</code></pre></div><div class="code out"><div class="code-bar"><span>Output</span><button class="copy" type="button" aria-label="Copy Output">copy</button></div><pre><code class="language-text">5 + 3 = 8
+age field matches 5 better than 3: True
+HoloCodec self-similarity is positive: True</code></pre></div>
+  <dl class="term-list"><dt>In the model</dt><dd>This one move is binding. For numbers, binding is addition. The codec comes from the Phasor package.</dd></dl>
+  
+</div></section><section class="sec doc-sec" aria-labelledby="moves"><div class="wrap">
+  <div class="sec-head"><span class="sec-dot cat-algformer" aria-hidden="true"></span><h2 id="moves">Chord moves</h2></div>
+  <div class="prose-block"><p>Stacking chords is not enough. The model also has to transform them, steering a question toward its answer. It does this with a small set of learned moves, each of which blends in tones from elsewhere on the instrument.</p><p>More moves let it express richer relationships. The moves are spread across the instrument rather than only nudging neighbouring strings, so it can connect distant ideas and not only adjacent notes. At least two are needed: with one move every tone only ever reads itself, and nothing can route between tones.</p></div>
+  <dl class="term-list"><dt>In the model</dt><dd>The moves are the shifts of the relation bank, spread by golden-ratio spacing so a few of them cover the whole range. HoloShape.ShiftsFor chooses how many a given context needs.</dd></dl>
+  
+  
+  
+  
+  
+  
+  
+</div></section><section class="sec doc-sec" aria-labelledby="layers"><div class="wrap">
+  <div class="sec-head"><span class="sec-dot cat-algformer" aria-hidden="true"></span><h2 id="layers">A chain of arrangers</h2></div>
+  <div class="prose-block"><p>The sound is not shaped all at once. It flows through several stages in a row, and each stage restyles it with its own set of moves before handing it on, the way a melody passes through a chain of arrangers.</p></div>
+  <dl class="term-list"><dt>In the model</dt><dd>The stages are the layers. Depth is how many times the sound is reworked.</dd></dl>
+  
+  
+  
+  
+  
+  
+  
+</div></section><section class="sec doc-sec" aria-labelledby="replay"><div class="wrap">
+  <div class="sec-head"><span class="sec-dot cat-algformer" aria-hidden="true"></span><h2 id="replay">Play it through twice</h2></div>
+  <div class="prose-block"><p>Thinking, for this model, is replaying. Each stage can play its part again over what it just laid down, and only then hand the sound on. The first pass sketches and the second develops the sketch.</p><p>Replaying costs no extra parameters, because the same stage is simply applied again. The model can think harder about a short input by playing it through more times, and a newly added stage can be eased in by letting its replay weight start at zero and ramp up.</p></div>
+  <dl class="term-list"><dt>In the model</dt><dd>The repeats are the K weight-tied iterations of each layer (the StackIter family), with a per-layer alpha that ramps a new layer in.</dd></dl>
+  
+  
+  
+  
+  
+  
+  
+</div></section><section class="sec doc-sec" aria-labelledby="memory"><div class="wrap">
+  <div class="sec-head"><span class="sec-dot cat-algformer" aria-hidden="true"></span><h2 id="memory">One shared sound you tune into</h2></div>
+  <div class="prose-block"><p>This is where HoloFormer parts company with an ordinary transformer. A transformer makes every position compare itself with every earlier position: a crowded room in which everyone talks to everyone, and the effort grows with the square of the conversation.</p><p>HoloFormer folds everything it has heard into one running sound per layer. Each position binds its key to its value and adds the result to the bundle. To recall something, the query is unbound from the bundle: the matching part rings out and the rest averages toward silence, like finding one station on a radio dial.</p><p>One bundle holds the whole context, so reading a prompt grows with its length rather than its square, and each new token costs the same however long the context has become. The chart on the overview page measures both cores. The held memory can also be listened to: the inspectors read off what the final query resonated with and decode it to tokens.</p></div>
+  <dl class="term-list"><dt>In the model</dt><dd>This is holographic memory: retrieval by resonance instead of every-position-to-every-position comparison. The incremental cache of this core is one running bundle per layer.</dd></dl>
+  
+  
+  
+  
+  
+  
+  
+</div></section><section class="sec doc-sec" aria-labelledby="capacity"><div class="wrap">
+  <div class="sec-head"><span class="sec-dot cat-algformer" aria-hidden="true"></span><h2 id="capacity">How much one sound can hold</h2></div>
+  <div class="prose-block"><p>Many bound pairs summed into one vector crosstalk: each read comes back with a little noise from all the others. A bundle can therefore hold a limited number of items cleanly. HoloShape reports two numbers for a shape. The crosstalk edge is the number of shifts times the width, halved. The clean capacity is the number of tokens that read back at least 90 percent clean, which is about 12 percent of the edge.</p><p>Models are sized so that the context sits at a chosen fraction of the edge, and the default is a quarter. At a width of 128, HoloShape derives a context of 2,048 tokens. The crosstalk edge there is 8,192 tokens and 983 tokens read back clean. The constants behind the derived shapes are single measurements, so treat the shape as a starting point.</p></div>
+  
+  
+  
+  
+  
+  <div class="code"><div class="code-bar"><span>Sizing a shape with HoloShape</span><button class="copy" type="button" aria-label="Copy Sizing a shape with HoloShape">copy</button></div><pre><code class="language-csharp">using PrismFormer;
+
+int ctx = 64, dim = 32;
+int shifts = HoloShape.ShiftsFor(ctx, dim);                       // the normal way to choose Shifts
+bool collides = HoloShape.ShiftsCollide(shifts, dim, golden: true);
+Console.WriteLine($&quot;ShiftsFor({ctx},{dim}) = {shifts}, collides = {collides}&quot;);
+Console.WriteLine($&quot;bind rank {HoloShape.BindRank(shifts, dim)}, reads back clean {HoloShape.CleanCapacity(shifts, dim)}&quot;);
+
+// A starting shape from a width alone. Treat it as a place to begin, not a guarantee.
+foreach (var width in new[] { 64, 128, 256 })
+{
+    var s = HoloShape.Derive(width, stackK: 2);
+    Console.WriteLine($&quot;Derive({width}): shifts {s.Shifts}, context {s.Context}, layers {s.Layers}&quot;);
+}</code></pre></div><div class="code out"><div class="code-bar"><span>Output</span><button class="copy" type="button" aria-label="Copy Output">copy</button></div><pre><code class="language-text">ShiftsFor(64,32) = 16, collides = False
+bind rank 256, reads back clean 30
+Derive(64): shifts 64, context 512, layers 3
+Derive(128): shifts 128, context 2048, layers 6
+Derive(256): shifts 256, context 8192, layers 8</code></pre></div>
+  
+  
+</div></section><section class="sec doc-sec" aria-labelledby="compare"><div class="wrap">
+  <div class="sec-head"><span class="sec-dot cat-algformer" aria-hidden="true"></span><h2 id="compare">Side by side with an ordinary transformer</h2></div>
+  
+  
+  
+  <div class="tbl-wrap"><table class="tbl"><caption>What differs between the two attention cores</caption>
+<thead><tr><th scope="col">Aspect</th><th scope="col">Ordinary transformer (softmax attention)</th><th scope="col">HoloFormer (holographic attention)</th></tr></thead>
+<tbody><tr><th scope="row">Meaning</th><td>A point in a learned space.</td><td>A chord: a vector of phases.</td></tr><tr><th scope="row">Combining ideas</th><td>Learned tables, taught every combination.</td><td>Binding: chords played together. For numbers it adds.</td></tr><tr><th scope="row">Remembering</th><td>Every position compares with every earlier position.</td><td>One running bundle per layer, read by resonance.</td></tr><tr><th scope="row">Cost of attention</th><td>Reading a prompt grows with the square of its length, and the cache grows with it.</td><td>Reading a prompt grows with its length, and the cache stays the same size.</td></tr><tr><th scope="row">Thinking longer</th><td>More layers, so more parameters.</td><td>Replay the same layer, with no new parameters.</td></tr><tr><th scope="row">Looking inside</th><td>Hidden numbers.</td><td>Inspectors read off what a query resonated with and decode it to tokens.</td></tr></tbody></table></div>
+  
+  <div class="prose-block"><p>An ordinary transformer memorises the music. This one plays it.</p></div>
+  
+  
+  
+</div></section><section class="sec doc-sec" aria-labelledby="try"><div class="wrap">
+  <div class="sec-head"><span class="sec-dot cat-algformer" aria-hidden="true"></span><h2 id="try">Try it</h2></div>
+  <div class="prose-block"><p>The holographic core takes the same constructor as the softmax core. This program trains one, serves it through the incremental cache and reads what its final query resonated with.</p></div>
+  
+  
+  
+  
+  
+  <div class="code"><div class="code-bar"><span>HoloFormer: train, serve and inspect</span><button class="copy" type="button" aria-label="Copy HoloFormer: train, serve and inspect">copy</button></div><pre><code class="language-csharp">using PrismFormer;
+
+// The holographic core has the same constructor shape. Swap the type, keep the workflow.
+var holo = new HoloFormer(vocab: 16, shifts: 4, layers: 2, maxContext: 6, dModel: 32, frozenPrefix: 0);
+
+var data = new List&lt;(int[] Ctx, int Target)&gt;
+{
+    (new[] { 1, 2, 3 }, 4),
+    (new[] { 2, 3, 4 }, 5),
+};
+double loss = holo.TrainEpoch(data, batchSize: 2, lr: 5e-2, shuffleSeed: 1);
+
+// Serve with the incremental cache: one running holographic memory per layer, so each token costs the same
+// however long the context has become.
+var cache = holo.NewCache();
+double[] afterPrompt = holo.Prime(cache, new[] { 1, 2, 3 });
+double[] afterNext = holo.Step(cache, 4);
+
+// Read the model&#39;s mind: the resonance of the final query against every earlier position, and what it retrieved.
+var alpha = new double[holo.Layers]; Array.Fill(alpha, 1.0);
+int[] toks = { 1, 2, 3 };
+double[][] resonance = holo.InspectAttention(toks, K: 2, alpha);
+double[] retrieved = holo.InspectRetrieval(toks, K: 2, alpha);
+double[] decoded = holo.DecodeFace(retrieved);          // per-token logits for what the query pulled out
+
+Console.WriteLine($&quot;loss={loss:F3} cache length={cache.Length} logits lengths {afterPrompt.Length},{afterNext.Length}&quot;);
+Console.WriteLine($&quot;resonance rows={resonance.Length}, positions per row={resonance[0].Length}, decoded logits={decoded.Length}&quot;);</code></pre></div><div class="code out"><div class="code-bar"><span>Output</span><button class="copy" type="button" aria-label="Copy Output">copy</button></div><pre><code class="language-text">loss=2.777 cache length=4 logits lengths 16,16
+resonance rows=4, positions per row=3, decoded logits=16</code></pre></div>
+  
+  <p class="more-link"><a href="/algformer/">Back to AlgFormer</a></p>
+</div></section>
+</main>
+<footer class="site-footer"><div class="wrap">
+  <div class="foot-grid">
+    <div><h2>Products</h2><ul><li><a href="/phasor/">Phasor</a></li><li><a href="/evalapp/">EvalApp</a></li><li><a href="/holodb/">HoloDb</a></li><li><a href="/algformer/">AlgFormer</a></li><li><a href="/prism/">Prism</a></li><li><a href="/prose/">Prose</a></li><li><a href="/tracer/">Tracer</a></li><li><a href="/holovoxel/">HoloVoxel</a></li></ul></div>
+    <div><h2>Tools</h2><ul><li><a href="/tools/analyst/">The Analyst</a></li><li><a href="/tools/creature/">The Creature</a></li><li><a href="/tools/forecaster/">The Forecaster</a></li><li><a href="/tools/prism/">Prism</a></li><li><a href="/tools/stories/">Nano Stories</a></li><li><a href="/tools/cartographer/">The Cartographer</a></li><li><a href="/tools/prose/">Prose</a></li><li><a href="/tools/council-spending/">Council Spending Scanner</a></li></ul></div>
+    <div><h2>Learn</h2><ul><li><a href="/evidence/">Evidence</a></li><li><a href="/research/">Research</a></li><li><a href="/products/">All products</a></li><li><a href="/tools/">All tools</a></li></ul></div>
+    <div><h2>Company</h2><ul><li><a href="/partner/">Partner with us</a></li><li><a href="/licence/">Licence</a></li><li><a href="/ai/">For AI readers</a></li><li><a href="https://www.nuget.org/profiles/evaluatedapplications" rel="noopener">NuGet</a></li></ul></div>
+    <div><h2>Machine-readable</h2><ul><li><a href="/llms.txt">llms.txt</a></li><li><a href="/llms-full.txt">llms-full.txt</a></li><li><a href="/sitemap.xml">sitemap.xml</a></li></ul></div>
+  </div>
+  <div class="foot-base"><span>Evaluated Applications · .NET libraries · England</span><span class="mono">© 2026 Evaluated Applications</span></div>
+</div></footer>
+
+<script src="/assets/site.js?v=3190ebab" defer></script>
+
+</body>
+</html>

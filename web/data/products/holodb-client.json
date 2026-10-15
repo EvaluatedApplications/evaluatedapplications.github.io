@@ -1,0 +1,64 @@
+{
+  "title": "HoloDb client and wire protocol",
+  "label": "Client",
+  "description": "HoloDb.Client connects a .NET app to a HoloDb server over TLS with the same API as the embedded engine; HoloDb.Protocol is the columnar wire format underneath.",
+  "h1": "HoloDb over the network: the client and the wire protocol",
+  "intro": "HoloDb.Client connects your .NET app to a HoloDb server over TCP with mandatory TLS and token authentication. HoloDb.Protocol is the columnar wire protocol between the two.",
+  "sections": [
+    {
+      "id": "client",
+      "title": "The client",
+      "paragraphs": [
+        "Run SQL queries and bulk-load data with the same API as the embedded, in-process HoloDbService, so you can move from embedded to networked by changing only how you create the handle. Building a data-driven app usually means choosing between speed (embed the database) and scale (run it on its own server), with two APIs that behave differently. The client gives you one code path for both.",
+        "Install it with dotnet add package EvaluatedApplications.HoloDb.Client. It targets .NET 8 and .NET 10 and needs a HoloDb server it can reach over TLS."
+      ],
+      "list": [
+        { "term": "Same API, embedded or networked", "text": "Execute, ExecuteAsync, BulkLoadAsync, GetStatsAsync and PingAsync have the same surface whether you talk to the in-process service or a remote server." },
+        { "term": "Columnar over the wire", "text": "Results are typed column arrays that match the in-process engine's QueryResult. There is no row buffering and no JSON serialization." },
+        { "term": "Secure by default", "text": "TLS is on. Trust a self-signed server by pinning its certificate thumbprint, or skip it in development only." },
+        { "term": "Resilience when you opt in", "text": "Exponential backoff with full jitter, a circuit breaker and a per-operation deadline budget across retries." },
+        { "term": "Built for concurrency", "text": "One client per concurrent worker, or pool clients up front with HoloDbClientPool." }
+      ]
+    },
+    {
+      "id": "connect",
+      "title": "Connect and query",
+      "paragraphs": [ "These examples are compiled against the published package. Running them needs a HoloDb server." ],
+      "snippets": [
+        { "source": "snippets/holodb-client-basic.cs", "label": "Connect and run a query" },
+        { "source": "snippets/holodb-client-resilient.cs", "label": "Retry and circuit breaker" },
+        { "source": "snippets/holodb-client-pinned.cs", "label": "Pin the server certificate" }
+      ]
+    },
+    {
+      "id": "notes",
+      "title": "Things to know",
+      "list": [
+        { "term": "One client is one session", "text": "Requests serialize through an internal queue, and concurrent callers share the same TCP connection. Use one client per worker, or a pool." },
+        { "term": "No automatic reconnect", "text": "A dropped socket raises an exception, and you reconnect explicitly. ResilientHoloDbClient does this for you when you use it." },
+        { "term": "Transient and application errors differ", "text": "HoloRemoteException (SQL errors, authentication failures) is not retried. The resilient client retries only transport failures such as IOException and SocketException." },
+        { "term": "Timeouts", "text": "ConnectAsync takes a TimeSpan for the connection only. The resilient client adds an operation timeout to every method, a budget across all its retries." }
+      ]
+    },
+    {
+      "id": "protocol",
+      "title": "The wire protocol",
+      "paragraphs": [
+        "HoloDb.Protocol defines how the server and client communicate. Instead of sending results as JSON or row objects it keeps the columnar shape: a long[], double[] or string[] travels as a typed array. That keeps the engine's columnar advantage intact when data moves between processes. You normally get the package through HoloDb.Client. Depend on it directly only to implement a server.",
+        "The wire format is stable: opcode byte values never change, and field order and types are fixed. Clients and servers from different builds negotiate a version and fail cleanly when incompatible."
+      ],
+      "list": [
+        { "term": "Length-prefixed TCP framing", "text": "Safe message boundaries, with frame size limits and count bounds checks that stop a hostile length prefix from forcing a huge allocation." },
+        { "term": "Binary columnar codec", "text": "Typed long, double and string arrays in little-endian format. Non-columnar results (joins, GROUP BY) are packed in a compact binary row format." },
+        { "term": "Request and response dispatch", "text": "Opcodes for Hello (handshake), Exec (SQL), BulkLoad, Stats and Ping." },
+        { "term": "Error semantics", "text": "Protocol errors (corrupt or malformed bytes) are distinct from query errors (bad SQL, a constraint violation), so a caller knows whether to retry." },
+        { "term": "Transport-agnostic", "text": "It works over TCP, TLS or any duplex Stream. The protocol provides no encryption: TLS is the transport layer's job, and the authentication token travels in the Hello handshake as UTF-8, so run it over TLS." }
+      ],
+      "snippets": [
+        { "source": "snippets/holodb-protocol-client.cs", "label": "Read a columnar result without row unpacking" },
+        { "source": "snippets/holodb-protocol-server.cs", "label": "One request in a server loop" }
+      ],
+      "paragraphsAfter": [ "A columnar query returns column arrays, not rows. If you expect row-by-row iteration, read the columns by position as above, or use Rows to materialise dictionaries." ]
+    }
+  ]
+}

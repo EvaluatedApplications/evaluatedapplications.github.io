@@ -1,0 +1,147 @@
+{
+  "title": "HoloDb docs",
+  "description": "How to use HoloDb: tables, the SQL dialect, bulk loading, transactions, similarity search, durability and paged tables, with compiled examples.",
+  "intro": "The practical guide: put data in, get answers out. Every program on this page was compiled and run against the published package, and the output shown is what it printed.",
+  "sections": [
+    {
+      "id": "install",
+      "title": "Install and first query",
+      "paragraphs": [
+        "Add the package from NuGet with dotnet add package EvaluatedApplications.HoloDb. It targets .NET 8 and later, and ships the compiled library only. HoloDbService is the wrapped, async-friendly entry point, and Execute runs SQL synchronously. ExecuteAsync offloads the work to the thread pool so a request thread is not blocked."
+      ],
+      "snippets": [ { "source": "snippets/holodb-quickstart.cs", "output": "snippets/holodb-quickstart.out.txt" } ]
+    },
+    {
+      "id": "types",
+      "title": "Tables and types",
+      "paragraphs": [ "There are three storage types, each with the usual SQL aliases." ],
+      "list": [
+        { "term": "INT", "text": "A .NET long. Aliases: INTEGER." },
+        { "term": "REAL", "text": "A .NET double. Aliases: FLOAT, DOUBLE, DECIMAL, NUMERIC. DECIMAL and NUMERIC map to a 64-bit float, so they are not exact decimals." },
+        { "term": "TEXT", "text": "A .NET string. Aliases: VARCHAR, STRING." }
+      ],
+      "snippets": [ { "provenIn": "holodb-sql-tour", "text": "CREATE TABLE sales (\n  id     INT PRIMARY KEY,\n  region TEXT,\n  amount REAL\n)" } ],
+      "paragraphsAfter": [ "One column may be PRIMARY KEY, and it is enforced unique. For money, store integer minor units, cents as an INT: it is exact, and it lets the constant-time integer aggregates serve your revenue totals." ]
+    },
+    {
+      "id": "writing",
+      "title": "Inserting, updating and bulk loading",
+      "paragraphs": [ "Strings use single quotes, and a quote is escaped by doubling it. Rows go in singly or in batches, with or without a column list." ],
+      "snippets": [
+        { "provenIn": "holodb-sql-tour", "text": "INSERT INTO sales VALUES (1, 'EU', 42.50)" },
+        { "provenIn": "holodb-sql-tour", "text": "INSERT INTO sales (id, region, amount) VALUES (2, 'US', 17.00), (3, 'EU', 61.10)" },
+        { "provenIn": "holodb-sql-tour", "text": "UPDATE sales SET amount = 0 WHERE region = 'US'" },
+        { "provenIn": "holodb-sql-tour", "text": "DELETE FROM sales WHERE amount = 0" }
+      ],
+      "paragraphsAfter": [ "Every Execute also takes positional ? placeholders. The arguments are quoted and escaped for you, before the statement is parsed. A null argument, a wrong argument count or an unsupported type throws." ]
+    },
+    {
+      "id": "parameters",
+      "title": "Parameterized queries",
+      "paragraphs": [ "Use ? placeholders instead of building SQL text yourself." ],
+      "snippets": [ { "source": "snippets/holodb-params.cs", "output": "snippets/holodb-params.out.txt" } ]
+    },
+    {
+      "id": "bulk",
+      "title": "Bulk loading",
+      "paragraphs": [ "For large loads, skip the SQL parser and hand the engine one typed array per column (long[], double[] or string[]). It is atomic and validates primary-key uniqueness before committing. Load in chunks for very large data sets, as the Analyst tool does with a large paste." ],
+      "snippets": [ { "source": "snippets/holodb-bulkload.cs", "output": "snippets/holodb-bulkload.out.txt" } ]
+    },
+    {
+      "id": "dialect",
+      "title": "Querying: the dialect",
+      "paragraphs": [ "A SELECT supports aggregates (COUNT, SUM, AVG, MIN, MAX), a full boolean WHERE (AND, OR, NOT, parentheses, the comparisons = != < > <= >=, LIKE, IN, IN (SELECT ...) and BETWEEN ... AND ...), GROUP BY with HAVING, ORDER BY with several keys, LIMIT, DISTINCT and INNER JOIN." ],
+      "snippets": [
+        { "provenIn": "holodb-sql-tour", "text": "SELECT region, COUNT(*), SUM(amount), AVG(amount)\nFROM sales\nWHERE amount BETWEEN 10 AND 1000\nGROUP BY region\nHAVING SUM(amount) > 50\nORDER BY sum(amount) DESC\nLIMIT 10" },
+        { "provenIn": "holodb-sql-tour", "label": "A join across two tables", "text": "SELECT orders.id, customers.name, orders.total\nFROM orders\nINNER JOIN customers ON orders.customer_id = customers.id\nWHERE orders.total > 100\nORDER BY orders.total DESC" }
+      ],
+      "paragraphsAfter": [ "Qualify joined columns with the table name, as above. Table aliases are not supported." ]
+    },
+    {
+      "id": "results",
+      "title": "Reading results",
+      "paragraphs": [
+        "Execute returns a QueryResult. The simplest way to read it is row by row as dictionaries keyed by column name, through Rows. Aggregate columns are named by the function applied, in lower case: count(*), sum(amount), avg(amount), min(amount) and max(amount). Columns lists the result's column names in order, and for a write statement Affected is the number of rows changed.",
+        "For hot paths QueryResult keeps results columnar and exposes direct accessors (GetLong, GetDouble, GetText and GetValue by row and column), so you can read values without materialising a dictionary per row."
+      ]
+    },
+    {
+      "id": "ways",
+      "title": "Three ways to ask one store",
+      "paragraphs": [ "Exact lookup by key, similarity by content and constant-time aggregates all read the same rows. The program below shows each, and the usage meter shows the aggregate scanned no rows." ],
+      "snippets": [ { "source": "snippets/holodb-three-ways.cs", "output": "snippets/holodb-three-ways.out.txt" } ],
+      "more": { "label": "See the three ways as a diagram", "href": "/holodb/#overview" }
+    },
+    {
+      "id": "similarity",
+      "title": "Similarity search",
+      "paragraphs": [
+        "Because rows are stored holographically, HoloDb ranks rows by similarity to a partial description, with no separate vector index. Use the NEAREST clause with the fields you know and a LIMIT for how many neighbours you want. Add score to the projection to read the ranking metric.",
+        "Similarity is graded: a close number or date, or a near-identical string, ranks ahead of a far or unrelated one. It is an exact scan below 8,000 rows and whenever the query has a WHERE, and above that an approximate sublinear index (locality-sensitive hashing) ranks candidates, so the result can differ from an exact scan. With a WHERE the filter runs first and the survivors are ranked. NEAREST does not combine with GROUP BY, and an UPDATE, DELETE or ALTER TABLE on the table forces the next NEAREST to rebuild its index."
+      ],
+      "snippets": [ { "provenIn": "holodb-sql-tour", "text": "SELECT id, title\nFROM articles\nNEAREST (title = 'holographic database')\nLIMIT 5" } ]
+    },
+    {
+      "id": "transactions",
+      "title": "Transactions",
+      "paragraphs": [ "ACID transactions with explicit control: wrap statements in BEGIN and COMMIT, or discard them with ROLLBACK. BEGIN costs the same at any table size, because rows are journaled as they change instead of the table being copied, and ROLLBACK replays the journal. With a WalPath set, a committed transaction is durable." ],
+      "snippets": [ { "source": "snippets/holodb-transactions.cs", "output": "snippets/holodb-transactions.out.txt" } ]
+    },
+    {
+      "id": "durable",
+      "title": "In memory or durable",
+      "paragraphs": [
+        "By default the database lives in memory and is gone when the process ends. To make writes durable, give it a write-ahead log path. Durable state is a compact snapshot of the current data plus a short log of the writes since the last checkpoint. A durable commit flushes to disk before it returns. Recovery is bounded by how much data you hold, not by how long the database has been running: reopening loads a snapshot and replays only the recent tail.",
+        "The log is folded into a fresh snapshot automatically once it passes a threshold (CheckpointThresholdBytes, 8 MB by default), and you can force one with Checkpoint, for example before a clean shutdown. In WebAssembly there is no file system, so leave WalPath null and use the in-memory engine. To work with the engine directly, without the async wrapper, call Database.Open with a path, or with null for in memory."
+      ],
+      "snippets": [ { "source": "snippets/holodb-durable.cs", "output": "snippets/holodb-durable.out.txt" } ]
+    },
+    {
+      "id": "paged",
+      "title": "Larger than memory: paged tables",
+      "paragraphs": [
+        "The default engine keeps everything in RAM. When a table needs to outgrow memory, create it as a paged table. It lives on an 8 KB buffer-pool page store with a redo-only write-ahead log, so cold pages spill to disk, and the constant-time aggregates stay maintained on disk. Once created, a paged table is driven through the same Execute call as an in-memory table.",
+        "The buffer-pool size (bufferFrames, 8,192 frames of 8 KB by default) bounds how much stays resident. The one structure that scales with row count is the primary-key index, which stays in RAM at about 35 bytes per row, measured at 39 and 34 bytes per entry for 1,000,000 and 10,000,000 entries. That index, not the buffer pool, bounds how far a single paged table can grow past memory."
+      ],
+      "snippets": [ { "source": "snippets/holodb-paged.cs", "output": "snippets/holodb-paged.out.txt" } ]
+    },
+    {
+      "id": "indexes",
+      "title": "Indexes, and why aggregates are instant",
+      "paragraphs": [
+        "A sorted index speeds range and lookup queries. You rarely need one for counting: COUNT and SUM over integer columns are served from maintained accumulators in constant time, independent of how many rows the table holds, so the engine does not scan to count. An index needs an INT or TEXT column.",
+        "CREATE INDEX also builds the optional aggregate plane, and SHOW INDEXES and EXPLAIN report what exists and what answers a query. Those are described with the plane."
+      ],
+      "snippets": [ { "provenIn": "holodb-sql-tour", "text": "CREATE INDEX ON sales (region)" } ],
+      "more": { "label": "The plane, index SQL and EXPLAIN", "href": "/holodb/pleroma/#index-sql" }
+    },
+    {
+      "id": "alter",
+      "title": "Changing a table",
+      "paragraphs": [ "ALTER TABLE supports ADD COLUMN with a mandatory DEFAULT, which backfills the rows that exist. There is no DROP, rename or type change." ],
+      "snippets": [ { "provenIn": "holodb-sql-tour", "text": "ALTER TABLE sales ADD COLUMN note TEXT DEFAULT ''" } ]
+    },
+    {
+      "id": "di",
+      "title": "Dependency injection and EvalApp",
+      "paragraphs": [
+        "Register HoloDb in a .NET host and inject HoloDbService wherever you need it. HoloDb also runs inside an EvalApp harness: WithHoloDb attaches a service to a pipeline, so heavy queries execute as compiled, resource-gated, self-tuning pipeline steps and any step can reach the service."
+      ],
+      "snippets": [ { "source": "snippets/holodb-di.cs", "output": "snippets/holodb-di.out.txt" } ]
+    },
+    {
+      "id": "meter",
+      "title": "The usage meter",
+      "paragraphs": [ "After each query, static per-thread readings report what the engine actually processed: LastRowsScanned, LastTableRows, LastRowBytes and LastLogicalBytes. An aggregate served from a maintained total reports zero rows scanned, which is the figure a metered API bills on." ]
+    },
+    {
+      "id": "browser-and-network",
+      "title": "In the browser, and over the network",
+      "paragraphs": [
+        "HoloDb is plain managed .NET with no native dependencies, so it compiles to WebAssembly and runs client-side with no server and nothing leaving the device. The Analyst tool is exactly that: a real HoloDb in your browser tab, profiling and querying whatever you paste in.",
+        "The same engine runs as a server, and a typed client talks to it over TLS with the same surface as the in-process engine."
+      ],
+      "more": { "label": "The client and the wire protocol", "href": "/holodb/client/" }
+    }
+  ]
+}

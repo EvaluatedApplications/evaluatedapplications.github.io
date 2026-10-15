@@ -1,0 +1,60 @@
+@using Showroom.Services
+@inject CouncilWebData Data
+
+@* One disclosure per check: every filter the check applies, as the scanner's own registry states it (cross/check_rules.csv, written by the engine's CheckRules and copied by
+   CouncilWebBuilder). Closed until tapped; the (small) file is fetched on the first tap anywhere and shared by every disclosure on the page. *@
+<div class="rulebox">
+    <button type="button" class="rulebtn" @onclick="Toggle" aria-expanded="@(_open ? "true" : "false")">@(_open ? "Hide the rules this applies" : Label)</button>
+    @if (_open)
+    {
+        @if (_error is not null) { <p class="err">@_error</p> }
+        else if (!_loaded) { <p class="hint">Loading the rules (a small file)...</p> }
+        else if (_rules.Count == 0) { <p class="hint">No rule is registered for this check in the rule list.</p> }
+        else
+        {
+            <ul class="rules">
+                @foreach (var (kind, rule) in _rules)
+                {
+                    <li><span class="rk">@kind.</span> @rule</li>
+                }
+            </ul>
+        }
+    }
+</div>
+
+@code {
+    /// <summary>The names this check carries in the rule list ("ScheduleA", "TwinPairs", ...).</summary>
+    [Parameter, EditorRequired] public string[] Checks { get; set; } = Array.Empty<string>();
+    [Parameter] public string Label { get; set; } = "The rules this applies: what it looks at, what it leaves out";
+
+    bool _open, _loaded;
+    string? _error;
+    List<(string Kind, string Rule)> _rules = new();
+
+    static string KindLabel(string k) => k switch
+    {
+        "population" => "What it looks at",
+        "exclusion" => "What is left out",
+        "threshold" => "When a row is listed",
+        "classification" => "How a listed row is described",
+        "counting" => "How it is counted",
+        _ => k.Length > 0 ? char.ToUpperInvariant(k[0]) + k[1..] : "Rule",
+    };
+
+    async Task Toggle()
+    {
+        _open = !_open;
+        if (!_open || _loaded) return;
+        try
+        {
+            var t = new Tab(await Data.TableAsync("cross/check_rules.csv", true, new Cooperative(CancellationToken.None)));
+            var l = new List<(string, string)>();
+            // the registry's own order is kept (what it looks at, what it leaves out, when it lists); a check can carry more than one name
+            foreach (var name in Checks)
+                foreach (var r in t.Rows)
+                    if (t.G(r, "Check") == name && t.G(r, "Rule").Length > 0) l.Add((KindLabel(t.G(r, "Kind")), t.G(r, "Rule")));
+            _rules = l; _loaded = true;
+        }
+        catch (Exception ex) { _error = "Could not load the rules: " + ex.Message; }
+    }
+}

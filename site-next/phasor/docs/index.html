@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Phasor docs | Evaluated Applications</title>
+<meta name="description" content="How to use Phasor: build and read a Pleroma, bind and apply kernels, use the keys-only CycleHologram, and work with the phasor codecs, with compiled examples.">
+<link rel="canonical" href="https://evaluatedapplications.github.io/phasor/docs/">
+
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Evaluated Applications">
+<meta property="og:title" content="Phasor docs | Evaluated Applications">
+<meta property="og:description" content="How to use Phasor: build and read a Pleroma, bind and apply kernels, use the keys-only CycleHologram, and work with the phasor codecs, with compiled examples.">
+<meta property="og:url" content="https://evaluatedapplications.github.io/phasor/docs/">
+<meta name="twitter:card" content="summary">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%23f0796a'/%3E%3Cstop offset='.5' stop-color='%237bd86a'/%3E%3Cstop offset='1' stop-color='%23c07dff'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='32' height='32' rx='7' fill='%23050608'/%3E%3Cpath d='M16 5L27 26H5Z' fill='none' stroke='url(%23g)' stroke-width='2' stroke-linejoin='round'/%3E%3C/svg%3E">
+<script>document.documentElement.classList.add('js')</script>
+<link rel="stylesheet" href="/assets/ea.css?v=93cf72d0">
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Home","item":"https://evaluatedapplications.github.io/"},{"@type":"ListItem","position":2,"name":"Products","item":"https://evaluatedapplications.github.io/products/"},{"@type":"ListItem","position":3,"name":"Phasor","item":"https://evaluatedapplications.github.io/phasor/"},{"@type":"ListItem","position":4,"name":"Docs","item":"https://evaluatedapplications.github.io/phasor/docs/"}]}</script>
+
+</head>
+<body class="cat-foundation" data-page="product-docs">
+<a class="skip" href="#main">Skip to content</a>
+<div class="beam" aria-hidden="true"></div>
+<header class="site-header"><div class="wrap nav" data-nav>
+  <a class="brand" href="/"><svg class="mark" viewBox="0 0 32 32" aria-hidden="true"><defs><linearGradient id="m" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#f0796a"/><stop offset=".166" stop-color="#f0a15a"/><stop offset=".333" stop-color="#e6c450"/><stop offset=".5" stop-color="#7bd86a"/><stop offset=".666" stop-color="#4aa3ff"/><stop offset=".833" stop-color="#7d7dff"/><stop offset="1" stop-color="#c07dff"/></linearGradient></defs><path d="M16 5L27 26H5Z" fill="none" stroke="url(#m)" stroke-width="2" stroke-linejoin="round"/></svg>Evaluated Applications</a>
+  <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="site-links">Menu</button>
+  <nav aria-label="Main"><ul class="nav-links" id="site-links">
+    <li><a href="/products/" aria-current="page">Products</a></li><li><a href="/tools/">Tools</a></li><li><a href="/evidence/">Evidence</a></li><li><a href="/research/">Research</a></li>
+    <li><a class="nav-cta" href="/partner/">Partner with us</a></li>
+    <li><a href="https://www.nuget.org/profiles/evaluatedapplications" rel="noopener">NuGet<span class="sr-only"> (external)</span></a></li>
+  </ul></nav>
+</div></header>
+<main id="main" tabindex="-1">
+
+<header class="page-head"><div class="wrap">
+<nav class="crumbs" aria-label="Breadcrumb"><ol><li><a href="/">Home</a></li><li><a href="/products/">Products</a></li><li><a href="/phasor/">Phasor</a></li><li aria-current="page">Docs</li></ol></nav>
+<p class="eyebrow">Phasor docs</p>
+<h1 class="wide">Phasor docs</h1>
+<p class="lede">Task-oriented notes with complete programs. Each example was compiled and run against the published package, and the output shown is what it printed.</p>
+
+</div></header>
+<nav class="subnav" aria-label="Phasor sections"><div class="wrap"><ul><li><a href="/phasor/">Overview</a></li><li><a href="/phasor/#quick-start">Quick start</a></li><li><a href="/phasor/docs/" aria-current="page">Docs</a></li><li><a href="/phasor/pleroma/">Pleroma</a></li><li><a href="/phasor/evidence/">Evidence</a></li></ul></div></nav>
+<section class="sec"><div class="wrap">
+  <nav class="toc" aria-labelledby="toc-h"><h2 id="toc-h">On this page</h2><ul><li><a href="#pleroma-views">Reading a Pleroma</a></li><li><a href="#bind">Bind two stores</a></li><li><a href="#kernel">Apply a weighted kernel in one pass</a></li><li><a href="#parity">Bit counts and parity</a></li><li><a href="#more-operations">More operations</a></li><li><a href="#cyclehologram">CycleHologram: the keys-only case</a></li><li><a href="#codecs">The phasor codecs</a></li><li><a href="#hologram">Hologram: readable algebra with operators</a></li><li><a href="#arithmetic">Arithmetic with numbers</a></li><li><a href="#gotchas">Things to know</a></li></ul></nav>
+</div></section>
+<section class="sec doc-sec" aria-labelledby="pleroma-views"><div class="wrap">
+  <div class="sec-head"><span class="sec-dot cat-foundation" aria-hidden="true"></span><h2 id="pleroma-views">Reading a Pleroma</h2></div>
+  <div class="prose-block"><p>A store is built item by item with Add, which takes a signed count, and Remove erases one copy. The key view keeps exactly the items with distinct keys up to KeyCapacity and refuses past that. Every other view reads its own slice of the array and stays exact at any load, within the field&#39;s range.</p><p>TryKeys returns the key, total count and the flag word, arrangement or tick when there is one per key. TryItems returns whole items when each key has one value per face factor. Both return false past capacity, never a wrong answer.</p></div>
+  <dl class="term-list"><dt>Flags, Near, Nearest</dt><dd>Flags returns the exact count at every flag word. Near(x, r) counts items whose flags differ from x in at most r bits, and Nearest(x) returns the nearest stored words with their distances.</dd><dt>Arrangements, SignBalance</dt><dd>Counts per arrangement of up to 5 things, and the even-minus-odd balance.</dd><dt>Times, Tick, Diffuse</dt><dd>Counts per tick. Tick ages every item, and Diffuse runs a lazy random walk over time on every item at once. Time views then return TimeScale times the exact expected counts.</dd><dt>JointCounts</dt><dd>Set JointFaces, for example Flags and Time, and JointCounts returns the exact joint counts. The joint slice holds the product of the faces&#39; sizes, so size it deliberately.</dd><dt>CountWhere, Compile</dt><dd>Count the items whose flag word satisfies any predicate with one inner product. Compile prepares a predicate for repeated queries, and CountWhereByTime and CountWhereByArrangement give the count per tick or per arrangement.</dd><dt>BitCounts, FlagParity, TryFindConflicts</dt><dd>Per-bit counts and the XOR of every stored word from a few cells, and the keys that carry more than one flag word or arrangement.</dd></dl>
+  
+  
+  
+  
+  
+  
+  
+</div></section><section class="sec doc-sec" aria-labelledby="bind"><div class="wrap">
+  <div class="sec-head"><span class="sec-dot cat-foundation" aria-hidden="true"></span><h2 id="bind">Bind two stores</h2></div>
+  <div class="prose-block"><p>store.Bind(other) binds every pair of items at once: keys add, flag words XOR, arrangements compose, ticks add, and counts multiply. The cost is one product per order representation, not per pair of items. Binding with a one-item store shifts the whole store on every face together, and binding with a larger store applies the mix of all those shifts.</p></div>
+  
+  
+  
+  
+  
+  <div class="code"><div class="code-bar"><span>C#</span><button class="copy" type="button" aria-label="Copy C#">copy</button></div><pre><code class="language-csharp">using Phasor;
+
+var shape = new HologramShape { KeyCapacity = 8, FlagBits = 4, TimePeriod = 9 };
+var store = new Pleroma(shape);
+store.Add(new HologramItem(Key: 10, Flags: 0b0011, Time: 2), 3);
+store.Add(new HologramItem(Key: 20, Flags: 0b0111, Time: 5), 1);
+
+// Bind with a one-item store: every item moves by the same key, flags and time shift.
+var shift = new Pleroma(shape);
+shift.Add(new HologramItem(Key: 1, Flags: 0b0001, Time: 1));
+store.Bind(shift);
+
+if (store.TryItems(out var items))
+    foreach (var (item, count) in items)
+        Console.WriteLine($&quot;{item.Key}: flags {item.Flags}, time {item.Time}, count {count}&quot;);</code></pre></div><div class="code out"><div class="code-bar"><span>Output</span><button class="copy" type="button" aria-label="Copy Output">copy</button></div><pre><code class="language-text">11: flags 2, time 3, count 3
+21: flags 6, time 6, count 1</code></pre></div>
+  
+  
+</div></section><section class="sec doc-sec" aria-labelledby="kernel"><div class="wrap">
+  <div class="sec-head"><span class="sec-dot cat-foundation" aria-hidden="true"></span><h2 id="kernel">Apply a weighted kernel in one pass</h2></div>
+  <div class="prose-block"><p>A PleromaKernel is a weighted sum of any number of flag flips, arrangement relabellings and time shifts, held as one harmonic factor per stored harmonic. store.Apply(kernel) gives exactly the store you would get by moving every item by every element and adding the copies, at a cost that does not depend on how many elements the kernel holds. Kernels add and compose, and Diffuse is the two-element case.</p><p>The example applies one identity plus two copies of an item that has a flag flipped and a tick added, to three items. Every flag and time count changes at once.</p></div>
+  
+  
+  
+  
+  
+  <div class="code"><div class="code-bar"><span>C#</span><button class="copy" type="button" aria-label="Copy C#">copy</button></div><pre><code class="language-csharp">using Phasor;
+
+var store = new Pleroma(new HologramShape
+{
+    KeyCapacity = 4,
+    FlagBits = 3,
+    TimePeriod = 7,
+    JointFaces = HologramFaces.Flags | HologramFaces.Time,
+});
+store.Add(new HologramItem(Key: 10, Flags: 0b001, Time: 0), 3);
+store.Add(new HologramItem(Key: 20, Flags: 0b010, Time: 2), 2);
+store.Add(new HologramItem(Key: 30, Flags: 0b100, Time: 4), 1);
+Console.WriteLine(&quot;before flags &quot; + string.Join(&quot; &quot;, store.Flags()));
+Console.WriteLine(&quot;before times &quot; + string.Join(&quot; &quot;, store.Times()));
+
+// One kernel: 1x identity plus 2x (flip flag bit 0 and age one tick), applied to every item in one pass.
+var kernel = new PleromaKernel(store.Shape);
+kernel.Add(weight: 1L);
+kernel.Add(flagMask: 0b001, timeShift: 1, weight: 2L);
+store.Apply(kernel);
+
+Console.WriteLine(&quot;after flags  &quot; + string.Join(&quot; &quot;, store.Flags()));
+Console.WriteLine(&quot;after times  &quot; + string.Join(&quot; &quot;, store.Times()));</code></pre></div><div class="code out"><div class="code-bar"><span>Output</span><button class="copy" type="button" aria-label="Copy Output">copy</button></div><pre><code class="language-text">before flags 0 3 2 0 1 0 0 0
+before times 3 0 2 0 1 0 0
+after flags  6 3 2 4 1 2 0 0
+after times  3 6 2 4 1 2 0</code></pre></div>
+  
+  <p class="more-link"><a href="/phasor/pleroma/#superposition">Watch the pass as a diagram</a></p>
+</div></section><section class="sec doc-sec" aria-labelledby="parity"><div class="wrap">
+  <div class="sec-head"><span class="sec-dot cat-foundation" aria-hidden="true"></span><h2 id="parity">Bit counts and parity</h2></div>
+  <div class="prose-block"><p>BitCounts gives the exact count of items with each bit set, and FlagParity gives the XOR of every stored word, both from a handful of cells.</p></div>
+  
+  
+  
+  
+  
+  <div class="code"><div class="code-bar"><span>C#</span><button class="copy" type="button" aria-label="Copy C#">copy</button></div><pre><code class="language-csharp">using Phasor;
+
+var store = new Pleroma(new HologramShape { FlagBits = 4, KeyCapacity = 8 });
+store.Add(new HologramItem(Key: 1, Flags: 0b0011), 2);   // two copies
+store.Add(new HologramItem(Key: 1, Flags: 0b0110), 1);   // one copy
+store.Add(new HologramItem(Key: 2, Flags: 0b0001), 3);   // three copies
+
+long[] bitCounts = store.BitCounts();                     // exact count of items with each bit set
+uint parity = store.FlagParity();                         // XOR of every stored word
+Console.WriteLine($&quot;{bitCounts[0]} {bitCounts[1]} {bitCounts[2]} {bitCounts[3]} parity {parity}&quot;);</code></pre></div><div class="code out"><div class="code-bar"><span>Output</span><button class="copy" type="button" aria-label="Copy Output">copy</button></div><pre><code class="language-text">5 3 1 0 parity 7</code></pre></div>
+  
+  
+</div></section><section class="sec doc-sec" aria-labelledby="more-operations"><div class="wrap">
+  <div class="sec-head"><span class="sec-dot cat-foundation" aria-hidden="true"></span><h2 id="more-operations">More operations</h2></div>
+  
+  <dl class="term-list"><dt>ScaleKeys, CombineCycles</dt><dd>With CompleteKeys a store keeps every harmonic of a small key cycle. ScaleKeys(u) relabels every key a to u a in place, and CombineCycles joins two stores on coprime cycles into one on their product, by the Chinese remainder theorem.</dd><dt>Frobenius, ShiftRegister</dt><dd>On a store built without per-bit item lines, Frobenius squares every flag word in GF(2^m) and ShiftRegister steps every word through a linear shift register, exactly, any number of steps in one pass.</dd><dt>Syndrome, IsIndependent, Sample</dt><dd>Count stored words per Hamming syndrome, test in exact integers whether joint counts are the product of their marginals, and draw one value of any view with probability count over total.</dd><dt>RelationFace, ChargeLattice</dt><dd>Store relations between a small set of keys and read a loop&#39;s winding, its frustration parity and the direction of its net circulation. Integer offsets on a periodic lattice give each cube an exact charge.</dd><dt>Eliminate</dt><dd>With one flag bit as a label, every stored word is an example, and Eliminate solves for the parity rule over GF(2) that fits every example, or reports that none does.</dd><dt>Dense pages</dt><dd>With CompleteKeys a store is a page of up to 4,096 slots in which every slot reads back exactly. FromCounts and AddCounts build a page from a count vector in one transform, CountWhereKey sums any function of the key in one read, and InnerProduct gives the exact equi-join sum of two pages.</dd><dt>Sparse pages</dt><dd>PleromaSparsePage keeps exact counts over keys anywhere in a huge key set in memory proportional to the keys present, with exact merges and draws.</dd><dt>Redundancy</dt><dd>ReservedKeys with Verify and Repair detect and rebuild lost harmonics, CheckPrime and VerifyCheck detect corruption of either copy, and PleromaParity rebuilds any one lost store of a group.</dd><dt>SQL-style compositions</dt><dd>Restrict, Support (and so COUNT DISTINCT), MapCounts, sums per group and joins are exact, built from the operations above.</dd></dl>
+  
+  
+  
+  
+  
+  
+  
+</div></section><section class="sec doc-sec" aria-labelledby="cyclehologram"><div class="wrap">
+  <div class="sec-head"><span class="sec-dot cat-foundation" aria-hidden="true"></span><h2 id="cyclehologram">CycleHologram: the keys-only case</h2></div>
+  <div class="prose-block"><p>CycleHologram is the Pleroma with keys only, kept as its own type. The phasor bundle, a sum of phasors, is a hologram: many items superposed in one fixed-size vector, read out approximately, with crosstalk that grows with load. CycleHologram is the same superposition on the discrete cycle of a finite field. Each symbol is an element of the cycle, the hologram holds power sums of the stored elements, and the readout is algebraic instead of statistical, so there is no similarity threshold and no rounding.</p><p>A hologram of capacity k holds 2k+1 eight-byte elements, and TryDecode returns every stored symbol with its signed count when at most k distinct symbols are stored. With k+1 distinct symbols decode always refuses. Every decode is re-encoded and must reproduce every stored element. Holograms add as a multiset union, subtract as an exact signed difference, and serialize with their field metadata.</p></div>
+  
+  
+  
+  
+  <div class="prose-block"><p>Each replica in the second example holds 10,000 items and the hologram has capacity 4, so it finds what differs by exchanging one small hologram sized to the difference, not to the data. If the replicas differ in more than the capacity, TryDecode returns false, so size the capacity to the largest difference you expect.</p><p>The decoder is the syndrome decoder of Reed-Solomon and BCH codes (Berlekamp-Massey), the construction behind the PinSketch set sketch and the minisketch library.</p></div>
+  <div class="code"><div class="code-bar"><span>Exact counts</span><button class="copy" type="button" aria-label="Copy Exact counts">copy</button></div><pre><code class="language-csharp">using Phasor;
+
+var stock = new CycleHologram(capacity: 8);
+stock.Add(CycleHologram.Symbol(&quot;apples&quot;), 10);
+stock.Add(42, 5);                                   // integer symbols are exact
+stock.Add(CycleHologram.Symbol(&quot;oranges&quot;), 3);
+
+if (stock.TryDecode(out var items))
+{
+    foreach (var (symbol, count) in items.OrderBy(i =&gt; i.Item2))
+        Console.WriteLine($&quot;count {count}&quot;);        // every count is exact
+}</code></pre></div><div class="code out"><div class="code-bar"><span>Output</span><button class="copy" type="button" aria-label="Copy Output">copy</button></div><pre><code class="language-text">count 3
+count 5
+count 10</code></pre></div><div class="code"><div class="code-bar"><span>Replica reconciliation</span><button class="copy" type="button" aria-label="Copy Replica reconciliation">copy</button></div><pre><code class="language-csharp">using Phasor;
+
+var a = new CycleHologram(capacity: 4);
+var b = new CycleHologram(capacity: 4);
+for (ulong id = 0; id &lt; 10_000; id++) { a.Add(id); b.Add(id); }
+a.Add(777_001);        // only on A
+b.Add(777_002, 2);     // only on B, two copies
+
+byte[] wire = a.Serialize();                   // what A sends
+Console.WriteLine($&quot;wire size {wire.Length} bytes&quot;);
+var delta = CycleHologram.Deserialize(wire);
+delta.Subtract(b);                             // B subtracts its own hologram: A minus B
+if (delta.TryDecode(out var diff))
+    foreach (var (symbol, count) in diff.OrderBy(d =&gt; d.Item1))
+        Console.WriteLine($&quot;{symbol}: {count}&quot;);</code></pre></div><div class="code out"><div class="code-bar"><span>Output</span><button class="copy" type="button" aria-label="Copy Output">copy</button></div><pre><code class="language-text">wire size 192 bytes
+777001: 1
+777002: -2</code></pre></div>
+  
+  
+</div></section><section class="sec doc-sec" aria-labelledby="codecs"><div class="wrap">
+  <div class="sec-head"><span class="sec-dot cat-foundation" aria-hidden="true"></span><h2 id="codecs">The phasor codecs</h2></div>
+  <div class="prose-block"><p>Phasor gives you two operations. Encode turns a number into a face with its value as phase, and gives a symbol a salted hash-based random signature. Compose with bind (complex multiply per component) to build relationships, bundle (sum) to collect sets, and unbind (conjugate) to extract parts, and read out with correlation. On the linear band of a face, bind is addition. On the log band it is multiplication. There is no separate calculator: arithmetic is the composition.</p><p>PhasorCodec has a fixed width of 256 reals, with a frozen identity prefix and a learned orbital tail, and is built for neural models. HoloCodec has a configurable width, uses SIMD, has a planar layout and a memoized number cache, and is built for holographic storage and similarity search at scale. Do not mix faces between the two.</p></div>
+  
+  
+  
+  
+  
+  <div class="code"><div class="code-bar"><span>Encode, bind, bundle, unbind</span><button class="copy" type="button" aria-label="Copy Encode, bind, bundle, unbind">copy</button></div><pre><code class="language-csharp">using Phasor;
+
+// Encode a number and some symbols
+double[] five = PhasorCodec.Encode(&quot;5&quot;);
+double[] three = PhasorCodec.Encode(&quot;3&quot;);
+double[] age = PhasorCodec.Encode(&quot;age&quot;);
+double[] name = PhasorCodec.Encode(&quot;name&quot;);
+double[] hello = PhasorCodec.Encode(&quot;hello&quot;);
+
+// Bind two numbers: adds them on the linear band
+double[] fivePlusThree = PhasorCodec.Bind(five, three);
+Console.WriteLine($&quot;5 + 3 = {PhasorCodec.DecodeSum(fivePlusThree, max: 10)}&quot;);
+
+// Bind each value to a role, bundle the pairs into one record, then unbind a role to read its value back
+double[] record = PhasorCodec.Bundle(PhasorCodec.Bind(age, five), PhasorCodec.Bind(name, hello));
+double[] ageField = PhasorCodec.Unbind(record, age);
+Console.WriteLine($&quot;age field matches 5 better than 3: {PhasorCodec.Correlate(ageField, five) &gt; PhasorCodec.Correlate(ageField, three)}&quot;);
+
+// For larger workloads and similarity search, HoloCodec is SIMD and configurable in width
+var codec = new HoloCodec(dim: 1024);
+double[] encoded = codec.Encode(&quot;hello&quot;);
+Console.WriteLine($&quot;HoloCodec self-similarity is positive: {HoloCodec.Dot(encoded, codec.Encode(&quot;hello&quot;)) &gt; 0}&quot;);</code></pre></div><div class="code out"><div class="code-bar"><span>Output</span><button class="copy" type="button" aria-label="Copy Output">copy</button></div><pre><code class="language-text">5 + 3 = 8
+age field matches 5 better than 3: True
+HoloCodec self-similarity is positive: True</code></pre></div>
+  
+  
+</div></section><section class="sec doc-sec" aria-labelledby="hologram"><div class="wrap">
+  <div class="sec-head"><span class="sec-dot cat-foundation" aria-hidden="true"></span><h2 id="hologram">Hologram: readable algebra with operators</h2></div>
+  <div class="prose-block"><p>Hologram wraps a phasor face with operators for readability and prototyping. It is a readonly struct around a double array, so it converts freely to and from arrays without copying.</p><p>Bind is the operator *, per-component complex multiply. Bundle is +, a component-wise sum that merges holograms into one superposition. Unbind is /, multiplying by the conjugate. Correlate is a method that gives a dot product, and ~ flips the sign of the imaginary parts. Readout by correlation is approximate. For an exact readout use Pleroma, or CycleHologram for keys only.</p></div>
+  
+  
+  
+  
+  <div class="prose-block"><p>Read those four numbers carefully, because the two fields behave differently. The name field separates completely: 128.59 for the right value against -1.96 for the wrong one. Two symbols get independent random signatures, so an unrelated symbol correlates at the noise floor, near zero.</p><p>The age field separates by less than 3x: 32.59 for 7 against 13.39 for 5. That is the codec telling the truth. A number is encoded as a phase proportional to its value, so 5 and 7 are similar faces and 5 and 500 are not. Numbers carry a metric and symbols do not. If you want numbers to behave like symbols, encode them with FromSymbol instead of FromNumber, and give up arithmetic to get it.</p><p>So correlation separates signal from noise for symbols, and separates signal from nearby signal only by distance for numbers. Design the readout accordingly: take an argmax over candidate values rather than a threshold, which is what DecodeSum and DecodeProduct do.</p></div>
+  <div class="code"><div class="code-bar"><span>A record of role and value pairs</span><button class="copy" type="button" aria-label="Copy A record of role and value pairs">copy</button></div><pre><code class="language-csharp">using Phasor;
+
+var dim = 256;  // Hologram default dimension
+
+// A record is a superposition of role-value pairs
+var nameRole = Hologram.FromSymbol(&quot;name&quot;, dim);
+var lily = Hologram.FromSymbol(&quot;Lily&quot;, dim);
+var ageRole = Hologram.FromSymbol(&quot;age&quot;, dim);
+var seven = Hologram.FromNumber(7, dim);
+var record = Hologram.Zero(dim) + nameRole * lily + ageRole * seven;   // bind, then bundle
+
+// Unbind a role and correlate with candidate values
+var nameField = record / nameRole;
+var ageField = record / ageRole;
+Console.WriteLine($&quot;Name field has Lily:  {nameField.Correlate(lily):F2}&quot;);
+Console.WriteLine($&quot;Name field has John:  {nameField.Correlate(Hologram.FromSymbol(&quot;John&quot;, dim)):F2}&quot;);
+Console.WriteLine($&quot;Age field has 7:  {ageField.Correlate(seven):F2}&quot;);
+Console.WriteLine($&quot;Age field has 5:  {ageField.Correlate(Hologram.FromNumber(5, dim)):F2}&quot;);</code></pre></div><div class="code out"><div class="code-bar"><span>Output</span><button class="copy" type="button" aria-label="Copy Output">copy</button></div><pre><code class="language-text">Name field has Lily:  128.59
+Name field has John:  -1.96
+Age field has 7:  32.59
+Age field has 5:  13.39</code></pre></div>
+  
+  
+</div></section><section class="sec doc-sec" aria-labelledby="arithmetic"><div class="wrap">
+  <div class="sec-head"><span class="sec-dot cat-foundation" aria-hidden="true"></span><h2 id="arithmetic">Arithmetic with numbers</h2></div>
+  <div class="prose-block"><p>When you bind two numbers their bands compose. The face carries both operations at once, and you read out the band you care about. Arithmetic is composition, not calculation.</p></div>
+  
+  
+  
+  
+  <div class="prose-block"><p>The operators allocate a new array per operation. In tight loops or accumulation, use the in-place static methods BindInto, BundleInto and UnbindInto with a buffer you allocate once. At typical dimensions the allocating Bind operator is about 1.7 times slower than BindInto.</p></div>
+  <div class="code"><div class="code-bar"><span>C#</span><button class="copy" type="button" aria-label="Copy C#">copy</button></div><pre><code class="language-csharp">using Phasor;
+
+var dim = 256;
+
+// Linear band: binding two numbers adds them
+var sumEncoded = Hologram.FromNumber(3, dim) * Hologram.FromNumber(5, dim);
+Console.WriteLine(PhasorCodec.DecodeSum(sumEncoded, max: 20));
+
+// Log band: binding two numbers multiplies them
+var productEncoded = Hologram.FromNumber(2, dim) * Hologram.FromNumber(4, dim);
+Console.WriteLine(PhasorCodec.DecodeProduct(productEncoded, max: 16));
+
+// In a loop, use the in-place methods: they reuse one buffer instead of allocating per call
+double[] accumulator = new double[dim];
+for (int i = 0; i &lt; 100; i++)
+    Hologram.BundleInto(accumulator, Hologram.FromNumber(i, dim).Reals);
+Console.WriteLine($&quot;accumulated {accumulator.Length} components&quot;);</code></pre></div><div class="code out"><div class="code-bar"><span>Output</span><button class="copy" type="button" aria-label="Copy Output">copy</button></div><pre><code class="language-text">8
+8
+accumulated 256 components</code></pre></div>
+  
+  
+</div></section><section class="sec doc-sec" aria-labelledby="gotchas"><div class="wrap">
+  <div class="sec-head"><span class="sec-dot cat-foundation" aria-hidden="true"></span><h2 id="gotchas">Things to know</h2></div>
+  
+  <dl class="term-list"><dt>Layouts do not mix</dt><dd>Hologram uses the interleaved layout, the same as PhasorCodec. HoloCodec is planar, with all reals then all imaginary parts, and produces garbage if given an interleaved face.</dd><dt>Dimension floor</dt><dd>PhasorCodec requires an even dimension of at least 128: 64 frozen reals and at least 64 orbital. Odd dimensions align down, and anything below 128 throws an ArgumentException.</dd><dt>.Reals is live</dt><dd>The Reals property returns the internal array, not a copy, so changing it changes the hologram. Use it read-only or pass it to the in-place methods.</dd><dt>Small fields wrap</dt><dd>Every view&#39;s count must lie within half the field per prime. On a small test field, large kernel weights wrap, so compare cells there instead of counts.</dd></dl>
+  
+  
+  
+  
+  
+  
+  
+</div></section>
+</main>
+<footer class="site-footer"><div class="wrap">
+  <div class="foot-grid">
+    <div><h2>Products</h2><ul><li><a href="/phasor/">Phasor</a></li><li><a href="/evalapp/">EvalApp</a></li><li><a href="/holodb/">HoloDb</a></li><li><a href="/algformer/">AlgFormer</a></li><li><a href="/prism/">Prism</a></li><li><a href="/prose/">Prose</a></li><li><a href="/tracer/">Tracer</a></li><li><a href="/holovoxel/">HoloVoxel</a></li></ul></div>
+    <div><h2>Tools</h2><ul><li><a href="/tools/analyst/">The Analyst</a></li><li><a href="/tools/creature/">The Creature</a></li><li><a href="/tools/forecaster/">The Forecaster</a></li><li><a href="/tools/prism/">Prism</a></li><li><a href="/tools/stories/">Nano Stories</a></li><li><a href="/tools/cartographer/">The Cartographer</a></li><li><a href="/tools/prose/">Prose</a></li><li><a href="/tools/council-spending/">Council Spending Scanner</a></li></ul></div>
+    <div><h2>Learn</h2><ul><li><a href="/evidence/">Evidence</a></li><li><a href="/research/">Research</a></li><li><a href="/products/">All products</a></li><li><a href="/tools/">All tools</a></li></ul></div>
+    <div><h2>Company</h2><ul><li><a href="/partner/">Partner with us</a></li><li><a href="/licence/">Licence</a></li><li><a href="/ai/">For AI readers</a></li><li><a href="https://www.nuget.org/profiles/evaluatedapplications" rel="noopener">NuGet</a></li></ul></div>
+    <div><h2>Machine-readable</h2><ul><li><a href="/llms.txt">llms.txt</a></li><li><a href="/llms-full.txt">llms-full.txt</a></li><li><a href="/sitemap.xml">sitemap.xml</a></li></ul></div>
+  </div>
+  <div class="foot-base"><span>Evaluated Applications · .NET libraries · England</span><span class="mono">© 2026 Evaluated Applications</span></div>
+</div></footer>
+
+<script src="/assets/site.js?v=3190ebab" defer></script>
+
+</body>
+</html>

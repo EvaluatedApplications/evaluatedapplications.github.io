@@ -1,0 +1,85 @@
+@page "/content-db-spike"
+@inject HttpClient Http
+@inject Showroom.Services.ContentDbHost ContentDb
+
+<PageTitle>Content DB spike — diagnostic</PageTitle>
+
+<div class="room">
+    <header class="room-head">
+        <nav class="crumb"><a href="/">Evaluated Applications</a> <span>/</span> Content DB spike</nav>
+        <h1>Content DB spike</h1>
+        <p class="lede">Internal diagnostic, not a public tool. Proves that a HoloDb database built at
+            desktop build time, shipped as a static file, can be fetched, written into this browser
+            tab's WASM virtual filesystem, opened, and queried — entirely client-side. Nothing else in
+            this app reads real page content from this yet; this page exists only to show, honestly,
+            whether each step of that chain actually works in a real browser.</p>
+        <div class="badges">
+            <span>Runs only on this page</span><span>Never touches app boot</span><span>Shows the real exception on failure</span>
+        </div>
+    </header>
+
+    @if (_diag is null)
+    {
+        <p class="hint">Running…</p>
+    }
+    else
+    {
+        <div class="stack">
+            <h2 style="margin-top:0">Pipeline result: @(_diag.Success ? "success" : "failed")</h2>
+            <ol style="padding-left:20px; display:flex; flex-direction:column; gap:10px; margin:0">
+                @foreach (var step in _diag.Steps)
+                {
+                    <li>
+                        <div><strong>@(step.Success ? "OK " : "FAIL ")@step.Name</strong>
+                            <span style="opacity:.65"> — @step.ElapsedMs ms</span></div>
+                        @if (step.Success)
+                        {
+                            <div style="opacity:.85">@step.Detail</div>
+                        }
+                        else
+                        {
+                            <div class="err">@step.ExceptionType: @step.ExceptionMessage</div>
+                        }
+                    </li>
+                }
+            </ol>
+        </div>
+
+        @if (_diag.Rows is { Count: > 0 })
+        {
+            <div class="stack" style="margin-top:16px">
+                <h2 style="margin-top:0">Rows read back (@_diag.Rows.Count)</h2>
+                <table style="width:100%; border-collapse:collapse">
+                    <thead>
+                        <tr style="text-align:left; opacity:.65">
+                            <th style="padding:4px 8px">Slug</th>
+                            <th style="padding:4px 8px">Title</th>
+                            <th style="padding:4px 8px">Body</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var row in _diag.Rows)
+                        {
+                            <tr>
+                                <td style="padding:4px 8px; vertical-align:top">@row.Slug</td>
+                                <td style="padding:4px 8px; vertical-align:top">@row.Title</td>
+                                <td style="padding:4px 8px; vertical-align:top">@row.Body</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    }
+</div>
+
+@code {
+    Showroom.Services.ContentDbDiagnostics? _diag;
+
+    // Triggered by opening THIS page, and only this page — nothing about this pipeline runs at app
+    // boot (see ContentDbHost's own header comment for why that matters here specifically).
+    protected override async Task OnInitializedAsync()
+    {
+        _diag = await ContentDb.GetOrLoadAsync(Http);
+    }
+}

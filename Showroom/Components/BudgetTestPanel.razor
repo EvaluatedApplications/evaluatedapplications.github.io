@@ -1,0 +1,114 @@
+@using System.Diagnostics
+@using Showroom.Services
+@inject CouncilWebData Data
+
+@* The pre-registered test and its result, in plain words. The verdicts are shown as the files give them; a slope (beta) is never shown as a finding. *@
+<section class="budget">
+    <button type="button" class="check-head" @onclick="Toggle" aria-expanded="@(_open ? "true" : "false")">
+        <span class="arrow" aria-hidden="true">@(_open ? "▾" : "▸")</span>
+        <h2>Did the test find anything? No: it was inconclusive</h2>
+    </button>
+    <p class="plain">Before looking, a method was written down and committed: compare each council-year's file total with what the council declared to government, and ask whether the second copies the rules flag
+        explain any of the gap. <a href="@DataUrl.For("council-web/PREREG_BUDGET_TEST.txt")" target="_blank" rel="noopener">The method as written before the run</a>.</p>
+    @if (_open)
+    {
+        <div class="verdict">
+            <p><b>In plain words.</b> The test was inconclusive, on every one of its arms. In the first group the flagged second copies are a median 0.01% of a council's file total (3.4% if the repeated-payment groups are added), while the ratio of file total to declared figure varies by about 23% between council-years (the comparator's own noise). A signal that small cannot be told apart from a gap that large, so the test cannot say whether any flagged row was an
+                extra outgoing, and no slope from it is presented as a finding.</p>
+            <p><b>The cities.</b> In Leeds the file total is between 11% below and 12% above the declared running expenses plus Housing Revenue Account, and 12% to 28% below once capital and pass-through payments are added.
+                The second copies the test counts are zero in Leeds by its definition, so the test says nothing there, and the repeated-payment groups give a fit the pre-registration calls an unexpected shape, with no verdict
+                (it reflects the size gap, not the flagged rows). @(_leeds ?? "The Leeds same-line-in-two-files repeats are not in the statistic; they were found after the test was written.")</p>
+            <p><b>Four more cities.</b> In Sheffield, Bradford, Liverpool and Bristol the file total is below the declared running expenses plus capital and pass-through in all 17 city-years (0.56 to 0.99 of it), and the second
+                copies the test counts are zero in Sheffield and 0.00 to 0.85% elsewhere. The test cannot tell whether flagged rows were extra outgoings. All six arms are inconclusive.</p>
+            <p><b>Nine more councils.</b> The group was frozen with 52 eligible council-years (Wakefield, Coventry, Durham, Kirklees, Leicester, Cornwall, Nottingham, Wirral and Newcastle). In 49 of those 52 the file total is below the declared running expenses plus capital and
+                pass-through (0.45 to 1.84 of it, median 0.75); the second copies the test counts are 0.0% to 8.1% of the file total. All six arms are inconclusive: the test cannot tell whether flagged rows were extra outgoings.
+                The current data holds one more eligible council-year, Wirral 2022-23, which became eligible after the group was frozen (a missing month was added). With it the figures are 50 of 53 (median 0.76) and 97 council-years pooled over the four groups. The test keeps its frozen pool, 52 and 96: the added year is not in the statistic.
+                Over the frozen pool of 96 council-years, pooled across the four groups, every one of its six arms is inconclusive. No slope is presented as a finding.</p>
+            <p><b>Seven more councils.</b> The fifth group is Surrey, Essex, Hertfordshire, Stockport, York, Calderdale and Camden, whose government figures were added after the first four groups were run (37 eligible council-years; the group was frozen and committed before its statistic was computed). In 26 of the 37 the file total is below the declared running expenses plus capital and
+                pass-through; in the other 11 it is above it. Across the 37, the file total is 0.64 to 2.57 of that figure (median 0.91). The second copies the test counts are 0.0% to 6.2% of the file total, and zero in 32 of the 37. All six arms are inconclusive: the test cannot tell whether flagged rows were extra outgoings.
+                Pooled over all five groups the test has 133 council-years, and every one of its six arms is inconclusive.</p>
+            <p class="caption">Revenue Outturn is revenue only and net of recoverable VAT; this file is gross of payment, includes capital, pass-through payments, loan movements and credits. Employees are not paid through a supplier file.
+                The published files cannot show which bank payments left.</p>
+        </div>
+        @if (_error is not null) { <p class="err">@_error</p> }
+        else if (!_loaded) { <p class="hint">Loading the results (small files)...</p> }
+        else
+        {
+            @foreach (var s in _sets)
+            {
+                <h3>@s.Title</h3>
+                <table class="tests">
+                    <thead><tr><th>Arm</th><th>Role</th><th>Council-years</th><th>Verdict</th></tr></thead>
+                    <tbody>
+                    @foreach (var r in s.Rows)
+                    {
+                        <tr><td>@r[0]</td><td>@r[1]</td><td>@r[2]</td><td>@Verdict(r[3])</td></tr>
+                    }
+                    </tbody>
+                </table>
+            }
+            <p class="caption">Council-years in the first group: 19, from Reading, Bracknell Forest, RBWM and Merton. Wokingham's years are a worked example and are not in the test. Birmingham and West Berkshire have no council-year with both twelve covered months and a published government figure, so none of their years is in a group. Declared figures are the government's Open Government Licence statistics, credited by name and year on each council's page.</p>
+        }
+    }
+</section>
+
+@code {
+    sealed class Set { public string Title = ""; public List<string[]> Rows = new(); }
+    bool _open, _loaded;
+    string? _error;
+    readonly List<Set> _sets = new();
+
+    string? _leeds;
+
+    /// <summary>The Leeds same-line-in-two-files repeats, from the shipped cross-file check (cross/cross_file_repeats.csv), by financial year: the two years that hold the most, then everything else.
+    /// Derived here, never typed, so it moves with the data (the 2026-10-05 re-audit found the typed figures stale). Null when Leeds is not in the file.</summary>
+    async Task<string?> LeedsRepeatsAsync(Cooperative co)
+    {
+        var t = new Tab(await Data.TableAsync("cross/cross_file_repeats.csv", true, co));
+        var rowsBy = new Dictionary<string, long>(StringComparer.Ordinal); var valBy = new Dictionary<string, decimal>(StringComparer.Ordinal);
+        foreach (var r in t.Rows)
+        {
+            if (!t.G(r, "Council").Equals("leeds", StringComparison.OrdinalIgnoreCase)) continue;
+            string fy = CouncilWebData.FinancialYearOf(t.G(r, "File"));
+            rowsBy[fy] = (rowsBy.TryGetValue(fy, out var n) ? n : 0) + t.I(r, "RowsAlsoInEarlierFile");
+            valBy[fy] = (valBy.TryGetValue(fy, out var v) ? v : 0) + t.M(r, "ValueAbsAlsoInEarlierFile");
+        }
+        if (valBy.Count == 0) return null;
+        var top = new List<string>(valBy.Keys);
+        top.Sort((a, b) => valBy[b].CompareTo(valBy[a]));
+        if (top.Count > 2) top.RemoveRange(2, top.Count - 2);
+        top.Sort(string.CompareOrdinal);
+        long restRows = 0; decimal restVal = 0;
+        foreach (var k in valBy.Keys) if (!top.Contains(k)) { restRows += rowsBy[k]; restVal += valBy[k]; }
+        var parts = new List<string>();
+        foreach (var k in top) parts.Add($"{CouncilTerms.Gbp(valBy[k])} ({CouncilTerms.Plural(rowsBy[k], "row", "rows")}) in {k}");
+        return $"The Leeds same-line-in-two-files repeats, counted from the cross-file check as shipped, are {string.Join(" and ", parts)}; every other financial year together holds {CouncilTerms.Gbp(restVal)} ({CouncilTerms.Plural(restRows, "row", "rows")}). They are not in the statistic; they were found after the test was written.";
+    }
+
+    static string Verdict(string v) => v == "INCONCLUSIVE" ? "Inconclusive" : v.StartsWith("UNEXPECTED SHAPE") ? "Unexpected shape, no verdict" : v;
+
+    async Task Toggle()
+    {
+        _open = !_open;
+        if (!_open || _loaded || _error is not null) return;
+        var sw = Stopwatch.StartNew();
+        try
+        {
+            var co = new Cooperative(CancellationToken.None);
+            foreach (var (file, title) in new[] { ("budget_test", "First group (Reading, Bracknell Forest, RBWM, Merton)"), ("budget_test_stage2", "Second group (Leeds)"),
+                         ("budget_test_stage2b", "Third group (Sheffield, Bradford, Liverpool, Bristol)"),
+                         ("budget_test_stage2c", "Fourth group (Wakefield, Coventry, Durham, Kirklees, Leicester, Cornwall, Nottingham, Wirral, Newcastle)"),
+                         ("budget_test_stage2d", "Fifth group (Surrey, Essex, Hertfordshire, Stockport, York, Calderdale, Camden)"),
+                         ("budget_test_pooled_all", "First three groups pooled (44 council-years)"), ("budget_test_pooled_all2", "First four groups pooled (96 council-years, the frozen pool)"),
+                         ("budget_test_pooled_all3", "All five groups pooled (133 council-years)") })
+            {
+                var t = new Tab(await Data.TableAsync($"cross/{file}.csv", true, co));
+                _sets.Add(new Set { Title = title, Rows = t.Rows.Select(r => new[] { t.G(r, "Arm"), t.G(r, "Role"), t.G(r, "Units"), t.G(r, "Verdict") }).ToList() });
+            }
+            _leeds = await LeedsRepeatsAsync(co);
+            _loaded = true;
+            await Data.LogAsync("budget test built", sw.ElapsedMilliseconds);
+        }
+        catch (Exception ex) { _error = "Could not load the results: " + ex.Message; }
+    }
+}

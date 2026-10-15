@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HoloDb docs | Evaluated Applications</title>
+<meta name="description" content="How to use HoloDb: tables, the SQL dialect, bulk loading, transactions, similarity search, durability and paged tables, with compiled examples.">
+<link rel="canonical" href="https://evaluatedapplications.github.io/holodb/docs/">
+
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Evaluated Applications">
+<meta property="og:title" content="HoloDb docs | Evaluated Applications">
+<meta property="og:description" content="How to use HoloDb: tables, the SQL dialect, bulk loading, transactions, similarity search, durability and paged tables, with compiled examples.">
+<meta property="og:url" content="https://evaluatedapplications.github.io/holodb/docs/">
+<meta name="twitter:card" content="summary">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%23f0796a'/%3E%3Cstop offset='.5' stop-color='%237bd86a'/%3E%3Cstop offset='1' stop-color='%23c07dff'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='32' height='32' rx='7' fill='%23050608'/%3E%3Cpath d='M16 5L27 26H5Z' fill='none' stroke='url(%23g)' stroke-width='2' stroke-linejoin='round'/%3E%3C/svg%3E">
+<script>document.documentElement.classList.add('js')</script>
+<link rel="stylesheet" href="/assets/ea.css?v=93cf72d0">
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Home","item":"https://evaluatedapplications.github.io/"},{"@type":"ListItem","position":2,"name":"Products","item":"https://evaluatedapplications.github.io/products/"},{"@type":"ListItem","position":3,"name":"HoloDb","item":"https://evaluatedapplications.github.io/holodb/"},{"@type":"ListItem","position":4,"name":"Docs","item":"https://evaluatedapplications.github.io/holodb/docs/"}]}</script>
+
+</head>
+<body class="cat-holodb" data-page="product-docs">
+<a class="skip" href="#main">Skip to content</a>
+<div class="beam" aria-hidden="true"></div>
+<header class="site-header"><div class="wrap nav" data-nav>
+  <a class="brand" href="/"><svg class="mark" viewBox="0 0 32 32" aria-hidden="true"><defs><linearGradient id="m" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#f0796a"/><stop offset=".166" stop-color="#f0a15a"/><stop offset=".333" stop-color="#e6c450"/><stop offset=".5" stop-color="#7bd86a"/><stop offset=".666" stop-color="#4aa3ff"/><stop offset=".833" stop-color="#7d7dff"/><stop offset="1" stop-color="#c07dff"/></linearGradient></defs><path d="M16 5L27 26H5Z" fill="none" stroke="url(#m)" stroke-width="2" stroke-linejoin="round"/></svg>Evaluated Applications</a>
+  <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="site-links">Menu</button>
+  <nav aria-label="Main"><ul class="nav-links" id="site-links">
+    <li><a href="/products/" aria-current="page">Products</a></li><li><a href="/tools/">Tools</a></li><li><a href="/evidence/">Evidence</a></li><li><a href="/research/">Research</a></li>
+    <li><a class="nav-cta" href="/partner/">Partner with us</a></li>
+    <li><a href="https://www.nuget.org/profiles/evaluatedapplications" rel="noopener">NuGet<span class="sr-only"> (external)</span></a></li>
+  </ul></nav>
+</div></header>
+<main id="main" tabindex="-1">
+
+<header class="page-head"><div class="wrap">
+<nav class="crumbs" aria-label="Breadcrumb"><ol><li><a href="/">Home</a></li><li><a href="/products/">Products</a></li><li><a href="/holodb/">HoloDb</a></li><li aria-current="page">Docs</li></ol></nav>
+<p class="eyebrow">HoloDb docs</p>
+<h1 class="wide">HoloDb docs</h1>
+<p class="lede">The practical guide: put data in, get answers out. Every program on this page was compiled and run against the published package, and the output shown is what it printed.</p>
+
+</div></header>
+<nav class="subnav" aria-label="HoloDb sections"><div class="wrap"><ul><li><a href="/holodb/">Overview</a></li><li><a href="/holodb/#quick-start">Quick start</a></li><li><a href="/holodb/docs/" aria-current="page">Docs</a></li><li><a href="/holodb/pleroma/">Built on Pleroma</a></li><li><a href="/holodb/client/">Client</a></li><li><a href="/holodb/evidence/">Evidence</a></li></ul></div></nav>
+<section class="sec"><div class="wrap">
+  <nav class="toc" aria-labelledby="toc-h"><h2 id="toc-h">On this page</h2><ul><li><a href="#install">Install and first query</a></li><li><a href="#types">Tables and types</a></li><li><a href="#writing">Inserting, updating and bulk loading</a></li><li><a href="#parameters">Parameterized queries</a></li><li><a href="#bulk">Bulk loading</a></li><li><a href="#dialect">Querying: the dialect</a></li><li><a href="#results">Reading results</a></li><li><a href="#ways">Three ways to ask one store</a></li><li><a href="#similarity">Similarity search</a></li><li><a href="#transactions">Transactions</a></li><li><a href="#durable">In memory or durable</a></li><li><a href="#paged">Larger than memory: paged tables</a></li><li><a href="#indexes">Indexes, and why aggregates are instant</a></li><li><a href="#alter">Changing a table</a></li><li><a href="#di">Dependency injection and EvalApp</a></li><li><a href="#meter">The usage meter</a></li><li><a href="#browser-and-network">In the browser, and over the network</a></li></ul></nav>
+</div></section>
+<section class="sec doc-sec" aria-labelledby="install"><div class="wrap">
+  <div class="sec-head"><span class="sec-dot cat-holodb" aria-hidden="true"></span><h2 id="install">Install and first query</h2></div>
+  <div class="prose-block"><p>Add the package from NuGet with dotnet add package EvaluatedApplications.HoloDb. It targets .NET 8 and later, and ships the compiled library only. HoloDbService is the wrapped, async-friendly entry point, and Execute runs SQL synchronously. ExecuteAsync offloads the work to the thread pool so a request thread is not blocked.</p></div>
+  
+  
+  
+  
+  
+  <div class="code"><div class="code-bar"><span>C#</span><button class="copy" type="button" aria-label="Copy C#">copy</button></div><pre><code class="language-csharp">using HoloDb;
+
+var db = new HoloDbService(new HoloDbOptions());           // in memory
+db.Execute(&quot;CREATE TABLE users (id INT PRIMARY KEY, age INT, name TEXT)&quot;);
+db.Execute(&quot;INSERT INTO users VALUES (1, 30, &#39;Ada&#39;), (2, 24, &#39;Linus&#39;), (3, 15, &#39;Kid&#39;)&quot;);
+
+var result = db.Execute(&quot;SELECT name FROM users WHERE age &gt;= 18 ORDER BY age DESC&quot;);
+foreach (var row in result.Rows)
+    Console.WriteLine(row[&quot;name&quot;]);
+
+var count = await db.ExecuteAsync(&quot;SELECT COUNT(*) FROM users&quot;);
+Console.WriteLine(count.Rows[0][&quot;count(*)&quot;]);</code></pre></div><div class="code out"><div class="code-bar"><span>Output</span><button class="copy" type="button" aria-label="Copy Output">copy</button></div><pre><code class="language-text">Ada
+Linus
+3</code></pre></div>
+  
+  
+</div></section><section class="sec doc-sec" aria-labelledby="types"><div class="wrap">
+  <div class="sec-head"><span class="sec-dot cat-holodb" aria-hidden="true"></span><h2 id="types">Tables and types</h2></div>
+  <div class="prose-block"><p>There are three storage types, each with the usual SQL aliases.</p></div>
+  <dl class="term-list"><dt>INT</dt><dd>A .NET long. Aliases: INTEGER.</dd><dt>REAL</dt><dd>A .NET double. Aliases: FLOAT, DOUBLE, DECIMAL, NUMERIC. DECIMAL and NUMERIC map to a 64-bit float, so they are not exact decimals.</dd><dt>TEXT</dt><dd>A .NET string. Aliases: VARCHAR, STRING.</dd></dl>
+  
+  
+  
+  <div class="prose-block"><p>One column may be PRIMARY KEY, and it is enforced unique. For money, store integer minor units, cents as an INT: it is exact, and it lets the constant-time integer aggregates serve your revenue totals.</p></div>
+  <div class="code"><div class="code-bar"><span>SQL</span><button class="copy" type="button" aria-label="Copy SQL">copy</button></div><pre><code class="language-sql">CREATE TABLE sales (
+  id     INT PRIMARY KEY,
+  region TEXT,
+  amount REAL
+)</code></pre></div>
+  
+  
+</div></section><section class="sec doc-sec" aria-labelledby="writing"><div class="wrap">
+  <div class="sec-head"><span class="sec-dot cat-holodb" aria-hidden="true"></span><h2 id="writing">Inserting, updating and bulk loading</h2></div>
+  <div class="prose-block"><p>Strings use single quotes, and a quote is escaped by doubling it. Rows go in singly or in batches, with or without a column list.</p></div>
+  
+  
+  
+  
+  <div class="prose-block"><p>Every Execute also takes positional ? placeholders. The arguments are quoted and escaped for you, before the statement is parsed. A null argument, a wrong argument count or an unsupported type throws.</p></div>
+  <div class="code"><div class="code-bar"><span>SQL</span><button class="copy" type="button" aria-label="Copy SQL">copy</button></div><pre><code class="language-sql">INSERT INTO sales VALUES (1, &#39;EU&#39;, 42.50)</code></pre></div><div class="code"><div class="code-bar"><span>SQL</span><button class="copy" type="button" aria-label="Copy SQL">copy</button></div><pre><code class="language-sql">INSERT INTO sales (id, region, amount) VALUES (2, &#39;US&#39;, 17.00), (3, &#39;EU&#39;, 61.10)</code></pre></div><div class="code"><div class="code-bar"><span>SQL</span><button class="copy" type="button" aria-label="Copy SQL">copy</button></div><pre><code class="language-sql">UPDATE sales SET amount = 0 WHERE region = &#39;US&#39;</code></pre></div><div class="code"><div class="code-bar"><span>SQL</span><button class="copy" type="button" aria-label="Copy SQL">copy</button></div><pre><code class="language-sql">DELETE FROM sales WHERE amount = 0</code></pre></div>
+  
+  
+</div></section><section class="sec doc-sec" aria-labelledby="parameters"><div class="wrap">
+  <div class="sec-head"><span class="sec-dot cat-holodb" aria-hidden="true"></span><h2 id="parameters">Parameterized queries</h2></div>
+  <div class="prose-block"><p>Use ? placeholders instead of building SQL text yourself.</p></div>
+  
+  
+  
+  
+  
+  <div class="code"><div class="code-bar"><span>C#</span><button class="copy" type="button" aria-label="Copy C#">copy</button></div><pre><code class="language-csharp">using HoloDb;
+
+var db = new HoloDbService(new HoloDbOptions());
+db.Execute(&quot;CREATE TABLE people (id INT PRIMARY KEY, name TEXT, age INT)&quot;);
+db.Execute(&quot;INSERT INTO people VALUES (?, ?, ?)&quot;, 1, &quot;O&#39;Neil&quot;, 41);   // quoted and escaped for you
+db.Execute(&quot;INSERT INTO people VALUES (?, ?, ?)&quot;, 2, &quot;Ada&quot;, 36);
+
+var r = db.Execute(&quot;SELECT name FROM people WHERE age &gt; ? ORDER BY name&quot;, 30);
+foreach (var row in r.Rows) Console.WriteLine(row[&quot;name&quot;]);</code></pre></div><div class="code out"><div class="code-bar"><span>Output</span><button class="copy" type="button" aria-label="Copy Output">copy</button></div><pre><code class="language-text">Ada
+O&#39;Neil</code></pre></div>
+  
+  
+</div></section><section class="sec doc-sec" aria-labelledby="bulk"><div class="wrap">
+  <div class="sec-head"><span class="sec-dot cat-holodb" aria-hidden="true"></span><h2 id="bulk">Bulk loading</h2></div>
+  <div class="prose-block"><p>For large loads, skip the SQL parser and hand the engine one typed array per column (long[], double[] or string[]). It is atomic and validates primary-key uniqueness before committing. Load in chunks for very large data sets, as the Analyst tool does with a large paste.</p></div>
+  
+  
+  
+  
+  
+  <div class="code"><div class="code-bar"><span>C#</span><button class="copy" type="button" aria-label="Copy C#">copy</button></div><pre><code class="language-csharp">using HoloDb;
+
+var db = new HoloDbService(new HoloDbOptions());
+db.Execute(&quot;CREATE TABLE sales (id INT PRIMARY KEY, region TEXT, amount REAL)&quot;);
+
+// Typed column arrays skip the SQL parser: the fast path for large loads.
+var ids = new long[] { 1, 2, 3 };
+var regions = new string[] { &quot;EU&quot;, &quot;US&quot;, &quot;EU&quot; };
+var amounts = new double[] { 42.50, 17.00, 61.10 };
+db.BulkLoad(&quot;sales&quot;, new[] { &quot;id&quot;, &quot;region&quot;, &quot;amount&quot; }, new Array[] { ids, regions, amounts }, count: 3);
+
+var r = db.Execute(&quot;SELECT region, COUNT(*), SUM(amount) FROM sales GROUP BY region ORDER BY region&quot;);
+foreach (var row in r.Rows) Console.WriteLine($&quot;{row[&quot;region&quot;]}: {row[&quot;count(*)&quot;]} rows, {row[&quot;sum(amount)&quot;]}&quot;);</code></pre></div><div class="code out"><div class="code-bar"><span>Output</span><button class="copy" type="button" aria-label="Copy Output">copy</button></div><pre><code class="language-text">EU: 2 rows, 103.6
+US: 1 rows, 17</code></pre></div>
+  
+  
+</div></section><section class="sec doc-sec" aria-labelledby="dialect"><div class="wrap">
+  <div class="sec-head"><span class="sec-dot cat-holodb" aria-hidden="true"></span><h2 id="dialect">Querying: the dialect</h2></div>
+  <div class="prose-block"><p>A SELECT supports aggregates (COUNT, SUM, AVG, MIN, MAX), a full boolean WHERE (AND, OR, NOT, parentheses, the comparisons = != &lt; &gt; &lt;= &gt;=, LIKE, IN, IN (SELECT ...) and BETWEEN ... AND ...), GROUP BY with HAVING, ORDER BY with several keys, LIMIT, DISTINCT and INNER JOIN.</p></div>
+  
+  
+  
+  
+  <div class="prose-block"><p>Qualify joined columns with the table name, as above. Table aliases are not supported.</p></div>
+  <div class="code"><div class="code-bar"><span>SQL</span><button class="copy" type="button" aria-label="Copy SQL">copy</button></div><pre><code class="language-sql">SELECT region, COUNT(*), SUM(amount), AVG(amount)
+FROM sales
+WHERE amount BETWEEN 10 AND 1000
+GROUP BY region
+HAVING SUM(amount) &gt; 50
+ORDER BY sum(amount) DESC
+LIMIT 10</code></pre></div><div class="code"><div class="code-bar"><span>A join across two tables</span><button class="copy" type="button" aria-label="Copy A join across two tables">copy</button></div><pre><code class="language-sql">SELECT orders.id, customers.name, orders.total
+FROM orders
+INNER JOIN customers ON orders.customer_id = customers.id
+WHERE orders.total &gt; 100
+ORDER BY orders.total DESC</code></pre></div>
+  
+  
+</div></section><section class="sec doc-sec" aria-labelledby="results"><div class="wrap">
+  <div class="sec-head"><span class="sec-dot cat-holodb" aria-hidden="true"></span><h2 id="results">Reading results</h2></div>
+  <div class="prose-block"><p>Execute returns a QueryResult. The simplest way to read it is row by row as dictionaries keyed by column name, through Rows. Aggregate columns are named by the function applied, in lower case: count(*), sum(amount), avg(amount), min(amount) and max(amount). Columns lists the result&#39;s column names in order, and for a write statement Affected is the number of rows changed.</p><p>For hot paths QueryResult keeps results columnar and exposes direct accessors (GetLong, GetDouble, GetText and GetValue by row and column), so you can read values without materialising a dictionary per row.</p></div>
+  
+  
+  
+  
+  
+  
+  
+  
+</div></section><section class="sec doc-sec" aria-labelledby="ways"><div class="wrap">
+  <div class="sec-head"><span class="sec-dot cat-holodb" aria-hidden="true"></span><h2 id="ways">Three ways to ask one store</h2></div>
+  <div class="prose-block"><p>Exact lookup by key, similarity by content and constant-time aggregates all read the same rows. The program below shows each, and the usage meter shows the aggregate scanned no rows.</p></div>
+  
+  
+  
+  
+  
+  <div class="code"><div class="code-bar"><span>C#</span><button class="copy" type="button" aria-label="Copy C#">copy</button></div><pre><code class="language-csharp">using HoloDb;
+
+var db = Database.Open();   // null path: in memory
+db.Execute(&quot;CREATE TABLE invoices (id INT PRIMARY KEY, customer TEXT, region TEXT, amount_cents INT)&quot;);
+db.Execute(&quot;INSERT INTO invoices VALUES (1,&#39;Acme&#39;,&#39;north&#39;,1200),(2,&#39;Beta&#39;,&#39;south&#39;,4500),(3,&#39;Cyan&#39;,&#39;north&#39;,1150),(4,&#39;Dune&#39;,&#39;east&#39;,30000),(5,&#39;Echo&#39;,&#39;north&#39;,1300)&quot;);
+
+// 1. By key: ordinary SQL, answered from the primary-key index
+Console.WriteLine(db.Execute(&quot;SELECT customer FROM invoices WHERE id = 3&quot;).Rows[0][&quot;customer&quot;]);
+
+// 2. By content: rank rows by resemblance to a partial description; add score to see the ranking
+foreach (var r in db.Execute(&quot;SELECT id, region, amount_cents FROM invoices NEAREST (region = &#39;north&#39;, amount_cents = 1200) LIMIT 3&quot;).Rows)
+    Console.WriteLine($&quot;{r[&quot;id&quot;]}: {r[&quot;region&quot;]} {r[&quot;amount_cents&quot;]}&quot;);
+
+// 3. By aggregate: read from maintained totals, no scan
+foreach (var r in db.Execute(&quot;SELECT region, SUM(amount_cents) FROM invoices GROUP BY region ORDER BY region&quot;).Rows)
+    Console.WriteLine($&quot;{r[&quot;region&quot;]}: {r[&quot;sum(amount_cents)&quot;]}&quot;);
+Console.WriteLine($&quot;rows scanned by the aggregate: {Database.LastRowsScanned}&quot;);</code></pre></div><div class="code out"><div class="code-bar"><span>Output</span><button class="copy" type="button" aria-label="Copy Output">copy</button></div><pre><code class="language-text">Cyan
+1: north 1200
+5: north 1300
+3: north 1150
+east: 30000
+north: 3650
+south: 4500
+rows scanned by the aggregate: 0</code></pre></div>
+  
+  <p class="more-link"><a href="/holodb/#overview">See the three ways as a diagram</a></p>
+</div></section><section class="sec doc-sec" aria-labelledby="similarity"><div class="wrap">
+  <div class="sec-head"><span class="sec-dot cat-holodb" aria-hidden="true"></span><h2 id="similarity">Similarity search</h2></div>
+  <div class="prose-block"><p>Because rows are stored holographically, HoloDb ranks rows by similarity to a partial description, with no separate vector index. Use the NEAREST clause with the fields you know and a LIMIT for how many neighbours you want. Add score to the projection to read the ranking metric.</p><p>Similarity is graded: a close number or date, or a near-identical string, ranks ahead of a far or unrelated one. It is an exact scan below 8,000 rows and whenever the query has a WHERE, and above that an approximate sublinear index (locality-sensitive hashing) ranks candidates, so the result can differ from an exact scan. With a WHERE the filter runs first and the survivors are ranked. NEAREST does not combine with GROUP BY, and an UPDATE, DELETE or ALTER TABLE on the table forces the next NEAREST to rebuild its index.</p></div>
+  
+  
+  
+  
+  
+  <div class="code"><div class="code-bar"><span>SQL</span><button class="copy" type="button" aria-label="Copy SQL">copy</button></div><pre><code class="language-sql">SELECT id, title
+FROM articles
+NEAREST (title = &#39;holographic database&#39;)
+LIMIT 5</code></pre></div>
+  
+  
+</div></section><section class="sec doc-sec" aria-labelledby="transactions"><div class="wrap">
+  <div class="sec-head"><span class="sec-dot cat-holodb" aria-hidden="true"></span><h2 id="transactions">Transactions</h2></div>
+  <div class="prose-block"><p>ACID transactions with explicit control: wrap statements in BEGIN and COMMIT, or discard them with ROLLBACK. BEGIN costs the same at any table size, because rows are journaled as they change instead of the table being copied, and ROLLBACK replays the journal. With a WalPath set, a committed transaction is durable.</p></div>
+  
+  
+  
+  
+  
+  <div class="code"><div class="code-bar"><span>C#</span><button class="copy" type="button" aria-label="Copy C#">copy</button></div><pre><code class="language-csharp">using HoloDb;
+
+var db = new HoloDbService(new HoloDbOptions());
+db.Execute(&quot;CREATE TABLE accounts (id INT PRIMARY KEY, balance INT)&quot;);
+db.Execute(&quot;INSERT INTO accounts VALUES (1, 500), (2, 100)&quot;);
+
+db.Execute(&quot;BEGIN&quot;);
+try
+{
+    db.Execute(&quot;UPDATE accounts SET balance = 400 WHERE id = 1&quot;);
+    db.Execute(&quot;UPDATE accounts SET balance = 200 WHERE id = 2&quot;);
+    db.Execute(&quot;COMMIT&quot;);
+}
+catch
+{
+    db.Execute(&quot;ROLLBACK&quot;);
+    throw;
+}
+Console.WriteLine(&quot;after commit: &quot; + string.Join(&quot;, &quot;, db.Execute(&quot;SELECT balance FROM accounts ORDER BY id&quot;).Rows.Select(r =&gt; r[&quot;balance&quot;])));
+
+db.Execute(&quot;BEGIN&quot;);
+db.Execute(&quot;UPDATE accounts SET balance = 0 WHERE id = 1&quot;);
+db.Execute(&quot;ROLLBACK&quot;);
+Console.WriteLine(&quot;after rollback: &quot; + string.Join(&quot;, &quot;, db.Execute(&quot;SELECT balance FROM accounts ORDER BY id&quot;).Rows.Select(r =&gt; r[&quot;balance&quot;])));</code></pre></div><div class="code out"><div class="code-bar"><span>Output</span><button class="copy" type="button" aria-label="Copy Output">copy</button></div><pre><code class="language-text">after commit: 400, 200
+after rollback: 400, 200</code></pre></div>
+  
+  
+</div></section><section class="sec doc-sec" aria-labelledby="durable"><div class="wrap">
+  <div class="sec-head"><span class="sec-dot cat-holodb" aria-hidden="true"></span><h2 id="durable">In memory or durable</h2></div>
+  <div class="prose-block"><p>By default the database lives in memory and is gone when the process ends. To make writes durable, give it a write-ahead log path. Durable state is a compact snapshot of the current data plus a short log of the writes since the last checkpoint. A durable commit flushes to disk before it returns. Recovery is bounded by how much data you hold, not by how long the database has been running: reopening loads a snapshot and replays only the recent tail.</p><p>The log is folded into a fresh snapshot automatically once it passes a threshold (CheckpointThresholdBytes, 8 MB by default), and you can force one with Checkpoint, for example before a clean shutdown. In WebAssembly there is no file system, so leave WalPath null and use the in-memory engine. To work with the engine directly, without the async wrapper, call Database.Open with a path, or with null for in memory.</p></div>
+  
+  
+  
+  
+  
+  <div class="code"><div class="code-bar"><span>C#</span><button class="copy" type="button" aria-label="Copy C#">copy</button></div><pre><code class="language-csharp">using HoloDb;
+
+var wal = Path.Combine(Path.GetTempPath(), &quot;holodb-docs-&quot; + Guid.NewGuid().ToString(&quot;N&quot;) + &quot;.wal&quot;);
+try
+{
+    var db = new HoloDbService(new HoloDbOptions { WalPath = wal });   // writes are durable
+    db.Execute(&quot;CREATE TABLE notes (id INT PRIMARY KEY, body TEXT)&quot;);
+    db.Execute(&quot;INSERT INTO notes VALUES (1, &#39;first&#39;), (2, &#39;second&#39;)&quot;);
+    db.Checkpoint();                                                    // fold the log into a snapshot
+    db.Execute(&quot;INSERT INTO notes VALUES (3, &#39;after the checkpoint&#39;)&quot;);
+    db.Database.Close();
+
+    var reopened = new HoloDbService(new HoloDbOptions { WalPath = wal });   // snapshot plus the short tail
+    Console.WriteLine(reopened.Execute(&quot;SELECT COUNT(*) FROM notes&quot;).Rows[0][&quot;count(*)&quot;]);
+    reopened.Database.Close();
+}
+finally
+{
+    foreach (var f in Directory.GetFiles(Path.GetTempPath(), Path.GetFileName(wal) + &quot;*&quot;)) File.Delete(f);
+}</code></pre></div><div class="code out"><div class="code-bar"><span>Output</span><button class="copy" type="button" aria-label="Copy Output">copy</button></div><pre><code class="language-text">3</code></pre></div>
+  
+  
+</div></section><section class="sec doc-sec" aria-labelledby="paged"><div class="wrap">
+  <div class="sec-head"><span class="sec-dot cat-holodb" aria-hidden="true"></span><h2 id="paged">Larger than memory: paged tables</h2></div>
+  <div class="prose-block"><p>The default engine keeps everything in RAM. When a table needs to outgrow memory, create it as a paged table. It lives on an 8 KB buffer-pool page store with a redo-only write-ahead log, so cold pages spill to disk, and the constant-time aggregates stay maintained on disk. Once created, a paged table is driven through the same Execute call as an in-memory table.</p><p>The buffer-pool size (bufferFrames, 8,192 frames of 8 KB by default) bounds how much stays resident. The one structure that scales with row count is the primary-key index, which stays in RAM at about 35 bytes per row, measured at 39 and 34 bytes per entry for 1,000,000 and 10,000,000 entries. That index, not the buffer pool, bounds how far a single paged table can grow past memory.</p></div>
+  
+  
+  
+  
+  
+  <div class="code"><div class="code-bar"><span>C#</span><button class="copy" type="button" aria-label="Copy C#">copy</button></div><pre><code class="language-csharp">using HoloDb;
+
+var dir = Path.Combine(Path.GetTempPath(), &quot;holodb-paged-&quot; + Guid.NewGuid().ToString(&quot;N&quot;));
+try
+{
+    var db = new HoloDbService(new HoloDbOptions());
+    // a durable, larger-than-memory table backed by a directory
+    db.CreatePaged(&quot;CREATE TABLE events (id INT PRIMARY KEY, kind TEXT, value INT)&quot;, dir);
+    var rows = Enumerable.Range(1, 1000).Select(i =&gt; (object[])new object[] { (long)i, i % 2 == 0 ? &quot;even&quot; : &quot;odd&quot;, (long)i });
+    db.PagedBulkLoad(&quot;events&quot;, rows);
+    foreach (var r in db.Execute(&quot;SELECT kind, COUNT(*), SUM(value) FROM events GROUP BY kind ORDER BY kind&quot;).Rows)
+        Console.WriteLine($&quot;{r[&quot;kind&quot;]}: {r[&quot;count(*)&quot;]} rows, sum {r[&quot;sum(value)&quot;]}&quot;);
+    db.Database.ClosePaged(&quot;events&quot;);
+
+    var again = new HoloDbService(new HoloDbOptions());
+    again.OpenPaged(dir);                                               // reopen it later
+    Console.WriteLine(again.Execute(&quot;SELECT COUNT(*) FROM events&quot;).Rows[0][&quot;count(*)&quot;]);
+    again.Database.ClosePaged(&quot;events&quot;);
+}
+finally { if (Directory.Exists(dir)) Directory.Delete(dir, true); }</code></pre></div><div class="code out"><div class="code-bar"><span>Output</span><button class="copy" type="button" aria-label="Copy Output">copy</button></div><pre><code class="language-text">even: 500 rows, sum 250500
+odd: 500 rows, sum 250000
+1000</code></pre></div>
+  
+  
+</div></section><section class="sec doc-sec" aria-labelledby="indexes"><div class="wrap">
+  <div class="sec-head"><span class="sec-dot cat-holodb" aria-hidden="true"></span><h2 id="indexes">Indexes, and why aggregates are instant</h2></div>
+  <div class="prose-block"><p>A sorted index speeds range and lookup queries. You rarely need one for counting: COUNT and SUM over integer columns are served from maintained accumulators in constant time, independent of how many rows the table holds, so the engine does not scan to count. An index needs an INT or TEXT column.</p><p>CREATE INDEX also builds the optional aggregate plane, and SHOW INDEXES and EXPLAIN report what exists and what answers a query. Those are described with the plane.</p></div>
+  
+  
+  
+  
+  
+  <div class="code"><div class="code-bar"><span>SQL</span><button class="copy" type="button" aria-label="Copy SQL">copy</button></div><pre><code class="language-sql">CREATE INDEX ON sales (region)</code></pre></div>
+  
+  <p class="more-link"><a href="/holodb/pleroma/#index-sql">The plane, index SQL and EXPLAIN</a></p>
+</div></section><section class="sec doc-sec" aria-labelledby="alter"><div class="wrap">
+  <div class="sec-head"><span class="sec-dot cat-holodb" aria-hidden="true"></span><h2 id="alter">Changing a table</h2></div>
+  <div class="prose-block"><p>ALTER TABLE supports ADD COLUMN with a mandatory DEFAULT, which backfills the rows that exist. There is no DROP, rename or type change.</p></div>
+  
+  
+  
+  
+  
+  <div class="code"><div class="code-bar"><span>SQL</span><button class="copy" type="button" aria-label="Copy SQL">copy</button></div><pre><code class="language-sql">ALTER TABLE sales ADD COLUMN note TEXT DEFAULT &#39;&#39;</code></pre></div>
+  
+  
+</div></section><section class="sec doc-sec" aria-labelledby="di"><div class="wrap">
+  <div class="sec-head"><span class="sec-dot cat-holodb" aria-hidden="true"></span><h2 id="di">Dependency injection and EvalApp</h2></div>
+  <div class="prose-block"><p>Register HoloDb in a .NET host and inject HoloDbService wherever you need it. HoloDb also runs inside an EvalApp harness: WithHoloDb attaches a service to a pipeline, so heavy queries execute as compiled, resource-gated, self-tuning pipeline steps and any step can reach the service.</p></div>
+  
+  
+  
+  
+  
+  <div class="code"><div class="code-bar"><span>C#</span><button class="copy" type="button" aria-label="Copy C#">copy</button></div><pre><code class="language-csharp">using HoloDb;
+using Microsoft.Extensions.DependencyInjection;
+
+var services = new ServiceCollection();
+services.AddHoloDb(options =&gt; { options.WalPath = null; });   // singleton HoloDbService
+
+using var provider = services.BuildServiceProvider();
+var db = provider.GetRequiredService&lt;HoloDbService&gt;();
+db.Execute(&quot;CREATE TABLE sales (id INT PRIMARY KEY, region TEXT, amount INT)&quot;);
+db.Execute(&quot;INSERT INTO sales VALUES (1, &#39;EU&#39;, 10), (2, &#39;US&#39;, 5), (3, &#39;EU&#39;, 7)&quot;);
+var totals = await db.ExecuteAsync(&quot;SELECT region, SUM(amount) FROM sales GROUP BY region ORDER BY region&quot;);
+foreach (var r in totals.Rows) Console.WriteLine($&quot;{r[&quot;region&quot;]}: {r[&quot;sum(amount)&quot;]}&quot;);</code></pre></div><div class="code out"><div class="code-bar"><span>Output</span><button class="copy" type="button" aria-label="Copy Output">copy</button></div><pre><code class="language-text">EU: 17
+US: 5</code></pre></div>
+  
+  
+</div></section><section class="sec doc-sec" aria-labelledby="meter"><div class="wrap">
+  <div class="sec-head"><span class="sec-dot cat-holodb" aria-hidden="true"></span><h2 id="meter">The usage meter</h2></div>
+  <div class="prose-block"><p>After each query, static per-thread readings report what the engine actually processed: LastRowsScanned, LastTableRows, LastRowBytes and LastLogicalBytes. An aggregate served from a maintained total reports zero rows scanned, which is the figure a metered API bills on.</p></div>
+  
+  
+  
+  
+  
+  
+  
+  
+</div></section><section class="sec doc-sec" aria-labelledby="browser-and-network"><div class="wrap">
+  <div class="sec-head"><span class="sec-dot cat-holodb" aria-hidden="true"></span><h2 id="browser-and-network">In the browser, and over the network</h2></div>
+  <div class="prose-block"><p>HoloDb is plain managed .NET with no native dependencies, so it compiles to WebAssembly and runs client-side with no server and nothing leaving the device. The Analyst tool is exactly that: a real HoloDb in your browser tab, profiling and querying whatever you paste in.</p><p>The same engine runs as a server, and a typed client talks to it over TLS with the same surface as the in-process engine.</p></div>
+  
+  
+  
+  
+  
+  
+  
+  <p class="more-link"><a href="/holodb/client/">The client and the wire protocol</a></p>
+</div></section>
+</main>
+<footer class="site-footer"><div class="wrap">
+  <div class="foot-grid">
+    <div><h2>Products</h2><ul><li><a href="/phasor/">Phasor</a></li><li><a href="/evalapp/">EvalApp</a></li><li><a href="/holodb/">HoloDb</a></li><li><a href="/algformer/">AlgFormer</a></li><li><a href="/prism/">Prism</a></li><li><a href="/prose/">Prose</a></li><li><a href="/tracer/">Tracer</a></li><li><a href="/holovoxel/">HoloVoxel</a></li></ul></div>
+    <div><h2>Tools</h2><ul><li><a href="/tools/analyst/">The Analyst</a></li><li><a href="/tools/creature/">The Creature</a></li><li><a href="/tools/forecaster/">The Forecaster</a></li><li><a href="/tools/prism/">Prism</a></li><li><a href="/tools/stories/">Nano Stories</a></li><li><a href="/tools/cartographer/">The Cartographer</a></li><li><a href="/tools/prose/">Prose</a></li><li><a href="/tools/council-spending/">Council Spending Scanner</a></li></ul></div>
+    <div><h2>Learn</h2><ul><li><a href="/evidence/">Evidence</a></li><li><a href="/research/">Research</a></li><li><a href="/products/">All products</a></li><li><a href="/tools/">All tools</a></li></ul></div>
+    <div><h2>Company</h2><ul><li><a href="/partner/">Partner with us</a></li><li><a href="/licence/">Licence</a></li><li><a href="/ai/">For AI readers</a></li><li><a href="https://www.nuget.org/profiles/evaluatedapplications" rel="noopener">NuGet</a></li></ul></div>
+    <div><h2>Machine-readable</h2><ul><li><a href="/llms.txt">llms.txt</a></li><li><a href="/llms-full.txt">llms-full.txt</a></li><li><a href="/sitemap.xml">sitemap.xml</a></li></ul></div>
+  </div>
+  <div class="foot-base"><span>Evaluated Applications · .NET libraries · England</span><span class="mono">© 2026 Evaluated Applications</span></div>
+</div></footer>
+
+<script src="/assets/site.js?v=3190ebab" defer></script>
+
+</body>
+</html>

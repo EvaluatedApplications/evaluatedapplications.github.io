@@ -1,0 +1,90 @@
+{
+  "title": "AlgFormer: a transformer engine for .NET",
+  "description": "AlgFormer is a .NET transformer engine with two attention cores, classic softmax and holographic, in pure managed code with no ML runtime to ship.",
+  "headline": "Two attention cores. One shape. No ML runtime.",
+  "intro": [
+    "AlgFormer is a .NET library for defining, training and running transformer-style language models. Give it a vocabulary and a shape, train it on your own token sequences through a data-parallel pipeline, and run inference as a single prediction, as full logits or as streaming generation with a cache.",
+    "It is a real, gradient-trained architecture written entirely in C# on double arrays with SIMD. It runs anywhere .NET runs, with no GPU, no Python and no native binary to ship. Most transformer tooling means binding into a native runtime such as ONNX, PyTorch or CUDA, or hand-rolling matrix code with no attention research behind it. AlgFormer sits between the two.",
+    "It also lets you compare two ideas of what attention should cost. Softmax attention scores every token against every other token, which is quadratic in the length. The holographic core composes context by binding, bundling and unbinding instead. The two cores are parameter for parameter comparable, so you can train the same shape on the same data with either."
+  ],
+  "facts": ["Pure managed code", "net8.0 and net10.0", "No GPU needed"],
+  "why": [
+    { "title": "Two real cores, not a toy", "text": "AlgFormer (softmax dot-product attention, the well-understood baseline) and HoloFormer (holographic attention) share a model shape, a training loop, a checkpoint format and a serving API. You swap the core, not the workflow." },
+    { "title": "No external ML runtime", "text": "Everything is plain double arrays and SIMD, compiled into your app. There is no ONNX Runtime, no libtorch, no CUDA toolkit and no Python interop." },
+    { "title": "Attention that scales differently", "text": "HoloFormer reads a prompt in time that grows with its length rather than its square, and serves each further token at a constant cost through an incremental cache. That matters when context windows get long. The chart above measures both cores." },
+    { "title": "Everything needed to use it", "text": "A subword tokenizer, a data-parallel trainer, streaming generation with a cache, checkpoints with format versioning, and helpers that grow a trained model to a longer context or a bigger vocabulary without retraining from scratch." },
+    { "title": "Built for swarm training", "text": "Relay components let several machines train one shared model over MQTT, exchanging either full batches or lightweight position manifests." }
+  ],
+  "diagram": {
+    "id": "algformer-cost",
+    "title": "What attention costs",
+    "stageLabel": "Chart of the cost of the two attention cores by context length. Use the tabs to change what is compared.",
+    "lede": "The same shape, {dim} channels, {shifts} shifts and {layers} layers, is built with each core, so both have the same parameter count, and driven with the same tokens. At {tokens} tokens of context, reading the prompt takes {prefillSoftMs} ms with softmax attention and {prefillHoloMs} ms with holographic attention. Each further token takes {stepSoftUs} µs against {stepHoloUs} µs, and the serve cache holds {cacheSoftKb} KB against {cacheHoloKb} KB.",
+    "caption": "Measured by running the published EvaluatedApplications.AlgFormer package (release {version}) at one shape on one thread, as medians of repeated runs. Absolute times depend on the machine. The way each cost grows with the context length is the point."
+  },
+  "quickstart": {
+    "lede": "Define a model, train it on pairs of context and target, then predict, read the logits or generate.",
+    "source": "snippets/algformer-quickstart.cs",
+    "output": "snippets/algformer-quickstart.out.txt",
+    "also": [
+      {
+        "lede": "The holographic core takes the same constructor and the same calls. This program trains it, serves it through the incremental cache, and reads what the final query resonated with.",
+        "source": "snippets/algformer-holoformer.cs",
+        "output": "snippets/algformer-holoformer.out.txt"
+      }
+    ]
+  },
+  "capabilities": [
+    { "title": "Two comparable attention cores", "text": "AlgFormer (softmax) and HoloFormer (holographic resonance), built from the same shape parameters." },
+    { "title": "Pure managed implementation", "text": "double arrays and SIMD, with no external ML runtime, no native dependency and no GPU required." },
+    { "title": "Data-parallel training", "text": "A resource-gated, adaptively tuned pipeline for full epochs over your data, built on EvalApp." },
+    { "title": "Streaming inference", "text": "An incremental cache for low-latency generation. HoloFormer's cache holds one running holographic memory per layer, so each token costs the same however long the context is." },
+    { "title": "Checkpoints that keep loading", "text": "Save and load with backward-compatible format versioning, so old checkpoints keep loading as the format evolves." },
+    { "title": "Growth in place", "text": "Extend the context length, the attention shifts or the vocabulary of a trained model without starting again." },
+    { "title": "Sizing from a measured law", "text": "HoloShape chooses model dimensions from measured trade-offs. HoloShape.Derive turns a single width into a starting set of shifts, context length and layers." },
+    { "title": "Tokenizer and data sources", "text": "A built-in subword tokenizer and ready-made adapters for raw corpus windows, prompt and answer pairs and source mixing." },
+    { "title": "Distributed training", "text": "Relay components over MQTT, from full-model relay to a data-free relay of position manifests." },
+    { "title": "Preference training", "text": "Direct preference optimisation on the CPU HoloFormer: sequence log-probability over a chosen span, an exact clone for the frozen reference model, a signed per-sequence weighted all-positions step and a helper that returns the loss and the two weights." },
+    { "title": "Gradient-check oracles", "text": "Built-in checks let you verify the training maths instead of assuming it is right." },
+    { "title": "ADAM and EVE", "text": "An opt-in, per-layer Adam gate for HoloFormer that nudges a layer's update toward a norm range derived from the codebook. It is off unless you enable it through HoloFormer.EveOptions." }
+  ],
+  "extensions": [
+    {
+      "id": "gpu", "nav": "AlgFormer.Gpu", "packageId": "EvaluatedApplications.AlgFormer.Gpu",
+      "title": "AlgFormer.Gpu: the same model, faster",
+      "line": "Optional GPU acceleration for HoloFormer",
+      "paragraphs": [
+        "AlgFormer.Gpu adds ILGPU and CUDA backed training and inference for HoloFormer. It builds device kernels straight from a CPU HoloFormer's serialized weights, so there is no separate model format and no retraining to switch devices. The backward pass, a fused Adam step on the device and batched forward inference all run on the GPU when one is present."
+      ],
+      "points": [
+        { "title": "A drop-in, not a rewrite", "text": "Point it at an existing CPU HoloFormer. It trains and serves against the same serialized weights, and the CPU model stays the source of truth." },
+        { "title": "One build for both machines", "text": "Device detection runs once per process. On a machine without a CUDA GPU the same kernels run on ILGPU's CPU backend, slower but identical in behaviour, so there is no separate code path to maintain." },
+        { "title": "Checked against the CPU engine", "text": "Every kernel is gradient-checked against the CPU HoloFormer, which computes in double precision. GPU results run in single precision for speed, so they are close to the CPU reference rather than bit-identical." },
+        { "title": "Adam on the device", "text": "The optimiser step runs next to the forward and backward kernels, which avoids a round trip to the CPU on every batch." }
+      ],
+      "snippet": {
+        "lede": "A small HoloFormer wrapped by the GPU trainer. This run fell back to the CPU backend; with a CUDA device the first line names it.",
+        "source": "snippets/algformer-gpu-quickstart.cs",
+        "output": "snippets/algformer-gpu-quickstart.out.txt"
+      },
+      "good": [
+        "Using the GPU path needs an ILGPU-supported CUDA device at run time. Without one, the same build still works on ILGPU's CPU backend.",
+        "The package is optional and needs EvaluatedApplications.AlgFormer alongside it. The core package has no GPU dependency and stays safe to trim and to compile ahead of time.",
+        "The device is one process-wide resource. Build, train and infer serially rather than from several threads at once.",
+        "In fused-Adam mode the GPU holds the live parameters and the CPU model lags. Call SyncToCpu before saving or serving the CPU model.",
+        "A HoloFormer built with a complex-bind feed-forward, with normalisation switched off, or with the unitary option is refused at construction instead of computing the wrong thing on the device.",
+        "The package also contains the GPU twin of the older softmax-attention model. That path is deprecated: it builds and runs, but new work targets HoloFormer."
+      ]
+    }
+  ],
+  "limits": [
+    "The two cores share an API, not a behaviour. HoloFormer's capacity is set by its shape: a bundle holds a limited number of items cleanly, and HoloShape reports how many. A context longer than that reads back less cleanly.",
+    "A shift count of 1 collapses the relation bank to a per-position diagonal and attention breaks. Keep at least two shifts and shrink the width or the layer count instead.",
+    "A single model instance is not safe for concurrent training steps. Serving is read-only and safe to call from several threads on a model that is not changing, but a cache belongs to one generation on one thread.",
+    "HoloFormer's serve-time knobs (Iters, IterAlphaServe, IterClean and IterTau) are not saved in a checkpoint. Set them again after loading.",
+    "Step returns false when it drops a batch because the gradient was not finite. Check the result, or watch SkippedSteps, in a long training run.",
+    "The ADAM and EVE gate is exercised in training only through AlgFormer.Gpu. On the CPU trainer it is covered by checks and has not been run as a training loop.",
+    "The package ships as a binary with no source. It depends on Phasor and EvalApp, and the swarm relay uses MQTTnet."
+  ],
+  "reference": "Every public type is documented with a worked example in the package readme on NuGet."
+}

@@ -1,0 +1,23 @@
+@page "/"
+@inject NavigationManager Nav
+@* The gallery is GENERATED (web/ in this repo: data/tools.json -> site-next/tools/index.html) and owns /tools/. This in-app route
+   exists only so a client-side link to the tools root (the layout's "Tools" link) lands on that page: a hard navigation to the
+   static gallery, which downloads no runtime. Home has no static shell of its own any more (dist has no root index.html).
+   On localhost (dotnet run) /tools/ IS this app, so redirecting would loop: there it only shows the links. *@
+
+<PageTitle>Tools — Evaluated Applications</PageTitle>
+
+<p class="boot-plain" role="status">
+    @if (_dev) { <text>Development run: the generated gallery is not served here. Open a tool by its address, for example /tools/prism/.</text> }
+    else { <text>Opening the tools gallery&hellip; <a href="/tools/">Go now</a></text> }
+</p>
+
+@code {
+    bool _dev;
+
+    protected override void OnInitialized()
+    {
+        _dev = new Uri(Nav.Uri).Host == "localhost";
+        if (!_dev) Nav.NavigateTo("/tools/", forceLoad: true);
+    }
+}

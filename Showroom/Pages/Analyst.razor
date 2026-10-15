@@ -1,0 +1,1597 @@
+@page "/analyst"
+@attribute [BlazierPage("analyst", Title = "The Analyst — in-browser data analytics", Layout = typeof(MainLayout), Static = true)]
+@inject IBuildTime Build
+@inject IJSRuntime JS
+@inject HttpClient Http
+@inject HoloKernel.SessionHost Sessions
+@using System.Diagnostics
+@using System.Globalization
+@using System.Text
+@using System.Text.RegularExpressions
+@using System.Text.Json
+@using HoloDb
+@using PrismFormer
+@using HoloKernel
+@* global:: required — see Prism.razor's own @using comment: Showroom.Pages.Prism (the Prism tool's
+   page class) shadows the "Prism" NuGet package's root namespace in this app's generated namespace. *@
+@using global::Prism.Lineage
+
+<PageTitle>The Analyst — in-browser data analytics</PageTitle>
+
+<div class="room" data-cat="holodb">
+    <header class="room-head">
+        <nav class="crumb"><a href="/holodb/">HoloDb</a> <span>/</span> The Analyst</nav>
+        <h1>The Analyst</h1>
+        <p class="lede">Your data analyst, and it <strong>never uploads a thing</strong>. Drop a CSV or pull a
+            <strong>live public feed</strong>, and a real SQL database <strong>running inside your browser tab</strong>
+            profiles the whole thing: what it is, what's typical, what's weird. Then it charts it, and answers any
+            question you can put in SQL — the sort of triage that usually means a database and a notebook.</p>
+        <div class="badges">
+            <span>No sign-up</span><span>Private — runs on your device</span><span>Real SQL, not a mock</span><span>Live public datasets</span>
+        </div>
+    </header>
+
+    <ol class="steps">
+        <li><b>1</b> Load or fetch data</li>
+        <li><b>2</b> Read the profile</li>
+        <li><b>3</b> Chart &amp; query it</li>
+        <li><b>4</b> Export the answer</li>
+    </ol>
+
+    @if (Build.IsPrerender)
+    {
+        <ToolStart Tool="The Analyst" />
+    }
+    else
+    {
+    <div class="dropzone @(_busy ? "busy" : "")">
+        <InputFile OnChange="OnFile" class="file-input" accept=".csv,.tsv,.tab,.txt,.log,.json" disabled="@_busy" />
+        <div class="dz-inner">
+            <svg viewBox="0 0 24 24" width="34" height="34" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M12 16V4" /><path d="M7 9l5-5 5 5" /><path d="M4 16v3a1 1 0 001 1h14a1 1 0 001-1v-3" />
+            </svg>
+            <strong>Drop a CSV, TSV, JSON, or log file</strong>
+            <span>or click to browse — up to ~50&nbsp;MB, and it stays on your device</span>
+            @if (_fileName is not null) { <span class="dz-file">@_fileName · @_charCount.ToString("N0") chars</span> }
+        </div>
+    </div>
+
+    <div class="feeds-lead">…or pull a live public dataset — fetched straight into the in-browser database:</div>
+    <div class="feeds">
+        @foreach (var f in _feeds)
+        {
+            <button class="feed" @onclick="() => LoadFeed(f)" disabled="@_busy" type="button">
+                <span class="feed-emoji">@f.Emoji</span>
+                <span class="feed-body">
+                    <span class="feed-name">@f.Name <span class="feed-src">@f.Source</span></span>
+                    <span class="feed-task">@f.Task</span>
+                </span>
+            </button>
+        }
+    </div>
+
+    <div class="feed-url">
+        <input type="url" class="feed-url-input" @bind="_feedUrl" @bind:event="oninput" disabled="@_busy"
+               placeholder="…or paste any CSV / JSON feed URL that allows browser access" @onkeydown="FeedUrlKey" />
+        <button class="ghost" @onclick="LoadUrl" disabled="@_busy" type="button">Fetch URL</button>
+    </div>
+
+    <details class="paste-wrap">
+        <summary>…or paste data instead</summary>
+        <textarea class="paste" @bind="Text" @bind:event="oninput" rows="7" disabled="@_busy"
+                  placeholder="Paste a CSV, a log file, JSON lines, transactions, anything…"></textarea>
+    </details>
+
+    <div class="controls">
+        <button class="go" @onclick="Analyze" disabled="@_busy">@(_busy ? "Working…" : "Profile it")</button>
+        <button class="ghost" @onclick="LoadSample" disabled="@_busy" type="button">Load sample</button>
+        <span class="hint">@_charCount.ToString("N0") characters ready</span>
+    </div>
+
+    @if (_busy)
+    {
+        <div class="progress-wrap">
+            <div class="progress-track"><div class="progress-fill" style="width:@Pct(_progress)"></div></div>
+            <span class="progress-label">@_phase</span>
+        </div>
+    }
+
+    @if (_error is not null)
+    {
+        <p class="err">@_error</p>
+    }
+    else if (_done)
+    {
+        <div class="speed">
+            Detected <strong>@_format</strong>. Profiled <strong>@_rows.ToString("N0")</strong> records &times;
+            <strong>@_cols.Count</strong> fields at <strong>@ShortRate(_loadRate)/sec</strong> into HoloDb,
+            every aggregate answered in <strong>@_queryMs.ToString("F1") ms</strong>. Total <strong>@Secs(_ms)</strong>.
+        </div>
+
+        <div class="cost">
+            <div class="cost-line"><span>A cloud warehouse to profile this</span><span class="them">~$@_bqCost.ToString("F4")</span></div>
+            <div class="cost-line"><span>Here, in your browser</span><span class="us">$0.0000</span></div>
+            <p class="privacy">A real SQL database compiled to your browser did every count, distinct, min/max and group-by.
+                Open your network tab &mdash; nothing left your device.</p>
+        </div>
+
+        <div class="drillbar">
+            @if (_filters.Count > 0)
+            {
+                <span class="drill-count"><strong>@_filteredRows.ToString("N0")</strong> of @_rows.ToString("N0") rows</span>
+                @foreach (var f in _filters)
+                {
+                    <button class="filter-chip" type="button" disabled="@_busy" @onclick="() => RemoveFilter(f)">@f.Col = @(string.IsNullOrEmpty(f.Val) ? "(empty)" : f.Val) <span class="x">✕</span></button>
+                }
+                <button class="drill-clear" type="button" disabled="@_busy" @onclick="ClearFilters">clear</button>
+            }
+            else
+            {
+                <span class="drill-hint">Click any value below — a category bar or a field's top value — to filter, and the whole page hones down to that subset.</span>
+            }
+        </div>
+
+        @if (_flags.Count > 0 && _filters.Count == 0)
+        {
+            <h2>What stands out</h2>
+            <ul class="flags">
+                @foreach (var f in _flags) { <li class="flag @f.Level">@((MarkupString)f.Text)</li> }
+            </ul>
+        }
+
+        @if (_insights.Count > 0 && _filters.Count == 0)
+        {
+            <h2>What the data says</h2>
+            <ul class="flags insights">
+                @foreach (var f in _insights) { <li class="flag @f.Level">@((MarkupString)f.Text)</li> }
+            </ul>
+        }
+
+        @if (_charts.Count > 0)
+        {
+            <h2>The picture</h2>
+            <div class="charts">
+                @foreach (var ch in _charts)
+                {
+                    <figure class="chart-card">
+                        <figcaption>@ch.Title @if (ch.Kind == "bars" && ch.DimCol is not null) { <span class="click-note">click to filter</span> }</figcaption>
+                        @if (ch.Kind == "bars" && ch.DimCol is not null)
+                        {
+                            var mx = ch.Data.Count > 0 ? ch.Data.Max(d => Math.Abs(d.Value)) : 1.0;
+                            if (mx <= 0) { mx = 1; }
+                            <div class="hbars">
+                                @foreach (var pt in ch.Data.Take(14))
+                                {
+                                    <button class="hbar" type="button" disabled="@_busy" @onclick="() => ApplyFilter(ch.DimCol!, pt.Label)" title="filter to @pt.Label">
+                                        <span class="hbar-lbl">@(string.IsNullOrEmpty(pt.Label) ? "(empty)" : pt.Label)</span>
+                                        <span class="hbar-track"><span class="hbar-fill" style="width:@((Math.Abs(pt.Value) / mx * 100).ToString("F1", System.Globalization.CultureInfo.InvariantCulture))%"></span></span>
+                                        <span class="hbar-n">@Fmt(pt.Value)</span>
+                                    </button>
+                                }
+                            </div>
+                        }
+                        else
+                        {
+                            @RenderChart(ch)
+                        }
+                    </figure>
+                }
+            </div>
+        }
+
+        <h2>Build a chart</h2>
+        <p class="repl-intro">Pick a breakdown and a measure — The Analyst writes the SQL, runs it in your browser, and draws it. No SQL required.</p>
+        <div class="cb-controls">
+            <label>break down by
+                <select @bind="_cbDim">@foreach (var c in _dimCols) { <option value="@c.Name">@c.Name</option> }</select>
+            </label>
+            <label>measure
+                <select @bind="_cbAgg">
+                    <option value="count">count of rows</option>
+                    <option value="sum">sum</option>
+                    <option value="avg">average</option>
+                    <option value="min">min</option>
+                    <option value="max">max</option>
+                </select>
+            </label>
+            @if (_cbAgg != "count" && _numCols.Count > 0)
+            {
+                <label>of
+                    <select @bind="_cbMeasure">@foreach (var c in _numCols) { <option value="@c.Name">@c.Name</option> }</select>
+                </label>
+            }
+            <label>as
+                <select @bind="_cbType">
+                    <option value="auto">auto</option>
+                    <option value="bars">bars</option>
+                    <option value="line">line</option>
+                    <option value="pie">pie</option>
+                </select>
+            </label>
+            <button class="go" @onclick="BuildChart" disabled="@_cbBusy">@(_cbBusy ? "…" : "Draw it")</button>
+        </div>
+        @if (_cbError is not null)
+        {
+            <p class="err">@_cbError</p>
+        }
+        else if (_cbChart is not null)
+        {
+            <figure class="chart-card result-chart"><figcaption>@_cbChart.Title</figcaption>@RenderChart(_cbChart)</figure>
+            <div class="cb-sql"><code>@_cbSql</code><button class="export" @onclick="ExportCb" type="button">↓ CSV</button></div>
+        }
+
+        @if (_entities.Count > 0 && _filters.Count == 0)
+        {
+            <h2>Found inside</h2>
+            <div class="chips">
+                @foreach (var e in _entities)
+                {
+                    <div class="chip">
+                        <span class="chip-kind">@e.Kind</span>
+                        <span class="chip-count">@e.Count.ToString("N0")</span>
+                        <span class="chip-eg">@string.Join("  ·  ", e.Examples)</span>
+                    </div>
+                }
+            </div>
+        }
+
+        <h2>The fields</h2>
+        <div class="cols">
+            @foreach (var c in _cols)
+            {
+                <div class="col-card">
+                    <div class="col-head">
+                        <span class="col-name">@c.Name</span>
+                        <span class="col-type type-@c.Type.ToString().ToLowerInvariant()">@c.Type</span>
+                    </div>
+                    <div class="col-facts">
+                        <span>@c.Distinct.ToString("N0") distinct</span>
+                        @if (c.Missing > 0) { <span class="warn">@MissPct(c) missing</span> }
+                        @if (c.Type is FieldType.Integer or FieldType.Decimal)
+                        {
+                            <span>min @Num(c.Min)</span><span>avg @Num(c.Mean)</span><span>max @Num(c.Max)</span>
+                            @if (c.Outliers > 0) { <span class="warn">@c.Outliers.ToString("N0") outliers</span> }
+                        }
+                    </div>
+                    @if (c.Top.Count > 0)
+                    {
+                        <div class="col-bars">
+                            @foreach (var (v, n) in c.Top)
+                            {
+                                <button class="mini-row" type="button" disabled="@_busy" @onclick="() => ApplyFilter(c.Name, v)" title="filter to @v">
+                                    <span class="mini-val">@(string.IsNullOrEmpty(v) ? "(empty)" : v)</span>
+                                    <div class="mini-bar"><div class="mini-fill" style="width:@ColFill(c, n)"></div></div>
+                                    <span class="mini-n">@n.ToString("N0")</span>
+                                </button>
+                            }
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+
+        @if (_textCols.Count > 0)
+        {
+            <h2>Novelty scan <span class="beta-tag">experimental</span></h2>
+            <p class="repl-intro">Score a free-text column against a real, trained language model &mdash; running
+                entirely in your browser, same as everything else on this page. For each value, it reads the text
+                and reports how surprised it was by what came next: a low predicted probability means the text was
+                unusual to the model, i.e. more novel relative to what it's learned so far. Nothing is generated
+                here, only read.</p>
+            <p class="hint novelty-caveat">This model is still early in its training, so treat a high score as a
+                rough signal rather than a precise one.</p>
+            <div class="cb-controls">
+                <label>column
+                    <select @bind="_novCol">@foreach (var c in _textCols) { <option value="@c.Name">@c.Name</option> }</select>
+                </label>
+                <button class="go" @onclick="RunNoveltyScan" disabled="@(_novBusy || _busy || string.IsNullOrEmpty(_novCol))">
+                    @(_novBusy ? "Scanning…" : "Scan for novelty")
+                </button>
+                @if (_prismSession is null && !_novBusy)
+                {
+                    <span class="hint">First scan downloads the Prism checkpoint (shared instantly with the Prism/Creature/Forecaster tools if you've already loaded one this visit). Scans up to @NoveltyCellCap.ToString("N0") values, capped for browser responsiveness.</span>
+                }
+            </div>
+
+            @if (_novBusy)
+            {
+                <div class="progress-wrap">
+                    <div class="progress-track"><div class="progress-fill" style="width:@Pct(_novProgress)"></div></div>
+                    <span class="progress-label">@_novPhase</span>
+                </div>
+            }
+            @if (_novError is not null)
+            {
+                <p class="err">@_novError</p>
+            }
+            else if (_novResults.Count > 0)
+            {
+                <div class="speed">Scanned <strong>@_novResults.Count.ToString("N0")</strong> values from
+                    <strong>@_novCol</strong> &mdash; average surprisal <strong>@_novAvg.ToString("F2")</strong>
+                    bits/token (a relative score against this one small checkpoint, not an absolute measure of
+                    novelty).</div>
+
+                @if (_novHist is not null)
+                {
+                    <figure class="chart-card"><figcaption>Surprisal distribution (bits/token, higher = more surprising to the model)</figcaption>@RenderChart(_novHist)</figure>
+                }
+
+                <div class="nov-sub">Most novel values <span class="click-note">click to filter</span></div>
+                <div class="col-bars nov-list">
+                    @foreach (var r in _novResults.OrderByDescending(x => x.Score).Take(15))
+                    {
+                        <button class="mini-row" type="button" disabled="@_busy" @onclick="() => ApplyFilter(_novCol, r.Val)" title="@r.Val">
+                            <span class="mini-val">@Trunc(r.Val, 70)</span>
+                            <div class="mini-bar"><div class="mini-fill" style="width:@NovFill(r.Score)"></div></div>
+                            <span class="mini-n">@r.Score.ToString("F1")</span>
+                        </button>
+                    }
+                </div>
+            }
+        }
+
+        <h2>Ask it anything</h2>
+        <p class="repl-intro">A live SQL prompt against your data, answered by the same in-browser database. Try a
+            suggestion or write your own &mdash; the fields are named just as they read above. Results come back as a
+            <strong>chart</strong> when they can, and you can download any answer as CSV.</p>
+        <div class="suggests">
+            @foreach (var sug in _suggestions)
+            {
+                <button class="suggest" @onclick="() => RunSql(sug.Sql)" disabled="@_replBusy">@sug.Label</button>
+            }
+        </div>
+        <textarea class="sql" @bind="_sql" @bind:event="oninput" rows="3" spellcheck="false" disabled="@_replBusy"></textarea>
+        <div class="controls">
+            <button class="go" @onclick="() => RunSql()" disabled="@_replBusy">@(_replBusy ? "Running…" : "Run query")</button>
+            @if (_replRan && _replError is null) { <span class="hint">@_replTotal.ToString("N0") rows in @_replMs.ToString("F2") ms</span> }
+        </div>
+
+        @if (_replError is not null)
+        {
+            <p class="err">@_replError</p>
+        }
+        else if (_replRan)
+        {
+            @if (_replRows.Count == 0)
+            {
+                <p class="hint">No rows.</p>
+            }
+            else
+            {
+                <div class="result-head">
+                    <div class="view-toggle">
+                        <button class="@(_replView == "table" ? "on" : "")" @onclick='() => _replView = "table"' type="button">Table</button>
+                        @if (_replChart is not null)
+                        {
+                            <button class="@(_replView == "chart" ? "on" : "")" @onclick='() => _replView = "chart"' type="button">Chart</button>
+                        }
+                    </div>
+                    <button class="export" @onclick="ExportCsv" type="button">↓ Download CSV</button>
+                </div>
+
+                @if (_replView == "chart" && _replChart is not null)
+                {
+                    <figure class="chart-card result-chart"><figcaption>@_replChart.Title</figcaption>@RenderChart(_replChart)</figure>
+                }
+                else
+                {
+                    <div class="table-scroll">
+                        <table class="result">
+                            <thead><tr>@foreach (var col in _replCols) { <th class="sortable" @onclick="() => SortResult(col)" title="sort by @col">@col @if (_sortCol == col) { <span class="sort-arrow">@(_sortDesc ? "▼" : "▲")</span> }</th> }</tr></thead>
+                            <tbody>
+                                @foreach (var row in _replRows)
+                                {
+                                    <tr>@foreach (var col in _replCols) { <td>@(row.TryGetValue(col, out var v) ? v?.ToString() : "")</td> }</tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                    @if (_replTotal > _replRows.Count) { <p class="hint">Showing the first @_replRows.Count.ToString("N0") of @_replTotal.ToString("N0") rows &mdash; download the CSV for all of them.</p> }
+                }
+            }
+        }
+
+        <div class="outro">
+            <p>Why it's instant: HoloDb doesn't scan rows one by one to answer a count or a sum — those totals stay
+                maintained as data loads, so they come back already computed instead of being worked out on demand.
+                That's why the whole-dataset profile you just saw resolved in microseconds and holds its speed from
+                a thousand rows to tens of millions.</p>
+            <p>The Analyst runs on <a href="/holodb/">HoloDb</a> — the same embeddable .NET SQL engine, compiled to
+                WebAssembly. Want it in your own app? <code>dotnet add package EvaluatedApplications.HoloDb</code></p>
+        </div>
+    }
+    }
+</div>
+
+@code {
+    const int RowCap = 500_000;
+    const int EntityScanChars = 2_000_000;
+    const long MaxUpload = 64L * 1024 * 1024;
+    static readonly CultureInfo Inv = CultureInfo.InvariantCulture;
+
+    enum FieldType { Integer, Decimal, Date, Boolean, Category, Text }
+    record Col(string Name, FieldType Type)
+    {
+        public long Count, Missing, Distinct, Outliers;
+        public double Min, Max, Mean;
+        public List<(string Val, long N)> Top = new();
+        public List<(double Lo, double Hi, long N)> Hist = new();
+    }
+    record Entity(string Kind, long Count, List<string> Examples);
+    record Flag(string Level, string Text);
+    record Chart(string Title, string Kind, List<(string Label, double Value)> Data, string? DimCol = null);
+    record Feed(string Emoji, string Name, string Source, string Task, string Url);
+
+    // Live public feeds that send CORS headers, so the browser can fetch them straight into the in-browser database.
+    readonly List<Feed> _feeds = new()
+    {
+        new Feed("🌎", "Earthquakes, last 30 days", "USGS",
+            "Every M2.5+ quake worldwide — magnitude, depth, place, time. Which regions, how deep, how the daily count trends.",
+            "https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/2.5_month.csv"),
+        new Feed("🏙️", "NYC 311 complaints", "NYC Open Data",
+            "The latest 5,000 service requests — complaint type, agency, borough, status. What the city is complaining about, and where.",
+            "https://data.cityofnewyork.us/resource/erm2-nwe9.csv?%24select=created_date,agency_name,complaint_type,descriptor,borough,status&%24order=created_date%20DESC&%24limit=5000"),
+        new Feed("🚦", "NYC traffic crashes", "NYC Open Data",
+            "The latest 5,000 collisions — borough, people injured and killed, contributing factor, vehicle type. Where crashes cluster, and why.",
+            "https://data.cityofnewyork.us/resource/h9gi-nx95.csv?%24select=crash_date,borough,number_of_persons_injured,number_of_persons_killed,contributing_factor_vehicle_1,vehicle_type_code1&%24order=crash_date%20DESC&%24limit=5000"),
+        new Feed("🚔", "Chicago crime reports", "Chicago Open Data",
+            "The latest 5,000 reported crimes — type, location, whether an arrest was made, district. What's reported where, and how often it leads to an arrest.",
+            "https://data.cityofchicago.org/resource/ijzp-q8t2.csv?%24select=date,primary_type,description,location_description,arrest,domestic,district,ward&%24order=date%20DESC&%24limit=5000"),
+        new Feed("🌦️", "Seattle weather", "Vega Datasets",
+            "Daily precipitation, max/min temperature and wind, each day labelled rain / sun / snow / fog / drizzle. Seasonality, and what the rainy days look like.",
+            "https://raw.githubusercontent.com/vega/vega-datasets/main/data/seattle-weather.csv"),
+        new Feed("🎬", "Movies", "Vega Datasets",
+            "~3,000 films — budget, US and worldwide gross, IMDB and Rotten Tomatoes ratings, genre, MPAA rating. What earns, what rates well. Loads as JSON.",
+            "https://raw.githubusercontent.com/vega/vega-datasets/main/data/movies.json"),
+    };
+    string _feedUrl = "";
+
+    string _text = SampleCsv;
+    string Text { get => _text; set { _text = value; _charCount = value.Length; } }
+    int _charCount = SampleCsv.Length;
+    string? _fileName;
+
+    bool _busy, _done;
+    string? _error;
+    double _progress; string _phase = "";
+    string _format = "";
+    long _rows;
+    double _ms, _queryMs, _loadRate, _bqCost;
+    List<Col> _cols = new();
+    List<Entity> _entities = new();
+    List<Flag> _flags = new();
+    List<Flag> _insights = new();   // computed "what the data says" — correlations, drivers, trend, concentration
+    List<Chart> _charts = new();
+
+    // drill-down: click an auto-detected value to filter; the middle re-profiles against the subset
+    readonly List<(string Col, string Val)> _filters = new();
+    long _filteredRows;
+    List<string> _sqlNames = new();
+    FieldType[] _types = Array.Empty<FieldType>();
+
+    // live SQL prompt over the profiled data
+    Database? _db;
+    string _sql = "";
+    List<(string Label, string Sql)> _suggestions = new();
+    bool _replBusy, _replRan;
+    string? _replError;
+    double _replMs; int _replTotal;
+    string[] _replCols = Array.Empty<string>();
+    List<Dictionary<string, object>> _replRows = new();
+    Chart? _replChart;
+    string _replView = "table";
+    string? _sortCol; bool _sortDesc;
+    const int ReplRowCap = 200;
+
+    // no-SQL chart builder
+    List<Col> _dimCols = new(); List<Col> _numCols = new();
+    string _cbDim = "", _cbMeasure = "", _cbAgg = "count", _cbType = "auto", _cbSql = "";
+    Chart? _cbChart; string? _cbError; bool _cbBusy;
+
+    // ---- novelty scan: perplexity/surprisal against Prism's trained HoloFormer checkpoint. Opt-in and lazy —
+    // the checkpoint is only fetched the first time a visitor actually clicks "Scan for novelty", never on page
+    // load, so the (much broader, non-text-heavy-by-default) Analyst audience never pays for it unasked. Shares
+    // HoloKernel.SessionHost's "prism" key with Prism/Creature/Forecaster: if any of those already loaded it this
+    // visit, this reuses that in-memory session instantly instead of re-downloading.
+    List<Col> _textCols = new();
+    string _novCol = "";
+    bool _novBusy; double _novProgress; string _novPhase = "";
+    string? _novError;
+    record NovResult(long RowId, string Val, double Score);
+    List<NovResult> _novResults = new();
+    double _novAvg;
+    Chart? _novHist;
+
+    HoloSession? _prismSession;
+    SubwordVocab? _prismVocab;
+    int _prismKPass = 1;
+
+    // Real per-token compute on an interpreted (no-AOT) WASM runtime, against Prism's d=1536 checkpoint — the
+    // most expensive thing this page can trigger. Capped hard on BOTH axes (cells scanned, and tokens scored per
+    // cell) so a worst case stays bounded (@NoveltyCellCap * @NoveltyMaxTokensPerCell forward passes, max) rather
+    // than scaling with dataset size. Judgment call, not a measured number — flagged in the task return; retune
+    // live if a real run feels too slow or too shallow.
+    const int NoveltyCellCap = 120;
+    const int NoveltyMaxTokensPerCell = 32;
+
+    static string Pct(double f) => (f * 100).ToString("F0") + "%";
+    static string Secs(double ms) => ms < 1000 ? ms.ToString("F0") + " ms" : (ms / 1000).ToString("F2") + " s";
+    static string ShortRate(double r) => r >= 1_000_000 ? (r / 1_000_000).ToString("F1") + "M" : r >= 1000 ? (r / 1000).ToString("F0") + "k" : r.ToString("F0");
+    static string Num(double v) => Math.Abs(v) >= 1000 || v == Math.Floor(v) ? v.ToString("N0") : v.ToString("N2");
+    string MissPct(Col c) => (c.Count > 0 ? c.Missing * 100.0 / c.Count : 0).ToString("F0") + "%";
+    static string ColFill(Col c, long n) { long m = c.Top.Count > 0 ? c.Top[0].N : 1; return (m > 0 ? n * 100.0 / m : 0).ToString("F1") + "%"; }
+
+    void LoadSample() { Text = SampleCsv; _fileName = null; _done = false; _error = null; }
+
+    async Task LoadFeed(Feed f)
+    {
+        _busy = true; _error = null; _done = false; _progress = 0; _phase = $"Fetching {f.Name} from {f.Source}…"; StateHasChanged(); await Task.Delay(1);
+        try
+        {
+            Text = await Http.GetStringAsync(f.Url);
+            _fileName = $"{f.Name} · {f.Source} (live)";
+        }
+        catch (Exception ex)
+        {
+            _error = $"Couldn't fetch {f.Name}: {ex.Message}. The source may be rate-limiting or briefly down — try again, or upload a file.";
+            _busy = false; StateHasChanged();
+            return;
+        }
+        await Analyze();
+    }
+
+    async Task FeedUrlKey(KeyboardEventArgs e) { if (e.Key == "Enter") await LoadUrl(); }
+
+    async Task LoadUrl()
+    {
+        var url = _feedUrl.Trim();
+        if (url.Length == 0) return;
+        if (!url.StartsWith("http://") && !url.StartsWith("https://")) { _error = "Enter a full http(s):// URL."; StateHasChanged(); return; }
+        _busy = true; _error = null; _done = false; _progress = 0; _phase = "Fetching URL…"; StateHasChanged(); await Task.Delay(1);
+        try
+        {
+            Text = await Http.GetStringAsync(url);
+            _fileName = $"{new Uri(url).Host} (live)";
+        }
+        catch (Exception ex)
+        {
+            _error = $"Couldn't fetch that URL ({ex.Message}). Most likely the source doesn't allow direct browser access — no CORS header. Download the file and drop it here instead, or try one of the datasets above.";
+            _busy = false; StateHasChanged();
+            return;
+        }
+        await Analyze();
+    }
+
+    async Task OnFile(InputFileChangeEventArgs e)
+    {
+        var file = e.File;
+        if (file is null) return;
+        _busy = true; _error = null; _done = false; _phase = "Reading file…"; _progress = 0; StateHasChanged(); await Task.Delay(1);
+        try
+        {
+            using var stream = file.OpenReadStream(MaxUpload);
+            using var reader = new StreamReader(stream);
+            Text = await reader.ReadToEndAsync();
+            _fileName = file.Name;
+        }
+        catch (Exception ex)
+        {
+            _error = "Couldn't read that file: " + ex.Message;
+            _busy = false; StateHasChanged();
+            return;
+        }
+        await Analyze();
+    }
+
+    async Task Analyze()
+    {
+        _busy = true; _error = null; _done = false; _progress = 0; _phase = "Reading…";
+        _cols = new(); _entities = new(); _flags = new(); _insights = new(); _charts = new();
+        _suggestions = new(); _replRan = false; _replError = null; _replRows = new(); _replCols = Array.Empty<string>(); _replChart = null; _replView = "table";
+        StateHasChanged(); await Task.Delay(1);
+
+        try
+        {
+            var swAll = Stopwatch.StartNew();
+
+            // ---- sniff + parse into columns (JSON / JSONL first, then delimited, then plain text) ----
+            List<string> names;
+            string[][] cells;
+            int malformed = 0;
+
+            if (TryParseJson(_text, RowCap + 1, out var jNames, out var jCells))
+            {
+                names = jNames; cells = jCells;
+                _format = $"JSON, {cells.Length:N0} records";
+            }
+            else
+            {
+                var lines = SplitLines(_text, RowCap + 1);
+                if (lines.Count == 0) { _error = "Nothing to profile."; return; }
+                char delim = SniffDelimiter(lines);
+                bool tabular = delim != '\0';
+                _format = tabular ? $"{DelimName(delim)}-separated, {lines.Count:N0} rows" : "plain text";
+                if (tabular)
+                {
+                    var header = SplitRow(lines[0], delim);
+                    bool hasHeader = header.All(h => !IsNumber(h)) && header.Distinct().Count() == header.Length;
+                    names = hasHeader ? header.Select((h, i) => string.IsNullOrWhiteSpace(h) ? $"col{i + 1}" : h.Trim()).ToList()
+                                      : Enumerable.Range(1, header.Length).Select(i => $"col{i}").ToList();
+                    int ncol = names.Count;
+                    int startRow = hasHeader ? 1 : 0;
+                    var rows = new List<string[]>(lines.Count);
+                    for (int i = startRow; i < lines.Count; i++)
+                    {
+                        var r = SplitRow(lines[i], delim);
+                        if (r.Length != ncol) { malformed++; if (r.Length < ncol) r = r.Concat(Enumerable.Repeat("", ncol - r.Length)).ToArray(); else r = r.Take(ncol).ToArray(); }
+                        rows.Add(r);
+                        if ((i & 0x1FFFF) == 0) { _progress = 0.35 * i / lines.Count; _phase = $"Parsing… {rows.Count:N0} rows"; StateHasChanged(); await Task.Delay(1); }
+                    }
+                    cells = rows.ToArray();
+                }
+                else
+                {
+                    names = new() { "line" };
+                    cells = lines.Select(l => new[] { l }).ToArray();
+                }
+            }
+            _rows = cells.Length;
+            if (_rows == 0) { _error = "No records found."; return; }
+
+            // real, typeable SQL identifiers so the REPL reads naturally (region, amount) not c0/c1
+            var sqlNames = MakeSqlNames(names);
+
+            // ---- infer a type per column ----
+            var types = new FieldType[names.Count];
+            for (int c = 0; c < names.Count; c++) types[c] = InferType(cells, c, _rows);
+
+            // ---- load into a real in-memory HoloDb ----
+            _phase = "Loading into HoloDb…"; _progress = 0.4; StateHasChanged(); await Task.Delay(1);
+            var db = Database.Open(null); _db = db;
+            var defs = new StringBuilder("CREATE TABLE data (rowid INT PRIMARY KEY");
+            for (int c = 0; c < names.Count; c++) defs.Append($", {sqlNames[c]} {SqlType(types[c])}");
+            defs.Append(')');
+            db.Execute(defs.ToString());
+
+            int n = (int)_rows; const int chunk = 100_000;
+            var colNames = new string[names.Count + 1]; colNames[0] = "rowid";
+            for (int c = 0; c < names.Count; c++) colNames[c + 1] = sqlNames[c];
+            var swLoad = Stopwatch.StartNew();
+            for (int start = 0; start < n; start += chunk)
+            {
+                int m = Math.Min(chunk, n - start);
+                var data = new Array[names.Count + 1];
+                var idc = new long[m]; for (int j = 0; j < m; j++) idc[j] = start + j; data[0] = idc;
+                for (int c = 0; c < names.Count; c++) data[c + 1] = BuildColumn(cells, c, start, m, types[c]);
+                db.BulkLoad("data", colNames, data, m);
+                _progress = 0.4 + 0.45 * (start + m) / n; _phase = $"Loading into HoloDb… {(start + m):N0} / {n:N0}"; StateHasChanged(); await Task.Delay(1);
+            }
+            swLoad.Stop();
+            _loadRate = swLoad.Elapsed.TotalSeconds > 0 ? n / swLoad.Elapsed.TotalSeconds : n;
+
+            // ---- profile each column via HoloDb aggregates (re-runnable against a drill-down filter) ----
+            _phase = "Profiling…"; _progress = 0.9; StateHasChanged(); await Task.Delay(1);
+            _sqlNames = sqlNames; _types = types; _filters.Clear();
+            var swQ = Stopwatch.StartNew();
+            await RunProfile();
+            swQ.Stop();
+            _queryMs = swQ.Elapsed.TotalMilliseconds;
+
+            // ---- entities from the raw text, headline flags ----
+            _phase = "Scanning for entities…"; StateHasChanged(); await Task.Delay(1);
+            _entities = await ExtractEntities(_text.Length > EntityScanChars ? _text[..EntityScanChars] : _text);
+            _flags = BuildFlags(malformed);
+
+            // ---- chart-builder default selections ----
+            _cbDim = _dimCols.FirstOrDefault()?.Name ?? "";
+            _cbMeasure = _numCols.FirstOrDefault()?.Name ?? "";
+            _cbAgg = _numCols.Count > 0 ? "sum" : "count"; _cbType = "auto"; _cbChart = null; _cbError = null;
+
+            // ---- query suggestions drawn from the profile ----
+            _suggestions = BuildSuggestions();
+            _sql = _suggestions.Count > 0 ? _suggestions[0].Sql : "SELECT * FROM data LIMIT 20";
+
+            swAll.Stop();
+            _ms = swAll.Elapsed.TotalMilliseconds;
+            long bytes = (long)_rows * names.Count * 12 * 4;
+            _bqCost = bytes / (double)(1L << 40) * 6.25;
+            _progress = 1; _done = true;
+        }
+        catch (Exception ex) { _error = "Something went wrong: " + ex.Message; }
+        finally { _busy = false; StateHasChanged(); }
+    }
+
+    // ---- parsing / inference helpers ----
+    static List<string> SplitLines(string t, int cap)
+    {
+        var res = new List<string>(); int i = 0, n = t.Length;
+        while (i < n && res.Count < cap)
+        {
+            int j = t.IndexOf('\n', i); if (j < 0) j = n;
+            var line = t[i..j].TrimEnd('\r');
+            if (line.Length > 0) res.Add(line);
+            i = j + 1;
+        }
+        return res;
+    }
+    static char SniffDelimiter(List<string> lines)
+    {
+        foreach (char d in new[] { '\t', ',', ';', '|' })
+        {
+            int probe = Math.Min(lines.Count, 30);
+            var counts = new Dictionary<int, int>();
+            for (int i = 0; i < probe; i++) { int c = lines[i].Count(ch => ch == d); counts[c] = counts.GetValueOrDefault(c) + 1; }
+            var best = counts.OrderByDescending(kv => kv.Value).First();
+            if (best.Key >= 1 && best.Value >= probe * 0.7) return d;
+        }
+        return '\0';
+    }
+    static string DelimName(char d) => d switch { '\t' => "tab", ',' => "comma", ';' => "semicolon", '|' => "pipe", _ => "text" };
+    // RFC-4180-aware field split: quoted fields may contain the delimiter, and "" is an escaped quote.
+    static string[] SplitRow(string line, char d)
+    {
+        if (line.IndexOf('"') < 0) return line.Split(d).Select(f => f.Trim()).ToArray();   // fast path: no quotes
+        var fields = new List<string>();
+        var sb = new StringBuilder();
+        bool inQ = false, started = false;
+        for (var i = 0; i < line.Length; i++)
+        {
+            var c = line[i];
+            if (inQ)
+            {
+                if (c == '"') { if (i + 1 < line.Length && line[i + 1] == '"') { sb.Append('"'); i++; } else inQ = false; }
+                else sb.Append(c);
+            }
+            else if (c == d) { fields.Add(sb.ToString().Trim()); sb.Clear(); started = false; }
+            else if (c == '"' && !started) { inQ = true; started = true; }
+            else { if (!char.IsWhiteSpace(c)) started = true; sb.Append(c); }
+        }
+        fields.Add(sb.ToString().Trim());
+        return fields.ToArray();
+    }
+
+    // Parse a JSON array-of-objects or JSONL (one object per line) into columns. Nested objects/arrays become raw-JSON text.
+    static bool TryParseJson(string text, int cap, out List<string> names, out string[][] cells)
+    {
+        names = new(); cells = Array.Empty<string[]>();
+        var t = text.TrimStart();
+        if (t.Length == 0 || (t[0] != '[' && t[0] != '{')) return false;
+        var rows = new List<Dictionary<string, string>>();
+        var order = new List<string>(); var seen = new HashSet<string>();
+        void Add(JsonElement el)
+        {
+            if (el.ValueKind != JsonValueKind.Object) return;
+            var d = new Dictionary<string, string>();
+            foreach (var p in el.EnumerateObject()) { if (seen.Add(p.Name)) order.Add(p.Name); d[p.Name] = JsonValToStr(p.Value); }
+            rows.Add(d);
+        }
+        try
+        {
+            if (t[0] == '[')
+            {
+                using var doc = JsonDocument.Parse(t);
+                if (doc.RootElement.ValueKind != JsonValueKind.Array) return false;
+                foreach (var el in doc.RootElement.EnumerateArray()) { if (rows.Count >= cap) break; Add(el); }
+            }
+            else   // '{': single object, or JSONL (one object per line)
+            {
+                var lines = t.Split('\n').Select(l => l.Trim()).Where(l => l.Length > 0).ToList();
+                if (lines.Count > 1 && lines.All(l => l[0] == '{'))
+                    foreach (var l in lines) { if (rows.Count >= cap) break; try { using var d = JsonDocument.Parse(l); Add(d.RootElement); } catch { return false; } }
+                else { using var doc = JsonDocument.Parse(t); Add(doc.RootElement); }
+            }
+        }
+        catch { return false; }
+        if (rows.Count == 0 || order.Count == 0) return false;
+        names = order;
+        cells = rows.Select(r => order.Select(c => r.TryGetValue(c, out var v) ? v : "").ToArray()).ToArray();
+        return true;
+    }
+
+    static string JsonValToStr(JsonElement v) => v.ValueKind switch
+    {
+        JsonValueKind.String => v.GetString() ?? "",
+        JsonValueKind.Number => v.GetRawText(),
+        JsonValueKind.True => "true",
+        JsonValueKind.False => "false",
+        JsonValueKind.Null or JsonValueKind.Undefined => "",
+        _ => v.GetRawText(),   // nested object/array -> raw JSON text
+    };
+
+    static FieldType InferType(string[][] cells, int c, long rows)
+    {
+        int seen = 0, ints = 0, dec = 0, dates = 0, bools = 0; var distinct = new HashSet<string>();
+        for (int i = 0; i < cells.Length && seen < 400; i++)
+        {
+            if (c >= cells[i].Length) continue; var v = cells[i][c];
+            if (string.IsNullOrEmpty(v)) continue; seen++;
+            if (distinct.Count < 60) distinct.Add(v);
+            if (long.TryParse(v, out _)) ints++;
+            else if (double.TryParse(v, NumberStyles.Any, CultureInfo.InvariantCulture, out _)) dec++;
+            if (DateTime.TryParse(v, CultureInfo.InvariantCulture, DateTimeStyles.None, out _)) dates++;
+            if (v is "true" or "false" or "yes" or "no" or "0" or "1" or "True" or "False") bools++;
+        }
+        if (seen == 0) return FieldType.Text;
+        if (ints == seen) return FieldType.Integer;
+        if (ints + dec == seen) return FieldType.Decimal;
+        if (dates == seen) return FieldType.Date;
+        if (bools == seen && distinct.Count <= 3) return FieldType.Boolean;
+        double ratio = seen > 0 ? distinct.Count / (double)Math.Min(seen, 60) : 1;
+        return distinct.Count <= 40 && ratio < 0.9 ? FieldType.Category : FieldType.Text;
+    }
+    static bool IsNumber(string v) => double.TryParse(v, NumberStyles.Any, CultureInfo.InvariantCulture, out _);
+    static string SqlType(FieldType t) => t == FieldType.Integer ? "INT" : t == FieldType.Decimal ? "REAL" : "TEXT";
+    static string Cell(object o) => o?.ToString() ?? "";
+    static double ToD(object o) => o is null ? 0 : Convert.ToDouble(o, CultureInfo.InvariantCulture);
+
+    static Array BuildColumn(string[][] cells, int c, int start, int m, FieldType t)
+    {
+        if (t == FieldType.Integer) { var a = new long[m]; for (int j = 0; j < m; j++) a[j] = c < cells[start + j].Length && long.TryParse(cells[start + j][c], out var v) ? v : 0; return a; }
+        if (t == FieldType.Decimal) { var a = new double[m]; for (int j = 0; j < m; j++) a[j] = c < cells[start + j].Length && double.TryParse(cells[start + j][c], NumberStyles.Any, CultureInfo.InvariantCulture, out var v) ? v : 0; return a; }
+        var s = new string[m]; for (int j = 0; j < m; j++) s[j] = c < cells[start + j].Length ? cells[start + j][c] : ""; return s;
+    }
+
+    // Async + cooperatively-yielding (2026-08-28) — 7 regex scans, each up to EntityScanChars (2M) characters,
+    // used to run back-to-back with nothing between them; a whole-file upload at the cap paid all 7 scans as one
+    // unbroken block on every Analyze() call, not just an occasional one. Can't yield mid-Regex.Matches (the BCL
+    // call itself isn't interruptible), so this yields BETWEEN patterns instead — bounds the worst uninterrupted
+    // stretch to one pattern's scan instead of all seven, same "yield at the natural sub-unit boundary" shape as
+    // RunProfile's per-column yield above.
+    static async Task<List<Entity>> ExtractEntities(string t)
+    {
+        var patterns = new (string Kind, string Re)[]
+        {
+            ("emails", @"[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}"),
+            ("URLs", @"https?://[^\s""'<>]+"),
+            ("IP addresses", @"\b(?:\d{1,3}\.){3}\d{1,3}\b"),
+            ("dates", @"\b\d{4}-\d{2}-\d{2}\b|\b\d{1,2}/\d{1,2}/\d{2,4}\b"),
+            ("money", @"[$£€]\s?\d[\d,]*(?:\.\d+)?"),
+            ("@mentions", @"(?<=\s|^)@[A-Za-z0-9_]{2,}"),
+            ("#tags", @"(?<=\s|^)#[A-Za-z0-9_]{2,}"),
+        };
+        var res = new List<Entity>();
+        foreach (var (kind, re) in patterns)
+        {
+            var ms = Regex.Matches(t, re);
+            if (ms.Count > 0)
+            {
+                var examples = ms.Select(m => m.Value).Distinct().Take(3).ToList();
+                res.Add(new Entity(kind, ms.Count, examples));
+            }
+            await Task.Delay(1);
+        }
+        return res.OrderByDescending(e => e.Count).ToList();
+    }
+
+    List<Flag> BuildFlags(int malformed)
+    {
+        var f = new List<Flag>();
+        foreach (var c in _cols.Where(c => c.Outliers > 0))
+            f.Add(new Flag("warn", $"<b>{c.Name}</b> has <b>{c.Outliers:N0}</b> outliers (past 3&sigma; from the mean of {Num(c.Mean)})."));
+        foreach (var c in _cols.Where(c => c.Distinct == _rows && _rows > 1))
+            f.Add(new Flag("info", $"<b>{c.Name}</b> is unique on every row &mdash; looks like an ID or key."));
+        foreach (var c in _cols.Where(c => c.Missing > _rows * 0.2))
+            f.Add(new Flag("warn", $"<b>{c.Name}</b> is <b>{MissPct(c)}</b> empty."));
+        foreach (var c in _cols.Where(c => c.Type == FieldType.Category && c.Distinct == 1 && _rows > 1))
+            f.Add(new Flag("info", $"<b>{c.Name}</b> is constant &mdash; the same value on every row."));
+        if (malformed > 0) f.Add(new Flag("warn", $"<b>{malformed:N0}</b> rows didn't match the column count (padded or trimmed to fit)."));
+        return f.Take(8).ToList();
+    }
+
+    // Header text -> valid, unique SQL identifiers (unquoted idents only; typical CSV headers pass through unchanged).
+    static List<string> MakeSqlNames(List<string> raw)
+    {
+        var used = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "rowid" };
+        var outp = new List<string>(raw.Count);
+        for (int i = 0; i < raw.Count; i++)
+        {
+            var sb = new StringBuilder();
+            foreach (var ch in raw[i]) sb.Append(char.IsLetterOrDigit(ch) ? ch : '_');
+            var s = sb.ToString().Trim('_');
+            if (s.Length == 0 || char.IsDigit(s[0])) s = "c" + (i + 1);
+            var baseName = s; int k = 2;
+            while (!used.Add(s)) s = baseName + "_" + k++;
+            outp.Add(s);
+        }
+        return outp;
+    }
+
+    // Up to three charts inferred from the profile: a category breakdown (its bars filter), a numeric distribution, a time series.
+    List<Chart> BuildCharts(Database db, string where)
+    {
+        var charts = new List<Chart>();
+
+        var cat = _cols.Where(c => c.Type is FieldType.Category or FieldType.Boolean && c.Distinct is > 1 and <= 24 && c.Top.Count > 1)
+                       .OrderByDescending(c => c.Top.Count).FirstOrDefault();
+        if (cat is not null)
+            charts.Add(new Chart($"Records by {cat.Name}", "bars",
+                cat.Top.Select(t => (t.Val, (double)t.N)).ToList(), cat.Name));
+
+        var num = _cols.Where(c => c.Type is FieldType.Integer or FieldType.Decimal && c.Hist.Count > 1 && c.Max > c.Min)
+                       .OrderByDescending(c => c.Distinct).FirstOrDefault();
+        if (num is not null)
+            charts.Add(new Chart($"Distribution of {num.Name}", "bars",
+                num.Hist.Select(h => (HistLabel(h.Lo, h.Hi), (double)h.N)).ToList()));
+
+        var dcol = _cols.FirstOrDefault(c => c.Type == FieldType.Date && c.Distinct is > 1 and <= 400);
+        if (dcol is not null)
+        {
+            var nm = _cols.FirstOrDefault(c => c.Type is FieldType.Integer or FieldType.Decimal);
+            string agg = nm is not null ? $"SUM({nm.Name})" : "COUNT(*)";
+            string title = nm is not null ? $"Total {nm.Name} over {dcol.Name}" : $"Records over {dcol.Name}";
+            try
+            {
+                var rs = db.Execute($"SELECT {dcol.Name}, {agg} FROM data {where} GROUP BY {dcol.Name} ORDER BY {dcol.Name} LIMIT 400").Rows;
+                if (rs.Count > 2)
+                    charts.Add(new Chart(title, "line", rs.Select(r => (Cell(r[dcol.Name]), ToD(r.Values.Last()))).ToList()));
+            }
+            catch { }
+        }
+        return charts;
+    }
+
+    // Re-profile the loaded table against the current drill-down filter: rebuilds field stats, charts, and the
+    // filtered count. Made async + cooperatively-yielding (2026-08-28 responsiveness pass) — this used to run
+    // fully synchronously, including from ApplyFilter/RemoveFilter/ClearFilters, which are wired directly to
+    // click handlers on the chart bars and field mini-rows (the site's single most frequent interaction on this
+    // page once a dataset is loaded). At the row cap (500k) a wide table can carry many numeric columns, each
+    // paying its own filtered-row scan in NumericStatsDb below — with no yield anywhere, that whole click-to-
+    // drill-down step used to freeze the tab for however long the full profile took. Now yields once every 8
+    // columns (matching the file's existing "yield every N units" idiom, e.g. RunNoveltyScan's every-16-tokens)
+    // so a wide table's re-profile can't run as one unbroken block, and NumericStatsDb itself yields inside its
+    // own row scans on the largest filtered results (see that method).
+    async Task RunProfile()
+    {
+        if (_db is null) return;
+        string where = BuildWhere();
+        _filteredRows = ToLong(_db.Execute($"SELECT COUNT(*) FROM data {where}").Rows[0].Values.First());
+        var cols = new List<Col>(_sqlNames.Count);
+        for (int c = 0; c < _sqlNames.Count; c++)
+        {
+            var col = new Col(_sqlNames[c], _types[c]);
+            string q = _sqlNames[c];
+            var groups = _db.Execute($"SELECT {q}, COUNT(*) FROM data {where} GROUP BY {q}").Rows;
+            col.Distinct = groups.Count;
+            col.Count = _filteredRows;
+            col.Top = groups.Select(r => (Cell(r[q]), (long)r["count(*)"]))
+                            .OrderByDescending(x => x.Item2).ThenBy(x => x.Item1).Take(6).ToList();
+            col.Missing = groups.Where(r => string.IsNullOrEmpty(Cell(r[q]))).Sum(r => (long)r["count(*)"]);
+            if (_types[c] is FieldType.Integer or FieldType.Decimal)
+            {
+                (col.Min, col.Max, col.Mean, col.Outliers, col.Hist) = await NumericStatsDb(q, where);
+                col.Top = new();   // numeric columns show stats + a histogram chart, not a top-values bar
+            }
+            cols.Add(col);
+            if ((c & 0x7) == 7) await Task.Delay(1);   // yield every 8 columns on a wide re-profile
+        }
+        _cols = cols;
+        _charts = BuildCharts(_db, where);
+        _dimCols = _cols.Where(c => c.Type is FieldType.Category or FieldType.Boolean or FieldType.Date or FieldType.Integer).ToList();
+        if (_dimCols.Count == 0) _dimCols = _cols.ToList();
+        _numCols = _cols.Where(c => c.Type is FieldType.Integer or FieldType.Decimal).ToList();
+        _insights = _filters.Count == 0 ? BuildInsights(_db, where) : new();   // deeper analysis only at the top level
+
+        // novelty scan is scoped to whatever the profiler already calls "text" (high-cardinality, non-numeric,
+        // non-date, non-boolean, not a small closed set of categories — see InferType). Recomputed here so it
+        // tracks a drill-down filter same as _dimCols/_numCols; stale results from a previous column/filter are
+        // cleared rather than left showing against a subset they were never scored on.
+        _textCols = _cols.Where(c => c.Type == FieldType.Text).ToList();
+        if (!_textCols.Any(c => c.Name == _novCol))
+        {
+            _novCol = _textCols.FirstOrDefault()?.Name ?? "";
+            _novResults = new(); _novHist = null; _novError = null; _novAvg = 0;
+        }
+    }
+
+    // "What the data says": computed insights beyond the per-field profile — correlations between numeric fields,
+    // which category best explains a measure, a trend over time, and concentration. Each is a small SQL aggregate
+    // (HoloDb's strength) plus a little C# math; every step is guarded so a quirky column can never break the page.
+    List<Flag> BuildInsights(Database db, string where)
+    {
+        var ins = new List<Flag>();
+        var nums = _cols.Where(c => c.Type is FieldType.Integer or FieldType.Decimal && c.Max > c.Min).ToList();
+        var cats = _cols.Where(c => c.Type is FieldType.Category or FieldType.Boolean && c.Distinct is > 1 and <= 30).ToList();
+        var dates = _cols.Where(c => c.Type == FieldType.Date && c.Distinct > 2).ToList();
+
+        // 1. strongest correlation between numeric fields (Pearson over an aligned sample)
+        if (nums.Count >= 2)
+        {
+            var use = nums.Take(4).ToList();
+            try
+            {
+                var rs = db.Execute($"SELECT {string.Join(", ", use.Select(c => c.Name))} FROM data {where} LIMIT 50000").Rows;
+                var vals = new List<double[]>(rs.Count);
+                foreach (var r in rs)
+                {
+                    var a = new double[use.Count]; bool ok = true;
+                    for (int j = 0; j < use.Count; j++) { var v = r[use[j].Name]; if (v is null) { ok = false; break; } a[j] = ToD(v); }
+                    if (ok) vals.Add(a);
+                }
+                if (vals.Count >= 8)
+                {
+                    int ba = -1, bb = -1; double br = 0;
+                    for (int a = 0; a < use.Count; a++)
+                        for (int b = a + 1; b < use.Count; b++)
+                        {
+                            double r = Pearson(vals, a, b);
+                            if (Math.Abs(r) > Math.Abs(br)) { br = r; ba = a; bb = b; }
+                        }
+                    if (ba >= 0 && Math.Abs(br) >= 0.5)
+                    {
+                        string dir = br > 0 ? "rise and fall together" : "move in opposite directions";
+                        ins.Add(new Flag("info", $"<b>{use[ba].Name}</b> and <b>{use[bb].Name}</b> {dir} &mdash; correlation <b>{br.ToString("F2", Inv)}</b>."));
+                    }
+                }
+            }
+            catch { }
+        }
+
+        // 2. which category best separates a numeric measure (biggest hi/lo group-average gap)
+        if (nums.Count > 0 && cats.Count > 0)
+        {
+            var m = nums[0];
+            Col? bestCat = null; string hiN = "", loN = ""; double hiV = 0, loV = 0, bestSpread = 0, ratio = 0;
+            foreach (var cat in cats)
+            {
+                try
+                {
+                    var rs = db.Execute($"SELECT {cat.Name}, AVG({m.Name}), COUNT(*) FROM data {where} GROUP BY {cat.Name}").Rows;
+                    var g = rs.Select(r => (name: Cell(r[cat.Name]), avg: ToD(r.Values.Skip(1).First()), n: (long)r["count(*)"]))
+                              .Where(x => x.n >= 3 && !string.IsNullOrEmpty(x.name)).ToList();
+                    if (g.Count < 2) continue;
+                    var hi = g.OrderByDescending(x => x.avg).First(); var lo = g.OrderBy(x => x.avg).First();
+                    double spread = Math.Abs(hi.avg - lo.avg) / (Math.Abs(m.Mean) + 1e-9);
+                    if (spread > bestSpread)
+                    { bestSpread = spread; bestCat = cat; hiN = hi.name; loN = lo.name; hiV = hi.avg; loV = lo.avg; ratio = lo.avg != 0 ? hi.avg / lo.avg : 0; }
+                }
+                catch { }
+            }
+            if (bestCat is not null && bestSpread >= 0.5)
+            {
+                string tail = ratio >= 1.5 ? $" (<b>{ratio.ToString("F1", Inv)}×</b>)" : "";
+                ins.Add(new Flag("info", $"<b>{m.Name}</b> varies most by <b>{bestCat.Name}</b>: <b>{hiN}</b> averages {Num(hiV)} vs <b>{loN}</b> at {Num(loV)}{tail}."));
+            }
+        }
+
+        // 3. trend over time (first third vs last third of the series)
+        if (dates.Count > 0)
+        {
+            var d = dates[0]; var m = nums.FirstOrDefault();
+            string agg = m is not null ? $"SUM({m.Name})" : "COUNT(*)";
+            string what = m is not null ? $"total {m.Name}" : "record volume";
+            try
+            {
+                var rs = db.Execute($"SELECT {d.Name}, {agg} FROM data {where} GROUP BY {d.Name} ORDER BY {d.Name}").Rows;
+                if (rs.Count >= 6)
+                {
+                    var series = rs.Select(r => ToD(r.Values.Last())).ToList();
+                    int third = Math.Max(1, series.Count / 3);
+                    double firstAvg = series.Take(third).Average(), lastAvg = series.Skip(series.Count - third).Average();
+                    if (firstAvg > 0)
+                    {
+                        double chg = (lastAvg - firstAvg) / firstAvg * 100;
+                        if (Math.Abs(chg) >= 20)
+                            ins.Add(new Flag("info", $"Over <b>{d.Name}</b>, {what} <b>{(chg > 0 ? "rose" : "fell")} {Math.Abs(chg).ToString("F0", Inv)}%</b> from the first stretch to the last."));
+                    }
+                }
+            }
+            catch { }
+        }
+
+        // 4. concentration: a single value dominating the busiest category
+        var topCat = cats.OrderByDescending(c => c.Top.Count > 0 ? c.Top[0].N : 0).FirstOrDefault();
+        if (topCat is not null && topCat.Top.Count > 0 && _filteredRows > 0)
+        {
+            var top = topCat.Top[0];
+            double share = top.N * 100.0 / _filteredRows;
+            if (share >= 40 && topCat.Distinct > 1)
+                ins.Add(new Flag("info", $"<b>{topCat.Name}</b> is dominated by <b>{(string.IsNullOrEmpty(top.Val) ? "(empty)" : top.Val)}</b> &mdash; <b>{share.ToString("F0", Inv)}%</b> of rows."));
+        }
+
+        return ins.Take(6).ToList();
+    }
+
+    static double Pearson(List<double[]> v, int a, int b)
+    {
+        int n = v.Count; double sa = 0, sb = 0;
+        for (int i = 0; i < n; i++) { sa += v[i][a]; sb += v[i][b]; }
+        double ma = sa / n, mb = sb / n, cov = 0, va = 0, vb = 0;
+        for (int i = 0; i < n; i++) { double da = v[i][a] - ma, db = v[i][b] - mb; cov += da * db; va += da * da; vb += db * db; }
+        return va <= 0 || vb <= 0 ? 0 : cov / Math.Sqrt(va * vb);
+    }
+
+    // Numeric stats (min/max/mean/outliers/histogram) over the filtered rows — one column scan, filter-aware.
+    // Async + cooperatively-yielding (2026-08-28) — up to 4 unyielded O(rows) passes over this column at the
+    // 500k-row cap (materialize, min/max/sum, variance, histogram bucketing), called once per numeric column
+    // from RunProfile above. Yields every 100k rows within each pass rather than only between columns, so even
+    // a table with a single very wide numeric column can't monopolize the tab. Below that threshold (the
+    // overwhelming majority of real profiles) this never triggers a single extra Task.Delay — no added latency
+    // for the common case.
+    async Task<(double, double, double, long, List<(double, double, long)>)> NumericStatsDb(string col, string where)
+    {
+        const int YieldEvery = 100_000;
+        var res = _db!.Execute($"SELECT {col} FROM data {where}");
+        var vals = new List<double>(res.Rows.Count);
+        int i = 0;
+        foreach (var r in res.Rows)
+        {
+            var v = r.Values.First(); if (v is not null) vals.Add(ToD(v));
+            if (++i % YieldEvery == 0) await Task.Delay(1);
+        }
+        if (vals.Count == 0) return (0, 0, 0, 0, new());
+        double min = vals[0], max = vals[0], sum = 0;
+        for (int j = 0; j < vals.Count; j++) { var v = vals[j]; if (v < min) min = v; if (v > max) max = v; sum += v; if ((j + 1) % YieldEvery == 0) await Task.Delay(1); }
+        double mean = sum / vals.Count, sq = 0;
+        for (int j = 0; j < vals.Count; j++) { sq += (vals[j] - mean) * (vals[j] - mean); if ((j + 1) % YieldEvery == 0) await Task.Delay(1); }
+        double std = Math.Sqrt(sq / vals.Count);
+        long outliers = std > 0 ? vals.Count(v => Math.Abs(v - mean) > 3 * std) : 0;
+        int buckets = 12; double span = max - min, width = span > 0 ? span / buckets : 1;
+        var counts = new long[buckets];
+        for (int j = 0; j < vals.Count; j++) { var v = vals[j]; int b = span > 0 ? (int)((v - min) / width) : 0; if (b < 0) b = 0; if (b >= buckets) b = buckets - 1; counts[b]++; if ((j + 1) % YieldEvery == 0) await Task.Delay(1); }
+        var hist = new List<(double, double, long)>();
+        for (int b = 0; b < buckets; b++) hist.Add((min + b * width, min + (b + 1) * width, counts[b]));
+        while (hist.Count > 1 && hist[^1].Item3 == 0) hist.RemoveAt(hist.Count - 1);
+        return (min, max, mean, outliers, hist);
+    }
+
+    static long ToLong(object? o) => o is null ? 0 : Convert.ToInt64(o, CultureInfo.InvariantCulture);
+
+    string BuildWhere()
+    {
+        if (_filters.Count == 0) return "";
+        var parts = _filters.Select(f =>
+        {
+            int ti = _sqlNames.IndexOf(f.Col);
+            bool isInt = ti >= 0 && _types[ti] == FieldType.Integer;
+            return isInt ? $"{f.Col} = {f.Val}" : $"{f.Col} = '{f.Val.Replace("'", "''")}'";
+        });
+        return "WHERE " + string.Join(" AND ", parts);
+    }
+
+    // ApplyFilter/RemoveFilter/ClearFilters made async (2026-08-28 responsiveness pass): these are wired
+    // directly to every chart-bar and field mini-row click, i.e. the single most frequent interaction on this
+    // page once a dataset is loaded, and used to call the (then-synchronous) RunProfile with no yield and no
+    // busy indicator at all — a click on a wide/large-row-count profile would freeze the tab with zero visual
+    // feedback that anything was happening. Now reuses the existing `_busy` flag the drop/upload/feed flow
+    // already gates every other button and filter-click off of (see the markup's `disabled="@_busy"` on the
+    // hbar/mini-row buttons), so a filter click now visibly disables further clicks while it re-profiles,
+    // rather than silently accepting a pile-up of re-entrant filter changes mid-scan.
+    async Task ApplyFilter(string col, string val)
+    {
+        if (_db is null || _busy) return;
+        if (_filters.Any(f => f.Col == col && f.Val == val)) return;
+        _filters.RemoveAll(f => f.Col == col);   // one filter per column; drilling replaces it
+        _filters.Add((col, val));
+        _busy = true; StateHasChanged(); await Task.Delay(1);
+        try { await RunProfile(); } catch (Exception ex) { _error = "Filter failed: " + ex.Message; }
+        finally { _busy = false; StateHasChanged(); }
+    }
+
+    async Task RemoveFilter((string Col, string Val) f)
+    {
+        if (_busy) return;
+        _filters.Remove(f);
+        _busy = true; StateHasChanged(); await Task.Delay(1);
+        try { await RunProfile(); } catch (Exception ex) { _error = "Filter failed: " + ex.Message; }
+        finally { _busy = false; StateHasChanged(); }
+    }
+
+    async Task ClearFilters()
+    {
+        if (_busy) return;
+        _filters.Clear();
+        _busy = true; StateHasChanged(); await Task.Delay(1);
+        try { await RunProfile(); } catch (Exception ex) { _error = "Filter failed: " + ex.Message; }
+        finally { _busy = false; StateHasChanged(); }
+    }
+
+    // click a result-grid header to sort the shown rows (numeric-aware), toggling direction
+    void SortResult(string col)
+    {
+        if (_sortCol == col) _sortDesc = !_sortDesc; else { _sortCol = col; _sortDesc = false; }
+        _replRows.Sort((a, b) => { int c = CompareVals(a.GetValueOrDefault(col), b.GetValueOrDefault(col)); return _sortDesc ? -c : c; });
+    }
+    static int CompareVals(object? a, object? b)
+        => TryNum(a, out var da) && TryNum(b, out var db) ? da.CompareTo(db) : string.Compare(a?.ToString(), b?.ToString(), StringComparison.OrdinalIgnoreCase);
+    static bool TryNum(object? o, out double d)
+    {
+        switch (o) { case long l: d = l; return true; case double x: d = x; return true; case int i: d = i; return true; }
+        d = 0; return o != null && double.TryParse(o.ToString(), NumberStyles.Any, CultureInfo.InvariantCulture, out d);
+    }
+
+    static string HistLabel(double lo, double hi) => $"{Num(lo)}–{Num(hi)}";
+
+    // Queries worth trying, inferred from what the profile found in the data.
+    List<(string Label, string Sql)> BuildSuggestions()
+    {
+        var s = new List<(string, string)> { ("Peek at the first rows", "SELECT * FROM data LIMIT 20") };
+        var cats = _cols.Where(c => c.Type is FieldType.Category or FieldType.Boolean && c.Distinct is > 1 and <= 50).ToList();
+        var nums = _cols.Where(c => c.Type is FieldType.Integer or FieldType.Decimal).ToList();
+        var dates = _cols.Where(c => c.Type == FieldType.Date).ToList();
+
+        foreach (var c in cats.Take(2))
+            s.Add(($"Count rows per {c.Name}", $"SELECT {c.Name}, COUNT(*) FROM data GROUP BY {c.Name} ORDER BY count(*) DESC LIMIT 10"));
+        foreach (var c in nums.Take(2))
+            s.Add(($"Summarise {c.Name}", $"SELECT MIN({c.Name}), AVG({c.Name}), MAX({c.Name}), SUM({c.Name}) FROM data"));
+        if (cats.Count > 0 && nums.Count > 0)
+            s.Add(($"Total {nums[0].Name} by {cats[0].Name}",
+                   $"SELECT {cats[0].Name}, SUM({nums[0].Name}), AVG({nums[0].Name}) FROM data GROUP BY {cats[0].Name} ORDER BY sum({nums[0].Name}) DESC LIMIT 10"));
+        var outlier = _cols.FirstOrDefault(c => c.Outliers > 0);
+        if (outlier is not null)
+            s.Add(($"Biggest {outlier.Name} first", $"SELECT * FROM data ORDER BY {outlier.Name} DESC LIMIT 10"));
+        if (dates.Count > 0 && nums.Count > 0)
+            s.Add(($"{nums[0].Name} over {dates[0].Name}",
+                   $"SELECT {dates[0].Name}, SUM({nums[0].Name}) FROM data GROUP BY {dates[0].Name} ORDER BY {dates[0].Name} LIMIT 30"));
+        return s.Take(7).ToList();
+    }
+
+    async Task RunSql(string? sql = null)
+    {
+        if (sql is not null) _sql = sql;
+        if (_db is null || string.IsNullOrWhiteSpace(_sql)) return;
+        _replBusy = true; _replError = null; StateHasChanged(); await Task.Delay(1);
+        try
+        {
+            var sw = Stopwatch.StartNew();
+            var res = _db.Execute(_sql);
+            sw.Stop();
+            _replMs = sw.Elapsed.TotalMilliseconds;
+            var rows = res.Rows;
+            _replTotal = rows.Count;
+            _replCols = res.Columns.ToArray();
+            _replRows = rows.Take(ReplRowCap).ToList();
+            _sortCol = null; _sortDesc = false;
+            _replChart = BuildReplChart(_replCols, _replRows);
+            _replView = _replChart is not null ? "chart" : "table";
+        }
+        catch (Exception ex) { _replError = ex.Message; _replRows = new(); _replCols = Array.Empty<string>(); _replTotal = 0; _replChart = null; }
+        finally { _replRan = true; _replBusy = false; StateHasChanged(); }
+    }
+
+    // Chart a query result when it has a label column and a numeric column and isn't too big.
+    static Chart? BuildReplChart(string[] cols, List<Dictionary<string, object>> rows)
+    {
+        if (cols.Length < 2 || rows.Count < 2 || rows.Count > 60) return null;
+        int valIdx = -1;
+        for (int i = 1; i < cols.Length; i++) { if (rows.All(r => IsNumeric(r, cols[i]))) { valIdx = i; break; } }
+        if (valIdx < 0 && IsColNumeric(rows, cols[0])) valIdx = 0;
+        if (valIdx < 0) return null;
+        int labIdx = -1;
+        for (int i = 0; i < cols.Length; i++) { if (i != valIdx && !IsColNumeric(rows, cols[i])) { labIdx = i; break; } }
+        if (labIdx < 0) labIdx = valIdx == 0 ? (cols.Length > 1 ? 1 : 0) : 0;
+        if (labIdx == valIdx) return null;
+        var data = rows.Take(40).Select(r => (Cell(r.GetValueOrDefault(cols[labIdx]) ?? ""), ToD(r.GetValueOrDefault(cols[valIdx]) ?? 0d))).ToList();
+        bool dateish = cols[labIdx].ToLowerInvariant().Contains("date")
+                       || (data.Count > 0 && Regex.IsMatch(data[0].Item1, @"^\d{4}[-/]\d{2}"));
+        return new Chart($"{cols[valIdx]} by {cols[labIdx]}", dateish && data.Count > 2 ? "line" : "bars", data);
+    }
+
+    static bool IsColNumeric(List<Dictionary<string, object>> rows, string col) => rows.All(r => IsNumeric(r, col));
+    static bool IsNumeric(Dictionary<string, object> r, string col)
+    {
+        var v = r.GetValueOrDefault(col);
+        if (v is long or int or double or float or decimal) return true;
+        var s = v?.ToString();
+        return !string.IsNullOrEmpty(s) && double.TryParse(s, NumberStyles.Any, CultureInfo.InvariantCulture, out _);
+    }
+
+    async Task ExportCsv() => await ExportSqlCsv(_sql, "analyst-results.csv");
+    async Task ExportCb() => await ExportSqlCsv(_cbSql, "chart-data.csv");
+
+    async Task ExportSqlCsv(string sql, string name)
+    {
+        if (_db is null || string.IsNullOrWhiteSpace(sql)) return;
+        try
+        {
+            var res = _db.Execute(sql);
+            var cols = res.Columns.ToArray();
+            var sb = new StringBuilder();
+            sb.Append(string.Join(",", cols.Select(CsvEsc))).Append('\n');
+            foreach (var r in res.Rows)
+                sb.Append(string.Join(",", cols.Select(c => CsvEsc(r.TryGetValue(c, out var v) ? v?.ToString() ?? "" : "")))).Append('\n');
+            await JS.InvokeVoidAsync("analystDownload", name, sb.ToString(), "text/csv;charset=utf-8");
+        }
+        catch (Exception ex) { _replError = "Export failed: " + ex.Message; StateHasChanged(); }
+    }
+
+    // no-SQL chart builder: pick a breakdown + measure, we write the GROUP BY, run it in-browser, and draw it
+    async Task BuildChart()
+    {
+        if (_db is null || string.IsNullOrEmpty(_cbDim)) { _cbError = "Pick a field to break down by."; return; }
+        _cbBusy = true; _cbError = null; StateHasChanged(); await Task.Delay(1);
+        try
+        {
+            bool isDate = _cols.FirstOrDefault(c => c.Name == _cbDim)?.Type == FieldType.Date;
+            string sql, measureLabel;
+            if (_cbAgg == "count")
+            {
+                sql = $"SELECT {_cbDim}, COUNT(*) FROM data GROUP BY {_cbDim} ORDER BY {(isDate ? _cbDim : "count(*) DESC")} LIMIT 40";
+                measureLabel = "count";
+            }
+            else
+            {
+                if (string.IsNullOrEmpty(_cbMeasure)) { _cbError = "Pick a numeric measure."; _cbBusy = false; return; }
+                sql = $"SELECT {_cbDim}, {_cbAgg}({_cbMeasure}) FROM data GROUP BY {_cbDim} ORDER BY {(isDate ? _cbDim : $"{_cbAgg}({_cbMeasure}) DESC")} LIMIT 40";
+                measureLabel = $"{_cbAgg} of {_cbMeasure}";
+            }
+            _cbSql = sql;
+            var res = _db.Execute(sql);
+            var cols = res.Columns.ToArray();
+            var data = res.Rows.Take(40).Select(r => (Cell(r.GetValueOrDefault(cols[0]) ?? ""), ToD(r.GetValueOrDefault(cols[^1]) ?? 0d))).ToList();
+            string kind = _cbType == "auto" ? (isDate ? "line" : "bars") : _cbType;
+            _cbChart = new Chart($"{measureLabel} by {_cbDim}", kind, data);
+        }
+        catch (Exception ex) { _cbError = ex.Message; _cbChart = null; }
+        finally { _cbBusy = false; StateHasChanged(); }
+    }
+
+    // ---- novelty scan ----
+
+    // Lazy checkpoint load: only ever runs from RunNoveltyScan, never from OnInitialized — the whole point of
+    // making this opt-in. Mirrors Prism.razor's own OnInitializedAsync sequence (same sidecar files, same
+    // FromCheckpoint(bytes, kPass, alpha) call, same LineageJournal.AlphaFor call for a mid-ramp snapshot —
+    // migrated 2026-09-05 off HoloKernel's own AlphaRamp.Reconstruct hand-copy) rather than re-deriving it
+    // differently. Sidecar metadata (rounds/stackK/iterWarm) is fetched fresh here even when
+    // Prism already loaded the model, because SessionHost's factory only ever runs ONCE per key — if Prism (or
+    // Creature/Forecaster) got there first, GetOrCreateAsync below just returns their already-built session and
+    // this method's own locally-fetched K/alpha are discarded in favour of the real session's ground truth.
+    async Task<bool> EnsurePrismLoadedAsync()
+    {
+        if (_prismSession is not null && _prismVocab is not null) return true;
+        try
+        {
+            _novPhase = "Loading checkpoint vocabulary…"; StateHasChanged(); await Task.Delay(1);
+            var vocabBytes = await Http.GetByteArrayAsync(DataUrl.For("prism/oracle-vocab.txt"));
+            var merges = Encoding.UTF8.GetString(vocabBytes).Replace("\r\n", "\n").Split('\n').Where(l => l.Length > 0).ToList();
+            _prismVocab = new SubwordVocab(merges);
+
+            long? rounds = null; int? stackK = null; int? iterWarm = null;
+            try { rounds = long.Parse((await Http.GetStringAsync(DataUrl.For("prism/oracle-rounds.txt"))).Trim()); } catch { }
+            try { stackK = int.Parse((await Http.GetStringAsync(DataUrl.For("prism/oracle-stackk.txt"))).Trim()); } catch { }
+            try { iterWarm = int.Parse((await Http.GetStringAsync(DataUrl.For("prism/oracle-iterwarm.txt"))).Trim()); } catch { }
+
+            bool reused = Sessions.IsLoaded("prism");
+            _novPhase = reused ? "Reusing already-loaded checkpoint…" : "Loading checkpoint weights (gzip-compressed over the wire), once…";
+            StateHasChanged(); await Task.Delay(1);
+            _prismSession = await Sessions.GetOrCreateAsync("prism", async () =>
+            {
+                // Same gzip-sidecar fetch Prism.razor's own checkpoint load uses now (2026-08-31) — see
+                // HoloKernel.CheckpointFetch's doc comment. Compressed byte count isn't narrated here (this
+                // path has no per-file boot log the way Prism.razor's does), only the decompressed bytes
+                // matter to the rest of this method.
+                var (bytes, _) = await CheckpointFetch.FetchAndDecompressGzipAsync(Http, DataUrl.For("prism/oracle-brain.bin.gz"));
+                var peek = HoloFormer.Deserialize(bytes);
+                var kPass = stackK ?? 1;
+                var alpha = (peek.Layers == 1 && rounds is not null && iterWarm is > 0)
+                    ? LineageJournal.AlphaFor((int)rounds.Value, addRound: 0, iterWarm.Value)
+                    : 1.0;
+                return HoloSession.FromCheckpoint(bytes, kPass, alpha);
+            });
+            _prismKPass = _prismSession.KPass;   // ground truth from whichever tool actually built the session first
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _novError = "Couldn't load the checkpoint for novelty scanning: " + ex.Message;
+            return false;
+        }
+    }
+
+    // Softmax-and-look-up the TRUE next token's probability — the same numerically-stable pattern
+    // (subtract the max before exponentiating) Prism.Inference.Gate.Evaluate/TopK already use, just reading
+    // one specific index back out instead of the top-1 or top-K. No sampling, no Gate.Pick, nothing generated.
+    static double SurprisalBits(double[] logits, int vocab, int trueId)
+    {
+        double max = logits[0];
+        for (int i = 1; i < vocab; i++) if (logits[i] > max) max = logits[i];
+        double sum = 0;
+        for (int i = 0; i < vocab; i++) sum += Math.Exp(logits[i] - max);
+        double p = Math.Exp(logits[trueId] - max) / sum;
+        return -Math.Log(Math.Max(p, 1e-12), 2);   // bits of surprisal for this one token; low p -> high surprisal
+    }
+
+    async Task RunNoveltyScan()
+    {
+        if (_db is null || string.IsNullOrEmpty(_novCol) || _busy) return;
+        _novBusy = true; _novError = null; _novResults = new(); _novHist = null; _novAvg = 0; _novProgress = 0;
+        _novPhase = "Preparing…"; StateHasChanged(); await Task.Delay(1);
+        try
+        {
+            if (!await EnsurePrismLoadedAsync()) return;
+            var vocab = _prismVocab!; var session = _prismSession!;
+            int ctxCap = session.Stats().Context;
+
+            var cond = BuildWhere();
+            // HoloDb's SQL grammar has no NULL/IS keyword at all (verified in MonoRepo\HoloDb\Engine\Sql.cs --
+            // only =, !=, <, >, <=, >= are valid comparison operators, "IS NOT NULL" threw "expected a
+            // comparison operator but found 'IS'"). There's no NULL concept to check for; <> '' alone is the
+            // real "has content" filter.
+            var extra = $"{_novCol} <> ''";
+            var where = cond.Length == 0 ? $"WHERE {extra}" : $"{cond} AND {extra}";
+            var rows = _db.Execute($"SELECT rowid, {_novCol} FROM data {where} ORDER BY rowid LIMIT {NoveltyCellCap}").Rows;
+
+            _novPhase = $"Scanning… 0/{rows.Count:N0}"; StateHasChanged(); await Task.Delay(1);
+            var results = new List<NovResult>(rows.Count);
+            int done = 0;
+            foreach (var r in rows)
+            {
+                var text = Cell(r[_novCol]);
+                if (text.Length > 0)
+                {
+                    var ids = vocab.Encode(HoloKernel.AsciiPunctuation.Fold(text)).ToList();
+                    if (ids.Count >= 2)
+                    {
+                        var window = new List<int> { ids[0] };
+                        double sum = 0; int scored = 0;
+                        int limit = Math.Min(ids.Count, NoveltyMaxTokensPerCell + 1);
+                        for (int i = 1; i < limit; i++)
+                        {
+                            var take = Math.Min(window.Count, ctxCap);
+                            var ctx = window.Skip(window.Count - take).ToArray();
+                            var logits = session.Logits(ctx);
+                            sum += SurprisalBits(logits, vocab.Size, ids[i]);
+                            scored++;
+                            window.Add(ids[i]);
+                            if (scored % 16 == 0) await Task.Delay(1);   // yield mid-cell on a long value, not just between cells
+                        }
+                        if (scored > 0) results.Add(new NovResult(ToLong(r["rowid"]), text, sum / scored));
+                    }
+                }
+                done++;
+                if (done % 4 == 0 || done == rows.Count)
+                {
+                    _novProgress = rows.Count > 0 ? (double)done / rows.Count : 1;
+                    _novPhase = $"Scanning… {done:N0}/{rows.Count:N0}";
+                    StateHasChanged(); await Task.Delay(1);
+                }
+            }
+            _novResults = results;
+            _novAvg = results.Count > 0 ? results.Average(x => x.Score) : 0;
+            _novHist = BuildScoreHistogram(results);
+        }
+        catch (Exception ex) { _novError = "Novelty scan failed: " + ex.Message; }
+        finally { _novBusy = false; _novProgress = 1; StateHasChanged(); }
+    }
+
+    static Chart? BuildScoreHistogram(List<NovResult> results)
+    {
+        if (results.Count < 2) return null;
+        double min = results.Min(r => r.Score), max = results.Max(r => r.Score);
+        if (max <= min) return null;
+        const int buckets = 10; double width = (max - min) / buckets;
+        var counts = new long[buckets];
+        foreach (var r in results) { int b = (int)((r.Score - min) / width); if (b < 0) b = 0; if (b >= buckets) b = buckets - 1; counts[b]++; }
+        var data = new List<(string, double)>();
+        for (int b = 0; b < buckets; b++) data.Add((HistLabel(min + b * width, min + (b + 1) * width), counts[b]));
+        return new Chart("Surprisal distribution", "bars", data);
+    }
+
+    string NovFill(double score)
+    {
+        double max = _novResults.Count > 0 ? _novResults.Max(r => r.Score) : 0;
+        return (max > 0 ? score * 100.0 / max : 0).ToString("F1") + "%";
+    }
+
+    static string CsvEsc(string s)
+    {
+        if (s.IndexOfAny(new[] { ',', '"', '\n', '\r' }) < 0) return s;
+        return "\"" + s.Replace("\"", "\"\"") + "\"";
+    }
+
+    // ---- SVG chart builders (rendered in C#, styled by the .razor.css) ----
+    MarkupString RenderChart(Chart ch) => ch.Kind switch { "line" => LineChart(ch.Data), "pie" => PieChart(ch.Data), _ => HBars(ch.Data) };
+
+    static readonly string[] Palette = { "#8b7dff", "#35d0c0", "#e6b450", "#f0796a", "#4aa3ff", "#b06ab3", "#7bd86a", "#e88bbf", "#5bc8d8", "#c0a15a" };
+    static (double, double) Polar(double cx, double cy, double r, double a) => (cx + r * Math.Cos(a), cy + r * Math.Sin(a));
+
+    static MarkupString PieChart(List<(string Label, double Value)> data)
+    {
+        var d = data.Where(x => x.Value > 0).Take(10).ToList();
+        double total = d.Sum(x => x.Value);
+        if (d.Count == 0 || total <= 0) return HBars(data);
+        int W = 720, H = 240, cx = 118, cy = 118, r = 100, ir = 56;
+        var sb = new StringBuilder();
+        sb.Append($"<svg class=\"chart-svg\" viewBox=\"0 0 {W} {H}\" role=\"img\" preserveAspectRatio=\"xMidYMid meet\">");
+        double ang = -Math.PI / 2;
+        for (int i = 0; i < d.Count; i++)
+        {
+            double frac = d[i].Value / total, a2 = ang + frac * 2 * Math.PI;
+            var (x1, y1) = Polar(cx, cy, r, ang); var (x2, y2) = Polar(cx, cy, r, a2);
+            var (ix1, iy1) = Polar(cx, cy, ir, a2); var (ix2, iy2) = Polar(cx, cy, ir, ang);
+            int large = frac > 0.5 ? 1 : 0; string col = Palette[i % Palette.Length];
+            sb.Append($"<path d=\"M {F(x1)},{F(y1)} A {r},{r} 0 {large} 1 {F(x2)},{F(y2)} L {F(ix1)},{F(iy1)} A {ir},{ir} 0 {large} 0 {F(ix2)},{F(iy2)} Z\" fill=\"{col}\"><title>{Esc(d[i].Label)}: {Esc(Fmt(d[i].Value))} ({(frac * 100).ToString("F1", Inv)}%)</title></path>");
+            ang = a2;
+        }
+        int ly = 22;
+        for (int i = 0; i < d.Count; i++)
+        {
+            sb.Append($"<rect x=\"280\" y=\"{ly - 9}\" width=\"11\" height=\"11\" rx=\"2\" fill=\"{Palette[i % Palette.Length]}\"/>");
+            sb.Append($"<text class=\"c-lbl\" x=\"298\" y=\"{ly}\">{Esc(Trunc(string.IsNullOrEmpty(d[i].Label) ? "(empty)" : d[i].Label, 28))}</text>");
+            sb.Append($"<text class=\"c-val\" x=\"704\" y=\"{ly}\" text-anchor=\"end\">{Esc(Fmt(d[i].Value))}</text>");
+            ly += 21;
+        }
+        sb.Append("</svg>");
+        return (MarkupString)sb.ToString();
+    }
+
+    static string F(double v) => v.ToString("0.##", Inv);
+    static string Fmt(double v)
+    {
+        double a = Math.Abs(v);
+        if (a >= 1_000_000) return (v / 1_000_000).ToString("0.##", Inv) + "M";
+        if (a >= 1_000) return (v / 1_000).ToString("0.##", Inv) + "k";
+        return a == Math.Floor(a) ? v.ToString("0", Inv) : v.ToString("0.##", Inv);
+    }
+    static string Esc(string s) => s.Replace("&", "&amp;").Replace("<", "&lt;").Replace(">", "&gt;");
+    static string Trunc(string s, int max) => s.Length <= max ? s : s[..(max - 1)] + "…";
+
+    static MarkupString HBars(List<(string Label, double Value)> data)
+    {
+        if (data is null || data.Count == 0) return (MarkupString)"<p class=\"hint\">Nothing to chart.</p>";
+        var d = data.Take(12).ToList(); int n = d.Count;
+        double max = d.Max(x => Math.Abs(x.Value)); if (max <= 0) max = 1;
+        int W = 720, rowH = 30, top = 8, labelW = 158, valW = 74, barX = labelW + 10;
+        int barMax = W - barX - valW - 8, H = top + n * rowH + 8;
+        var sb = new StringBuilder();
+        sb.Append($"<svg class=\"chart-svg\" viewBox=\"0 0 {W} {H}\" role=\"img\" preserveAspectRatio=\"xMidYMid meet\">");
+        for (int i = 0; i < n; i++)
+        {
+            int y = top + i * rowH, cy = y + rowH / 2;
+            double w = barMax * Math.Abs(d[i].Value) / max; if (w < 2 && d[i].Value != 0) w = 2;
+            sb.Append($"<text class=\"c-lbl\" x=\"{labelW}\" y=\"{cy + 4}\" text-anchor=\"end\">{Esc(Trunc(d[i].Label, 24))}</text>");
+            sb.Append($"<rect class=\"c-bar\" x=\"{barX}\" y=\"{y + 7}\" width=\"{F(w)}\" height=\"{rowH - 14}\" rx=\"3\"><title>{Esc(d[i].Label)}: {Esc(Fmt(d[i].Value))}</title></rect>");
+            sb.Append($"<text class=\"c-val\" x=\"{F(barX + w + 7)}\" y=\"{cy + 4}\">{Esc(Fmt(d[i].Value))}</text>");
+        }
+        sb.Append("</svg>");
+        return (MarkupString)sb.ToString();
+    }
+
+    static MarkupString LineChart(List<(string Label, double Value)> data)
+    {
+        if (data is null || data.Count < 2) return HBars(data ?? new());
+        var d = data.Count > 120 ? Downsample(data, 120) : data;
+        int n = d.Count;
+        double max = d.Max(x => x.Value), min = d.Min(x => x.Value);
+        if (min > 0) min = 0; if (max <= min) max = min + 1;
+        int W = 720, H = 250, padL = 60, padR = 16, padT = 14, padB = 34;
+        double plotW = W - padL - padR, plotH = H - padT - padB;
+        double X(int i) => padL + (n == 1 ? plotW / 2 : plotW * i / (n - 1));
+        double Y(double v) => padT + plotH * (1 - (v - min) / (max - min));
+        var line = string.Join(" ", Enumerable.Range(0, n).Select(i => $"{F(X(i))},{F(Y(d[i].Value))}"));
+        var area = $"M {F(X(0))},{F(Y(min))} L {line} L {F(X(n - 1))},{F(Y(min))} Z";
+        var sb = new StringBuilder();
+        sb.Append($"<svg class=\"chart-svg\" viewBox=\"0 0 {W} {H}\" role=\"img\" preserveAspectRatio=\"xMidYMid meet\">");
+        // y grid + labels (min / max)
+        sb.Append($"<line class=\"c-axis\" x1=\"{padL}\" y1=\"{F(Y(min))}\" x2=\"{W - padR}\" y2=\"{F(Y(min))}\"/>");
+        sb.Append($"<line class=\"c-grid\" x1=\"{padL}\" y1=\"{F(Y(max))}\" x2=\"{W - padR}\" y2=\"{F(Y(max))}\"/>");
+        sb.Append($"<text class=\"c-tick\" x=\"{padL - 8}\" y=\"{F(Y(max) + 4)}\" text-anchor=\"end\">{Esc(Fmt(max))}</text>");
+        sb.Append($"<text class=\"c-tick\" x=\"{padL - 8}\" y=\"{F(Y(min) + 4)}\" text-anchor=\"end\">{Esc(Fmt(min))}</text>");
+        sb.Append($"<path class=\"c-area\" d=\"{area}\"/>");
+        sb.Append($"<polyline class=\"c-line\" points=\"{line}\"/>");
+        // x labels: first, middle, last
+        foreach (int i in new[] { 0, n / 2, n - 1 }.Distinct())
+            sb.Append($"<text class=\"c-tick\" x=\"{F(X(i))}\" y=\"{H - 12}\" text-anchor=\"middle\">{Esc(Trunc(d[i].Label, 12))}</text>");
+        sb.Append("</svg>");
+        return (MarkupString)sb.ToString();
+    }
+
+    static List<T> Downsample<T>(List<T> d, int target)
+    {
+        if (d.Count <= target) return d;
+        var r = new List<T>(target); double step = (double)d.Count / target;
+        for (int i = 0; i < target; i++) r.Add(d[(int)(i * step)]);
+        return r;
+    }
+
+    const string SampleCsv = @"date,user,region,amount,status,email
+2026-01-03,alice,EU,42.50,paid,alice@example.com
+2026-01-03,bob,US,17.00,paid,bob@example.com
+2026-01-04,carol,EU,9999.00,refunded,carol@example.com
+2026-01-04,alice,EU,38.20,paid,alice@example.com
+2026-01-05,dave,APAC,55.75,paid,dave@sample.org
+2026-01-05,bob,US,,failed,bob@example.com
+2026-01-06,eve,EU,61.10,paid,eve@example.com
+2026-01-06,alice,EU,44.00,paid,alice@example.com
+2026-01-07,frank,US,28.90,paid,frank@sample.org
+2026-01-07,carol,EU,33.30,paid,carol@example.com";
+}

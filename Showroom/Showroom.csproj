@@ -1,0 +1,183 @@
+<Project Sdk="Microsoft.NET.Sdk.BlazorWebAssembly">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <OverrideHtmlAssetPlaceholders>true</OverrideHtmlAssetPlaceholders>
+    <!-- Blazier (2026-10-08): on publish, every [BlazierPage] component is rendered to a real static HTML shell
+         (tools/prism/index.html and so on) and the Blazor runtime boots only on intent. See Showroom/CLAUDE.md,
+         "Static shells (Blazier)". No lazy assemblies are declared, so Blazier's lazy guard (BLZ001) has nothing to check. -->
+    <BlazierScaffold>true</BlazierScaffold>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <IsPackable>false</IsPackable>
+    <!-- EXPERIMENT (2026-08-28, testing the user's own hunch that AOT is worth it for this app's numeric
+         hot loops): AOT only affects `dotnet publish`, not `dotnet run`/the dev server. AOT requires
+         PublishTrimmed=true, so also testing whether the old "EvalApp step factory reflection" trim
+         blocker is actually still true: EvalApp was fixed to be trim-safe (a `new()` constraint on
+         its step-builder generics) earlier THIS session, so the comment this replaces may be stale. -->
+    <!-- AOT IS OFF PERMANENTLY (user decision, 2026-09-06): "is the aot worth it? lets just not use
+         it then". Measured, not assumed. Holding trimming constant to isolate AOT's own contribution:
+
+             trim + AOT      raw 36.4 MB   brotli 7.5 MB   60 assemblies   <- what broke
+             trim, no AOT    raw 12.2 MB   brotli 3.6 MB   60 assemblies
+             no trim, no AOT raw 22.1 MB   brotli 6.2 MB  208 assemblies   <- shipped
+
+         AOT COSTS 3.9 MB of brotli download (7.5 vs 3.6). It more than doubles what every visitor
+         fetches, because the AOT'd dotnet.native.wasm blob dwarfs anything trimming saves. That is the
+         opposite of the usual intuition, and it lands on a page whose one real user complaint was
+         already "stuck downloading". Add the phone boot-stall it caused (multi-second WASM compile
+         behind a plateaued progress bar, which needed the boot-log compile narration as a workaround),
+         4-minute publishes (100 while ILGPU was in the graph), the PublishTrimmed dependency it drags
+         in, and its role in the 2026-09-06 outage.
+         Against all that it buys faster numeric loops, which this csproj's own earlier comment admits
+         was only ever an EXPERIMENT to find out whether that helps here, and which was never measured
+         in the weeks it was enabled. An unmeasured benefit does not outweigh a measured 2x download.
+         Do not re-enable without a real before/after measurement of in-browser generation speed.
+
+         TRIMMING is off too, for now, but for a weaker reason and it is the more reversible half:
+         it would save 2.6 MB brotli (6.2 -> 3.6), which is worth having. It is off because AOT
+         required it so the two were disabled together during the outage, and because trim-only is a
+         configuration nobody has yet loaded in a browser. Turning it back on is a real 2.6 MB win and
+         a reasonable next step, but it needs someone to actually open the page afterwards.
+
+         ORIGINAL OUTAGE NOTE (2026-09-06), kept because the root cause is NOT yet identified:
+         Symptom: /tools/prism loaded every assembly, compiled the WebAssembly module in 156ms, then
+         froze on the boot screen forever. Prism.razor's own checkpoint-fetch narration never printed,
+         so the app died between Blazor.start() and the first component rendering, i.e. before any
+         model code ran. Bundle delivery was ruled out: every assembly present, correct size, all 200
+         from the live host, nothing zero-length.
+         That leaves a startup-time runtime failure, and trimming/AOT is by far the largest source of
+         those, because both fail at RUN time rather than build time and nothing in a green build tells
+         you. This app's own csproj comment (above) records that trimming was only ever enabled as an
+         EXPERIMENT, on the assumption a since-fixed EvalApp reflection blocker no longer applied.
+         EvalApp still emits real IL2026/IL2087/IL2090 trim warnings (JsonSerializer,
+         Activator.CreateInstance, Type.GetProperties) that the trimmer cannot see through, and the
+         dependency graph changed twice recently (HoloKernel onto the Prism package, then ILGPU
+         removed), which is exactly what reshapes a trim graph.
+         Cost of turning it off is real but bounded: a bigger download and slower numeric loops. The
+         benefit is that a non-trimmed, non-AOT WASM build runs the same code path as `dotnet run`,
+         which has never exhibited this. A working slow tool beats a fast broken one.
+         RunAOTCompilation REQUIRES PublishTrimmed, so both move together.
+         RE-ENABLE only after reproducing the failure in a browser and fixing the real root cause,
+         with a trim descriptor or an explicit root, not by flipping this back and hoping. -->
+    <!-- ==== THE ACTUAL ROOT CAUSE OF THE 2026-09-06 OUTAGE (everything above it was wrong) ====
+         KEEP THE Microsoft.AspNetCore.Components.WebAssembly PACKAGE VERSION EQUAL TO THE INSTALLED
+         WASM RUNTIME PACK. They were skewed, and that is the whole bug:
+             runtime pack linked : Microsoft.NETCore.App.Runtime.Mono.browser-wasm  10.0.11
+             package pinned      : Microsoft.AspNetCore.Components.WebAssembly      10.0.8
+         The native Mono runtime (dotnet.native.wasm) came from 10.0.11 while the managed framework
+         assemblies, System.Private.CoreLib included, came from 10.0.8. The interpreter then executed
+         IL it did not recognise and died:
+             MONO interpreter: NIY encountered in method System.OutOfMemoryException:.ctor (string)
+             [MONO] * Assertion: should not be reached at interp.c:4135
+             MONO_WASM: mono_wasm_load_runtime () failed
+         mono_wasm_load_runtime failing means it never reached app code, so Blazor.start() neither
+         resolved nor rejected and the boot screen hung with no error and no fallback panel.
+         WHY IT SURFACED WHEN IT DID, which is the part worth remembering: the SDK was updated to
+         10.0.11 at some point, and dist/ is NOT rebuilt by ordinary checkpoint pushes (those are a
+         deliberate data-only fast path). So the skew lay dormant until the first real rebuild, which
+         happened to be the HoloKernel-to-Prism migration deploy. The migration got the blame; it was
+         innocent. Bump these packages whenever the installed runtime moves (check with the dotnet CLI's
+         list-runtimes command; its flag is spelled with two dashes, which cannot be written inside an
+         XML comment, hence this wording).
+         Trimming is ON below, but that is NOT what fixed this. It is on because it is simply better
+         here: 60 assemblies and 3.6 MB brotli against 208 and 6.2 MB untrimmed. -->
+
+    <!-- AOT IS BACK ON (2026-09-06). My "AOT is not worth it" argument below was measured correctly on
+         download size but WRONG on necessity, and this is the correction.
+         With the version skew fixed the runtime started, and then died at:
+             MONO interpreter: NIY encountered in method Prism.Inference.DecodePolicy:.cctor ()
+         NIY is the Mono INTERPRETER meeting IL it does not implement. With AOT on, that method is
+         compiled ahead of time and the interpreter never sees it, which is why this code ran fine for
+         weeks. Turning AOT off did not reveal a latent bug so much as remove the thing that was
+         carrying it. DecodePolicy is a plain sealed record whose static constructor only does `new()`,
+         and Prism resolves to lib/net10.0 (verified in project.assets.json), so the IL is unremarkable
+         and this looks like a genuine interpreter gap rather than anything wrong in Prism.
+         So AOT is not a luxury here, it is load-bearing. The download cost stands (7.5 MB brotli vs
+         3.6) and is simply the price. Do not disable it again without first proving the interpreter
+         can execute Prism.Inference and the AlgFormer serve path. -->
+    <PublishTrimmed>true</PublishTrimmed>
+    <RunAOTCompilation>true</RunAOTCompilation>
+    <!-- -O2 (the Release default) makes the emcc/wasm-opt link step OOM-fail on this dev machine whenever
+         PrismStudio is also running its own live training (which holds about 15 GB resident): confirmed
+         reproducible across four failed attempts, always dying at the identical wasm-opt invocation, and
+         confirmed fixed by dropping to -O1 (tested successfully at 5 GB free RAM with PrismStudio still
+         running). Real, measured tradeoff: dotnet.native.wasm grows about 24.8 MB to about 27.0 MB raw,
+         roughly 9% bigger, worth it to never need to interrupt live training for a site rebuild again. -->
+    <EmccLinkOptimizationFlag>-O1</EmccLinkOptimizationFlag>
+    <!-- REAL WASM MULTITHREADING — REVERTED 2026-08-28 (same day it landed), real device regression.
+         Was <WasmEnableThreads>true</WasmEnableThreads> (pthreads over SharedArrayBuffer, gated behind
+         window.crossOriginIsolated via wwwroot/coi-serviceworker.js + the index.html boot-gate script).
+         First real device report: Continue button on /tools/prism stuck permanently disabled — but
+         ONLY on a laptop; a phone loaded the exact same deploy fine. That platform split is the tell:
+         the .NET WASM threaded runtime sizes/spins up its pthread worker pool from
+         navigator.hardwareConcurrency at boot, and a laptop routinely reports far more logical cores
+         than a phone — more workers means more redundant WASM-module fetch/compile/instantiate cycles
+         racing in the background right after Blazor.start() resolves and the page paints (this repo's
+         own AlgFormer/HoloDb "the fan-out is width-1 at our shapes" finding, ParallelMapping.cs, already
+         proved NOTHING in this app's own code dispatches work across threads — the risk was 100% the
+         runtime's own boot-time thread-pool machinery, zero app benefit). Emscripten-based multithreaded
+         WASM runtimes have a documented deadlock class here too: worker→main-thread calls proxy through
+         a synchronous Atomics.wait, which can stall if the main thread's event loop is itself busy
+         servicing the worker-spawn/compile queue at that exact moment — a race whose odds scale with
+         worker count, i.e. with core count, i.e. exactly a laptop-not-phone split. Genuinely could not
+         verify the deadlock live (no browser here, per this repo's own boundary) — but with ZERO current
+         consumers of real threading in this app (verified, see HoloKernel/ParallelMapping.cs) this was
+         already flagged in Showroom/CLAUDE.md as "the cheapest option of all... pure downside for zero
+         benefit right now" BEFORE this incident; the incident is exactly the trigger that was flagged as
+         missing. Reverting removes the entire failure class at zero feature cost, and as a side effect
+         also removes the ORIGINAL reason the crossOriginIsolated boot-gate/coi-serviceworker existed at
+         all (a non-threaded module has no SharedArrayBuffer requirement, so it boots in any browser,
+         including the LinkedIn in-app WebView that motivated the gate in the first place) — see
+         index.html for the matching simplification. Re-enable only once a real training loop actually
+         dispatches across threads (today: none do) AND this exact regression has been reproduced/fixed
+         live on a real high-core-count laptop, not just re-flagged as a hunch. -->
+    <WasmEnableThreads>false</WasmEnableThreads>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly" Version="10.0.11" />
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly.DevServer" Version="10.0.11" PrivateAssets="all" />
+  </ItemGroup>
+
+  <!-- HoloKernel: a sibling project IN THIS SAME REPO (AboutUs\HoloKernel), not MonoRepo — a ProjectReference
+       here is the designed consumption path, not a boundary break. It is itself NuGet-only against AlgFormer
+       (see its own csproj), so this repo's "never a MonoRepo ProjectReference" rule is unaffected. -->
+  <ItemGroup>
+    <ProjectReference Include="..\HoloKernel\HoloKernel.csproj" />
+  </ItemGroup>
+
+  <!-- The showroom runs our real published libraries client-side (browser-wasm): HoloDb (in-memory SQL),
+       AlgFormer (tiny learning model), Tracer (navigation) — straight from NuGet, exactly what a user gets.
+       EvalApp comes transitively. Versions are set by `dotnet add package` (latest published). -->
+  <ItemGroup>
+    <PackageReference Include="EvaluatedApplications.HoloDb">
+      <Version>2.1.0</Version>
+    </PackageReference>
+    <PackageReference Include="EvaluatedApplications.AlgFormer">
+      <Version>2.20.1</Version>
+    </PackageReference>
+    <PackageReference Include="EvaluatedApplications.Tracer">
+      <Version>2.0.0</Version>
+    </PackageReference>
+    <PackageReference Include="EvaluatedApplications.Prose">
+      <Version>1.3.2</Version>
+    </PackageReference>
+    <PackageReference Include="EvaluatedApplications.Blazier">
+      <Version>1.0.0</Version>
+    </PackageReference>
+  </ItemGroup>
+
+  <!-- The big data (council data, Prism checkpoint) lives in the website-data repo and is fetched from its own Pages site
+       (see Services/DataUrl.cs). For local dev, scripts/link-data.ps1 puts a junction at wwwroot/website-data so dotnet run
+       can serve it. A Release publish must never carry it, or dist/ (committed to the site repo) would swell with data again. -->
+  <ItemGroup Condition="'$(Configuration)' == 'Release'">
+    <Content Remove="wwwroot\website-data\**" />
+    <None Remove="wwwroot\website-data\**" />
+    <EmbeddedResource Remove="wwwroot\website-data\**" />
+  </ItemGroup>
+
+</Project>

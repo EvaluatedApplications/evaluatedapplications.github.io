@@ -1,0 +1,368 @@
+using SiteKit.Spec;
+
+namespace SiteKit.Render.PoC;
+
+/// <summary>
+/// Phase 2, third batch, page 7 (the last of the originally-flagged 8): site/holodb/index.html —
+/// the HoloDb hub, the richest page on the whole site — transcribed verbatim. Deliberately the
+/// LAST page ported in this batch, since it needed the widest set of new capabilities, several
+/// only discoverable by trying to force this exact page through the composer taxonomy:
+///   - HeroSpec.RawBodyHtml — this hero has no crumb, no `.facts` pills, a `.race` benchmark
+///     widget between the lede and the CTA row, and `.install` AFTER `.cta-row` (every other
+///     ported page puts install first) — forcing it through the typed hero fields would have left
+///     most of them unused while fighting the ones that don't fit, so it's one raw block instead
+///     (still inside the shared hero-bar wrapper).
+///   - HeroSpec.ExtraHeroClass — `&lt;header class="hero hd-hero"&gt;`, an extra page-local class
+///     no other ported page carries.
+///   - SectionSpec.SectionId — five of this page's sections are same-page anchor targets
+///     (`#how`/`#workload`/`#benchmarks`/`#features`/`#deploy`), reused from the mechanism
+///     `articles.html`'s `#articles` already proved.
+///   - SectionSpec.Raw for the "how it works" diagram, the workload shape grid, and the full
+///     benchmark scoreboard (stat-row + two tables + `.lim` notes) — genuinely bespoke, one-off
+///     graphics/tables not worth typing further, same doctrine as `evalapp.html`'s Raw table.
+///   - SectionKind.ToolGrid's single-card "no Ver pill" case (`ToolCardSpec.Ver = null`),
+///     confirming the field is genuinely optional, not just theoretically nullable.
+///   - CardSpec.LimHtml (a `.lim` INSIDE several "Capabilities" cards), CardSpec.PreBodyHtml (a
+///     `.snip` code sample before two "Deploy" cards' own `.desc`), and CardSpec.OmitCatStyle (all
+///     three "Deploy" cards carry no `--cat` at all).
+///   - SectionSpec.ClosingInstallCommand — the closing `.stack` has an `.install` chip between its
+///     `&lt;p&gt;` and `.cta-row`, which plain ClosingStack never needed before.
+///   - PageSpec.TailScriptHtml — this page's OWN differently-minified copy-button handler
+///     (`var o=...` instead of the shared `var old=...`/multi-statement version every other
+///     copy-button page uses) — a real, byte-level divergence the diff itself caught, not
+///     speculative.
+/// </summary>
+public static class HoloDbHubPageSpec
+{
+    private const string PageStyle = """
+    <style>
+      .hd-hero{padding:72px 0 24px}
+      .hd-hero h1{font-size:clamp(2.4rem,6vw,4rem);max-width:15ch}
+      .hd-kicker{color:var(--accent-ink)}
+      /* the race: HoloDb resolved vs SQL Server still filling */
+      .race{margin:34px 0 0;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:22px 24px;max-width:760px}
+      .race h3{font-size:.82rem;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-faint);font-family:var(--mono);margin:0 0 16px;font-weight:600}
+      .race-row{display:grid;grid-template-columns:120px 1fr auto;align-items:center;gap:14px;margin:10px 0}
+      .race-name{font-family:var(--mono);font-size:.9rem;color:var(--ink-soft)}
+      .race-name b{color:var(--ink)}
+      .race-track{height:22px;background:var(--bg-2);border:1px solid var(--border);border-radius:6px;overflow:hidden;position:relative}
+      .race-fill{height:100%;border-radius:5px}
+      .race-fill.holo{width:0.5%;background:var(--spectrum)}
+      .race-fill.sql{width:100%;background:linear-gradient(90deg,color-mix(in srgb,var(--bad) 55%,transparent),var(--bad))}
+      .race-fill.duck{width:2%;background:color-mix(in srgb,var(--spectrum-5) 60%,transparent)}
+      .race-time{font-family:var(--mono);font-size:.9rem;font-variant-numeric:tabular-nums;white-space:nowrap;min-width:96px;text-align:right}
+      .race-time.win{color:var(--ok);font-weight:700}
+      .race-note{margin:14px 0 0;font-size:.82rem;color:var(--ink-faint)}
+      .fourstrip{display:flex;flex-wrap:wrap;gap:10px;margin-top:28px}
+      .fourstrip span{font-family:var(--mono);font-size:.84rem;color:var(--ink);border:1px solid var(--border-2);border-radius:999px;padding:7px 15px;background:var(--surface)}
+      .fourstrip b{color:var(--accent-ink)}
+      .stat-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;margin:8px 0}
+      .stat{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:22px;border-left:3px solid var(--accent)}
+      .stat .n{font-size:2.2rem;font-weight:800;letter-spacing:-.03em;color:var(--ink);font-variant-numeric:tabular-nums}
+      .stat .l{color:var(--ink-soft);font-size:.92rem;margin-top:6px;line-height:1.45}
+      .chartwrap{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:22px 22px 12px;overflow-x:auto}
+      .chartwrap svg{display:block;min-width:640px;width:100%;height:auto}
+      .chart-cap{color:var(--ink-soft);font-size:.9rem;margin:6px 0 0}
+      table.cmp{width:100%;border-collapse:collapse;font-size:.9rem;margin-top:6px;display:block;overflow-x:auto}
+      table.cmp th{text-align:right;color:var(--ink);border-bottom:1px solid var(--border-2);padding:9px 12px;font-family:var(--mono);font-size:.78rem;text-transform:uppercase;letter-spacing:.03em;white-space:nowrap}
+      table.cmp th:first-child,table.cmp td:first-child{text-align:left}
+      table.cmp td{border-bottom:1px solid var(--border);padding:9px 12px;color:var(--ink-soft);font-variant-numeric:tabular-nums;white-space:nowrap}
+      table.cmp td.win{color:var(--ok);font-weight:700}
+      table.cmp td.holo{color:var(--accent-ink);font-weight:700}
+      .how-grid{display:grid;grid-template-columns:1fr 1fr;gap:22px;align-items:center}
+      @media(max-width:720px){.how-grid{grid-template-columns:1fr}.race-row{grid-template-columns:88px 1fr auto}}
+      .how-diagram{background:var(--bg-2);border:1px solid var(--border);border-radius:var(--radius);padding:24px}
+      .snip{background:var(--bg-2);border:1px solid var(--border);border-radius:10px;padding:14px 16px;margin:14px 0;overflow-x:auto}
+      .snip code{font-family:var(--mono);font-size:.84rem;line-height:21px;color:var(--ink);white-space:pre}
+      .lim{font-size:.85rem;color:var(--ink-faint);line-height:14px;margin-top:14px;border-top:1px dashed var(--border-2);padding-top:7px}
+      .lim b{color:var(--warn)}
+      table.cmp td .q{display:block;font-family:var(--mono);font-size:.72rem;color:var(--ink-faint);margin-top:3px;white-space:nowrap;font-weight:400}
+      table.cmp td b.ql{color:var(--ink);font-weight:600}
+      table.cmp td.mult{color:var(--accent-ink);font-weight:700}
+      .shape{display:grid;grid-template-columns:1.1fr 1fr;gap:22px;align-items:start}
+      @media(max-width:720px){.shape{grid-template-columns:1fr}}
+      .shape ul{list-style:none;padding:0;margin:6px 0 0}
+      .shape li{padding:7px 0;border-bottom:1px solid var(--border);color:var(--ink-soft);font-size:.92rem;display:flex;justify-content:space-between;gap:12px}
+      .shape li b{color:var(--ink);font-family:var(--mono);font-size:.86rem;font-variant-numeric:tabular-nums;white-space:nowrap}
+    </style>
+    """;
+
+    private const string HeroRaw = """
+    <span class="eyebrow">HoloDb · v1.7.7 · embeddable .NET · <span class="hd-kicker">holographic SQL</span></span>
+          <h1>One store. Query by key, content, or aggregate.</h1>
+          <p class="lede">HoloDb encodes every value as a phase vector and every row as a hologram, in a single <strong>associative store</strong>.
+            Because rows can be retrieved by resemblance as well as by key, one copy of the data answers three kinds of question —
+            exact SQL by primary key, <strong>similarity search by content</strong> with <code>NEAREST</code>, and analytics that read
+            maintained totals instead of scanning. No separate vector index, no OLAP cube, nothing to keep in sync.</p>
+
+          <div class="race">
+            <h3>Total invoiced across 10,000,000 invoices — <code>SELECT SUM(amount_cents)</code> — in-process, same query, same data, verified identical</h3>
+            <div class="race-row"><span class="race-name"><b>HoloDb</b></span><div class="race-track"><div class="race-fill holo"></div></div><span class="race-time win">0.002 ms ✓</span></div>
+            <div class="race-row"><span class="race-name">DuckDB</span><div class="race-track"><div class="race-fill duck"></div></div><span class="race-time">2.9 ms</span></div>
+            <p class="race-note">HoloDb reads a maintained total rather than adding up 10 million rows: no scan, and response time holds constant as the ledger grows. Full per-query results follow — single-table rollups and cross-table joins, in-process against DuckDB and as a networked service against SQL&nbsp;Server.</p>
+          </div>
+
+          <div class="cta-row" style="margin-top:26px">
+            <a class="btn btn-primary" href="/tools/analyst">Run a query in the browser →</a>
+            <a class="btn btn-ghost" href="#benchmarks">See the benchmarks</a>
+          </div>
+          <div class="install" style="max-width:520px;margin-top:14px"><code>dotnet add package EvaluatedApplications.HoloDb</code><button class="copy" type="button">copy</button></div>
+
+          <div class="fourstrip">
+            <span><b>Holographic</b> · one associative store</span>
+            <span><b>SQL</b> · real ACID</span>
+            <span><b>Vector</b> · NEAREST in SQL</span>
+            <span><b>Analytics</b> · maintained, not scanned</span>
+          </div>
+          <div class="related">
+            <span class="related-label">Related</span>
+            <a href="/holodb-client.html">HoloDb.Client</a>
+            <a href="/holodb-protocol.html">HoloDb.Protocol</a>
+            <a href="/phasor.html">Phasor</a>
+            <a class="related-all" href="/packages.html">All packages →</a>
+          </div>
+    """;
+
+    private const string HowRaw = """
+    <div class="how-grid">
+          <div>
+            <p class="desc" style="font-size:1.02rem">Most databases store rows and bolt the rest on top — a separate analytical cube, a separate vector index — each kept in sync with the source of truth. HoloDb stores the source of truth <em>as holograms</em>.</p>
+            <p class="desc" style="font-size:1.02rem">Every value is encoded as a <strong>phase vector</strong>, and a row's columns are bound into one hologram; those holograms form a single associative store. Retrieval works by resemblance, not only by address — <code>NEAREST (region='EU', status='overdue')</code> returns the rows whose holograms are closest to a partial description, ranked by similarity: a vector query in SQL, over the same rows, with no separate index.</p>
+            <p class="desc" style="font-size:1.02rem">Aggregates fall out of the same algebra. An integer column's running total <em>is</em> a single vector — a residue-phase encoding read back in constant time — so <code>SUM</code>, <code>COUNT</code> and single-column <code>GROUP BY</code> read a maintained total rather than scanning, and hold their speed from one million rows to tens of millions.</p>
+            <p class="lim">Similarity uses a sublinear index above a few thousand rows. Integer sums are exact and constant-time; real-valued columns use a fast SIMD pass.</p>
+          </div>
+          <div class="how-diagram">
+            <svg viewBox="0 0 360 280" width="100%" height="auto" aria-label="Rows flow into a maintained accumulator; reads bypass the rows">
+              <defs><linearGradient id="acc" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#8b7dff"/><stop offset="1" stop-color="#35d0c0"/></linearGradient></defs>
+              <text x="12" y="24" fill="#98a2b3" font-family="ui-monospace,monospace" font-size="12">writes</text>
+              <g font-family="ui-monospace,monospace" font-size="11" fill="#7c869c">
+                <rect x="12" y="40" width="120" height="22" rx="4" fill="#0d0f16" stroke="#1e2430"/><text x="20" y="55">inv   4250</text>
+                <rect x="12" y="70" width="120" height="22" rx="4" fill="#0d0f16" stroke="#1e2430"/><text x="20" y="85">inv   1700</text>
+                <rect x="12" y="100" width="120" height="22" rx="4" fill="#0d0f16" stroke="#1e2430"/><text x="20" y="115">inv 384217</text>
+                <text x="20" y="140" fill="#2c3444">…10,000,000 invoices</text>
+              </g>
+              <path d="M138 80 H196" stroke="#8b7dff" stroke-width="2" fill="none" marker-end="url(#ar)"/>
+              <defs><marker id="ar" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0 0l6 3-6 3z" fill="#8b7dff"/></marker></defs>
+              <rect x="200" y="52" width="150" height="60" rx="10" fill="url(#acc)" opacity="0.16" stroke="url(#acc)"/>
+              <text x="275" y="78" text-anchor="middle" fill="#e9ecf3" font-family="ui-sans-serif" font-size="13" font-weight="700">running total</text>
+              <text x="275" y="98" text-anchor="middle" fill="#b3a9ff" font-family="ui-monospace,monospace" font-size="12">fixed-size vector</text>
+              <text x="12" y="200" fill="#98a2b3" font-family="ui-monospace,monospace" font-size="12">SELECT SUM(amount_cents)</text>
+              <path d="M150 210 H240 V120" stroke="#35d0c0" stroke-width="2" fill="none" stroke-dasharray="4 3" marker-end="url(#ar2)"/>
+              <defs><marker id="ar2" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0 0l6 3-6 3z" fill="#35d0c0"/></marker></defs>
+              <text x="150" y="236" fill="#7bd86a" font-family="ui-monospace,monospace" font-size="12">→ reads the tally, skips the rows</text>
+              <text x="150" y="256" fill="#e9ecf3" font-family="ui-monospace,monospace" font-size="13" font-weight="700">0.003 ms</text>
+            </svg>
+          </div>
+        </div>
+    """;
+
+    private const string WorkloadRaw = """
+    <p class="desc" style="max-width:74ch">Every number on this page comes from one realistic workload: a normalised <code>invoices</code> fact joined to a <code>customers</code> dimension — what a subscription business runs its dashboards on. <strong>10 million invoices</strong> across <strong>200,000 customers</strong> and <strong>24 months</strong> of history — and the queries are the ones a billing dashboard actually fires: revenue by status, month and region; the running total; the biggest customers; a single-invoice lookup; and cross-table rollups by <strong>customer segment</strong> and <strong>signup cohort</strong>.</p>
+        <div class="shape" style="margin-top:20px">
+          <div class="snip"><code>CREATE TABLE customers (
+      customer_id  INT  PRIMARY KEY,   -- 200k customers
+      name         TEXT,
+      segment      TEXT,          -- smb / mid / enterprise / strategic
+      tier         TEXT,          -- gold / silver / bronze
+      signup_month INT
+    );
+    CREATE TABLE invoices (
+      invoice_id   INT  PRIMARY KEY,
+      customer_id  INT,           -- FK → customers, ~50 invoices each
+      month        INT,           -- yyyymm, 202301 … 202412
+      region       TEXT,          -- US / EU / APAC / LATAM
+      status       TEXT,          -- paid / pending / overdue / refunded / failed
+      amount_cents INT            -- money as integer minor units, never a float
+    );</code></div>
+          <div>
+            <ul>
+              <li>Invoices <b>10,000,000</b></li>
+              <li>Customers <b>200,000</b></li>
+              <li>History <b>24 months</b></li>
+              <li>paid / pending / overdue <b>78% / 10% / 7%</b></li>
+              <li>refunded / failed <b>3% / 2%</b></li>
+              <li>Regions US·EU·APAC·LATAM <b>40/30/20/10%</b></li>
+              <li>Invoice size (long-tail) <b>$20 – $50,000</b></li>
+            </ul>
+            <p class="lim" style="margin-top:10px">Money is stored as <b>integer cents</b> — the model Stripe and every accounting ledger use, and the reason HoloDb can keep revenue totals exact <em>and</em> constant-time.</p>
+          </div>
+        </div>
+    """;
+
+    private const string BenchmarksRaw = """
+    <p class="desc" style="max-width:76ch">Two comparisons, each between like and like: the <strong>in-process, in-memory</strong> engines (HoloDb embedded and DuckDB), and the <strong>networked services</strong> (HoloDb's server and SQL&nbsp;Server). Identical billing queries — single-table rollups <em>and</em> cross-table JOINs — over identical data (<strong>10,000,000 invoices ⋈ 200,000 customers</strong>), loaded into each engine through its own bulk path. Every result is verified <strong>byte-for-byte identical</strong> across every engine before timing; figures are the median of many runs on 16 cores.</p>
+
+        <div class="stat-row" style="margin-top:24px">
+          <div class="stat"><div class="n">6 rollups in µs</div><div class="l">The billing dashboard — revenue by status, month and region, plus totals, counts and lookups — resolves in <strong>microseconds</strong> from maintained accumulators. Response time holds constant as the ledger grows.</div></div>
+          <div class="stat"><div class="n">15 of 16</div><div class="l">As a networked service, HoloDb outperforms SQL&nbsp;Server on <strong>15 of the 16</strong> billing queries — every rollup and scan (by up to ~32,000×) and <strong>all five</strong> cross-table joins.</div></div>
+          <div class="stat"><div class="n">joins at parity</div><div class="l">The five cross-table JOINs run parallel across all cores: HoloDb <strong>wins revenue by segment</strong> and lands within ~1.4–3.3× of DuckDB on the rest (down from 15–92× before). DuckDB keeps a modest edge on the heavy single-table scans.</div></div>
+        </div>
+
+        <h3 style="margin:36px 0 6px;font-size:1.05rem">In-process, in memory <span style="color:var(--ink-faint);font-weight:400;font-size:.9rem">— HoloDb (embedded) vs DuckDB (in-process), 10M invoices ⋈ 200k customers, median ms</span></h3>
+        <table class="cmp">
+          <thead><tr><th>billing query</th><th>HoloDb</th><th>DuckDB</th><th>faster</th></tr></thead>
+          <tbody>
+            <tr><td><b class="ql">revenue by region</b><span class="q">SELECT region, SUM(amount_cents) … GROUP BY region</span></td><td class="holo">0.004</td><td>48.6</td><td class="mult">HoloDb ~12,000×</td></tr>
+            <tr><td><b class="ql">invoices by status</b><span class="q">SELECT status, COUNT(*), SUM(amount_cents) … GROUP BY status</span></td><td class="holo">0.006</td><td>59.0</td><td class="mult">HoloDb ~9,800×</td></tr>
+            <tr><td><b class="ql">total invoiced</b><span class="q">SELECT SUM(amount_cents) FROM invoices</span></td><td class="holo">0.002</td><td>2.95</td><td class="mult">HoloDb ~1,500×</td></tr>
+            <tr><td><b class="ql">invoice count</b><span class="q">SELECT COUNT(*) FROM invoices</span></td><td class="holo">0.001</td><td>0.98</td><td class="mult">HoloDb ~980×</td></tr>
+            <tr><td><b class="ql">revenue by month</b><span class="q">SELECT month, SUM(amount_cents) … GROUP BY month</span></td><td class="holo">0.011</td><td>7.11</td><td class="mult">HoloDb ~650×</td></tr>
+            <tr><td><b class="ql">look up one invoice</b><span class="q">SELECT … WHERE invoice_id = ?</span></td><td class="holo">0.005</td><td>0.61</td><td class="mult">HoloDb ~120×</td></tr>
+            <tr><td><b class="ql">big-ticket invoices (&gt;$5k)</b><span class="q">SELECT COUNT(*) … WHERE amount_cents &gt; 500000</span></td><td>6.40</td><td class="win">3.85</td><td>DuckDB ~1.7×</td></tr>
+            <tr><td><b class="ql">revenue by region &amp; status</b><span class="q">GROUP BY region, status  (multi-column)</span></td><td>129.7</td><td class="win">76.8</td><td>DuckDB ~1.7×</td></tr>
+            <tr><td><b class="ql">top customers by revenue</b><span class="q">GROUP BY customer_id … ORDER BY SUM(amount_cents) DESC LIMIT 10</span></td><td>206.9</td><td class="win">162.0</td><td>DuckDB ~1.3×</td></tr>
+            <tr><td><b class="ql">largest invoices</b><span class="q">ORDER BY amount_cents DESC LIMIT 20</span></td><td>11.8</td><td class="win">4.48</td><td>DuckDB ~2.6×</td></tr>
+            <tr><td><b class="ql">overdue outstanding</b><span class="q">SELECT SUM(amount_cents) … WHERE status = 'overdue'</span></td><td>82.7</td><td class="win">14.1</td><td>DuckDB ~5.8×</td></tr>
+            <tr><td><b class="ql">revenue by segment (JOIN)</b><span class="q">invoices ⋈ customers GROUP BY customers.segment</span></td><td class="holo">56.7</td><td>65.6</td><td class="mult">HoloDb ~1.2×</td></tr>
+            <tr><td><b class="ql">revenue by segment &amp; status (JOIN)</b><span class="q">⋈ customers GROUP BY customers.segment, invoices.status</span></td><td>135</td><td class="win">94.9</td><td>DuckDB ~1.4×</td></tr>
+            <tr><td><b class="ql">enterprise revenue (JOIN)</b><span class="q">invoices ⋈ customers WHERE customers.segment = 'enterprise'</span></td><td>34.3</td><td class="win">10.3</td><td>DuckDB ~3.3×</td></tr>
+            <tr><td><b class="ql">revenue by signup cohort (JOIN)</b><span class="q">⋈ customers GROUP BY customers.signup_month</span></td><td>44.0</td><td class="win">15.3</td><td>DuckDB ~2.9×</td></tr>
+            <tr><td><b class="ql">top named customers (JOIN)</b><span class="q">invoices ⋈ customers … GROUP BY customers.name … LIMIT 10</span></td><td>808</td><td class="win">322</td><td>DuckDB ~2.5×</td></tr>
+          </tbody>
+        </table>
+        <p class="lim">The six rollups and the point lookup resolve from maintained accumulators and the primary-key index — no scan, hence microseconds, thousands of times faster, and flat as the ledger grows. On the single-table scans (a filtered sum, a top-K, a multi-column group) DuckDB's purpose-built columnar engine keeps a modest lead. The five cross-table <strong>JOINs</strong> now fan out in parallel across all cores: HoloDb <strong>wins revenue by segment</strong> and lands within ~1.4–3.3× of DuckDB on the rest — down from 15–92× before the joins were parallelised — all verified identical, and beats SQLite and (as a server) SQL&nbsp;Server outright. Bulk load, rows/sec: DuckDB 916k · HoloDb 359k.</p>
+
+        <h3 style="margin:36px 0 6px;font-size:1.05rem">Networked service <span style="color:var(--ink-faint);font-weight:400;font-size:.9rem">— HoloDb server vs SQL&nbsp;Server 2022 (LocalDB), 10M invoices ⋈ 200k customers, median ms</span></h3>
+        <table class="cmp">
+          <thead><tr><th>billing query</th><th>HoloDb&nbsp;server</th><th>SQL&nbsp;Server</th><th>faster</th></tr></thead>
+          <tbody>
+            <tr><td><b class="ql">invoices by status</b><span class="q">SELECT status, COUNT(*), SUM(amount_cents) … GROUP BY status</span></td><td class="holo">0.124</td><td>4,032</td><td class="mult">HoloDb ~32,000×</td></tr>
+            <tr><td><b class="ql">revenue by month</b><span class="q">SELECT month, SUM(amount_cents) … GROUP BY month</span></td><td class="holo">0.153</td><td>2,965</td><td class="mult">HoloDb ~19,000×</td></tr>
+            <tr><td><b class="ql">revenue by region</b><span class="q">SELECT region, SUM(amount_cents) … GROUP BY region</span></td><td class="holo">0.134</td><td>2,575</td><td class="mult">HoloDb ~19,000×</td></tr>
+            <tr><td><b class="ql">total invoiced</b><span class="q">SELECT SUM(amount_cents) FROM invoices</span></td><td class="holo">0.129</td><td>1,156</td><td class="mult">HoloDb ~9,000×</td></tr>
+            <tr><td><b class="ql">invoice count</b><span class="q">SELECT COUNT(*) FROM invoices</span></td><td class="holo">0.138</td><td>589</td><td class="mult">HoloDb ~4,300×</td></tr>
+            <tr><td><b class="ql">largest invoices</b><span class="q">ORDER BY amount_cents DESC LIMIT 20</span></td><td class="holo">7.42</td><td>3,001</td><td class="mult">HoloDb ~405×</td></tr>
+            <tr><td><b class="ql">big-ticket invoices (&gt;$5k)</b><span class="q">SELECT COUNT(*) … WHERE amount_cents &gt; 500000</span></td><td class="holo">4.20</td><td>689</td><td class="mult">HoloDb ~164×</td></tr>
+            <tr><td><b class="ql">revenue by region &amp; status</b><span class="q">GROUP BY region, status  (multi-column)</span></td><td class="holo">131.7</td><td>3,260</td><td class="mult">HoloDb ~25×</td></tr>
+            <tr><td><b class="ql">overdue outstanding</b><span class="q">SELECT SUM(amount_cents) … WHERE status = 'overdue'</span></td><td class="holo">83.2</td><td>1,004</td><td class="mult">HoloDb ~12×</td></tr>
+            <tr><td><b class="ql">top customers by revenue</b><span class="q">GROUP BY customer_id … ORDER BY SUM(amount_cents) DESC LIMIT 10</span></td><td class="holo">221.0</td><td>3,277</td><td class="mult">HoloDb ~15×</td></tr>
+            <tr><td><b class="ql">enterprise revenue (JOIN)</b><span class="q">invoices ⋈ customers WHERE customers.segment = 'enterprise'</span></td><td class="holo">39.7</td><td>1,792</td><td class="mult">HoloDb ~45×</td></tr>
+            <tr><td><b class="ql">revenue by segment &amp; status (JOIN)</b><span class="q">⋈ customers GROUP BY customers.segment, invoices.status</span></td><td class="holo">140</td><td>6,556</td><td class="mult">HoloDb ~47×</td></tr>
+            <tr><td><b class="ql">revenue by segment (JOIN)</b><span class="q">invoices ⋈ customers GROUP BY customers.segment</span></td><td class="holo">57.5</td><td>2,946</td><td class="mult">HoloDb ~51×</td></tr>
+            <tr><td><b class="ql">revenue by signup cohort (JOIN)</b><span class="q">⋈ customers GROUP BY customers.signup_month</span></td><td class="holo">67.6</td><td>2,853</td><td class="mult">HoloDb ~42×</td></tr>
+            <tr><td><b class="ql">top named customers (JOIN)</b><span class="q">⋈ customers GROUP BY customers.name … LIMIT 10</span></td><td class="holo">806</td><td>4,173</td><td class="mult">HoloDb ~5.2×</td></tr>
+            <tr><td><b class="ql">look up one invoice</b><span class="q">SELECT … WHERE invoice_id = ?</span></td><td>0.20</td><td>0.20</td><td>tie (~0.2 ms)</td></tr>
+          </tbody>
+        </table>
+        <p class="lim">Both are networked services paying a client/server round-trip. HoloDb's server holds the working set in memory with the same maintained accumulators; SQL&nbsp;Server 2022 (LocalDB) reads its on-disk table. HoloDb leads on <b>15 of the 16</b> — every rollup and scan by 11× to 32,000×, and <b>all five JOINs by 5× to 51×</b> now that they fan out in parallel across all cores (the heaviest, the name-grouped join, lands at 806&nbsp;ms against SQL&nbsp;Server's 4,173&nbsp;ms) — conceding only the sub-millisecond point lookup. Bulk load, rows/sec: HoloDb server 697k · SQL&nbsp;Server 349k.</p>
+
+        <p class="lim">HoloDb is built for the <strong>mixed</strong> workload: a transactional ACID store, durable and larger-than-memory, that also resolves dashboard rollups in microseconds and runs vector search — in a single embeddable dependency. <a href="/holodb.html">Full methodology &amp; every number →</a></p>
+    """;
+
+    private const string TailScript = """
+    <script>
+      document.getElementById('yr').textContent = new Date().getFullYear();
+      document.querySelectorAll('.copy').forEach(function(btn){
+        btn.addEventListener('click', function(){
+          var code = btn.parentElement.querySelector('code').textContent;
+          navigator.clipboard.writeText(code).then(function(){ var o=btn.textContent; btn.textContent='copied'; btn.classList.add('done'); setTimeout(function(){btn.textContent=o;btn.classList.remove('done');},1400); });
+        });
+      });
+    </script>
+    """;
+
+    public static void Configure(IPageBuilder p) => p
+        .Seo(new SeoSpec(
+            Title: "HoloDb — the holographic .NET database",
+            Description: "HoloDb stores data as holograms in one associative store, queried three ways over one copy: exact SQL by key, similarity search by content (NEAREST), and constant-time analytics. Relational, vector and analytical in one embeddable .NET package.",
+            Canonical: "https://evaluatedapplications.github.io/holodb/",
+            OgTitle: "HoloDb — the holographic .NET database",
+            OgDescription: "Data stored as holograms in one associative store: query by key (SQL), by content (NEAREST similarity), or by aggregate — over one copy, in an embeddable .NET package. Reproducible benchmarks against DuckDB and SQL Server.",
+            OgUrl: "https://evaluatedapplications.github.io/holodb/",
+            TwitterCard: "summary_large_image",
+            JsonLd: """
+            {"@context":"https://schema.org","@type":"SoftwareApplication","name":"EvaluatedApplications.HoloDb","description":"HoloDb stores data as holograms in one associative store, queried three ways over one copy: exact SQL by key, similarity search by content (NEAREST), and constant-time analytics. Relational, vector and analytical in one embeddable .NET package.","applicationCategory":"DeveloperApplication","operatingSystem":".NET 8.0+","softwareVersion":"1.7.7","url":"https://evaluatedapplications.github.io/holodb/","downloadUrl":"https://www.nuget.org/packages/EvaluatedApplications.HoloDb","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"author":{"@type":"Organization","name":"Evaluated Applications","url":"https://evaluatedapplications.github.io/"}}
+            """))
+        .PageStyle(PageStyle)
+        .TailScript(TailScript)
+        .NavItems(new[]
+        {
+            new RelatedLink("Home", "/"),
+            new RelatedLink("Packages", "/packages.html"),
+            new RelatedLink("Benchmarks", "#benchmarks"),
+            new RelatedLink("Docs", "/holodb/manual/"),
+            new RelatedLink("NuGet", "https://www.nuget.org/packages/EvaluatedApplications.HoloDb", ExternalNewTab: true),
+        })
+        .Hero(h => h
+            .BarTitle("holodb.app")
+            .ExtraHeroClass("hd-hero")
+            .LeadingComment("<!-- HERO -->")
+            .RawBody(HeroRaw))
+        .Section(SectionSpec.Raw("How the holographic store works", "how it works", HowRaw, id: "how") with { LeadingCommentHtml = "<!-- HOW IT WORKS -->" })
+        .Section(SectionSpec.Raw("A billing SaaS's invoice ledger", "the shape of the data", WorkloadRaw, id: "workload") with { LeadingCommentHtml = "<!-- SHAPE OF THE DATA -->" })
+        .Section(SectionSpec.Raw("Same SQL. Same data. Verified identical.", "the scoreboard", BenchmarksRaw, id: "benchmarks") with { LeadingCommentHtml = "<!-- BENCHMARKS -->" })
+        .Section(SectionSpec.ToolGrid(
+            "The engine, running in a browser tab", "the Analyst",
+            new[]
+            {
+                new ToolCardSpec("The Analyst", "/tools/analyst", "live", null,
+                    "Any data — a CSV, a log, JSON lines — loads into a <strong>real HoloDb running entirely in the browser tab</strong> (compiled to WebAssembly, nothing leaves the device), which profiles it and opens a live SQL prompt. The same real engine as the benchmarks above — running on WASM's interpreted runtime today, not the same speed as those native numbers, honestly.",
+                    "Open The Analyst →", "var(--c-holodb)"),
+            }, omitGridWrapper: true) with { LeadingCommentHtml = "<!-- TRY IT LIVE -->" })
+        .Section(SectionSpec.CardGrid(
+            "One store, four databases' worth of jobs", "capabilities",
+            new[]
+            {
+                new CardSpec("Holographic, associative store",
+                    "Values are encoded as complex <strong>phase vectors</strong>, and a row's columns are bound into one hologram, so rows can be retrieved by resemblance, not just by key. The maintained totals are superpositions — sums of encodings — that a row is removed from by exact subtraction, which keeps <code>UPDATE</code> and <code>DELETE</code> exact. Holograms are derived from the columns, not stored per row, so there is no per-row space cost.",
+                    "var(--c-holodb)"),
+                new CardSpec("Transactional SQL",
+                    "Real ACID: a reader/writer lock, pre-transaction snapshot rolled back on any error, fsync write-ahead log, and crash recovery bounded by <em>live data, not write history</em>. A substantial SQL dialect — joins, subqueries in <code>IN</code>, <code>LIKE</code>, <code>BETWEEN</code>, <code>GROUP BY</code>/<code>HAVING</code>, transactions.",
+                    "var(--c-holodb)",
+                    LimHtml: "One <code>PRIMARY KEY</code> per table (INT or TEXT). <b>No</b> OUTER joins or <code>ALTER TABLE</code> yet."),
+                new CardSpec("Content-addressable search",
+                    "Retrieve by resemblance, not just by key: <code>SELECT … FROM t NEAREST (col=val,…) LIMIT k</code> ranks rows by similarity to a partial description — a vector query <em>in SQL</em>, over the <strong>same rows</strong>, with no separate index to build or keep in sync. A sublinear index takes over above ~8,000 rows in the in-memory engine.",
+                    "var(--c-holodb)",
+                    LimHtml: "<code>NEAREST</code> can't yet combine with <code>WHERE</code>/<code>GROUP</code>."),
+                new CardSpec("Size-independent analytics",
+                    "Because an integer total is itself one vector, whole-table <code>COUNT</code>/<code>SUM</code>/<code>MIN</code>/<code>MAX</code> and single-column <code>GROUP BY</code> read a maintained value in <strong>O(1)</strong> — no scan, flat as the table grows. Zone maps, compiled predicates and a columnar path keep ordinary filters fast.",
+                    "var(--c-holodb)",
+                    LimHtml: "Integer aggregates are exact + constant-time; <b>real</b>-number sums use a SIMD scan."),
+                new CardSpec("Durable, larger-than-memory",
+                    "The paged engine stores tables on an 8&nbsp;KB buffer-pool page store with a redo-only WAL: cold pages spill to disk, so a table can <strong>exceed RAM</strong>, with bounded crash recovery — and the size-independent aggregates are maintained <em>on disk</em>.",
+                    "var(--c-holodb)",
+                    LimHtml: "The primary-key index stays in RAM (~16&nbsp;B/row) — the limit for tables far bigger than memory."),
+                new CardSpec("Live metrics under ingest",
+                    "Whole-table and grouped counts/sums are served from an immutable snapshot republished after every write — <strong>without taking the engine lock</strong> — so a continuous streaming ingest never stalls a dashboard read.",
+                    "var(--c-holodb)"),
+            },
+            id: "features",
+            introHtml: "Relational rows, analytical rollups and a vector index are usually three separate systems kept in sync. Here they are three views of the same holographic store — one <code>dotnet add package</code>, one copy of the data.") with { LeadingCommentHtml = "<!-- FEATURES -->" })
+        .Section(SectionSpec.CardGrid(
+            "Runs everywhere .NET runs. Including this tab.", "deploy",
+            new[]
+            {
+                new CardSpec("Embedded, in-process",
+                    "Sync or async, plus a column-native <code>BulkLoad</code>. Register with DI via <code>AddHoloDb()</code>, or attach to an EvalApp pipeline.",
+                    OmitCatStyle: true,
+                    PreBodyHtml: "<div class=\"snip\"><code>var db = new HoloDbService(new HoloDbOptions { WalPath = \"app.wal\" });\ndb.Execute(\"CREATE TABLE t (id INT PRIMARY KEY, region TEXT, amount REAL)\");\nvar r = await db.ExecuteAsync(\"SELECT region, SUM(amount) FROM t GROUP BY region\");</code></div>"),
+                new CardSpec("Networked server + typed client",
+                    "A self-hosted TLS server; the <a href=\"/holodb-client.html\">.NET client</a> mirrors the embedded surface, so moving from in-process to networked changes only how the handle is obtained. Columnar results stay columnar on the wire via <a href=\"/holodb-protocol.html\">HoloDb.Protocol</a>.",
+                    OmitCatStyle: true,
+                    PreBodyHtml: "<div class=\"snip\"><code>docker run -p 5432:5432 -v holodb-data:/data \\\n  ghcr.io/evaluatedapplications/holodb:latest --token s3cret</code></div>"),
+                new CardSpec("In the browser (WebAssembly)",
+                    "The in-memory engine is pure managed .NET, so it compiles to WebAssembly and runs client-side — the <a href=\"/tools/analyst\">Analyst tool</a> is a real HoloDb in a browser tab, nothing leaving the device. Ideal for local/offline analytics and \"your data stays with you\" apps.",
+                    OmitCatStyle: true),
+            },
+            limHtml: "The Docker image is rebuilt from source and published as <code>:latest</code> (and <code>:&lt;version&gt;</code>) on every release, so <code>:latest</code> is always the current engine.",
+            id: "deploy") with { LeadingCommentHtml = "<!-- DEPLOY -->", LimStyleAttr = "margin-top:16px" })
+        .Section(SectionSpec.ClosingStackWithInstall(
+            "Get started",
+            "Add the package and go — every capability is free to use.",
+            "dotnet add package EvaluatedApplications.HoloDb",
+            new[]
+            {
+                new CtaLink("Try it live", "/tools/analyst", CtaStyle.Primary),
+                new CtaLink("Read the manual", "/holodb/manual/", CtaStyle.Ghost),
+                new CtaLink("Full benchmark methodology", "/holodb.html", CtaStyle.Ghost),
+                new CtaLink("NuGet", "https://www.nuget.org/packages/EvaluatedApplications.HoloDb", CtaStyle.Ghost, ExternalNewTab: true),
+            }) with { LeadingCommentHtml = "<!-- GET STARTED -->" })
+        .Footer(new FooterSpec(new[]
+        {
+            new RelatedLink("Home", "/"),
+            new RelatedLink("Packages", "/packages.html"),
+            new RelatedLink("Docs", "/holodb/manual/"),
+            new RelatedLink("Benchmarks", "/holodb.html"),
+            new RelatedLink("NuGet", "https://www.nuget.org/packages/EvaluatedApplications.HoloDb", ExternalNewTab: true),
+        }));
+}

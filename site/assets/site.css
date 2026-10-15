@@ -1,0 +1,953 @@
+/* Evaluated Applications — one brand stylesheet, shared by the static content site and the Blazor tools app.
+   Dark, unconditionally — this is a branded visual identity (Dark Side of the Moon: deep black +
+   true ROYGBIV spectrum + prism triangle), not a neutral utility UI, so it does NOT defer to the
+   visitor's OS/browser colour-scheme preference. A `prefers-color-scheme:light` palette override
+   used to exist here; removed 2026-08-28 on direct user instruction ("get rid of light pallets
+   then dark always") after real-device testing showed it firing and washing out the brand on a
+   phone in light mode. Do not reintroduce a light palette without an explicit, separate request. */
+
+/* Design tokens (2026-09-02, SiteKit Phase 1 rewire): the :root token block + the per-package
+   body[data-cat="..."] glow-tint rules that used to be typed out here directly now live in
+   AboutUs/SiteKit/tokens/{core,brand-ea}.css — core.css is the brand-agnostic shell (dark
+   surface/ink scale, semantic ok/warn/bad, radius/wrap/font, the baseline rhythm grid),
+   brand-ea.css is this brand's own values (the ROYGBIV --spectrum, the per-package hex table,
+   the body[data-cat] glow overrides, the chord rule). Values are UNCHANGED — this is a
+   value-preserving rewire, not a retint; see docs/platform-architecture.md §"Phase 1" and
+   CLAUDE.md's "Design system"/"Per-package palette" sections for the full reasoning/history
+   those two files now carry instead of this one. The relative path below resolves correctly
+   both live (deploy.yml copies SiteKit/tokens/ to the site root alongside site/, preserving the
+   same relative depth) and when browsing the raw repo directly. */
+@import url("../../SiteKit/tokens/core.css");
+@import url("../../SiteKit/tokens/brand-ea.css");
+
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+  margin:0; background:var(--bg); color:var(--ink);
+  font-family:var(--font); font-size:17px; line-height:1.65; /* 17*1.65=28.05px ≈ 1 --rhythm
+    baseline (28px) — the value --rhythm is rounded from; kept unitless so it still scales
+    correctly for any descendant that doesn't declare its own line-height, see the --rhythm
+    comment in :root */
+  -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility;
+}
+a{color:var(--accent-ink); text-decoration:none}
+a:hover{text-decoration:underline}
+/* Headings are display type, not flowing body copy — a single unitless ratio here can't land
+   every heading instance's own font-size on a 28px multiple at once, so h1/h2/h3 keep a tight,
+   legible ratio (1.15) for THEIR OWN line box; the grid is preserved instead by each heading's own
+   vertical MARGIN (recalibrated below, per selector, to a clean multiple of --rhythm-q) so the
+   text baseline returns to the page grid right after the heading even though the heading's own
+   line doesn't subdivide evenly into it. Where an individual heading selector's real rendered
+   font-size DOES let a clean-multiple line-height fit comfortably (.sec-head h2, .card h3, .stack
+   h2, .prose h2/h3), that selector overrides this base ratio with an explicit on-grid px value
+   below — see each rule's own comment. */
+h1,h2,h3{margin:0; line-height:1.15; letter-spacing:-.02em; font-weight:650}
+.wrap{max-width:var(--wrap); margin:0 auto; padding:0 24px}
+.mono{font-family:var(--mono)}
+
+.beam{height:3px; background:var(--spectrum); opacity:.9}
+
+/* ---- nav (with CSS-only mobile menu) ---- */
+.site-nav{position:sticky; top:0; z-index:20; background:color-mix(in srgb,var(--bg-2) 88%,transparent);
+    backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px); border-bottom:1px solid var(--border)}
+.site-nav .wrap{display:flex; align-items:center; justify-content:space-between; min-height:63px; gap:12px; flex-wrap:wrap} /* 63px=9*--rhythm-q, was 62 */
+.brand{display:flex; align-items:center; gap:11px; color:var(--ink); font-weight:650; letter-spacing:-.01em}
+.brand:hover{text-decoration:none}
+.mark{width:22px; height:22px; flex:none}
+.nav-links{display:flex; gap:22px; align-items:center}
+.nav-links a{color:var(--ink-soft); font-size:.94rem; line-height:21px} /* 3/4 baseline, single-line nav label */
+.nav-links a:hover{color:var(--ink); text-decoration:none}
+.nav-links a.active{color:var(--ink)}
+.nav-toggle{position:absolute; opacity:0; pointer-events:none}
+.nav-burger{display:none; flex-direction:column; gap:5px; cursor:pointer; padding:8px; margin:-8px; border-radius:8px} /* gap/padding intentionally off the rhythm grid: a fixed-size (22px) icon glyph's own internal spacing, not page-flow rhythm */
+.nav-burger span{display:block; width:22px; height:2px; background:var(--ink-soft); border-radius:2px; transition:transform .2s, opacity .2s}
+
+@media (max-width:640px){
+  /* Scoped to body:not(.os-chrome): this is the CSS-only slide-down menu the 14 plain pages use.
+     BUG (found via real-device screenshot, 2026-08-28, third round): without this exclusion, this
+     block still matched on the 3 os-chrome pages too, and while the os-chrome dock rule below wins
+     the specificity fight for `display`/`position` (0,3,1 beats this block's 0,1,0), it never
+     re-declares `flex-direction`/`flex-basis` — so THOSE two properties fell through and were still
+     supplied by this lower-specificity block. The result: `.nav-links` really was `position:fixed`
+     but with `flex-direction:column` and `flex-basis:100%` leaking in, so its 4 children (each
+     already an icon-over-label column via the dock's own `.nav-links a` rule) stacked as one more
+     level of full-width vertical rows instead of a horizontal row of tiles — a big vertical list, not
+     a compact dock. Same lesson as the backdrop-filter containing-block bug: two rule sets meant to
+     be mutually exclusive (plain-site menu vs. os-chrome dock) must exclude each other's SCOPE
+     outright, not rely on winning every individual property one at a time. */
+  body:not(.os-chrome) .nav-burger{display:flex}
+  body:not(.os-chrome) .nav-links{display:none; flex-basis:100%; flex-direction:column; align-items:flex-start; gap:2px; padding:7px 0 14px} /* vertical rhythm: 7px/14px, was 6/12 */
+  body:not(.os-chrome) .nav-links a{padding:7px 4px; width:100%; font-size:1rem} /* vertical rhythm: 7px, was 9 */
+  body:not(.os-chrome) .nav-toggle:checked ~ .nav-links{display:flex}
+  body:not(.os-chrome) .nav-toggle:checked ~ .nav-burger span:nth-child(1){transform:translateY(7px) rotate(45deg)}
+  body:not(.os-chrome) .nav-toggle:checked ~ .nav-burger span:nth-child(2){opacity:0}
+  body:not(.os-chrome) .nav-toggle:checked ~ .nav-burger span:nth-child(3){transform:translateY(-7px) rotate(-45deg)}
+}
+
+/* ---- "Related" pills: compact, contextual per-page cross-links (not a global mega-menu — the
+   homepage gallery at /#packages is the exhaustive index; this is just the 2-4 siblings that
+   actually matter from THIS page, plus a link back to the full gallery). Lives in the hero,
+   under .cta-row, on every product/reference page. */
+.related{display:flex; flex-wrap:wrap; align-items:center; row-gap:7px; column-gap:8px; margin-top:21px} /* vertical rhythm: row-gap 7px (was gap:8px), margin-top 21px=3/4 baseline (was 18) */
+.related-label{font-family:var(--mono); font-size:.72rem; text-transform:uppercase; letter-spacing:.06em; color:var(--ink-faint); line-height:14px} /* half baseline, single-line label */
+.related a{font-family:var(--mono); font-size:.8rem; color:var(--ink-soft); border:1px solid var(--border-2); line-height:14px;
+    border-radius:999px; padding:5px 12px; background:var(--surface)} /* padding vertical 5px intentionally off-grid, see :root comment on sub-7px pill padding */
+.related a:hover{color:var(--accent-ink); border-color:var(--accent); text-decoration:none}
+.related a.related-all{color:var(--accent-ink); border-color:var(--accent)}
+
+/* ---- hero ---- */
+.hero{padding:84px 0 28px; position:relative; overflow:hidden} /* vertical rhythm: 84px=3*--rhythm (unchanged, already on-grid), 28px=1*--rhythm (was 34) */
+.hero > .wrap{position:relative; z-index:1}
+
+/* ---- prism beam: the Dark Side of the Moon motif — a white beam entering a prism, splitting into
+   a ROYGBIV fan. Decorative background accent in the hero of the flagship/Prism-tied pages only
+   (not swept across all 16 pages — see CLAUDE.md "Prism motif" for which pages carry it and why).
+   Sits behind the hero text (z-index:0 vs .hero>.wrap's z-index:1), fixed aspect, right-aligned,
+   low enough opacity to read as texture, not illustration. Hidden below 900px so it never collides
+   with hero copy on tablet/mobile widths. */
+.prism-beam{position:absolute; top:0; right:-40px; bottom:0; width:min(40vw,520px);
+    pointer-events:none; z-index:0; opacity:.65}
+.prism-beam svg{width:100%; height:100%; display:block}
+@media (max-width:900px){.prism-beam{display:none}}
+@media (prefers-reduced-motion:no-preference){.prism-beam{transition:opacity .3s ease}}
+.eyebrow{font-family:var(--mono); font-size:.8rem; letter-spacing:.08em; text-transform:uppercase; color:var(--ink-faint); line-height:14px} /* half baseline, single-line label */
+.hero h1{font-size:clamp(2.3rem,5.4vw,3.5rem); line-height:1.125; margin:14px 0 0; max-width:18ch; text-wrap:balance}
+  /* h1 is fluid (clamp), so its line-height stays a unitless ratio rather than a fixed px value —
+     an absolute px would decouple from font-size across the clamp range and look cramped/loose at
+     one end. 1.125 was tuned so BOTH clamp endpoints land within ~1px of a clean quarter-baseline
+     multiple: at the 2.3rem/36.8px floor, 36.8*1.125=41.4px (target 42px=1.5*--rhythm, off by
+     0.6px); at the 3.5rem/56px ceiling, 56*1.125=63px exactly (=2.25*--rhythm=9*--rhythm-q).
+     margin-top 14px=half baseline (was 16), directly under the eyebrow label. */
+.lede{font-size:clamp(1.05rem,2vw,1.28rem); color:var(--ink-soft); max-width:62ch; margin:21px 0 0; line-height:1.6}
+  /* margin-top 21px=3/4 baseline (was 22). line-height stays unitless 1.6 for the same fluid-type
+     reason as .hero h1 above: at the 1.05rem/16.8px floor, 16.8*1.6=26.9px (target 28px=1
+     baseline, off by 1.1px); at the 1.28rem/20.48px ceiling, 20.48*1.6=32.8px (target
+     31.5px=9*--rhythm-q/2... nearest clean quarter-multiple is 35px, off by 2.2px, still the
+     closest available ratio across the whole clamp range — checked 1.5/1.55/1.65 too, none beat
+     1.6 at both ends simultaneously). */
+.facts{display:flex; flex-wrap:wrap; row-gap:7px; column-gap:10px; margin-top:28px} /* vertical rhythm: row-gap 7px (was gap:10px), margin-top 28px=1 baseline (was 30) */
+.fact{font-family:var(--mono); font-size:.82rem; color:var(--ink-soft); line-height:14px;
+      border:1px solid var(--border); border-radius:999px; padding:6px 13px; background:var(--surface)} /* padding vertical 6px intentionally off-grid, see :root comment */
+.fact b{color:var(--ink); font-weight:600}
+.hero-cta{margin-top:28px; max-width:560px} /* already 1 baseline, unchanged */
+.cta-row{display:flex; flex-wrap:wrap; gap:10px; margin-top:14px} /* margin-top already half baseline, unchanged; gap is a button row that essentially never wraps, left as-is (horizontal-scope) */
+
+/* ---- section framing ---- */
+.sec{padding:28px 0} /* 1 baseline, was 30 */
+.sec-head{display:flex; align-items:baseline; gap:14px; margin:0 0 21px; padding-top:21px; border-top:1px solid var(--border)} /* vertical rhythm: 21px=3/4 baseline both sides, was 20/22 */
+.sec-head h2{font-size:1.15rem; line-height:21px} /* 3/4 baseline: 1.15rem=18.4px, 18.4*1.15(orig ratio)=21.16px, now locked to the clean 21px rung */
+.sec-head .dot{width:9px; height:9px; border-radius:3px; flex:none; align-self:center}
+.sec-head p{margin:0 0 0 auto; color:var(--ink-faint); font-size:.9rem; font-family:var(--mono); line-height:21px} /* matches h2's line so the row's baseline is coherent */
+
+/* ---- card grid ---- */
+.grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(330px,1fr)); row-gap:14px; column-gap:16px} /* vertical rhythm: row-gap 14px=half baseline (was gap:16px, column-gap kept 16 unchanged/horizontal) */
+/* REAL MOBILE BUG (found 2026-08-28, user: "on mobile horizontal overflow is not great it goes off
+   screen often" — pre-existing, older than the parallax/pivot work, confirmed by the user before
+   this fix landed). Root cause: `minmax(330px,1fr)` never had a narrow-viewport override anywhere in
+   this file — `auto-fill` can wrap to a new row, but it can NOT shrink a track below its floor, so
+   any `.grid` (every "Key features"/"Why it's useful" card grid on every product page — 34 occurrences
+   across 14 files, not just the homepage) forces a minimum content width of 330px + `.wrap`'s 24px*2
+   padding = 378px regardless of viewport. Any real phone narrower than that (iPhone SE/mini at
+   320-375px, most budget/older Android at 360-393px — all extremely common, which is why this was
+   hit "often") pushes the grid, and with it `.sec`/`.wrap`/the page itself, wider than the viewport:
+   real horizontal scroll/clipping, not a rare edge case. `html`/`body` never carried `overflow-x:hidden`
+   anywhere in this file either (checked) — so there was nothing masking the symptom, the width was
+   genuinely escaping. Fixed at the actual source (the grid track), not with a blanket
+   `overflow-x:hidden` band-aid on body (which would have silently clipped real card content instead
+   of fixing the layout): below 640px every `.grid` collapses to a single full-width column, same
+   proven pattern `#tools`' os-chrome mobile block already uses (see the OS CHROME section) — cards
+   simply stack instead of trying to hold a 330px-wide track in less space. Scoped to the base `.grid`
+   selector (not chrome-gated) since the bug reproduces on all 14 plain pages today, not just the 3
+   os-chrome ones; `body.os-chrome #packages .grid`/`#tools .grid`'s own higher-specificity ID rules
+   (below, in the OS CHROME block) are untouched and still win on the 3 pages that carry them. */
+@media (max-width:640px){
+  .grid{grid-template-columns:1fr}
+}
+.card{position:relative; background:var(--surface); border:1px solid var(--border);
+      border-radius:var(--radius); padding:21px 22px 21px; overflow:hidden;
+      transition:border-color .18s ease, transform .18s ease, background .18s ease} /* vertical rhythm: 21px=3/4 baseline top+bottom, was 22/20; horizontal 22 unchanged */
+.card:hover{border-color:var(--border-2); background:var(--surface-2); transform:translateY(-2px)}
+.card::before{content:""; position:absolute; left:0; top:0; bottom:0; width:3px; background:var(--cat,var(--accent)); opacity:.85}
+.card-top{display:flex; align-items:center; gap:10px; flex-wrap:wrap}
+.card h3{font-size:1.18rem; line-height:21px} /* 3/4 baseline: 1.18rem=18.88px, close to the same 21px rung as .sec-head h2/.stack h2 */
+.ver{font-family:var(--mono); font-size:.74rem; color:var(--ink-soft); border:1px solid var(--border-2); line-height:14px;
+     border-radius:6px; padding:2px 7px; font-variant-numeric:tabular-nums} /* padding vertical 2px intentionally off-grid, see :root comment */
+.tag{font-family:var(--mono); font-size:.7rem; letter-spacing:.04em; text-transform:uppercase; padding:2px 8px; border-radius:999px; line-height:14px} /* padding vertical 2px intentionally off-grid */
+.tag.live{color:var(--ok); border:1px solid color-mix(in srgb,var(--ok) 45%,transparent); background:color-mix(in srgb,var(--ok) 12%,transparent)}
+.tag.soon{color:var(--ink-faint); border:1px solid var(--border-2)}
+.pkgid{font-family:var(--mono); font-size:.8rem; color:var(--ink-faint); line-height:14px; margin:7px 0 0; word-break:break-all} /* margin-top 7px=1/4 baseline, was 9 */
+.desc{color:var(--ink-soft); font-size:.96rem; margin:14px 0 0; line-height:21px} /* margin-top 14px=half baseline (was 12); line-height 21px=3/4 baseline (was unitless 1.55~23.8px) */
+.note{font-size:.86rem; color:var(--ink-faint); margin:14px 0 0; line-height:14px} /* margin-top 14px=half baseline (was 11) */
+.note code, .desc code{font-family:var(--mono); font-size:.86em; color:var(--accent-ink); background:color-mix(in srgb,var(--accent) 12%,transparent); padding:1px 5px; border-radius:5px; word-break:break-all} /* padding vertical 1px intentionally off-grid, inline code chip */
+.install{display:flex; align-items:center; gap:8px; margin-top:14px; background:var(--bg-2);
+         border:1px solid var(--border); border-radius:9px; padding:7px 10px; overflow:hidden} /* vertical rhythm: margin-top 14px=half baseline (was 16), padding vertical 7px=1/4 baseline (was 8) */
+.install code{font-family:var(--mono); font-size:.82rem; color:var(--ink); line-height:14px; white-space:nowrap; overflow-x:auto; flex:1; scrollbar-width:none}
+.install code::-webkit-scrollbar{display:none}
+.copy{flex:none; font-family:var(--mono); font-size:.72rem; color:var(--ink-soft); cursor:pointer; line-height:14px;
+      background:var(--surface); border:1px solid var(--border-2); border-radius:6px; padding:4px 8px; transition:color .15s, border-color .15s} /* padding vertical 4px intentionally off-grid, see :root comment */
+.copy:hover{color:var(--ink); border-color:var(--accent)}
+.copy.done{color:var(--ok); border-color:var(--ok)}
+.links{display:flex; gap:16px; margin-top:14px; font-size:.85rem; font-family:var(--mono); line-height:14px} /* margin-top 14px=half baseline, was 15 */
+.links a{color:var(--ink-soft)}
+.links a:hover{color:var(--accent-ink)}
+
+/* a card that represents a tool. Class selector only (not "a.tool") so it matches BOTH shapes in
+   use on the site: algformer.html's "Try it live" mini-gallery, where the card has no nested links
+   and can stay a plain <a class="card tool">; and the homepage #tools cards (2026-08-28 tools-first
+   pivot), which now nest a "Powered by" pill row of real links and so had to move to the same
+   <article>+.card-link overlay pattern package cards already use, for the same nested-anchor reason
+   documented below. */
+.card.tool{display:block; color:inherit}
+.card.tool:hover{text-decoration:none}
+.card.tool .go-in{margin-top:14px; font-family:var(--mono); font-size:.85rem; color:var(--accent-ink); line-height:14px} /* margin-top 14px=half baseline (was 16); line-height 14px matches .links a, same font-size band */
+
+/* package cards (and, since 2026-08-28, the homepage tool cards too) stay <article> when they nest
+   a second link (NuGet, or a "Powered by" pill) — the whole card can't itself be an <a> in that case,
+   that would be invalid nested-anchor markup. Instead a full-bleed "stretched link" covers the card;
+   the real .links/.install/.powered controls sit above it at a higher z-index so those inner links
+   and the copy button stay independently clickable. .card already has position:relative (card grid,
+   above) which is what anchors this overlay. */
+.card-link{position:absolute; inset:0; z-index:1; border-radius:inherit}
+.card-link:hover{text-decoration:none}
+.card .install, .card .links, .card .note, .card .powered{position:relative; z-index:2}
+
+/* "Powered by" pill row (2026-08-28 tools-first pivot): a small link-per-constituent-package row
+   under a tool card's description, e.g. The Creature -> AlgFormer + Tracer. Deliberately smaller/
+   quieter than .related (which lives in a hero, not a card) — same idea, tool-card-scoped. */
+.powered{display:flex; flex-wrap:wrap; align-items:center; row-gap:7px; column-gap:6px; margin-top:14px} /* row-gap 7px=1/4 baseline (was gap:6px); margin-top already half baseline, unchanged */
+.powered-label{font-family:var(--mono); font-size:.68rem; text-transform:uppercase; letter-spacing:.05em; color:var(--ink-faint); line-height:14px}
+.powered a{font-family:var(--mono); font-size:.76rem; color:var(--ink-soft); border:1px solid var(--border-2); line-height:14px;
+    border-radius:999px; padding:3px 10px; background:var(--bg-2)} /* padding vertical 3px intentionally off-grid, see :root comment */
+.powered a:hover{color:var(--accent-ink); border-color:var(--accent); text-decoration:none}
+
+/* Slim homepage "Powered by" package-chip strip (2026-08-28 tools-first pivot): the ONLY
+   packages-related content left on index.html once the full gallery moves to /packages.html —
+   deliberately NOT a .sec/.sec-head (so it never grows an os-chrome window panel and can't read as
+   a second top-level gallery), just name + colour-dot chips and one link to the real catalogue. */
+.pkg-strip{padding:7px 0 42px} /* vertical rhythm: 7px=1/4 baseline (was 10), 42px=1.5 baseline (was 40) */
+.pkg-strip-label{display:block; font-family:var(--mono); font-size:.72rem; text-transform:uppercase; letter-spacing:.06em; color:var(--ink-faint); line-height:14px; margin-bottom:14px} /* margin-bottom 14px=half baseline, was 12 */
+.pkg-chips{display:flex; flex-wrap:wrap; row-gap:7px; column-gap:8px} /* row-gap 7px=1/4 baseline (was gap:8px) */
+.pkg-chip{display:inline-flex; align-items:center; gap:7px; font-family:var(--mono); font-size:.8rem; color:var(--ink-soft); line-height:14px;
+    border:1px solid var(--border); border-radius:999px; padding:6px 13px; background:var(--surface)} /* padding vertical 6px intentionally off-grid, see :root comment */
+.pkg-chip:hover{color:var(--ink); border-color:var(--border-2); text-decoration:none}
+.pkg-chip .swatch{width:7px; height:7px; border-radius:50%; flex:none}
+.pkg-strip-all{display:inline-block; margin-top:14px; font-family:var(--mono); font-size:.86rem; color:var(--accent-ink); line-height:14px} /* margin-top already half baseline, unchanged */
+
+/* ---- foundation callout ---- */
+.stack{background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:21px 26px; margin-top:7px} /* vertical rhythm: padding 21px=3/4 baseline (was 24), margin-top 7px=1/4 baseline (was 6) */
+.stack h2{font-size:1.15rem; line-height:21px; margin-bottom:7px} /* line-height 21px=3/4 baseline (same rung as .sec-head h2); margin-bottom 7px=1/4 baseline, was 10 */
+.stack p{color:var(--ink-soft); margin:0; max-width:72ch}
+.stack .flow{display:flex; flex-wrap:wrap; align-items:center; row-gap:7px; column-gap:8px; margin-top:14px; font-family:var(--mono); font-size:.82rem} /* row-gap 7px=1/4 baseline (was gap:8px); margin-top 14px=half baseline (was 16) */
+.stack .flow span{border:1px solid var(--border-2); border-radius:7px; padding:5px 10px; color:var(--ink)} /* padding vertical 5px intentionally off-grid, see :root comment */
+.stack .flow em{color:var(--ink-faint); font-style:normal}
+
+/* ---- articles (essay index + reading list, added 2026-08-30) ---- */
+/* Deliberately NOT a .card grid: these are things to READ, one at a time, not products to
+   compare side-by-side, so the index is a plain divided list — title (links through), a mono
+   date, a one-line summary — reusing .crumb's mono/faint date treatment and .desc's soft-ink
+   summary colour rather than inventing new type. See CLAUDE.md "Articles" for the full pattern
+   and the copy-paste-per-entry workflow. */
+.articles{display:flex; flex-direction:column}
+.article-item{padding:21px 0; border-top:1px solid var(--border)} /* 3/4 baseline top+bottom */
+.article-item:first-child{border-top:none; padding-top:7px} /* 1/4 baseline, matches .prose's own top gap */
+.article-item h3{font-size:1.18rem; line-height:21px} /* same rung as .card h3 */
+.article-item h3 a{color:var(--ink)}
+.article-item h3 a:hover{color:var(--accent-ink); text-decoration:none}
+.article-date{display:block; font-family:var(--mono); font-size:.78rem; color:var(--ink-faint); line-height:14px; margin-top:7px}
+.article-summary{color:var(--ink-soft); margin:7px 0 0; max-width:68ch; line-height:21px} /* same rung as .desc */
+.article-item .go-in{display:inline-block; margin-top:7px; font-family:var(--mono); font-size:.85rem; color:var(--accent-ink)}
+/* Empty state: reuses .stack (the same bordered callout every "how it fits together" closer on
+   the site already uses) instead of a bespoke empty-state component — one fewer thing to
+   maintain, and it already reads as a real, intentional box rather than broken/missing markup. */
+.stack.articles-empty p{font-style:italic}
+
+/* ---- buttons ---- */
+.btn{display:inline-flex; align-items:center; gap:8px; font-family:var(--font); font-size:.95rem; font-weight:600; line-height:21px;
+     border-radius:10px; padding:7px 1.2rem; cursor:pointer; border:1px solid transparent; transition:all .15s ease} /* line-height 21px=3/4 baseline; padding vertical 7px=1/4 baseline (was .6rem=9.6px) */
+.btn-primary{background:var(--accent); color:#fff; border-color:var(--accent)}
+.btn-primary:hover{filter:brightness(1.08); text-decoration:none}
+.btn-ghost{background:transparent; color:var(--ink); border-color:var(--border-2)}
+.btn-ghost:hover{border-color:var(--accent); color:var(--accent-ink); text-decoration:none}
+
+/* ---- crumb ---- */
+.crumb{font-family:var(--mono); font-size:.82rem; color:var(--ink-faint); line-height:14px; margin-bottom:14px} /* margin-bottom 14px=half baseline (was .75rem=12px) */
+.crumb a{color:var(--ink-soft)}
+.crumb span{margin:0 .4rem; opacity:.6}
+
+/* ---- prose (manual / docs) ---- */
+.prose{max-width:760px; margin:0 auto; padding:7px 0 42px} /* vertical rhythm: 7px=1/4 baseline (was 8), 42px=1.5 baseline (was 40) */
+.prose h2{font-size:1.5rem; line-height:28px; margin:42px 0 7px; scroll-margin-top:80px} /* line-height 28px=1 full baseline (1.5rem=24px, was unitless 1.15~27.6px); margin 42px=1.5 baseline (was 2.4rem=38.4px), 7px=1/4 baseline tight heading->text gap (was .3rem=4.8px) */
+.prose h3{font-size:1.12rem; line-height:21px; margin:28px 0 7px; color:var(--ink)} /* line-height 21px=3/4 baseline (1.12rem=17.92px); margin 28px=1 baseline (was 1.8rem=28.8px, already essentially on-grid), 7px tight heading->text gap (was .3rem=4.8px) */
+.prose p{color:var(--ink-soft); margin:14px 0} /* half baseline, was .7rem=11.2px */
+.prose ul,.prose ol{color:var(--ink-soft); padding-left:1.3rem; margin:14px 0} /* half baseline, was .7rem=11.2px */
+.prose li{margin:7px 0} /* quarter baseline, was .3rem=4.8px */
+.prose strong{color:var(--ink)}
+.prose a{color:var(--accent-ink)}
+.prose p code,.prose li code,.prose td code{font-family:var(--mono); font-size:.88em; color:var(--accent-ink);
+      background:color-mix(in srgb,var(--accent) 12%,transparent); padding:1px 5px; border-radius:5px} /* padding vertical 1px intentionally off-grid, inline code chip */
+.prose pre{background:var(--bg-2); border:1px solid var(--border); border-radius:12px; padding:14px 18px;
+      overflow-x:auto; margin:14px 0; font-size:.86rem; line-height:21px} /* vertical rhythm: padding-block 14px=half baseline (was 16), margin 14px (was 1rem=16px), line-height 21px=3/4 baseline (was unitless 1.55~21.3px, already near-on-grid) */
+.prose pre code{font-family:var(--mono); color:var(--ink)}
+.prose table{width:100%; border-collapse:collapse; margin:14px 0; font-size:.9rem; display:block; overflow-x:auto} /* half baseline, was 1rem=16px */
+.prose th{text-align:left; color:var(--ink); border-bottom:1px solid var(--border-2); padding:7px .7rem; white-space:nowrap} /* padding-block 7px=1/4 baseline, was .5rem=8px */
+.prose td{color:var(--ink-soft); border-bottom:1px solid var(--border); padding:7px .7rem; vertical-align:top} /* padding-block 7px=1/4 baseline, was .5rem=8px */
+.prose blockquote{margin:14px 0; padding:7px 1rem; border-left:3px solid var(--accent); background:var(--surface); color:var(--ink-soft); border-radius:0 8px 8px 0} /* margin 14px=half baseline (was 1rem=16px), padding-block 7px=1/4 baseline (was .6rem=9.6px) */
+.toc{background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:14px 20px; margin:28px 0} /* vertical rhythm: padding-block 14px=half baseline (was 16), margin 28px=1 baseline top+bottom (was 1.5rem/2rem=24/32px asymmetric) */
+.toc h2{font-size:.8rem; line-height:14px; text-transform:uppercase; letter-spacing:.06em; color:var(--ink-faint); font-family:var(--mono); margin:0 0 7px} /* quarter baseline, was .6rem=9.6px */
+.toc ul{list-style:none; padding:0; margin:0; columns:2; column-gap:24px}
+.toc li{margin:7px 0} /* quarter baseline, was .25rem=4px */
+.toc a{color:var(--ink-soft); font-size:.92rem}
+
+/* ---- code snippet box (product pages) ---- */
+.snip{background:var(--bg-2); border:1px solid var(--border); border-radius:10px; padding:14px 16px; margin:14px 0; overflow-x:auto} /* margin half baseline, was 10 */
+.snip code{font-family:var(--mono); font-size:.84rem; color:var(--ink); line-height:21px; white-space:pre} /* 3/4 baseline (was inherited ~22.2px) */
+/* .snip.out — a printed-OUTPUT block, distinct from a C#-to-paste block at a glance (added
+   2026-09-12 for phasor.html's Hologram guide, first page needing the distinction; reusable
+   anywhere a guide shows console output next to code). Three simultaneous cues so it never reads
+   as more code to copy: a small uppercase label in normal flow (not absolutely positioned, so it
+   can't be clipped by the box's own overflow-x:auto), a solid accent left edge instead of the
+   plain 1px border, and a faint tint on the fill — text itself stays --ink for full readability. */
+.snip-tag{display:block; font-family:var(--mono); font-size:.68rem; text-transform:uppercase; letter-spacing:.07em; color:var(--ink-faint); margin:0 0 7px; line-height:14px}
+.snip.out{border-left:3px solid var(--ok); background:color-mix(in srgb,var(--ok) 7%,var(--bg-2))}
+.snip.out .snip-tag{color:var(--ok)}
+.lim{font-size:.85rem; color:var(--ink-faint); line-height:14px; margin-top:14px; border-top:1px dashed var(--border-2); padding-top:7px} /* margin-top 14px=half baseline (was 12), padding-top 7px=1/4 baseline (was 10) */
+.lim b{color:var(--warn)}
+
+/* ---- inline guide (long-form usage walkthrough embedded in a product-page .sec — distinct from
+   .prose, which is a whole standalone article page with its own 760px column/padding; a .guide is
+   just h3-sectioned prose+lists inside an ordinary .sec .wrap, added 2026-09-12 for phasor.html's
+   Hologram section). Same h3/list rhythm as .prose's own, values intentionally identical. */
+.guide h3{font-size:1.05rem; line-height:21px; margin:28px 0 7px; color:var(--ink)}
+.guide h3:first-child{margin-top:0}
+.guide ul,.guide ol{color:var(--ink-soft); padding-left:1.3rem; margin:14px 0}
+.guide li{margin:7px 0}
+.guide li b{color:var(--ink)}
+
+/* ---- footer ---- */
+footer.site{border-top:1px solid var(--border); margin-top:35px; padding:28px 0 49px; color:var(--ink-faint)} /* vertical rhythm: 35px=5*--rhythm-q (was 34), 28px=1 baseline (was 30), 49px=7*--rhythm-q (was 50) */
+footer.site .wrap{display:flex; flex-wrap:wrap; gap:14px; justify-content:space-between; align-items:center} /* gap already half baseline, unchanged */
+footer.site .mono{font-family:var(--mono); font-size:.82rem; line-height:14px}
+footer.site a{color:var(--ink-soft)}
+
+@media (max-width:640px){
+  .hero{padding:42px 0 21px} /* vertical rhythm: 42px=1.5 baseline (was 48), 21px=3/4 baseline (was 20) */
+  .sec-head p{display:none}
+  .toc ul{columns:1}
+  /* Narrow numeric .prose tables (added 2026-09-21, "The Model Learns Back To Front" — the first
+     article with several short numeric tables, not just the HoloDb manual's one 3-column type
+     table): shrink font/padding and let .prose th wrap instead of forcing white-space:nowrap, so a
+     narrow data table sizes to its DATA width instead of its widest header word and never needs
+     .prose table's own overflow-x:auto scroll at phone width. .prose td already defaults to
+     white-space:normal (only th opts into nowrap), so this is the one override needed. */
+  .prose table{font-size:.82rem}
+  .prose th{white-space:normal}
+  .prose th,.prose td{padding:6px .5rem}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important; scroll-behavior:auto}}
+
+/* ================================================================================
+   OS CHROME — opt-in via <body class="os-chrome">. Desktop/wide viewports get a
+   window-panel treatment (bordered "window" frame around .hero and every .sec that
+   carries a .sec-head, a titlebar with decorative traffic-light dots, a floating
+   taskbar/dock nav); narrow viewports get a phone-home-screen treatment for nav (a
+   fixed bottom icon dock) and for #packages specifically (its gallery becomes an
+   app-icon grid). #tools does NOT share the icon-grid treatment (pulled out
+   2026-08-28, see the dedicated #tools mobile block below the #packages one — full-
+   width product cards with description/tag/powered-by all visible instead, a
+   deliberate redesign, not an oversight if you're diffing against #packages).
+   Tablet widths (641-900px) intentionally fall back to the plain
+   base layout above — no window chrome, no dock — the same responsive layout every
+   other page already uses. CHROME ONLY: no JS, no window drag/resize; every element
+   this touches is real, already-linked HTML (nav <a>, .card-link, a.tool) — hiding
+   description text on a mobile icon tile hides text, never a link. Decorative-only
+   markup (.hero-bar, .win-dots) is aria-hidden; .sec-head's traffic dots are a
+   zero-markup ::before/box-shadow trio so EVERY page that already has a .sec-head
+   inherits window framing the moment os-chrome is added — no per-section HTML edit
+   needed. See CLAUDE.md "OS chrome" for the page rollout list + the sweep recipe.
+   ================================================================================ */
+
+/* Wallpaper: previously just two cool stops (accent-violet + data-blue) — on review this read as a
+   generic "purple-blue SaaS hero glow" (the single most common dark-dashboard cliche) rather than
+   the brand's full ROYGBIV spectrum, since it only ever showed the cool half. Added a third, warm
+   stop (spectrum-1, the coral/red end) low-centre so the ambient glow itself spans the spectrum,
+   not just its cool end — reads as refracted light bathing the desktop, not a tech-startup blob. */
+body.os-chrome{
+  background:
+    radial-gradient(1100px 560px at 12% -8%, color-mix(in srgb,var(--accent) 9%,transparent), transparent 60%),
+    radial-gradient(900px 520px at 100% 0%, color-mix(in srgb,var(--spectrum-5) 7%,transparent), transparent 55%),
+    radial-gradient(820px 480px at 46% 104%, color-mix(in srgb,var(--spectrum-1) 7%,transparent), transparent 55%),
+    var(--bg);
+}
+
+/* ================================================================================
+   SCROLL-TIED PARALLAX DEPTH + SPOTLIGHT SHADOWS (2026-08-28, platform initiative
+   motion hook — see CLAUDE.md "Platform initiative": "the requested scroll-tied
+   depth system... must be gated [behind prefers-reduced-motion:no-preference], and
+   the effect must be a pure function of scroll position (CSS animation-timeline:
+   view()), never a JS scroll handler, or it will fight the mobile performance
+   budget"). Three layer-aware tiers, each a NATIVE CSS scroll-driven animation
+   (animation-timeline: scroll()/view()) — zero JS, zero new DOM, no scroll
+   listener anywhere in the codebase to fight the mobile perf budget.
+
+   MAGNITUDE (retuned 2026-08-28, real-device follow-up, user: "increase the
+   intensity of parallax and the brightness of the inverted shadow; it really
+   is imperceptible"). The first pass was deliberately calibrated near-
+   imperceptible ("close inspection" depth cue, not a flourish) and that
+   undershot on a real device — the user's own word was "imperceptible," not
+   "subtle." Every magnitude below was pushed a real step, not a token nudge:
+   tier "far"'s background-position travel tripled (4/-3/2 -> 12/-9/6, in %);
+   tier "near"'s (.prism-beam) translateY tripled (-22px -> -70px) and its
+   drop-shadow blur/spread tripled (8px/3px -> 24px/12px) with alpha raised
+   ~2.75-3x (20%/8% -> 55%/25%) — raised MORE than a flat 3x on this tier
+   specifically to compensate a compounding factor found while retuning:
+   `.prism-beam`'s own base rule (below) carries a static `opacity:.65`, which
+   multiplies the whole element's rendered output AFTER the drop-shadow filter
+   composites, so the keyframe's alpha alone understates what actually reaches
+   the screen by that same .65 factor (same class of bug as the documented
+   icon-tile `opacity:.85` bleed-in — checked for here on purpose, and real:
+   the tier-near glow was quietly ~35% dimmer than its keyframe alpha implied
+   before this pass). Tier "mid" (hero/.sec panels, no such element-opacity
+   multiplier — checked, `.hero > .wrap`/`.sec:has(.sec-head)` set no
+   `opacity` themselves) has its settle distance tripled (10px -> 30px) and
+   its drop-shadow Y/blur tripled (4-12px/5-16px -> 12-36px/15-48px) with
+   alpha raised ~2.3-2.5x (8%/24% -> 20%/55%). This should now read as a real,
+   noticeable depth cue while scrolling, not a "close inspection" easter egg —
+   if a future pass finds it's now too strong, dial back the ALPHA/blur
+   numbers first (cheapest to retune), not the underlying scalar-multiple
+   keyframe-pair mechanism (angle-lock) or the tier structure itself.
+   Browsers without scroll-driven-animations support simply don't recognise
+   `animation-timeline` and ignore these rules outright — a static site.css, same
+   as today, no fallback code needed; this is pure progressive enhancement.
+
+   LIGHTING MODEL (folded in from the start, not bolted on — user: "since we are
+   simulating distance and motion between the layers have the shadows also
+   generate appropriately for the perceived depth and motion, and angle with the
+   centre of the page being a spotlight"). One coupled signal per tier, not two:
+   the SAME @keyframes step that moves an element also grows/shrinks a shadow
+   layer, so motion and shadow can never desync (there is no second timeline or
+   JS to keep in sync — same animation-timeline, same progress, more properties
+   on it). Tier "near" (`.prism-beam`) uses `filter:drop-shadow()`, composited
+   additively on top of nothing else (the beam has no static box-shadow of its
+   own to duplicate).
+   **Tier "mid" uses `box-shadow`, NOT `filter:drop-shadow()` — CORRECTED
+   2026-08-28, real bug, see "HARD-CUT SHADOW BUG" below.** The original design
+   here used `filter:drop-shadow()` for tier "mid" too (reasoning at the time:
+   avoid re-deriving the existing tuned STATIC multi-layer `box-shadow` inside
+   every keyframe step) but that traded a transcription-drift risk for a WORSE,
+   real visual bug: `.hero > .wrap`/`.sec:has(.sec-head)` both carry their own
+   `overflow:hidden` (needed for `.prism-beam`'s bleed and the panels' own
+   rounded corners), and per the CSS Filter Effects spec an element's own
+   `overflow:hidden` clips that SAME element's `filter` output at its tight
+   rectangular border-box — so the glow hard-cut at the panel edge instead of
+   falling off softly (a real phone screenshot caught this: "a HARSH, hard-edged
+   black rectangular cut" on the hero panel and the `.sec` panel wrapping the
+   tool cards). `box-shadow` is NOT subject to an element's own overflow
+   clipping (spec-guaranteed, unlike `filter`) so it doesn't have this problem —
+   fixed by moving tier "mid"'s animated glow onto `box-shadow`, and solving the
+   original transcription-drift worry with a `--elev-shadow` custom property
+   (set once per element, close to its own static box-shadow declaration) that
+   both the resting rule AND every `ea-parallax-mid`/`ea-parallax-mid-chord`
+   keyframe step reference via `var(--elev-shadow)` — one authored copy of the
+   static layers, read everywhere, never duplicated by value.
+   ANGLE is static per element (author-time, from where it actually sits in the
+   layout — never itself scroll-reactive, exactly as asked), SIZE/opacity is the
+   dynamic scroll-driven part: each pair of drop-shadow() keyframe values below is
+   an exact scalar multiple of the other (same X:Y ratio at both ends, e.g.
+   -5px:10px -> -2px:4px is the same -1:2 direction scaled by 0.4) so linear
+   interpolation between them can only ever slide along that one ray — the shadow
+   direction is mathematically incapable of drifting mid-scroll, only its length/
+   blur/opacity can. Per-element angle, matching where each actually sits:
+   `.prism-beam` is right-aligned in the hero (`right:-40px`) -> right-of-centre
+   -> shadow toward the lower-LEFT; `.hero > .wrap` / `.sec:has(.sec-head)` are
+   both centred (`margin:...auto`, `max-width`-capped) -> dead-centre -> shadow
+   straight down. No element in this pass sits left-of-centre, so there's no
+   lower-right example live on the page today — the SAME convention (X-offset
+   sign = which side of centre-x the element sits on) extends cleanly to one if a
+   future left-aligned decorative element is ever added to a chrome page; don't
+   hand-roll a different convention for it.
+   The two tiers use OPPOSITE growth directions for a reason, not an inconsistency:
+   `.prism-beam` (tier "near") is a `view()`-timeline EXIT — it's already visible
+   at page load with no scroll room above it, so the only real motion is scrolling
+   the hero away — from(prominent, larger shadow) -> to(exiting/receding, smaller,
+   fainter shadow). The panels (tier "mid") are a `view()`-timeline ENTRY/settle —
+   from(just arriving, smaller/fainter shadow) -> to(settled into place, larger,
+   richer shadow). Both read the same underlying rule ("larger shadow = closer/
+   more present"), just applied at opposite ends of two different tiers' own
+   lifecycles. The wallpaper (tier "far") gets NO shadow at all, on purpose — it
+   IS the backdrop everything else casts a shadow onto, not another object with
+   depth of its own.
+   HONEST PERF NOTE (measured/flat, not oversold — no live browser here to
+   profile): unlike `transform`/`opacity`, `filter` is not a pure compositor
+   property and CAN trigger repaint as it's driven. Kept the blur/spread radii
+   small and the element count low (1 beam + 1 hero panel + however many
+   `.sec:has(.sec-head)` panels a given page has, never more than ~6) to bound the
+   cost, but real jank/no-jank on a real device is unverified — same caveat as
+   every other motion change in this pass.
+
+   COLOUR INVERTED TO A GLOW, NOT A SHADOW (fixed same day, user: "since the
+   website is black can we have the shadows be bright instead of dark. Like
+   inverted"). The original `rgba(0,0,0,...)` values were dead on arrival against
+   `--bg:#050608` — a black drop-shadow on a near-black field has ~zero contrast
+   by construction, not "very subtle." Only the colour CHANNEL was swapped; every
+   X/Y/blur value and the scalar-multiple keyframe-pair mechanism above (same
+   ratio at both ends, angle can't drift mid-scroll) is untouched, so this is a
+   pure recolour, not a redesign. Physical model: this now reads as light being
+   CAST/CAUGHT (a rim-light glow off a lit edge), not a shadow being cast — the
+   right model for a "deep-black field + a light source" brand identity (the
+   Foundation-card doc's own language: "the brightest accent on the site, pure
+   white against deep black").
+   PER-PAGE CATEGORY TINT (follow-up same day, coordinator relaying the user:
+   colour-code the glow per product page's own theme, not one flat colour
+   sitewide). The two colours below are no longer hardcoded rgba() literals —
+   they're `color-mix(in srgb, var(--glow-near|--glow-mid) N%, transparent)`,
+   reading the two custom properties defined in :root / the `body[data-cat=...]`
+   rules near the top of this file. That means EVERY page that ever gains
+   `os-chrome` shows its own PACKAGE colour automatically (Foundation white,
+   plus one of the 8 per-package hues — see the :root "PER-PACKAGE PALETTE"
+   comment, 2026-08-28, superseding the original 4-bucket Data/ML/Spatial
+   description this paragraph used to carry) with zero new keyframes — a
+   page-level attribute swap, not a per-page CSS fork. `--glow-near` (tier
+   "near", `.prism-beam`) defaults to pure white regardless of category,
+   because the beam is a literal white light source in its own SVG artwork —
+   that's a property of the GRAPHIC, not the page's product domain, so it
+   stays fixed even on a category page (e.g. algformer.html, `data-cat=
+   "algformer"`, still glows white for the beam, its own package hue for its
+   window panels). `--glow-mid` (tier "mid",
+   the glass window panels) is the one that actually shifts per category, since
+   panels are generic chrome with no light source of their own — they read as
+   catching ambient light tinted by whatever product they belong to.
+   `index.html`/`packages.html` carry no `data-cat`, so both tiers fall through
+   to the :root default (`--glow-near:#fff`, `--glow-mid:var(--accent)`) — the
+   right call for the one page that isn't about a single domain: the site's
+   own brand accent, already the "whole spectrum" page's default hue elsewhere
+   (nav pills, buttons), not one product's colour borrowed for the flagship.
+   The N% figures below were originally the exact same alpha values the old
+   rgba() literals carried (.20/.08 near, .08/.24 mid) — color-mix against
+   transparent is just the arbitrary-colour equivalent of an alpha channel, so
+   that first recolour pass was a pure re-expression, not a retune. They were
+   since RAISED (2026-08-28 magnitude pass, see "MAGNITUDE" above the
+   keyframes below: 55%/25% near, 20%/55% mid) — that later change is a real
+   intensity increase, not just another re-expression; don't assume these
+   numbers still trace back 1:1 to the original rgba() alphas. */
+@media (prefers-reduced-motion:no-preference){
+  @keyframes ea-parallax-far{
+    from{background-position:0% 0%, 0% 0%, 0% 0%, 0% 0%}
+    to{background-position:0% 12%, 0% -9%, 0% 6%, 0% 0%}
+  }
+  @keyframes ea-parallax-near{
+    from{transform:translateY(0); filter:drop-shadow(-16px 32px 24px color-mix(in srgb, var(--glow-near) 55%, transparent))}
+    to{transform:translateY(-70px); filter:drop-shadow(-8px 16px 12px color-mix(in srgb, var(--glow-near) 25%, transparent))}
+  }
+  /* box-shadow, not filter:drop-shadow — see the "HARD-CUT SHADOW BUG" note above the MAGNITUDE/
+     LIGHTING MODEL comment block for why. var(--elev-shadow) is set once per element right next to
+     its own static box-shadow (the .hero > .wrap / .sec:has(.sec-head) rules below), so this ONE
+     shared keyframes pair still resolves each element's own distinct elevation layers correctly —
+     hero and .sec have different --elev-shadow values, nothing here hardcodes either. */
+  @keyframes ea-parallax-mid{
+    from{transform:translateY(30px); box-shadow:var(--elev-shadow), 0 12px 15px color-mix(in srgb, var(--glow-mid) 20%, transparent)}
+    to{transform:translateY(0); box-shadow:var(--elev-shadow), 0 36px 48px color-mix(in srgb, var(--glow-mid) 55%, transparent)}
+  }
+  /* CHORD variant of tier "mid" (2026-08-28) — identical transform/timing/angle math to
+     ea-parallax-mid above (same translateY, same X/Y/blur numbers, same scalar-multiple lock), the
+     ONLY difference is TWO stacked animated box-shadow layers instead of one, each reading a
+     different domain colour (--glow-mid-a / --glow-mid-b, set once per chord page via
+     body[data-cat="..."] near :root — see "CHORD (multi-tone) pages" above). This is what makes a
+     genuinely multi-domain page (prose.html: HoloDb + AlgFormer) glow two-tone instead of one flat
+     colour, without forking the tier's motion/angle logic — only used where ea-parallax-mid-chord is
+     explicitly assigned below, single-tone pages never load or pay for it. */
+  @keyframes ea-parallax-mid-chord{
+    from{transform:translateY(30px); box-shadow:var(--elev-shadow), 0 12px 15px color-mix(in srgb, var(--glow-mid-a) 20%, transparent), 0 12px 15px color-mix(in srgb, var(--glow-mid-b) 20%, transparent)}
+    to{transform:translateY(0); box-shadow:var(--elev-shadow), 0 36px 48px color-mix(in srgb, var(--glow-mid-a) 55%, transparent), 0 36px 48px color-mix(in srgb, var(--glow-mid-b) 55%, transparent)}
+  }
+
+  /* Tier 1 "far" — the wallpaper itself (the body.os-chrome background painted
+     immediately above). Tied to scroll(root), the FULL document's own scroll
+     range, so the shift only completes once you've scrolled the entire page —
+     by far the slowest-reading layer of the three, exactly what a distant
+     backdrop should do. 4 background-position values because the background
+     above paints 4 layers (3 radial-gradients + the solid --bg base) — if that
+     declaration ever gains/loses a layer, update the value count here to match,
+     or background-position will cycle to the wrong layer. */
+  body.os-chrome{
+    animation-name:ea-parallax-far;
+    animation-timing-function:linear;
+    animation-timeline:scroll(root);
+  }
+
+  @media (min-width:901px){
+    /* Tier 2 "near" — .prism-beam, the hero's decorative beam/spectrum graphic.
+       Tied to view(), scoped to the BEAM'S OWN visibility (not the whole
+       document), so it drifts specifically across the hero's own scroll-past,
+       not diluted by total page length — the fastest-reading, most "foreground"
+       of the three tiers. Gated >=901px to match .prism-beam's own base rule
+       (display:none below 900px) — redundant with that but kept explicit so
+       this tier's scope reads in one place without cross-referencing. */
+    body.os-chrome .prism-beam{
+      animation-name:ea-parallax-near;
+      animation-timing-function:linear;
+      animation-timeline:view();
+    }
+
+    /* Tier 3 "mid" — the window panels themselves (.hero > .wrap's glass panel,
+       every .sec:has(.sec-head) panel). Each settles a few px as it scrolls into
+       view — animation-range caps the motion to the first 45% of the panel's own
+       entry, so it's a quick settle, not a long slow drift. Deliberately a
+       DIFFERENT rate, direction and technique than tier 2 (smaller displacement,
+       translateY(+)->0 "settle" instead of an outward drift, capped by
+       animation-range instead of running the panel's full visibility) so the
+       three tiers read as genuinely different depths, not one motion recipe
+       copy-pasted three times. Scoped >=901px — the same breakpoint the glass
+       window-panel treatment itself uses (see the panel rules above); the flat,
+       unchromed .hero>.wrap/.sec below 901px isn't part of the "floating window"
+       motif this depth system is dressing up, so it stays motionless there.
+       animation-fill-mode:both holds the resting (already-settled) look outside
+       the active entry range instead of a value from a stale iteration. */
+    body.os-chrome .hero > .wrap,
+    body.os-chrome .sec:has(.sec-head){
+      animation-name:ea-parallax-mid;
+      animation-timing-function:linear;
+      animation-fill-mode:both;
+      animation-timeline:view();
+      animation-range:entry 0% entry 45%;
+    }
+    /* CHORD override — higher specificity (adds the [data-cat] attribute selector) than the base
+       rule immediately above, so it always wins regardless of source order while every other
+       animation-* property (timing-function/fill-mode/timeline/range) still cascades in from that
+       same base rule untouched — only animation-name changes. See the ea-parallax-mid-chord
+       keyframes and the body[data-cat="holodb-algformer"] custom-property rule near :root for the rest of
+       this mechanism. Extend this one-line pattern (a new body[data-cat="..."] value + a matching
+       override here) for any future multi-domain page rather than writing a new keyframes/selector
+       pair from scratch each time. */
+    body.os-chrome[data-cat="holodb-algformer"] .hero > .wrap,
+    body.os-chrome[data-cat="holodb-algformer"] .sec:has(.sec-head){
+      animation-name:ea-parallax-mid-chord;
+    }
+  }
+}
+/* ================================================================================ */
+
+/* shared window-titlebar traffic-light dots — real (empty, aria-hidden-parent) markup,
+   used inside .hero-bar; sits alongside the CSS-only version .sec-head grows below. */
+.win-dots{display:inline-flex; gap:6px; flex:none} /* gap intentionally off the rhythm grid: 3 fixed-size (9px) decorative dots, an icon glyph not page-flow rhythm */
+.win-dots i{display:block; width:9px; height:9px; border-radius:50%}
+.win-dots i:nth-child(1){background:var(--bad)}
+.win-dots i:nth-child(2){background:var(--warn)}
+.win-dots i:nth-child(3){background:var(--ok)}
+
+/* hero splits into a titlebar (.hero-bar, desktop-only chrome) + a body (.hero-body,
+   always present) so at narrow/tablet widths — where .hero-bar just stays hidden —
+   .hero-body renders its children exactly like the old flat hero, unchanged. */
+body.os-chrome .hero-bar{display:none}
+.hero-body{position:relative}
+.hero-content{position:relative; z-index:1} /* only needed on the page(s) that also nest .prism-beam in .hero-body */
+.hero-bar-title{font-family:var(--mono); font-size:.78rem; color:var(--ink-faint); letter-spacing:.02em; line-height:14px}
+
+@media (min-width:901px){
+  body.os-chrome .hero{padding:21px 0 7px} /* vertical rhythm: 21px=3/4 baseline (was 22), 7px=1/4 baseline (was 10) — the compact chrome titlebar variant, intentionally on the finer quarter-step */
+  /* "Glass" window, not an opaque grey card: translucent panel + blur so the void-black field and
+     its spectrum wallpaper glow bleed through behind the content, the same glass language the
+     taskbar below already uses. A flat opaque --surface fill here read as a generic light-toned
+     "OS chrome" panel sitting ON TOP of the black-field brand instead of continuing it — see
+     CLAUDE.md "OS chrome" for the full diagnosis. The ::before is a 2px spectrum edge (literally
+     the same gradient as the page-top .beam strip) so every window is visibly cut from the same
+     prism, not just bordered in plain grey. */
+  /* NOTE: this .hero > .wrap rule's own vertical padding lives on .hero-body above (padding:35px
+     36px 35px) — the desktop chrome hero has no separate top/bottom padding of its own here. */
+  body.os-chrome .hero > .wrap{
+    max-width:calc(var(--wrap) + 60px); /* matches .sec:has(.sec-head)'s own max-width below, so
+      window edges line up as you scroll from the hero into the first section, not two different
+      panel widths stacked on top of each other */
+    position:relative; z-index:1; background:color-mix(in srgb,var(--surface) 78%,transparent);
+    backdrop-filter:blur(28px) saturate(1.15); border:1px solid var(--border-2);
+    border-radius:calc(var(--radius) + 2px); overflow:hidden;
+    /* --elev-shadow + the HARD-CUT SHADOW BUG fix: see the comment above the ea-parallax-mid
+       keyframes and the MAGNITUDE/LIGHTING MODEL block earlier in this file. Kept as one custom
+       property (not a literal box-shadow value) specifically so the shared keyframes can append the
+       animated tier-"mid" glow after it without duplicating these three static layers by hand. */
+    --elev-shadow:0 32px 64px -36px rgba(0,0,0,.65), inset 0 1px 0 rgba(255,255,255,.03),
+               inset 0 0 0 1px color-mix(in srgb,var(--accent) 14%,transparent);
+    box-shadow:var(--elev-shadow);
+  }
+  body.os-chrome .hero > .wrap::before{
+    content:""; position:absolute; inset:0 0 auto 0; height:2px; background:var(--spectrum); opacity:.85; z-index:2;
+  }
+  body.os-chrome .hero-bar{display:flex; align-items:center; gap:12px; padding:14px 22px; /* vertical rhythm: 14px=half baseline, was 13 */
+      background:var(--surface-2); border-bottom:1px solid var(--border)}
+  body.os-chrome .hero-body{padding:35px 36px 35px} /* vertical rhythm: 35px=5*--rhythm-q both sides, was 32/36 */
+
+  /* every .sec that carries a .sec-head becomes its own window: bordered panel, the
+     .sec-head bleeds edge-to-edge as its titlebar, a zero-markup ::before/box-shadow
+     trio stands in for window-control dots. Sections that are just a lone .stack
+     callout (no .sec-head) are left unframed on purpose: .stack is already its own
+     bordered card, so wrapping it in a second frame would be a double border, not
+     a widget — it reads fine floating on the desktop background as-is. */
+  body.os-chrome .sec:has(.sec-head){
+    max-width:calc(var(--wrap) + 60px); margin:28px auto; padding:0; position:relative; /* vertical rhythm: 28px=1 baseline, was 26 */
+    background:color-mix(in srgb,var(--surface) 76%,transparent); backdrop-filter:blur(24px) saturate(1.1);
+    border:1px solid var(--border); border-radius:var(--radius);
+    /* same box-shadow-not-filter fix as .hero > .wrap above (see its comment for the full root
+       cause) — this is the panel that wraps every #tools/#packages card grid, so the reported
+       "hard cut ... on the tool cards below it" was THIS element's edge, not the .card elements
+       themselves (verified: .card carries its own overflow:hidden + border-radius but no filter or
+       animated shadow of its own, so it was never the source). */
+    --elev-shadow:0 26px 54px -32px rgba(0,0,0,.6), inset 0 1px 0 rgba(255,255,255,.02);
+    box-shadow:var(--elev-shadow);
+    overflow:hidden;
+  }
+  body.os-chrome .sec:has(.sec-head)::before{
+    content:""; position:absolute; inset:0 0 auto 0; height:2px; background:var(--spectrum); opacity:.85; z-index:2;
+  }
+  body.os-chrome .sec:has(.sec-head) > .wrap{max-width:none; margin:0; padding:0 30px 28px} /* vertical rhythm: bottom 28px=1 baseline, was 30 */
+  body.os-chrome .sec-head{position:relative; margin:0 -30px 21px; padding:14px 30px; /* vertical rhythm: margin-bottom 21px=3/4 baseline (was 22), padding-block 14px=half baseline (was 16) */
+      background:var(--surface-2); border-top:0; border-bottom:1px solid var(--border)}
+  body.os-chrome .sec > .wrap > .sec-head:first-child{padding-left:78px; border-radius:var(--radius) var(--radius) 0 0}
+  body.os-chrome .sec > .wrap > .sec-head:first-child::before{
+    content:""; position:absolute; left:30px; top:50%; transform:translateY(-50%);
+    width:9px; height:9px; border-radius:50%; background:var(--bad);
+    box-shadow:16px 0 0 var(--warn), 32px 0 0 var(--ok);
+  }
+  body.os-chrome .sec-head:not(:first-child){margin-top:35px; border-top:1px solid var(--border)} /* vertical rhythm: 35px=5*--rhythm-q, was 38 */
+
+  /* taskbar/dock: the same .site-nav, floated as a rounded chrome bar off the top
+     edge; each link renders as a small app-tile pill (colour-cycled through the
+     brand spectrum, see the shared rule below) instead of a plain text link. */
+  body.os-chrome .site-nav{
+    top:7px; margin:7px auto 0; max-width:calc(var(--wrap) + 60px); /* vertical rhythm: 7px=1/4 baseline, was 10 */
+    background:color-mix(in srgb,var(--bg-2) 82%,transparent);
+    backdrop-filter:blur(16px) saturate(1.3); -webkit-backdrop-filter:blur(16px) saturate(1.3);
+    border:1px solid var(--border); border-radius:16px;
+    box-shadow:0 20px 42px -26px rgba(0,0,0,.65), inset 0 1px 0 rgba(255,255,255,.03);
+  }
+  body.os-chrome .site-nav .wrap{padding:0 18px; min-height:56px} /* min-height already 8*--rhythm-q, unchanged */
+  body.os-chrome .brand{padding:7px 12px 7px 8px; border-radius:11px; background:var(--surface); border:1px solid var(--border)} /* vertical rhythm: 7px=1/4 baseline, was 6 */
+  body.os-chrome .nav-links a{display:inline-flex; align-items:center; gap:8px; padding:7px 12px; border-radius:10px} /* padding vertical already 1/4 baseline, unchanged */
+  body.os-chrome .nav-links a:hover{background:var(--surface-2); color:var(--ink)}
+  body.os-chrome .nav-links a.active{background:var(--surface-2); color:var(--ink)}
+  body.os-chrome .nav-links a::before{width:11px; height:11px; border-radius:2.5px}
+}
+
+/* app-tile colour cycle for nav-link icon squares — declared once (unsized here, sized
+   per breakpoint above/below) so the desktop pills and the mobile dock read as the
+   same component wearing two sizes, not two different things. */
+/* REDESIGNED 2026-08-28 (user, live-review of the mobile dock: "I don't like these buttons, the
+   colour is not good it should be prism dark side of the moon theme, not pastels"). The old filled
+   two-stop ROYGBIV gradient rounded-squares were technically brand hues but rendered as solid soft
+   colour blobs -- read as a generic iOS app-icon grid, not the sharp geometric prism/thin-beam
+   language the rest of the site uses (.prism-beam is thin coloured LINES fanning off a triangle
+   against void black, never a filled shape). New treatment: a thin-bordered DIAMOND (a rotated
+   square -- a facet, not a rounded blob, deliberately echoing the brand mark's triangle rather than
+   a stock icon shape), void-dark and essentially invisible against the black chrome at rest (each
+   link's own text label already carries the meaning), that only shows a spectrum hue as a thin EDGE
+   + soft GLOW on hover/focus/active -- "light catching a facet," not a filled swatch. Each item still
+   cycles one spectrum stop via nth-child (unchanged assignment), but only as a --tile custom
+   property consumed by the interactive state below, never as a permanent fill. */
+body.os-chrome .nav-links a::before{
+  content:""; flex:none; display:block; background:var(--surface); border:1.5px solid var(--border-2);
+  border-radius:3px; transform:rotate(45deg); transition:border-color .15s ease, background-color .15s ease, box-shadow .15s ease;
+}
+body.os-chrome .nav-links a:nth-child(1)::before{--tile:var(--spectrum-1)}
+body.os-chrome .nav-links a:nth-child(2)::before{--tile:var(--spectrum-4)}
+body.os-chrome .nav-links a:nth-child(3)::before{--tile:var(--spectrum-5)}
+body.os-chrome .nav-links a:nth-child(4)::before{--tile:var(--spectrum-6)}
+body.os-chrome .nav-links a:nth-child(5)::before{--tile:var(--spectrum-2)}
+body.os-chrome .nav-links a:nth-child(6)::before{--tile:var(--spectrum-3)}
+body.os-chrome .nav-links a:hover::before,
+body.os-chrome .nav-links a:focus-visible::before,
+body.os-chrome .nav-links a.active::before{
+  border-color:var(--tile,var(--accent));
+  background:color-mix(in srgb,var(--tile,var(--accent)) 18%,var(--surface));
+  box-shadow:0 0 9px -1px color-mix(in srgb,var(--tile,var(--accent)) 70%,transparent);
+}
+
+@media (max-width:640px){
+  /* phone home screen: nav collapses to a fixed bottom icon dock (always visible,
+     no burger / no slide-down list) instead of the CSS-only checkbox menu the plain
+     site uses at this width. */
+  body.os-chrome{padding-bottom:77px} /* vertical rhythm: 77px=11*--rhythm-q, was 78 */
+  /* BUG FIX (found via real-device screenshot, 2026-08-28): .site-nav carries backdrop-filter
+     unconditionally (base rule, all pages/widths — the sticky top-bar blur). A backdrop-filter (like
+     transform/filter/perspective/contain) establishes a new containing block for `position:fixed`
+     DESCENDANTS. Since .nav-links below is fixed, it was pinning to the BOTTOM of .site-nav's own
+     ~52px box (which sits at the top of the page) instead of the viewport — collapsing the intended
+     bottom icon dock into a sliver overlapping the top bar/brand, so only the last, unobscured item
+     (NuGet) read as legible. Clearing backdrop-filter on .site-nav at this breakpoint restores the
+     viewport as the containing block; the dock keeps its OWN blur below, so the frosted look is
+     unaffected — only the (redundant, mostly invisible at 52px) top-bar blur is dropped on mobile. */
+  body.os-chrome .site-nav{backdrop-filter:none; -webkit-backdrop-filter:none}
+  body.os-chrome .site-nav .nav-toggle,
+  body.os-chrome .site-nav .nav-burger{display:none}
+  body.os-chrome .site-nav .wrap{min-height:52px}
+  body.os-chrome .site-nav .nav-links{
+    display:flex; flex-direction:row; flex-basis:auto; position:fixed; left:0; right:0; bottom:0; z-index:30;
+    flex-wrap:nowrap; justify-content:space-around; align-items:center; gap:0;
+    padding:7px 6px calc(7px + env(safe-area-inset-bottom)); /* vertical rhythm: 7px=1/4 baseline, was 8/6 */
+    background:color-mix(in srgb,var(--bg-2) 94%,transparent);
+    backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px);
+    border-top:1px solid var(--border); box-shadow:0 -10px 26px -14px rgba(0,0,0,.55);
+  }
+  body.os-chrome .site-nav .nav-links a{
+    flex:1; min-width:0; display:flex; flex-direction:column; align-items:center; gap:4px;
+    padding:7px 2px; border-radius:10px; font-size:.66rem; line-height:14px; text-align:center; /* padding vertical 7px=1/4 baseline, was 4 */
+  }
+  body.os-chrome .site-nav .nav-links a::before{width:17px; height:17px; border-radius:4px}
+  body.os-chrome .site-nav .nav-links a.active{color:var(--ink)}
+
+  /* #packages becomes an icon grid on mobile: the SAME real cards, the SAME real .card-link
+     overlay — description/install/links text is hidden, not removed, so the one-tap-away
+     destination page is where the detail lives, exactly like tapping a phone app icon.
+     #tools USED TO share this exact pattern but was pulled OUT of it entirely (2026-08-28,
+     real-device review, user: "looks like garbage... bigger space for each app with explanation
+     under not buttons... it should funnel people in"). A tool is a live product a visitor is about
+     to try, not a bookmark to a reference page — shrinking it to a 56px icon + one-word label
+     stripped out exactly the copy that convinces someone to tap in. See the dedicated #tools block
+     below this one for its own, deliberately un-shrunk treatment; don't re-add #tools to any
+     selector in this #packages block without re-reading both bug writeups in CLAUDE.md first. */
+  body.os-chrome #packages .grid{
+    grid-template-columns:repeat(auto-fill,minmax(76px,1fr)); gap:21px 12px; margin-top:2px; /* vertical rhythm: row-gap 21px=3/4 baseline, was 22 (column-gap 12 unchanged/horizontal) */
+  }
+  body.os-chrome #packages .grid > .card{
+    position:relative; display:flex; flex-direction:column; align-items:center; gap:7px; /* vertical rhythm: 7px=1/4 baseline (column stack: icon/label), was 8 */
+    padding:0; border:0; background:none; border-radius:0; text-align:center; overflow:visible;
+  }
+  body.os-chrome #packages .grid > .card:hover{transform:none; background:none; border-color:transparent}
+  /* Icon glyph, not a blank tinted square (2nd review flag): content:attr(data-initial) pulls a
+     1-2 letter mark from each .card's own data-initial attribute (set once in the HTML, see
+     packages.html) — no new DOM element, no image asset, no icon font. Falls back to an empty,
+     plain-tinted square if a future card is added without the attribute (graceful, not broken).
+     GOTCHA (found 2026-08-28, tools-first pivot, docs/brand-identity.md §2): --cat can now hold a
+     GRADIENT (Foundation cards) — color-mix() requires a real <color> and can't take a gradient as
+     an input, and a gradient can't be nested as a single colour-stop inside this rule's own
+     linear-gradient() either. Every var(--cat,var(--accent)) reference in THIS rule falls back
+     through --cat-root first (a plain solid colour, set alongside --cat only where --cat itself is
+     a gradient — see the .card style="" attributes in packages.html) before falling to --cat, so
+     this rule always resolves to a real solid colour even when --cat can't be used directly. This
+     is the only call site in site.css with this constraint — the plain .card::before accent-bar
+     rule near the top of the file is fine as-is (background alone accepts a gradient).
+     RE-VERIFIED 2026-08-28 (real-device review flagged the Creature tool tile blank on-phone,
+     "Cr" showing text with no coloured tile behind it at all): traced this exact fallback chain
+     against index.html's Creature card (--cat a two-tone gradient, --cat-root explicitly set to
+     var(--c-ml)) — the chain resolves correctly on paper (--cat-root present -> its var(--c-ml)
+     fallback branch is never even evaluated) and every var(--cat,...) in this rule was already
+     routed through --cat-root before this pass; could not reproduce a remaining syntax defect by
+     reading the CSS (no live browser here to confirm/deny a device-specific rendering quirk).
+     Rather than patch an unconfirmed root cause, #tools (the only page this tile pattern was live
+     on) was pulled out of this rule entirely below — the exposure for tools is now closed by
+     construction, not by a further fallback tweak. #packages itself doesn't carry this pattern on
+     any os-chrome page yet (packages.html isn't on os-chrome — see CLAUDE.md), so this whole rule
+     is presently DORMANT; the mechanism above is kept correct for whenever that page joins os-chrome,
+     at which point Phasor/EvalApp (the only two --cat-root-bearing package cards) are the ones to
+     re-check on a real device first.
+     OPACITY FIX (2026-08-28, coordinator flag on real-device review): this ::before inherited
+     `opacity:.85` from the UNRELATED .card::before accent-bar rule up top (tuned for a thin 3px
+     desktop bar, never meant for a 56px filled tile) purely because this rule never set its own
+     opacity — compounded with the second gradient stop already fading to a 45% colour-mix, brand
+     colours that are NOT pastel (--c-data #4aa3ff, --c-ml #7d7dff at the time this note was written,
+     since retuned to #c07dff for spectrum spacing) read washed-out once both
+     softenings stacked. Explicit opacity:1 here breaks that inheritance regardless of what the
+     accent-bar rule does.
+     HISTORICAL NOTE (2026-08-28, per-package palette pass): --c-data/--c-ml/--c-spatial themselves
+     no longer exist as tokens — superseded by the 8 per-package tokens + Prose's chord, see the
+     :root comment near the top of this file. Left the var(--c-ml)/hex literals above as written,
+     since they're a dated trace of a specific past bug hunt, not live code — don't "fix" them to the
+     new token names, that would misrepresent what was actually being debugged at the time. The
+     --cat/--cat-root FALLBACK MECHANISM this whole comment describes is unchanged and still load-
+     bearing for the new palette (a two-tone chord --cat gradient still needs a --cat-root solid
+     fallback, same reason, just reading different tokens now — e.g. Prose's card sets
+     --cat-root:var(--c-holodb)). */
+  body.os-chrome #packages .grid > .card::before{
+    content:attr(data-initial); position:static; display:flex; align-items:center; justify-content:center;
+    width:56px; height:56px; border-radius:16px; opacity:1;
+    font-family:var(--font); font-weight:800; font-size:1.02rem; letter-spacing:-.02em;
+    color:rgba(255,255,255,.94); text-shadow:0 1px 3px rgba(0,0,0,.35);
+    background:linear-gradient(155deg, var(--cat-root,var(--cat,var(--accent))), color-mix(in srgb,var(--cat-root,var(--cat,var(--accent))) 45%, var(--bg-2)));
+    box-shadow:0 10px 18px -10px color-mix(in srgb,var(--cat-root,var(--cat,var(--accent))) 65%,transparent), inset 0 1px 0 rgba(255,255,255,.22);
+  }
+  body.os-chrome #packages .grid > .card .card-top{flex-direction:column; gap:2px; align-items:center} /* gap intentionally off-grid: 2px hairline gap between a version chip and a live/soon tag under a 56px icon tile, decorative micro-spacing */
+  body.os-chrome #packages .grid > .card h3{font-size:.76rem; line-height:14px; font-weight:600} /* half baseline, small icon-tile label */
+  body.os-chrome #packages .grid > .card .ver,
+  body.os-chrome #packages .grid > .card .pkgid,
+  body.os-chrome #packages .grid > .card .desc,
+  body.os-chrome #packages .grid > .card .note,
+  body.os-chrome #packages .grid > .card .install,
+  body.os-chrome #packages .grid > .card .links{display:none}
+
+  /* #tools mobile treatment (2026-08-28 REDESIGN — replaces the icon-grid pattern above for this
+     section only): full-width single-column cards, the SAME real .card/.card-link/.powered markup
+     as desktop, un-shrunk — name, live tag, package version chip, full description, and the
+     "Powered by" pill row all stay visible, because the whole point of this pass was to keep the
+     words that make someone tap "Open". Reads as a stacked product showcase (funnel), not a
+     home-screen icon grid.
+     This also structurally CLOSES both real bugs the icon-grid version had for #tools specifically,
+     by removing the failure surface rather than patching around it further:
+     (1) the Creature tool card's --cat is a two-tone gradient (see the long comment on the
+     #packages ::before rule above for the full color-mix()/--cat-root trace) — #tools no longer
+     runs ANY color-mix()/gradient-math rule on mobile at all, only a plain .card::before 3px accent
+     bar (background:var(--cat,var(--accent)); a gradient is a completely valid background-image on
+     its own, no math applied to it, see that rule near the top of this file) — there is nothing
+     left here that could resolve to a blank tile on any device.
+     (2) the icon-grid .card got `overflow:visible` + a 76px-wide flex column so a full-size
+     .powered pill row (sized for a 330px+ desktop card) had nowhere to wrap and could bleed into
+     the neighbouring grid cell the instant it wasn't hidden. #tools no longer takes that layout
+     branch: single column, full card width, normal document flow, .card keeps its base rule's own
+     overflow:hidden (untouched) — .powered (already position:relative;z-index:2 above the
+     .card-link overlay, same as desktop) can only ever wrap within its own card now, never escape
+     it, regardless of viewport width. */
+  body.os-chrome #tools .grid{grid-template-columns:1fr; gap:21px; margin-top:2px} /* vertical rhythm: 21px=3/4 baseline row-gap (single column, was 18) */
+  body.os-chrome #tools .grid > .card{padding:21px 22px 21px} /* vertical rhythm: 21px=3/4 baseline, was 24/22, matches base .card padding */
+  body.os-chrome #tools .grid > .card .go-in{
+    display:inline-flex; align-items:center; gap:6px; margin-top:14px; /* vertical rhythm: half baseline, was 16 */
+    font-family:var(--mono); font-size:.85rem; font-weight:600; color:var(--accent-ink); line-height:14px;
+    padding:7px 14px; border:1px solid var(--border-2); border-radius:999px; background:var(--bg-2); /* vertical rhythm: 7px=1/4 baseline, was 8 */
+  }
+}
+@media (max-width:640px) and (prefers-reduced-motion:no-preference){
+  body.os-chrome #packages .grid > .card:active::before{transform:scale(.92); transition:transform .1s ease}
+}
+
+/* ---- Blazor tools app: loading shell + error ui ---- */
+#app:has(.loading-progress){min-height:70vh; display:flex; flex-direction:column; align-items:center; justify-content:center; background:var(--bg)}
+.loading-progress{position:relative; display:block; width:6rem; height:6rem}
+.loading-progress circle{fill:none; stroke:var(--border-2); stroke-width:.5rem; transform-origin:50% 50%; transform:rotate(-90deg)}
+.loading-progress circle:last-child{stroke:var(--accent); stroke-dasharray:calc(3.141*var(--blazor-load-percentage,0%)) 500%; transition:stroke-dasharray .1s ease-in-out}
+.loading-progress-text{margin-top:14px; font-family:var(--mono); font-size:.85rem; line-height:14px; color:var(--ink-soft)} /* half baseline, was 1rem=16px */
+.loading-progress-text:after{content:var(--blazor-load-percentage-text,"Loading the tool…")}
+#blazor-error-ui{color:var(--ink); background:var(--surface); border-top:1px solid var(--bad); bottom:0;
+      box-shadow:0 -1px 12px rgba(0,0,0,.3); display:none; left:0; padding:14px 1.4rem 14px; position:fixed; width:100%; z-index:1000} /* vertical rhythm: 14px=half baseline both sides, was .8rem/1rem=12.8/16px */
+#blazor-error-ui .dismiss{cursor:pointer; position:absolute; right:1rem; top:.6rem}
+#blazor-error-ui .reload{color:var(--accent-ink)}
+
+/* ---- Plane showcase (holodb hub + benchmarks article): stat tiles, wrap-first-column tables, log-scale bar charts ---- */
+table.cmp.wrap1 td:first-child{white-space:normal; min-width:11rem; max-width:26rem}
+.sc-tiles{display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); gap:14px; margin:18px 0}
+.sc-tile{background:var(--surface); border:1px solid var(--border); border-left:3px solid var(--c-holodb,var(--accent)); border-radius:var(--radius); padding:18px}
+.sc-tile .n{font-size:2rem; font-weight:800; letter-spacing:-.03em; line-height:1.15; color:var(--ink); font-variant-numeric:tabular-nums}
+.sc-tile .l{color:var(--ink-soft); font-size:.9rem; line-height:1.45; margin-top:6px}
+.sc-tile .c{margin-top:10px; padding-top:8px; border-top:1px dashed var(--border-2); color:var(--ink-soft); font-size:.84rem; line-height:1.45}
+.sc-tile .c b{display:block; color:var(--warn); font-family:var(--mono); font-size:.7rem; text-transform:uppercase; letter-spacing:.06em; margin-bottom:2px}
+.sc-chart{background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:16px 18px 12px; margin:16px 0}
+.sc-chart figcaption{color:var(--ink-faint); font-size:.82rem; line-height:1.45; margin:0 0 10px}
+.sc-chart figcaption strong{color:var(--ink)}
+.sc-group{margin:12px 0 0}
+.sc-group h5{margin:0 0 4px; font-family:var(--mono); font-size:.76rem; font-weight:600; color:var(--ink); letter-spacing:.02em}
+.sc-row{display:grid; grid-template-columns:150px 1fr; gap:10px; align-items:center; margin:4px 0}
+.sc-lab{font-family:var(--mono); font-size:.78rem; color:var(--ink-soft); line-height:1.3}
+.sc-track{position:relative; height:22px; background:var(--bg-2); border:1px solid var(--border); border-radius:5px; overflow:hidden}
+.sc-track i{position:absolute; top:0; bottom:0; width:0; border-left:1px solid var(--border-2)}
+.sc-track i.one{border-left:1px dashed var(--ink-faint)}
+.sc-fill{position:absolute; left:0; top:0; bottom:0; border-radius:0 4px 4px 0}
+.sc-fill.plane{background:var(--spectrum)}
+.sc-fill.engine{background:color-mix(in srgb,var(--ink-faint) 70%,transparent)}
+.sc-fill.other{background:color-mix(in srgb,var(--c-algformer,#5998ff) 60%,transparent)}
+.sc-val{position:absolute; top:0; bottom:0; display:flex; align-items:center; padding:0 6px; font-family:var(--mono); font-size:.76rem; font-weight:700; white-space:nowrap; font-variant-numeric:tabular-nums}
+.sc-val.out{color:var(--ink)}
+.sc-val.in{transform:translateX(-100%); color:var(--bg)}
+.sc-axis{display:grid; grid-template-columns:150px 1fr; gap:10px; margin-top:4px}
+.sc-axis span.ticks{position:relative; height:16px; font-family:var(--mono); font-size:.7rem; color:var(--ink-faint)}
+.sc-axis span.ticks em{position:absolute; top:0; font-style:normal; transform:translateX(-50%); white-space:nowrap}
+@media(max-width:520px){
+  .sc-row,.sc-axis{grid-template-columns:1fr; gap:3px}
+  .sc-axis > span:first-child{display:none}
+  .sc-row{margin:7px 0}
+  .sc-chart{padding:14px 12px 10px}
+}.card h4.sc-h{margin:28px 0 0; font-family:var(--mono); font-size:.84rem; font-weight:600; text-transform:uppercase; letter-spacing:.06em; color:var(--ink); line-height:1.4}
+.card.sc-card:hover{transform:none}

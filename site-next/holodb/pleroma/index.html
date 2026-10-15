@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HoloDb on Pleroma | Evaluated Applications</title>
+<meta name="description" content="How HoloDb uses the Pleroma: an optional aggregate plane for exact answers from a derived summary, index SQL with EXPLAIN, and a durable checksummed page store.">
+<link rel="canonical" href="https://evaluatedapplications.github.io/holodb/pleroma/">
+
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Evaluated Applications">
+<meta property="og:title" content="HoloDb on Pleroma | Evaluated Applications">
+<meta property="og:description" content="How HoloDb uses the Pleroma: an optional aggregate plane for exact answers from a derived summary, index SQL with EXPLAIN, and a durable checksummed page store.">
+<meta property="og:url" content="https://evaluatedapplications.github.io/holodb/pleroma/">
+<meta name="twitter:card" content="summary">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%23f0796a'/%3E%3Cstop offset='.5' stop-color='%237bd86a'/%3E%3Cstop offset='1' stop-color='%23c07dff'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='32' height='32' rx='7' fill='%23050608'/%3E%3Cpath d='M16 5L27 26H5Z' fill='none' stroke='url(%23g)' stroke-width='2' stroke-linejoin='round'/%3E%3C/svg%3E">
+<script>document.documentElement.classList.add('js')</script>
+<link rel="stylesheet" href="/assets/ea.css?v=93cf72d0">
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Home","item":"https://evaluatedapplications.github.io/"},{"@type":"ListItem","position":2,"name":"Products","item":"https://evaluatedapplications.github.io/products/"},{"@type":"ListItem","position":3,"name":"HoloDb","item":"https://evaluatedapplications.github.io/holodb/"},{"@type":"ListItem","position":4,"name":"Built on Pleroma","item":"https://evaluatedapplications.github.io/holodb/pleroma/"}]}</script>
+
+</head>
+<body class="cat-holodb" data-page="product-docs">
+<a class="skip" href="#main">Skip to content</a>
+<div class="beam" aria-hidden="true"></div>
+<header class="site-header"><div class="wrap nav" data-nav>
+  <a class="brand" href="/"><svg class="mark" viewBox="0 0 32 32" aria-hidden="true"><defs><linearGradient id="m" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#f0796a"/><stop offset=".166" stop-color="#f0a15a"/><stop offset=".333" stop-color="#e6c450"/><stop offset=".5" stop-color="#7bd86a"/><stop offset=".666" stop-color="#4aa3ff"/><stop offset=".833" stop-color="#7d7dff"/><stop offset="1" stop-color="#c07dff"/></linearGradient></defs><path d="M16 5L27 26H5Z" fill="none" stroke="url(#m)" stroke-width="2" stroke-linejoin="round"/></svg>Evaluated Applications</a>
+  <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="site-links">Menu</button>
+  <nav aria-label="Main"><ul class="nav-links" id="site-links">
+    <li><a href="/products/" aria-current="page">Products</a></li><li><a href="/tools/">Tools</a></li><li><a href="/evidence/">Evidence</a></li><li><a href="/research/">Research</a></li>
+    <li><a class="nav-cta" href="/partner/">Partner with us</a></li>
+    <li><a href="https://www.nuget.org/profiles/evaluatedapplications" rel="noopener">NuGet<span class="sr-only"> (external)</span></a></li>
+  </ul></nav>
+</div></header>
+<main id="main" tabindex="-1">
+
+<header class="page-head"><div class="wrap">
+<nav class="crumbs" aria-label="Breadcrumb"><ol><li><a href="/">Home</a></li><li><a href="/products/">Products</a></li><li><a href="/holodb/">HoloDb</a></li><li aria-current="page">Built on Pleroma</li></ol></nav>
+<p class="eyebrow">HoloDb built on pleroma</p>
+<h1 class="wide">HoloDb is built with Pleroma</h1>
+<p class="lede">HoloDb is built with Pleroma, the exact count-and-sum structure in the Phasor package. Three parts of HoloDb are Pleroma parts. This page says what each gives you and what it costs. The first two are optional and off until you ask for them.</p>
+
+</div></header>
+<nav class="subnav" aria-label="HoloDb sections"><div class="wrap"><ul><li><a href="/holodb/">Overview</a></li><li><a href="/holodb/#quick-start">Quick start</a></li><li><a href="/holodb/docs/">Docs</a></li><li><a href="/holodb/pleroma/" aria-current="page">Built on Pleroma</a></li><li><a href="/holodb/client/">Client</a></li><li><a href="/holodb/evidence/">Evidence</a></li></ul></div></nav>
+<section class="sec"><div class="wrap">
+  <nav class="toc" aria-labelledby="toc-h"><h2 id="toc-h">On this page</h2><ul><li><a href="#framing">Engine results and plane results</a></li><li><a href="#plane">The aggregate plane: exact answers from a derived summary</a></li><li><a href="#index-sql">Index SQL and EXPLAIN: build it and see why</a></li><li><a href="#page-store">The Pleroma page store: durable, checksummed pages</a></li><li><a href="#exactness">Exactness</a></li></ul></nav>
+</div></section>
+<section class="sec doc-sec" aria-labelledby="framing"><div class="wrap">
+  <div class="sec-head"><span class="sec-dot cat-holodb" aria-hidden="true"></span><h2 id="framing">Engine results and plane results</h2></div>
+  <div class="prose-block"><p>The headline results on the evidence page are the engine&#39;s, not the plane&#39;s. The 10,000,000-invoice billing comparison against SQLite, DuckDB and SQL Server, and the single-row write tables against SQLite, were run on the HoloDb engine alone, with no plane attached. The plane is a separate, opt-in feature, measured in its own runs, where its costs sit beside its wins.</p></div>
+  
+  
+  
+  
+  
+  
+  
+  <p class="more-link"><a href="/holodb/evidence/#dashboard">Plane results and costs</a></p>
+</div></section><section class="sec doc-sec" aria-labelledby="plane"><div class="wrap">
+  <div class="sec-head"><span class="sec-dot cat-holodb" aria-hidden="true"></span><h2 id="plane">The aggregate plane: exact answers from a derived summary</h2></div>
+  <div class="prose-block"><p>You name a few small-domain columns (dimensions, INT or TEXT) and the INT columns to sum (measures). HoloDb keeps a Pleroma summary of them, updated by every write, and answers filters, multi-column GROUP BY, COUNT(DISTINCT), MIN and MAX of a dimension, and equi-join COUNT and SUM from it, without scanning the table.</p></div>
+  <dl class="term-list"><dt>Exact and derived</dt><dd>The columns stay the source of truth, and the plane is rebuilt from them. PleromaVerify rebuilds it and compares, and returns nothing when they agree. Sums are held exactly past 64 bits: the plane raises an error rather than wrap, and PleromaSumExact returns the exact 128-bit total.</dd><dt>It declines safely</dt><dd>Anything the plane does not hold (AVG, a column that is not a dimension or measure, a dimension over its cap of distinct values, a join over 4,095 keys) goes to the engine, so a query returns the same rows with the plane on or off. The default routing, PleromaMode.Auto, also leaves to the engine the shapes where it already reads a maintained total (whole-table counts and sums, single-column GROUP BY) and GROUP BY with a WHERE below 140,000 rows, because the engine is faster there.</dd><dt>What it costs</dt><dd>On a 1,000,000-row table the plane is slower than the engine alone on whole-table COUNT, whole-table SUM, single-column GROUP BY and MIN and MAX, because the engine reads a maintained total in microseconds there. It adds to single-row INSERT and UPDATE, and to bulk load a little. Every cost is in the evidence record beside the wins.</dd><dt>Limits</dt><dd>Memory-resident tables only: a paged table refuses a plane. A plane attached with EnablePleroma is not persisted, so call it again after Open. A plane created with SQL is replayed from the log and survives Checkpoint. It is opt-in per table.</dd></dl>
+  
+  
+  
+  
+  
+  
+  
+</div></section><section class="sec doc-sec" aria-labelledby="index-sql"><div class="wrap">
+  <div class="sec-head"><span class="sec-dot cat-holodb" aria-hidden="true"></span><h2 id="index-sql">Index SQL and EXPLAIN: build it and see why</h2></div>
+  <div class="prose-block"><p>The plane has a SQL form, so a remote client can build it through the server like any statement. SHOW INDEXES reports its size and how many queries it served and declined, and EXPLAIN reports why a query was served or declined, without running it.</p><p>EXPLAIN runs the engine&#39;s own routing code in a mode that stops before the heavy work, so what it reports is the decision the real statement takes. It does not run an IN (SELECT ...) subquery, which it shows unresolved. A binary older than the release that added this SQL cannot open a log or snapshot that contains it.</p></div>
+  
+  
+  
+  
+  
+  <div class="code"><div class="code-bar"><span>C#</span><button class="copy" type="button" aria-label="Copy C#">copy</button></div><pre><code class="language-csharp">using HoloDb;
+
+var db = Database.Open();
+db.Execute(&quot;CREATE TABLE sales (id INT PRIMARY KEY, region TEXT, tier INT, qty INT)&quot;);
+db.Execute(&quot;INSERT INTO sales (id, region, tier, qty) VALUES (1,&#39;north&#39;,1,10),(2,&#39;north&#39;,2,-4),(3,&#39;south&#39;,1,7),(4,&#39;east&#39;,3,5),(5,&#39;south&#39;,2,9)&quot;);
+
+// build the plane from SQL: key columns are dimensions, INCLUDE columns are measures
+db.Execute(&quot;CREATE INDEX by_region ON sales (region, tier) INCLUDE (qty) USING SUMMARY&quot;);
+db.PleromaMode = PleromaMode.Always;
+
+Console.WriteLine(db.Execute(&quot;SELECT SUM(qty) FROM sales WHERE region = &#39;north&#39; OR tier = 3&quot;).Rows[0][&quot;sum(qty)&quot;]);
+
+// why was it served, or declined?
+foreach (var r in db.Execute(&quot;EXPLAIN SELECT region, SUM(qty) FROM sales WHERE region = &#39;north&#39; GROUP BY region&quot;).Rows)
+    Console.WriteLine($&quot;{r[&quot;kind&quot;]}: {r[&quot;route&quot;]}&quot;);
+foreach (var r in db.Execute(&quot;EXPLAIN SELECT COUNT(*) FROM sales WHERE qty &gt; 5&quot;).Rows)
+    Console.WriteLine($&quot;{r[&quot;kind&quot;]}: {r[&quot;route&quot;]}&quot;);
+
+Console.WriteLine(db.PleromaVerify(&quot;sales&quot;) ?? &quot;plane equals a rebuild from the columns&quot;);
+Console.WriteLine(db.PleromaSumExact(&quot;SELECT SUM(qty) FROM sales&quot;));</code></pre></div><div class="code out"><div class="code-bar"><span>Output</span><button class="copy" type="button" aria-label="Copy Output">copy</button></div><pre><code class="language-text">11
+route: Pleroma plane (exact aggregate from the derived plane)
+decline: WHERE uses a column that is not a plane dimension, a dimension over its cap, a column-to-column comparison or a subquery
+access: block-wise mask scan
+route: predicate count (block-wise byte-mask, no position list)
+plane equals a rebuild from the columns
+27</code></pre></div>
+  
+  <p class="more-link"><a href="/holodb/#overview">Watch queries route to the plane or the engine</a></p>
+</div></section><section class="sec doc-sec" aria-labelledby="page-store"><div class="wrap">
+  <div class="sec-head"><span class="sec-dot cat-holodb" aria-hidden="true"></span><h2 id="page-store">The Pleroma page store: durable, checksummed pages</h2></div>
+  <div class="prose-block"><p>PleromaPageStore holds many exact Pleroma pages as the data itself, durably and larger than memory, with no columns behind them. PleromaSparsePageStore does the same for sparse pages over a large vocabulary.</p></div>
+  <dl class="term-list"><dt>Checksummed pages</dt><dd>Every page carries a check prime, a mirror of its cells in a second prime, and a header hash. Verify proves every record and parity group intact. VerifyOnLoad does the same on every load and is off by default (about 100 microseconds for a 110-key page).</dd><dt>Parity repair</dt><dd>Records are grouped (8 by default) with one exact-sum parity record per group, and the members of a group sit on different 8 KB pager pages. Any one lost pager page, or any one damaged record per group, is rebuilt by Repair. A rebuilt page must pass its own check before it is written, and a page whose group parity is also damaged is reported as unrecoverable, never rebuilt wrong.</dd><dt>Restore points</dt><dd>Checkpoint returns a restore point, and RestoreTo returns the store to exactly that state with no recount. It is copy-on-write, so a restore point costs one before-image per page changed since, not a copy of the data. Eight are kept by default.</dd><dt>Exactly-once replay</dt><dd>Every AddBatch is journaled (fsynced by default) before it is applied, and each page remembers the last batch applied to it, so crash recovery applies a logged add exactly once, even over pages already flushed. A torn journal tail is discarded, so a batch survives whole or not at all.</dd></dl>
+  
+  
+  
+  <div class="prose-block"><p>Limits: one shape per store, and it must be CompleteKeys and admissible for a check prime. Shapes with a continuous component or a relation face cannot be saved. One process opens a store at a time and one writer works at a time. A batch is applied page by page, so a reader sees every page whole but may see a batch on some pages and not on others. The sparse store has no parity groups, restore points or event journal. Page-store throughput is not reported.</p></div>
+  <div class="code"><div class="code-bar"><span>C#</span><button class="copy" type="button" aria-label="Copy C#">copy</button></div><pre><code class="language-csharp">using HoloDb;
+using Phasor;
+
+var shape = new HologramShape { KeyCapacity = 2, KeyCycle = 110, CompleteKeys = true };
+var dir = Path.Combine(Path.GetTempPath(), &quot;plrstore-restore&quot;);
+if (Directory.Exists(dir)) Directory.Delete(dir, true);
+
+using (var store = PleromaPageStore.Open(dir, shape))
+{
+    store.AddBatch(new[] { new PageAdd(42, 5, 3) });
+    var point = store.Checkpoint();                       // a restore point: id and journal position
+    store.AddBatch(new[] { new PageAdd(42, 5, 10), new PageAdd(9, 1, 1) });
+    Console.WriteLine($&quot;{store.Counts(42)[5]} {store.Contains(9)}&quot;);
+
+    store.RestoreTo(point.Id);                            // back to the point, no recount
+    Console.WriteLine($&quot;{store.Counts(42)[5]} {store.Contains(9)}&quot;);
+
+    Console.WriteLine(store.Verify().Clean);
+    Console.WriteLine(store.Repair().Unrecoverable.Count);
+}
+Directory.Delete(dir, true);</code></pre></div><div class="code out"><div class="code-bar"><span>Output</span><button class="copy" type="button" aria-label="Copy Output">copy</button></div><pre><code class="language-text">13 True
+3 False
+True
+0</code></pre></div>
+  
+  
+</div></section><section class="sec doc-sec" aria-labelledby="exactness"><div class="wrap">
+  <div class="sec-head"><span class="sec-dot cat-holodb" aria-hidden="true"></span><h2 id="exactness">Exactness</h2></div>
+  <div class="prose-block"><p>The plane returns row-for-row the same answers as the engine and SQLite across its parity suite, including a random insert, update, delete, rollback and reopen log, and sums past 64 bits, and the page store passes its fault suite. The checks, and the deliberate mutations that turned them red, are listed with the figures.</p></div>
+  
+  
+  
+  
+  
+  
+  
+  <p class="more-link"><a href="/holodb/evidence/#checks">Checks behind the figures</a></p>
+</div></section>
+</main>
+<footer class="site-footer"><div class="wrap">
+  <div class="foot-grid">
+    <div><h2>Products</h2><ul><li><a href="/phasor/">Phasor</a></li><li><a href="/evalapp/">EvalApp</a></li><li><a href="/holodb/">HoloDb</a></li><li><a href="/algformer/">AlgFormer</a></li><li><a href="/prism/">Prism</a></li><li><a href="/prose/">Prose</a></li><li><a href="/tracer/">Tracer</a></li><li><a href="/holovoxel/">HoloVoxel</a></li></ul></div>
+    <div><h2>Tools</h2><ul><li><a href="/tools/analyst/">The Analyst</a></li><li><a href="/tools/creature/">The Creature</a></li><li><a href="/tools/forecaster/">The Forecaster</a></li><li><a href="/tools/prism/">Prism</a></li><li><a href="/tools/stories/">Nano Stories</a></li><li><a href="/tools/cartographer/">The Cartographer</a></li><li><a href="/tools/prose/">Prose</a></li><li><a href="/tools/council-spending/">Council Spending Scanner</a></li></ul></div>
+    <div><h2>Learn</h2><ul><li><a href="/evidence/">Evidence</a></li><li><a href="/research/">Research</a></li><li><a href="/products/">All products</a></li><li><a href="/tools/">All tools</a></li></ul></div>
+    <div><h2>Company</h2><ul><li><a href="/partner/">Partner with us</a></li><li><a href="/licence/">Licence</a></li><li><a href="/ai/">For AI readers</a></li><li><a href="https://www.nuget.org/profiles/evaluatedapplications" rel="noopener">NuGet</a></li></ul></div>
+    <div><h2>Machine-readable</h2><ul><li><a href="/llms.txt">llms.txt</a></li><li><a href="/llms-full.txt">llms-full.txt</a></li><li><a href="/sitemap.xml">sitemap.xml</a></li></ul></div>
+  </div>
+  <div class="foot-base"><span>Evaluated Applications · .NET libraries · England</span><span class="mono">© 2026 Evaluated Applications</span></div>
+</div></footer>
+
+<script src="/assets/site.js?v=3190ebab" defer></script>
+
+</body>
+</html>

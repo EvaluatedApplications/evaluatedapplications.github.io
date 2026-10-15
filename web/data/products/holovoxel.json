@@ -1,0 +1,62 @@
+{
+  "title": "HoloVoxel: LOD-native voxels for .NET",
+  "description": "HoloVoxel stores each chunk of a voxel world as one hologram, so level of detail is the readout itself: crisp near, soft far, no mesh tiers and no popping.",
+  "headline": "Level of detail is not a mesh trick. It is how a read works.",
+  "intro": [
+    "Most voxel engines store a world as arrays of blocks and fake distant detail with mesh simplification, mipmaps or detail popping. HoloVoxel stores a chunk of the world as one holographic superposition instead. Every voxel is bound as position and content and summed into a single vector, using the Phasor codec.",
+    "Reading a voxel back is a correlation against that vector, and correlating with fewer components gives a cheaper, fuzzier answer. Near the viewer, with the full budget, the correlation collapses to one crisp block. Far away, with a handful of components, the interference of every candidate block blends into a soft, continuous colour. The result is crisp near and soft far, with no discrete tiers of detail and no popping between them.",
+    "The engine also exposes a rendering signal. Decoded confidence, how unambiguous a read is, maps naturally to visual solidity, so a renderer can make distant, low-confidence terrain read as hazy while confident terrain stays solid. The number is computed here. Drawing it is up to your renderer."
+  ],
+  "facts": ["Engine only, no graphics dependency", "net8.0 and net10.0", "Built on Phasor"],
+  "why": [
+    { "title": "Level of detail is free", "text": "There is no simplified mesh to generate, store or stitch. The same hologram answers a near read and a far read, at whatever cost you choose to pay for that read." },
+    { "title": "Memory follows perceived detail", "text": "A chunk stores only as many components as its level of detail will ever read back, and the first k components of a truncated hologram are bit-identical to reading the same chunk in full. Storage tracks the budget you plan to read at, not the size of the world." },
+    { "title": "The blur is the data", "text": "Distant terrain looks soft because the engine has less information at that budget, not because a texture was downsampled. The same signal that saves compute drives the look." },
+    { "title": "Plug into anything", "text": "No rendering or graphics dependency, and it is verified headless. You bring the renderer, the block palette and the world source, or use the built-in procedural generator." }
+  ],
+  "diagram": {
+    "id": "holovoxel-lod",
+    "title": "Detail follows the viewer",
+    "stageLabel": "Interactive view of a strip of terrain chunks. Drag, or use the arrow keys to turn and tilt it.",
+    "lede": "A strip of {chunks} terrain chunks, each stored once as a single hologram, is decoded at three budgets. Near the viewer a chunk is read with {nearComps} components and is {nearAcc} percent correct. In the middle band {midComps} components give {midAcc} percent, and far away {farComps} give {farAcc}. The far read takes {farMs} ms and {farBytes} bytes of hologram against {nearMs} ms and {nearBytes} bytes for the near one. Move the viewer and the bands move with it.",
+    "caption": "Decoded by running the published EvaluatedApplications.HoloVoxel package (release {version}). The terrain, the colours and the heights are the package's output for one fixed world. The three bands are this scene's choice, and each band's component count comes from Lod.Components. Accuracy is the share of one chunk's cells decoded to the right block, measured at full resolution for each budget."
+  },
+  "quickstart": {
+    "lede": "Decode a near chunk at the full budget and a far chunk cheaply, from the same kind of hologram.",
+    "source": "snippets/holovoxel-quickstart.cs",
+    "output": "snippets/holovoxel-quickstart.out.txt",
+    "also": [
+      {
+        "lede": "Lod.Components turns a distance into a budget. Confidence says where a flat distance curve is not enough, and the adaptive budget spends more only there.",
+        "source": "snippets/holovoxel-lod.cs",
+        "output": "snippets/holovoxel-lod.out.txt"
+      },
+      {
+        "lede": "Entities are stored the same way as terrain, with the same level-of-detail and confidence machinery, independent of the terrain grid.",
+        "source": "snippets/holovoxel-entity.cs",
+        "output": "snippets/holovoxel-entity.out.txt"
+      }
+    ]
+  },
+  "capabilities": [
+    { "title": "Holographic chunk storage", "text": "HoloWorld and Chunk encode a chunk once and decode it at any component budget, as a colour field or as a triangulated surface mesh with analytic per-vertex normals." },
+    { "title": "Continuous, meshless level of detail", "text": "The same stored hologram serves a crisp near view and a soft far view. Lod.Components maps a distance to a budget as a starting point." },
+    { "title": "Field confidence for adaptive detail", "text": "FieldConfidence reports how unambiguous each decoded point is, the softmax margin between the winning material and its runner-up. Lod.AverageConfidence and Lod.AdaptiveComponents turn that into a budget that spends more only where the world is genuinely ambiguous." },
+    { "title": "Spatial coarsening at distance", "text": "Far reads average over a footprint of the underlying world data, for terrain height and material, instead of sampling one noisy point. That keeps far terrain reading as smooth, coherent shapes. It is a separate knob from the component budget, and the two compound." },
+    { "title": "Truncated holograms", "text": "Storage cost tracks the level of detail you plan to read at, not the size of the world." },
+    { "title": "Fused SIMD bind and correlate", "text": "Generation and decode are allocation-free on the hot path." },
+    { "title": "Entities too", "text": "HoloModel stores a creature or a prop the same holographic way, with the same level of detail and confidence, independent of the terrain grid." },
+    { "title": "A built-in world generator", "text": "WorldGen offers biomes, height fields and an optional maze layout. Supply your own IWorldSource to skip it entirely." },
+    { "title": "Ringworld warp", "text": "Ring is a pure flat-to-cylinder coordinate transform for cylindrical spaces, on top of the same flat chunk storage." }
+  ],
+  "limits": [
+    "This is the engine, not the renderer. It hands you decoded colour fields, meshes and confidence values. Shaders, GPU decode and a game-engine binding belong to your front end. A reference shading recipe (lighting from the mesh normals, ambient occlusion from the height field, confidence-driven haze) is a reference outside the package.",
+    "Chunks are 16 columns on a side and that size is fixed. A full build stores four buried layers per column.",
+    "Chunks only ever get finer. A chunk built coarse can be refined but never coarsened, and decoding at a step finer than the build is invalid.",
+    "Call Prewarm once, on one thread, before any concurrent chunk work. After that, parallel generation and decode are lock-free.",
+    "Accuracy checks and the argmax decode need a full build. Confidence is empty for a chunk whose first build was coarse and for a wall chunk.",
+    "A read asking for fewer than eight components still reads eight.",
+    "Entity voxels must stay inside 16 by 16 columns and 12 layers, or they alias another position."
+  ],
+  "reference": "Every public type is documented with a worked example in the package readme on NuGet."
+}

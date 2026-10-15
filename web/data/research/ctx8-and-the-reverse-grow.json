@@ -1,0 +1,134 @@
+{
+  "id": "context-eight",
+  "title": "Growing the Wrong Way",
+  "summary": "Seeding an eight-token model from fully trained four-token weights gave it no head start, and appending new context slots after the most-trained one is a structural cost that inserting them before the oldest one removes.",
+  "description": "Seeding an eight-token model from trained four-token weights gave no head start, and appending context slots demotes the most-trained one.",
+  "topics": [
+    "context length",
+    "growth"
+  ],
+  "order": 2,
+  "status": "migrated",
+  "legacyUrl": "/articles/ctx8-and-the-reverse-grow.html",
+  "voice": "pending-editorial",
+  "finding": "Growing a four-token model that had plateaued to eight tokens of context gave no recovery in about 100,000 rounds, and growth by appending new position slots after the most-trained one demotes that slot on every grow, whereas inserting new slots before the oldest one keeps it in place.",
+  "refutedBy": "The finding fails if a grown model seeded from fully trained weights reaches a settled margin sooner than a less-trained seed under the same learning rate, or if a model grown by front insertion still shows the long-form repeat collapse after many grows.",
+  "related": [
+    "ctx4-plateau"
+  ],
+  "references": [],
+  "sections": [
+    {
+      "id": "finding",
+      "title": "The finding",
+      "paragraphs": [
+        "Growing a four-token model that had plateaued to eight tokens of context gave no recovery in about 100,000 rounds. Separately, growing by appending new position slots after the most-trained one demotes that slot on every grow; inserting new slots before the oldest one keeps it in place."
+      ]
+    },
+    {
+      "id": "setup",
+      "title": "Setup",
+      "paragraphs": [
+        "The starting point is the final trained weights of the four-token run described in the article The Four-Token Ceiling, whose top-guess margin had plateaued. A new model is seeded from those weights and its context is grown to eight tokens. The test is whether training a context fully at the smaller size makes the larger one easier to absorb.",
+        "The main metric is the same top-guess margin used at four tokens. Other measures are calibration, long-form generation sampled at dozens of checkpoints, and the specialisation of the weight bank that kept changing at four tokens."
+      ]
+    },
+    {
+      "id": "evidence-grow",
+      "title": "Evidence: no payoff from a finished seed",
+      "paragraphs": [
+        "No recovery appeared in the first 20,000 rounds after the grow, or in the next 70,000. The margin oscillated in a wide band for the whole period, past the point where the four-token run's own training life would have finished. Calibration got worse before it improved. Long-form generation stayed collapsed into repeat loops at every checkpoint pulled, dozens of them, spread over nearly 100,000 rounds.",
+        "One measure held: the weight bank that specialises at four tokens kept specialising, checkpoint after checkpoint, through the grow. It behaves as a general mechanism and not a context-specific one."
+      ],
+      "tables": [
+        {
+          "id": "grow-outcomes",
+          "caption": "Measures after growing from four to eight tokens",
+          "columns": [
+            "Measure",
+            "Outcome"
+          ],
+          "rows": [
+            [
+              "Top-guess margin",
+              "Oscillates in a wide band; no settled recovery in about 100,000 rounds"
+            ],
+            [
+              "Calibration",
+              "Worse before better"
+            ],
+            [
+              "Long-form generation",
+              "Repeat-loop collapse at every checkpoint, dozens over nearly 100,000 rounds"
+            ],
+            [
+              "Specialisation of the general weight bank",
+              "Keeps rising through the grow"
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "evidence-learning-rate",
+      "title": "Evidence: the learning rate does not explain the stall",
+      "paragraphs": [
+        "A learning-rate boost that the training engine gives a model after a context grow did not fire in this run, because the fork bypassed the normal path that triggers it. That does not explain the stall. The four-token model produced all of its own improvement at that same floor learning rate, so a starved rate would have stopped the four-token run as well, and it did not.",
+        "With the learning rate excluded, the premise is not supported: fully mining a small context before growing did not make the bigger context easier to absorb."
+      ]
+    },
+    {
+      "id": "evidence-growth-continues",
+      "title": "Evidence: growth is not the problem",
+      "paragraphs": [
+        "The one measure that never stopped improving through the eight-token run was the general, non-position-specific structure. Content that is generic should not need a context size to be finished before it is worth having, and the record is consistent with that.",
+        "On that basis the schedule was changed from a context tier every 20,000 rounds to a context tier every 200 rounds, on the reasoning that cheap early token-level structure does not need relearning at each size. Comparable capability appeared at comparable round counts to the four-token run, as generic transfer predicts. These early results are not tabulated here."
+      ]
+    },
+    {
+      "id": "evidence-structure",
+      "title": "Evidence: appending slots demotes the most important one",
+      "paragraphs": [
+        "Every position slot in the context window has its own separately trained representation. The highest-indexed slot always means the token immediately before the one being predicted, the most load-bearing position. Growing by appending capacity past that slot demotes it to the middle of the window and puts a new untrained slot in the role that matters most.",
+        "This happens on every grow. Pacing the growth more slowly spreads the damage and does not remove it. After growth to a thousand tokens, the slot that reads what was just said has had less training than almost any other slot in the window. The cause is structural, not a training-procedure problem.",
+        "The alternative is to insert new capacity before the oldest slot and shift every existing position up. The slot meaning immediately before prediction keeps its trained values through any number of grows, and new capacity lands on context further in the past, where starting from zero is cheapest.",
+        "This is safe for a specific reason, checked against the code: the attention mechanism does not work on relative position. The model's sense of position lives in exactly one place, a lookup table added onto each token, so nothing else depends on slot order.",
+        "Newly built models use front insertion by default. Existing checkpoints are pinned to the old behaviour when loaded, so a trained model does not change under itself, and old and new can coexist."
+      ]
+    },
+    {
+      "id": "practice",
+      "title": "What this means for a small model",
+      "paragraphs": [
+        "Do not expect a model converged at a small context to absorb a larger one faster. Treat context growth as its own change and measure it.",
+        "Before blaming a stall on the learning rate, check whether a model that did improve ran at the same rate.",
+        "When a model will grow repeatedly, insert new position slots before the oldest slot and shift existing slots up. Appending demotes the most trained slot on every grow, however slowly the model grows.",
+        "Pin loaded checkpoints to the convention they were trained under, so a change of growth default does not alter a trained model."
+      ]
+    },
+    {
+      "id": "limits",
+      "title": "Limits",
+      "paragraphs": [
+        "The no-payoff result comes from one seeded run at one grow, from four to eight tokens. Whether a less-settled seed would have absorbed the grow better is a conjecture the run does not test.",
+        "The effect of front insertion on the long-form repeat collapse over many grows is unmeasured. A model trained from scratch under the new convention has run for a few hundred rounds. Its generation shows cleanly space-separated word-shaped chunks with the individual words misspelled, and its raw numbers match the old approach at the same age, which is expected because the cost accrues over many grows, not the first.",
+        "The faster growth schedule's results are reported in words only."
+      ]
+    },
+    {
+      "id": "refuted-by",
+      "title": "Refuted by",
+      "paragraphs": [
+        "A grown model seeded from fully trained weights that reaches a settled margin sooner than a less-trained seed under the same learning rate; or a model grown by front insertion that still shows the long-form repeat collapse after many grows."
+      ]
+    }
+  ],
+  "diagram": {
+    "kind": "slot-grow",
+    "title": "Which slot reads what was just said",
+    "lede": "Every position slot has its own trained representation, and the slot at the end of the window means the token just before the one being predicted. Pick how many times the window has grown from four tokens. Appending puts a new untrained slot in that role every time; inserting before the oldest slot keeps the trained one there. The slot ages are counted in grows, not training rounds.",
+    "from": 4,
+    "grows": 8,
+    "stageLabel": "Two rows of position slots, one grown by appending and one by inserting before the oldest. Use the slider to change the number of grows."
+  }
+}

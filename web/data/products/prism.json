@@ -1,0 +1,20 @@
+{
+  "title": "Prism: decode gate and model lineage",
+  "description": "The .NET package behind the in-browser Prism tool: a confidence-gated decode policy, an append-only lineage journal and growth tools for AlgFormer models.",
+  "headline": "The package behind the Prism tool.",
+  "tryTool": { "tool": "prism", "label": "Try Prism in your browser" },
+  "intro": "Prism is the NuGet package that the Prism chat tool runs on. It holds three things for a model built on AlgFormer: the decode policy that chooses each next token, a lineage journal that records how the model grew, and a growth surface that changes the model and writes that record for you.",
+  "facts": ["Depends on AlgFormer only", "In-memory store for browser hosts"],
+  "why": [
+    { "title": "One decode policy", "text": "Commit greedily when the model is confident, otherwise sample only from what clears the floor. The gate is one tested policy with an explicit floor mode: a resonance floor for the holographic core, no floor, or nucleus sampling." },
+    { "title": "Facts about the past stay facts", "text": "Every structural change is stamped with the parameters a later calculation needs, when it happens. Questions such as how ramped a layer is, or when the model last grew, are answered from that history and never from whatever a live constant holds today." },
+    { "title": "Growth that records itself", "text": "Growing context, layers, shifts or vocabulary through the growth surface stamps the journal automatically, so a model cannot grow without the record." }
+  ],
+  "capabilities": [
+    { "title": "Lineage journal", "text": "Idempotent append, so a resumed process stamping the same event again is a no-op. Derivations AlphaAt, DepthAt, LastGrowthRound and AddRoundOf resolve against the stamped history, including layers inserted at the front." },
+    { "title": "Storage seam", "text": "A file-backed JSONL store with durable append, and a pure in-memory store for browser and WebAssembly hosts that have no file system." },
+    { "title": "Growth surface", "text": "Grow a HoloFormer's context, layers, shifts or vocabulary, correct by construction, with the lineage stamped for you." },
+    { "title": "Decode policy and gate", "text": "DecodePolicy, Gate and GateDecision implement the confidence-gated decode with an explicit FloorMode." },
+    { "title": "Degeneration guard", "text": "DegenGuard fires on a run of repeated tokens or a run of non-greedy picks, the two signs that decoding has collapsed." }
+  ]
+}

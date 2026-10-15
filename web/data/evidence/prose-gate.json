@@ -1,0 +1,75 @@
+{
+  "id": "prose-gate",
+  "product": "prose",
+  "slug": "/prose/evidence/",
+  "scope": "Generated sentences re-checked by the package gate",
+  "title": "Generated sentences pass the gate",
+  "description": "Of 2,000 sentences requested in one run, 1,966 different ones came back and every one passed the validity gate.",
+  "claim": "Of 2,000 sentences requested in one run, 1,966 different ones came back. Every one passed the package's validity gate on a fresh parse, and every word in every one was observed in the corpus.",
+  "headline": [
+    {
+      "value": "1,966 of 1,966",
+      "label": "generated sentences that passed the validity gate on re-parse"
+    },
+    {
+      "value": "1,966 of 1,966",
+      "label": "sentences in which every word was observed in the corpus"
+    },
+    {
+      "value": "1,966 of 1,966",
+      "label": "sentences that were different from every other"
+    }
+  ],
+  "method": {
+    "workload": "8,232 sentences from 3 public-domain novels (Alice's Adventures in Wonderland; The Adventures of Sherlock Holmes; Pride and Prejudice) are mined, then 2,000 sentences are generated with a fixed seed.",
+    "engines": [
+      "Prose ProseEngine.Generate, checked with ValidityGate.Check and Attested.All"
+    ],
+    "verification": "Every sentence is parsed again by the same rules that mined the text and must have a real subject and a finite verb, with subject and verb agreement and article and noun agreement. A separate check confirms every open-class word was observed in the corpus.",
+    "statistic": "One run with one seed.",
+    "tie": "The corpus is large enough for generation to use observed pairings only."
+  },
+  "tables": [
+    {
+      "id": "bulk",
+      "kind": "matrix",
+      "caption": "2,000 sentences requested in one run",
+      "columns": [
+        "Measure",
+        "Count"
+      ],
+      "rows": [
+        [
+          "Sentences requested",
+          "2,000"
+        ],
+        [
+          "Sentences returned",
+          "1,966"
+        ],
+        [
+          "Different from every other",
+          "1,966"
+        ],
+        [
+          "Passed the validity gate",
+          "1,966"
+        ],
+        [
+          "Every word observed in the corpus",
+          "1,966"
+        ]
+      ]
+    }
+  ],
+  "losses": [
+    "The package returned 1,966 of the 2,000 requested sentences. It returns up to the number asked for and stops when it cannot find more different valid ones."
+  ],
+  "limits": [
+    "The gate checks form, using the same rules that produced the sentences. It does not check meaning, and a valid sentence can still say something odd.",
+    "One corpus, one seed."
+  ],
+  "internal": {
+    "source": "web/generators/prose-pipeline, web/scripts/derive-evidence.mjs"
+  }
+}

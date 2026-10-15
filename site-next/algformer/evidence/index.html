@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>What attention costs | Evaluated Applications</title>
+<meta name="description" content="At one shape, reading a 1,984-token prompt takes 182 ms with softmax attention and 7.08 ms with holographic attention.">
+<link rel="canonical" href="https://evaluatedapplications.github.io/algformer/evidence/">
+
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Evaluated Applications">
+<meta property="og:title" content="What attention costs | Evaluated Applications">
+<meta property="og:description" content="At one shape, reading a 1,984-token prompt takes 182 ms with softmax attention and 7.08 ms with holographic attention.">
+<meta property="og:url" content="https://evaluatedapplications.github.io/algformer/evidence/">
+<meta name="twitter:card" content="summary">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%23f0796a'/%3E%3Cstop offset='.5' stop-color='%237bd86a'/%3E%3Cstop offset='1' stop-color='%23c07dff'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='32' height='32' rx='7' fill='%23050608'/%3E%3Cpath d='M16 5L27 26H5Z' fill='none' stroke='url(%23g)' stroke-width='2' stroke-linejoin='round'/%3E%3C/svg%3E">
+<script>document.documentElement.classList.add('js')</script>
+<link rel="stylesheet" href="/assets/ea.css?v=93cf72d0">
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Home","item":"https://evaluatedapplications.github.io/"},{"@type":"ListItem","position":2,"name":"Evidence","item":"https://evaluatedapplications.github.io/evidence/"},{"@type":"ListItem","position":3,"name":"What attention costs","item":"https://evaluatedapplications.github.io/algformer/evidence/"}]}</script>
+
+</head>
+<body class="cat-algformer" data-page="evidence">
+<a class="skip" href="#main">Skip to content</a>
+<div class="beam" aria-hidden="true"></div>
+<header class="site-header"><div class="wrap nav" data-nav>
+  <a class="brand" href="/"><svg class="mark" viewBox="0 0 32 32" aria-hidden="true"><defs><linearGradient id="m" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#f0796a"/><stop offset=".166" stop-color="#f0a15a"/><stop offset=".333" stop-color="#e6c450"/><stop offset=".5" stop-color="#7bd86a"/><stop offset=".666" stop-color="#4aa3ff"/><stop offset=".833" stop-color="#7d7dff"/><stop offset="1" stop-color="#c07dff"/></linearGradient></defs><path d="M16 5L27 26H5Z" fill="none" stroke="url(#m)" stroke-width="2" stroke-linejoin="round"/></svg>Evaluated Applications</a>
+  <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="site-links">Menu</button>
+  <nav aria-label="Main"><ul class="nav-links" id="site-links">
+    <li><a href="/products/">Products</a></li><li><a href="/tools/">Tools</a></li><li><a href="/evidence/" aria-current="page">Evidence</a></li><li><a href="/research/">Research</a></li>
+    <li><a class="nav-cta" href="/partner/">Partner with us</a></li>
+    <li><a href="https://www.nuget.org/profiles/evaluatedapplications" rel="noopener">NuGet<span class="sr-only"> (external)</span></a></li>
+  </ul></nav>
+</div></header>
+<main id="main" tabindex="-1">
+
+<header class="page-head"><div class="wrap">
+<nav class="crumbs" aria-label="Breadcrumb"><ol><li><a href="/">Home</a></li><li><a href="/evidence/">Evidence</a></li><li aria-current="page">What attention costs</li></ol></nav>
+<p class="eyebrow">AlgFormer evidence</p>
+<h1 class="wide">What attention costs</h1>
+<p class="lede">At the same shape and the same parameter count, reading a 1,984-token prompt takes 182 ms with softmax attention and 7.08 ms with holographic attention. Each further token takes 181 µs against 3.60 µs, and the serve cache holds 2,253 KB against 3.40 KB. Softmax reading grows with the square of the length (exponent 1.9) and holographic reading grows in step with it (1.0).</p>
+<ul class="facts"><li class="fact">Two attention cores at one shape</li><li class="fact">Losses shown</li></ul>
+</div></header>
+<nav class="subnav" aria-label="AlgFormer sections"><div class="wrap"><ul><li><a href="/algformer/">Overview</a></li><li><a href="/algformer/#quick-start">Quick start</a></li><li><a href="/algformer/#gpu">AlgFormer.Gpu</a></li><li><a href="/algformer/holoformer/">How HoloFormer works</a></li><li><a href="/algformer/evidence/" aria-current="page">Evidence</a></li></ul></div></nav>
+
+
+<section class="sec" aria-labelledby="h-head"><div class="wrap">
+  <div class="sec-head"><span class="sec-dot cat-algformer" aria-hidden="true"></span><h2 id="h-head">Headline</h2></div>
+  <dl class="stats"><div class="stat"><dt>less time to read a 1,984-token prompt with holographic attention</dt><dd>26 times</dd></div><div class="stat"><dt>less time for each further token, which stays flat as the context grows</dt><dd>50 times</dd></div><div class="stat"><dt>smaller serve cache, constant in the length of the context</dt><dd>663 times</dd></div></dl>
+</div></section>
+
+<section class="sec" aria-labelledby="h-loss"><div class="wrap">
+  <div class="sec-head"><span class="sec-dot cat-algformer" aria-hidden="true"></span><h2 id="h-loss">Where it is slower</h2><span class="sec-line">Every loss in this record, stated once</span></div>
+  <ul class="limits"><li>Holographic attention holds a limited number of items cleanly in one bundle, and HoloShape reports how many for a shape (the capacity table). Softmax attention has no such bound, at the cost of everything above.</li></ul>
+</div></section>
+
+<section class="sec method" aria-labelledby="h-method"><div class="wrap">
+  <div class="sec-head"><span class="sec-dot cat-algformer" aria-hidden="true"></span><h2 id="h-method">How it was measured</h2><span class="sec-line">Stated once, for every figure on this page</span></div>
+  <dl><dt>Workload</dt><dd>Both cores are built at 32 channels, 8 shifts and 2 layers, which gives them the same parameter count, and driven with the same random tokens. For each context length the run reads the prompt through the serve cache, then produces 16 more tokens and averages them. Cache memory is the managed memory kept alive by the primed cache.</dd><dt>Engines</dt><dd>AlgFormer (softmax attention); HoloFormer (holographic attention)</dd><dt>Check</dt><dd>Both cores are warmed at every length before timing, so compilation has settled. The two have identical parameter counts.</dd><dt>Statistic</dt><dd>Median of 7 runs per length, on one thread.</dd><dt>Machine</dt><dd>16 logical processors; the run used one thread.</dd><dt>Ties</dt><dd>This measures cost only. It says nothing about which core predicts better.</dd></dl>
+</div></section>
+
+<section class="sec" aria-labelledby="results"><div class="wrap">
+  <div class="sec-head"><span class="sec-dot cat-algformer" aria-hidden="true"></span><h2 id="results">Results</h2></div>
+  
+  <div class="tbl-wrap"><table class="tbl"><caption>Time and memory by context length</caption>
+<thead><tr><th scope="col">Tokens in context</th><th scope="col">Read the prompt, softmax (ms)</th><th scope="col">Read the prompt, holographic (ms)</th><th scope="col">One more token, softmax (µs)</th><th scope="col">One more token, holographic (µs)</th><th scope="col">Cache, softmax (KB)</th><th scope="col">Cache, holographic (KB)</th></tr></thead>
+<tbody><tr><th scope="row">64</th><td>0.35</td><td>0.21</td><td>7.60</td><td>3.20</td><td>90.6</td><td>3.40</td></tr><tr><th scope="row">128</th><td>1.01</td><td>0.45</td><td>12.5</td><td>3.50</td><td>163</td><td>3.40</td></tr><tr><th scope="row">256</th><td>3.37</td><td>0.99</td><td>22.4</td><td>3.80</td><td>307</td><td>3.40</td></tr><tr><th scope="row">512</th><td>12.2</td><td>2.44</td><td>45.6</td><td>4.10</td><td>595</td><td>3.40</td></tr><tr><th scope="row">1,024</th><td>44.2</td><td>4.16</td><td>97.2</td><td>3.90</td><td>1,171</td><td>3.40</td></tr><tr><th scope="row">1,984</th><td>182</td><td>7.08</td><td>181</td><td>3.60</td><td>2,253</td><td>3.40</td></tr></tbody></table></div><div class="tbl-wrap"><table class="tbl"><caption>The shape HoloShape derives from a width, and the capacity of a holographic bundle at that shape</caption>
+<thead><tr><th scope="col">Width</th><th scope="col">Shifts</th><th scope="col">Layers</th><th scope="col">Derived context (tokens)</th><th scope="col">Crosstalk edge (tokens)</th><th scope="col">Reads back 90% clean (tokens)</th></tr></thead>
+<tbody><tr><th scope="row">32</th><td>32</td><td>1</td><td>128</td><td>512</td><td>61</td></tr><tr><th scope="row">64</th><td>64</td><td>3</td><td>512</td><td>2,048</td><td>245</td></tr><tr><th scope="row">128</th><td>128</td><td>6</td><td>2,048</td><td>8,192</td><td>983</td></tr><tr><th scope="row">256</th><td>256</td><td>8</td><td>8,192</td><td>32,768</td><td>3,932</td></tr><tr><th scope="row">512</th><td>512</td><td>11</td><td>32,768</td><td>131,072</td><td>15,728</td></tr></tbody></table></div>
+  
+</div></section>
+
+<section class="sec" aria-labelledby="h-lim"><div class="wrap">
+  <div class="sec-head"><span class="sec-dot cat-algformer" aria-hidden="true"></span><h2 id="h-lim">Limits</h2></div>
+  <ul class="limits"><li>Absolute times depend on the machine. The way each cost grows with the context length is the finding.</li><li>One shape and one random token stream. The growth exponents are fitted between the 128-token and the longest measurement.</li><li>Cost only, not quality.</li></ul>
+</div></section>
+
+<section class="sec" aria-labelledby="h-rel"><div class="wrap">
+  <div class="sec-head"><span class="sec-dot cat-algformer" aria-hidden="true"></span><h2 id="h-rel">Related</h2></div>
+  <div class="related"><div><h3>Product</h3><ul><li><a class="pill" href="/algformer/">AlgFormer</a></li></ul></div><div><h3>More evidence</h3><ul><li><a class="pill" href="/evidence/">All evidence</a></li></ul></div></div>
+</div></section>
+</main>
+<footer class="site-footer"><div class="wrap">
+  <div class="foot-grid">
+    <div><h2>Products</h2><ul><li><a href="/phasor/">Phasor</a></li><li><a href="/evalapp/">EvalApp</a></li><li><a href="/holodb/">HoloDb</a></li><li><a href="/algformer/">AlgFormer</a></li><li><a href="/prism/">Prism</a></li><li><a href="/prose/">Prose</a></li><li><a href="/tracer/">Tracer</a></li><li><a href="/holovoxel/">HoloVoxel</a></li></ul></div>
+    <div><h2>Tools</h2><ul><li><a href="/tools/analyst/">The Analyst</a></li><li><a href="/tools/creature/">The Creature</a></li><li><a href="/tools/forecaster/">The Forecaster</a></li><li><a href="/tools/prism/">Prism</a></li><li><a href="/tools/stories/">Nano Stories</a></li><li><a href="/tools/cartographer/">The Cartographer</a></li><li><a href="/tools/prose/">Prose</a></li><li><a href="/tools/council-spending/">Council Spending Scanner</a></li></ul></div>
+    <div><h2>Learn</h2><ul><li><a href="/evidence/">Evidence</a></li><li><a href="/research/">Research</a></li><li><a href="/products/">All products</a></li><li><a href="/tools/">All tools</a></li></ul></div>
+    <div><h2>Company</h2><ul><li><a href="/partner/">Partner with us</a></li><li><a href="/licence/">Licence</a></li><li><a href="/ai/">For AI readers</a></li><li><a href="https://www.nuget.org/profiles/evaluatedapplications" rel="noopener">NuGet</a></li></ul></div>
+    <div><h2>Machine-readable</h2><ul><li><a href="/llms.txt">llms.txt</a></li><li><a href="/llms-full.txt">llms-full.txt</a></li><li><a href="/sitemap.xml">sitemap.xml</a></li></ul></div>
+  </div>
+  <div class="foot-base"><span>Evaluated Applications · .NET libraries · England</span><span class="mono">© 2026 Evaluated Applications</span></div>
+</div></footer>
+
+<script src="/assets/site.js?v=3190ebab" defer></script>
+
+</body>
+</html>
