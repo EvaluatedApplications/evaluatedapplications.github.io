@@ -1,0 +1,536 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>The Helix: grade the DNA helix against your own measurements, in your browser</title>
+    <meta name="description" content="Paste DNA sequences and measurements and see the helix in the numbers: a score graded in your browser, with the controls that would expose a false win shown beside it." />
+    <link rel="canonical" href="https://evaluatedapplications.github.io/tools/helix/" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Evaluated Applications" />
+    <meta property="og:title" content="The Helix: grade the DNA helix against your own measurements, in your browser" />
+    <meta property="og:description" content="Paste DNA sequences and measurements and see the helix in the numbers: a score graded in your browser, with the controls that would expose a false win shown beside it." />
+    <meta property="og:url" content="https://evaluatedapplications.github.io/tools/helix/" />
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content="The Helix: grade the DNA helix against your own measurements, in your browser" />
+    <meta name="twitter:description" content="Paste DNA sequences and measurements and see the helix in the numbers: a score graded in your browser, with the controls that would expose a false win shown beside it." />
+    <base href="/tools/" />
+    <script>
+      // THE ONE DATA SETTING. The big files (council data, the Prism checkpoint) live in the website-data repo and are served
+      // by that repo's own GitHub Pages, at /website-data/ on this same origin (so no CORS). C# reads this value at boot
+      // (Program.cs -> DataUrl). Local dev (`dotnet run`, host "localhost") reads a directory junction under wwwroot instead:
+      // run scripts/link-data.ps1 once. Any other host, including a published build served from 127.0.0.1, uses production paths.
+      window.EA_DATA_BASE = location.hostname === 'localhost' ? 'website-data/' : '/website-data/';
+      // The prebuilt Blazor runtime (_framework: the 30 MB AOT wasm, the assemblies, ICU data; everything except blazor.webassembly.*.js
+      // itself) is served from the same place, website-data/_framework, so every rebuild's new hashed files land in that repo and not in
+      // this one. Empty on localhost, where dotnet run serves its own _framework. Used by loadBootResource in the boot script below.
+      window.EA_FRAMEWORK_BASE = location.hostname === 'localhost' ? '' : window.EA_DATA_BASE + '_framework/';
+    </script>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%23f0796a'/%3E%3Cstop offset='.166' stop-color='%23f0a15a'/%3E%3Cstop offset='.333' stop-color='%23e6c450'/%3E%3Cstop offset='.5' stop-color='%237bd86a'/%3E%3Cstop offset='.666' stop-color='%234aa3ff'/%3E%3Cstop offset='.833' stop-color='%237d7dff'/%3E%3Cstop offset='1' stop-color='%23c07dff'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='32' height='32' rx='7' fill='%23050608'/%3E%3Cpath d='M16 5L27 26H5Z' fill='none' stroke='url(%23g)' stroke-width='2' stroke-linejoin='round'/%3E%3C/svg%3E" />
+    <link rel="stylesheet" href="/assets/site.css" />
+    <link rel="stylesheet" href="css/boot.css" />
+    <!-- Showroom's own scroll-tied parallax depth + spotlight glow (ports the concept from site.css's
+         "SCROLL-TIED PARALLAX DEPTH" system for Showroom's own .room/.room-head/panel page shape — see
+         the file's own header comment). Showroom-owned, never edits site.css. -->
+    <link rel="stylesheet" href="css/depth.css" />
+    <!-- The shared per-token voice (sound toggle + volume slider), rendered by HoloKernel's
+         TokenVoiceControls component — global, not per-page CSS, so Prism and Nano Stories share
+         one definition. See wwwroot/css/voice.css's own header comment. -->
+    <link rel="stylesheet" href="css/voice.css" />
+    <link href="Showroom.styles.css" rel="stylesheet" />
+    <script type="importmap">{
+  "imports": {
+    "./_framework/blazor.webassembly.js": "./_framework/blazor.webassembly.w3qd1tpl0e.js",
+    "./_framework/dotnet.native.js": "./_framework/dotnet.native.k91nx0o4x0.js",
+    "./_framework/dotnet.js": "./_framework/dotnet.oulhy92aug.js",
+    "./_framework/dotnet.runtime.js": "./_framework/dotnet.runtime.zbexyp8zrs.js"
+  },
+  "scopes": {},
+  "integrity": {
+    "./_framework/blazor.webassembly.js": "sha256-lDXsDYFgm62F+YUvxES7IOTCXYpiHpU3uR45YdC6mq4=",
+    "./_framework/blazor.webassembly.w3qd1tpl0e.js": "sha256-lDXsDYFgm62F+YUvxES7IOTCXYpiHpU3uR45YdC6mq4=",
+    "./_framework/dotnet.js": "sha256-4E4OliSVkwcsGiS4qUqmM0o2uPbe3Bb/cQS98vDac10=",
+    "./_framework/dotnet.native.js": "sha256-2FjO0xRE3/roHQTHEtAmIf8RwPc7AIJTis6KceeCa2E=",
+    "./_framework/dotnet.native.k91nx0o4x0.js": "sha256-2FjO0xRE3/roHQTHEtAmIf8RwPc7AIJTis6KceeCa2E=",
+    "./_framework/dotnet.oulhy92aug.js": "sha256-4E4OliSVkwcsGiS4qUqmM0o2uPbe3Bb/cQS98vDac10=",
+    "./_framework/dotnet.runtime.js": "sha256-MZMguyke9CroSQl+L/SHIGFkPTD+LtYGXkXjAvwWx40=",
+    "./_framework/dotnet.runtime.zbexyp8zrs.js": "sha256-MZMguyke9CroSQl+L/SHIGFkPTD+LtYGXkXjAvwWx40="
+  }
+}</script>
+    <!-- REAL WASM MULTITHREADING — REVERTED 2026-08-28 (see Showroom.csproj's own comment for the
+         real-device incident: a laptop's Continue button on /tools/prism stuck permanently disabled,
+         a phone loading the exact same deploy was fine). WasmEnableThreads is back to false, so this
+         build no longer needs SharedArrayBuffer / cross-origin isolation to boot at all — the
+         coi-serviceworker.js script tag that used to load here first is REMOVED (the vendored file
+         itself is left in wwwroot, unreferenced, in case threading is deliberately re-enabled later
+         with this exact regression fixed first). A laptop that visited on the ONE day threading was
+         live may still have that old service worker registered and active at this scope — the cleanup
+         script right below finds and unregisters any such leftover registration so a returning visitor
+         doesn't stay stuck behind stale SW-injected headers/caching from today's reverted change. -->
+    <script>
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.getRegistrations().then(function (regs) {
+          regs.forEach(function (r) { r.unregister(); });
+        }).catch(function () { /* best-effort cleanup only, never block boot on this */ });
+      }
+    </script>
+    <!-- GitHub Pages SPA: restore the deep-link path that the root 404.html encoded. Every tool has a static shell, so 404.html is only
+         reached for a path with none; it bounces the ones the app can draw (a council page such as /tools/council-spending/wokingham)
+         to /tools/app/?/<path>. /tools/app/ is THIS template's boot shell (the generated gallery owns /tools/). The path goes back
+         under /tools, whatever folder the bounce page sits in. window.__eaBounced tells the loader at the end of this file to start
+         the app at once, because the visitor asked for a page that only the running app can draw. -->
+    <script>
+      (function (l) {
+        if (l.search[1] === '/') {
+          var decoded = l.search.slice(1).split('&').map(function (s) { return s.replace(/~and~/g, '&'); }).join('?');
+          window.history.replaceState(null, null, '/tools' + decoded + l.hash);
+          window.__eaBounced = true;
+        }
+      }(window.location));
+    </script>    <meta name="blazier-scaffold" content="helix" />
+</head>
+
+<body>
+    <!-- Blazier (2026-10-08): THIS FILE IS THE TEMPLATE for every static shell. `dotnet publish` renders each [BlazierPage] component to HTML
+         and writes it into #app of a copy of this file (tools/prism/index.html and so on), so a visitor reads real content at once and the
+         Blazor runtime downloads only on intent: the start button of a tool shell (data-blazier-go), a visitor arriving from another page
+         of this site, or a path that has no shell (window.__eaBounced). The script at the end of this file does the starting.
+         The placeholder below is what an UNPUBLISHED run (dotnet run) shows; there the loader starts the app straight away. -->
+    <div id="app"><div class="beam" b-6xrfe1d2ym></div>
+
+<nav class="site-nav" b-6xrfe1d2ym><div class="wrap" b-6xrfe1d2ym><a class="brand" href="/" b-6xrfe1d2ym><svg class="mark" viewBox="0 0 32 32" aria-hidden="true" b-6xrfe1d2ym><defs b-6xrfe1d2ym><linearGradient id="m" x1="0" y1="0" x2="1" y2="1" b-6xrfe1d2ym><stop offset="0" stop-color="#f0796a" b-6xrfe1d2ym></stop><stop offset=".166" stop-color="#f0a15a" b-6xrfe1d2ym></stop><stop offset=".333" stop-color="#e6c450" b-6xrfe1d2ym></stop><stop offset=".5" stop-color="#7bd86a" b-6xrfe1d2ym></stop><stop offset=".666" stop-color="#4aa3ff" b-6xrfe1d2ym></stop><stop offset=".833" stop-color="#7d7dff" b-6xrfe1d2ym></stop><stop offset="1" stop-color="#c07dff" b-6xrfe1d2ym></stop></linearGradient></defs>
+                <path d="M16 5L27 26H5Z" fill="none" stroke="url(#m)" stroke-width="2" stroke-linejoin="round" b-6xrfe1d2ym></path></svg>
+            Evaluated Applications
+        </a>
+        <input type="checkbox" id="navtoggle" class="nav-toggle" b-6xrfe1d2ym>
+        <label for="navtoggle" class="nav-burger" aria-label="Toggle menu" b-6xrfe1d2ym><span b-6xrfe1d2ym></span><span b-6xrfe1d2ym></span><span b-6xrfe1d2ym></span></label>
+        <div class="nav-links" b-6xrfe1d2ym><a href="/" b-6xrfe1d2ym>Home</a>
+            <a href="." b-6xrfe1d2ym>Tools</a>
+            <a href="https://www.nuget.org/profiles/evaluatedapplications" target="_blank" rel="noopener" b-6xrfe1d2ym>NuGet</a></div></div></nav>
+
+<main b-6xrfe1d2ym>
+
+<div class="room hx" data-cat="neutral" b-cpdaugx7ti><header class="room-head" b-cpdaugx7ti><nav class="crumb" b-cpdaugx7ti><a href="/hologenome/" b-cpdaugx7ti>HoloGenome</a> <span b-cpdaugx7ti>/</span> The Helix</nav>
+        <h1 b-cpdaugx7ti>The Helix</h1>
+        <p class="lede" b-cpdaugx7ti>Paste DNA sequences, add a column of measurements if you have one, and see the double helix in the numbers. Every base is placed on the real twist of the helix, then a score
+            is graded against your measurements <strong b-cpdaugx7ti>in this tab</strong>, with the controls that would expose a false win shown beside it. No server, no upload.</p>
+        <div class="badges" b-cpdaugx7ti><span b-cpdaugx7ti>Runs in your tab</span><span b-cpdaugx7ti>Nothing leaves your device</span><span b-cpdaugx7ti>Controls beside every score</span><span b-cpdaugx7ti>Your own timings</span><span b-cpdaugx7ti>Research and education only</span></div></header><section class="tool-start" aria-label="Start The Helix" b-kxova46e5k><p class="tool-start-note" b-kxova46e5k>The Helix runs on your own device, inside this tab. Starting it downloads the .NET runtime that does the
+        work (about 11 MB the first time); your browser keeps it for next time.</p>
+    <div class="tool-start-actions" b-kxova46e5k><button type="button" class="btn btn-primary" data-blazier-go b-kxova46e5k>Start the Helix</button></div>
+    <div class="tool-start-boot" data-boot-slot b-kxova46e5k></div>
+    <noscript b-kxova46e5k><p class="hint" b-kxova46e5k>This tool needs JavaScript to run.</p></noscript></section><div class="outro" b-cpdaugx7ti><p b-cpdaugx7ti>This runs <a href="/hologenome/" b-cpdaugx7ti>HoloGenome</a>, which turns DNA into holograms from measured DNA physics, compiled to WebAssembly. The twist table is Olson et al. 1998; the measurements are yours.
+            The demo data is synthetic and says nothing about real DNA. This tool makes no health, disease-risk or drug-response claim.</p></div></div></main>
+
+<footer class="site" b-6xrfe1d2ym><div class="wrap" b-6xrfe1d2ym><span b-6xrfe1d2ym>Evaluated Applications — .NET libraries, England.</span>
+        <span class="mono" b-6xrfe1d2ym>© 2026 · <a href="/" b-6xrfe1d2ym>Home</a></span></div></footer></div>
+    <div id="blazor-error-ui">
+        An unhandled error has occurred.
+        <a href="." class="reload">Reload</a>
+        <span class="dismiss">🗙</span>
+    </div>
+    <script>
+      // Prism chat auto-scroll. STICKY, not unconditional: a forced scroll happens when YOU send (you always
+      // want to see your own turn land), but during Prism's streaming reply it only scrolls if you were already
+      // near the bottom. That way scrolling up to re-read earlier turns mid-reply doesn't yank you back down.
+      window.prismScrollToBottom = function (el, force) {
+        if (!el) return;
+        if (!force && el.scrollHeight - el.scrollTop - el.clientHeight > 80) return;   // user has scrolled away — leave them alone
+        el.scrollTop = el.scrollHeight;
+      };
+      // client-side file download for The Analyst's CSV export — nothing leaves the device
+      window.analystDownload = function (name, text, mime) {
+        var blob = new Blob([text], { type: mime || 'text/csv;charset=utf-8' });
+        var url = URL.createObjectURL(blob);
+        var a = document.createElement('a');
+        a.href = url; a.download = name; document.body.appendChild(a); a.click();
+        document.body.removeChild(a); setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+      };
+      // Generic clipboard copy — used by Prose's per-block "Copy" buttons (and reusable by any future
+      // tool). navigator.clipboard requires a secure context, which this app always is (GitHub Pages
+      // is https, and localhost dev is exempt) — no fallback path is built, a rejected promise just
+      // surfaces as a real, visible error in the caller, same "no silent failure" discipline as
+      // analystDownload above.
+      window.copyText = function (text) {
+        return navigator.clipboard.writeText(text);
+      };
+      // Scroll an element into view by id (Council Spending Scanner's request tray). The page's base href is
+      // /tools/, so a bare "#id" link would navigate away instead of scrolling; this does not.
+      window.scrollToId = function (id) {
+        var el = document.getElementById(id);
+        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      };
+
+      // Prism's per-token tone synth (2026-09-13, rewritten inharmonic 2026-09-14). Each generated
+      // token is rendered as a short note built DIRECTLY from that token's own phasor face: 128
+      // independent complex components, each contributing one partial with its own frequency,
+      // amplitude and starting phase. See `partials` below for the synthesis itself.
+      //
+      // WHAT THIS REPLACED, AND WHY IT MATTERS. The first version handed the face's even/odd split
+      // straight to AudioContext.createPeriodicWave(real, imag), which reads coefficient k as the
+      // k-th HARMONIC of one fundamental. That is a faithful rendering of the face AS A COEFFICIENT
+      // VECTOR, but it silently imposed the harmonic series on data that has none — and since the
+      // harmonic series is the physical basis of tonality, every note came out sounding musical and
+      // in a key. The user heard exactly that and challenged it. Measured at the time: the pitches
+      // themselves sat at CHANCE against 12-tone equal temperament (22.6 cents mean error, 25.0
+      // expected from random), which is the proof the tonality was coming from the harmonic mapping
+      // and not from the notes. The codec's own component frequencies are wildly inharmonic —
+      // Phasor's LinTheta ratios run 1.00, 24.66, 34.43, 44.70, ... where a harmonic series would
+      // run 1, 2, 3, 4 — so a harmonic rendering was the one thing guaranteed to flatter the data.
+      //
+      // THE HONEST LIMIT THAT REMAINS, and it cannot be engineered away: a phasor face has no time
+      // axis at all. Its components are phases, not frequencies. Any audification therefore has to
+      // invent the frequency axis; the choice here is to derive every partial's frequency from the
+      // face's own per-component phase (see Prism.razor's PlayTokenTone) so the invented part is a
+      // single range mapping rather than an imposed harmonic structure.
+      //
+      // OFF BY DEFAULT, opt-in only (see Prism.razor's own toggle) — this object does no work at all,
+      // not even creating an AudioContext, until unlock()/tone() is first called from a real click.
+      window.prismAudio = (function () {
+        var ctx = null, master = null, active = [], lastFreqs = null;
+        // A stereo decaying-noise impulse response: the cheapest believable small room, generated on the spot.
+        function roomImpulse(c, seconds, decay) {
+          var n = Math.max(1, Math.round(c.sampleRate * seconds)), ir = c.createBuffer(2, n, c.sampleRate);
+          for (var ch = 0; ch < 2; ch++) { var data = ir.getChannelData(ch); for (var i = 0; i < n; i++) data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / n, decay); }
+          return ir;
+        }
+        function ensureCtx() {
+          if (ctx) return ctx;
+          var AC = window.AudioContext || window.webkitAudioContext;
+          if (!AC) return null;
+          ctx = new AC();
+          master = ctx.createGain();
+          master.gain.value = 0; // real level is set by setVolume() before any tone is ever audible
+          // Output chain (2026-09-15, user: "a compressor or something to make the sound a bit nicer"): master -> soft
+          // high-cut -> compressor -> speakers, plus a short generated room reverb fed from the high-cut into the
+          // compressor. None of it moves any partial's frequency: the high-cut tames the piercing top end of 128
+          // equal-strength inharmonic partials, the compressor evens loud and quiet notes, and the reverb lets
+          // overlapping notes bloom into each other.
+          var hiCut = ctx.createBiquadFilter(); hiCut.type = 'lowpass'; hiCut.frequency.value = 3000; hiCut.Q.value = 0.5;   // 2026-09-16: 5200 -> 2600 -> 1800 -> 3000. The only step back UP today: the arcade crush below lives in the top end, and an 1800 Hz cut smooths the crunch straight back off
+          var comp = ctx.createDynamicsCompressor();
+          comp.threshold.value = -22; comp.knee.value = 18; comp.ratio.value = 4; comp.attack.value = 0.004; comp.release.value = 0.22;
+          var verb = ctx.createConvolver(); verb.buffer = roomImpulse(ctx, 1.6, 2.8);
+          var wet = ctx.createGain(); wet.gain.value = 0.10;   // 2026-09-16: 0.22 -> 0.10. An arcade cabinet was a dry speaker in a box, and a wet tail blurs the sample-and-hold steps that carry the era
+          master.connect(hiCut); hiCut.connect(comp); hiCut.connect(verb); verb.connect(wet); wet.connect(comp); comp.connect(ctx.destination);
+          return ctx;
+        }
+        return {
+          // Call this from the mute/unmute toggle's OWN click handler — that click IS the user
+          // gesture browsers require before audio can play; creating/resuming the context anywhere
+          // else (e.g. quietly on page load from a persisted "sound was on last time" preference)
+          // would just start it suspended and go on being silent regardless.
+          unlock: function () {
+            var c = ensureCtx();
+            if (c && c.state === 'suspended') { c.resume().catch(function () {}); }
+          },
+          // v is 0..1 from the UI slider — the caller (Prism.razor) has already multiplied it through
+          // its own low ceiling before this ever arrives, so this sets the raw value as given.
+          setVolume: function (v) {
+            ensureCtx();
+            if (master) master.gain.value = Math.max(0, Math.min(1, v));
+          },
+          // partials: three parallel plain number arrays (marshalled from C# double[]) — freqs[k] in Hz,
+          // amps[k] linear, phases[k] in radians — one entry per phasor-face component. ms: total note
+          // length including release. gain: local peak BEFORE the master volume bus.
+          //
+          // REPLACED createPeriodicWave-based tone() on 2026-09-14 (user: "still sounds musical").
+          // createPeriodicWave can only place partial k at k x the fundamental, i.e. it forces a HARMONIC
+          // series — and the harmonic series is the physical basis of tonality, so that one API choice, not
+          // the pitch, was what made every note sound musical. A phasor face has no harmonic structure: its
+          // components are 128 independent phases. Additive synthesis into a rendered buffer is the only way
+          // to place partials at arbitrary, INHARMONIC frequencies, so the sound follows the face instead of
+          // the face being flattened onto a scale it never had. Rendered as ONE AudioBuffer rather than 128
+          // oscillators per note: 128 oscillator nodes x overlapping notes is what would actually break a
+          // phone, a few hundred thousand Math.sin calls is not.
+          partials: function (freqs, amps, phases, ms, gain) {
+            var c = ctx; // never call ensureCtx() here — a muted/never-unlocked player does zero work
+            if (!c || !master || master.gain.value <= 0 || !freqs || !amps || !phases) return;
+            try {
+              var n = Math.min(freqs.length, amps.length, phases.length);
+              if (n < 1) return;
+              var sr = c.sampleRate, nyq = sr / 2;
+              var dur = Math.max(0.03, (ms || 110) / 1000);
+              var len = Math.max(1, Math.round(sr * dur));
+              var glideLen = Math.min(len, Math.round(sr * 0.045));   // 45ms slide from the previous note, see GLIDE below
+              var buf = c.createBuffer(1, len, sr);
+              var d = buf.getChannelData(0);
+              var peakAbs = 0;
+              for (var k = 0; k < n; k++) {
+                var f = freqs[k];
+                if (!(f > 0) || f >= nyq) continue;   // above Nyquist would alias down as a phantom partial
+                var a = amps[k];
+                if (!(a > 0)) continue;
+                // Two-term sinusoid recurrence, s[n] = 2cos(w)s[n-1] - s[n-2], seeded so s[0] is exactly
+                // sin(ph): one multiply and one subtract per sample instead of a Math.sin call. With 128
+                // partials x ~5,300 samples that is ~675,000 sin calls per note otherwise, on the same main
+                // thread that is driving generation — enough to visibly stutter the per-token cadence the
+                // whole page's feel depends on. Double-precision drift over a buffer this short is
+                // inaudible; it would only matter for a note orders of magnitude longer.
+                // GLIDE (2026-09-15, user: "something that tweens the notes between each token"): the first glideLen
+                // samples slide this component from the SAME component's frequency in the previous token's note (same
+                // face component, so the pairing means something) into its own, on an eased curve with a phase
+                // accumulator; the cheap recurrence then takes over, seeded from the phase the glide ended on, so the
+                // hand-off has no click. No previous note (first token, or after stopAll) means no glide.
+                var ph = phases[k], start = 0;
+                var fPrev = (lastFreqs && k < lastFreqs.length && lastFreqs[k] > 0 && lastFreqs[k] < nyq) ? lastFreqs[k] : f;
+                if (fPrev !== f && glideLen > 0) {
+                  for (; start < glideLen; start++) {
+                    var u = start / glideLen, e = u * u * (3 - 2 * u);
+                    d[start] += a * Math.sin(ph);
+                    ph += 2 * Math.PI * (fPrev + (f - fPrev) * e) / sr;
+                  }
+                }
+                var w = 2 * Math.PI * f / sr;
+                var k1 = 2 * Math.cos(w), y1 = Math.sin(ph - w), y2 = Math.sin(ph - 2 * w);
+                for (var s = start; s < len; s++) { var y = k1 * y1 - y2; d[s] += a * y; y2 = y1; y1 = y; }
+              }
+              lastFreqs = Array.prototype.slice.call(freqs);   // the next note glides from these
+              for (var s2 = 0; s2 < len; s2++) { var v = d[s2] < 0 ? -d[s2] : d[s2]; if (v > peakAbs) peakAbs = v; }
+              // Level normalisation only — divides every sample by one constant, so it cannot change the
+              // spectrum or the relative weight of any partial. Without it 128 summed partials clip hard.
+              if (peakAbs > 0) { var inv = 1 / peakAbs; for (var s3 = 0; s3 < len; s3++) d[s3] *= inv; }
+
+              // ARCADE CRUSH (2026-09-16, user: "Deeper, like 80s arcade robot"). Two artefacts, in the order the hardware
+              // imposed them: SAMPLE-AND-HOLD down to ~8 kHz (a Votrax SC-01 / TMS5220 speech chip ran a low clock, and the
+              // steps alias into a metallic ladder of extra partials) then QUANTISE to 6 bits (32 levels -- those chips had
+              // nothing like 16-bit headroom, and the error floor is the grit under the voice). Doing it AFTER the peak
+              // normalisation above is what makes the bit depth mean anything: the 32 levels get spanned, not crowded into
+              // a corner. This is amplitude quantisation, NOT pitch quantisation -- no partial is moved onto a scale; the
+              // standing "authentic sound, never snapped to a key" rule is untouched, every frequency is still the face's.
+              var hold = Math.max(1, Math.round(sr / 8000));
+              var half = 16;   // 6-bit: 32 levels across -1..1
+              for (var s4 = 0; s4 < len; s4 += hold) {
+                var q = Math.round(d[s4] * half) / half;
+                if (q > 1) q = 1; else if (q < -1) q = -1;
+                for (var j = s4; j < s4 + hold && j < len; j++) d[j] = q;
+              }
+
+              var src = c.createBufferSource();
+              src.buffer = buf;
+              var g = c.createGain();
+              var now = c.currentTime;
+              var peak = Math.max(0, gain == null ? 1 : gain);
+              // GATED EDGES (2026-09-16, user: "Deeper, like a robot"). Was a soft 25ms/160ms cross-fade, which is what a bowed
+              // or breathed note does; a machine voice switches on and off instead. 4ms/45ms is abrupt enough to read as
+              // switched rather than played, while still long enough to stay clear of the hard click an instant edge causes.
+              // The 45ms pitch GLIDE above is untouched, so notes still slide into each other -- the step is in the level, not
+              // the frequency, which is exactly the vocoder-ish combination (steady sliding tone, gated articulation).
+              var attack = Math.min(0.004, dur * 0.15);
+              var release = Math.min(0.045, dur * 0.5);
+              g.gain.setValueAtTime(0, now);
+              g.gain.linearRampToValueAtTime(peak, now + attack);
+              g.gain.setValueAtTime(peak, Math.max(now + attack, now + dur - release));
+              g.gain.linearRampToValueAtTime(0, now + dur);
+              src.connect(g); g.connect(master);
+              src.start(now);
+              src.stop(now + dur + 0.02);
+              var entry = { osc: src, gain: g };
+              active.push(entry);
+              src.onended = function () {
+                try { src.disconnect(); g.disconnect(); } catch (e) { }
+                var idx = active.indexOf(entry);
+                if (idx >= 0) active.splice(idx, 1);
+              };
+            } catch (e) { /* never let a synth glitch break generation */ }
+          },
+          // Hard-stops every currently-sounding note immediately, without touching master volume (so
+          // returning to the page — or re-enabling sound — doesn't need the slider re-set). Called on
+          // component teardown (navigating away from /prism) — see Prism.razor's Dispose().
+          stopAll: function () {
+            active.forEach(function (e) {
+              try { e.gain.gain.cancelScheduledValues(0); e.gain.gain.value = 0; e.osc.stop(0); } catch (err) { }
+            });
+            active = []; lastFreqs = null;
+          },
+          // Tiny localStorage wrappers, both fail-soft (private-mode/disabled storage throws) — a
+          // visitor who muted this once should not have to mute it again every visit, but losing that
+          // preference silently is fine; failing the page over it is not.
+          getPref: function (key, def) {
+            try { var v = window.localStorage.getItem(key); return v === null ? def : v; } catch (e) { return def; }
+          },
+          setPref: function (key, val) {
+            try { window.localStorage.setItem(key, val); } catch (e) { }
+          }
+        };
+      })();
+    </script>
+    <!-- Blazier's loader. It does nothing until the script below (or a [data-blazier-island] element) asks it to start Blazor.
+         data-blazor-script names the fingerprinted blazor.webassembly.js, which is fetched only when the app starts. -->
+    <script src="_content/EvaluatedApplications.Blazier/blazier.js" data-blazor-script="_framework/blazor.webassembly.w3qd1tpl0e.js"></script>
+    <script>
+      // ---- Starting the app (Blazier) ---------------------------------------------------------------------------------------------
+      // INTENT, in the order the code checks it:
+      //   1. an unpublished run (no blazier-scaffold meta: dotnet run) or a bounced deep link (window.__eaBounced): start at once;
+      //   2. a visitor who followed a link from another page of this site (document.referrer on this origin) to a tool shell has
+      //      just chosen that tool: start at once. Set AUTO_START_FROM_SITE to false to ask for the button press instead;
+      //   3. anyone else (search result, pasted link, a bookmark) reads the shell and presses the start button.
+      // Scrolling, tapping text and following links never start it, so a reader pays for the HTML and CSS only.
+      // The first start goes through Blazier.mount('#app', 'app'): the routed App is mounted over the shell and takes the current URL,
+      // so from then on it is the same single-page app as before (client-side navigation, one shared SessionHost). A hard navigation
+      // (typed URL, reload, a link followed before the app has started) is a new page load: another shell, a fresh runtime, no models.
+      var AUTO_START_FROM_SITE = true;
+
+      (function () {
+        var B = window.Blazier;
+        var started = false;
+        function el(id) { return document.getElementById(id); }
+
+        // The boot terminal. Every line is an actual resource this page is fetching (loadBootResource below), and the bar and the
+        // percentage are the framework's own cumulative-bytes figure (--blazor-load-percentage[-text], set while it downloads).
+        function panelHtml() {
+          return '<div class="boot-crt ck-boot">' +
+            '<div class="boot-head"><span class="boot-dot" aria-hidden="true"></span>EVALUATED APPLICATIONS <span class="boot-sep">/</span> CLIENT-SIDE RUNTIME</div>' +
+            '<div class="boot-sub">no server round-trip from here on \u2014 everything below runs in this browser tab.</div>' +
+            '<pre class="boot-log" id="boot-log" aria-live="polite"></pre>' +
+            '<div class="boot-bar" id="boot-bar"><div class="boot-bar-fill"></div></div>' +
+            '<div class="boot-pct"></div>' +
+            '<div class="boot-phase" id="boot-phase" aria-live="polite"></div>' +
+            // data-blazier-error: Blazier unhides this block itself when the mount fails
+            '<div class="boot-fallback" id="boot-fallback" data-blazier-error hidden aria-live="polite">' +
+              '<p class="boot-fallback-title">Can\u2019t start here</p>' +
+              '<p class="boot-fallback-body" id="boot-fallback-reason">This browser couldn\u2019t start the runtime this tool needs.</p>' +
+              '<p class="boot-fallback-body">Try reloading, or copy the link below and open it in a different browser (Chrome, Safari, or Edge).</p>' +
+              '<div class="boot-fallback-actions">' +
+                '<button type="button" class="btn btn-primary" id="boot-fallback-retry">Retry</button>' +
+                '<button type="button" class="btn btn-ghost" id="boot-fallback-copy">Copy link</button>' +
+              '</div>' +
+              '<p class="boot-fallback-copied" id="boot-fallback-copied" hidden></p>' +
+            '</div>' +
+          '</div>';
+        }
+
+        window.__bootLine = function (cls, text) {
+          var log = el('boot-log');
+          if (!log) return;
+          var s = document.createElement('span');
+          s.className = cls ? 'l ' + cls : 'l';
+          var p = document.createElement('span'); p.className = 'p'; p.textContent = '>';
+          s.appendChild(p);
+          s.appendChild(document.createTextNode(' ' + text));
+          log.appendChild(s);
+          if (log.childNodes.length > 80) log.removeChild(log.firstChild);
+          log.scrollTop = log.scrollHeight;
+        };
+
+        // __bootPhase: separate from the percentage (real bytes can sit near 100% while the browser still compiles the big native
+        // module). Only the WebAssembly.compile observer below calls it with busy=true.
+        window.__bootPhase = function (busy, text) {
+          var ph = el('boot-phase'), bar = el('boot-bar');
+          if (ph) { ph.textContent = text || ''; ph.className = 'boot-phase' + (busy ? ' compiling' : ''); }
+          if (bar) bar.classList.toggle('busy', !!busy);
+        };
+
+        // The one boot phase with no fetch to hang a line on: after dotnet.native.wasm downloads the browser still COMPILES it, real
+        // CPU work that can take seconds on a phone. dotnet.js calls WebAssembly.compileStreaming (falling back to .compile) once per
+        // boot and nothing else does, so wrapping exactly those two narrates it. Calls straight through, no added latency; restores itself.
+        (function () {
+          if (typeof WebAssembly === 'undefined') return;
+          var announced = false;
+          function wrap(name) {
+            var real = WebAssembly[name];
+            if (typeof real !== 'function') return;
+            WebAssembly[name] = function () {
+              WebAssembly[name] = real;
+              if (!announced) {
+                announced = true;
+                __bootLine('core', 'compiling WebAssembly module (native code \u2014 real CPU work, can take a few seconds on a phone)\u2026');
+                __bootPhase(true, 'still working \u2014 compiling WebAssembly module\u2026');
+              }
+              var t0 = performance.now();
+              var result = real.apply(WebAssembly, arguments);
+              var finish = function (r) {
+                __bootLine('core', 'WebAssembly module compiled (' + Math.round(performance.now() - t0) + 'ms)');
+                __bootPhase(false, '');
+                return r;
+              };
+              return result.then(finish, function (e) { finish(); throw e; });
+            };
+          }
+          wrap('compileStreaming');
+          wrap('compile');
+        })();
+
+        function showFallback(reason) {
+          __bootPhase(false, '');
+          __bootLine('warn', 'stopped: ' + reason);
+          var wrap = el('boot-fallback'), r = el('boot-fallback-reason');
+          if (r) r.textContent = reason;
+          if (wrap) wrap.hidden = false;
+        }
+
+        function showPanel() {
+          var slot = document.querySelector('[data-boot-slot]');
+          if (slot) {
+            var actions = document.querySelector('.tool-start-actions');
+            if (actions) actions.hidden = true;
+            slot.innerHTML = panelHtml();
+          } else {
+            el('app').innerHTML = '<div class="boot">' + panelHtml() + '</div>';   // no start panel on this page (gallery, bounced link, dev run)
+          }
+          var retry = el('boot-fallback-retry');
+          if (retry) retry.addEventListener('click', function () { window.location.reload(); });
+          var copy = el('boot-fallback-copy');
+          if (copy) copy.addEventListener('click', function () {
+            var copied = el('boot-fallback-copied');
+            function report(ok) {
+              if (!copied) return;
+              copied.hidden = false;
+              copied.textContent = ok ? 'Link copied.' : 'Could not copy automatically \u2014 copy the address bar link manually.';
+            }
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+              navigator.clipboard.writeText(window.location.href).then(function () { report(true); }, function () { report(false); });
+            } else {
+              report(false);
+            }
+          });
+          __bootLine('', 'target ' + (window.location.pathname || '/'));
+        }
+
+        function start() {
+          if (started) return;
+          started = true;
+          showPanel();
+          __bootLine('', 'requesting WebAssembly runtime + compiled binaries\u2026');
+          B.mount('#app', 'app').then(function () { __bootPhase(false, ''); }, function () { /* shown by the blazier:error listener below */ });
+        }
+
+        // Blazier's own loadBootResource hook: observe every runtime file and send it to website-data/_framework (EA_FRAMEWORK_BASE).
+        // `name` is already the fingerprinted file name, except the first call, "dotnet.js", which Blazor resolves through the import map
+        // (read the same map here). Anything else, and every file on localhost, is left to Blazor's own default (the file next to this page).
+        B.configure({
+          loadBootResource: function (type, name) {
+            var label =
+              type === 'dotnetwasm' ? ['core', 'runtime ' + name] :
+              type === 'dotnetjs' ? ['core', 'loader ' + name] :
+              type === 'globalization' ? ['', 'locale data ' + name] :
+              type === 'assembly' ? ['', 'assembly ' + name] : null;
+            if (label) __bootLine(label[0], label[1]);
+            var fw = window.EA_FRAMEWORK_BASE;
+            if (fw && label) {
+              var file = name;
+              if (name === 'dotnet.js') {
+                var mapped = JSON.parse(document.querySelector('script[type="importmap"]').textContent).imports['./_framework/dotnet.js'];
+                if (mapped) file = mapped.substring(mapped.lastIndexOf('/') + 1);
+              }
+              return fw + file;
+            }
+            return undefined;
+          }
+        });
+        document.addEventListener('blazier:error', function (e) {
+          showFallback('the runtime failed to start (' + ((e.detail && e.detail.message) || 'unknown error') + ').');
+        });
+
+        document.addEventListener('click', function (e) {
+          if (e.target && e.target.closest && e.target.closest('[data-blazier-go]')) start();
+        });
+
+        var scaffolded = !!document.querySelector('meta[name=blazier-scaffold]');
+        var hasStartPanel = !!document.querySelector('[data-blazier-go]');
+        var fromSite = false;
+        try { fromSite = !!document.referrer && new URL(document.referrer).origin === location.origin; } catch (err) { }
+        if (!scaffolded || window.__eaBounced || (AUTO_START_FROM_SITE && hasStartPanel && fromSite)) start();
+      })();
+    </script></body>
+
+</html>
