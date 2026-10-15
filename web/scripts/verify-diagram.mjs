@@ -371,13 +371,39 @@ try {
   await rd('nobody-read-the-warning', 'design-effect');
   await b.evaluate(setRange('[data-diagram=design-effect] [data-ctl=rho]', 1000));
   ok('research nobody-read: full correlation leaves about one independent judgement', await b.evaluate(RO('design-effect')).then((t) => /about 1\.00 independent judgements/.test(t)));
-  for (const s of ['context-four', 'context-eight', 'back-to-front', 'smaller-than-tinystories', 'nobody-read-the-warning']) {
+  // ---- the Pleroma article: the operation grid ----
+  const PG = "[data-diagram=pleroma-grid]", pgu = `/research/forty-five-reads-one-store/`;
+  await b.goto(`${base}${pgu}`, { width: 1280, height: 900, wait: `document.querySelector('${PG}').dataset.ready==='true'` });
+  ok('pleroma article: the grid mounts without console errors', b.errors.length === 0, JSON.stringify(b.errors));
+  ok('pleroma article: 24 cells and the lid are buttons, each named with its kind', await b.evaluate(`(()=>{const c=[...document.querySelectorAll('${PG} button.pg-cell')];return c.length===25&&c.every(x=>/Checked\\.|Read-time\\./.test(x.getAttribute('aria-label')))&&document.querySelectorAll('${PG} .pg-cell.k-ok').length===24&&document.querySelectorAll('${PG} .pg-cell.k-warn').length===1})()`));
+  await b.evaluate(`document.querySelector('${PG} [data-id=R3_Ouroboros]').click()`);
+  ok('pleroma article: selecting a cell shows its API, kind and evidence from the record', await b.evaluate(`(()=>{const t=document.querySelector('${PG} [data-ctl=panel]').textContent;return /Parity: odd-occurrence XOR/.test(t)&&/FlagParity/.test(t)&&/Checked/.test(t)&&/256 parity classes/.test(t)})()`));
+  await b.evaluate(`document.querySelector('${PG} [data-id=R3_Ouroboros]').focus()`);
+  await b.key('ArrowLeft', 'ArrowLeft', 37);
+  ok('pleroma article: the left arrow moves focus to the Monad cell of the same rung', await b.evaluate("document.activeElement.dataset.id==='R3_Monad'"));
+  await b.key('ArrowUp', 'ArrowUp', 38);
+  ok('pleroma article: the up arrow moves one rung up', await b.evaluate("document.activeElement.dataset.id==='R4_Monad'"));
+  await b.key('Home', 'Home', 36);
+  ok('pleroma article: Home goes to the lid', await b.evaluate("document.activeElement.dataset.id==='Lid_Sample'"));
+  ok('pleroma article: the table alternative lists all 25 cells', await b.evaluate(`document.querySelectorAll('${PG} .dia-data tbody tr').length===25`));
+  ok('pleroma article: the three tiles, the words strip and the closed Go deeper blocks are present', await b.evaluate("document.querySelectorAll('.rtiles .stat').length===3&&document.querySelectorAll('.words-list dt').length===6&&document.querySelectorAll('details.deeper').length===7&&[...document.querySelectorAll('details.deeper')].every(d=>!d.open)"));
+  await b.goto(`${base}${pgu}`, { width: 1280, height: 900, wait: `document.querySelector('${PG}').dataset.ready==='true'` });
+  await b.evaluate("location.hash='#the-gaps-grouped'");
+  await new Promise((r) => setTimeout(r, 300));
+  ok('pleroma article: a link to a Go deeper block opens it', await b.evaluate("document.getElementById('the-gaps-grouped').open===true"));
+  await b.goto(`${base}${pgu}`, { width: 1280, height: 900, reducedMotion: true, wait: `document.querySelector('${PG}').dataset.ready==='true'` });
+  ok('pleroma article: reduced motion, still mounts and animates nothing', await b.evaluate(`getComputedStyle(document.querySelector('${PG} .pg-cell')).transitionDuration==='0s'`));
+  await b.goto(`${base}${pgu}`, { width: 390, height: 844, mobile: true, wait: `document.querySelector('${PG}').dataset.ready==='true'` });
+  ok('pleroma article phone 390: the grid has three columns that fit the screen', await b.evaluate(`(()=>{const g=document.querySelector('${PG} .pg').getBoundingClientRect();const c=[...document.querySelectorAll('${PG} .pg-cell:not(.lid)')].slice(0,3).map(x=>x.getBoundingClientRect());return g.right<=window.innerWidth+1&&c[0].top===c[2].top&&c[0].width>80})()`));
+  ok('pleroma article phone 390: cells are at least 40px tall', await b.evaluate(`[...document.querySelectorAll('${PG} .pg-cell')].every(x=>x.getBoundingClientRect().height>=40)`));
+  ok('pleroma article phone 390: no console errors', b.errors.length === 0, JSON.stringify(b.errors));
+  for (const s of ['context-four', 'context-eight', 'back-to-front', 'smaller-than-tinystories', 'nobody-read-the-warning', 'forty-five-reads-one-store']) {
     ow = await overflow(`/research/${s}/`);
     ok(`research/${s} phone 390: no horizontal overflow`, ow.sw <= ow.cw, JSON.stringify(ow));
   }
   await b.goto(`${base}/research/`, { width: 1280, height: 900 });
   await b.evaluate("document.querySelector('[data-filter] [data-topic=layers]').click()");
-  ok('research hub: the topic filter hides articles that do not match', await b.evaluate("[...document.querySelectorAll('.research-cards .card')].filter(c=>!c.hidden).length===1 && /1 of 5 articles about layers/.test(document.querySelector('[data-filter-count]').textContent)"));
+  ok('research hub: the topic filter hides articles that do not match', await b.evaluate("[...document.querySelectorAll('.research-cards .card')].filter(c=>!c.hidden).length===1 && /1 of 6 articles about layers/.test(document.querySelector('[data-filter-count]').textContent)"));
 
   // ================= Blazier: the boot bars =================
   const BB = "document.querySelector('[data-diagram=blazier-boot]').dataset.ready==='true'";

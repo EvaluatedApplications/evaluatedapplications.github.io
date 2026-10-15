@@ -1,8 +1,13 @@
 // Turns the numbers in a research article's own tables into the data its diagram draws. Nothing is typed here:
 // every value is parsed from sections[].tables, or taken from the article's `diagram` block, which restates numbers from its prose.
-export function deriveDiagram(r) {
+export function deriveDiagram(r, ctx) {
   const d = r.diagram;
   if (!d) return null;
+  // the operation grid is the Phasor map record itself (data/diagrams/pleroma-map.json), shown as a grid instead of the pyramid
+  if (d.kind === 'pleroma-grid') {
+    if (!ctx || !ctx.diagrams['pleroma-map']) throw new Error(`research ${r.id}: pleroma-grid needs the pleroma-map diagram data`);
+    return { ...ctx.diagrams['pleroma-map'], kind: 'pleroma-grid', article: r.id };
+  }
   const tbl = (id) => {
     const t = r.sections.flatMap((s) => s.tables || []).find((x) => x.id === id);
     if (!t) throw new Error(`research ${r.id}: diagram needs table "${id}"`);

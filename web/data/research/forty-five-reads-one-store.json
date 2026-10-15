@@ -1,0 +1,579 @@
+{
+  "id": "forty-five-reads-one-store",
+  "title": "Forty-five reads, one store",
+  "headline": "Forty-five reads, one store.",
+  "sub": "One fixed-size array of exact integers. Counts, order, parity, time and nearest words, each in a single pass. When it is full, it refuses instead of guessing.",
+  "summary": "One fixed-size array of exact integers. Counts, order, parity, time and nearest words, each in a single pass. When it is full, it refuses instead of guessing.",
+  "description": "One fixed-size array of exact integers answers forty-five different questions, each in a single pass, and refuses instead of guessing when it is full.",
+  "topics": [
+    "exact stores",
+    "Pleroma"
+  ],
+  "order": 0,
+  "status": "migrated",
+  "voice": "owner-authored",
+  "finding": "**Forty-five reads, one store.** One fixed-size array of exact integers answers forty-five different questions, each in a single pass over the array. The one exception is `CausalReads`, which takes one read per prefix. Counts by key. Counts by flag word. The nearest stored words. Arrangement order. Parity. Time. Joint counts across any chosen faces. Every count it returns is exact, and when the store is full it refuses rather than guessing.",
+  "stats": [
+    {
+      "value": "64",
+      "label": "items exact, against 4 for the best HRR decoder (200 of 200 trials)",
+      "small": "At 2,064 and 2,580 bits, the two budgets the benchmark ran, the Pleroma recovered 64 items exactly, in 200 of 200 trials. Plate's holographic memory (HRR), and its phase form (FHRR), with the best decoder tried, recovered 4 items reliably and none from 16 upward."
+    },
+    {
+      "value": "0",
+      "label": "wrong answers in 12,800 trials past capacity",
+      "small": "Past the Pleroma's capacity, 65 to 96 items, it refused all 12,800 trials and gave no wrong answer. The baselines answered every time, and every answer was wrong."
+    },
+    {
+      "value": "0.17 to 0.44 ms",
+      "label": "per kernel apply on a 10,464-cell store",
+      "small": "On a 10,464-cell store, `Apply` takes 0.17 to 0.44 ms per call, for a kernel of anything from 1 operator up to 10,368, with no trend across that range. Building the same store from the moved items takes 1,916 ms at 1,000 operators. The figures are a Release build on a loaded machine, two runs."
+    }
+  ],
+  "words": [
+    {
+      "term": "Flag word",
+      "text": "a short string of bits stored with each item, one bit per flag."
+    },
+    {
+      "term": "Kernel",
+      "text": "a weighted mix of operations, applied to the whole store in one pass."
+    },
+    {
+      "term": "Rung",
+      "text": "one step up the ladder of symmetry. There are eight."
+    },
+    {
+      "term": "Face",
+      "text": "one of three ways a whole can balance: counts, choices, or parities."
+    },
+    {
+      "term": "Cell",
+      "text": "one operation in the grid of eight rungs by three faces."
+    },
+    {
+      "term": "Lid",
+      "text": "the top row of the grid, the one read that makes a random draw."
+    }
+  ],
+  "related": [],
+  "references": [],
+  "sections": [
+    {
+      "id": "in-brief",
+      "title": "In brief",
+      "untitled": true,
+      "blocks": [
+        {
+          "t": "p",
+          "text": "The Pleroma is a new construction and a mathematical discovery. Its proof is the code."
+        },
+        {
+          "t": "p",
+          "text": "The numbers were measured against the standard. At 2,064 and 2,580 bits, the two budgets the benchmark ran, the Pleroma recovered 64 items exactly, in 200 of 200 trials. Plate's holographic memory (HRR), and its phase form (FHRR), with the best decoder tried, recovered 4 items reliably and none from 16 upward. Past the Pleroma's capacity, 65 to 96 items, it refused all 12,800 trials and gave no wrong answer. The baselines answered every time, and every answer was wrong."
+        }
+      ]
+    },
+    {
+      "id": "how-it-was-found",
+      "title": "How it was found",
+      "blocks": [
+        {
+          "t": "p",
+          "text": "The project starts where its philosophy and ethics start, and reduces to the fewest axioms that reasoning needs. In its own words:"
+        },
+        {
+          "t": "quote",
+          "text": "It is how we start from philosophy and ethics to figure out the most minimal set of axioms for reasoning, and build up from that on first principles."
+        },
+        {
+          "t": "p",
+          "text": "Three of its statements carry the reduction: \"Consciousness exists.\" (T1), \"Non-contradiction is necessary for coherent reasoning.\" (T2), and \"Claims about reality are more reliable when tested against reality.\" (T9)."
+        },
+        {
+          "t": "p",
+          "text": "Two axioms follow: there is an observer, and a resolved state does not contain both P and not-P. From them comes the first distinction. Whatever appears from the void comes with its opposite, so 0 = (+1) + (−1). The project calls this pair the syzygy."
+        },
+        {
+          "t": "p",
+          "text": "Once the syzygy is in hand, its symmetries can be counted. They are the signed permutations of the cross-polytope, and they split exactly into two parts: sign flips, each its own inverse, and permutations. The flips form the ouroboros, and the permutations form the monad."
+        },
+        {
+          "t": "p",
+          "text": "The project's rule for climbing from here: \"A tick therefore adds one symmetry, and climbing the ladder is mapping the lineage of symmetries in order.\""
+        },
+        {
+          "t": "p",
+          "text": "The thesis came next. The project states it as: \"The Pleroma ... is the one object all their holograms are shadows of.\" A shadow is what the larger object shows when it is read on some of its faces and not others."
+        },
+        {
+          "t": "p",
+          "text": "Searching for that object gave a map: the ladder laid out as rungs, each read across three faces. The map is predictive. It says what each cell should be, and each cell was then built and proved."
+        },
+        {
+          "t": "table",
+          "caption": "The ladder: eight rungs, each read across three faces",
+          "columns": [
+            "Rung",
+            "Counts (syzygy)",
+            "Choices (monad)",
+            "Parities (ouroboros)"
+          ],
+          "rows": [
+            [
+              "1 Pair",
+              "±1",
+              "one of two",
+              "the toggle"
+            ],
+            [
+              "2 Identity",
+              "a position",
+              "a corner",
+              "a truth assignment"
+            ],
+            [
+              "3 Relation",
+              "counts",
+              "order",
+              "parity"
+            ],
+            [
+              "4 Function",
+              "table, Fourier",
+              "a map",
+              "Boolean function, Walsh"
+            ],
+            [
+              "5 Symmetry",
+              "h → u·h",
+              "conjugation",
+              "Frobenius"
+            ],
+            [
+              "6 Composition",
+              "Chinese remainder",
+              "independent choices",
+              "Hamming codes"
+            ],
+            [
+              "7 Turning",
+              "the spiral",
+              "mixing",
+              "shift-register cycles"
+            ],
+            [
+              "8 Circulation",
+              "winding",
+              "probability current",
+              "frustration"
+            ]
+          ]
+        },
+        {
+          "t": "p",
+          "text": "The method is the same for every cell. The prediction and its null are written first. The operation is built as a public member of the store. Its answer is checked against a brute-force rebuild, and the test is broken on purpose to confirm it fails for the right reason. For rung 3, ten symbols bound as four-symbol sequences give 715 distinct multisets, 10,000 distinct orders, and 256 parity classes, each checked against the rebuilt store."
+        }
+      ]
+    },
+    {
+      "id": "the-rungs-said-which-operations-superpose",
+      "title": "The rungs said which operations superpose",
+      "blocks": [
+        {
+          "t": "p",
+          "text": "The derivation's operator rule: a symmetry is a group element, and a weighted sum of group elements is one kernel. It acts on each harmonic with one multiplication, so its cost is one pass whatever the size of the sum. The same rule says choosing is not linear, so the one choice is made at the read."
+        },
+        {
+          "t": "p",
+          "text": "The code was measured against that rule across the public surface. Seven of the 36 operators that change the store join one kernel and apply in one pass. Fourteen take one pass per term in a mix. Fifteen are writes that are not kernel elements. The 45 reads are separate, each one pass."
+        },
+        {
+          "t": "p",
+          "text": "On a 10,464-cell store, `Apply` takes 0.17 to 0.44 ms per call, for a kernel of anything from 1 operator up to 10,368, with no trend across that range. Building the same store from the moved items takes 1,916 ms at 1,000 operators. The figures are a Release build on a loaded machine, two runs."
+        }
+      ]
+    },
+    {
+      "id": "twenty-four-cells-each-an-operation",
+      "title": "Twenty-four cells, each an operation",
+      "blocks": [
+        {
+          "t": "p",
+          "text": "Every cell is a public member of `Pleroma`. The grid covers eight rungs by three faces, and the lid. Each cell has its own brute-force check."
+        },
+        {
+          "t": "table",
+          "caption": "The 24 cells: the public member for each rung and face, and the lid",
+          "columns": [
+            "Rung",
+            "Counts (syzygy)",
+            "Choices (monad)",
+            "Parities (ouroboros)"
+          ],
+          "rows": [
+            [
+              "1 Pair",
+              "`Add`, `Remove`",
+              "`SignBalance`",
+              "`RelabelFlags` (XOR mask)"
+            ],
+            [
+              "2 Identity",
+              "`TryKeys`, `TryItems`, `Counts`",
+              "`Arrangements`, `ArrangementIndex`",
+              "`Flags`, `Near`, `Nearest`"
+            ],
+            [
+              "3 Relation",
+              "`Bind`, `JointCounts`, `Attend`",
+              "`ComposeArrangements`, `Attend`",
+              "`BitCounts`, `FlagParity`, `Attend`"
+            ],
+            [
+              "4 Function",
+              "`ShiftKeys`, `ModulateKeys`",
+              "`TimeMap`, `MapTimes`",
+              "`CountWhere` (Walsh spectrum)"
+            ],
+            [
+              "5 Symmetry",
+              "`ScaleKeys`",
+              "`RelabelArrangements`",
+              "`Frobenius`, `Apply(FlagOperator)`"
+            ],
+            [
+              "6 Composition",
+              "`CombineCycles`",
+              "`IsIndependent`",
+              "`Syndrome`"
+            ],
+            [
+              "7 Turning",
+              "`Tick`, `FadedTimes`",
+              "`Diffuse`",
+              "`ShiftRegister`"
+            ],
+            [
+              "8 Circulation",
+              "`Holonomy`, `ReadLoop`",
+              "`Current`",
+              "`Frustration`"
+            ],
+            [
+              "Lid",
+              "`Sample`, a read-time draw over all three faces",
+              "",
+              ""
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "protection-and-size",
+      "title": "Protection and size",
+      "blocks": [
+        {
+          "t": "p",
+          "text": "Each face protects its own store in its own way."
+        },
+        {
+          "t": "ul",
+          "items": [
+            "**Counts:** a page on a larger cycle, with r keys known to be empty, rebuilds any r lost harmonics exactly: 300 of 300 at each erasure size from 1 to 5. It detects corrupted harmonics and corrects up to half that many at unknown positions.",
+            "**Choices:** a second prime holds a mirror of every cell. One corrupted cell in either copy is detected, 10,000 of 10,000.",
+            "**Parities:** a parity page, the sum of the pages, rebuilds any one lost page, 100 of 100."
+          ]
+        },
+        {
+          "t": "p",
+          "text": "The unit workload is 53,031 pages of 110 cells each, and it fits in 49.6 MB. A plane of 14 flag bits and 16,386 cells stores at 8.02 bytes per cell. A sparse page holding one key takes 183 bytes and reads in 0.4 µs."
+        }
+      ]
+    },
+    {
+      "id": "built-on",
+      "title": "Built on",
+      "blocks": [
+        {
+          "t": "p",
+          "text": "The Pleroma is a new construction. Each brick it stands on is established mathematics or an established algorithm, credited here:"
+        },
+        {
+          "t": "ul",
+          "items": [
+            "**Plate's Holographic Reduced Representations (1995)**, and its phase form FHRR. The continuous component is the bundle, and both are the equal-storage baselines.",
+            "**Reed and Solomon (1960)**, with **Bose and Ray-Chaudhuri (1960)**: syndrome decoding of power sums, which the key view uses.",
+            "**Berlekamp (1968)** and **Massey (1969)**: the Berlekamp-Massey recurrence, with a re-encode check.",
+            "**PinSketch** (Talbot et al., 2012) and **minisketch** (Poinsot et al., 2017): exact set sketches that subtract and decode the difference.",
+            "**The Walsh-Hadamard transform**: counts under any predicate of the flag word, in one read.",
+            "**Fourier analysis on finite groups**: binding as convolution.",
+            "**The Chinese remainder theorem**: joining coprime key cycles.",
+            "**Hamming codes (1950)**: syndromes that locate a single error.",
+            "**Galois linear feedback shift registers** and the **Frobenius map** on GF(2^m).",
+            "**Time diffusion on a cycle**, from Markov chains.",
+            "**Krawtchouk polynomials**, which underlie the views.",
+            "**The universal coefficient theorem**, **Schläfli's classification** of regular polytopes, **Galois and Abel-Ruffini** on the simplicity of A_5, **Kolmogorov's criterion** for circulation, **Bott periodicity**, and the **Altland-Zirnbauer** and **Kitaev** symmetry classes."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "where-the-code-does-not-superpose-today",
+      "title": "Where the code does not superpose today",
+      "blocks": [
+        {
+          "t": "ul",
+          "items": [
+            "Key shifts and key scaling cost one pass per term in a mix, not one pass.",
+            "Right relabelling, conjugation and flag sign flips cost one pass per term.",
+            "A kernel is refused on a store with a check prime.",
+            "Key reads refuse past their capacity. A store keeps 2K+1 harmonics per key line, so K+1 distinct keys always refuse. A complete key band goes to 4,096 keys.",
+            "Counts are exact within the field's signed range. No read detects a wrap past it.",
+            "The store runs on the CPU. Its gain is exactness and many views on one array, not raw speed for a single read.",
+            "Rung 8's contradiction location is not built, and reunification, the rung where observers merge, is open."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "the-four-families-and-the-order-face",
+      "title": "The four families and the order face",
+      "summary": "Go deeper: the four families and the order face",
+      "disclosure": true,
+      "blocks": [
+        {
+          "t": "p",
+          "text": "The store holds the harmonic transform of its items on one product of four families: the key cycle, the flag cube, the symmetric group and the time cycle. Each view reads its own slice of the same cells, because each view is a shadow on some of the faces."
+        },
+        {
+          "t": "p",
+          "text": "The search found the flags and the permutations as the two halves of the root's symmetry. The key cycle is the syzygy's own cycle, realised on a finite field. The time family is the rung-7 step repeated. A direct product does not depend on the order of its factors. The listing follows the order in which the search met them."
+        },
+        {
+          "t": "p",
+          "text": "The order face is built for S_2 to S_5, up to 120 arrangements. The shape definition sets the cap, and the record gives no further reason for it."
+        },
+        {
+          "t": "p",
+          "text": "Five is also where repeated splitting first meets a part it cannot split: the alternating group A_5, of order 60, the rotation group of the icosahedron. That is a coincidence of the two facts, and the cap is not derived from it."
+        },
+        {
+          "t": "p",
+          "text": "The splitting chains are: 2 to 1; 6 to 3 to 1; 24 to 12 to 4 to 1; 120 to 60 to 60. The shadow of the root holds on sequences, 10,000 of 10,000, and on loops, 9,000 of 9,000."
+        }
+      ]
+    },
+    {
+      "id": "signed-removal-and-plus-and-minus",
+      "title": "Signed removal and plus and minus",
+      "summary": "Go deeper: signed removal and plus and minus",
+      "disclosure": true,
+      "blocks": [
+        {
+          "t": "p",
+          "text": "Removal adds the opposite count. This fits the project's rule that a distinction, once made, is not unmade. The cell layout keeps its size, and a removed item leaves its cells at zero."
+        },
+        {
+          "t": "p",
+          "text": "The cancellation test adds an item and then its opposite, and every cell is zero afterwards, with the default field and with three primes."
+        },
+        {
+          "t": "p",
+          "text": "A plus and a minus of the same item share one cell and cancel there exactly."
+        }
+      ]
+    },
+    {
+      "id": "closeness-on-the-cube",
+      "title": "Closeness on the cube",
+      "summary": "Go deeper: closeness on the cube",
+      "disclosure": true,
+      "blocks": [
+        {
+          "t": "p",
+          "text": "Closeness on the flag cube is Hamming distance. `Near(query, r)` counts the stored items whose flag word lies within r bits of the query, and `Nearest` returns the nearest stored words with their distances. Both are exact at 200 keys. The key view refuses past its capacity, but the flag-cube read does not depend on the key count."
+        }
+      ]
+    },
+    {
+      "id": "the-lid",
+      "title": "The lid",
+      "summary": "Go deeper: the lid",
+      "disclosure": true,
+      "blocks": [
+        {
+          "t": "p",
+          "text": "`Sample` is a read-time draw. It returns a value with probability count over total, taken from the exact counts, and it leaves the store unchanged. A check confirms that every draw lands on its exact share."
+        },
+        {
+          "t": "p",
+          "text": "The map places the lid at the top of the ladder: the top rung iterated, with the faces divergence, forgetting and pseudo-randomness."
+        }
+      ]
+    },
+    {
+      "id": "what-the-map-got-right-and-what-it-got-wrong",
+      "title": "What the map got right, and what it got wrong",
+      "summary": "Go deeper: what the map got right, and what it got wrong",
+      "disclosure": true,
+      "blocks": [
+        {
+          "t": "sub",
+          "text": "Predictions that held"
+        },
+        {
+          "t": "ul",
+          "items": [
+            "Rung 3: 715 distinct multisets, 10,000 distinct orders, 256 parity classes.",
+            "A complete cycle sums to exactly zero, and a symbol read on coprime cycles decodes exactly, 20,000 of 20,000.",
+            "Relation networks stored as bound facts give exact loop sums, and planted contradictions are found: 40 of 40 networks, no false alarms in 20.",
+            "Nested structure answers every path question exactly, 851 of 851.",
+            "Cross-face predictions: the universal face's polygon sits inside the mixing of the anti-universe, to 2 × 10⁻¹⁵; circulation has one form on two faces; the third face's squaring symmetry halves the set hologram.",
+            "The mirror cells that label the ten symmetry classes hold on every realisation: 10 of 10 classes, 11,995 relation checks over 2,079 realisations.",
+            "Four composition recipes, built only from existing operations, are exact against brute force, 4 of 4."
+          ]
+        },
+        {
+          "t": "sub",
+          "text": "Predictions that did not hold, and what changed"
+        },
+        {
+          "t": "ul",
+          "items": [
+            "The continuous circle cannot hold the rungs exactly past its dimension. The bridge step strips the continuous context, and what remains is a finite field. On the finite field, recovery is 100% for 8 to 64 items and 0% at 65, with p = 65,537 and d = 128.",
+            "The spiral's eight steps are not the eight named rungs. Each spiral step adds an operator of order 2 or 4, while the rungs add cycles of every order.",
+            "The anti-universe does not start at three states; groups of two gain as much.",
+            "The lid's predicted ordered regime before chaos did not appear, and entropy is not monotone; the divergence from the settled state is.",
+            "Reunification, the merging-observers rung, is open.",
+            "Detection of a wrap past the signed range is not built, and the parity claim for the running bundle is not measured."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "the-gaps-grouped",
+      "title": "The gaps, grouped",
+      "summary": "Go deeper: the gaps, grouped",
+      "disclosure": true,
+      "blocks": [
+        {
+          "t": "sub",
+          "text": "The theory says these should superpose, and the code does not:"
+        },
+        {
+          "t": "ul",
+          "items": [
+            "Key shifts and key scaling permute the key harmonics. The kernel has no key-harmonic axis.",
+            "Right relabelling and conjugation act from the right on the order face. The kernel holds the left action only. A superposed conjugation exists in an experiment record and not in the library.",
+            "Flag sign flips and per-key or per-tick weights cost one pass per term.",
+            "A kernel on a store with a check prime.",
+            "Relation faces under projection and under the Chinese remainder theorem.",
+            "Causal reads take one read per prefix. A prefix structure over the sequence is not built."
+          ]
+        },
+        {
+          "t": "sub",
+          "text": "Design limits, set by the data rather than a missing operation:"
+        },
+        {
+          "t": "ul",
+          "items": [
+            "A complete key band costs one cell per key, up to 4,096 keys. A truncated band holds 2K+1 harmonics per key line.",
+            "Exact keys carry no metric, so a nearest-key read needs the continuous component, which is approximate.",
+            "Choosing (argmax, sampling, a decode that refuses) happens once, at the read."
+          ]
+        },
+        {
+          "t": "sub",
+          "text": "Other boundaries:"
+        },
+        {
+          "t": "ul",
+          "items": [
+            "Exact within the signed range; no wrap detection.",
+            "`Bind` is refused with several primes, and `ShiftKeys` on several primes needs an explicit key cycle.",
+            "`CombineCycles` refuses a store with a relation face.",
+            "The joint slice is capped at 2^24 cells."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "cost-of-exactness-one-page-per-context-against-a-hash-map",
+      "title": "Cost of exactness, one page per context against a hash map",
+      "summary": "Go deeper: cost of exactness, one page per context against a hash map",
+      "disclosure": true,
+      "blocks": [
+        {
+          "t": "p",
+          "text": "In a sequence-model test, the same exact counts were held two ways: a hash map, and one dense Pleroma page per context. The two agree on every cell, 5,037,945 of 5,037,945."
+        },
+        {
+          "t": "table",
+          "caption": "The same exact counts held two ways: a hash map and one dense Pleroma page per context",
+          "columns": [
+            "Measure",
+            "Hash map",
+            "Pleroma pages, one per context"
+          ],
+          "rows": [
+            [
+              "memory",
+              "22.3 MB",
+              "757.8 MB (44.5 MB of cells)"
+            ],
+            [
+              "read, 8 subsets per position",
+              "0.67 µs",
+              "131 µs"
+            ],
+            [
+              "build",
+              "0.45 s",
+              "2.06 s"
+            ],
+            [
+              "training step, 32 by 128",
+              "6.8 s",
+              "6.2 s"
+            ]
+          ]
+        },
+        {
+          "t": "p",
+          "text": "With the shared layout, the same pages occupy 66.2 MB as standalone stores, and 49.6 MB as one page set."
+        },
+        {
+          "t": "p",
+          "text": "A long-context store still sits in a sorted host index, which is exact up to 16 subwords and reads in microseconds. The sparse page class exists, but the page store's keys are 63 bits, and a context of four or more subwords needs 128."
+        }
+      ]
+    }
+  ],
+  "closing": {
+    "text": "The Pleroma ships in the `EvaluatedApplications.Phasor` package. Install it, build a store, and read forty-five things back. For partnerships, get in touch.",
+    "links": [
+      {
+        "label": "Install the Phasor package",
+        "href": "/phasor/"
+      },
+      {
+        "label": "Walk the grid on the Pleroma page",
+        "href": "/phasor/pleroma/"
+      },
+      {
+        "label": "Partner with us",
+        "href": "/partner/"
+      }
+    ]
+  },
+  "diagram": {
+    "kind": "pleroma-grid",
+    "title": "The grid: every cell, with its kind",
+    "lede": "Eight rungs by three faces, and the lid. Each cell is one public operation of the Pleroma. Select a cell for its API, what it does and the check behind it.",
+    "stageLabel": "The Pleroma operation grid. Select a cell, or use the arrow keys to move between cells.",
+    "caption": "Drawn from the Pleroma map record: the cells, their kind and their evidence are that record, unchanged. Nothing is measured on this page."
+  }
+}

@@ -164,7 +164,8 @@ for (const [url, p] of real) {
     if (!blob) { err(url, `diagram ${kind}: no data blob`); continue; }
     let data; try { data = JSON.parse(blob); } catch { err(url, `diagram ${kind}: data is not JSON`); continue; }
     if (!/<table[\s>]/.test(body)) err(url, `diagram ${kind}: no data table alternative`);
-    if (!/<svg[^>]*role="(img|group)"/.test(body)) err(url, `diagram ${kind}: static fallback svg has no role`);
+    // a diagram drawn as HTML (a grid of cells) marks its static fallback with data-static-html and a list or group role instead of an svg
+    if (!/<svg[^>]*role="(img|group)"/.test(body) && !/data-static-html[^>]*role="(list|group)"/.test(body)) err(url, `diagram ${kind}: static fallback svg has no role`);
     const modFile = path.join(dir, 'assets', 'diagrams', kind + '.js');
     const coreFile = path.join(dir, 'assets', 'diagrams', 'core.js');
     const bytes = fs.statSync(modFile).size + fs.statSync(coreFile).size + Buffer.byteLength(blob);
@@ -204,7 +205,10 @@ for (const [url, p] of real) {
 for (const [url, p] of real) {
   if (!/^\/research\/[^/]+\/$/.test(url)) continue;
   if (!/class="finding-text"/.test(p.src)) err(url, 'no finding lead');
-  if (!/class="callout warn refuted"/.test(p.src)) err(url, 'no refuted-by callout');
+  // an article may state no refutation condition; then its data has neither `refutedBy` nor a refuted-by section
+  const rid = url.split('/')[2], rf = fs.readdirSync(path.join(DATA, 'research')).map((f) => JSON.parse(fs.readFileSync(path.join(DATA, 'research', f), 'utf8'))).find((x) => x.id === rid);
+  const hasRef = !rf || rf.refutedBy || (rf.sections || []).some((s) => s.id === 'refuted-by');
+  if (hasRef && !/class="callout warn refuted"/.test(p.src)) err(url, 'no refuted-by callout');
   if (!/<nav class="toc"/.test(p.src)) err(url, 'no contents block');
   if (!/"@type":"Article"/.test(p.src)) err(url, 'no Article JSON-LD');
   const refIds = [...p.src.matchAll(/<li id="ref-([a-z0-9-]+)"/g)].map((m) => m[1]);

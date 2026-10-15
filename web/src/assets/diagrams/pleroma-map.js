@@ -5,13 +5,13 @@
 import { hasDom, prefersReducedMotion, readTokens, rgba, fitCanvas, loop } from './core.js';
 
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-const FACES = ['Syzygy', 'Monad', 'Ouroboros'];
-const GLOSS = {
+export const FACES = ['Syzygy', 'Monad', 'Ouroboros'];
+export const GLOSS = {
   COVERED: 'A public member of Pleroma, checked against a brute-force or naive rebuild of the same answer.',
   'READ-TIME': 'Not superposable by nature: a choice made once, when the store is read.',
 };
 
-const KIND = { COVERED: 'Checked', 'READ-TIME': 'Read-time' };
+export const KIND = { COVERED: 'Checked', 'READ-TIME': 'Read-time' };
 
 export function cells(d) {
   const out = [];

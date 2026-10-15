@@ -15,7 +15,7 @@
 <meta name="twitter:card" content="summary">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%23f0796a'/%3E%3Cstop offset='.5' stop-color='%237bd86a'/%3E%3Cstop offset='1' stop-color='%23c07dff'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='32' height='32' rx='7' fill='%23050608'/%3E%3Cpath d='M16 5L27 26H5Z' fill='none' stroke='url(%23g)' stroke-width='2' stroke-linejoin='round'/%3E%3C/svg%3E">
 <script>document.documentElement.classList.add('js')</script>
-<link rel="stylesheet" href="/assets/ea.css?v=63c2f828">
+<link rel="stylesheet" href="/assets/ea.css?v=dcc706ee">
 <script type="application/ld+json">{"@context":"https://schema.org","@type":"Article","headline":"Growing the Wrong Way","description":"Seeding an eight-token model from fully trained four-token weights gave it no head start, and appending new context slots after the most-trained one is a structural cost that inserting them before the oldest one removes.","url":"https://evaluatedapplications.github.io/research/context-eight/","keywords":"context length, growth","about":["context length","growth"],"author":{"@id":"https://evaluatedapplications.github.io/#org"},"publisher":{"@id":"https://evaluatedapplications.github.io/#org"},"mainEntityOfPage":"https://evaluatedapplications.github.io/research/context-eight/"}</script><script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Home","item":"https://evaluatedapplications.github.io/"},{"@type":"ListItem","position":2,"name":"Research","item":"https://evaluatedapplications.github.io/research/"},{"@type":"ListItem","position":3,"name":"Growing the Wrong Way","item":"https://evaluatedapplications.github.io/research/context-eight/"}]}</script>
 
 </head>
@@ -40,9 +40,11 @@
 <p class="lede">Seeding an eight-token model from fully trained four-token weights gave it no head start, and appending new context slots after the most-trained one is a structural cost that inserting them before the oldest one removes.</p>
 <ul class="facts"><li class="fact">4 min read</li><li class="fact">7 sections</li><li class="fact">1 table</li></ul>
 </div></header>
+
 <section class="sec" id="finding" aria-labelledby="h-finding"><div class="wrap">
   <div class="finding"><h2 id="h-finding" class="finding-label">Finding</h2><p class="finding-text">Growing a four-token model that had plateaued to eight tokens of context gave no recovery in about 100,000 rounds, and growth by appending new position slots after the most-trained one demotes that slot on every grow, whereas inserting new slots before the oldest one keeps it in place.</p></div>
 </div></section>
+
 <section class="sec fig-sec" id="diagram" aria-label="Which slot reads what was just said"><div class="wrap"><figure class="fig" data-diagram="slot-grow" data-diagram-id="dg">
   <div class="fig-head"><h2>Which slot reads what was just said</h2><p>Every position slot has its own trained representation, and the slot at the end of the window means the token just before the one being predicted. Pick how many times the window has grown from four tokens. Appending puts a new untrained slot in that role every time; inserting before the oldest slot keeps the trained one there. The slot ages are counted in grows, not training rounds.</p></div>
   <div class="fig-body">
@@ -61,41 +63,28 @@
 <section class="sec" id="setup" aria-labelledby="h-setup"><div class="wrap">
   <div class="sec-head"><h2 id="h-setup">Setup</h2></div>
   <div class="prose-block"><p>The starting point is the final trained weights of the four-token run described in the article The Four-Token Ceiling, whose top-guess margin had plateaued. A new model is seeded from those weights and its context is grown to eight tokens. The test is whether training a context fully at the smaller size makes the larger one easier to absorb.</p><p>The main metric is the same top-guess margin used at four tokens. Other measures are calibration, long-form generation sampled at dozens of checkpoints, and the specialisation of the weight bank that kept changing at four tokens.</p></div>
-  
-  
 </div></section><section class="sec" id="evidence-grow" aria-labelledby="h-evidence-grow"><div class="wrap">
   <div class="sec-head"><h2 id="h-evidence-grow">Evidence: no payoff from a finished seed</h2></div>
-  <div class="prose-block"><p>No recovery appeared in the first 20,000 rounds after the grow, or in the next 70,000. The margin oscillated in a wide band for the whole period, past the point where the four-token run&#39;s own training life would have finished. Calibration got worse before it improved. Long-form generation stayed collapsed into repeat loops at every checkpoint pulled, dozens of them, spread over nearly 100,000 rounds.</p><p>One measure held: the weight bank that specialises at four tokens kept specialising, checkpoint after checkpoint, through the grow. It behaves as a general mechanism and not a context-specific one.</p></div>
-  
-  <div class="tbl-wrap"><table class="tbl"><caption>Measures after growing from four to eight tokens</caption>
+  <div class="prose-block"><p>No recovery appeared in the first 20,000 rounds after the grow, or in the next 70,000. The margin oscillated in a wide band for the whole period, past the point where the four-token run&#39;s own training life would have finished. Calibration got worse before it improved. Long-form generation stayed collapsed into repeat loops at every checkpoint pulled, dozens of them, spread over nearly 100,000 rounds.</p><p>One measure held: the weight bank that specialises at four tokens kept specialising, checkpoint after checkpoint, through the grow. It behaves as a general mechanism and not a context-specific one.</p></div><div class="tbl-wrap"><table class="tbl"><caption>Measures after growing from four to eight tokens</caption>
 <thead><tr><th scope="col">Measure</th><th scope="col" class="num-h">Outcome</th></tr></thead>
 <tbody><tr><th scope="row">Top-guess margin</th><td>Oscillates in a wide band; no settled recovery in about 100,000 rounds</td></tr><tr><th scope="row">Calibration</th><td>Worse before better</td></tr><tr><th scope="row">Long-form generation</th><td>Repeat-loop collapse at every checkpoint, dozens over nearly 100,000 rounds</td></tr><tr><th scope="row">Specialisation of the general weight bank</th><td>Keeps rising through the grow</td></tr></tbody></table></div>
 </div></section><section class="sec" id="evidence-learning-rate" aria-labelledby="h-evidence-learning-rate"><div class="wrap">
   <div class="sec-head"><h2 id="h-evidence-learning-rate">Evidence: the learning rate does not explain the stall</h2></div>
   <div class="prose-block"><p>A learning-rate boost that the training engine gives a model after a context grow did not fire in this run, because the fork bypassed the normal path that triggers it. That does not explain the stall. The four-token model produced all of its own improvement at that same floor learning rate, so a starved rate would have stopped the four-token run as well, and it did not.</p><p>With the learning rate excluded, the premise is not supported: fully mining a small context before growing did not make the bigger context easier to absorb.</p></div>
-  
-  
 </div></section><section class="sec" id="evidence-growth-continues" aria-labelledby="h-evidence-growth-continues"><div class="wrap">
   <div class="sec-head"><h2 id="h-evidence-growth-continues">Evidence: growth is not the problem</h2></div>
   <div class="prose-block"><p>The one measure that never stopped improving through the eight-token run was the general, non-position-specific structure. Content that is generic should not need a context size to be finished before it is worth having, and the record is consistent with that.</p><p>On that basis the schedule was changed from a context tier every 20,000 rounds to a context tier every 200 rounds, on the reasoning that cheap early token-level structure does not need relearning at each size. Comparable capability appeared at comparable round counts to the four-token run, as generic transfer predicts. These early results are not tabulated here.</p></div>
-  
-  
 </div></section><section class="sec" id="evidence-structure" aria-labelledby="h-evidence-structure"><div class="wrap">
   <div class="sec-head"><h2 id="h-evidence-structure">Evidence: appending slots demotes the most important one</h2></div>
   <div class="prose-block"><p>Every position slot in the context window has its own separately trained representation. The highest-indexed slot always means the token immediately before the one being predicted, the most load-bearing position. Growing by appending capacity past that slot demotes it to the middle of the window and puts a new untrained slot in the role that matters most.</p><p>This happens on every grow. Pacing the growth more slowly spreads the damage and does not remove it. After growth to a thousand tokens, the slot that reads what was just said has had less training than almost any other slot in the window. The cause is structural, not a training-procedure problem.</p><p>The alternative is to insert new capacity before the oldest slot and shift every existing position up. The slot meaning immediately before prediction keeps its trained values through any number of grows, and new capacity lands on context further in the past, where starting from zero is cheapest.</p><p>This is safe for a specific reason, checked against the code: the attention mechanism does not work on relative position. The model&#39;s sense of position lives in exactly one place, a lookup table added onto each token, so nothing else depends on slot order.</p><p>Newly built models use front insertion by default. Existing checkpoints are pinned to the old behaviour when loaded, so a trained model does not change under itself, and old and new can coexist.</p></div>
-  
-  
 </div></section><section class="sec" id="practice" aria-labelledby="h-practice"><div class="wrap">
   <div class="sec-head"><h2 id="h-practice">What this means for a small model</h2></div>
   <div class="prose-block"><p>Do not expect a model converged at a small context to absorb a larger one faster. Treat context growth as its own change and measure it.</p><p>Before blaming a stall on the learning rate, check whether a model that did improve ran at the same rate.</p><p>When a model will grow repeatedly, insert new position slots before the oldest slot and shift existing slots up. Appending demotes the most trained slot on every grow, however slowly the model grows.</p><p>Pin loaded checkpoints to the convention they were trained under, so a change of growth default does not alter a trained model.</p></div>
-  
-  
 </div></section><section class="sec" id="limits" aria-labelledby="h-limits"><div class="wrap">
   <div class="sec-head"><h2 id="h-limits">Limits</h2></div>
   <div class="prose-block"><p>The no-payoff result comes from one seeded run at one grow, from four to eight tokens. Whether a less-settled seed would have absorbed the grow better is a conjecture the run does not test.</p><p>The effect of front insertion on the long-form repeat collapse over many grows is unmeasured. A model trained from scratch under the new convention has run for a few hundred rounds. Its generation shows cleanly space-separated word-shaped chunks with the individual words misspelled, and its raw numbers match the old approach at the same age, which is expected because the cost accrues over many grows, not the first.</p><p>The faster growth schedule&#39;s results are reported in words only.</p></div>
-  
-  
 </div></section>
+
 <section class="sec" id="refuted-by" aria-labelledby="h-refuted"><div class="wrap">
   <aside class="callout warn refuted"><h2 id="h-refuted">Refuted by</h2><p>A grown model seeded from fully trained weights that reaches a settled margin sooner than a less-trained seed under the same learning rate; or a model grown by front insertion that still shows the long-form repeat collapse after many grows.</p></aside>
 </div></section>
@@ -103,6 +92,7 @@
   <div class="sec-head"><h2 id="h-related">Related</h2></div>
   <ul class="related-list"><li><a href="/research/context-four/">The Four-Token Ceiling</a><span>What a language model builds when it can only ever see four tokens at a time, where its output metrics stop moving, and which internal measures keep changing after that.</span></li></ul>
 </div></section>
+
 
 </main>
 <footer class="site-footer"><div class="wrap">
@@ -116,7 +106,7 @@
   <div class="foot-base"><span>Evaluated Applications · .NET libraries · England</span><span class="mono">© 2026 Evaluated Applications</span></div>
 </div></footer>
 
-<script src="/assets/site.js?v=3190ebab" defer></script>
+<script src="/assets/site.js?v=6d531a65" defer></script>
 <script type="module" src="/assets/diagrams/slot-grow.js"></script>
 </body>
 </html>

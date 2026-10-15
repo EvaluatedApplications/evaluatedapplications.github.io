@@ -6,6 +6,7 @@ import { html, raw, jsonScript } from '../scripts/lib/html.mjs';
 import * as tracerField from './assets/diagrams/tracer-field.js';
 import * as stackMap from './assets/diagrams/stack-map.js';
 import * as pleromaMap from './assets/diagrams/pleroma-map.js';
+import * as pleromaGrid from './assets/diagrams/pleroma-grid.js';
 import * as pleromaSuper from './assets/diagrams/pleroma-superposition.js';
 import * as pleromaCap from './assets/diagrams/pleroma-capacity.js';
 import * as latencyBars from './assets/diagrams/latency-bars.js';
@@ -25,7 +26,7 @@ import * as blazierBoot from './assets/diagrams/blazier-boot.js';
 import * as hologenomeScores from './assets/diagrams/hologenome-scores.js';
 
 const KINDS = {
-  'tracer-field': tracerField, 'stack-map': stackMap, 'pleroma-map': pleromaMap,
+  'tracer-field': tracerField, 'stack-map': stackMap, 'pleroma-map': pleromaMap, 'pleroma-grid': pleromaGrid,
   'pleroma-superposition': pleromaSuper, 'pleroma-capacity': pleromaCap, 'latency-bars': latencyBars, 'holodb-store': holodbStore,
   'evalapp-gate': evalappGate, 'algformer-cost': algformerCost, 'holovoxel-lod': holovoxelLod, 'prose-pipeline': prosePipeline,
   'round-timeline': roundTimeline, 'slot-grow': slotGrow, 'layer-stack': layerStack, 'size-bars': sizeBars, 'design-effect': designEffect,

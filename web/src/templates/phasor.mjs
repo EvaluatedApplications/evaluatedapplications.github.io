@@ -130,6 +130,7 @@ ${p.evidence.length ? html`<section class="sec doc-sec" aria-labelledby="h-ev"><
     ${dependsOn.length ? html`<div><h3>Builds on</h3><ul>${dependsOn.map((d) => html`<li><a class="pill" href="${d.href}">${d.name}</a></li>`)}</ul></div>` : ''}
     ${usedBy.length ? html`<div><h3>Used by</h3><ul>${usedBy.map((d) => html`<li><a class="pill" href="${d.href}">${d.name}</a></li>`)}</ul></div>` : ''}
     ${p.tools.length ? html`<div><h3>Try it in the browser</h3><ul>${p.tools.map((t) => html`<li><a class="pill" href="${t.href}">${t.name}</a></li>`)}</ul></div>` : ''}
+    ${(doc.research || []).length ? html`<div><h3>Research</h3><ul>${doc.research.map((x) => { const a = ctx.research.find((r) => r.id === x.id); if (!a) throw new Error('phasor research link: no article ' + x.id); return html`<li><a class="pill" href="${a.href}">${x.label}</a></li>`; })}</ul></div>` : ''}
     <div><h3>Elsewhere</h3><ul><li><a class="pill" href="/products/">All products</a></li><li><a class="pill" href="${primary.nuget}" rel="noopener">NuGet package</a></li></ul></div>
   </div>
 </div></section>

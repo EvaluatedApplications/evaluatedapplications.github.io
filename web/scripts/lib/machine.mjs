@@ -5,6 +5,7 @@ import path from 'node:path';
 import { DATA } from './data.mjs';
 import { stripTags } from './html.mjs';
 import { plain } from '../../src/inline.mjs';
+import { blocksOf } from '../../src/blocks.mjs';
 import { resolveStats } from '../../src/partials.mjs';
 
 const abs = (ctx, u) => (u.startsWith('http') ? u : ctx.site.url + u);
@@ -122,8 +123,12 @@ export function composeLlmsFull(ctx, stamp) {
     L.push(`### ${r.title}`, '', `Page: ${abs(ctx, r.href)}`, `Topics: ${r.topics.join(', ')}`, '', `Finding: ${plain(r.finding)}`, '');
     for (const sec of r.sections) {
       if (['finding', 'references', 'reference'].includes(sec.id)) continue;
-      L.push(`#### ${sec.title}`, '', ...(sec.paragraphs || []).flatMap((t) => [plain(t), '']));
-      for (const tb of sec.tables || []) L.push(table({ kind: 'matrix', ...tb }), '');
+      L.push(`#### ${sec.title}`, '');
+      for (const b of blocksOf(sec)) {
+        if (b.t === 'table') L.push(table({ kind: 'matrix', ...b }), '');
+        else if (b.t === 'ul') L.push(...b.items.map((x) => `- ${plain(x)}`), '');
+        else L.push(plain(b.text), '');
+      }
     }
     if (r.references.length) L.push('References:', ...r.references.map((x, i) => `${i + 1}. ${x.text}${x.url ? ' ' + x.url : ''}`), '');
     if (r.relatedArticles.length) L.push('Related: ' + r.relatedArticles.map((a) => `${a.title} ${abs(ctx, a.href)}`).join('; '), '');
