@@ -8,7 +8,7 @@
   "claim": "On a 10,000,000-invoice ledger joined to 200,000 customers, the dashboard rollups read in microseconds in the embedded engine, and every result is identical across the engines. The queries where HoloDb is slower are listed beside the wins.",
   "tieBelow": 1.15,
   "method": {
-    "workload": "A billing business's invoice ledger (a normalised invoices fact of 10,000,000 rows joined to a customers dimension of 200,000 rows) with sixteen queries: five rollups, a single-invoice lookup, five single-table scans and five joins to the customer dimension. The plane sections use three constructed workloads: a live dashboard, ingest while querying, and multi-tenant slices and joins.",
+    "workload": "A billing business's invoice ledger (a normalised invoices fact of 10,000,000 rows joined to a customers dimension of 200,000 rows) with sixteen queries: five rollups, a single-invoice lookup, five single-table scans and five joins to the customer dimension. The plane sections use three constructed workloads: a live dashboard, ingest while querying, and multi-tenant slices and joins. These are out-of-the-box benchmarks: every engine ran as it ships, with default settings, no indexes added and no summary or rollup tables built for the queries.",
     "engines": [
       "SQLite (in memory, the external reference, always listed first)",
       "DuckDB (in process, in memory)",
@@ -534,7 +534,7 @@
         }
       ],
       "notes": [
-        "The best other engine on the W, G, H and D slices is DuckDB in every row shown. Three of the nine W cells are noisy, because the engine's own two timing loops disagreed by more than 25 percent; the class median is as printed.",
+        "The best other engine on the W, G, H and D slices is DuckDB in every row shown, out of the box: no indexes added and no summary table built. Three of the nine W cells are noisy, because the engine's own two timing loops disagreed by more than 25 percent; the class median is as printed.",
         "The first call of each query, which pays any one-time work, is also faster with the plane: the median first-call speed-up over the engine is 16.99x for W, 10.90x for G, 13.97x for H and 10.17x for D.",
         "The queries the plane declines or leaves to the engine (the X class: a filter on a non-dimension column, COUNT(DISTINCT user_id), a sum of a non-measure column, a top-10 by user, a filter on a measure, a row list and a point lookup by event id) run the engine's own path and tie with it: the seven X queries read 0.95x to 1.04x warm. On the first call five of the seven were slower with the plane attached, at 0.42x to 0.84x of the engine's first call; these are single samples."
       ],

@@ -1195,8 +1195,8 @@ Ten million rows. Dashboard answers in microseconds.
 
 Put a SQL database inside your app that rolls up a ledger in a blink, ranks rows by resemblance and keeps ACID transactions. Tables can be bigger than memory.
 
-- 0.02 ms: to total 10,000,000 invoices by status. DuckDB took 41.63 ms
-- More than 1,600 times: faster than DuckDB on that rollup, and more than 120 times faster on all five dashboard rollups
+- 0.02 ms: to total 10,000,000 invoices by status. DuckDB took 41.63 ms, out of the box
+- More than 1,600 times: faster than out-of-the-box DuckDB on that rollup, and more than 120 times faster on all five dashboard rollups
 - 3.3 times: faster than DuckDB on a join of 10,000,000 invoices to 200,000 customers
 - 16 of 16: queries that returned the same rows as SQLite and DuckDB. The ones where HoloDb is slower are listed too
 
@@ -2775,7 +2775,7 @@ On a 10,000,000-invoice ledger joined to 200,000 customers, the dashboard rollup
 Page: https://evaluatedapplications.github.io/holodb/evidence/
 
 Method:
-- Workload: A billing business's invoice ledger (a normalised invoices fact of 10,000,000 rows joined to a customers dimension of 200,000 rows) with sixteen queries: five rollups, a single-invoice lookup, five single-table scans and five joins to the customer dimension. The plane sections use three constructed workloads: a live dashboard, ingest while querying, and multi-tenant slices and joins.
+- Workload: A billing business's invoice ledger (a normalised invoices fact of 10,000,000 rows joined to a customers dimension of 200,000 rows) with sixteen queries: five rollups, a single-invoice lookup, five single-table scans and five joins to the customer dimension. The plane sections use three constructed workloads: a live dashboard, ingest while querying, and multi-tenant slices and joins. These are out-of-the-box benchmarks: every engine ran as it ships, with default settings, no indexes added and no summary or rollup tables built for the queries.
 - Engines: SQLite (in memory, the external reference, always listed first); DuckDB (in process, in memory); SQL Server 2022 LocalDB (tables in tempdb on disk); HoloDb embedded (in process); HoloDb server (networked over TLS on the loopback interface); HoloDb engine: the same database without a plane. HoloDb plane: a database with the optional Pleroma plane attached.
 - Check: Before any query is timed, its full result set is normalised and compared across the engines. Every timed result is identical, including on the queries where HoloDb is slower. After each plane workload the plane is compared with a rebuild from the columns and found equal.
 - Statistic: Medians of repeated calls through each engine's typed client API, execute plus consume every row. A cell whose own two timing loops disagree by more than 25 percent is marked noisy, and no ratio is drawn from it. A difference under 1.15x counts as a tie.
@@ -2888,7 +2888,7 @@ First call of each query, median milliseconds
 | COUNT(DISTINCT channel), COUNT(DISTINCT device) with a WHERE | 37.506 | 2,336.280 | 50.189 | 0.803 |
 | (outside the plane: filter on user_id, a column that is not a dimension) | 12.139 | 486.466 | 11.300 | 11.484 |
 
-The best other engine on the W, G, H and D slices is DuckDB in every row shown. Three of the nine W cells are noisy, because the engine's own two timing loops disagreed by more than 25 percent; the class median is as printed.
+The best other engine on the W, G, H and D slices is DuckDB in every row shown, out of the box: no indexes added and no summary table built. Three of the nine W cells are noisy, because the engine's own two timing loops disagreed by more than 25 percent; the class median is as printed.
 
 The first call of each query, which pays any one-time work, is also faster with the plane: the median first-call speed-up over the engine is 16.99x for W, 10.90x for G, 13.97x for H and 10.17x for D.
 

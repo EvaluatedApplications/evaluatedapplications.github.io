@@ -7,15 +7,15 @@
     "tool": "dashboard",
     "mechanismTitle": "One store, three ways to ask",
     "stats": [
-      { "value": "0.02 ms", "label": "to total 10,000,000 invoices by status. DuckDB took 41.63 ms", "cite": ["evidence/holodb.json"] },
-      { "value": "More than 1,600 times", "label": "faster than DuckDB on that rollup, and more than 120 times faster on all five dashboard rollups", "cite": ["evidence/holodb.json"] },
+      { "value": "0.02 ms", "label": "to total 10,000,000 invoices by status. DuckDB took 41.63 ms, out of the box", "cite": ["evidence/holodb.json"] },
+      { "value": "More than 1,600 times", "label": "faster than out-of-the-box DuckDB on that rollup, and more than 120 times faster on all five dashboard rollups", "cite": ["evidence/holodb.json"] },
       { "value": "3.3 times", "label": "faster than DuckDB on a join of 10,000,000 invoices to 200,000 customers", "cite": ["evidence/holodb.json"] },
       { "value": "16 of 16", "label": "queries that returned the same rows as SQLite and DuckDB. The ones where HoloDb is slower are listed too", "cite": ["evidence/holodb.json"] }
     ],
     "numbers": {
       "summary": "See the numbers",
       "items": [
-        { "claim": "Five rollups, 120 to 1,600 times faster than DuckDB", "text": "Revenue by status takes 0.02 ms against 41.63 ms for DuckDB and 3,719.66 ms for SQLite. The other four rollups are more than 1,300, 510, 120 and 130 times faster than DuckDB. Conditions: a ledger of 10,000,000 invoices joined to 200,000 customers, in process and in memory, medians of repeated calls through each engine's typed client API, one 16-core laptop CPU (Intel Core i9-11950H) with nothing else heavy running." },
+        { "claim": "Five rollups, 120 to 1,600 times faster than DuckDB", "text": "Revenue by status takes 0.02 ms against 41.63 ms for DuckDB and 3,719.66 ms for SQLite. The other four rollups are more than 1,300, 510, 120 and 130 times faster than DuckDB. Conditions: out-of-the-box engines (default settings, no added indexes, no summary tables), a ledger of 10,000,000 invoices joined to 200,000 customers, in process and in memory, medians of repeated calls through each engine's typed client API, one 16-core laptop CPU (Intel Core i9-11950H) with nothing else heavy running." },
         { "claim": "Joins: ahead on three, tied on one, behind on one", "text": "Revenue by segment takes 14.71 ms against 49.01 ms for DuckDB (3.3 times). Top named customers is 2.2 times faster and revenue by segment and status 2.1 times. Enterprise revenue ties with DuckDB (1.03 times), and revenue by signup cohort is DuckDB's by 1.25 times." },
         { "claim": "Where SQLite is ahead", "text": "Looking up one invoice takes 0.01 ms in SQLite and 0.02 ms in HoloDb. Every HoloDb figure is an in-memory database with no write-ahead log. A database opened with a log flushes each committed statement to disk, which adds one flush per commit, set by the disk." },
         { "claim": "Identical answers", "text": "Before any query is timed, its full result set is compared across the engines. All 16 results are identical, including on the queries where HoloDb is slower." }
