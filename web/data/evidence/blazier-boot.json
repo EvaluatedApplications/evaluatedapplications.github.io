@@ -1,0 +1,151 @@
+{
+  "id": "blazier-boot",
+  "product": "blazier",
+  "slug": "/blazier/evidence/",
+  "scope": "The sample app in headless Edge",
+  "title": "What a visitor waits for",
+  "description": "A Blazier static shell downloads 6.8 KB before the visitor acts, against 2.8 MB for the usual boot, and shows content in 416 to 484 ms on a phone profile.",
+  "claim": "On the sample app the static page downloads 6.8 KB before the visitor acts, against 2.8 MB when the same app boots the usual way. Real content is on screen in 72 to 100 ms on desktop and 416 to 484 ms on the phone profile, against 748 to 1,165 ms and 13.2 to 15.5 s. After the visitor presses Start the runtime takes 710 to 1,170 ms on desktop and 12.7 to 15.4 s on the phone profile to reach a working page, the same wait as the usual boot.",
+  "headline": [
+    {
+      "value": "6.8 KB",
+      "label": "downloaded before the visitor does anything, against 2.8 MB when the same app boots the usual way"
+    },
+    {
+      "value": "416 to 484 ms",
+      "label": "until real content is on screen on the phone profile, against 13.2 to 15.5 s booting the usual way"
+    },
+    {
+      "value": "14 to 19 ms",
+      "label": "worst gap on the page's timers while a worker ran a long job, with 0 long tasks"
+    },
+    {
+      "value": "0.49 to 0.57 ms",
+      "label": "for one call to a worker service, round trip"
+    }
+  ],
+  "method": {
+    "workload": "The Blazier sample app, the sample app published with the trimmed interpreter build, is loaded in headless Microsoft Edge from a local server shaped like GitHub Pages, with gzip. The same page is loaded two ways: booted the usual way, and as a Blazier static shell that starts the runtime when the visitor presses Start. The worker rows run a prime count to 600,000 in a worker service.",
+    "engines": [
+      "Blazier static shell",
+      "Blazor WebAssembly booted the usual way"
+    ],
+    "verification": "On a page with a click target, a touch scroll, a tap on text and a Tab key press make 0 requests for the runtime, while the control page starts it.",
+    "statistic": "Desktop is unthrottled, 3 runs. The phone profile is 4 Mbit/s, 100 ms round trip, CPU slowed 6 times, 2 runs. A range runs from the fastest to the slowest run.",
+    "machine": "An Intel Core i9-11950H laptop with 32 GB of memory."
+  },
+  "tables": [
+    {
+      "id": "boot",
+      "kind": "matrix",
+      "caption": "Booted the usual way and as a Blazier static shell",
+      "columns": [
+        "Measure",
+        "Profile",
+        "Booted the usual way",
+        "Blazier static shell"
+      ],
+      "rows": [
+        [
+          "Downloaded before the visitor does anything",
+          "Both",
+          "2.8 MB",
+          "6.8 KB in 6 requests"
+        ],
+        [
+          "Until real content is on screen",
+          "Desktop",
+          "748 to 1,165 ms",
+          "72 to 100 ms"
+        ],
+        [
+          "Until real content is on screen",
+          "Phone profile",
+          "13.2 to 15.5 s",
+          "416 to 484 ms"
+        ],
+        [
+          "Until the page works (usual boot from loading the page, Blazier from pressing Start)",
+          "Desktop",
+          "748 to 1,165 ms",
+          "710 to 1,170 ms"
+        ],
+        [
+          "Until the page works (usual boot from loading the page, Blazier from pressing Start)",
+          "Phone profile",
+          "13.2 to 15.5 s",
+          "12.7 to 15.4 s"
+        ]
+      ]
+    },
+    {
+      "id": "worker",
+      "kind": "matrix",
+      "caption": "Worker bridge, desktop",
+      "columns": [
+        "Measure",
+        "Recorded"
+      ],
+      "rows": [
+        [
+          "Start a worker runtime from cached files",
+          "190 to 210 ms"
+        ],
+        [
+          "One call to a worker service, round trip",
+          "0.49 to 0.57 ms"
+        ],
+        [
+          "Worst gap on the page's timers during a long job",
+          "14 to 19 ms"
+        ],
+        [
+          "Long tasks on the page during that job",
+          "0"
+        ],
+        [
+          "Stop a job that yields",
+          "12 to 17 ms"
+        ],
+        [
+          "Stop a job that never yields, until the worker is usable again",
+          "730 to 800 ms"
+        ],
+        [
+          "Restart the worker",
+          "170 to 180 ms"
+        ],
+        [
+          "Stream 2,000 items, first item",
+          "16 to 21 ms"
+        ],
+        [
+          "Stream 2,000 items, all of them",
+          "250 to 272 ms"
+        ],
+        [
+          "Memory of a worker runtime",
+          "32 MiB"
+        ],
+        [
+          "Worker start on a shared bundle",
+          "132 requests, all served from the browser cache (0 KB over the network)"
+        ]
+      ]
+    }
+  ],
+  "losses": [
+    "Pressing Start does not shorten the wait for the runtime: a working page takes 12.7 to 15.4 s after the press on the phone profile, against 13.2 to 15.5 s for the usual boot. Blazier moves the wait behind a readable page and does not remove it."
+  ],
+  "limits": [
+    "One sample app on one machine. The figures describe that app, not a forecast for another.",
+    "The sample app uses the trimmed interpreter build. In an ahead-of-time build the lazy-assembly saving is small, because that native code lives in the main runtime file either way.",
+    "The worker rows are desktop only. The phone profile slows the page and not the worker, so a phone worker figure would describe the page. A worker runtime starts at about 32 MiB of memory.",
+    "Headless Edge only. Firefox and Safari have not been run, and the memory and battery cost on a phone are not measured.",
+    "The worker bridge was measured with a shared bundle. A separate worker bundle has been built but not run in a browser.",
+    "The Showroom tool pages are built this way, but their shell sizes and timings are not part of this record."
+  ],
+  "internal": {
+    "source": "web/data/diagrams/blazier-boot.json, web/scripts/derive-evidence.mjs"
+  }
+}

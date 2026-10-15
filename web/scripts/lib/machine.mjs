@@ -75,7 +75,11 @@ export function composeLlmsFull(ctx, stamp) {
         L.push([].concat(d.intro).join('\n\n'), '');
         if (d.why) L.push('Why use it:', ...d.why.map((w) => `- ${w.title}. ${w.text}`), '');
         if (d.capabilities) L.push('Capabilities:', ...d.capabilities.map((c) => `- ${c.title}. ${c.text}`), '');
-        if (d.quickstart) L.push('Quick start:', '', '```csharp', readSnip(d.quickstart.source), '```', '', 'Output:', '', '```text', readSnip(d.quickstart.output), '```', '');
+        if (d.quickstart?.source) L.push('Quick start:', '', '```csharp', readSnip(d.quickstart.source), '```', '', 'Output:', '', '```text', readSnip(d.quickstart.output), '```', '');
+        if (d.quickstart?.blocks) { L.push('Quick start:', ''); for (const b of d.quickstart.blocks) L.push(...(b.lede ? [b.lede, ''] : []), '```' + (b.lang || 'csharp'), readSnip(b.source), '```', ''); if (d.quickstart.note) L.push(d.quickstart.note, ''); }
+        if (d.sizzle?.pointer) L.push(`${d.sizzle.pointer.title}. ${(d.sizzle.pointer.line || '').replace(/\{(\w+)\}/g, (_, k) => (ctx.limitFacts[p.id] || {})[k] ?? `{${k}}`)}`, '');
+        if (d.today) L.push(`${d.today.title}:`, ...d.today.items.map((w) => `- ${w.title} (${w.built ? 'built' : 'not built'}). ${w.text.replace(/\{(\w+)\}/g, (_, k) => (ctx.limitFacts[p.id] || {})[k] ?? `{${k}}`)}`), '');
+        if (d.otherTools) L.push(`${d.otherTools.title}:`, ...d.otherTools.items.map((l) => `- ${l}`), '');
         if (d.limits) L.push('Limits:', ...d.limits.map((l) => `- ${l.replace(/\{(\w+)\}/g, (_, k) => (ctx.limitFacts[p.id] || {})[k] ?? `{${k}}`)}`), '');
       }
     }

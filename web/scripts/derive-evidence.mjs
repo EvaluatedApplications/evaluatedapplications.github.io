@@ -10,6 +10,7 @@ import * as gate from '../src/assets/diagrams/evalapp-gate.js';
 import * as cost from '../src/assets/diagrams/algformer-cost.js';
 import * as vox from '../src/assets/diagrams/holovoxel-lod.js';
 import * as prose from '../src/assets/diagrams/prose-pipeline.js';
+import * as boot from '../src/assets/diagrams/blazier-boot.js';
 
 const out = (name, rec) => { fs.writeFileSync(path.join(DATA, 'evidence', name + '.json'), JSON.stringify(rec, null, 2) + '\n', 'utf8'); console.log('wrote evidence/' + name + '.json'); };
 const n0 = (n) => Number(n).toLocaleString('en-GB');
@@ -171,5 +172,54 @@ const dg = (n) => readJson(path.join(DATA, 'diagrams', n + '.json'));
       'One corpus, one seed.',
     ],
     internal: { source: 'web/generators/prose-pipeline, web/scripts/derive-evidence.mjs' },
+  });
+}
+
+// ---------------------------------------------------------------- Blazier: what the visitor waits for
+{
+  const d = dg('blazier-boot'), m = boot.metrics(d), F = boot.limitFacts(m), me = d.method;
+  const fr = boot.fmtRange;
+  const rowsFor = (x) => x.groups.map((g) => [x.label, g.label, fr(g.classic.lo, g.classic.hi, x.unit), fr(g.shell.lo, g.shell.hi, x.unit)]);
+  out('blazier-boot', {
+    id: 'blazier-boot', product: 'blazier', slug: '/blazier/evidence/', scope: 'The sample app in headless Edge',
+    title: 'What a visitor waits for',
+    description: `A Blazier static shell downloads ${F.bytesShell} before the visitor acts, against ${F.bytesClassic} for the usual boot, and shows content in ${F.contentPhoneShell} on a phone profile.`,
+    claim: `On the sample app the static page downloads ${F.bytesShell} before the visitor acts, against ${F.bytesClassic} when the same app boots the usual way. Real content is on screen in ${F.contentDesktopShell} on desktop and ${F.contentPhoneShell} on the phone profile, against ${F.contentDesktopClassic} and ${F.contentPhoneClassic}. After the visitor presses Start the runtime takes ${F.workingDesktopShell} on desktop and ${F.workingPhoneShell} on the phone profile to reach a working page, the same wait as the usual boot.`,
+    headline: [
+      { value: F.bytesShell, label: `downloaded before the visitor does anything, against ${F.bytesClassic} when the same app boots the usual way` },
+      { value: F.contentPhoneShell, label: `until real content is on screen on the phone profile, against ${F.contentPhoneClassic} booting the usual way` },
+      { value: F.gap, label: `worst gap on the page's timers while a worker ran a long job, with ${F.longTasks} long tasks` },
+      { value: F.callRt, label: 'for one call to a worker service, round trip' },
+    ],
+    method: {
+      workload: `The Blazier sample app, ${me.build}, is loaded in ${me.browser} from ${me.server}. The same page is loaded two ways: booted the usual way, and as a Blazier static shell that starts the runtime when the visitor presses Start. The worker rows run ${me.workerJob} in a worker service.`,
+      engines: ['Blazier static shell', 'Blazor WebAssembly booted the usual way'],
+      verification: `On a page with a click target, a touch scroll, a tap on text and a Tab key press make ${F.gestureRequests} requests for the runtime, while the control page starts it.`,
+      statistic: `Desktop is unthrottled, ${F.desktopRuns} runs. The phone profile is ${me.phone}, ${F.phoneRuns} runs. A range runs from the fastest to the slowest run.`,
+      machine: `${me.machine[0].toUpperCase()}${me.machine.slice(1)}.`,
+    },
+    tables: [
+      {
+        id: 'boot', kind: 'matrix', caption: 'Booted the usual way and as a Blazier static shell',
+        columns: ['Measure', 'Profile', ...d.series.map((s) => s.label)],
+        rows: [...rowsFor(m.bytes).map((r) => [r[0], 'Both', r[2], `${r[3]} in ${F.requestsShell} requests`]), ...rowsFor(m.content), ...rowsFor(m.working).map((r) => [r[0] + ' (usual boot from loading the page, Blazier from pressing Start)', r[1], r[2], r[3]])],
+      },
+      {
+        id: 'worker', kind: 'matrix', caption: 'Worker bridge, desktop', columns: ['Measure', 'Recorded'],
+        rows: d.worker.map((w) => [w.label, w.text || fr(w.lo, w.hi, w.unit)]),
+      },
+    ],
+    losses: [
+      `Pressing Start does not shorten the wait for the runtime: a working page takes ${F.workingPhoneShell} after the press on the phone profile, against ${F.contentPhoneClassic} for the usual boot. Blazier moves the wait behind a readable page and does not remove it.`,
+    ],
+    limits: [
+      'One sample app on one machine. The figures describe that app, not a forecast for another.',
+      'The sample app uses the trimmed interpreter build. In an ahead-of-time build the lazy-assembly saving is small, because that native code lives in the main runtime file either way.',
+      `The worker rows are desktop only. The phone profile slows the page and not the worker, so a phone worker figure would describe the page. A worker runtime starts at about ${F.workerMemory} of memory.`,
+      'Headless Edge only. Firefox and Safari have not been run, and the memory and battery cost on a phone are not measured.',
+      'The worker bridge was measured with a shared bundle. A separate worker bundle has been built but not run in a browser.',
+      'The Showroom tool pages are built this way, but their shell sizes and timings are not part of this record.',
+    ],
+    internal: { source: 'web/data/diagrams/blazier-boot.json, web/scripts/derive-evidence.mjs' },
   });
 }

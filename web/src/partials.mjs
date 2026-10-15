@@ -136,6 +136,15 @@ export function toolBand(tool, p, others = []) {
 </div></div></section>`;
 }
 
+// A product with no tool of its own can point at the tools that run on it: the same band, one button, words from the product's data.
+export function pointerBand(pt, subst = {}) {
+  const fill = fillWith(subst);
+  return html`<section class="sec doc-sec" id="demo" aria-label="Try it now"><div class="wrap"><div class="callout tool-band">
+  <div class="tb-copy"><p class="eyebrow">${pt.eyebrow || 'Try it now, in your browser'}</p><h2>${pt.title}</h2><p>${fill(pt.line)}</p></div>
+  <div class="actions"><a class="btn btn-primary" href="${pt.cta.href}">${pt.cta.label}</a></div>
+</div></div></section>`;
+}
+
 export const nbsp =(s) => String(s).replace(/ /g, ' ');
 export { fmt2, fmt0 };
 

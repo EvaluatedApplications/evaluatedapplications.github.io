@@ -1,0 +1,13 @@
+@page "/hello"
+@using Blazier
+@attribute [BlazierPage("hello", Start = StartOn.Click, ClickTarget = "[data-blazier-go]",
+    Title = "Hello", Description = "A page that is readable before any .NET code runs.")]
+@inject IBuildTime Build
+
+<h1>Hello</h1>
+<p>This text is plain HTML. Reading it downloads no .NET runtime.</p>
+<button type="button" data-blazier-go>Start</button>
+@if (!Build.IsPrerender)
+{
+    <p>The runtime is running now.</p>
+}

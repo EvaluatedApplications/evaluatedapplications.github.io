@@ -1,0 +1,107 @@
+{
+  "title": "Blazier: pages that read first",
+  "description": "Blazor WebAssembly pages that read at once on a static host and download .NET only when a visitor presses Start, plus a typed Web Worker bridge.",
+  "sizzle": {
+    "headline": "Show the page now. Download .NET when they press Start.",
+    "sub": "Blazier turns your Blazor WebAssembly pages into real HTML at publish time. Visitors read at once, and the .NET runtime downloads only when someone presses the button that needs it. Long C# jobs run in a Web Worker behind an ordinary interface.",
+    "mechanismTitle": "How it works",
+    "pointer": {
+      "title": "Every tool on this site is a Blazier page",
+      "line": "Open any tool. Its page reads at once, and its roughly {toolRuntimeMb} MB runtime downloads only when you press Start. Scrolling, tapping text or following a link downloads nothing.",
+      "cta": { "label": "Open the tools", "href": "/tools/" }
+    },
+    "stats": [
+      { "evidence": "blazier-boot", "tile": 0 },
+      { "evidence": "blazier-boot", "tile": 1 },
+      { "evidence": "blazier-boot", "tile": 2 },
+      { "evidence": "blazier-boot", "tile": 3 }
+    ],
+    "numbers": {
+      "summary": "See the numbers",
+      "items": [
+        { "claim": "{bytesShell} before anyone acts", "text": "On the sample app the static page, its loader and its styles come to {bytesShell} in {requestsShell} requests. The same app booted the usual way downloads {bytesClassic} before the visitor can do anything." },
+        { "claim": "Content on screen in {contentPhoneShell} on a phone profile", "text": "Real content is on screen in {contentDesktopShell} on desktop. Booted the usual way it takes {contentDesktopClassic} on desktop and {contentPhoneClassic} on the phone profile ({phoneProfile})." },
+        { "claim": "The runtime still costs what it costs", "text": "From pressing Start to a working page takes {workingDesktopShell} on desktop and {workingPhoneShell} on the phone profile, the same wait as the usual boot. Blazier moves it behind a readable page instead of in front of it." },
+        { "claim": "A worker that does not freeze the page", "text": "A worker runtime starts in {workerStart} from cached files and a call takes {callRt}. While a worker ran {workerJob}, the worst gap on the page's timers was {gap}, with {longTasks} long tasks. A job that yields stops in {coopCancel}." },
+        { "claim": "Where it was measured", "text": "The sample app, in headless Edge on {machine}. Desktop is unthrottled ({desktopRuns} runs) and the phone profile is {phoneProfile} ({phoneRuns} runs). A range runs from the fastest to the slowest run." }
+      ]
+    },
+    "build": {
+      "title": "What you can build",
+      "line": "Each one is in the package today.",
+      "items": [
+        { "title": "Pages that read at once on a static host", "text": "Mark a component with the BlazierPage attribute; publish writes its HTML into your own index.html. Titles, descriptions, canonical and Open Graph tags come with it, so the page is indexable and previews well when shared." },
+        { "title": "Tools that cost nothing until they are used", "text": "Put a Start button on the page and only a click on that button downloads the runtime. Scrolling, tapping text or following a link never does, so a phone visitor who only reads pays for the HTML and nothing else." },
+        { "title": "Pages made of independent islands", "text": "A chart here, a form there, each booting the one shared runtime on its own trigger: click, scroll into view, browser idle, or straight away." },
+        { "title": "Heavy components that download on demand", "text": "Put a component in a lazy assembly and its code arrives only when its island is used. The build fails and names the path if startup code would reach it, instead of the app dying at boot in a visitor's browser." },
+        { "title": "Long C# jobs that never freeze the page", "text": "Write an ordinary interface; a generated bridge runs it in a Web Worker. The page awaits the call, shows progress, receives results as a stream and can cancel." },
+        { "title": "Data pages that still prerender", "text": "Components that fetch data render a skeleton in the static page. A page that tries to fetch at publish fails the build instead of shipping an error message as HTML." }
+      ]
+    }
+  },
+  "intro": "Blazier is a publish step, a small loader and a worker bridge in one package. It hosts any Blazor WebAssembly app and needs no other Evaluated Applications package.",
+  "facts": ["Stands alone, no other package", "Typed Web Worker bridge", ".NET 10"],
+  "why": [
+    { "title": "Publish renders your pages", "text": "After dotnet publish, a small tool renders every BlazierPage component with Blazor's HtmlRenderer and writes it into your own index.html as path/index.html. Components see IBuildTime.IsPrerender as true while this happens." },
+    { "title": "A tiny loader waits for intent", "text": "blazier.js is a classic script with no dependencies. On click (anywhere in the page or only on one chosen control), visibility, idle or immediately, it starts Blazor and mounts the component over the shell, keeping the shell on screen until the live one has rendered. A handshake from Blazor ties runtime start and mounting together, so mounting does not race the runtime." },
+    { "title": "Islands are named components", "text": "Register them in UseBlazier; mark them in Razor with Island or in plain HTML with data-blazier-island. Each element reports its state (idle, booting, mounting, live, failed) for styling, and the page raises blazier events with byte and timing figures." },
+    { "title": "Lazy assemblies are named in the project file", "text": "LazyIsland(\"chart\", \"Charts.PrimeChart, Charts\", \"Charts\") mounts a component from an assembly that downloads on demand. After each build a guard walks the code reachable from startup and fails the build, naming the path, if it reaches a lazy-assembly type." },
+    { "title": "The worker bridge is generated", "text": "A source generator turns a WorkerService interface into a page-side proxy and a worker-side dispatcher. The worker starts a second runtime from the files the page already downloaded. Calls, progress and streamed items are messages; arguments and results travel as JSON. A cancellation token cancels cooperatively. A job that never yields is stopped by terminating and restarting the worker after a grace period, and only that worker's calls fail." }
+  ],
+  "diagram": {
+    "id": "blazier-boot",
+    "title": "What the visitor waits for",
+    "stageLabel": "Bar chart of the recording. Choose a view with the tabs.",
+    "lede": "One app, booted two ways. Before anyone acts, the static shell downloads {bytesShell} against {bytesClassic}. Pick a view to see real content on screen and the time until the page works.",
+    "caption": "Recorded on the sample app that ships with Blazier (release {version}) in headless Edge. Desktop is unthrottled and the phone profile is {phoneProfile}. Every bar and every figure on this page is read from that recording."
+  },
+  "quickstart": {
+    "lede": "A page that reads before any .NET code runs, then a long job that never freezes it.",
+    "blocks": [
+      { "lede": "Start from a Blazor WebAssembly project and turn on scaffolding in the project file.", "label": "Project file", "lang": "xml", "source": "snippets/blazier-hello.csproj.xml" },
+      { "lede": "Load the loader in wwwroot/index.html instead of starting Blazor yourself. Keep the import map line.", "label": "wwwroot/index.html", "lang": "html", "source": "snippets/blazier-hello-index.html" },
+      { "lede": "Register your root component. HelloApp stands for your project's root namespace.", "label": "Program.cs", "source": "snippets/blazier-hello.cs" },
+      { "lede": "Mark the page. The button is the only thing that starts the runtime.", "label": "Pages/Hello.razor", "lang": "razor", "source": "snippets/blazier-hello.razor" },
+      { "lede": "dotnet publish writes hello/index.html with the heading, text and button already in it. The runtime downloads when the button is pressed, then the live component replaces the shell.", "label": "hello/index.html after dotnet publish (body)", "lang": "html", "out": true, "source": "snippets/blazier-hello.out.html" },
+      { "lede": "A long job in a worker, behind an ordinary interface. The page awaits the call, shows progress and can cancel.", "label": "A worker service", "source": "snippets/blazier-worker.cs" }
+    ],
+    "note": "The page project and the worker program both build against the published package. The block under hello/index.html is the body that dotnet publish wrote for this page. Running the worker needs a browser."
+  },
+  "capabilities": [
+    { "title": "Per-page head tags", "text": "Title and Description on the BlazierPage attribute replace the template's title and meta description in each shell. Set the BlazierSiteUrl property and every shell also gets a canonical link and Open Graph tags." },
+    { "title": "On-intent loader", "text": "Boots Blazor on click, visibility, idle or immediately, keeps the static shell visible until the component has rendered, and mounts islands on a ready handshake from the runtime." },
+    { "title": "Start on one control", "text": "Give a Click page a ClickTarget selector and only a click on that control starts the runtime, so a phone visitor who scrolls or taps text never downloads it." },
+    { "title": "Islands", "text": "Several named components on one static page, each booting the one shared runtime on its own trigger. Island marks them in Razor, and data-blazier-island works in plain HTML." },
+    { "title": "Build-time shells for pages that fetch", "text": "Inject IBuildTime and skip fetching when IsPrerender is true, or wrap the live part in NotAtBuildTime with a skeleton. A page that still tries to fetch fails the publish with BLZ102 instead of shipping an error message as static HTML." },
+    { "title": "Lazy assemblies with a guard", "text": "LazyIsland mounts a component whose assembly downloads only on demand. After every build a guard fails with BLZ001, naming the path, if startup code reaches a lazy-assembly type." },
+    { "title": "Typed worker bridge", "text": "Calls are awaitable, IProgress streams progress, IAsyncEnumerable streams results with backpressure, and a CancellationToken cancels cooperatively. A job that never yields is stopped by terminating and restarting the worker after a grace period." },
+    { "title": "Same protocol in-process", "text": "BlazierWorker.StartInProcessAsync runs your services on a dedicated thread with the same messages, for unit tests and non-browser hosts." }
+  ],
+  "today": {
+    "title": "What exists today",
+    "line": "Built and measured, and not built",
+    "items": [
+      { "built": true, "status": "Built and measured", "title": "Typed Web Worker bridge", "text": "Awaitable calls, IProgress, IAsyncEnumerable with backpressure, cooperative and hard cancellation, restart, and an in-process mode that speaks the same protocol for unit tests. It has been run in headless Edge against the sample app. It has not been run in Firefox or Safari, and its phone memory and battery cost are not measured. Arguments are JSON text; there is no binary or zero-copy message." },
+      { "built": false, "title": "EvalApp host seam", "text": "Blazier has no EvalApp dependency and no EvalApp-specific code. Nothing fans an EvalApp pipeline out across several worker runtimes. You can run a whole pipeline inside one worker service today by writing that service yourself; a built-in pool of workers behind EvalApp does not exist." }
+    ]
+  },
+  "otherTools": {
+    "title": "When another tool fits better",
+    "items": [
+      "A page that always needs the runtime, a dashboard behind a login for example, gains little from a static shell. Plain Blazor WebAssembly is simpler.",
+      "Content that needs no .NET in the browser at all is better served by a static site generator.",
+      "Server-rendered interactivity (Blazor Server or Blazor Web App) suits apps that can run a server. Blazier is for hosts with none, such as GitHub Pages.",
+      "Parallel speed-ups across cores. Workers free the page; they do not share memory. Each worker is its own runtime with its own copy of your data."
+    ]
+  },
+  "limits": [
+    "The first interaction starts the runtime but is not replayed: the visitor presses again once the page is live.",
+    "Moving between two static pages is a full page load, so in-memory state does not carry over. Mount the routed app (App<TApp>()) to keep one runtime across tools.",
+    "The lazy guard is conservative: it follows startup code, routable pages and component render code, not lambdas that run later (event handlers, DI factories).",
+    "Lazy assemblies save little in an ahead-of-time compiled build, because that native code lives in the main runtime file either way. They pay off with the interpreter build.",
+    "A worker runtime starts at about {workerMemory} of memory; on phones, memory is the budget. The worker bridge was measured with a shared bundle on the interpreter build. A separate worker bundle exists but has not been run in a browser.",
+    "Requires .NET 10 and the Blazor WebAssembly package matching the installed browser-wasm runtime pack. The publish step runs a small tool that needs the ASP.NET Core runtime."
+  ],
+  "reference": "Every public type is documented in the package readme on NuGet.",
+  "related": { "title": "Powers", "links": [ { "label": "The Showroom tools", "href": "/tools/" } ] }
+}

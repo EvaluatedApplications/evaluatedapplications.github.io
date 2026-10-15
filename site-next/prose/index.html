@@ -15,7 +15,7 @@
 <meta name="twitter:card" content="summary">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%23f0796a'/%3E%3Cstop offset='.5' stop-color='%237bd86a'/%3E%3Cstop offset='1' stop-color='%23c07dff'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='32' height='32' rx='7' fill='%23050608'/%3E%3Cpath d='M16 5L27 26H5Z' fill='none' stroke='url(%23g)' stroke-width='2' stroke-linejoin='round'/%3E%3C/svg%3E">
 <script>document.documentElement.classList.add('js')</script>
-<link rel="stylesheet" href="/assets/ea.css?v=15c8b29e">
+<link rel="stylesheet" href="/assets/ea.css?v=200900a0">
 <script type="application/ld+json">{"@context":"https://schema.org","@type":"SoftwareApplication","name":"EvaluatedApplications.Prose","alternateName":"Prose","description":"Mine the grammar of your text into HoloDb and recombine it into new sentences and question and answer pairs, each one re-parsed before you get it.","applicationCategory":"DeveloperApplication","operatingSystem":".NET","softwareVersion":"1.4.0","url":"https://evaluatedapplications.github.io/prose/","downloadUrl":"https://www.nuget.org/packages/EvaluatedApplications.Prose","license":"https://evaluatedapplications.github.io/licence/","author":{"@id":"https://evaluatedapplications.github.io/#org"}}</script><script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Home","item":"https://evaluatedapplications.github.io/"},{"@type":"ListItem","position":2,"name":"Products","item":"https://evaluatedapplications.github.io/products/"},{"@type":"ListItem","position":3,"name":"Prose","item":"https://evaluatedapplications.github.io/prose/"}]}</script>
 
 </head>
@@ -101,6 +101,7 @@ The peaceful ball barks.
 A queen sends the letter.
 A book chases the ball.
 The peaceful kingdom rules the wise kingdom.</code></pre></div>
+  
   <p class="muted tool-note">This is the complete program, compiled and run against the published package.</p>
   <p class="prose-block">Parsing needs no mining and no database. The comma changes the parse, and the meaning with it.</p><div class="code"><div class="code-bar"><span>C#</span><button class="copy" type="button" aria-label="Copy C#">copy</button></div><pre><code class="language-csharp">using Prose;
 
@@ -151,6 +152,8 @@ prose.WriteQaPairs(@&quot;C:\corpus\qa&quot;, 50_000);           // write contex
   <ul class="points"><li><h3>Parse</h3><p>Sentence splitting, part-of-speech tagging, phrase chunking and role assignment (subject, verb, objects, indirect object, predicate, relative clauses) with zero training and no external model.</p></li><li><h3>Mine</h3><p>Scans a corpus and builds a lexicon plus selectional tables: which subjects go with which verbs, which verbs take which objects and which adjectives modify which nouns. They are stored in a HoloDb database.</p></li><li><h3>Generate</h3><p>Samples a sentence shape from the mined patterns (simple, transitive, ditransitive, copular, with optional relative clauses), fills each slot with an observed, agreement-correct word, and keeps only sentences that re-parse validly.</p></li><li><h3>Plausibility scoring</h3><p>Optional. A small language model ranks generated candidates so the output reads more sensibly, without weakening the grammatical guarantee.</p></li><li><h3>Question and answer generation</h3><p>Turns generated sentences into context, question and answer triples, including multi-sentence passages with coreference and self-referential two-turn dialogues.</p></li><li><h3>Corpus and TSV export</h3><p>Write generated sentences straight to text files, or question and answer pairs to a prompt and target TSV, ready for a language model&#39;s training data.</p></li></ul>
 </div></section>
 
+
+
 <section class="sec doc-sec" aria-labelledby="h-lim"><div class="wrap">
   <div class="sec-head"><span class="sec-dot cat-chord-holodb-algformer" aria-hidden="true"></span><h2 id="h-lim">Know before you start</h2><span class="sec-line">What Prose does not do, and where to be careful</span></div>
   <ul class="limits"><li>A small corpus recombines freely. Below 500 mined sentences generation falls back to the whole part-of-speech pool, so pairings need not have been seen. From 500 sentences on it draws only from pairings the tables contain.</li><li>Grammatical is not the same as meaningful. The output is built from observed pairings and checked for form, and it can still say odd things. The optional scorer ranks candidates, and correct output never depends on it.</li><li>Relative clauses are handled for subject relatives. Object relatives and non-restrictive relatives are not.</li><li>Generation is deterministic for a seed. Parallel generation uses a fixed number of shards, so it is also deterministic across machines, but it draws a different sequence from the sequential path.</li><li>It depends on HoloDb, which holds the mined tables, and on AlgFormer, which supplies the optional scorer. Installing the package brings both in.</li><li>The package ships as a binary with no source.</li></ul>
@@ -166,6 +169,7 @@ prose.WriteQaPairs(@&quot;C:\corpus\qa&quot;, 50_000);           // write contex
     <div><h3>Builds on</h3><ul><li><a class="pill" href="/evalapp/">EvalApp</a></li><li><a class="pill" href="/holodb/">HoloDb</a></li><li><a class="pill" href="/algformer/">AlgFormer</a></li></ul></div>
     
     
+    
     <div><h3>Elsewhere</h3><ul><li><a class="pill" href="/products/">All products</a></li><li><a class="pill" href="https://www.nuget.org/packages/EvaluatedApplications.Prose" rel="noopener">NuGet package</a></li></ul></div>
   </div>
 </div></section>
@@ -177,7 +181,7 @@ prose.WriteQaPairs(@&quot;C:\corpus\qa&quot;, 50_000);           // write contex
 </main>
 <footer class="site-footer"><div class="wrap">
   <div class="foot-grid">
-    <div><h2>Products</h2><ul><li><a href="/phasor/">Phasor</a></li><li><a href="/evalapp/">EvalApp</a></li><li><a href="/holodb/">HoloDb</a></li><li><a href="/algformer/">AlgFormer</a></li><li><a href="/prism/">Prism</a></li><li><a href="/prose/">Prose</a></li><li><a href="/tracer/">Tracer</a></li><li><a href="/holovoxel/">HoloVoxel</a></li></ul></div>
+    <div><h2>Products</h2><ul><li><a href="/phasor/">Phasor</a></li><li><a href="/evalapp/">EvalApp</a></li><li><a href="/holodb/">HoloDb</a></li><li><a href="/algformer/">AlgFormer</a></li><li><a href="/prism/">Prism</a></li><li><a href="/prose/">Prose</a></li><li><a href="/tracer/">Tracer</a></li><li><a href="/holovoxel/">HoloVoxel</a></li><li><a href="/blazier/">Blazier</a></li></ul></div>
     <div><h2>Tools</h2><ul><li><a href="/tools/dashboard/">The Dashboard</a></li><li><a href="/tools/analyst/">The Analyst</a></li><li><a href="/tools/creature/">The Creature</a></li><li><a href="/tools/forecaster/">The Forecaster</a></li><li><a href="/tools/prism/">Prism</a></li><li><a href="/tools/stories/">Nano Stories</a></li><li><a href="/tools/cartographer/">The Cartographer</a></li><li><a href="/tools/prose/">Prose</a></li><li><a href="/tools/council-spending/">Council Spending Scanner</a></li></ul></div>
     <div><h2>Learn</h2><ul><li><a href="/evidence/">Evidence</a></li><li><a href="/research/">Research</a></li><li><a href="/products/">All products</a></li><li><a href="/tools/">All tools</a></li></ul></div>
     <div><h2>Company</h2><ul><li><a href="/partner/">Partner with us</a></li><li><a href="/licence/">Licence</a></li><li><a href="/ai/">For AI readers</a></li><li><a href="https://www.nuget.org/profiles/evaluatedapplications" rel="noopener">NuGet</a></li></ul></div>

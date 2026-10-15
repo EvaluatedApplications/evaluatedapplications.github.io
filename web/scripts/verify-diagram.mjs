@@ -378,6 +378,30 @@ try {
   await b.goto(`${base}/research/`, { width: 1280, height: 900 });
   await b.evaluate("document.querySelector('[data-filter] [data-topic=layers]').click()");
   ok('research hub: the topic filter hides articles that do not match', await b.evaluate("[...document.querySelectorAll('.research-cards .card')].filter(c=>!c.hidden).length===1 && /1 of 5 articles about layers/.test(document.querySelector('[data-filter-count]').textContent)"));
+
+  // ================= Blazier: the boot bars =================
+  const BB = "document.querySelector('[data-diagram=blazier-boot]').dataset.ready==='true'";
+  const bbTab = (mode) => b.evaluate(`document.querySelector('[data-diagram=blazier-boot] [role=tab][data-mode="${mode}"]').click()`);
+  const bbRead = () => b.evaluate("document.querySelector('[data-diagram=blazier-boot] [data-ctl=readout]').textContent");
+  // every label and value sits inside the drawing, in every view, on desktop and on a phone
+  const bbFit = "(()=>{const s=document.querySelector('[data-diagram=blazier-boot] .bb-svg'); const vb=s.viewBox.baseVal; return [...s.querySelectorAll('text')].every(t=>{const r=t.getBBox(); return r.x>=-1 && r.x+r.width<=vb.width+1 && r.y>=-1 && r.y+r.height<=vb.height+1;});})()";
+  for (const [label, opts] of [['desktop', { width: 1280, height: 900 }], ['phone 390', { width: 390, height: 844, mobile: true }]]) {
+    await b.goto(`${base}/blazier/`, { ...opts, wait: BB });
+    ok(`blazier ${label}: bars mount without console errors`, b.errors.length === 0, JSON.stringify(b.errors));
+    ok(`blazier ${label}: first view is the bytes before anyone acts`, await bbRead().then((t) => /downloads 6\.8 KB in 6 requests/.test(t) && /2\.8 MB/.test(t)));
+    ok(`blazier ${label}: bytes view fits the drawing`, await b.evaluate(bbFit));
+    await bbTab('content');
+    ok(`blazier ${label}: content view reads both profiles`, await bbRead().then((t) => /72 to 100 ms on desktop and 416 to 484 ms on the phone profile/.test(t)) && await b.evaluate("document.querySelectorAll('[data-diagram=blazier-boot] .bb-svg .gh').length===2"));
+    ok(`blazier ${label}: content view fits the drawing`, await b.evaluate(bbFit));
+    await bbTab('working');
+    ok(`blazier ${label}: working view says the runtime still costs what it costs`, await bbRead().then((t) => /still costs what it costs/.test(t) && /12\.7 to 15\.4 s/.test(t)));
+    ok(`blazier ${label}: working view fits the drawing`, await b.evaluate(bbFit));
+    ok(`blazier ${label}: table alternative holds three measures and the worker bridge`, await b.evaluate("document.querySelectorAll('[data-diagram=blazier-boot] .dia-data table').length===4"));
+  }
+  ow = await overflow('/blazier/');
+  ok('blazier phone 390: no horizontal overflow', ow.sw <= ow.cw, JSON.stringify(ow));
+  ow = await overflow('/blazier/evidence/');
+  ok('blazier evidence phone 390: no horizontal overflow', ow.sw <= ow.cw, JSON.stringify(ow));
 } finally { b.close(); server.close(); }
 process.exitCode = results.every(Boolean) ? 0 : 1;
 

@@ -65,6 +65,8 @@ async function main() {
     const ids = [p.doc?.diagram?.id, ...(p.doc?.factDiagrams || [])].filter(Boolean);
     ctx.limitFacts[p.id] = {};
     for (const id of ids) { const mod = diagramModule(id); if (mod.limitFacts) Object.assign(ctx.limitFacts[p.id], mod.limitFacts(mod.metrics(ctx.diagrams[id]))); }
+    // the one site-wide runtime size, read from the Showroom source (data/generated/facts.json), is available to any product's prose
+    if (ctx.toolRuntimeMb != null) ctx.limitFacts[p.id].toolRuntimeMb = String(ctx.toolRuntimeMb);
   }
 
   // ---- clean output ----

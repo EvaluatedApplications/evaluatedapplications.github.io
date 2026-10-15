@@ -3,7 +3,7 @@ import path from 'node:path';
 import { html, raw } from '../../scripts/lib/html.mjs';
 import { DATA } from '../../scripts/lib/data.mjs';
 import { pageHead, secHead, breadcrumbs, crumbsLd } from '../layout.mjs';
-import { installLine, codeBlock, evidenceTiles, stat, productSubnav, resolveStats, numbersBlock, toolBand } from '../partials.mjs';
+import { installLine, codeBlock, evidenceTiles, stat, productSubnav, resolveStats, numbersBlock, toolBand, pointerBand } from '../partials.mjs';
 import { diagramFigure } from '../diagram.mjs';
 
 const read = (rel) => fs.readFileSync(path.join(DATA, rel), 'utf8').replace(/\r\n/g, '\n').trimEnd();
@@ -48,8 +48,8 @@ export default function product(ctx, p) {
     });
   }
   const qs = doc.quickstart;
-  const code = qs ? read(qs.source) : null;
-  const out = qs ? read(qs.output) : null;
+  const code = qs?.source ? read(qs.source) : null;
+  const out = qs?.output ? read(qs.output) : null;
 
   const tryTool = doc.tryTool ? ctx.tools.find((t) => t.id === doc.tryTool.tool) : null;
   const heroTool = sz?.tool ? ctx.tools.find((t) => t.id === sz.tool) : null;
@@ -83,8 +83,8 @@ export default function product(ctx, p) {
 <p class="licence-ribbon"><span>${ctx.licence.ribbon}</span><a href="/licence/">Licence terms</a></p>`,
   }) : '';
 
-  const figSec = fig ? html`<section class="sec fig-sec doc-sec" id="${sz && !heroTool ? 'demo' : 'overview'}" aria-label="Overview"><div class="wrap">${fig.html}</div></section>` : '';
-  const bandSec = heroTool ? toolBand(heroTool, p, p.tools.filter((t) => t.id !== heroTool.id)) : '';
+  const figSec = fig ? html`<section class="sec fig-sec doc-sec" id="${sz && !heroTool && !sz.pointer ? 'demo' : 'overview'}" aria-label="Overview"><div class="wrap">${fig.html}</div></section>` : '';
+  const bandSec = heroTool ? toolBand(heroTool, p, p.tools.filter((t) => t.id !== heroTool.id)) : sz?.pointer ? pointerBand(sz.pointer, subst) : '';
 
   const stats = sz ? resolveStats(ctx, sz.stats, subst) : [];
   const numbersSec = sz ? numbersBlock({
@@ -99,7 +99,7 @@ export default function product(ctx, p) {
 
   const whatSec = html`<section class="sec doc-sec" aria-labelledby="h-what"><div class="wrap">
   ${secHead({ title: sz ? (sz.mechanismTitle || `How ${p.name} works`) : `What ${p.name} is`, cat: p.cat, id: 'h-what' })}
-  ${[].concat(doc.intro).map((t) => html`<p class="prose-block">${t}</p>`)}
+  ${[].concat(doc.intro).map((t) => html`<p class="prose-block">${fill(t)}</p>`)}
   ${doc.why ? html`<ul class="points">${doc.why.map((w) => html`<li><h3>${w.title}</h3><p>${fill(w.text)}</p></li>`)}</ul>` : ''}
 </div></section>`;
 
@@ -107,9 +107,10 @@ export default function product(ctx, p) {
   const qsSec = qs ? html`<section class="sec doc-sec" id="quick-start" aria-labelledby="h-qs"><div class="wrap">
   ${secHead({ title: sz ? (sz.codeTitle || 'Run it yourself') : 'Quick start', line: qs.lede, cat: p.cat, id: 'h-qs' })}
   ${extraInstalls}
-  ${codeBlock({ code, label: 'C#' })}
-  ${codeBlock({ code: out, label: 'Output', out: true, lang: 'text' })}
-  <p class="muted tool-note">This is the complete program, compiled and run against the published package.</p>
+  ${code ? codeBlock({ code, label: 'C#' }) : ''}
+  ${out ? codeBlock({ code: out, label: 'Output', out: true, lang: 'text' }) : ''}
+  ${(qs.blocks || []).map((b) => html`${b.lede ? html`<p class="prose-block">${fill(b.lede)}</p>` : ''}${codeBlock({ code: read(b.source), label: b.label || 'C#', lang: b.lang || 'csharp', out: b.out })}`)}
+  <p class="muted tool-note">${qs.note || 'This is the complete program, compiled and run against the published package.'}</p>
   ${(qs.also || []).map((a) => html`${a.lede ? html`<p class="prose-block">${a.lede}</p>` : ''}${codeBlock({ code: read(a.source), label: 'C#' })}${a.output ? codeBlock({ code: read(a.output), label: 'Output', out: true, lang: 'text' }) : ''}`)}
 </div></section>` : '';
 
@@ -130,6 +131,16 @@ export default function product(ctx, p) {
 </div></section>`;
   });
 
+  // What exists today against what does not: each item carries a status badge, so an unbuilt piece is never read as present.
+  const todaySec = doc.today ? html`<section class="sec doc-sec" id="today" aria-labelledby="h-today"><div class="wrap">
+  ${secHead({ title: doc.today.title, line: doc.today.line, cat: p.cat, id: 'h-today' })}
+  <ul class="points">${doc.today.items.map((w) => html`<li><h3>${w.title} <span class="badge ${w.built ? 'badge-ok' : 'badge-warn'}">${w.status || (w.built ? 'Built' : 'Not built')}</span></h3><p>${fill(w.text)}</p></li>`)}</ul>
+</div></section>` : '';
+  const otherSec = doc.otherTools ? html`<section class="sec doc-sec" id="fit" aria-labelledby="h-fit"><div class="wrap">
+  ${secHead({ title: doc.otherTools.title, cat: p.cat, id: 'h-fit' })}
+  <ul class="limits">${doc.otherTools.items.map((l) => html`<li>${fill(l)}</li>`)}</ul>
+</div></section>` : '';
+
   const limSec = doc.limits ? html`<section class="sec doc-sec" aria-labelledby="h-lim"><div class="wrap">
   ${secHead({ title: sz ? 'Know before you start' : 'Limits', line: `What ${p.name} does not do, and where to be careful`, cat: p.cat, id: 'h-lim' })}
   <ul class="limits">${doc.limits.map((l) => html`<li>${fill(l)}</li>`)}</ul>
@@ -147,6 +158,7 @@ export default function product(ctx, p) {
     ${dependsOn.length ? html`<div><h3>Builds on</h3><ul>${dependsOn.map((d) => html`<li><a class="pill" href="${d.href}">${d.name}</a></li>`)}</ul></div>` : ''}
     ${usedBy.length ? html`<div><h3>Used by</h3><ul>${usedBy.map((d) => html`<li><a class="pill" href="${d.href}">${d.name}</a></li>`)}</ul></div>` : ''}
     ${p.tools.length ? html`<div><h3>Try it in the browser</h3><ul>${p.tools.map((t) => html`<li><a class="pill" href="${t.href}">${t.name}</a></li>`)}</ul></div>` : ''}
+    ${doc.related ? html`<div><h3>${doc.related.title}</h3><ul>${doc.related.links.map((l) => html`<li><a class="pill" href="${l.href}">${l.label}</a></li>`)}</ul></div>` : ''}
     <div><h3>Elsewhere</h3><ul><li><a class="pill" href="/products/">All products</a></li><li><a class="pill" href="${primary.nuget}" rel="noopener">NuGet package</a></li></ul></div>
   </div>
 </div></section>`;
@@ -168,6 +180,8 @@ ${qsSec}
 ${whatSec}
 ${capSec}
 ${extSecs}
+${todaySec}
+${otherSec}
 ${limSec}
 ${evSec}
 ${relSec}

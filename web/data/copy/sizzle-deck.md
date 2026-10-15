@@ -131,3 +131,13 @@ the full feature list, limits, evidence, related.
 - Sub: HoloFormer folds everything it has read into one running memory per layer. Reading a prompt grows with its length instead of its square, and each new word costs the same however long the context is.
 - Tiles (from the AlgFormer evidence record): 26 times / 50 times / 663 times
 - Meta: HoloFormer folds a whole context into one running memory, so reading a prompt grows with its length, not its square. Here is how it works, in plain terms.
+
+## /blazier/
+
+- Eyebrow: Blazier, lazy Blazor WebAssembly for static hosts
+- H1: Show the page now. Download .NET when they press Start.
+- Sub: Blazier turns your Blazor WebAssembly pages into real HTML at publish time. Visitors read at once, and the .NET runtime downloads only when someone presses the button that needs it. Long C# jobs run in a Web Worker behind an ordinary interface.
+- Under the hero: a pointer band to /tools/ ("Every tool on this site is a Blazier page", runtime size read from `data/generated/facts.json`), then the `blazier-boot` bars
+- Tiles (from the evidence record `blazier-boot`, derived from `data/diagrams/blazier-boot.json`): 6.8 KB / 416 to 484 ms / 14 to 19 ms / 0.49 to 0.57 ms. Sample-app figures only; no Showroom shell figure is recorded
+- Sections after the proven program: How it works, Everything in the package, What exists today (typed Web Worker bridge built and measured; EvalApp host seam not built), When another tool fits better, Know before you start
+- Meta: Blazor WebAssembly pages that read at once on a static host and download .NET only when a visitor presses Start, plus a typed Web Worker bridge.

@@ -21,13 +21,14 @@ import * as sizeBars from './assets/diagrams/size-bars.js';
 import * as designEffect from './assets/diagrams/design-effect.js';
 import * as superpositionScene from './assets/diagrams/superposition-scene.js';
 import * as coverageMeter from './assets/diagrams/coverage-meter.js';
+import * as blazierBoot from './assets/diagrams/blazier-boot.js';
 
 const KINDS = {
   'tracer-field': tracerField, 'stack-map': stackMap, 'pleroma-map': pleromaMap,
   'pleroma-superposition': pleromaSuper, 'pleroma-capacity': pleromaCap, 'latency-bars': latencyBars, 'holodb-store': holodbStore,
   'evalapp-gate': evalappGate, 'algformer-cost': algformerCost, 'holovoxel-lod': holovoxelLod, 'prose-pipeline': prosePipeline,
   'round-timeline': roundTimeline, 'slot-grow': slotGrow, 'layer-stack': layerStack, 'size-bars': sizeBars, 'design-effect': designEffect,
-  'superposition-scene': superpositionScene, 'coverage-meter': coverageMeter,
+  'superposition-scene': superpositionScene, 'coverage-meter': coverageMeter, 'blazier-boot': blazierBoot,
 };
 
 export function diagramModule(kind) {

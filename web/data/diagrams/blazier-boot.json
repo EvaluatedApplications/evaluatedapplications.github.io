@@ -1,0 +1,60 @@
+{
+  "schema": "ea-diagram/1",
+  "kind": "blazier-boot",
+  "package": { "id": "EvaluatedApplications.Blazier", "version": "1.1.0" },
+  "source": "Blazier sample app, measured in headless Edge (MonoRepo Blazier/CLAUDE.md, Measured). Typed once here; the evidence record and every figure on the product page are read from this file.",
+  "method": {
+    "build": "the sample app published with the trimmed interpreter build",
+    "server": "a local server shaped like GitHub Pages, with gzip",
+    "browser": "headless Microsoft Edge",
+    "machine": "an Intel Core i9-11950H laptop with 32 GB of memory",
+    "phone": "4 Mbit/s, 100 ms round trip, CPU slowed 6 times",
+    "desktopRuns": 3,
+    "phoneRuns": 2,
+    "workerJob": "a prime count to 600,000",
+    "gestureRequests": 0
+  },
+  "series": [
+    { "id": "classic", "label": "Booted the usual way", "short": "Usual boot" },
+    { "id": "shell", "label": "Blazier static shell", "short": "Blazier" }
+  ],
+  "measures": [
+    {
+      "id": "bytes", "tab": "Before anyone acts", "label": "Downloaded before the visitor does anything",
+      "unit": "KB", "axis": { "unit": "MB", "per": 1000 },
+      "groups": [
+        { "id": "page", "label": "Page", "classic": { "lo": 2800, "hi": 2800 }, "shell": { "lo": 6.8, "hi": 6.8, "requests": 6 } }
+      ]
+    },
+    {
+      "id": "content", "tab": "Content on screen", "label": "Until real content is on screen",
+      "unit": "ms", "axis": { "unit": "s", "per": 1000 },
+      "groups": [
+        { "id": "desktop", "label": "Desktop", "classic": { "lo": 748, "hi": 1165 }, "shell": { "lo": 72, "hi": 100 } },
+        { "id": "phone", "label": "Phone profile", "classic": { "lo": 13200, "hi": 15500 }, "shell": { "lo": 416, "hi": 484 } }
+      ]
+    },
+    {
+      "id": "working", "tab": "Until it works", "label": "Until the page works",
+      "unit": "ms", "axis": { "unit": "s", "per": 1000 },
+      "note": "The usual boot is timed from loading the page. Blazier is timed from pressing Start, with the page already readable",
+      "groups": [
+        { "id": "desktop", "label": "Desktop", "classic": { "lo": 748, "hi": 1165 }, "shell": { "lo": 710, "hi": 1170 } },
+        { "id": "phone", "label": "Phone profile", "classic": { "lo": 13200, "hi": 15500 }, "shell": { "lo": 12700, "hi": 15400 } }
+      ]
+    }
+  ],
+  "worker": [
+    { "id": "start", "label": "Start a worker runtime from cached files", "lo": 190, "hi": 210, "unit": "ms" },
+    { "id": "call", "label": "One call to a worker service, round trip", "lo": 0.49, "hi": 0.57, "unit": "ms" },
+    { "id": "gap", "label": "Worst gap on the page's timers during a long job", "lo": 14, "hi": 19, "unit": "ms" },
+    { "id": "longTasks", "label": "Long tasks on the page during that job", "lo": 0, "hi": 0, "unit": "n" },
+    { "id": "coop", "label": "Stop a job that yields", "lo": 12, "hi": 17, "unit": "ms" },
+    { "id": "hard", "label": "Stop a job that never yields, until the worker is usable again", "lo": 730, "hi": 800, "unit": "ms" },
+    { "id": "restart", "label": "Restart the worker", "lo": 170, "hi": 180, "unit": "ms" },
+    { "id": "streamFirst", "label": "Stream 2,000 items, first item", "lo": 16, "hi": 21, "unit": "ms" },
+    { "id": "streamAll", "label": "Stream 2,000 items, all of them", "lo": 250, "hi": 272, "unit": "ms" },
+    { "id": "memory", "label": "Memory of a worker runtime", "lo": 32, "hi": 32, "unit": "MiB" },
+    { "id": "network", "label": "Worker start on a shared bundle", "text": "132 requests, all served from the browser cache (0 KB over the network)" }
+  ]
+}
