@@ -1,0 +1,43 @@
+@using HelixDemo
+@using HoloGenome
+@using Showroom.Services
+
+<section class="hx-panel" aria-labelledby="hx-track-h">
+    <h2 id="hx-track-h">2. The helix track</h2>
+    @if (S.Data is not { } d || S.Track is not { } t)
+    {
+        <p class="hint">Load sequences above and each base is placed on the helix here.</p>
+    }
+    else
+    {
+        string seq = d.Sequences[S.Row];
+        <p class="hint">Every base sits at the helix angle the measured twist of the steps before it has wound (Olson et al. 1998, built into the package). One colour cycle is one full turn.
+            The line below shows where this sequence winds tighter or looser than a helix with the same twist at every step.</p>
+        <div class="row">
+            <label for="hx-row">Sequence number</label>
+            <input id="hx-row" type="number" min="1" max="@d.Sequences.Count" value="@(S.Row + 1)" @onchange="Pick" />
+            <span class="hint">of @d.Sequences.Count.ToString("N0"): @d.Ids[S.Row]</span>
+        </div>
+        <div class="figure">@((MarkupString)HelixSvg.Track(seq, t))</div>
+        <dl class="facts">
+            <div><dt>Bases</dt><dd>@seq.Length.ToString("N0")</dd></div>
+            <div><dt>Helix turns, measured twist</dt><dd>@t.Turns.ToString("F2")</dd></div>
+            <div><dt>Helix turns, constant 34.3 deg</dt><dd>@t.FlatTurns.ToString("F2")</dd></div>
+            <div><dt>Bases per turn, this sequence</dt><dd>@t.BasesPerTurn.ToString("F4")</dd></div>
+            <div><dt>Bases per turn, mean Olson twist</dt><dd>@HelicalScore.OlsonPeriodBasesPerTurn.ToString("F4")</dd></div>
+            <div><dt>Bases per turn, constant twist</dt><dd>@((360.0 / ConstantTwist.BDnaDegrees).ToString("F4"))</dd></div>
+            <div><dt>Hologram width</dt><dd>@t.HologramReals reals</dd></div>
+            <div><dt>Track and hologram took</dt><dd>@(t.Ms < 10 ? t.Ms.ToString("F1") : t.Ms.ToString("F0")) ms</dd></div>
+        </dl>
+        <HxSnippet Region="track" Title="The code that produced this track" />
+    }
+</section>
+
+@code {
+    [Parameter, EditorRequired] public HelixSession S { get; set; } = default!;
+
+    void Pick(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out var v)) S.SelectRow(v - 1);
+    }
+}

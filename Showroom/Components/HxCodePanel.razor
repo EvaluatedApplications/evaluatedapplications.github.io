@@ -1,0 +1,48 @@
+@* "How this is built". The two C# files are the embedded sources the page runs (HelixCode.Source); the console program is rendered from the same
+   constants by HelixCode.MinimalProgram. tools/HelixProof compiles that program against the published package and checks its numbers. *@
+@using HelixDemo
+@using Showroom.Services
+@inject IJSRuntime JS
+
+<section class="hx-panel" aria-labelledby="hx-code-h">
+    <h2 id="hx-code-h">4. How this is built</h2>
+    <p class="hint">Everything above is <code>@HelixCode.Package</code> @HelixCode.PackageVersion running in this tab. The panels showed the regions of <code>HelixAnalysis.cs</code> that ran; here are the whole files and a console
+        program that runs the same steps. Copy the program and <code>HelixAnalysis.cs</code> into a new console project, add the package, and give it a file of sequences.</p>
+    <div class="seg tabs" role="group" aria-label="Code view">
+        @foreach (var (key, text) in Tabs)
+        {
+            var k = key;
+            <button type="button" class="@(_tab == k ? "on" : "")" aria-pressed="@(_tab == k ? "true" : "false")" @onclick="() => Pick(k)">@text</button>
+        }
+    </div>
+    <pre class="code" tabindex="0" aria-label="@Tabs.First(t => t.Item1 == _tab).Item2"><code>@Current</code></pre>
+    <div class="row">
+        <button type="button" class="btn btn-ghost" @onclick="Copy">Copy</button>
+        <span class="hint" role="status">@_note</span>
+    </div>
+</section>
+
+@code {
+    [Parameter, EditorRequired] public HelixSession S { get; set; } = default!;
+
+    static readonly (string, string)[] Tabs =
+    {
+        ("program", "Console program"), ("analysis", "HelixAnalysis.cs"), ("demo", "HelixDemoData.cs"),
+    };
+    string _tab = "program", _note = "";
+
+    string Current => _tab switch
+    {
+        "program" => HelixCode.MinimalProgram(S.Options),
+        "analysis" => HelixCode.Source("HelixAnalysis.cs"),
+        _ => HelixCode.Source("HelixDemoData.cs"),
+    };
+
+    void Pick(string k) { _tab = k; _note = ""; }
+
+    async Task Copy()
+    {
+        try { await JS.InvokeVoidAsync("copyText", Current); _note = "Copied."; }
+        catch { _note = "Copy is not available here; select the text instead."; }
+    }
+}

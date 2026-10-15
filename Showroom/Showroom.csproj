@@ -139,6 +139,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="EvaluatedApplications.HoloGenome" Version="0.2.0" />
     <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly" Version="10.0.11" />
     <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly.DevServer" Version="10.0.11" PrivateAssets="all" />
   </ItemGroup>
@@ -176,6 +177,9 @@
        rendered program against the published package; it must stay out of this project's compile. -->
   <ItemGroup>
     <EmbeddedResource Include="Services\Dashboard\OrdersGenerator.cs" LogicalName="OrdersGenerator.cs" />
+    <!-- The Helix tool shows these two files to the visitor (whole, and region by region beside each result). Same single-source rule; tools\HelixProof compiles the program that uses them. -->
+    <EmbeddedResource Include="Services\Helix\HelixAnalysis.cs" LogicalName="HelixAnalysis.cs" />
+    <EmbeddedResource Include="Services\Helix\HelixDemoData.cs" LogicalName="HelixDemoData.cs" />
     <Compile Remove="tools\**" />
     <EmbeddedResource Remove="tools\**" />
     <None Remove="tools\**" />

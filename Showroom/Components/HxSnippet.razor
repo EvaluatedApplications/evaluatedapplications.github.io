@@ -1,0 +1,26 @@
+@* The code that produced the result beside it: a region of the embedded HelixAnalysis.cs, cut at its >>> / <<< markers (see HelixCode.Region).
+   Not a copy typed for the page, so it cannot drift from what ran. *@
+@using HelixDemo
+@inject IJSRuntime JS
+
+<details class="snip" open="@Open">
+    <summary>@Title</summary>
+    <pre class="code" tabindex="0" aria-label="@Title"><code>@HelixCode.Region(Region)</code></pre>
+    <div class="row">
+        <button type="button" class="btn btn-ghost" @onclick="Copy">Copy</button>
+        <span class="hint" role="status">@_note</span>
+    </div>
+</details>
+
+@code {
+    [Parameter, EditorRequired] public string Region { get; set; } = "";
+    [Parameter] public string Title { get; set; } = "The code that ran";
+    [Parameter] public bool Open { get; set; } = true;
+    string _note = "";
+
+    async Task Copy()
+    {
+        try { await JS.InvokeVoidAsync("copyText", HelixCode.Region(Region)); _note = "Copied."; }
+        catch { _note = "Copy is not available here; select the text instead."; }
+    }
+}

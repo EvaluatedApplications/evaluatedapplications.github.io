@@ -1,0 +1,47 @@
+@page "/helix"
+@attribute [BlazierPage("helix", Title = "The Helix: grade the DNA helix against your own measurements, in your browser", Layout = typeof(MainLayout), Static = true)]
+@inject IBuildTime Build
+@using Showroom.Services
+
+<PageTitle>The Helix: grade the DNA helix against your own measurements, in your browser</PageTitle>
+
+<div class="room hx" data-cat="neutral">
+    <header class="room-head">
+        <nav class="crumb"><a href="/hologenome/">HoloGenome</a> <span>/</span> The Helix</nav>
+        <h1>The Helix</h1>
+        <p class="lede">Paste DNA sequences, add a column of measurements if you have one, and see the double helix in the numbers. Every base is placed on the real twist of the helix, then a score
+            is graded against your measurements <strong>in this tab</strong>, with the controls that would expose a false win shown beside it. No server, no upload.</p>
+        <div class="badges">
+            <span>Runs in your tab</span><span>Nothing leaves your device</span><span>Controls beside every score</span><span>Your own timings</span><span>Research and education only</span>
+        </div>
+    </header>
+
+    @if (Build.IsPrerender)
+    {
+        <ToolStart Tool="The Helix" Label="Start the Helix" />
+    }
+    else
+    {
+        <div class="stack">
+            <HxDataPanel S="_s" />
+            <HxTrackPanel S="_s" />
+            <HxGradePanel S="_s" />
+            <HxCodePanel S="_s" />
+        </div>
+    }
+
+    <div class="outro">
+        <p>This runs <a href="/hologenome/">HoloGenome</a>, which turns DNA into holograms from measured DNA physics, compiled to WebAssembly. The twist table is Olson et al. 1998; the measurements are yours.
+            The demo data is synthetic and says nothing about real DNA. This tool makes no health, disease-risk or drug-response claim.</p>
+    </div>
+</div>
+
+@code {
+    readonly HelixSession _s = new();
+
+    protected override void OnInitialized()
+    {
+        if (Build.IsPrerender) return;
+        _s.Repaint = async () => { await InvokeAsync(StateHasChanged); await Task.Delay(1); };   // the delay lets the browser paint between steps
+    }
+}

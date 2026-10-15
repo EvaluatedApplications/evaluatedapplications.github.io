@@ -20,6 +20,7 @@ const PAGES = {
   'forecaster': { d: 'Train a small holographic transformer on real historical price ticks and watch its next-move accuracy climb, live in your browser. A demo, not investment advice.' },
   'analyst': { d: 'A real SQL database running in your browser tab profiles any CSV, JSON or log you give it, charts it, and answers your SQL. Nothing is uploaded.' },
   'dashboard': { d: 'A live dashboard over a database of orders built inside your browser tab. Click any chart, every panel re-queries, and the page times each query on your own device.' },
+  'helix': { d: 'Paste DNA sequences and measurements and see the helix in the numbers: a score graded in your browser, with the controls that would expose a false win shown beside it.' },
   'prose': { d: 'Paste in text and a rules-first English grammar mines it in your browser, then recombines what it learned into sentences and question and answer pairs.' },
   'council-spending': { d: "Mechanical checks over English councils' published spending data, the same rules for every council, run in your browser. Nothing is uploaded." },
 };

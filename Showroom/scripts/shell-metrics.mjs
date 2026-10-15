@@ -41,6 +41,7 @@ const PAGES = {
   analyst: ['analyst', '.dropzone'],
   prose: ['prose', '.dropzone'],
   dashboard: ['dashboard', '.build .row'],
+  helix: ['helix', '.hx-panel .row'],
   'council-spending': ['council-spending', '.picker-grid .pick-card'],
 };
 const keys = (pagesArg && pagesArg !== 'all') ? pagesArg.split(',') : Object.keys(PAGES);

@@ -1,0 +1,116 @@
+@using HelixDemo
+@using HoloGenome
+@using Showroom.Services
+
+<section class="hx-panel" aria-labelledby="hx-grade-h">
+    <h2 id="hx-grade-h">3. Grade a score against your measurements</h2>
+    @if (S.Data is null)
+    {
+        <p class="hint">Load sequences with a measurement column above.</p>
+    }
+    else if (!S.HasMeasurement)
+    {
+        <p class="hint">This input has no measurement on every row, or fewer than @HelixAnalysis.MinRows rows, so there is nothing to grade against. Add a number to the end of each line (or FASTA header).</p>
+    }
+    else
+    {
+        <p class="hint">Two scores, each shown with the controls that would expose a false win. The zero-parameter helical score fits nothing. The phasor model fits ten complex weights and a period that starts at
+            @HelixAnalysis.FitStartPeriod.ToString("F0") bases per turn. Intervals resample whole blocks, @HelixAnalysis.Resamples.ToString("N0") times.</p>
+        <div class="row">
+            <label for="hx-mode">Blocks</label>
+            <select id="hx-mode" @bind="S.Mode" disabled="@S.Running">
+                <option value="@BlockMode.Rows">Each row is independent</option>
+                <option value="@BlockMode.Tiled">Tiled windows slid by N bases</option>
+                <option value="@BlockMode.Segments">Fixed runs of N rows</option>
+            </select>
+            <input type="number" min="1" aria-label="N" class="small" @bind="S.BlockSize" disabled="@(S.Running || S.Mode == BlockMode.Rows)" />
+            <label for="hx-fit">Fit on up to</label>
+            <select id="hx-fit" @bind="S.FitRows" disabled="@S.Running">
+                @foreach (var n in HelixSession.FitSizes) { <option value="@n">@n.ToString("N0") rows</option> }
+            </select>
+            <label class="check"><input type="checkbox" @bind="S.FitControl" disabled="@S.Running" /> also fit on shuffled sequences</label>
+        </div>
+        <p class="hint">The fit uses the first rows (at most two thirds of the data, at most @HelixAnalysis.MaxFitBases.ToString("N0") bases) for @HelixSession.FitIterations.ToString("N0") iterations, the package default.
+            Its cost grows with rows times iterations, and the shuffled fit doubles it. The package gives no progress or stop inside a fit, so the tab is busy until a fit returns; <strong>Cancel</strong> takes effect between steps.</p>
+        <div class="row">
+            <button type="button" class="btn btn-primary" disabled="@S.Running" @onclick="S.RunAsync">Run the grading</button>
+            <button type="button" class="btn btn-ghost" disabled="@(!S.Running)" @onclick="S.Cancel">Cancel</button>
+            @if (S.Results.Count > 0) { <span class="hint">@S.Results.Count of @S.Stages.Count steps, @Ms(S.TotalMs) in total</span> }
+        </div>
+        @if (S.Error is not null) { <p class="err" role="alert">@S.Error</p> }
+
+        @if (S.Stages.Count > 0)
+        {
+            <ol class="steps" aria-live="polite">
+                @foreach (var st in S.Stages)
+                {
+                    var r = S.Result(st.Id);
+                    <li class="@(r is not null ? "done" : S.Current == st ? "now" : "wait")">
+                        <span>@st.Label</span>
+                        <b>@(r is not null ? Ms(r.Ms) : S.Current == st ? "running" : S.Cancelled || !S.Running ? "not run" : "waiting")</b>
+                    </li>
+                }
+            </ol>
+            @if (S.Cancelled) { <p class="hint">Stopped. Only the steps marked with a time ran.</p> }
+        }
+
+        @if (S.Result("helical")?.Grade is { } head)
+        {
+            var rows = new[] { ("helical", "Olson period (headline)", true), ("control7", "Control: 7 bases per turn", false), ("control15", "Control: 15 bases per turn", false), ("order-null", "Control: order destroyed", false) }
+                .Select(x => (x.Item1, x.Item2, x.Item3, S.Result(x.Item1)?.Grade)).Where(x => x.Item4 is not null).ToList();
+            <h3>Zero-parameter helical score, with its controls</h3>
+            <div class="figure">@((MarkupString)HelixSvg.Grades(rows.Select(x => (x.Item2, x.Item4!, x.Item3)).ToList()))</div>
+            <div class="table-scroll"><table class="data">
+                <thead><tr><th>Score</th><th class="num">Pearson r</th><th class="num">95% interval</th><th class="num">Spearman</th><th>Interval excludes 0</th><th>Headline's lower end above this upper end</th><th class="num">Blocks</th><th class="num">Time</th></tr></thead>
+                <tbody>
+                @foreach (var (id, label, isHead, g) in rows)
+                {
+                    <tr class="@(isHead ? "on" : "")"><th scope="row">@label</th><td class="num">@g!.Pearson.ToString("F3")</td><td class="num">[@g.Low.ToString("F3"), @g.High.ToString("F3")]</td>
+                        <td class="num">@g.Spearman.ToString("F3")</td><td>@(g.Low > 0 || g.High < 0 ? "yes" : "no")</td><td>@(isHead ? "n/a" : head.Low > g.High ? "yes" : "no")</td>
+                        <td class="num">@g.Blocks.ToString("N0")</td><td class="num">@Ms(S.Result(id)!.Ms)</td></tr>
+                }
+                </tbody></table></div>
+            <p class="hint">A control close to the headline means the score is picking up something other than the helix period. Rows: @head.N.ToString("N0"). The order control keeps every step count and shuffles the order (seed @HelixAnalysis.ShuffleSeed).</p>
+            <HxSnippet Region="helical" Title="The code that ran for the headline and the two period controls" />
+            <HxSnippet Region="order-null" Title="The code that ran for the order control" />
+            <HxSnippet Region="blocks" Title="The code that chose the blocks" Open="false" />
+        }
+
+        @if (S.Result("fit")?.Model is { } fit)
+        {
+            var held = S.Result("heldout")?.Grade; var shuf = S.Result("fit-shuffled")?.Model;
+            <h3>Fitted phasor model: the period it finds</h3>
+            <div class="table-scroll"><table class="data">
+                <thead><tr><th>Fit</th><th class="num">Period, bases per turn</th><th class="num">Difference from Olson @HelicalScore.OlsonPeriodBasesPerTurn.ToString("F4")</th><th class="num">Mean squared error, first to last logged</th><th class="num">Time</th></tr></thead>
+                <tbody>
+                    <tr class="on"><th scope="row">Fitted from @HelixAnalysis.FitStartPeriod.ToString("F1")</th><td class="num">@fit.PeriodBasesPerTurn.ToString("F4")</td><td class="num">@((fit.PeriodBasesPerTurn - HelicalScore.OlsonPeriodBasesPerTurn).ToString("+0.0000;-0.0000"))</td>
+                        <td class="num">@fit.LossLog[0].ToString("G4") to @fit.LossLog[^1].ToString("G4")</td><td class="num">@Ms(S.Result("fit")!.Ms)</td></tr>
+                    @if (shuf is not null)
+                    {
+                        <tr><th scope="row">Control: fitted on shuffled sequences</th><td class="num">@shuf.PeriodBasesPerTurn.ToString("F4")</td><td class="num">@((shuf.PeriodBasesPerTurn - HelicalScore.OlsonPeriodBasesPerTurn).ToString("+0.0000;-0.0000"))</td>
+                            <td class="num">@shuf.LossLog[0].ToString("G4") to @shuf.LossLog[^1].ToString("G4")</td><td class="num">@Ms(S.Result("fit-shuffled")!.Ms)</td></tr>
+                    }
+                    @if (S.IsDemo)
+                    {
+                        <tr><th scope="row">Planted in the demo</th><td class="num">@HelixDemoData.PlantedPeriod.ToString("F4")</td><td class="num">@((HelixDemoData.PlantedPeriod - HelicalScore.OlsonPeriodBasesPerTurn).ToString("+0.0000;-0.0000"))</td><td class="num"></td><td class="num"></td></tr>
+                    }
+                </tbody></table></div>
+            <p class="hint">@S.Result("fit")!.Note. The period is a fitted number: the control shows what the same fit finds when the base order is gone.</p>
+            @if (held is not null)
+            {
+                <div class="tiles">
+                    <div class="tile"><span class="n">@held.Pearson.ToString("F3")</span><span class="l">Held-out r on the @held.N.ToString("N0") rows after the fit</span></div>
+                    <div class="tile"><span class="n">[@held.Low.ToString("F3"), @held.High.ToString("F3")]</span><span class="l">95% interval, @held.Blocks.ToString("N0") blocks, took @Ms(S.Result("heldout")!.Ms)</span></div>
+                </div>
+                @if (S.IsDemo) { <p class="hint">The demo's measurement was made by the same kind of model this fit uses, so a high held-out value only shows the fit works on data of its own form. It says nothing about real DNA.</p> }
+            }
+            <HxSnippet Region="fit" Title="The code that ran for the fit and its held-out score" />
+            <HxSnippet Region="plan" Title="The code that ordered the steps and chose the rows" Open="false" />
+        }
+    }
+</section>
+
+@code {
+    [Parameter, EditorRequired] public HelixSession S { get; set; } = default!;
+    static string Ms(double v) => v < 1000 ? $"{v:F0} ms" : $"{v / 1000:F2} s";
+}

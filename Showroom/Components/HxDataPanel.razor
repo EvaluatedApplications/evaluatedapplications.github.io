@@ -1,0 +1,72 @@
+@using HelixDemo
+@using Showroom.Services
+@inject IJSRuntime JS
+
+<section class="hx-panel" aria-labelledby="hx-data-h">
+    <h2 id="hx-data-h">1. Your sequences</h2>
+    <p class="hint">Paste FASTA, or one sequence per line. For a measurement column, end each line with a number (<code>ACGT...,0.42</code>) or end each FASTA header with one
+        (<code>&gt;id 0.42</code>). Only A, C, G and T are accepted; anything else is skipped and counted, never guessed.
+        Limits: @HelixAnalysis.MaxRows.ToString("N0") rows, @HelixAnalysis.MaxLength.ToString("N0") bases each, @(HelixSession.MaxTextChars.ToString("N0")) characters. Everything is read and computed in this tab.</p>
+
+    <div class="row">
+        <select aria-label="Demo size" @bind="S.DemoRows">
+            @foreach (var n in HelixSession.DemoSizes) { <option value="@n">@n.ToString("N0") rows</option> }
+        </select>
+        <button type="button" class="btn btn-primary" disabled="@S.Running" @onclick="Demo">Use the synthetic demo</button>
+        <InputFile OnChange="OnFile" class="file-input" accept=".txt,.fa,.fasta,.csv,.tsv" disabled="@S.Running" aria-label="Load a sequence file" />
+    </div>
+    <textarea class="paste" rows="5" spellcheck="false" placeholder="Paste sequences here, then press the button below" aria-label="Pasted sequences" @bind="S.PastedText" @bind:event="onchange"></textarea>
+    <div class="row">
+        <button type="button" class="btn btn-ghost" disabled="@(S.Running || string.IsNullOrWhiteSpace(S.PastedText))" @onclick="Pasted">Use the pasted text</button>
+    </div>
+    @if (S.Error is not null && S.Data is null) { <p class="err" role="alert">@S.Error</p> }
+
+    @if (S.Data is { } d)
+    {
+        var lens = d.Sequences.Select(s => s.Length).ToArray();
+        <dl class="facts">
+            <div><dt>Loaded</dt><dd>@S.Label</dd></div>
+            <div><dt>Sequences</dt><dd>@d.Sequences.Count.ToString("N0")</dd></div>
+            <div><dt>Length</dt><dd>@(lens.Min() == lens.Max() ? lens[0].ToString() : $"{lens.Min()} to {lens.Max()}") bases</dd></div>
+            <div><dt>Measurement column</dt><dd>@(d.Measurements is null ? "none" : "yes")</dd></div>
+            <div><dt>Read in</dt><dd>@Ms(S.ParseMs)</dd></div>
+        </dl>
+        @foreach (var note in d.Notes) { <p class="hint">@note</p> }
+        @if (S.IsDemo)
+        {
+            <p class="notice" role="note"><strong>This is synthetic data, not measurements.</strong> The sequences are random. The "measurement" was made by running a phasor model whose period is set
+                to @HelixDemoData.PlantedPeriod.ToString("F1") bases per turn, plus noise. It checks that the instrument finds a signal that was planted and does not find one that was not.
+                Its scores are not a result about real DNA. The planted weights give some steps more weight than others, so base composition carries part of the signal; the controls below show how much.</p>
+            <div class="row">
+                <button type="button" class="btn btn-ghost" @onclick="Download">Download this demo as a text file</button>
+                <span class="hint">The console program in panel 4 reads it and prints the same stages.</span>
+            </div>
+        }
+    }
+</section>
+
+@code {
+    [Parameter, EditorRequired] public HelixSession S { get; set; } = default!;
+    static string Ms(double v) => v < 1000 ? $"{v:F0} ms" : $"{v / 1000:F2} s";
+
+    async Task Demo() { S.LoadDemo(); await S.Repaint(); }
+    async Task Pasted() { S.LoadText(S.PastedText, "Pasted text"); await S.Repaint(); }
+
+    async Task OnFile(InputFileChangeEventArgs e)
+    {
+        try
+        {
+            using var stream = e.File.OpenReadStream(HelixSession.MaxTextChars * 2L);
+            using var rd = new StreamReader(stream);
+            S.LoadText(await rd.ReadToEndAsync(), e.File.Name);
+        }
+        catch (IOException) { S.Fail($"{e.File.Name} is larger than the {HelixSession.MaxTextChars:N0} character limit."); }
+        await S.Repaint();
+    }
+
+    async Task Download()
+    {
+        if (S.Data is null) return;
+        await JS.InvokeVoidAsync("analystDownload", "helix-demo.txt", HelixDemoData.ToText(S.Data), "text/plain;charset=utf-8");
+    }
+}
