@@ -1,7 +1,38 @@
 {
-  "title": "AlgFormer: a transformer engine for .NET",
-  "description": "AlgFormer is a .NET transformer engine with two attention cores, classic softmax and holographic, in pure managed code with no ML runtime to ship.",
-  "headline": "Two attention cores. One shape. No ML runtime.",
+  "title": "AlgFormer: language models in plain C#",
+  "description": "Train and run language models in plain C# with no Python, GPU or native runtime. The holographic core reads long prompts in a fraction of the time.",
+  "sizzle": {
+    "headline": "Train a language model in plain C#. Nothing else to install.",
+    "sub": "Define, train and run transformer models with no Python, no GPU and no native runtime. Pick classic attention, or the holographic core that reads long prompts in a fraction of the time.",
+    "tool": "forecaster",
+    "mechanismTitle": "Two attention cores, one shape",
+    "stats": [
+      { "evidence": "algformer-cost", "tile": 0 },
+      { "evidence": "algformer-cost", "tile": 1 },
+      { "evidence": "algformer-cost", "tile": 2 }
+    ],
+    "numbers": {
+      "summary": "See the numbers",
+      "items": [
+        { "claim": "Reading a prompt: 182 ms against 7.08 ms", "text": "At 1,984 tokens of context, softmax attention reads the prompt in 182 ms and holographic attention in 7.08 ms. Softmax reading grows with the square of the length (exponent 1.9) and holographic reading grows in step with it (1.0). Conditions: both cores built at 32 channels, 8 shifts and 2 layers, which gives them the same parameter count, driven with the same random tokens, median of 7 runs per length, one thread." },
+        { "claim": "Each further token: 181 µs against 3.60 µs", "text": "Once the prompt is read, softmax takes longer for every new token as the context grows. Holographic attention takes 3.20 to 4.10 µs per token from 64 to 1,984 tokens of context." },
+        { "claim": "The serve cache: 2,253 KB against 3.40 KB", "text": "The cache holds one running memory per layer in the holographic core, so it stays 3.40 KB at every length. The softmax cache grows with the context." },
+        { "claim": "What you give up", "text": "A holographic bundle holds a limited number of items cleanly, and HoloShape reports how many for a shape. Softmax attention has no such bound. These figures measure cost only, not which core predicts better, and absolute times depend on the machine." }
+      ]
+    },
+    "build": {
+      "title": "What you can build",
+      "line": "Each one is in the package today.",
+      "items": [
+        { "title": "A language model inside your app", "text": "Everything is plain double arrays and SIMD compiled into your project. There is no ONNX Runtime, no libtorch, no CUDA toolkit and no Python to ship." },
+        { "title": "Chat and streaming that stay fast", "text": "Generate with an incremental cache. With the holographic core each new token costs the same however long the context has become." },
+        { "title": "Models trained on your own text", "text": "A subword tokenizer, a data-parallel trainer and ready-made adapters for raw corpus windows, prompt and answer pairs and source mixing." },
+        { "title": "Models that grow instead of restarting", "text": "Extend a trained model to a longer context or a bigger vocabulary without training from scratch." },
+        { "title": "Training across machines", "text": "Relay components let several machines train one shared model over MQTT." },
+        { "title": "A browser tab that trains a model", "text": "The Forecaster trains a holographic transformer live on a price tape, in your browser, with this package." }
+      ]
+    }
+  },
   "intro": [
     "AlgFormer is a .NET library for defining, training and running transformer-style language models. Give it a vocabulary and a shape, train it on your own token sequences through a data-parallel pipeline, and run inference as a single prediction, as full logits or as streaming generation with a cache.",
     "It is a real, gradient-trained architecture written entirely in C# on double arrays with SIMD. It runs anywhere .NET runs, with no GPU, no Python and no native binary to ship. Most transformer tooling means binding into a native runtime such as ONNX, PyTorch or CUDA, or hand-rolling matrix code with no attention research behind it. AlgFormer sits between the two.",

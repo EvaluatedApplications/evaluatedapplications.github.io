@@ -1,7 +1,39 @@
 {
-  "title": "HoloDb: embeddable SQL database for .NET",
-  "description": "HoloDb is an embeddable .NET SQL database with ACID transactions, similarity search and maintained aggregates, all answered from one store.",
-  "headline": "One store. Query it by key, by content, or by aggregate.",
+  "title": "HoloDb: answers in microseconds",
+  "description": "Put a SQL database inside your .NET app that totals ten million invoices in 0.02 ms, ranks rows by resemblance and survives a crash.",
+  "sizzle": {
+    "headline": "Ten million rows. Dashboard answers in microseconds.",
+    "sub": "Put a SQL database inside your app that rolls up a ledger in a blink, ranks rows by resemblance and keeps ACID transactions. Tables can be bigger than memory.",
+    "tool": "analyst",
+    "mechanismTitle": "One store, three ways to ask",
+    "stats": [
+      { "value": "0.02 ms", "label": "to total 10,000,000 invoices by status. DuckDB took 41.63 ms", "cite": ["evidence/holodb.json"] },
+      { "value": "More than 1,600 times", "label": "faster than DuckDB on that rollup, and more than 120 times faster on all five dashboard rollups", "cite": ["evidence/holodb.json"] },
+      { "value": "3.3 times", "label": "faster than DuckDB on a join of 10,000,000 invoices to 200,000 customers", "cite": ["evidence/holodb.json"] },
+      { "value": "16 of 16", "label": "queries that returned the same rows as SQLite and DuckDB. The ones where HoloDb is slower are listed too", "cite": ["evidence/holodb.json"] }
+    ],
+    "numbers": {
+      "summary": "See the numbers",
+      "items": [
+        { "claim": "Five rollups, 120 to 1,600 times faster than DuckDB", "text": "Revenue by status takes 0.02 ms against 41.63 ms for DuckDB and 3,719.66 ms for SQLite. The other four rollups are more than 1,300, 510, 120 and 130 times faster than DuckDB. Conditions: a ledger of 10,000,000 invoices joined to 200,000 customers, in process and in memory, medians of repeated calls through each engine's typed client API, one 16-core laptop CPU (Intel Core i9-11950H) with nothing else heavy running." },
+        { "claim": "Joins: ahead on three, tied on one, behind on one", "text": "Revenue by segment takes 14.71 ms against 49.01 ms for DuckDB (3.3 times). Top named customers is 2.2 times faster and revenue by segment and status 2.1 times. Enterprise revenue ties with DuckDB (1.03 times), and revenue by signup cohort is DuckDB's by 1.25 times." },
+        { "claim": "Where SQLite is ahead", "text": "Looking up one invoice takes 0.01 ms in SQLite and 0.02 ms in HoloDb. Every HoloDb figure is an in-memory database with no write-ahead log. A database opened with a log flushes each committed statement to disk, which adds one flush per commit, set by the disk." },
+        { "claim": "Identical answers", "text": "Before any query is timed, its full result set is compared across the engines. All 16 results are identical, including on the queries where HoloDb is slower." }
+      ]
+    },
+    "build": {
+      "title": "What you can build",
+      "line": "Each one is in the package today.",
+      "items": [
+        { "title": "Live dashboards with no cache layer", "text": "Totals, counts, minimums, maximums and single-column group-bys over integer columns read a maintained value, so the answer stays flat from a thousand rows to tens of millions." },
+        { "title": "Search by resemblance, in SQL", "text": "Rank rows by how closely they match a partial description, over the rows the table already holds. A close number or date, or a near-identical string, ranks ahead of a far one, with no separate vector index." },
+        { "title": "A database that survives a crash", "text": "Write-ahead logging with an fsync on each durable commit, and recovery bounded by your live data, not by how much you have ever written." },
+        { "title": "Tables bigger than memory", "text": "Paged tables spill cold pages to disk through an 8 KB buffer pool and keep the maintained totals accurate there." },
+        { "title": "One database, in process or over the network", "text": "Use it inside your app, or run it as a server with a typed client and a columnar wire protocol. The same managed code also runs in a browser tab, which is how The Analyst works." },
+        { "title": "Exact answers from a small summary", "text": "Attach an optional plane to chosen columns and filters, group-bys and joins are answered without scanning the table.", "link": { "href": "/holodb/pleroma/", "label": "See HoloDb on the Pleroma" } }
+      ]
+    }
+  },
   "intro": [
     "HoloDb is an embeddable SQL database for .NET with ACID transactions, similarity search and maintained aggregates. It stores data as holograms in a single associative store: every value is encoded as a phase vector and a row's columns are bound into one hologram, so the same copy of the data can be retrieved three ways. Exact lookup by primary key is ordinary SQL. Similarity search by content is the NEAREST clause. Analytics read a maintained total instead of scanning.",
     "Applications that need relational storage, similarity search and fast dashboard rollups normally reach for three systems, a row store, a vector index and a cube or a pile of scans, and pay to keep them consistent. HoloDb is one embeddable package: a transactional store, an in-SQL similarity search, and aggregates whose response time does not grow with the table."

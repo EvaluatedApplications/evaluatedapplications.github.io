@@ -91,7 +91,10 @@ export function metrics(d) {
 
 // Numbers the product page quotes in prose, taken from the data so the sentence cannot go stale.
 export function limitFacts(m) {
-  return { swarmCorner: f2(m.swarmCorner), singleCorner: f2(m.singleCorner) };
+  return {
+    swarmCorner: f2(m.swarmCorner), singleCorner: f2(m.singleCorner),
+    agents: String(m.agents), goals: String(m.goals), foundSwarm: String(m.foundSwarm), foundBlocked: String(m.foundBlocked), rerouted: String(m.rerouted), triangles: String(m.triangles),
+  };
 }
 
 const MODES = [

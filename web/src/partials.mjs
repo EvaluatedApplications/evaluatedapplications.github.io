@@ -96,7 +96,47 @@ export function evidenceTiles(e) {
   return tiles;
 }
 
-export const nbsp = (s) => String(s).replace(/ /g, ' ');
+// ---- sizzle-first pieces (design-language section 8): number tiles with the conditions behind a disclosure, and the tool entry ----
+export const fillWith = (subst) => (t) => String(t).replace(/\{(\w+)\}/g, (_, k) => (k in subst ? subst[k] : `{${k}}`));
+
+// A stat spec is { value, label } typed from a cited record, or { evidence, tile } read from an evidence record's headline tiles
+// (optionally with its own label). Placeholders {name} come from the product's diagram facts. Nothing else is accepted.
+export function resolveStats(ctx, specs, subst = {}) {
+  const fill = fillWith(subst);
+  return specs.map((s) => {
+    if (s.evidence) {
+      const e = ctx.evidence.find((x) => x.id === s.evidence);
+      const t = e && evidenceTiles(e)[s.tile];
+      if (!t) throw new Error(`stat refers to evidence ${s.evidence} tile ${s.tile}, which does not exist`);
+      return { value: s.value ?? t.value, label: s.label ?? t.label, evidence: e };
+    }
+    if (!s.cite) throw new Error(`stat "${s.value}" has no cite (a source record it can be checked against)`);
+    return { value: fill(s.value), label: fill(s.label) };
+  });
+}
+
+export function numbersBlock({ stats, numbers, links = [], subst = {}, ribbon, id = 'numbers' }) {
+  const fill = fillWith(subst);
+  return html`<section class="sec doc-sec" id="${id}" aria-labelledby="${id}-h"><div class="wrap">
+  <h2 class="sr-only" id="${id}-h">The numbers</h2>
+  <dl class="stats stats-big">${stats.map((x) => stat(x.label, x.value))}</dl>
+  ${numbers ? html`<details class="dia-data numbers-more"><summary>${numbers.summary || 'See the numbers'}</summary>
+    <ul class="numbers-list">${numbers.items.map((n) => html`<li><h3>${fill(n.claim)}</h3><p>${fill(n.text)}</p></li>`)}</ul>
+    ${links.length ? html`<p class="more-link">${links.map((e, i) => html`${i ? ' · ' : ''}<a href="${e.slug}">${e.title}</a>`)}</p>` : ''}
+  </details>` : ''}
+  ${ribbon || ''}
+</div></section>`;
+}
+
+// The live tool, straight under the hero.
+export function toolBand(tool, p, others = []) {
+  return html`<section class="sec doc-sec" id="demo" aria-label="Try it now"><div class="wrap"><div class="callout tool-band">
+  <div class="tb-copy"><p class="eyebrow">Try it now, in your browser</p><h2>${tool.name}</h2><p>${tool.line}</p>${others.length ? html`<p class="tb-also">Also built on ${p.name}: ${others.map((t, i) => html`${i ? ', ' : ''}<a href="${t.href}">${t.name}</a>`)}</p>` : ''}</div>
+  <div class="actions"><a class="btn btn-primary" href="${tool.href}">Open ${tool.name}</a></div>
+</div></div></section>`;
+}
+
+export const nbsp =(s) => String(s).replace(/ /g, ' ');
 export { fmt2, fmt0 };
 
 // Sub-navigation shared by a product's overview, its sub-pages and its evidence. A tab for something that does not exist is omitted.

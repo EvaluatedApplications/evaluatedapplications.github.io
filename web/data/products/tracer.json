@@ -1,7 +1,38 @@
 {
-  "title": "Tracer: pathfinding and game AI for .NET",
-  "description": "Tracer is a .NET SDK for navmesh pathfinding with many moving agents: swarms that share goals, dynamic obstacles, line of sight, fog of war and combat.",
-  "headline": "Pathfinding is the easy part. Tracer does the rest.",
+  "title": "Tracer: a crowd, one search",
+  "description": "Send a whole crowd to one exit with a single search. Navmesh pathfinding for .NET with dynamic obstacles, line of sight and combat.",
+  "sizzle": {
+    "headline": "Send a whole crowd to one exit with a single search.",
+    "sub": "Bake a navmesh, route single agents or whole swarms across it, close a doorway mid-game and watch the crowd find another way. Line of sight, fog of war and combat are in the same package.",
+    "tool": "creature",
+    "mechanismTitle": "More than pathfinding",
+    "stats": [
+      { "value": "{foundSwarm} of {agents}", "label": "agents given a path in one swarm tick on the recorded level", "cite": ["diagrams/tracer-field.json"] },
+      { "value": "{foundBlocked} of {agents}", "label": "still given a path after a doorway is closed", "cite": ["diagrams/tracer-field.json"] },
+      { "value": "{rerouted} of {agents}", "label": "agents that took a new route around the closed doorway", "cite": ["diagrams/tracer-field.json"] },
+      { "value": "{goals}", "label": "goals for {agents} agents. Agents that share a goal share one solve", "cite": ["diagrams/tracer-field.json"] }
+    ],
+    "numbers": {
+      "summary": "See the numbers",
+      "items": [
+        { "claim": "One recorded level, every path the package's own", "text": "A level of {triangles} navmesh triangles with two walls and two doorways each, {agents} agents and {goals} goals. The paths were returned by the published package and are drawn as they came back." },
+        { "claim": "A closed doorway reroutes, it does not break", "text": "Closing the upper doorway in the first wall leaves the mesh at {triangles} triangles. {rerouted} of {agents} agents take a new route and {foundBlocked} of {agents} still find a path." },
+        { "claim": "Corner clearance", "text": "Swarm waypoints are shared guidance. On this level they cut doorway corners by up to {swarmCorner} of a cell, and single-agent queries stay within {singleCorner} of a cell. Use single queries where exact corner clearance matters." }
+      ]
+    },
+    "build": {
+      "title": "What you can build",
+      "line": "Each one is in the package today.",
+      "items": [
+        { "title": "A crowd that shares the work", "text": "Agents that share a goal share one solve, and adaptive path budgeting keeps a large swarm inside your frame-time budget under pressure." },
+        { "title": "A map that changes mid-game", "text": "Block and unblock regions of a baked mesh while the game runs, with no re-bake. Swap the new mesh in between ticks." },
+        { "title": "Units that see and fight", "text": "Line of sight, fog of war, influence maps and combat resolution with pluggable damage, dodge and block formulas, in the same package." },
+        { "title": "Tile games with no bake", "text": "A separate lane gives line of sight, movement range, cover and target selection over any tilemap." },
+        { "title": "Movement that looks alive", "text": "Seek, Wander, Patrol, Flee, Queue and FlowLane steering, composed through a fluent builder." },
+        { "title": "Creatures that learn to navigate", "text": "The Creature pairs a holographic transformer brain with Tracer as its feet, in your browser." }
+      ]
+    }
+  },
   "intro": "Tracer is a pathfinding and game-AI SDK for real-time simulations with many moving agents: crowds, RTS-style unit groups and tactical squads. It bakes triangle navmeshes, routes single agents and whole swarms across them, reacts to obstacles that appear or vanish mid-game, and adds the game-AI toolkit around pathfinding: line of sight, fog of war, influence maps and combat engagement.",
   "facts": ["Triangle navmesh and a bake-free tile lane", "Self-tuning concurrency", "net8.0 and net10.0"],
   "why": [

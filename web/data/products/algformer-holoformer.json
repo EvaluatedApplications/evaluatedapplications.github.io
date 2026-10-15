@@ -1,8 +1,29 @@
 {
-  "title": "How HoloFormer works",
+  "title": "HoloFormer: attention that stays fast",
   "label": "How HoloFormer works",
-  "description": "HoloFormer is AlgFormer's holographic attention core. This page explains in plain terms how it stores meaning, combines ideas and remembers a whole context.",
+  "description": "HoloFormer folds a whole context into one running memory, so reading a prompt grows with its length, not its square. Here is how it works, in plain terms.",
   "h1": "How HoloFormer works",
+  "sizzle": {
+    "eyebrow": "How HoloFormer works",
+    "headline": "Attention that stays fast as the context grows.",
+    "sub": "HoloFormer folds everything it has read into one running memory per layer. Reading a prompt grows with its length instead of its square, and each new word costs the same however long the context is.",
+    "cta": "See the numbers",
+    "briefTitle": "In plain terms",
+    "evidence": ["algformer-cost"],
+    "stats": [
+      { "evidence": "algformer-cost", "tile": 0 },
+      { "evidence": "algformer-cost", "tile": 1 },
+      { "evidence": "algformer-cost", "tile": 2 }
+    ],
+    "numbers": {
+      "summary": "See the numbers",
+      "items": [
+        { "claim": "Reading a prompt: 182 ms against 7.08 ms", "text": "At 1,984 tokens, softmax attention reads the prompt in 182 ms and holographic attention in 7.08 ms. Conditions: both cores at 32 channels, 8 shifts and 2 layers, with the same parameter count, the same random tokens, a median of 7 runs, one thread." },
+        { "claim": "Flat per token, small cache", "text": "Each further token takes 3.20 to 4.10 µs from 64 to 1,984 tokens of context, and the serve cache stays 3.40 KB. The softmax cache reaches 2,253 KB." },
+        { "claim": "What a bundle can hold", "text": "One bundle holds a limited number of items cleanly. At a width of 128, about 983 tokens read back at least 90 percent clean, and the section on capacity says how HoloShape sizes a model to stay inside that." }
+      ]
+    }
+  },
   "intro": "HoloFormer is the holographic attention core in AlgFormer. This page explains it in plain terms: how a token is stored, how ideas are combined, how the model thinks longer and how it remembers a whole context in one place. Each idea ends by naming the part of the model it describes.",
   "sections": [
     {

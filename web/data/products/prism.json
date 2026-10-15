@@ -1,8 +1,34 @@
 {
-  "title": "Prism: decode gate and model lineage",
-  "description": "The .NET package behind the in-browser Prism tool: a confidence-gated decode policy, an append-only lineage journal and growth tools for AlgFormer models.",
-  "headline": "The package behind the Prism tool.",
-  "tryTool": { "tool": "prism", "label": "Try Prism in your browser" },
+  "title": "Prism: a model that remembers",
+  "description": "Grow a language model and keep a record of every change. Prism is a .NET decode gate and lineage journal, and the code behind the Prism chat tool.",
+  "sizzle": {
+    "headline": "A model that remembers how it grew.",
+    "sub": "Prism picks each next word by how confident the model is, records every time you grow the model, and works out how it stood at any past round. It is the code behind the Prism chat in your browser.",
+    "tool": "prism",
+    "mechanismTitle": "What Prism holds",
+    "stats": [
+      { "value": "30,400", "label": "checks that the decode gate matches the hand-written code it replaced, with zero mismatches", "cite": ["monorepo:Prism/docs/site.md"] },
+      { "value": "19.5 ms", "label": "to open a journal of 50,000 events, far more than a real model records", "cite": ["monorepo:Prism/CLAUDE.md"] }
+    ],
+    "numbers": {
+      "summary": "See the numbers",
+      "items": [
+        { "claim": "30,400 checks, no mismatches", "text": "The gate was compared with the decode code in the app that trains the Prism model, over 30,400 checks, and every one agreed. That app now routes its decoding through the package." },
+        { "claim": "A journal that opens in 19.5 ms at 50,000 events", "text": "Measured once on a synthetic worst case: 50,000 hand-built events in an in-memory store, with each derivation then taking 2 to 15 ms. A real model's journal holds one line per growth or setting change, typically tens." }
+      ]
+    },
+    "build": {
+      "title": "What you can build",
+      "line": "Each one is in the package today.",
+      "items": [
+        { "title": "Decoding that knows when to guess", "text": "Commit greedily when the model is confident, otherwise sample only from what clears the floor. One tested policy, with a resonance floor, no floor, or nucleus sampling." },
+        { "title": "Growth with a receipt", "text": "Grow a model's context, layers, shifts or vocabulary, and the journal is stamped for you. A model cannot grow without the record." },
+        { "title": "Answers about the past that stay true", "text": "How ramped is this layer? When did the model last grow? Each is answered from the history stamped at the time, never from whatever a constant holds today." },
+        { "title": "A guard against collapse", "text": "DegenGuard fires on a run of repeated tokens or a run of non-greedy picks, the two signs that decoding has collapsed." },
+        { "title": "A journal that runs in a browser tab", "text": "A file-backed store for servers and a pure in-memory store for browser hosts that have no file system." }
+      ]
+    }
+  },
   "intro": "Prism is the NuGet package that the Prism chat tool runs on. It holds three things for a model built on AlgFormer: the decode policy that chooses each next token, a lineage journal that records how the model grew, and a growth surface that changes the model and writes that record for you.",
   "facts": ["Depends on AlgFormer only", "In-memory store for browser hosts"],
   "why": [

@@ -90,10 +90,8 @@ export async function loadAll(opts = {}) {
   const productsFile = readJson(path.join(DATA, 'products.json'));
   const toolsFile = readJson(path.join(DATA, 'tools.json'));
   const redirects = readJson(path.join(DATA, 'redirects.json'));
-  const pages = {
-    partner: readJson(path.join(DATA, 'pages', 'partner.json')),
-    ai: readJson(path.join(DATA, 'pages', 'ai.json')),
-  };
+  // one file per page type: partner, ai, and the copy for the home, products, tools and research index pages
+  const pages = Object.fromEntries(readDir(path.join(DATA, 'pages')).map((f) => [f.replace(/\.json$/, ''), readJson(path.join(DATA, 'pages', f))]));
   const versions = await resolveVersions(productsFile.products, opts.versions || 'auto');
 
   const products = productsFile.products.map((p) => ({ ...p }));

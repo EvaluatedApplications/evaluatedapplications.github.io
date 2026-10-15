@@ -1,7 +1,36 @@
 {
-  "title": "HoloVoxel: LOD-native voxels for .NET",
-  "description": "HoloVoxel stores each chunk of a voxel world as one hologram, so level of detail is the readout itself: crisp near, soft far, no mesh tiers and no popping.",
-  "headline": "Level of detail is not a mesh trick. It is how a read works.",
+  "title": "HoloVoxel: crisp near, cheap far",
+  "description": "A voxel engine where level of detail is how a read works: crisp near, soft far, no mesh tiers and no popping. Engine only, for any renderer.",
+  "sizzle": {
+    "headline": "Crisp up close, cheap far away, and nothing ever pops.",
+    "sub": "Store each chunk of a voxel world once. Read it with a big budget near the viewer and a tiny one in the distance, and the detail fades smoothly. No mesh tiers to build, store or stitch.",
+    "mechanismTitle": "Level of detail is how a read works",
+    "stats": [
+      { "evidence": "holovoxel-lod", "tile": 0 },
+      { "evidence": "holovoxel-lod", "tile": 1 },
+      { "evidence": "holovoxel-lod", "tile": 2 }
+    ],
+    "numbers": {
+      "summary": "See the numbers",
+      "items": [
+        { "claim": "98.4 percent correct at the full budget", "text": "One 16 by 16 chunk stored as a single hologram decodes 98.4 percent of its cells correctly with all 8,192 components, which takes 131,072 bytes and 17.0 ms." },
+        { "claim": "341 times less data, 189 times less time", "text": "At 24 components the same chunk reads 384 bytes in 0.09 ms. Accuracy at the smallest budget is 19.5 percent, against 12.5 percent for a random guess among eight blocks: far terrain is a soft blend by design, not a smaller copy of the near one." },
+        { "claim": "Conditions", "text": "One chunk of a fixed procedural world, decoded at ten component budgets and checked cell by cell against the stored block. Decode time is the median of 15 runs after warm-up, on one machine. Hologram size is sixteen bytes per component read." }
+      ]
+    },
+    "build": {
+      "title": "What you can build",
+      "line": "Each one is in the package today.",
+      "items": [
+        { "title": "A world with no detail tiers", "text": "There is no simplified mesh to generate, store or stitch. The same hologram answers a near read and a far read, at whatever cost you choose to pay for that read." },
+        { "title": "Memory that follows what you see", "text": "A chunk stores only as many components as its level of detail will ever read, so storage tracks the budget you plan to read at, not the size of the world." },
+        { "title": "Haze that is real information", "text": "Distant terrain looks soft because the engine has less information at that budget. Decoded confidence maps straight to solidity, so a renderer can fade the far world for free." },
+        { "title": "Detail only where the world is ambiguous", "text": "An adaptive budget spends more components only where a read is genuinely unclear." },
+        { "title": "Creatures and props in the same store", "text": "Entities are stored the same holographic way, with the same level of detail and confidence." },
+        { "title": "Any renderer you like", "text": "The engine has no graphics dependency. You bring the renderer and the block palette, or use the built-in procedural world generator." }
+      ]
+    }
+  },
   "intro": [
     "Most voxel engines store a world as arrays of blocks and fake distant detail with mesh simplification, mipmaps or detail popping. HoloVoxel stores a chunk of the world as one holographic superposition instead. Every voxel is bound as position and content and summed into a single vector, using the Phasor codec.",
     "Reading a voxel back is a correlation against that vector, and correlating with fewer components gives a cheaper, fuzzier answer. Near the viewer, with the full budget, the correlation collapses to one crisp block. Far away, with a handful of components, the interference of every candidate block blends into a soft, continuous colour. The result is crisp near and soft far, with no discrete tiers of detail and no popping between them.",

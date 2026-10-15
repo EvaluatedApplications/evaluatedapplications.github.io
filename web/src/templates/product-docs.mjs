@@ -3,7 +3,7 @@ import path from 'node:path';
 import { html, raw } from '../../scripts/lib/html.mjs';
 import { DATA, readJson } from '../../scripts/lib/data.mjs';
 import { pageHead, secHead, crumbsLd } from '../layout.mjs';
-import { codeBlock, productSubnav, matrixTable, ladderTable } from '../partials.mjs';
+import { codeBlock, productSubnav, matrixTable, ladderTable, resolveStats, numbersBlock } from '../partials.mjs';
 import { diagramFigure } from '../diagram.mjs';
 
 const read = (rel) => fs.readFileSync(path.join(DATA, rel), 'utf8').replace(/\r\n/g, '\n').trimEnd();
@@ -45,14 +45,22 @@ export default function productSubpage(ctx, p, sp) {
 </div></section>`;
   };
   const body = d.sections.map(section);
-  const main = html`
-${pageHead({ crumbs, eyebrow: `${p.name} ${sp.label.toLowerCase()}`, h1: d.h1 || d.title, lede: d.intro, wide: true,
-    extra: d.maturity ? html`<ul class="facts"><li class="fact">${d.maturity}</li></ul>` : '' })}
+  // sizzle-first sub-page (design-language section 8): a promise headline, number tiles with the conditions behind a disclosure, then the explainer
+  const sz = d.sizzle;
+  const stats = sz ? resolveStats(ctx, sz.stats, subst) : [];
+  const links = sz ? (sz.evidence || []).map((id) => ctx.evidence.find((e) => e.id === id)).filter(Boolean) : [];
+  const head = sz
+    ? pageHead({ crumbs, eyebrow: sz.eyebrow, h1: sz.headline, lede: sz.sub, wide: true, extra: html`<div class="actions"><a class="btn btn-primary" href="#numbers">${sz.cta || 'See the numbers'}</a><a class="btn btn-ghost" href="${p.slug}">${p.name} overview</a></div>` })
+    : pageHead({ crumbs, eyebrow: `${p.name} ${sp.label.toLowerCase()}`, h1: d.h1 || d.title, lede: d.intro, wide: true, extra: d.maturity ? html`<ul class="facts"><li class="fact">${d.maturity}</li></ul>` : '' });
+  const inner = html`${head}
 ${productSubnav(p, sp.path)}
+${sz ? numbersBlock({ stats, numbers: sz.numbers, subst, links }) : ''}
+${sz ? html`<section class="sec doc-sec" aria-labelledby="h-brief"><div class="wrap">${secHead({ title: sz.briefTitle || 'In brief', cat: p.cat, id: 'h-brief' })}<p class="prose-block">${d.intro}</p>${d.maturity ? html`<ul class="facts"><li class="fact">${d.maturity}</li></ul>` : ''}</div></section>` : ''}
 <section class="sec"><div class="wrap">
   <nav class="toc" aria-labelledby="toc-h"><h2 id="toc-h">On this page</h2><ul>${d.sections.map((s) => html`<li><a href="#${s.id}">${s.title}</a></li>`)}</ul></nav>
 </div></section>
 ${body}`;
+  const main = sz ? html`<div class="sizzle-page">${inner}</div>` : inner;
   return {
     url, type: 'product-docs', section: 'products', cat: p.cat,
     title: d.h1 && d.title.length < 40 ? d.title : d.title, description: d.description, crumbs, jsonld: [crumbsLd(ctx, crumbs)],

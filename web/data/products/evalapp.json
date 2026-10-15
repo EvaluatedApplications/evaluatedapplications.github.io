@@ -1,7 +1,36 @@
 {
-  "title": "EvalApp: self-tuning pipelines for .NET",
-  "description": "EvalApp compiles a process into one pipeline, gates every resource it touches at a real bound and can tune concurrency itself. No broker, no dependencies.",
-  "headline": "Stop hand-writing concurrency coordination.",
+  "title": "EvalApp: run it all at once",
+  "description": "Run every step at once without overloading a database, disk or network. EvalApp gates each resource, undoes failures and can tune itself. No broker needed.",
+  "sizzle": {
+    "headline": "Run it all at once without overloading anything.",
+    "sub": "Describe a process as plain steps. EvalApp gates every database, disk and network call at a bound you set, undoes failed work in reverse order, and can tune the bound for you. No broker, no services to stand up.",
+    "mechanismTitle": "What EvalApp replaces",
+    "stats": [
+      { "evidence": "evalapp-gate", "tile": 0 },
+      { "evidence": "evalapp-gate", "tile": 1 },
+      { "evidence": "evalapp-gate", "tile": 2 }
+    ],
+    "numbers": {
+      "summary": "See the numbers",
+      "items": [
+        { "claim": "The gate held its bound every time", "text": "In all 7 recorded runs the most downloads in flight equalled the bound. Every job records its own timestamps, and the number in flight is counted inside the gated step, so the bound is checked against what actually ran." },
+        { "claim": "24 jobs in 139 ms instead of 1,113 ms", "text": "At a bound of 1 the 24 queued jobs took 1,113 ms. At a bound of 8 they took 139 ms, 8.0 times faster. Conditions: each job passes a Network gate and awaits a simulated download of 40 ms, and the simulated service stretches the wait once more than 6 downloads are in flight. One recording per bound, after a warm-up run." },
+        { "claim": "More is not always faster", "text": "With all 24 jobs running at once, the batch took 410 ms, 2.9 times the best bound, because the thing behind the gate slows when it is crowded. The gate does not choose the bound for you; the tuner exists to find it. The work here is a simulated wait, not a real network." }
+      ]
+    },
+    "build": {
+      "title": "What you can build",
+      "line": "Each one is in the package today.",
+      "items": [
+        { "title": "A flood of requests that never floods your database", "text": "Declare Network, DiskIO, Cpu, Database or a pool of your own, and every step that touches it shares the same bound." },
+        { "title": "A limit that finds itself", "text": "Turn tuning on and a hill-climbing or Bayesian tuner searches for the concurrency that works on the hardware it runs on. It stays inside the bounds you declare." },
+        { "title": "Failures that undo themselves", "text": "Chain steps with an undo. When a later step fails, every earlier compensation runs in reverse order." },
+        { "title": "Pipelines that run pipelines", "text": "A compiled pipeline is a value. A step can run another pipeline, or itself, so a schedule can drive a per-batch pipeline with no orchestration code of your own." },
+        { "title": "Code that was never safe to run twice at once", "text": "Declare a GPU context, a native handle or a single-writer file as an exclusive resource, and a second concurrent entry fails loudly or queues." },
+        { "title": "Pipelines that run in a browser tab", "text": "On a single-thread host EvalApp detects it once, runs fan-out inline and hands the thread back every few milliseconds so the page stays responsive." }
+      ]
+    }
+  },
   "intro": [
     "EvalApp replaces the plumbing that every real async .NET codebase ends up writing by hand: a SemaphoreSlim to stop a flood of requests hammering a database, a guessed constant for how many things run at once, a Task.WhenAll inside a try and catch to collect failures, and a rollback path bolted on after something breaks halfway through.",
     "You describe a process as a plain data record and a sequence of steps. EvalApp compiles that into one reusable execution path and gates every resource it touches (CPU, network, disk, database or a pool of your own) at a real bound. When you turn tuning on, it looks for the concurrency that works on the hardware it runs on, instead of a number someone picked once. It is the runtime under the other Evaluated Applications libraries, and it works on its own: no broker, no external service, no config store."

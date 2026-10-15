@@ -3,19 +3,19 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>HoloDb on Pleroma | Evaluated Applications</title>
-<meta name="description" content="How HoloDb uses the Pleroma: an optional aggregate plane for exact answers from a derived summary, index SQL with EXPLAIN, and a durable checksummed page store.">
+<title>HoloDb on Pleroma: no scanning | Evaluated Applications</title>
+<meta name="description" content="Switch on the plane and HoloDb answers filters, group-bys and joins from a small exact summary instead of scanning rows. Optional, and every answer matches.">
 <link rel="canonical" href="https://evaluatedapplications.github.io/holodb/pleroma/">
 
 <meta property="og:type" content="article">
 <meta property="og:site_name" content="Evaluated Applications">
-<meta property="og:title" content="HoloDb on Pleroma | Evaluated Applications">
-<meta property="og:description" content="How HoloDb uses the Pleroma: an optional aggregate plane for exact answers from a derived summary, index SQL with EXPLAIN, and a durable checksummed page store.">
+<meta property="og:title" content="HoloDb on Pleroma: no scanning | Evaluated Applications">
+<meta property="og:description" content="Switch on the plane and HoloDb answers filters, group-bys and joins from a small exact summary instead of scanning rows. Optional, and every answer matches.">
 <meta property="og:url" content="https://evaluatedapplications.github.io/holodb/pleroma/">
 <meta name="twitter:card" content="summary">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%23f0796a'/%3E%3Cstop offset='.5' stop-color='%237bd86a'/%3E%3Cstop offset='1' stop-color='%23c07dff'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='32' height='32' rx='7' fill='%23050608'/%3E%3Cpath d='M16 5L27 26H5Z' fill='none' stroke='url(%23g)' stroke-width='2' stroke-linejoin='round'/%3E%3C/svg%3E">
 <script>document.documentElement.classList.add('js')</script>
-<link rel="stylesheet" href="/assets/ea.css?v=4eb85a7c">
+<link rel="stylesheet" href="/assets/ea.css?v=15c8b29e">
 <script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Home","item":"https://evaluatedapplications.github.io/"},{"@type":"ListItem","position":2,"name":"Products","item":"https://evaluatedapplications.github.io/products/"},{"@type":"ListItem","position":3,"name":"HoloDb","item":"https://evaluatedapplications.github.io/holodb/"},{"@type":"ListItem","position":4,"name":"Built on Pleroma","item":"https://evaluatedapplications.github.io/holodb/pleroma/"}]}</script>
 
 </head>
@@ -32,15 +32,24 @@
   </ul></nav>
 </div></header>
 <main id="main" tabindex="-1">
-
-<header class="page-head"><div class="wrap">
+<div class="sizzle-page"><header class="page-head"><div class="wrap">
 <nav class="crumbs" aria-label="Breadcrumb"><ol><li><a href="/">Home</a></li><li><a href="/products/">Products</a></li><li><a href="/holodb/">HoloDb</a></li><li aria-current="page">Built on Pleroma</li></ol></nav>
-<p class="eyebrow">HoloDb built on pleroma</p>
-<h1 class="wide">HoloDb is built with Pleroma</h1>
-<p class="lede">HoloDb is built with Pleroma, the exact count-and-sum structure in the Phasor package. Three parts of HoloDb are Pleroma parts. This page says what each gives you and what it costs. The first two are optional and off until you ask for them.</p>
-
+<p class="eyebrow">HoloDb, built on Pleroma</p>
+<h1 class="wide">Ask a table a question without reading the table.</h1>
+<p class="lede">Switch on the plane for a table and HoloDb answers filters, group-bys, distinct counts and joins from a small exact summary instead of scanning rows. It is optional, off until you ask, and every answer matches the engine&#39;s.</p>
+<div class="actions"><a class="btn btn-primary" href="#numbers">See the numbers</a><a class="btn btn-ghost" href="/holodb/">HoloDb overview</a></div>
 </div></header>
 <nav class="subnav" aria-label="HoloDb sections"><div class="wrap"><ul><li><a href="/holodb/">Overview</a></li><li><a href="/holodb/#quick-start">Quick start</a></li><li><a href="/holodb/docs/">Docs</a></li><li><a href="/holodb/pleroma/" aria-current="page">Built on Pleroma</a></li><li><a href="/holodb/client/">Client</a></li><li><a href="/holodb/evidence/">Evidence</a></li></ul></div></nav>
+<section class="sec doc-sec" id="numbers" aria-labelledby="numbers-h"><div class="wrap">
+  <h2 class="sr-only" id="numbers-h">The numbers</h2>
+  <dl class="stats stats-big"><div class="stat"><dt>faster for an overdue-invoices rollup on 10,000,000 rows with the plane on: 5.93 ms down to 0.01 ms</dt><dd>About 600 times</dd></div><div class="stat"><dt>median speed-up over the engine on nine ad-hoc filters across a 10,000,000-event dashboard</dt><dd>121 times</dd></div><div class="stat"><dt>faster dashboard panel while new data keeps loading</dt><dd>12 times</dd></div></dl>
+  <details class="dia-data numbers-more"><summary>See the numbers, and what the plane costs</summary>
+    <ul class="numbers-list"><li><h3>Rollups on the billing ledger</h3><p>Overdue outstanding falls from 5.93 ms to 0.01 ms, and revenue by region and status from 32.30 ms to 0.18 ms. Building the plane for 10,000,000 rows took 741 ms and its cells take 34,528 bytes. All 16 results were identical across the engines.</p></li><li><h3>A live dashboard of 10,000,000 events</h3><p>Across nine scalar filter slices the median speed-up over the engine is 121.40 times, and 191.5 times over the best of SQLite, DuckDB and SQL Server. Group-bys gain 20.90 times, HAVING 24.57 times and distinct or min and max with a filter 18.42 times. Queries the plane declines tie with the engine at 0.97 times.</p></li><li><h3>Ingest while querying</h3><p>A dashboard panel is 11.95 times faster than the engine alone, the round total 5.78 times and a trickle pair of one insert and one query 7.00 times.</p></li><li><h3>What it costs</h3><p>Writes cost more with the plane attached: a 10,000-row bulk load takes 11.62 ms against 9.85 ms, and 200 single-row inserts take 1.55 ms against 1.23 ms. On a table of 1,000,000 rows the plane is slower than the engine on whole-table counts and sums, single-column group-bys, and minimums and maximums, because the engine already reads a maintained total there in microseconds. A join that is not a repeat usually costs more through the plane than the engine&#39;s own join.</p></li></ul>
+    <p class="more-link"><a href="/holodb/evidence/">HoloDb benchmarks</a></p>
+  </details>
+  
+</div></section>
+<section class="sec doc-sec" aria-labelledby="h-brief"><div class="wrap"><div class="sec-head"><span class="sec-dot cat-holodb" aria-hidden="true"></span><h2 id="h-brief">What Pleroma gives HoloDb</h2></div><p class="prose-block">HoloDb is built with Pleroma, the exact count-and-sum structure in the Phasor package. Three parts of HoloDb are Pleroma parts. This page says what each gives you and what it costs. The first two are optional and off until you ask for them.</p></div></section>
 <section class="sec"><div class="wrap">
   <nav class="toc" aria-labelledby="toc-h"><h2 id="toc-h">On this page</h2><ul><li><a href="#framing">Engine results and plane results</a></li><li><a href="#plane">The aggregate plane: exact answers from a derived summary</a></li><li><a href="#index-sql">Index SQL and EXPLAIN: build it and see why</a></li><li><a href="#page-store">The Pleroma page store: durable, checksummed pages</a></li><li><a href="#exactness">Exactness</a></li></ul></nav>
 </div></section>
@@ -152,7 +161,7 @@ True
   
   
   <p class="more-link"><a href="/holodb/evidence/#checks">Checks behind the figures</a></p>
-</div></section>
+</div></section></div>
 </main>
 <footer class="site-footer"><div class="wrap">
   <div class="foot-grid">

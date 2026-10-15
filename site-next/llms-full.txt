@@ -1,6 +1,6 @@
 # Evaluated Applications: products, tools and evidence in full
 
-High-performance .NET libraries: an embeddable SQL database, a transformer engine, pathfinding and a pipeline runtime, plus tools that run in your browser.
+Data that answers in microseconds and language models that run in a browser tab. .NET libraries you add with one command, and tools to try now.
 
 Updated: 2026-10-15
 
@@ -568,12 +568,20 @@ Licence: Commercial licence for commercial use. Evaluation and non-commercial us
 
 ### EvalApp: a self-tuning async pipeline runtime for .NET
 
-Resource-gated concurrency that tunes itself, sagas with compensation, middleware and a fluent builder. The execution engine under the other libraries.
+Run everything at once without overloading anything. Gates on every resource, sagas that undo failures, and a tuner that finds the right speed.
 
 Page: https://evaluatedapplications.github.io/evalapp/
 - Package EvaluatedApplications.EvalApp, release 4.4.1: `dotnet add package EvaluatedApplications.EvalApp`
 - Package EvaluatedApplications.EvalApp.Neural, release 2.0.3: `dotnet add package EvaluatedApplications.EvalApp.Neural`
 - Used by: HoloDb, AlgFormer, Prose, Tracer
+
+Run it all at once without overloading anything.
+
+Describe a process as plain steps. EvalApp gates every database, disk and network call at a bound you set, undoes failed work in reverse order, and can tune the bound for you. No broker, no services to stand up.
+
+- 7 of 7: recorded runs where the most downloads in flight equalled the gate bound
+- 1,113 ms to 139 ms: time to finish 24 jobs at a bound of 1 and at the best bound, 8
+- 2.9 times: slower with all 24 jobs running at once than at the best bound
 
 EvalApp replaces the plumbing that every real async .NET codebase ends up writing by hand: a SemaphoreSlim to stop a flood of requests hammering a database, a guessed constant for how many things run at once, a Task.WhenAll inside a try and catch to collect failures, and a rollback path bolted on after something breaks halfway through.
 
@@ -1173,7 +1181,7 @@ Licence: Commercial licence for commercial use. Evaluation and non-commercial us
 
 ### HoloDb: an embeddable SQL database for .NET
 
-Answers exact, similarity and aggregate queries from one store, with transactions, a larger-than-memory paged engine, and a networked client.
+A SQL database inside your app that answers dashboard queries in microseconds, with transactions, similarity search and tables bigger than memory.
 
 Page: https://evaluatedapplications.github.io/holodb/
 - Package EvaluatedApplications.HoloDb, release 5.1.2: `dotnet add package EvaluatedApplications.HoloDb`
@@ -1182,6 +1190,15 @@ Page: https://evaluatedapplications.github.io/holodb/
 - Builds on: EvalApp, Phasor
 - Used by: Prose
 - Tools: The Analyst, Prose
+
+Ten million rows. Dashboard answers in microseconds.
+
+Put a SQL database inside your app that rolls up a ledger in a blink, ranks rows by resemblance and keeps ACID transactions. Tables can be bigger than memory.
+
+- 0.02 ms: to total 10,000,000 invoices by status. DuckDB took 41.63 ms
+- More than 1,600 times: faster than DuckDB on that rollup, and more than 120 times faster on all five dashboard rollups
+- 3.3 times: faster than DuckDB on a join of 10,000,000 invoices to 200,000 customers
+- 16 of 16: queries that returned the same rows as SQLite and DuckDB. The ones where HoloDb is slower are listed too
 
 HoloDb is an embeddable SQL database for .NET with ACID transactions, similarity search and maintained aggregates. It stores data as holograms in a single associative store: every value is encoded as a phase vector and a row's columns are bound into one hologram, so the same copy of the data can be retrieved three ways. Exact lookup by primary key is ordinary SQL. Similarity search by content is the NEAREST clause. Analytics read a maintained total instead of scanning.
 
@@ -1605,6 +1622,14 @@ The same engine runs as a server, and a typed client talks to it over TLS with t
 
 #### HoloDb is built with Pleroma (https://evaluatedapplications.github.io/holodb/pleroma/)
 
+Ask a table a question without reading the table.
+
+Switch on the plane for a table and HoloDb answers filters, group-bys, distinct counts and joins from a small exact summary instead of scanning rows. It is optional, off until you ask, and every answer matches the engine's.
+
+- About 600 times: faster for an overdue-invoices rollup on 10,000,000 rows with the plane on: 5.93 ms down to 0.01 ms
+- 121 times: median speed-up over the engine on nine ad-hoc filters across a 10,000,000-event dashboard
+- 12 times: faster dashboard panel while new data keeps loading
+
 HoloDb is built with Pleroma, the exact count-and-sum structure in the Phasor package. Three parts of HoloDb are Pleroma parts. This page says what each gives you and what it costs. The first two are optional and off until you ask for them.
 
 ##### Engine results and plane results
@@ -1836,7 +1861,7 @@ Licence: Commercial licence for commercial use. Evaluation and non-commercial us
 
 ### AlgFormer: a transformer engine for .NET
 
-Two interchangeable attention cores, classic softmax and holographic, in pure managed code, with optional GPU acceleration.
+Train and run language models in plain C#. The holographic attention core reads long prompts in a fraction of the time.
 
 Page: https://evaluatedapplications.github.io/algformer/
 - Package EvaluatedApplications.AlgFormer, release 3.3.0: `dotnet add package EvaluatedApplications.AlgFormer`
@@ -1844,6 +1869,14 @@ Page: https://evaluatedapplications.github.io/algformer/
 - Builds on: EvalApp, Phasor
 - Used by: Prism, Prose
 - Tools: The Creature, The Forecaster, Prism, Nano Stories, The Cartographer, Prose
+
+Train a language model in plain C#. Nothing else to install.
+
+Define, train and run transformer models with no Python, no GPU and no native runtime. Pick classic attention, or the holographic core that reads long prompts in a fraction of the time.
+
+- 26 times: less time to read a 1,984-token prompt with holographic attention
+- 50 times: less time for each further token, which stays flat as the context grows
+- 663 times: smaller serve cache, constant in the length of the context
 
 AlgFormer is a .NET library for defining, training and running transformer-style language models. Give it a vocabulary and a shape, train it on your own token sequences through a data-parallel pipeline, and run inference as a single prediction, as full logits or as streaming generation with a cache.
 
@@ -1914,6 +1947,14 @@ Limits:
 - The package ships as a binary with no source. It depends on Phasor and EvalApp, and the swarm relay uses MQTTnet.
 
 #### How HoloFormer works (https://evaluatedapplications.github.io/algformer/holoformer/)
+
+Attention that stays fast as the context grows.
+
+HoloFormer folds everything it has read into one running memory per layer. Reading a prompt grows with its length instead of its square, and each new word costs the same however long the context is.
+
+- 26 times: less time to read a 1,984-token prompt with holographic attention
+- 50 times: less time for each further token, which stays flat as the context grows
+- 663 times: smaller serve cache, constant in the length of the context
 
 HoloFormer is the holographic attention core in AlgFormer. This page explains it in plain terms: how a token is stored, how ideas are combined, how the model thinks longer and how it remembers a whole context in one place. Each idea ends by naming the part of the model it describes.
 
@@ -2078,12 +2119,19 @@ Licence: Commercial licence for commercial use. Evaluation and non-commercial us
 
 ### Prism: decode gate, lineage journal and growth for AlgFormer models
 
-The package behind the Prism tool: a confidence-gated decode policy, an append-only lineage journal and growth tools for AlgFormer models.
+A model that remembers how it grew. A confidence-gated decoder and a journal of every change, behind the Prism chat tool.
 
 Page: https://evaluatedapplications.github.io/prism/
 - Package EvaluatedApplications.Prism, release 1.3.4: `dotnet add package EvaluatedApplications.Prism`
 - Builds on: AlgFormer
 - Tools: Prism, Nano Stories
+
+A model that remembers how it grew.
+
+Prism picks each next word by how confident the model is, records every time you grow the model, and works out how it stood at any past round. It is the code behind the Prism chat in your browser.
+
+- 30,400: checks that the decode gate matches the hand-written code it replaced, with zero mismatches
+- 19.5 ms: to open a journal of 50,000 events, far more than a real model records
 
 Prism is the NuGet package that the Prism chat tool runs on. It holds three things for a model built on AlgFormer: the decode policy that chooses each next token, a lineage journal that records how the model grew, and a growth surface that changes the model and writes that record for you.
 
@@ -2103,11 +2151,20 @@ Licence: Commercial licence for commercial use. Evaluation and non-commercial us
 
 ### Prose: a grammar-driven corpus generator for .NET
 
-Mines real text with deterministic grammar rules into a HoloDb database, then recombines it into new sentences and question and answer pairs.
+Three novels in, nearly two thousand checked new sentences out. Mines grammar into HoloDb and recombines it into text and question and answer pairs.
 
 Page: https://evaluatedapplications.github.io/prose/
 - Package EvaluatedApplications.Prose, release 1.4.0: `dotnet add package EvaluatedApplications.Prose`
 - Builds on: EvalApp, HoloDb, AlgFormer
+
+Three novels in. Nearly two thousand checked new sentences out.
+
+Prose reads your text through the rules of grammar, keeps what it learns in HoloDb and recombines it into new sentences and question and answer pairs. Every sentence is re-parsed before you get it.
+
+- 8,232: sentences mined from three public-domain novels
+- 1,966: different sentences from one call that asked for 2,000
+- 1,966 of 1,966: passed the grammar gate on a fresh parse: a real subject, a finite verb and agreement
+- 1,966 of 1,966: used only words the corpus contains. Nothing imaginary
 
 Prose reads plain text through the rules of grammar, keeps what it learns in a HoloDb database, and recombines that knowledge into new sentences that are grammatical, use words suited to their slots and read plausibly. It exists to grow a training corpus. Mine the grammatical knowledge already in your text, which nouns, verbs and adjectives go together and how, then generate more of it, along with question and answer pairs for reading-comprehension training data.
 
@@ -2164,12 +2221,21 @@ Licence: Commercial licence for commercial use. Evaluation and non-commercial us
 
 ### Tracer: pathfinding and game AI for .NET
 
-Navmesh pathfinding for crowds: swarms that share goals, dynamic obstacles, line of sight and combat, tuned to your frame budget.
+Send a whole crowd to one exit with a single search. Navmesh pathfinding with dynamic obstacles, line of sight and combat.
 
 Page: https://evaluatedapplications.github.io/tracer/
 - Package EvaluatedApplications.Tracer, release 2.0.2: `dotnet add package EvaluatedApplications.Tracer`
 - Builds on: EvalApp
 - Tools: The Creature
+
+Send a whole crowd to one exit with a single search.
+
+Bake a navmesh, route single agents or whole swarms across it, close a doorway mid-game and watch the crowd find another way. Line of sight, fog of war and combat are in the same package.
+
+- 14 of 14: agents given a path in one swarm tick on the recorded level
+- 14 of 14: still given a path after a doorway is closed
+- 12 of 14: agents that took a new route around the closed doorway
+- 2: goals for 14 agents. Agents that share a goal share one solve
 
 Tracer is a pathfinding and game-AI SDK for real-time simulations with many moving agents: crowds, RTS-style unit groups and tactical squads. It bakes triangle navmeshes, routes single agents and whole swarms across them, reacts to obstacles that appear or vanish mid-game, and adds the game-AI toolkit around pathfinding: line of sight, fog of war, influence maps and combat engagement.
 
@@ -2261,11 +2327,19 @@ Licence: Commercial licence for commercial use. Evaluation and non-commercial us
 
 ### HoloVoxel: a level-of-detail-native voxel engine for .NET
 
-Level of detail is a property of the read: near data stays crisp and far data degrades gracefully, with SIMD throughout.
+Voxel worlds that stay crisp up close and cost almost nothing far away, with no mesh tiers and no popping.
 
 Page: https://evaluatedapplications.github.io/holovoxel/
 - Package EvaluatedApplications.HoloVoxel, release 1.5.2: `dotnet add package EvaluatedApplications.HoloVoxel`
 - Builds on: Phasor
+
+Crisp up close, cheap far away, and nothing ever pops.
+
+Store each chunk of a voxel world once. Read it with a big budget near the viewer and a tiny one in the distance, and the detail fades smoothly. No mesh tiers to build, store or stitch.
+
+- 98.4%: of cells decoded correctly with all 8,192 components
+- 341 times: less hologram read at 24 components than at the full budget
+- 189 times: less decode time at the smallest budget than at the full one
 
 Most voxel engines store a world as arrays of blocks and fake distant detail with mesh simplification, mipmaps or detail popping. HoloVoxel stores a chunk of the world as one holographic superposition instead. Every voxel is bound as position and content and summed into a single vector, using the Phasor codec.
 

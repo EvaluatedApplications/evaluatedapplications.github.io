@@ -5,6 +5,7 @@ import path from 'node:path';
 import { DATA } from './data.mjs';
 import { stripTags } from './html.mjs';
 import { plain } from '../../src/inline.mjs';
+import { resolveStats } from '../../src/partials.mjs';
 
 const abs = (ctx, u) => (u.startsWith('http') ? u : ctx.site.url + u);
 const readSnip = (rel) => fs.readFileSync(path.join(DATA, rel), 'utf8').replace(/\r\n/g, '\n').trimEnd();
@@ -70,6 +71,7 @@ export function composeLlmsFull(ctx, stamp) {
         L.push(`${cv.headline.text} ${cv.headline.reads}`, '', `${fl(d.bricks.title)}. ${d.bricks.opening}`, ...cv.construction.map((b) => `- ${b.brick}: ${b.alone} In the Pleroma: ${b.pleroma} Proof: ${b.proof}`), '', d.bricks.claim, '');
         L.push(`${d.uses.title}:`, ...d.uses.items.map((u) => `- ${u.title}. ${u.text}`), '', `${d.wrongTool.title}:`, ...d.wrongTool.items.map((l) => `- ${l}`), '', `${d.limits.title}:`, ...d.limits.items.map((l) => `- ${l}`), '');
       } else {
+        if (d.sizzle) { const fl = ctx.limitFacts[p.id] || {}; L.push(d.sizzle.headline, '', d.sizzle.sub, '', ...resolveStats(ctx, d.sizzle.stats, fl).map((x) => `- ${x.value}: ${x.label}`), ''); }
         L.push([].concat(d.intro).join('\n\n'), '');
         if (d.why) L.push('Why use it:', ...d.why.map((w) => `- ${w.title}. ${w.text}`), '');
         if (d.capabilities) L.push('Capabilities:', ...d.capabilities.map((c) => `- ${c.title}. ${c.text}`), '');
@@ -79,7 +81,9 @@ export function composeLlmsFull(ctx, stamp) {
     }
     for (const sp of p.subpages || []) {
       const sd = sp.doc, fact = ctx.limitFacts[p.id] || {};
-      L.push(`#### ${sd.h1 || sd.title} (${abs(ctx, p.slug + sp.path + '/')})`, '', sd.intro, '');
+      L.push(`#### ${sd.h1 || sd.title} (${abs(ctx, p.slug + sp.path + '/')})`, '');
+      if (sd.sizzle) L.push(sd.sizzle.headline, '', sd.sizzle.sub, '', ...resolveStats(ctx, sd.sizzle.stats, fact).map((x) => `- ${x.value}: ${x.label}`), '');
+      L.push(sd.intro, '');
       for (const sec of sd.sections) {
         L.push(`##### ${sec.title}`, '');
         for (const t of sec.paragraphs || []) L.push(t.replace(/\{(\w+)\}/g, (_, k) => fact[k] ?? `{${k}}`), '');

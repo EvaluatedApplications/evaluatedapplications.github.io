@@ -1,7 +1,39 @@
 {
-  "title": "Prose: grammar-driven text for .NET",
-  "description": "Prose mines real text with deterministic grammar rules into a HoloDb database, then recombines it into new grammatical sentences and question and answer pairs.",
-  "headline": "Grow a corpus from the grammar you already have.",
+  "title": "Prose: novels in, new sentences out",
+  "description": "Mine the grammar of your text into HoloDb and recombine it into new sentences and question and answer pairs, each one re-parsed before you get it.",
+  "sizzle": {
+    "headline": "Three novels in. Nearly two thousand checked new sentences out.",
+    "sub": "Prose reads your text through the rules of grammar, keeps what it learns in HoloDb and recombines it into new sentences and question and answer pairs. Every sentence is re-parsed before you get it.",
+    "tool": "prose",
+    "mechanismTitle": "Rules first, not model first",
+    "stats": [
+      { "value": "8,232", "label": "sentences mined from three public-domain novels", "cite": ["evidence/prose-gate.json"] },
+      { "value": "1,966", "label": "different sentences from one call that asked for 2,000", "cite": ["evidence/prose-gate.json"] },
+      { "value": "1,966 of 1,966", "label": "passed the grammar gate on a fresh parse: a real subject, a finite verb and agreement", "cite": ["evidence/prose-gate.json"] },
+      { "value": "1,966 of 1,966", "label": "used only words the corpus contains. Nothing imaginary", "cite": ["evidence/prose-gate.json"] }
+    ],
+    "numbers": {
+      "summary": "See the numbers",
+      "items": [
+        { "claim": "1,966 of the 2,000 requested", "text": "The package returns up to the number asked for and stops when it cannot find more different valid sentences. All 1,966 were different from every other." },
+        { "claim": "Every sentence passed the gate", "text": "Each one is parsed again by the same rules that mined the text, and must have a real subject and a finite verb, with subject and verb agreement and article and noun agreement. A separate check confirms every open-class word was observed in the corpus." },
+        { "claim": "The corpus", "text": "8,232 sentences from Alice's Adventures in Wonderland, The Adventures of Sherlock Holmes and Pride and Prejudice, mined once, then 2,000 sentences generated with a fixed seed. One corpus, one seed." },
+        { "claim": "What the gate does not check", "text": "It checks form, not meaning. A valid sentence can still say something odd." }
+      ]
+    },
+    "build": {
+      "title": "What you can build",
+      "line": "Each one is in the package today.",
+      "items": [
+        { "title": "A bigger training corpus from the text you have", "text": "Mine the grammar already in your text, which nouns, verbs and adjectives go together, then generate more of it, grammatical and checked." },
+        { "title": "Reading-comprehension data", "text": "Turn generated sentences into context, question and answer triples, including multi-sentence passages with pronouns and names that refer back." },
+        { "title": "A parser that needs no model", "text": "Sentence splitting, tagging, chunking and roles with zero training. The panda eats, shoots, and leaves parses as three verbs, and without the commas as one verb with two objects." },
+        { "title": "Output you can trust to be new", "text": "Every word Prose emits is a form it observed in your text. It never invents an inflection." },
+        { "title": "Repeatable runs", "text": "Generation is deterministic for a seed, so the same corpus comes back every time." },
+        { "title": "A corpus builder in a browser tab", "text": "The Prose tool mines pasted text and recombines it on your machine, with nothing uploaded." }
+      ]
+    }
+  },
   "intro": [
     "Prose reads plain text through the rules of grammar, keeps what it learns in a HoloDb database, and recombines that knowledge into new sentences that are grammatical, use words suited to their slots and read plausibly. It exists to grow a training corpus. Mine the grammatical knowledge already in your text, which nouns, verbs and adjectives go together and how, then generate more of it, along with question and answer pairs for reading-comprehension training data.",
     "Language models need volume and variety of grammatically correct text. Writing or scraping more does not scale, and most data augmentation either pastes fragments together ungrammatically or needs a large model of its own. Prose takes a different route. It parses real text into its grammatical structure with deterministic rules, stores what nouns, verbs and adjectives actually go with, and recombines those observed pieces into fresh sentences that are checked to parse correctly before they are written out."

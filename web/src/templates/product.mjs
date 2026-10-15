@@ -3,7 +3,7 @@ import path from 'node:path';
 import { html, raw } from '../../scripts/lib/html.mjs';
 import { DATA } from '../../scripts/lib/data.mjs';
 import { pageHead, secHead, breadcrumbs, crumbsLd } from '../layout.mjs';
-import { installLine, codeBlock, evidenceTiles, stat, productSubnav } from '../partials.mjs';
+import { installLine, codeBlock, evidenceTiles, stat, productSubnav, resolveStats, numbersBlock, toolBand } from '../partials.mjs';
 import { diagramFigure } from '../diagram.mjs';
 
 const read = (rel) => fs.readFileSync(path.join(DATA, rel), 'utf8').replace(/\r\n/g, '\n').trimEnd();
@@ -24,8 +24,11 @@ function captionHtml(text, data, subst) {
 
 // Product page template. A product supplies data/products.json (identity, packages, group) and
 // data/products/<id>.json (words, diagram, quick start). Sections without data are omitted.
+// With doc.sizzle the page sells the result first (design-language section 8): one promise, the live tool or demo under it, number tiles
+// with the conditions behind a disclosure, what you can build, a proven program, and only then the mechanism, limits and proof.
 export default function product(ctx, p) {
   const doc = p.doc;
+  const sz = doc.sizzle || null;
   const s = ctx.site;
   const primary = p.packages.find((x) => x.role === 'primary');
   const group = ctx.groups.find((g) => g.id === p.group);
@@ -41,14 +44,16 @@ export default function product(ctx, p) {
       data: withLatency(ctx, ctx.diagrams[doc.diagram.id], doc.diagram.latency),
       stageLabel: doc.diagram.stageLabel || 'Interactive diagram. Drag, or use the arrow keys.',
       caption: doc.diagram.caption ? captionHtml(doc.diagram.caption, ctx.diagrams[doc.diagram.id], subst) : undefined,
+      variant: sz ? 'fig-hero-demo' : undefined,
     });
   }
   const qs = doc.quickstart;
   const code = qs ? read(qs.source) : null;
   const out = qs ? read(qs.output) : null;
 
-
   const tryTool = doc.tryTool ? ctx.tools.find((t) => t.id === doc.tryTool.tool) : null;
+  const heroTool = sz?.tool ? ctx.tools.find((t) => t.id === sz.tool) : null;
+  if (sz?.tool && !heroTool) throw new Error(`${p.id}: sizzle.tool "${sz.tool}" is not a tool`);
   const dependsOn = p.dependsOn.map((id) => ctx.byId[id]);
   const usedBy = p.usedBy.map((id) => ctx.byId[id]);
 
@@ -61,39 +66,59 @@ export default function product(ctx, p) {
     author: { '@id': s.url + '/#org' },
   };
 
-  const main = html`
-${pageHead({
+  const plainHero = pageHead({
     crumbs, eyebrow: group.label, h1: `${p.name}: ${p.tagline}`, wide: true, lede: doc.headline,
     extra: html`
 <ul class="facts"><li class="fact">Release <b data-gen="version">${primary.version}</b></li>${(doc.facts || []).map((f) => html`<li class="fact">${f}</li>`)}</ul>
 <div class="install-row">${p.packages.map((pkg) => html`<div>${p.packages.length > 1 ? html`<div class="pkg-label">${pkg.id}</div>` : ''}${installLine(`dotnet add package ${pkg.id}`)}</div>`)}</div>
 <div class="actions">${tryTool ? html`<a class="btn btn-primary" href="${tryTool.href}">${doc.tryTool.label}</a>` : ''}${qs ? html`<a class="btn ${tryTool ? 'btn-ghost' : 'btn-primary'}" href="#quick-start">Quick start</a>` : ''}<a class="btn btn-ghost" href="${primary.nuget}" rel="noopener">View on NuGet</a></div>
 <p class="licence-ribbon"><span>${ctx.licence.ribbon}</span><a href="/licence/">Licence terms</a></p>`,
-  })}
-${productSubnav(p, 'overview')}
+  });
 
-${fig ? html`<section class="sec fig-sec doc-sec" id="overview" aria-label="Overview"><div class="wrap">${fig.html}</div></section>` : ''}
+  const sizzleHero = sz ? pageHead({
+    crumbs, eyebrow: sz.eyebrow || `${p.name}, ${p.tagline}`, h1: sz.headline, wide: true, lede: sz.sub,
+    extra: html`
+<div class="hero-row"><div class="install-row hero-cta">${installLine(`dotnet add package ${primary.id}`)}</div>
+<div class="actions"><a class="btn btn-primary" href="#demo">${sz.cta || 'See it run'}</a>${qs ? html`<a class="btn btn-ghost" href="#quick-start">Get the code</a>` : ''}<a class="btn btn-ghost" href="${primary.nuget}" rel="noopener">View on NuGet</a></div></div>
+<p class="licence-ribbon"><span>${ctx.licence.ribbon}</span><a href="/licence/">Licence terms</a></p>`,
+  }) : '';
 
-<section class="sec doc-sec" aria-labelledby="h-what"><div class="wrap">
-  ${secHead({ title: `What ${p.name} is`, cat: p.cat, id: 'h-what' })}
+  const figSec = fig ? html`<section class="sec fig-sec doc-sec" id="${sz && !heroTool ? 'demo' : 'overview'}" aria-label="Overview"><div class="wrap">${fig.html}</div></section>` : '';
+  const bandSec = heroTool ? toolBand(heroTool, p, p.tools.filter((t) => t.id !== heroTool.id)) : '';
+
+  const stats = sz ? resolveStats(ctx, sz.stats, subst) : [];
+  const numbersSec = sz ? numbersBlock({
+    stats, numbers: sz.numbers, subst, links: p.evidence,
+    ribbon: html`<p class="licence-ribbon"><span>Release <b data-gen="version">${primary.version}</b></span><span>${(doc.facts || []).join(' · ')}</span></p>`,
+  }) : '';
+
+  const buildSec = sz?.build ? html`<section class="sec doc-sec" id="build" aria-labelledby="h-build"><div class="wrap">
+  ${secHead({ title: sz.build.title || 'What you can build', line: sz.build.line, cat: p.cat, id: 'h-build' })}
+  <ul class="points build-points">${sz.build.items.map((c) => html`<li><h3>${c.title}</h3><p>${fill(c.text)}</p>${c.link ? html`<p class="more-link"><a href="${c.link.href}">${c.link.label}</a></p>` : ''}</li>`)}</ul>
+</div></section>` : '';
+
+  const whatSec = html`<section class="sec doc-sec" aria-labelledby="h-what"><div class="wrap">
+  ${secHead({ title: sz ? (sz.mechanismTitle || `How ${p.name} works`) : `What ${p.name} is`, cat: p.cat, id: 'h-what' })}
   ${[].concat(doc.intro).map((t) => html`<p class="prose-block">${t}</p>`)}
-  ${doc.why ? html`<ul class="points">${doc.why.map((w) => html`<li><h3>${w.title}</h3><p>${w.text}</p></li>`)}</ul>` : ''}
-</div></section>
+  ${doc.why ? html`<ul class="points">${doc.why.map((w) => html`<li><h3>${w.title}</h3><p>${fill(w.text)}</p></li>`)}</ul>` : ''}
+</div></section>`;
 
-${qs ? html`<section class="sec doc-sec" id="quick-start" aria-labelledby="h-qs"><div class="wrap">
-  ${secHead({ title: 'Quick start', line: qs.lede, cat: p.cat, id: 'h-qs' })}
+  const extraInstalls = sz && p.packages.length > 1 ? html`<div class="install-row">${p.packages.map((pkg) => html`<div><div class="pkg-label">${pkg.id}</div>${installLine(`dotnet add package ${pkg.id}`)}</div>`)}</div>` : '';
+  const qsSec = qs ? html`<section class="sec doc-sec" id="quick-start" aria-labelledby="h-qs"><div class="wrap">
+  ${secHead({ title: sz ? (sz.codeTitle || 'Run it yourself') : 'Quick start', line: qs.lede, cat: p.cat, id: 'h-qs' })}
+  ${extraInstalls}
   ${codeBlock({ code, label: 'C#' })}
   ${codeBlock({ code: out, label: 'Output', out: true, lang: 'text' })}
   <p class="muted tool-note">This is the complete program, compiled and run against the published package.</p>
   ${(qs.also || []).map((a) => html`${a.lede ? html`<p class="prose-block">${a.lede}</p>` : ''}${codeBlock({ code: read(a.source), label: 'C#' })}${a.output ? codeBlock({ code: read(a.output), label: 'Output', out: true, lang: 'text' }) : ''}`)}
-</div></section>` : ''}
+</div></section>` : '';
 
-${doc.capabilities ? html`<section class="sec doc-sec" aria-labelledby="h-cap"><div class="wrap">
-  ${secHead({ title: 'Capabilities', cat: p.cat, id: 'h-cap' })}
+  const capSec = doc.capabilities ? html`<section class="sec doc-sec" aria-labelledby="h-cap"><div class="wrap">
+  ${secHead({ title: sz ? 'Everything in the package' : 'Capabilities', cat: p.cat, id: 'h-cap' })}
   <ul class="points">${doc.capabilities.map((c) => html`<li><h3>${c.title}</h3><p>${c.text}</p></li>`)}</ul>
-</div></section>` : ''}
+</div></section>` : '';
 
-${(doc.extensions || []).map((x) => {
+  const extSecs = (doc.extensions || []).map((x) => {
     const pkg = p.packages.find((q) => q.id === x.packageId);
     return html`<section class="sec doc-sec" id="${x.id}" aria-labelledby="h-${x.id}"><div class="wrap">
   ${secHead({ title: x.title, line: x.line, cat: p.cat, id: 'h-' + x.id })}
@@ -103,20 +128,20 @@ ${(doc.extensions || []).map((x) => {
   ${x.snippet ? html`${x.snippet.lede ? html`<p class="prose-block">${x.snippet.lede}</p>` : ''}${codeBlock({ code: read(x.snippet.source), label: 'C#' })}${x.snippet.output ? codeBlock({ code: read(x.snippet.output), label: 'Output', out: true, lang: 'text' }) : ''}` : ''}
   ${x.good ? html`<h3 class="sub-h">Good to know</h3><ul class="limits">${x.good.map((l) => html`<li>${l}</li>`)}</ul>` : ''}
 </div></section>`;
-  })}
+  });
 
-${doc.limits ? html`<section class="sec doc-sec" aria-labelledby="h-lim"><div class="wrap">
-  ${secHead({ title: 'Limits', line: `What ${p.name} does not do, and where to be careful`, cat: p.cat, id: 'h-lim' })}
+  const limSec = doc.limits ? html`<section class="sec doc-sec" aria-labelledby="h-lim"><div class="wrap">
+  ${secHead({ title: sz ? 'Know before you start' : 'Limits', line: `What ${p.name} does not do, and where to be careful`, cat: p.cat, id: 'h-lim' })}
   <ul class="limits">${doc.limits.map((l) => html`<li>${fill(l)}</li>`)}</ul>
   ${doc.reference ? html`<p class="muted tool-note">${doc.reference} <a href="${primary.nuget}" rel="noopener">Open the NuGet page</a>.</p>` : ''}
-</div></section>` : ''}
+</div></section>` : '';
 
-${p.evidence.length ? html`<section class="sec doc-sec" aria-labelledby="h-ev"><div class="wrap">
+  const evSec = p.evidence.length ? html`<section class="sec doc-sec" aria-labelledby="h-ev"><div class="wrap">
   ${secHead({ title: 'Evidence', cat: p.cat, id: 'h-ev', more: { href: p.evidence[0].slug, label: 'Method and every number' } })}
-  <dl class="stats">${evidenceTiles(p.evidence[0]).map((t) => stat(t.label, t.value))}</dl>
-</div></section>` : ''}
+  ${sz ? html`<p class="prose-block">${p.evidence[0].claim}</p>` : html`<dl class="stats">${evidenceTiles(p.evidence[0]).map((t) => stat(t.label, t.value))}</dl>`}
+</div></section>` : '';
 
-<section class="sec doc-sec" aria-labelledby="h-rel"><div class="wrap">
+  const relSec = html`<section class="sec doc-sec" aria-labelledby="h-rel"><div class="wrap">
   ${secHead({ title: 'Related', cat: p.cat, id: 'h-rel' })}
   <div class="related">
     ${dependsOn.length ? html`<div><h3>Builds on</h3><ul>${dependsOn.map((d) => html`<li><a class="pill" href="${d.href}">${d.name}</a></li>`)}</ul></div>` : ''}
@@ -124,12 +149,42 @@ ${p.evidence.length ? html`<section class="sec doc-sec" aria-labelledby="h-ev"><
     ${p.tools.length ? html`<div><h3>Try it in the browser</h3><ul>${p.tools.map((t) => html`<li><a class="pill" href="${t.href}">${t.name}</a></li>`)}</ul></div>` : ''}
     <div><h3>Elsewhere</h3><ul><li><a class="pill" href="/products/">All products</a></li><li><a class="pill" href="${primary.nuget}" rel="noopener">NuGet package</a></li></ul></div>
   </div>
-</div></section>
+</div></section>`;
 
-<section class="sec doc-sec" aria-labelledby="h-lic"><div class="wrap">
+  const licSec = html`<section class="sec doc-sec" aria-labelledby="h-lic"><div class="wrap">
   ${secHead({ title: 'Licence', cat: p.cat, id: 'h-lic' })}
   <p class="prose-block">${ctx.licence.oneLine} <a href="/licence/">Read the licence terms</a>.</p>
 </div></section>`;
+
+  const main = sz
+    ? html`<div class="sizzle-page">
+${sizzleHero}
+${productSubnav(p, 'overview')}
+${bandSec}
+${figSec}
+${numbersSec}
+${buildSec}
+${qsSec}
+${whatSec}
+${capSec}
+${extSecs}
+${limSec}
+${evSec}
+${relSec}
+${licSec}
+</div>`
+    : html`
+${plainHero}
+${productSubnav(p, 'overview')}
+${fig ? html`<section class="sec fig-sec doc-sec" id="overview" aria-label="Overview"><div class="wrap">${fig.html}</div></section>` : ''}
+${whatSec}
+${qsSec}
+${capSec}
+${extSecs}
+${limSec}
+${evSec}
+${relSec}
+${licSec}`;
 
   return {
     url: p.slug, type: 'product', section: 'products', cat: p.cat,
