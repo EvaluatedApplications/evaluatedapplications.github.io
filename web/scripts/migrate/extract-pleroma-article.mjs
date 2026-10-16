@@ -22,9 +22,9 @@ const CAPTIONS = [
   'The same exact counts held two ways: a hash map and one dense Pleroma page per context',
 ];
 const TOPICS = ['exact stores', 'Pleroma'];
-const HEADLINE = 'Forty-five reads, one store.';
+const HEADLINE = 'Forty-seven reads, one store.';
 const SUB = 'One fixed-size array of exact integers. Counts, order, parity, time and nearest words, each in a single pass. When it is full, it refuses instead of guessing.';
-const DESCRIPTION = 'One fixed-size array of exact integers answers forty-five different questions, each in a single pass, and refuses instead of guessing when it is full.';
+const DESCRIPTION = 'One fixed-size array of exact integers answers forty-seven different questions, each in a single pass, and refuses instead of guessing when it is full.';
 // tiles: value and label as the user approved them; `small` is quoted from the article and must appear in it verbatim
 const TILES = [
   { value: '64', label: 'items exact, against 4 for the best HRR decoder (200 of 200 trials)',
@@ -107,7 +107,7 @@ const ids = sections.map((s) => s.id); if (new Set(ids).size !== ids.length) thr
 
 const out = {
   id: 'forty-five-reads-one-store',
-  title: 'Forty-five reads, one store',
+  title: 'Forty-seven reads, one store',
   headline: HEADLINE,
   sub: SUB,
   summary: SUB,
