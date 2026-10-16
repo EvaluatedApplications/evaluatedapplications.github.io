@@ -62,9 +62,18 @@ const ops = cov.operations;
 const keep = (o) => ({ name: o.name, face: o.face, rung: o.rung || '', evidence: o.evidence });
 const classes = ['kernel', 'pass-per-term', 'write'].map((c) => ({ id: c, count: ops.filter((o) => o.class === c).length, meaning: cov.classes[c], operations: ops.filter((o) => o.class === c).map(keep) }));
 const reads = ops.filter((o) => o.class === 'read').map(keep);
+// The page says one thing about reads and read sets: how many answer from the array in one pass, and that nine of them are answered through a
+// read set. The owner's longer notes on routes and planners (headline.reads after "Of them", readsInOnePassNote) are not carried over.
+const readsCut = cov.headline.reads.indexOf(' Of them, ');
+if (readsCut < 0) throw new Error('headline.reads no longer has the "Of them," sentence this script cuts at');
+const NUM = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve', 'thirteen', 'fourteen', 'fifteen', 'sixteen', 'seventeen', 'eighteen', 'nineteen', 'twenty'];
+const nInSet = cov.headline.readsInOnePass;
+if (nInSet !== cov.commutation.readsInOneReadSet) throw new Error('the count of reads answered through a read set differs between the headline and the commutation block');
+const headline = { ...cov.headline, reads: cov.headline.reads.slice(0, readsCut) + ` ${NUM[nInSet][0].toUpperCase() + NUM[nInSet].slice(1)} of them are answered through a read set.` };
+delete headline.readsInOnePassNote;
 const coverage = {
   schema: 'ea-diagram/1', kind: 'coverage-meter', package: pkg, source: 'Phasor/docs/superposition-coverage.json',
-  headline: cov.headline, summary: cov.summary, classes, reads, readsMeaning: cov.classes.read,
+  headline, summary: cov.summary, classes, reads, readsMeaning: cov.classes.read,
   plumbing: { count: ops.filter((o) => o.class === 'plumbing').length, meaning: cov.classes.plumbing },
   notBuilt: ops.filter((o) => o.class === 'not-built').map(keep),
   construction: cov.construction.map((b) => ({ brick: b.brick, alone: b.alone, pleroma: b.pleroma, proof: b.proof })),
@@ -72,6 +81,57 @@ const coverage = {
 const sum = classes.reduce((a, c) => a + c.count, 0);
 if (sum !== cov.summary.operatorCount || classes[0].count !== cov.summary.kernelCount || reads.length !== cov.summary.readCount) throw new Error('coverage counts disagree with the operations list');
 write('diagrams/coverage-meter.json', coverage);
+
+// ---- the commutation map: how each of the 89 operations moves when the store is moved ----
+// Classes come from the coverage record (each operation's commutation.class, probe-backed rows taken by the owner's tests from
+// superposition-classification.json); the generators and the per-generator "breaks" counts are read from the classification file.
+const cls = readJson(path.join(docs, 'superposition-classification.json'));
+const com = cov.commutation;
+const members = ops.filter((o) => o.commutation);
+if (members.length !== com.members) throw new Error(`commutation members: ${members.length} operations carry a class, the record says ${com.members}`);
+// "joins" splits by the owner's definition: it commutes with the group AND lies on an axis the kernel carries, which the record shows as a
+// kernel operation, a store sum (Add or Subtract of another store) or a read answered through a read set. The other commuting operations,
+// Hadamard and the key shift among them, lie off those axes (a key shift joins them only through a keyed kernel).
+const isStoreSum = (o) => o.class === 'write' && /^(Add|Subtract)\(Pleroma\)$/.test(o.name);
+const onAxes = (o) => o.commutation.class === 'joins' && (o.class === 'kernel' || isStoreSum(o) || o.readSet === 'joined');
+const how = (o) => (o.class === 'kernel' ? 'kernel operation' : isStoreSum(o) ? 'store sum' : o.readSet === 'joined' ? 'read through a read set' : o.class === 'read' ? 'read' : 'operator');
+const note = (o) => (o.commutation.note || o.commutation.basis || '').replace(/^probe: /, 'probed as ').replace(/^not probed$/, '').replace(/\s*\(op-\d+,\s*EXP-\w+\)/g, '').replace(/,\s*EXP-\w+\)/g, ')').trim(); // internal ids stay out of public prose
+const pick = (f) => members.filter(f).map((o) => ({ name: o.name, class: o.class, how: how(o), face: o.face, note: note(o) }));
+const GROUPS = [
+  { id: 'joins-axes', label: "Join the kernel's axes", meaning: 'Commute with every generator of the group and lie on an axis the kernel carries: the flag face, the left arrangement or the tick.', f: onAxes },
+  { id: 'joins-off', label: 'Commute, off the axes', meaning: 'Commute with every generator but do not lie on an axis the kernel carries, such as the key shift of an unkeyed kernel.', f: (o) => o.commutation.class === 'joins' && !onAxes(o) },
+  { id: 'linear', label: 'Linear, break a symmetry', meaning: 'Linear or affine, and break at least one named generator: a bit permutation of the flags, a key scaling, a Frobenius squaring, a bind.', f: (o) => o.commutation.class === 'linear-not-commuting' },
+  { id: 'nonlinear', label: 'Not linear', meaning: 'Choices, decodes, order statistics, draws and predicates.', f: (o) => o.commutation.class === 'non-linear' },
+  { id: 'declare', label: 'Need a declaration', meaning: 'Need an output-action declaration before a probe can classify them. The record gives the reason for each.', f: (o) => o.commutation.class === 'needs-declaration' },
+].map((g) => ({ id: g.id, label: g.label, meaning: g.meaning, operations: pick(g.f) })).map((g) => ({ ...g, count: g.operations.length }));
+if (GROUPS.reduce((a, g) => a + g.count, 0) !== com.members) throw new Error('commutation groups do not add up to the members');
+const byCount = (id) => GROUPS.find((g) => g.id === id).count;
+if (byCount('joins-axes') + byCount('joins-off') !== com.classCounts.joins || byCount('linear') !== com.classCounts['linear-not-commuting'] || byCount('nonlinear') !== com.classCounts['non-linear'] || byCount('declare') !== com.classCounts['needs-declaration']) throw new Error('commutation groups differ from the record\'s class counts');
+// the generators, parsed from the classification file's own scope line
+const genText = cls.scope.replace(/^.*?Generators:\s*/, '').replace(/\.$/, '').split(';').map((s) => s.trim());
+const generators = genText.map((s) => { const m = s.match(/^(.+?) \((.+)\)$/); if (!m) throw new Error('generator group not understood: ' + s); return m[1].split(',').map((x) => x.trim()).map((id) => ({ id, group: m[2] })); }).flat();
+const movesOf = (id) => {
+  let m;
+  if ((m = id.match(/^key(\d+)$/))) return `shift every key by ${m[1]}`;
+  if ((m = id.match(/^flag(\d+)$/))) return `XOR every flag word with mask ${m[1]}`;
+  if ((m = id.match(/^arrR(\d+)$/))) return `relabel the arrangements from the right, generator ${m[1]}`;
+  if ((m = id.match(/^arrL(\d+)$/))) return `relabel the arrangements from the left, generator ${m[1]}`;
+  if ((m = id.match(/^time(\d+)$/))) return `advance every tick by ${m[1]}`;
+  throw new Error('generator not understood: ' + id);
+};
+for (const g of generators) { g.moves = movesOf(g.id); delete g.group; }
+for (const g of generators) g.breaks =cls.probes.filter((p) => p.commutes && p.commutes[g.id] === 'breaks').length;
+const probeIds = new Set(cls.probes.flatMap((p) => Object.keys(p.commutes || {})));
+if (generators.some((g) => !probeIds.has(g.id))) throw new Error('a parsed generator is not a key of the probe rows');
+// the owner's prose and the data must say the same numbers (the pages quote these)
+const word = (n) => NUM[n][0].toUpperCase() + NUM[n].slice(1);
+if (!siteMd.includes(`${com.classCounts.joins} commute with every generator of the group. ${word(byCount('joins-axes'))} of them join the kernel's axes.`)) throw new Error('site.md no longer states the commutation split this data produces');
+const commutation = {
+  schema: 'ea-diagram/1', kind: 'commutation-map', package: pkg, source: 'Phasor/docs/superposition-coverage.json (commutation) and Phasor/docs/superposition-classification.json',
+  members: com.members, commuting: com.classCounts.joins, probeBacked: com.probeBacked, notProbed: com.notProbed, probeRows: com.probeRows,
+  probeSummary: cls.summary, groups: GROUPS, generators,
+};
+write('diagrams/commutation-map.json', commutation);
 
 // ---- the ladder table (rungs x what one pass can do), parsed from the owner's table ----
 const sec = siteMd.slice(siteMd.indexOf('## The rungs as the ladder'));

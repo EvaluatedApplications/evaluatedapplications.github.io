@@ -33,14 +33,14 @@ export default function productSubpage(ctx, p, sp) {
     return html`<section class="sec doc-sec" aria-labelledby="${s.id}"><div class="wrap">
   ${secHead({ title: s.title, cat: p.cat, id: s.id })}
   ${(s.paragraphs || []).length ? html`<div class="prose-block">${s.paragraphs.map((t) => html`<p>${fill(t)}</p>`)}</div>` : ''}
-  ${s.list ? html`<dl class="term-list">${s.list.map((x) => html`<dt>${x.term}</dt><dd>${x.text}</dd>`)}</dl>` : ''}
+  ${s.list ? html`<dl class="term-list">${s.list.map((x) => html`<dt>${fill(x.term)}</dt><dd>${fill(x.text)}</dd>`)}</dl>` : ''}
   ${s.table ? matrixTable(s.table) : ''}
   ${s.ladder ? ladderTable(readJson(path.join(DATA, 'generated', 'phasor-ladder.json')).rungs) : ''}
   ${fig}
   ${s.grid ? gridTable(ctx.diagrams[s.grid]) : ''}
   ${(s.paragraphsAfter || []).length ? html`<div class="prose-block">${s.paragraphsAfter.map((t) => html`<p>${fill(t)}</p>`)}</div>` : ''}
   ${(s.snippets || []).map((sn) => (sn.text ? codeBlock({ code: sn.text.trim(), lang: sn.lang || 'sql', label: sn.label || 'SQL' }) : html`${codeBlock({ code: read(sn.source), label: sn.label || 'C#' })}${sn.output ? codeBlock({ code: read(sn.output), label: 'Output', out: true, lang: 'text' }) : ''}`))}
-  ${s.listAfter ? html`<dl class="term-list">${s.listAfter.map((x) => html`<dt>${x.term}</dt><dd>${x.text}</dd>`)}</dl>` : ''}
+  ${s.listAfter ? html`<dl class="term-list">${s.listAfter.map((x) => html`<dt>${fill(x.term)}</dt><dd>${fill(x.text)}</dd>`)}</dl>` : ''}
   ${s.more ? html`<p class="more-link"><a href="${s.more.href}">${s.more.label}</a></p>` : ''}
 </div></section>`;
   };

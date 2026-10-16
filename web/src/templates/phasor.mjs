@@ -23,7 +23,9 @@ export default function phasorPage(ctx, p) {
   const meter = diagramFigure({ id: 'cm', kind: 'coverage-meter', title: null, lede: null, data: cov, stageLabel: 'Each square is one operator, coloured by class.', level: 3, variant: 'fig-quiet',
     caption: html`From the coverage record for release <span data-gen="version">${primary.version}</span>. Every count is the record's.` });
 
-  const w = doc.where;
+  const w = doc.where, sy = doc.symmetry;
+  const commute = diagramFigure({ id: 'cx', kind: 'commutation-map', title: sy.figure.title, lede: sy.figure.lede, data: ctx.diagrams['commutation-map'], stageLabel: sy.figure.stageLabel, level: 3, variant: 'fig-quiet',
+    caption: html`From the commutation record for release <span data-gen="version">${primary.version}</span>. Every count is the record's.` });
   const ld = {
     '@context': 'https://schema.org', '@type': 'SoftwareApplication', name: primary.id, alternateName: p.name, description: doc.description,
     applicationCategory: 'DeveloperApplication', operatingSystem: '.NET', softwareVersion: primary.version, url: s.url + p.slug, downloadUrl: primary.nuget,
@@ -64,6 +66,16 @@ ${productSubnav(p, 'overview')}
   ${codeBlock({ code: read(doc.code.output), label: 'Output', out: true, lang: 'text' })}
 </div></section>
 
+<section class="sec doc-sec" id="flags" aria-labelledby="h-flags"><div class="wrap">
+  ${secHead({ title: doc.flags.title, line: doc.flags.line, cat: p.cat, id: 'h-flags', more: doc.flags.more })}
+  <p class="prose-block">${doc.flags.lede}</p>
+  <dl class="stats stats-big">${doc.flags.tiles.map((x) => stat(fill(x.label), fill(x.value)))}</dl>
+  <ul class="points build-points">${doc.flags.items.map((c) => html`<li><h3>${c.title}</h3><p>${c.text}</p></li>`)}</ul>
+  <h3 class="sub-h">${doc.flags.code.title}</h3>
+  ${codeBlock({ code: read(doc.flags.code.source), label: 'C#' })}
+  ${codeBlock({ code: read(doc.flags.code.output), label: 'Output', out: true, lang: 'text' })}
+</div></section>
+
 <section class="sec doc-sec" id="superposition" aria-labelledby="h-where"><div class="wrap">
   ${secHead({ title: w.title, line: w.line, cat: p.cat, id: 'h-where' })}
   <p class="prose-block">${w.lede}</p>
@@ -80,6 +92,19 @@ ${productSubnav(p, 'overview')}
     <p class="prose-block">${w.ladder.lede}</p>
     ${ladderTable(ladder)}
     <p class="more-link"><a href="${w.ladder.more.href}">${w.ladder.more.label}</a></p>
+  </details>
+</div></section>
+
+<section class="sec doc-sec" id="symmetry" aria-labelledby="h-sym"><div class="wrap">
+  ${secHead({ title: sy.title, line: sy.line, cat: p.cat, id: 'h-sym' })}
+  <p class="prose-block">${fill(sy.lede)}</p>
+  <dl class="stats stats-big">${sy.tiles.map((x) => stat(fill(x.label), fill(x.value)))}</dl>
+  ${commute.html}
+  ${sy.define.map((t) => html`<p class="prose-block">${fill(t)}</p>`)}
+  <h3 class="sub-h">${sy.scopeTitle}</h3>
+  <dl class="term-list">${sy.scope.map((x) => html`<dt>${x.term}</dt><dd>${x.text}</dd>`)}</dl>
+  <details class="dia-data"><summary>${sy.meaning.summary}</summary>
+    ${sy.meaning.paragraphs.map((t) => html`<p class="prose-block">${t}</p>`)}
   </details>
 </div></section>
 
@@ -145,7 +170,7 @@ ${p.evidence.length ? html`<section class="sec doc-sec" aria-labelledby="h-ev"><
     url: p.slug, type: 'product', section: 'products', cat: p.cat,
     title: doc.title, description: doc.description,
     crumbs, jsonld: [ld, crumbsLd(ctx, crumbs)],
-    scripts: ['/assets/diagrams/superposition-scene.js', '/assets/diagrams/coverage-meter.js'],
+    scripts: ['/assets/diagrams/superposition-scene.js', '/assets/diagrams/commutation-map.js', '/assets/diagrams/coverage-meter.js'],
     main,
   };
 }

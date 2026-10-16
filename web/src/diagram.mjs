@@ -22,6 +22,7 @@ import * as sizeBars from './assets/diagrams/size-bars.js';
 import * as designEffect from './assets/diagrams/design-effect.js';
 import * as superpositionScene from './assets/diagrams/superposition-scene.js';
 import * as coverageMeter from './assets/diagrams/coverage-meter.js';
+import * as commutationMap from './assets/diagrams/commutation-map.js';
 import * as blazierBoot from './assets/diagrams/blazier-boot.js';
 import * as hologenomeScores from './assets/diagrams/hologenome-scores.js';
 import * as scalingCurve from './assets/diagrams/scaling-curve.js';
@@ -31,7 +32,7 @@ const KINDS = {
   'pleroma-superposition': pleromaSuper, 'pleroma-capacity': pleromaCap, 'latency-bars': latencyBars, 'holodb-store': holodbStore,
   'evalapp-gate': evalappGate, 'algformer-cost': algformerCost, 'holovoxel-lod': holovoxelLod, 'prose-pipeline': prosePipeline,
   'round-timeline': roundTimeline, 'slot-grow': slotGrow, 'layer-stack': layerStack, 'size-bars': sizeBars, 'design-effect': designEffect,
-  'superposition-scene': superpositionScene, 'coverage-meter': coverageMeter, 'blazier-boot': blazierBoot, 'hologenome-scores': hologenomeScores,
+  'superposition-scene': superpositionScene, 'coverage-meter': coverageMeter, 'commutation-map': commutationMap, 'blazier-boot': blazierBoot, 'hologenome-scores': hologenomeScores,
   'scaling-curve': scalingCurve,
 };
 

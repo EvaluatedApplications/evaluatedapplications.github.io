@@ -146,6 +146,16 @@ try {
   await b.evaluate(`document.querySelector('${CM} .cm-sq.cm-write').dispatchEvent(new MouseEvent('click',{bubbles:true}))`);
   ok('phasor: clicking a square chooses its class', await b.evaluate(`document.querySelectorAll('${CM} .cm-ops li').length===${cs.classCounts.write}`));
   ok('phasor: the brick table has one row per brick', await b.evaluate(`document.querySelectorAll('.bricks tbody tr').length===${covD.construction.length}`));
+  // the commutation map: one square per operation, five groups, the owner's counts
+  const CX = "[data-diagram=commutation-map]", cxD = JSON.parse(fs.readFileSync(path.join(DATA, 'diagrams', 'commutation-map.json'), 'utf8'));
+  ok('phasor: the commutation map mounts', await b.evaluate(`document.querySelector('${CX}').dataset.ready==='true'`));
+  ok('phasor: one square per operation, and the headline states the commuting count', await b.evaluate(`document.querySelectorAll('${CX} .cm-sq').length===${cxD.members} && document.querySelector('${CX} .cm-head').textContent.includes('${cxD.commuting} of ${cxD.members}')`));
+  const cxG = Object.fromEntries(cxD.groups.map((g) => [g.id, g.count]));
+  ok('phasor: the group counts are the record\'s', await b.evaluate(`Object.entries(${JSON.stringify(cxG)}).every(([id,n])=>document.querySelectorAll('${CX} .cm-sq.cm-g-'+id).length===n)`));
+  await b.evaluate(`document.querySelector('${CX} .cm-chip[data-class=joins-axes]').click()`);
+  ok('phasor: choosing the group that joins the kernel\'s axes lists its operations', await b.evaluate(`document.querySelectorAll('${CX} .cm-ops li').length===${cxG['joins-axes']} && document.querySelector('${CX} .cm-chip[data-class=joins-axes]').getAttribute('aria-pressed')==='true'`));
+  ok('phasor: the symmetry section states the boundary tiles', await b.evaluate(`(()=>{const t=[...document.querySelectorAll('#symmetry .stat dd')].map(x=>x.textContent.trim());return t.join(',')==='${cxD.commuting},${cxG.linear},${cxG.nonlinear},${cxG.declare}'})()`));
+  ok('phasor: the page keeps to "commute", not "universal" or "complete" claims about the kernel', await b.evaluate(`!/\\b(universal|complete)\\b/i.test(document.querySelector('#symmetry').innerText)`));
   ok('phasor: the numbers disclosure is closed above the fold', await b.evaluate(`!document.querySelector('.numbers-more').open`));
   ok('phasor: the hero promise is the first heading and the demo is next', await b.evaluate(`document.querySelector('h1').textContent.startsWith('Do a thousand things') && document.querySelector('main section#demo').getBoundingClientRect().top < 900`));
   ok('phasor: no console errors after use', b.errors.length === 0, JSON.stringify(b.errors));
@@ -199,6 +209,8 @@ try {
   ok('pleroma: 5 keys is past capacity and TryKeys refuses', await b.evaluate("/returns false/.test(document.querySelector('[data-diagram=pleroma-capacity] [data-ctl=verdict]').textContent) && document.querySelector('.cap-box').dataset.over==='1'"));
   await b.evaluate("document.querySelector('[data-diagram=pleroma-capacity] [data-ctl=remove]').click()");
   ok('pleroma: 4 keys is exact', await b.evaluate("/decoded exactly \\(4 of K = 4\\)/.test(document.querySelector('[data-diagram=pleroma-capacity] [data-ctl=verdict]').textContent)"));
+  ok('pleroma: the commutation map mounts in the symmetry section and a group lists its operations', await b.evaluate(`(()=>{const r=document.querySelector('#symmetry')||document.querySelector('[data-diagram=commutation-map]');const f=document.querySelector('[data-diagram=commutation-map]');f.querySelector('.cm-chip[data-class=linear]').click();return f.dataset.ready==='true'&&f.querySelectorAll('.cm-sq').length===88&&f.querySelectorAll('.cm-ops li').length>0})()`));
+  ok('pleroma: it points to the coverage meter and the grid map it refers to', await b.evaluate(`!!document.querySelector('a[href="/phasor/#coverage"]') && !!document.querySelector('[data-diagram=pleroma-map]')`));
   ok('pleroma: no console errors', b.errors.length === 0, JSON.stringify(b.errors));
   await b.goto(pl, { width: 390, height: 844, mobile: true, wait: SREADY });
   const lw = await b.evaluate('({sw:document.documentElement.scrollWidth,cw:document.documentElement.clientWidth})');
@@ -372,7 +384,7 @@ try {
   await b.evaluate(setRange('[data-diagram=design-effect] [data-ctl=rho]', 1000));
   ok('research nobody-read: full correlation leaves about one independent judgement', await b.evaluate(RO('design-effect')).then((t) => /about 1\.00 independent judgements/.test(t)));
   // ---- the Pleroma article: the operation grid ----
-  const PG = "[data-diagram=pleroma-grid]", pgu = `/research/forty-five-reads-one-store/`;
+  const PG = "[data-diagram=pleroma-grid]", pgu = `/research/one-store-many-reads/`;
   await b.goto(`${base}${pgu}`, { width: 1280, height: 900, wait: `document.querySelector('${PG}').dataset.ready==='true'` });
   ok('pleroma article: the grid mounts without console errors', b.errors.length === 0, JSON.stringify(b.errors));
   ok('pleroma article: 24 cells and the lid are buttons, each named with its kind', await b.evaluate(`(()=>{const c=[...document.querySelectorAll('${PG} button.pg-cell')];return c.length===25&&c.every(x=>/Checked\\.|Read-time\\./.test(x.getAttribute('aria-label')))&&document.querySelectorAll('${PG} .pg-cell.k-ok').length===24&&document.querySelectorAll('${PG} .pg-cell.k-warn').length===1})()`));
@@ -386,7 +398,7 @@ try {
   await b.key('Home', 'Home', 36);
   ok('pleroma article: Home goes to the lid', await b.evaluate("document.activeElement.dataset.id==='Lid_Sample'"));
   ok('pleroma article: the table alternative lists all 25 cells', await b.evaluate(`document.querySelectorAll('${PG} .dia-data tbody tr').length===25`));
-  ok('pleroma article: the three tiles, the words strip and the closed Go deeper blocks are present', await b.evaluate("document.querySelectorAll('.rtiles .stat').length===3&&document.querySelectorAll('.words-list dt').length===6&&document.querySelectorAll('details.deeper').length===7&&[...document.querySelectorAll('details.deeper')].every(d=>!d.open)"));
+  ok('pleroma article: the three tiles, the words strip and the closed Go deeper blocks are present', await b.evaluate("document.querySelectorAll('.rtiles .stat').length===3&&document.querySelectorAll('.words-list dt').length===7&&document.querySelectorAll('details.deeper').length===7&&[...document.querySelectorAll('details.deeper')].every(d=>!d.open)"));
   await b.goto(`${base}${pgu}`, { width: 1280, height: 900, wait: `document.querySelector('${PG}').dataset.ready==='true'` });
   await b.evaluate("location.hash='#the-gaps-grouped'");
   await new Promise((r) => setTimeout(r, 300));
@@ -397,7 +409,7 @@ try {
   ok('pleroma article phone 390: the grid has three columns that fit the screen', await b.evaluate(`(()=>{const g=document.querySelector('${PG} .pg').getBoundingClientRect();const c=[...document.querySelectorAll('${PG} .pg-cell:not(.lid)')].slice(0,3).map(x=>x.getBoundingClientRect());return g.right<=window.innerWidth+1&&c[0].top===c[2].top&&c[0].width>80})()`));
   ok('pleroma article phone 390: cells are at least 40px tall', await b.evaluate(`[...document.querySelectorAll('${PG} .pg-cell')].every(x=>x.getBoundingClientRect().height>=40)`));
   ok('pleroma article phone 390: no console errors', b.errors.length === 0, JSON.stringify(b.errors));
-  for (const s of ['context-four', 'context-eight', 'back-to-front', 'smaller-than-tinystories', 'nobody-read-the-warning', 'forty-five-reads-one-store']) {
+  for (const s of ['context-four', 'context-eight', 'back-to-front', 'smaller-than-tinystories', 'nobody-read-the-warning', 'one-store-many-reads']) {
     ow = await overflow(`/research/${s}/`);
     ok(`research/${s} phone 390: no horizontal overflow`, ow.sw <= ow.cw, JSON.stringify(ow));
   }

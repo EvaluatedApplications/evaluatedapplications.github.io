@@ -1,10 +1,10 @@
 {
-  "id": "forty-five-reads-one-store",
-  "title": "Forty-seven reads, one store",
-  "headline": "Forty-seven reads, one store.",
+  "id": "one-store-many-reads",
+  "title": "Fifty reads, one store",
+  "headline": "Fifty reads, one store",
   "sub": "One fixed-size array of exact integers. Counts, order, parity, time and nearest words, each in a single pass. When it is full, it refuses instead of guessing.",
   "summary": "One fixed-size array of exact integers. Counts, order, parity, time and nearest words, each in a single pass. When it is full, it refuses instead of guessing.",
-  "description": "One fixed-size array of exact integers answers forty-seven different questions, each in a single pass, and refuses instead of guessing when it is full.",
+  "description": "One fixed-size array of exact integers answers fifty different questions, each in a single pass over the array. It refuses instead of guessing when it is full.",
   "topics": [
     "exact stores",
     "Pleroma"
@@ -12,7 +12,7 @@
   "order": 0,
   "status": "migrated",
   "voice": "owner-authored",
-  "finding": "**Forty-seven reads, one store.** One fixed-size array of exact integers answers forty-seven different questions, each in a single pass over the array. The one exception is `CausalReads`, which takes one read per prefix. Counts by key. Counts by flag word. The nearest stored words. Arrangement order. Parity. Time. Joint counts across any chosen faces. Every count it returns is exact, and when the store is full it refuses rather than guessing.",
+  "finding": "**Fifty reads, one store.** One fixed-size array of exact integers answers fifty different questions, each in a single pass over the array. The one exception is `CausalReads`, which takes one read per prefix. Counts by key. Counts by flag word. The nearest stored words. Arrangement order. Parity. Time. Joint counts across any chosen faces. Every count it returns is exact within the field's range (about 1.15 x 10^18 on the default field), and when the store is full the key views refuse rather than guess.",
   "stats": [
     {
       "value": "64",
@@ -37,7 +37,7 @@
     },
     {
       "term": "Kernel",
-      "text": "a weighted mix of operations, applied to the whole store in one pass."
+      "text": "a weighted mix of symmetries, applied to the whole store in one pass."
     },
     {
       "term": "Rung",
@@ -54,6 +54,10 @@
     {
       "term": "Lid",
       "text": "the top row of the grid, the one read that makes a random draw."
+    },
+    {
+      "term": "Read set",
+      "text": "a group of reads declared once and answered in one call."
     }
   ],
   "related": [],
@@ -88,7 +92,7 @@
         },
         {
           "t": "p",
-          "text": "Three of its statements carry the reduction: \"Consciousness exists.\" (T1), \"Non-contradiction is necessary for coherent reasoning.\" (T2), and \"Claims about reality are more reliable when tested against reality.\" (T9)."
+          "text": "Three of its statements carry the reduction: \"Consciousness exists.\", \"Non-contradiction is necessary for coherent reasoning.\", and \"Claims about reality are more reliable when tested against reality.\""
         },
         {
           "t": "p",
@@ -104,11 +108,11 @@
         },
         {
           "t": "p",
-          "text": "The thesis came next. The project states it as: \"The Pleroma ... is the one object all their holograms are shadows of.\" A shadow is what the larger object shows when it is read on some of its faces and not others."
+          "text": "The thesis comes next. The project states it as: \"The Pleroma ... is the one object all their holograms are shadows of.\" A shadow is what the larger object shows when it is read on some of its faces and not others."
         },
         {
           "t": "p",
-          "text": "Searching for that object gave a map: the ladder laid out as rungs, each read across three faces. The map is predictive. It says what each cell should be, and each cell was then built and proved."
+          "text": "The search for that object gives a map: the ladder laid out as rungs, each read across three faces. The map is predictive. It says what each cell should be, and each cell is then built and proved."
         },
         {
           "t": "table",
@@ -186,7 +190,7 @@
         },
         {
           "t": "p",
-          "text": "The code was measured against that rule across the public surface. Seven of the 38 operators that change the store join one kernel and apply in one pass. Fourteen take one pass per term in a mix. Seventeen are writes that are not kernel elements. The 47 reads are separate, each one pass."
+          "text": "The code was measured against that rule across the public surface. Eight of the 39 operators that change the store join one kernel and apply in one pass; key shifts do so on a keyed kernel. Fourteen take one pass per term in a mix. Seventeen are writes that are not kernel elements. The 50 reads are separate, each one pass, and nine of them are answered through a read set."
         },
         {
           "t": "p",
@@ -326,11 +330,14 @@
         {
           "t": "ul",
           "items": [
-            "Key shifts and key scaling cost one pass per term in a mix, not one pass.",
+            "Key scaling costs one pass per term in a mix. A key shift joins a kernel only on a keyed kernel; on an unkeyed one a mix of key shifts costs one pass per term.",
             "Right relabelling, conjugation and flag sign flips cost one pass per term.",
+            "Bit maps on the flag cube, and fixed per-key or per-tick weights, are not kernel elements. A mix of them costs one pass per term.",
+            "Commuting with the symmetry is necessary for a kernel and not sufficient. `Hadamard` commutes and is not a kernel element, and `ShiftKeys` is one only through a keyed kernel.",
+            "Each read makes its own transform by default. A transform is shared between reads only inside an internal planner that is not exposed.",
             "A kernel on a store with a check prime runs through a mirror kernel in the check prime, built from the same elements; a kernel built from a shape without that check prime is refused.",
             "Key reads refuse past their capacity. A store keeps 2K+1 harmonics per key line, so K+1 distinct keys always refuse. A complete key band goes to 4,096 keys.",
-            "Counts are exact within the field's signed range. No read detects a wrap past it.",
+            "Counts are exact within the field's signed range. A plain read does not check for a wrap. On a store with a check prime, `VerifyCheck` detects one within the check bound.",
             "The store runs on the CPU. Its gain is exactness and many views on one array, not raw speed for a single read.",
             "Rung 8's contradiction location is not built, and reunification, the rung where observers merge, is open."
           ]
@@ -414,14 +421,18 @@
       ]
     },
     {
-      "id": "what-the-map-got-right-and-what-it-got-wrong",
-      "title": "What the map got right, and what it got wrong",
-      "summary": "Go deeper: what the map got right, and what it got wrong",
+      "id": "the-map-and-where-the-code-stands",
+      "title": "The map and where the code stands",
+      "summary": "Go deeper: the map and where the code stands",
       "disclosure": true,
       "blocks": [
         {
+          "t": "p",
+          "text": "The map says what each cell should be. Each row below is a place where the map's statement and the code are checked against each other, and what the code does today."
+        },
+        {
           "t": "sub",
-          "text": "Predictions that held"
+          "text": "Held as mapped"
         },
         {
           "t": "ul",
@@ -430,24 +441,46 @@
             "A complete cycle sums to exactly zero, and a symbol read on coprime cycles decodes exactly, 20,000 of 20,000.",
             "Relation networks stored as bound facts give exact loop sums, and planted contradictions are found: 40 of 40 networks, no false alarms in 20.",
             "Nested structure answers every path question exactly, 851 of 851.",
-            "Cross-face predictions: the universal face's polygon sits inside the mixing of the anti-universe, to 2 × 10⁻¹⁵; circulation has one form on two faces; the third face's squaring symmetry halves the set hologram.",
             "The mirror cells that label the ten symmetry classes hold on every realisation: 10 of 10 classes, 11,995 relation checks over 2,079 realisations.",
             "Four composition recipes, built only from existing operations, are exact against brute force, 4 of 4."
           ]
         },
         {
           "t": "sub",
-          "text": "Predictions that did not hold, and what changed"
+          "text": "Where the code stands against the map"
         },
         {
-          "t": "ul",
-          "items": [
-            "The continuous circle cannot hold the rungs exactly past its dimension. The bridge step strips the continuous context, and what remains is a finite field. On the finite field, recovery is 100% for 8 to 64 items and 0% at 65, with p = 65,537 and d = 128.",
-            "The spiral's eight steps are not the eight named rungs. Each spiral step adds an operator of order 2 or 4, while the rungs add cycles of every order.",
-            "The anti-universe does not start at three states; groups of two gain as much.",
-            "The lid's predicted ordered regime before chaos did not appear, and entropy is not monotone; the divergence from the settled state is.",
-            "Reunification, the merging-observers rung, is open.",
-            "Detection of a wrap past the signed range is not built, and the parity claim for the running bundle is not measured."
+          "t": "table",
+          "caption": "Where the map's statement and the code were checked against each other",
+          "columns": [
+            "The map says",
+            "The code today"
+          ],
+          "rows": [
+            [
+              "The continuous circle holds the rungs exactly.",
+              "It holds them up to its dimension. Exact storage is the finite field: with p = 65,537 and d = 128, recovery is 100% for 8 to 64 items and 0% at 65. The continuous circle is the graded-similarity component."
+            ],
+            [
+              "The spiral's eight steps are the eight named rungs.",
+              "They are two ladders. Each spiral step adds an operator of order 2 or 4; the rungs add cycles of every order."
+            ],
+            [
+              "The anti-universe starts at three states.",
+              "Groups of two gain as much as groups of three."
+            ],
+            [
+              "The lid has an ordered regime before chaos, and entropy rises steadily.",
+              "The lid has no ordered regime before chaos. The divergence from the settled state is monotone; entropy is not."
+            ],
+            [
+              "Reunification, the rung where observers merge by exact difference, is the next rung.",
+              "It is open."
+            ],
+            [
+              "A wrap is detected while the true value lies inside both check ranges.",
+              "`VerifyCheck` detects a wrap on a store with a check prime, within the check bound. A plain read does not check. The parity claim for the running bundle is not measured."
+            ]
           ]
         }
       ]
@@ -465,10 +498,9 @@
         {
           "t": "ul",
           "items": [
-            "Key shifts and key scaling permute the key harmonics. The kernel has no key-harmonic axis.",
+            "Key shifts and key scaling permute the key harmonics. A keyed kernel has the key-harmonic axis, so a key shift is one of its elements; key scaling is not.",
             "Right relabelling and conjugation act from the right on the order face. The kernel holds the left action only. A superposed conjugation exists in an experiment record and not in the library.",
             "Flag sign flips and per-key or per-tick weights cost one pass per term.",
-            "A kernel on a store with a check prime.",
             "Relation faces under projection and under the Chinese remainder theorem.",
             "Causal reads take one read per prefix. A prefix structure over the sequence is not built."
           ]
@@ -492,10 +524,11 @@
         {
           "t": "ul",
           "items": [
-            "Exact within the signed range; no wrap detection.",
+            "Exact within the signed range. A plain read does not check for a wrap; `VerifyCheck` does on a store with a check prime, within the check bound.",
             "`Bind` is refused with several primes, and `ShiftKeys` on several primes needs an explicit key cycle.",
             "`CombineCycles` refuses a store with a relation face.",
-            "The joint slice is capped at 2^24 cells."
+            "The joint slice is capped at 2^24 cells.",
+            "Tenants as flag bits share one store while tenant bits plus data bits stay at 16 or fewer."
           ]
         }
       ]
@@ -553,7 +586,7 @@
     }
   ],
   "closing": {
-    "text": "The Pleroma ships in the `EvaluatedApplications.Phasor` package. Install it, build a store, and read forty-seven things back. For partnerships, get in touch.",
+    "text": "The Pleroma ships in the `EvaluatedApplications.Phasor` package. Install it, build a store, and read fifty things back. For partnerships, get in touch.",
     "links": [
       {
         "label": "Install the Phasor package",

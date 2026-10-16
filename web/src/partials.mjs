@@ -1,6 +1,7 @@
 // Component partials: one function per pattern in the design language (card, install, code, stat, table, chart).
 import { html, raw, esc, fmt2, fmt0 } from '../scripts/lib/html.mjs';
 import { allTables } from '../scripts/lib/data.mjs';
+import { inline } from './inline.mjs';
 
 export function productCard(p) {
   const pkgs = p.packages;
@@ -23,7 +24,7 @@ export function toolCard(t, byId) {
 export function researchCard(r) {
   return html`<li class="card cat-neutral" data-topics="${r.topics.join('|')}">
   <h3><a href="${r.href}">${r.title}</a></h3>
-  <p class="finding-line">${r.finding || r.summary}</p>
+  <p class="finding-line">${inline(r.finding || r.summary)}</p>
   <div class="meta">${r.topics.map((t) => html`<span class="pill">${t}</span>`)}</div>
 </li>`;
 }

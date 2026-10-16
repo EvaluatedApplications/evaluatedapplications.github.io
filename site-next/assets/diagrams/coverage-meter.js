@@ -9,7 +9,10 @@ const total = classes.reduce((a, c) => a + c.count, 0);
 const squares = classes.flatMap((c, ci) => c.operations.map((o) => ({ class: c.id, ci, name: o.name })));
 return { classes, total, squares, kernel: classes[0].count, reads: d.reads.length, bricks: (d.construction || []).length };
 }
-export function limitFacts(m) { return { operators: m.total, kernelOps: m.kernel, bricks: m.bricks }; }
+const TENS = ['', '', 'twenty', 'thirty', 'forty', 'fifty', 'sixty', 'seventy', 'eighty', 'ninety'];
+const ONES = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve', 'thirteen', 'fourteen', 'fifteen', 'sixteen', 'seventeen', 'eighteen', 'nineteen'];
+const words = (n) => (n < 20 ? ONES[n] : TENS[Math.floor(n / 10)] + (n % 10 ? '-' + ONES[n % 10] : ''));
+export function limitFacts(m) { return { operators: m.total, kernelOps: m.kernel, bricks: m.bricks, reads: m.reads, readsWord: words(m.reads) }; }
 function headlineHtml(d) {
 const t = d.headline.text, mt = t.match(/^(\d+ of \d+)(.*)$/);
 return mt ? `<b class="cm-num">${esc(mt[1])}</b>${esc(mt[2])}` : esc(t);

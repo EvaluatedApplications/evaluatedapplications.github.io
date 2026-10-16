@@ -28,8 +28,12 @@ for (const s of manifest.samples) {
   for (const [dest, src] of Object.entries(s.files || {})) { fs.mkdirSync(path.dirname(path.join(tmp, dest)), { recursive: true }); fs.copyFileSync(path.join(dir, src), path.join(tmp, dest)); }
   const compileOnly = s.run === false;
   const r = spawnSync('dotnet', compileOnly ? ['build', '-c', 'Release', tmp] : ['run', '-c', 'Release', '--project', tmp], { encoding: 'utf8', env: { ...process.env, ...(s.env || {}) } });
+  // "hold": the sample uses members the published package does not have yet. It is tried every run: while it fails it is reported as held
+  // (its .out.txt is then the owner's recorded output, not a run of ours); the first run it compiles it is proven normally, so remove the hold.
+  if (r.status !== 0 && s.hold) { console.log(`held ${s.name}  (${s.hold}; output is the owner's record, not yet proven here)`); fs.rmSync(tmp, { recursive: true, force: true }); continue; }
   if (r.status !== 0) { bad++; console.log(`FAIL ${s.name}\n${(r.stdout + r.stderr).split('\n').slice(0, 12).join('\n')}`); }
   else {
+    if (s.hold) console.log(`note ${s.name} now compiles against the published package: remove its "hold" in manifest.json`);
     if (compileOnly) { console.log(`ok   ${s.name}  (compiled only: it needs a server or a browser)`); fs.rmSync(tmp, { recursive: true, force: true }); continue; }
     const out = r.stdout.replace(/\r\n/g, '\n');
     const f = path.join(dir, s.name + '.out.txt');

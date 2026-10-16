@@ -44,6 +44,30 @@
       "snippets": [ { "source": "snippets/phasor-parity.cs", "output": "snippets/phasor-parity.out.txt" } ]
     },
     {
+      "id": "flags",
+      "title": "Flag reads, widening and tenants",
+      "paragraphs": [
+        "The flag face is the m-bit flag word of every item. These operations read or write that face for a few words, for several stores, or for several bit subsets, without building anything extra. The examples build in a console project with ImplicitUsings enabled, the SDK default.",
+        "Flags(bits) returns the exact count of each flag pattern on the bits you name, summing out every other bit. Index u of the result has bit j set when flag bit bits[j] is set. The empty list returns the total. No store is built.",
+        "Pleroma.FlagsMany(stores, bits) reads one bit set from several stores of one shape in one batched transform per prime, and each row equals Flags(bits) of that store, cell for cell. Pleroma.FlagsUnion(stores, bitSets) returns the answers indexed [bit set][store].",
+        "PleromaReadSet declares each read once (AddFlagMarginal, AddTotal, AddBitCounts, AddFlagParity, AddFlagWordCounts). Read(stores) answers all of them for all stores in one call. Run(kernel, stores) applies a kernel to clones of the stores, then answers the reads, and the inputs are not changed. One call returns many reads, but each read makes its own transform by default, and Run is not fused: the kernel's pass and the read transforms are separate passes.",
+        "ReadFlagWords returns the exact count of each listed word. Up to four words it sums the flag cells once per word, and above four it uses the whole-store transform. Both return the same numbers.",
+        "WidenFlags(bits, at) returns a store with bits zero flag bits inserted at position at, and the bits at and above at move up. The source is not changed, and no item is decoded or added again: the cells are copied through a cached map. It refuses continuous components, relation faces and reserved keys, and the result may hold at most 16 flag bits.",
+        "AddFlagWords adds counts[j] copies of words[j] at one key in one pass over the cells, equal to one Add per word. The static overload applies one batch to several stores of one shape.",
+        "One store can hold several tenants. Each tenant takes bits in the high end of the flag word and the data takes the low bits. The all-tenant total is Flags(data bits) on that store, one transform whatever the tenant count. A tenant's own counts are its slice of Flags(tenant bits + data bits), whose transform grows with the tenant count. The cap is 16 flag bits in total, so tenant bits plus data bits must be at most 16. Past the cap, split the tenants across stores."
+      ],
+      "snippets": [
+        { "source": "snippets/phasor-flags-bits.cs", "output": "snippets/phasor-flags-bits.out.txt", "label": "Flags(bits)" },
+        { "source": "snippets/phasor-flags-many.cs", "output": "snippets/phasor-flags-many.out.txt", "label": "FlagsMany and FlagsUnion" },
+        { "source": "snippets/phasor-readset.cs", "output": "snippets/phasor-readset.out.txt", "label": "PleromaReadSet" },
+        { "source": "snippets/phasor-readflagwords.cs", "output": "snippets/phasor-readflagwords.out.txt", "label": "ReadFlagWords" },
+        { "source": "snippets/phasor-widenflags.cs", "output": "snippets/phasor-widenflags.out.txt", "label": "WidenFlags" },
+        { "source": "snippets/phasor-addflagwords.cs", "output": "snippets/phasor-addflagwords.out.txt", "label": "AddFlagWords" },
+        { "source": "snippets/phasor-tenants.cs", "output": "snippets/phasor-tenants.out.txt", "label": "Tenants as flag bits" }
+      ],
+      "more": { "label": "How these fit the kernel and the symmetry", "href": "/phasor/pleroma/#symmetry" }
+    },
+    {
       "id": "more-operations",
       "title": "More operations",
       "list": [

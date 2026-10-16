@@ -87,7 +87,7 @@ key total (30, 3)
 3 6 2 4 1 2 0
 ```
 
-7 of 38 operators that transform the store join one kernel: a weighted sum of them applies to every stored item in one shared pass. All 47 reads answer from the store array in one pass each (CausalReads is the stated exception: one pass per prefix). This is a fact about reads, not part of the score.
+8 of 39 operators that transform the store join one kernel: a weighted sum of them applies to every stored item in one shared pass. All 50 reads answer from the store array in one pass each (CausalReads is the stated exception: one pass per prefix). Nine of them are answered through a read set.
 
 11 established ideas, one store. The Pleroma is a new construction. It is one store that satisfies every brick in the table below. Each brick is established work and is credited in its row. Each row gives what the brick offers on its own, the operation of the Pleroma that carries it, and the check that the operation passes.
 - Reed-Solomon and BCH syndrome decoding (Reed and Solomon 1960; Bose and Ray-Chaudhuri 1960): Recovers up to K distinct symbols exactly from 2K+1 power sums, and refuses beyond that. In the Pleroma: The key view: `TryKeys` and `TryItems` read the key line by syndrome decoding and refuse past `KeyCapacity`. Proof: Keys exact in 30 of 30 trials at 16 keys, and refused in 30 of 30 trials at 17 and 20 keys.
@@ -108,7 +108,7 @@ Put it to work:
 - HoloDb aggregate plane. Database.EnablePleroma(table, options) derives a Pleroma from a table's columns and serves COUNT, SUM, GROUP BY, WHERE, COUNT DISTINCT, MIN and MAX of dimensions, HAVING, and a single equi-join COUNT or SUM from exact slices. It holds in-RAM tables and is not persisted, so call it again after Open. AVG and other shapes use the engine.
 - Page store, larger than memory. Pages of one shape are stored as records with a check prime that verifies every record, parity groups that rebuild one lost record each, restore points, and journal numbers so replay applies each add once. It needs a complete key band, and a reader may see a batch half applied while it runs.
 - Replica reconciliation. Two replicas each hold a CycleHologram. The one with the difference sends its hologram, and the other subtracts its own and decodes the exact signed difference. The message is sized to the difference, not to the data. It decodes when the difference has at most the capacity's worth of distinct symbols, so size the capacity to the largest difference you expect.
-- Batch relabel, age and diffuse. Tick, Diffuse, RelabelFlags, RelabelArrangements, ShiftKeys, ScaleKeys (on a complete key band) and Apply(kernel) each act on every stored item at once. A mix of different harmonic permutations costs one pass per term. Diffuse readbacks need TimeScale times the total to stay within half the field.
+- Batch relabel, age and diffuse. Tick, Diffuse, RelabelFlags, RelabelArrangements, ShiftKeys, ScaleKeys (on a complete key band) and Apply(kernel) each act on every stored item at once. A mix of different harmonic permutations costs one pass per term. Key shifts join a keyed kernel. Diffuse readbacks need TimeScale times the total to stay within half the field.
 
 When another tool fits better:
 - A single item, or a few keys. Each Add touches every cell of the store. A dictionary is cheaper for one lookup, and the sparse page (PleromaSparsePage) suits a few keys.
@@ -124,6 +124,9 @@ Know before you start:
 - Exact arithmetic is not faster in general. A Pleroma read costs one or more transforms, and a float bundle read is one correlation. The Pleroma gives you exactness and many views on one array.
 - On a store with a check prime, a kernel runs through a mirror kernel in the check prime, built from the same elements. A kernel built from a shape without that check prime is refused.
 - Locating the contradiction on a relation face is not provided.
+- A read set returns many reads in one call, but each read makes its own transform by default. A transform is shared between reads only inside an internal planner that is not exposed.
+- Tenants as flag bits share one store only while tenant bits plus data bits stay at 16 or fewer.
+- WidenFlags refuses continuous components, relation faces and reserved keys, and any result above 16 flag bits.
 
 #### Phasor docs: stores, kernels and codecs (https://evaluatedapplications.github.io/phasor/docs/)
 
@@ -233,6 +236,228 @@ Output:
 
 ```text
 5 3 1 0 parity 7
+```
+
+##### Flag reads, widening and tenants
+
+The flag face is the m-bit flag word of every item. These operations read or write that face for a few words, for several stores, or for several bit subsets, without building anything extra. The examples build in a console project with ImplicitUsings enabled, the SDK default.
+
+Flags(bits) returns the exact count of each flag pattern on the bits you name, summing out every other bit. Index u of the result has bit j set when flag bit bits[j] is set. The empty list returns the total. No store is built.
+
+Pleroma.FlagsMany(stores, bits) reads one bit set from several stores of one shape in one batched transform per prime, and each row equals Flags(bits) of that store, cell for cell. Pleroma.FlagsUnion(stores, bitSets) returns the answers indexed [bit set][store].
+
+PleromaReadSet declares each read once (AddFlagMarginal, AddTotal, AddBitCounts, AddFlagParity, AddFlagWordCounts). Read(stores) answers all of them for all stores in one call. Run(kernel, stores) applies a kernel to clones of the stores, then answers the reads, and the inputs are not changed. One call returns many reads, but each read makes its own transform by default, and Run is not fused: the kernel's pass and the read transforms are separate passes.
+
+ReadFlagWords returns the exact count of each listed word. Up to four words it sums the flag cells once per word, and above four it uses the whole-store transform. Both return the same numbers.
+
+WidenFlags(bits, at) returns a store with bits zero flag bits inserted at position at, and the bits at and above at move up. The source is not changed, and no item is decoded or added again: the cells are copied through a cached map. It refuses continuous components, relation faces and reserved keys, and the result may hold at most 16 flag bits.
+
+AddFlagWords adds counts[j] copies of words[j] at one key in one pass over the cells, equal to one Add per word. The static overload applies one batch to several stores of one shape.
+
+One store can hold several tenants. Each tenant takes bits in the high end of the flag word and the data takes the low bits. The all-tenant total is Flags(data bits) on that store, one transform whatever the tenant count. A tenant's own counts are its slice of Flags(tenant bits + data bits), whose transform grows with the tenant count. The cap is 16 flag bits in total, so tenant bits plus data bits must be at most 16. Past the cap, split the tenants across stores.
+
+```csharp
+using Phasor;
+
+var store = new Pleroma(new HologramShape { FlagBits = 3 });
+store.Add(new HologramItem(Key: 1, Flags: 0b101), 2);   // bits 0 and 2 set
+store.Add(new HologramItem(Key: 2, Flags: 0b100), 1);   // bit 2 only
+store.Add(new HologramItem(Key: 3, Flags: 0b011), 4);   // bits 0 and 1 set
+
+// Marginal on flag bits 0 and 2, with no store built: index u has bit 0 = flag bit 0, bit 1 = flag bit 2.
+long[] onBits02 = store.Flags(new[] { 0, 2 });
+System.Console.WriteLine($"bits {{0,2}}: {string.Join(" ", onBits02)}");
+
+// The empty list is the total.
+System.Console.WriteLine($"bits {{}}: {string.Join(" ", store.Flags(Array.Empty<int>()))}");
+```
+
+Output:
+
+```text
+bits {0,2}: 0 4 1 2
+bits {}: 7
+```
+
+```csharp
+using Phasor;
+
+var monday = new Pleroma(new HologramShape { FlagBits = 3 });
+var tuesday = new Pleroma(new HologramShape { FlagBits = 3 });
+monday.Add(new HologramItem(Key: 1, Flags: 0b101), 2);
+tuesday.Add(new HologramItem(Key: 1, Flags: 0b100), 6);
+
+// One bit set, many stores: result[store] is the marginal on bit 2 of that store.
+long[][] onBit2 = Pleroma.FlagsMany(new[] { monday, tuesday }, new[] { 2 });
+System.Console.WriteLine($"FlagsMany bit 2: monday {string.Join(" ", onBit2[0])} | tuesday {string.Join(" ", onBit2[1])}");
+
+// Many bit sets, many stores: result[bitSet][store].
+long[][][] union = Pleroma.FlagsUnion(new[] { monday, tuesday }, new[] { new[] { 0 }, new[] { 1, 2 } });
+System.Console.WriteLine($"FlagsUnion bit 0: monday {string.Join(" ", union[0][0])} | tuesday {string.Join(" ", union[0][1])}");
+System.Console.WriteLine($"FlagsUnion bits 1,2: monday {string.Join(" ", union[1][0])} | tuesday {string.Join(" ", union[1][1])}");
+```
+
+Output:
+
+```text
+FlagsMany bit 2: monday 0 2 | tuesday 0 6
+FlagsUnion bit 0: monday 0 2 | tuesday 6 0
+FlagsUnion bits 1,2: monday 0 0 2 0 | tuesday 0 0 6 0
+```
+
+```csharp
+using Phasor;
+
+var a = new Pleroma(new HologramShape { FlagBits = 3 });
+var b = new Pleroma(new HologramShape { FlagBits = 3 });
+a.Add(new HologramItem(Key: 1, Flags: 0b101), 2);
+b.Add(new HologramItem(Key: 1, Flags: 0b011), 5);
+
+// Declare every read once; Read answers all of them for all stores in one call.
+var reads = new PleromaReadSet();
+int onBit0 = reads.AddFlagMarginal(new[] { 0 });
+int onBits12 = reads.AddFlagMarginal(new[] { 1, 2 });
+int total = reads.AddTotal();
+int bitCounts = reads.AddBitCounts();
+
+var result = reads.Read(new[] { a, b });   // result[read handle, store index]
+System.Console.WriteLine($"a: bit 0 {string.Join(" ", result[onBit0, 0])} | total {result[total, 0][0]} | bit counts {string.Join(" ", result[bitCounts, 0])}");
+System.Console.WriteLine($"b: bits 1,2 {string.Join(" ", result[onBits12, 1])} | total {result[total, 1][0]}");
+
+// Run: a kernel flips bit 0 of every item in clones of the stores, then the same reads are answered.
+var flip = new PleromaKernel(a.Shape);
+flip.Add(flagMask: 0b001);
+var ran = reads.Run(flip, new[] { a, b });
+System.Console.WriteLine($"after flip, a: bit 0 {string.Join(" ", ran[onBit0, 0])}; input a unchanged: {string.Join(" ", result[onBit0, 0])}");
+```
+
+Output:
+
+```text
+a: bit 0 0 2 | total 2 | bit counts 2 0 2
+b: bits 1,2 0 5 0 0 | total 5
+after flip, a: bit 0 2 0; input a unchanged: 0 2
+```
+
+```csharp
+using Phasor;
+
+var store = new Pleroma(new HologramShape { FlagBits = 6 });
+store.Add(new HologramItem(Key: 1, Flags: 0b000101), 3);
+store.Add(new HologramItem(Key: 2, Flags: 0b111000), 2);
+store.Add(new HologramItem(Key: 3, Flags: 0b000101), 1);
+
+// Exact counts of three flag words; the store is not transformed as a whole.
+long[] few = store.ReadFlagWords(new uint[] { 0b000101, 0b111000, 0b000000 });
+System.Console.WriteLine($"words: {string.Join(" ", few)}");
+
+// Same values as indexing the whole-store read.
+long[] all = store.Flags();
+System.Console.WriteLine($"matches Flags(): {few[0] == all[0b000101] && few[1] == all[0b111000] && few[2] == all[0]}");
+```
+
+Output:
+
+```text
+words: 4 2 0
+matches Flags(): True
+```
+
+```csharp
+using Phasor;
+
+var narrow = new Pleroma(new HologramShape { FlagBits = 2 });
+narrow.Add(new HologramItem(Key: 7, Flags: 0b10), 3);
+narrow.Add(new HologramItem(Key: 8, Flags: 0b01), 1);
+
+// One zero flag bit inserted at position 1: old bit 1 moves to bit 2, the new bit 1 is zero on every item.
+Pleroma wide = narrow.WidenFlags(1, 1);
+long[] counts = wide.Flags();
+System.Console.WriteLine($"flag bits {wide.Shape.FlagBits}: word 100 -> {counts[0b100]}, word 001 -> {counts[0b001]}, word 010 -> {counts[0b010]}");
+System.Console.WriteLine($"source store still {narrow.Shape.FlagBits} flag bits, total {narrow.Total()}");
+```
+
+Output:
+
+```text
+flag bits 3: word 100 -> 3, word 001 -> 1, word 010 -> 0
+source store still 2 flag bits, total 4
+```
+
+```csharp
+using Phasor;
+
+var batched = new Pleroma(new HologramShape { FlagBits = 4 });
+var sequential = new Pleroma(new HologramShape { FlagBits = 4 });
+
+uint[] words = { 0b0001, 0b0010, 0b1111 };
+long[] counts = { 5, 2, 7 };
+
+// One pass over the cells for all three words, at key 9.
+batched.AddFlagWords(words, counts, key: 9);
+
+// The same adds, one item at a time.
+for (int j = 0; j < words.Length; j++)
+    sequential.Add(new HologramItem(Key: 9, Flags: words[j]), counts[j]);
+
+System.Console.WriteLine($"total {batched.Total()}, word 0001 {batched.Flags()[0b0001]}, word 1111 {batched.Flags()[0b1111]}");
+System.Console.WriteLine($"equal to {words.Length} sequential Adds: {batched.Equals(sequential)}");
+```
+
+Output:
+
+```text
+total 14, word 0001 5, word 1111 7
+equal to 3 sequential Adds: True
+```
+
+```csharp
+using Phasor;
+
+// Four tenants, two data bits each, and two tenant bits. The tenant id sits in the high bits of one store: FlagBits = 2 + 2 = 4.
+const int dataBits = 2;
+const int tenants = 4;
+var shared = new Pleroma(new HologramShape { FlagBits = 2 + dataBits });
+var separate = new Pleroma[tenants];
+for (int t = 0; t < tenants; t++)
+    separate[t] = new Pleroma(new HologramShape { FlagBits = dataBits });
+
+// Each write goes to the shared store (tenant in the high bits) and to that tenant's own store.
+void Write(int tenant, uint data, long count)
+{
+    shared.Add(new HologramItem(Key: 1, Flags: ((uint)tenant << dataBits) | data), count);
+    separate[tenant].Add(new HologramItem(Key: 1, Flags: data), count);
+}
+Write(0, 0b01, 2);
+Write(1, 0b01, 3);
+Write(1, 0b10, 1);
+Write(3, 0b11, 4);
+
+// All-tenant aggregate: the marginal on the data bits (the tenant bits are summed out, one transform).
+long[] aggregate = shared.Flags(new[] { 0, 1 });
+long[] sumOfSeparate = new long[1 << dataBits];
+foreach (var s in separate)
+    for (int u = 0; u < sumOfSeparate.Length; u++)
+        sumOfSeparate[u] += s.Flags()[u];
+System.Console.WriteLine($"aggregate {string.Join(" ", aggregate)}; equals the sum of tenant stores: {aggregate.SequenceEqual(sumOfSeparate)}");
+
+// Per-tenant read: the marginal on tenant bits plus data bits, then the tenant's slice.
+long[] perTenant = shared.Flags(new[] { 0, 1, 2, 3 });
+for (int t = 0; t < tenants; t++)
+{
+    long[] slice = perTenant.Skip(t << dataBits).Take(1 << dataBits).ToArray();
+    System.Console.WriteLine($"tenant {t}: {string.Join(" ", slice)}; equals its own store: {slice.SequenceEqual(separate[t].Flags())}");
+}
+```
+
+Output:
+
+```text
+aggregate 0 5 1 4; equals the sum of tenant stores: True
+tenant 0: 0 2 0 0; equals its own store: True
+tenant 1: 0 3 1 0; equals its own store: True
+tenant 2: 0 0 0 0; equals its own store: True
+tenant 3: 0 0 0 4; equals its own store: True
 ```
 
 ##### More operations
@@ -434,7 +659,7 @@ One array of exact integers holds your items. Ask it for counts by key, by flag 
 
 ##### What it is
 
-The Pleroma is a fixed-size array of exact integers (finite-field arithmetic) that holds a multiset of items. Each item is a key, optionally with a flag word, an arrangement and a tick. One array answers many questions: counts by key, by flag word, by Hamming distance, by arrangement, by tick, and joint counts over any chosen faces.
+The Pleroma is a fixed-size array of exact integers (finite-field arithmetic) that holds a multiset of items. Each item is a key, optionally with a flag word, an arrangement and a tick. One array answers fifty different questions, each in a single pass: counts by key, by flag word, by Hamming distance, by arrangement, by tick, and joint counts over any chosen faces.
 
 The store holds a harmonic transform on the product of the key cycle, the flag cube, the symmetric group and the time cycle. Each component of the transform is a harmonic. The store keeps only the harmonics its views need, and each view reads its own slice of the array.
 
@@ -451,6 +676,8 @@ A Pleroma view is one of three faces of the same array.
 The operations form a grid of 8 rungs by 3 faces, plus one read-time operation (the lid): 25 cells in all. Every cell is a public member of Pleroma, checked against a brute-force or naive rebuild of the same answer, and every whole-store operation applies to all items in one pass.
 
 Turn the pyramid, select a cell, or colour it by kind. Each cell shows its API and what it was checked against.
+
+The pyramid above is the grid map: each cell shows its status, the operator it uses and the checks that cover it. The per-operation classification is in the coverage meter on the Phasor page, which counts every operation that changes the store by how it superposes.
 
 ##### The rungs as a ladder
 
@@ -536,9 +763,29 @@ Output:
 21: flags 6, time 6, count 1
 ```
 
+##### Flag reads, widening and tenants
+
+Flags(bits) returns the exact count of each flag pattern on a chosen subset of the bits, with no store built. FlagsMany reads one bit set from several stores of one shape in one batched transform per prime, and FlagsUnion takes several bit sets. PleromaReadSet declares several reads and answers them in one call, and Run applies a kernel to clones of the stores before answering. Each read makes its own transform by default. ReadFlagWords returns the counts of a few words without the whole-store transform. WidenFlags(bits, at) inserts zero flag bits and copies the cells natively, with no decode. AddFlagWords adds many flag words in one pass over the cells.
+
+A tenant takes bits in the high end of the flag word. The all-tenant total is Flags(data bits) on one store, and a tenant's own counts are its slice of Flags(tenant bits + data bits). Tenant bits plus data bits are capped at 16.
+
+##### The kernel is the symmetry
+
+A symmetry here is a move you can make to every item at once, such as flipping a flag, advancing the clock or reordering the arrangement. A kernel is a weighted mix of such moves, and the store applies the whole mix in one pass instead of one pass per move. This section says which moves can be mixed that way and which cannot. The numbers are how many of the store's 89 operations fall on each side.
+
+The store holds the harmonic transform of its items on the product of four families: the key cycle Z_N (a cycle of N keys), the flag cube Z_2^m (m flag bits), the arrangements S_k (the orderings of k things) and the tick cycle Z_T (a cycle of T ticks). A harmonic is one component of that transform, and each stored item is one point of that product. A symmetry here is a translation of the product: add a key shift, XOR a flag mask, advance a tick, or multiply an arrangement. A weighted sum of translations is an element of the group algebra, and PleromaKernel holds exactly that element and applies it to every stored item in one pass. For a finite group, the linear maps that commute with its translations are exactly the group-algebra elements, so on the faces the kernel carries, the kernel is the general form of such a map.
+
+- Flag and tick faces: Every translation is a kernel element. Both are abelian, so their characters diagonalise every translation: a flag mask or a tick shift is one scalar on each harmonic block, and any weighted sum of them is one kernel. Bit permutations and sign flips of the flag word are not translations and are not kernel elements.
+- Arrangement face (S_2 to S_5 as built): Left multiplication joins the kernel. A left arrangement element multiplies each irreducible block from the left, and weighted sums of those span every left multiplication. The right action, which relabels the other side of the block, and conjugation, which relabels both sides, are not kernel elements.
+- Key face: A key shift is a kernel element on a keyed kernel. PleromaKernel(shape, keyHarmonics: true) holds one factor per key harmonic, so AddKeyed puts a key shift in the same kernel as the flag, arrangement and tick elements, and one Apply runs the mix. ShiftKeys(k) gives the same store as a one-element keyed kernel. A keyed kernel holds one number per stored cell. Key scaling, Hadamard products and per-key weights are not kernel elements: each mixes key harmonics together, and no per-harmonic factor can hold that.
+
+The measured boundary. The coverage record sorts the {members} operations that transform the store or read it by how they commute with the symmetry group. To commute with the group means that moving first and then applying the operation gives the same result as applying the operation first and then moving. A probe is a test that applies the operation to a store and to its moved copy, and compares the two. Some operations return a list, a count or a boolean, so each of those needs an output-action declaration first: a statement of how its output moves when its input is moved, which the probe needs before it can check the operation.
+
+Joins here means: commutes with the group and lies on an axis the kernel carries (flag, left arrangement, tick, and the key harmonic of a keyed kernel). Kernel membership is stricter and counts only the {kernelOps} kernel operators in {kernelOps} of {operators}.
+
 ##### Keys, bit maps and exact checks
 
-- Shift, scale and combine keys: ShiftKeys(k) adds k to every key in place. ScaleKeys(u) multiplies every key by a unit, or gathers several keys to one for a non-unit. CombineCycles(a, b) joins two stores on coprime key cycles by the Chinese remainder theorem. Scaling and combining need the optional CompleteKeys configuration.
+- Shift, scale and combine keys: ShiftKeys(k) adds k to every key in place. ScaleKeys(u) multiplies every key by a unit, or gathers several keys to one for a non-unit. CombineCycles(a, b) joins two stores on coprime key cycles by the Chinese remainder theorem. Scaling and combining need the optional CompleteKeys configuration. On a keyed kernel a key shift is also a kernel element (AddKeyed).
 - Frobenius and shift registers: Frobenius(modulus, steps) squares every flag word as a polynomial over GF(2), and ShiftRegister(polynomial, steps) steps every word through a linear shift register, each exactly and in one pass.
 - Exact repair and redundancy: ReservedKeys lets Verify detect and Repair rebuild up to r lost or corrupted key-line harmonics. CheckPrime mirrors every cell in a second prime so VerifyCheck detects any corruption of one copy. PleromaParity keeps the exact sum of a group of stores and rebuilds any one lost store.
 - Dense and sparse pages: With CompleteKeys, a store is a dense page of up to 4,096 slots where Count and Counts read every slot exactly in one transform. PleromaSparsePage holds exact counts over keys anywhere in a huge key set in memory proportional to the keys present.
@@ -554,6 +801,8 @@ The HoloDb holographic plane uses the Pleroma as its data store. COUNT, SUM, MIN
 - Kernels: On a store with a check prime, a kernel runs through a mirror kernel in the check prime, built from the same elements. A kernel built from a shape without that check prime is refused.
 - Hardware: The Pleroma runs on the CPU. There is no GPU kernel.
 - Speed: Exact arithmetic is not faster than a float bundle for a single read. The Pleroma gives you exactness and many views on one array.
+- Reads: Each read makes its own transform by default. A transform is shared between reads only inside an internal planner that is not exposed.
+- Tenants and widening: Tenant bits plus data bits must be at most 16, and past that the tenants split across stores. WidenFlags refuses continuous components, relation faces and reserved keys, and any result above 16 flag bits.
 - Relations: Locating the contradiction on a relation face is not provided.
 
 ##### Prior art
@@ -3446,12 +3695,12 @@ Limits:
 
 ## Research
 
-### Forty-seven reads, one store
+### Fifty reads, one store
 
-Page: https://evaluatedapplications.github.io/research/forty-five-reads-one-store/
+Page: https://evaluatedapplications.github.io/research/one-store-many-reads/
 Topics: exact stores, Pleroma
 
-Finding: Forty-seven reads, one store. One fixed-size array of exact integers answers forty-seven different questions, each in a single pass over the array. The one exception is `CausalReads`, which takes one read per prefix. Counts by key. Counts by flag word. The nearest stored words. Arrangement order. Parity. Time. Joint counts across any chosen faces. Every count it returns is exact, and when the store is full it refuses rather than guessing.
+Finding: Fifty reads, one store. One fixed-size array of exact integers answers fifty different questions, each in a single pass over the array. The one exception is `CausalReads`, which takes one read per prefix. Counts by key. Counts by flag word. The nearest stored words. Arrangement order. Parity. Time. Joint counts across any chosen faces. Every count it returns is exact within the field's range (about 1.15 x 10^18 on the default field), and when the store is full the key views refuse rather than guess.
 
 #### In brief
 
@@ -3465,7 +3714,7 @@ The project starts where its philosophy and ethics start, and reduces to the few
 
 It is how we start from philosophy and ethics to figure out the most minimal set of axioms for reasoning, and build up from that on first principles.
 
-Three of its statements carry the reduction: "Consciousness exists." (T1), "Non-contradiction is necessary for coherent reasoning." (T2), and "Claims about reality are more reliable when tested against reality." (T9).
+Three of its statements carry the reduction: "Consciousness exists.", "Non-contradiction is necessary for coherent reasoning.", and "Claims about reality are more reliable when tested against reality."
 
 Two axioms follow: there is an observer, and a resolved state does not contain both P and not-P. From them comes the first distinction. Whatever appears from the void comes with its opposite, so 0 = (+1) + (−1). The project calls this pair the syzygy.
 
@@ -3473,9 +3722,9 @@ Once the syzygy is in hand, its symmetries can be counted. They are the signed p
 
 The project's rule for climbing from here: "A tick therefore adds one symmetry, and climbing the ladder is mapping the lineage of symmetries in order."
 
-The thesis came next. The project states it as: "The Pleroma ... is the one object all their holograms are shadows of." A shadow is what the larger object shows when it is read on some of its faces and not others.
+The thesis comes next. The project states it as: "The Pleroma ... is the one object all their holograms are shadows of." A shadow is what the larger object shows when it is read on some of its faces and not others.
 
-Searching for that object gave a map: the ladder laid out as rungs, each read across three faces. The map is predictive. It says what each cell should be, and each cell was then built and proved.
+The search for that object gives a map: the ladder laid out as rungs, each read across three faces. The map is predictive. It says what each cell should be, and each cell is then built and proved.
 
 The ladder: eight rungs, each read across three faces
 
@@ -3496,7 +3745,7 @@ The method is the same for every cell. The prediction and its null are written f
 
 The derivation's operator rule: a symmetry is a group element, and a weighted sum of group elements is one kernel. It acts on each harmonic with one multiplication, so its cost is one pass whatever the size of the sum. The same rule says choosing is not linear, so the one choice is made at the read.
 
-The code was measured against that rule across the public surface. Seven of the 38 operators that change the store join one kernel and apply in one pass. Fourteen take one pass per term in a mix. Seventeen are writes that are not kernel elements. The 47 reads are separate, each one pass.
+The code was measured against that rule across the public surface. Eight of the 39 operators that change the store join one kernel and apply in one pass; key shifts do so on a keyed kernel. Fourteen take one pass per term in a mix. Seventeen are writes that are not kernel elements. The 50 reads are separate, each one pass, and nine of them are answered through a read set.
 
 On a 10,464-cell store, `Apply` takes 0.17 to 0.44 ms per call, for a kernel of anything from 1 operator up to 10,368, with no trend across that range. Building the same store from the moved items takes 1,916 ms at 1,000 operators. The figures are a Release build on a loaded machine, two runs.
 
@@ -3547,11 +3796,14 @@ The Pleroma is a new construction. Each brick it stands on is established mathem
 
 #### Where the code does not superpose today
 
-- Key shifts and key scaling cost one pass per term in a mix, not one pass.
+- Key scaling costs one pass per term in a mix. A key shift joins a kernel only on a keyed kernel; on an unkeyed one a mix of key shifts costs one pass per term.
 - Right relabelling, conjugation and flag sign flips cost one pass per term.
+- Bit maps on the flag cube, and fixed per-key or per-tick weights, are not kernel elements. A mix of them costs one pass per term.
+- Commuting with the symmetry is necessary for a kernel and not sufficient. `Hadamard` commutes and is not a kernel element, and `ShiftKeys` is one only through a keyed kernel.
+- Each read makes its own transform by default. A transform is shared between reads only inside an internal planner that is not exposed.
 - A kernel on a store with a check prime runs through a mirror kernel in the check prime, built from the same elements; a kernel built from a shape without that check prime is refused.
 - Key reads refuse past their capacity. A store keeps 2K+1 harmonics per key line, so K+1 distinct keys always refuse. A complete key band goes to 4,096 keys.
-- Counts are exact within the field's signed range. No read detects a wrap past it.
+- Counts are exact within the field's signed range. A plain read does not check for a wrap. On a store with a check prime, `VerifyCheck` detects one within the check bound.
 - The store runs on the CPU. Its gain is exactness and many views on one array, not raw speed for a single read.
 - Rung 8's contradiction location is not built, and reunification, the rung where observers merge, is open.
 
@@ -3585,35 +3837,39 @@ Closeness on the flag cube is Hamming distance. `Near(query, r)` counts the stor
 
 The map places the lid at the top of the ladder: the top rung iterated, with the faces divergence, forgetting and pseudo-randomness.
 
-#### What the map got right, and what it got wrong
+#### The map and where the code stands
 
-Predictions that held
+The map says what each cell should be. Each row below is a place where the map's statement and the code are checked against each other, and what the code does today.
+
+Held as mapped
 
 - Rung 3: 715 distinct multisets, 10,000 distinct orders, 256 parity classes.
 - A complete cycle sums to exactly zero, and a symbol read on coprime cycles decodes exactly, 20,000 of 20,000.
 - Relation networks stored as bound facts give exact loop sums, and planted contradictions are found: 40 of 40 networks, no false alarms in 20.
 - Nested structure answers every path question exactly, 851 of 851.
-- Cross-face predictions: the universal face's polygon sits inside the mixing of the anti-universe, to 2 × 10⁻¹⁵; circulation has one form on two faces; the third face's squaring symmetry halves the set hologram.
 - The mirror cells that label the ten symmetry classes hold on every realisation: 10 of 10 classes, 11,995 relation checks over 2,079 realisations.
 - Four composition recipes, built only from existing operations, are exact against brute force, 4 of 4.
 
-Predictions that did not hold, and what changed
+Where the code stands against the map
 
-- The continuous circle cannot hold the rungs exactly past its dimension. The bridge step strips the continuous context, and what remains is a finite field. On the finite field, recovery is 100% for 8 to 64 items and 0% at 65, with p = 65,537 and d = 128.
-- The spiral's eight steps are not the eight named rungs. Each spiral step adds an operator of order 2 or 4, while the rungs add cycles of every order.
-- The anti-universe does not start at three states; groups of two gain as much.
-- The lid's predicted ordered regime before chaos did not appear, and entropy is not monotone; the divergence from the settled state is.
-- Reunification, the merging-observers rung, is open.
-- Detection of a wrap past the signed range is not built, and the parity claim for the running bundle is not measured.
+Where the map's statement and the code were checked against each other
+
+| The map says | The code today |
+|---|---|
+| The continuous circle holds the rungs exactly. | It holds them up to its dimension. Exact storage is the finite field: with p = 65,537 and d = 128, recovery is 100% for 8 to 64 items and 0% at 65. The continuous circle is the graded-similarity component. |
+| The spiral's eight steps are the eight named rungs. | They are two ladders. Each spiral step adds an operator of order 2 or 4; the rungs add cycles of every order. |
+| The anti-universe starts at three states. | Groups of two gain as much as groups of three. |
+| The lid has an ordered regime before chaos, and entropy rises steadily. | The lid has no ordered regime before chaos. The divergence from the settled state is monotone; entropy is not. |
+| Reunification, the rung where observers merge by exact difference, is the next rung. | It is open. |
+| A wrap is detected while the true value lies inside both check ranges. | `VerifyCheck` detects a wrap on a store with a check prime, within the check bound. A plain read does not check. The parity claim for the running bundle is not measured. |
 
 #### The gaps, grouped
 
 The theory says these should superpose, and the code does not:
 
-- Key shifts and key scaling permute the key harmonics. The kernel has no key-harmonic axis.
+- Key shifts and key scaling permute the key harmonics. A keyed kernel has the key-harmonic axis, so a key shift is one of its elements; key scaling is not.
 - Right relabelling and conjugation act from the right on the order face. The kernel holds the left action only. A superposed conjugation exists in an experiment record and not in the library.
 - Flag sign flips and per-key or per-tick weights cost one pass per term.
-- A kernel on a store with a check prime.
 - Relation faces under projection and under the Chinese remainder theorem.
 - Causal reads take one read per prefix. A prefix structure over the sequence is not built.
 
@@ -3625,10 +3881,11 @@ Design limits, set by the data rather than a missing operation:
 
 Other boundaries:
 
-- Exact within the signed range; no wrap detection.
+- Exact within the signed range. A plain read does not check for a wrap; `VerifyCheck` does on a store with a check prime, within the check bound.
 - `Bind` is refused with several primes, and `ShiftKeys` on several primes needs an explicit key cycle.
 - `CombineCycles` refuses a store with a relation face.
 - The joint slice is capped at 2^24 cells.
+- Tenants as flag bits share one store while tenant bits plus data bits stay at 16 or fewer.
 
 #### Cost of exactness, one page per context against a hash map
 

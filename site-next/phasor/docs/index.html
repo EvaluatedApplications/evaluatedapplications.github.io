@@ -15,7 +15,7 @@
 <meta name="twitter:card" content="summary">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%23f0796a'/%3E%3Cstop offset='.5' stop-color='%237bd86a'/%3E%3Cstop offset='1' stop-color='%23c07dff'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='32' height='32' rx='7' fill='%23050608'/%3E%3Cpath d='M16 5L27 26H5Z' fill='none' stroke='url(%23g)' stroke-width='2' stroke-linejoin='round'/%3E%3C/svg%3E">
 <script>document.documentElement.classList.add('js')</script>
-<link rel="stylesheet" href="/assets/ea.css?v=ecbd2f46">
+<link rel="stylesheet" href="/assets/ea.css?v=dbb23992">
 <script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Home","item":"https://evaluatedapplications.github.io/"},{"@type":"ListItem","position":2,"name":"Products","item":"https://evaluatedapplications.github.io/products/"},{"@type":"ListItem","position":3,"name":"Phasor","item":"https://evaluatedapplications.github.io/phasor/"},{"@type":"ListItem","position":4,"name":"Docs","item":"https://evaluatedapplications.github.io/phasor/docs/"}]}</script>
 
 </head>
@@ -43,7 +43,7 @@
 
 
 <section class="sec"><div class="wrap">
-  <nav class="toc" aria-labelledby="toc-h"><h2 id="toc-h">On this page</h2><ul><li><a href="#pleroma-views">Reading a Pleroma</a></li><li><a href="#bind">Bind two stores</a></li><li><a href="#kernel">Apply a weighted kernel in one pass</a></li><li><a href="#parity">Bit counts and parity</a></li><li><a href="#more-operations">More operations</a></li><li><a href="#cyclehologram">CycleHologram: the keys-only case</a></li><li><a href="#codecs">The phasor codecs</a></li><li><a href="#hologram">Hologram: readable algebra with operators</a></li><li><a href="#arithmetic">Arithmetic with numbers</a></li><li><a href="#gotchas">Things to know</a></li></ul></nav>
+  <nav class="toc" aria-labelledby="toc-h"><h2 id="toc-h">On this page</h2><ul><li><a href="#pleroma-views">Reading a Pleroma</a></li><li><a href="#bind">Bind two stores</a></li><li><a href="#kernel">Apply a weighted kernel in one pass</a></li><li><a href="#parity">Bit counts and parity</a></li><li><a href="#flags">Flag reads, widening and tenants</a></li><li><a href="#more-operations">More operations</a></li><li><a href="#cyclehologram">CycleHologram: the keys-only case</a></li><li><a href="#codecs">The phasor codecs</a></li><li><a href="#hologram">Hologram: readable algebra with operators</a></li><li><a href="#arithmetic">Arithmetic with numbers</a></li><li><a href="#gotchas">Things to know</a></li></ul></nav>
 </div></section>
 <section class="sec doc-sec" aria-labelledby="pleroma-views"><div class="wrap">
   <div class="sec-head"><span class="sec-dot cat-foundation" aria-hidden="true"></span><h2 id="pleroma-views">Reading a Pleroma</h2></div>
@@ -142,6 +142,152 @@ uint parity = store.FlagParity();                         // XOR of every stored
 Console.WriteLine($&quot;{bitCounts[0]} {bitCounts[1]} {bitCounts[2]} {bitCounts[3]} parity {parity}&quot;);</code></pre></div><div class="code out"><div class="code-bar"><span>Output</span><button class="copy" type="button" aria-label="Copy Output">copy</button></div><pre><code class="language-text">5 3 1 0 parity 7</code></pre></div>
   
   
+</div></section><section class="sec doc-sec" aria-labelledby="flags"><div class="wrap">
+  <div class="sec-head"><span class="sec-dot cat-foundation" aria-hidden="true"></span><h2 id="flags">Flag reads, widening and tenants</h2></div>
+  <div class="prose-block"><p>The flag face is the m-bit flag word of every item. These operations read or write that face for a few words, for several stores, or for several bit subsets, without building anything extra. The examples build in a console project with ImplicitUsings enabled, the SDK default.</p><p>Flags(bits) returns the exact count of each flag pattern on the bits you name, summing out every other bit. Index u of the result has bit j set when flag bit bits[j] is set. The empty list returns the total. No store is built.</p><p>Pleroma.FlagsMany(stores, bits) reads one bit set from several stores of one shape in one batched transform per prime, and each row equals Flags(bits) of that store, cell for cell. Pleroma.FlagsUnion(stores, bitSets) returns the answers indexed [bit set][store].</p><p>PleromaReadSet declares each read once (AddFlagMarginal, AddTotal, AddBitCounts, AddFlagParity, AddFlagWordCounts). Read(stores) answers all of them for all stores in one call. Run(kernel, stores) applies a kernel to clones of the stores, then answers the reads, and the inputs are not changed. One call returns many reads, but each read makes its own transform by default, and Run is not fused: the kernel&#39;s pass and the read transforms are separate passes.</p><p>ReadFlagWords returns the exact count of each listed word. Up to four words it sums the flag cells once per word, and above four it uses the whole-store transform. Both return the same numbers.</p><p>WidenFlags(bits, at) returns a store with bits zero flag bits inserted at position at, and the bits at and above at move up. The source is not changed, and no item is decoded or added again: the cells are copied through a cached map. It refuses continuous components, relation faces and reserved keys, and the result may hold at most 16 flag bits.</p><p>AddFlagWords adds counts[j] copies of words[j] at one key in one pass over the cells, equal to one Add per word. The static overload applies one batch to several stores of one shape.</p><p>One store can hold several tenants. Each tenant takes bits in the high end of the flag word and the data takes the low bits. The all-tenant total is Flags(data bits) on that store, one transform whatever the tenant count. A tenant&#39;s own counts are its slice of Flags(tenant bits + data bits), whose transform grows with the tenant count. The cap is 16 flag bits in total, so tenant bits plus data bits must be at most 16. Past the cap, split the tenants across stores.</p></div>
+  
+  
+  
+  
+  
+  
+  <div class="code"><div class="code-bar"><span>Flags(bits)</span><button class="copy" type="button" aria-label="Copy Flags(bits)">copy</button></div><pre><code class="language-csharp">using Phasor;
+
+var store = new Pleroma(new HologramShape { FlagBits = 3 });
+store.Add(new HologramItem(Key: 1, Flags: 0b101), 2);   // bits 0 and 2 set
+store.Add(new HologramItem(Key: 2, Flags: 0b100), 1);   // bit 2 only
+store.Add(new HologramItem(Key: 3, Flags: 0b011), 4);   // bits 0 and 1 set
+
+// Marginal on flag bits 0 and 2, with no store built: index u has bit 0 = flag bit 0, bit 1 = flag bit 2.
+long[] onBits02 = store.Flags(new[] { 0, 2 });
+System.Console.WriteLine($&quot;bits {{0,2}}: {string.Join(&quot; &quot;, onBits02)}&quot;);
+
+// The empty list is the total.
+System.Console.WriteLine($&quot;bits {{}}: {string.Join(&quot; &quot;, store.Flags(Array.Empty&lt;int&gt;()))}&quot;);</code></pre></div><div class="code out"><div class="code-bar"><span>Output</span><button class="copy" type="button" aria-label="Copy Output">copy</button></div><pre><code class="language-text">bits {0,2}: 0 4 1 2
+bits {}: 7</code></pre></div><div class="code"><div class="code-bar"><span>FlagsMany and FlagsUnion</span><button class="copy" type="button" aria-label="Copy FlagsMany and FlagsUnion">copy</button></div><pre><code class="language-csharp">using Phasor;
+
+var monday = new Pleroma(new HologramShape { FlagBits = 3 });
+var tuesday = new Pleroma(new HologramShape { FlagBits = 3 });
+monday.Add(new HologramItem(Key: 1, Flags: 0b101), 2);
+tuesday.Add(new HologramItem(Key: 1, Flags: 0b100), 6);
+
+// One bit set, many stores: result[store] is the marginal on bit 2 of that store.
+long[][] onBit2 = Pleroma.FlagsMany(new[] { monday, tuesday }, new[] { 2 });
+System.Console.WriteLine($&quot;FlagsMany bit 2: monday {string.Join(&quot; &quot;, onBit2[0])} | tuesday {string.Join(&quot; &quot;, onBit2[1])}&quot;);
+
+// Many bit sets, many stores: result[bitSet][store].
+long[][][] union = Pleroma.FlagsUnion(new[] { monday, tuesday }, new[] { new[] { 0 }, new[] { 1, 2 } });
+System.Console.WriteLine($&quot;FlagsUnion bit 0: monday {string.Join(&quot; &quot;, union[0][0])} | tuesday {string.Join(&quot; &quot;, union[0][1])}&quot;);
+System.Console.WriteLine($&quot;FlagsUnion bits 1,2: monday {string.Join(&quot; &quot;, union[1][0])} | tuesday {string.Join(&quot; &quot;, union[1][1])}&quot;);</code></pre></div><div class="code out"><div class="code-bar"><span>Output</span><button class="copy" type="button" aria-label="Copy Output">copy</button></div><pre><code class="language-text">FlagsMany bit 2: monday 0 2 | tuesday 0 6
+FlagsUnion bit 0: monday 0 2 | tuesday 6 0
+FlagsUnion bits 1,2: monday 0 0 2 0 | tuesday 0 0 6 0</code></pre></div><div class="code"><div class="code-bar"><span>PleromaReadSet</span><button class="copy" type="button" aria-label="Copy PleromaReadSet">copy</button></div><pre><code class="language-csharp">using Phasor;
+
+var a = new Pleroma(new HologramShape { FlagBits = 3 });
+var b = new Pleroma(new HologramShape { FlagBits = 3 });
+a.Add(new HologramItem(Key: 1, Flags: 0b101), 2);
+b.Add(new HologramItem(Key: 1, Flags: 0b011), 5);
+
+// Declare every read once; Read answers all of them for all stores in one call.
+var reads = new PleromaReadSet();
+int onBit0 = reads.AddFlagMarginal(new[] { 0 });
+int onBits12 = reads.AddFlagMarginal(new[] { 1, 2 });
+int total = reads.AddTotal();
+int bitCounts = reads.AddBitCounts();
+
+var result = reads.Read(new[] { a, b });   // result[read handle, store index]
+System.Console.WriteLine($&quot;a: bit 0 {string.Join(&quot; &quot;, result[onBit0, 0])} | total {result[total, 0][0]} | bit counts {string.Join(&quot; &quot;, result[bitCounts, 0])}&quot;);
+System.Console.WriteLine($&quot;b: bits 1,2 {string.Join(&quot; &quot;, result[onBits12, 1])} | total {result[total, 1][0]}&quot;);
+
+// Run: a kernel flips bit 0 of every item in clones of the stores, then the same reads are answered.
+var flip = new PleromaKernel(a.Shape);
+flip.Add(flagMask: 0b001);
+var ran = reads.Run(flip, new[] { a, b });
+System.Console.WriteLine($&quot;after flip, a: bit 0 {string.Join(&quot; &quot;, ran[onBit0, 0])}; input a unchanged: {string.Join(&quot; &quot;, result[onBit0, 0])}&quot;);</code></pre></div><div class="code out"><div class="code-bar"><span>Output</span><button class="copy" type="button" aria-label="Copy Output">copy</button></div><pre><code class="language-text">a: bit 0 0 2 | total 2 | bit counts 2 0 2
+b: bits 1,2 0 5 0 0 | total 5
+after flip, a: bit 0 2 0; input a unchanged: 0 2</code></pre></div><div class="code"><div class="code-bar"><span>ReadFlagWords</span><button class="copy" type="button" aria-label="Copy ReadFlagWords">copy</button></div><pre><code class="language-csharp">using Phasor;
+
+var store = new Pleroma(new HologramShape { FlagBits = 6 });
+store.Add(new HologramItem(Key: 1, Flags: 0b000101), 3);
+store.Add(new HologramItem(Key: 2, Flags: 0b111000), 2);
+store.Add(new HologramItem(Key: 3, Flags: 0b000101), 1);
+
+// Exact counts of three flag words; the store is not transformed as a whole.
+long[] few = store.ReadFlagWords(new uint[] { 0b000101, 0b111000, 0b000000 });
+System.Console.WriteLine($&quot;words: {string.Join(&quot; &quot;, few)}&quot;);
+
+// Same values as indexing the whole-store read.
+long[] all = store.Flags();
+System.Console.WriteLine($&quot;matches Flags(): {few[0] == all[0b000101] &amp;&amp; few[1] == all[0b111000] &amp;&amp; few[2] == all[0]}&quot;);</code></pre></div><div class="code out"><div class="code-bar"><span>Output</span><button class="copy" type="button" aria-label="Copy Output">copy</button></div><pre><code class="language-text">words: 4 2 0
+matches Flags(): True</code></pre></div><div class="code"><div class="code-bar"><span>WidenFlags</span><button class="copy" type="button" aria-label="Copy WidenFlags">copy</button></div><pre><code class="language-csharp">using Phasor;
+
+var narrow = new Pleroma(new HologramShape { FlagBits = 2 });
+narrow.Add(new HologramItem(Key: 7, Flags: 0b10), 3);
+narrow.Add(new HologramItem(Key: 8, Flags: 0b01), 1);
+
+// One zero flag bit inserted at position 1: old bit 1 moves to bit 2, the new bit 1 is zero on every item.
+Pleroma wide = narrow.WidenFlags(1, 1);
+long[] counts = wide.Flags();
+System.Console.WriteLine($&quot;flag bits {wide.Shape.FlagBits}: word 100 -&gt; {counts[0b100]}, word 001 -&gt; {counts[0b001]}, word 010 -&gt; {counts[0b010]}&quot;);
+System.Console.WriteLine($&quot;source store still {narrow.Shape.FlagBits} flag bits, total {narrow.Total()}&quot;);</code></pre></div><div class="code out"><div class="code-bar"><span>Output</span><button class="copy" type="button" aria-label="Copy Output">copy</button></div><pre><code class="language-text">flag bits 3: word 100 -&gt; 3, word 001 -&gt; 1, word 010 -&gt; 0
+source store still 2 flag bits, total 4</code></pre></div><div class="code"><div class="code-bar"><span>AddFlagWords</span><button class="copy" type="button" aria-label="Copy AddFlagWords">copy</button></div><pre><code class="language-csharp">using Phasor;
+
+var batched = new Pleroma(new HologramShape { FlagBits = 4 });
+var sequential = new Pleroma(new HologramShape { FlagBits = 4 });
+
+uint[] words = { 0b0001, 0b0010, 0b1111 };
+long[] counts = { 5, 2, 7 };
+
+// One pass over the cells for all three words, at key 9.
+batched.AddFlagWords(words, counts, key: 9);
+
+// The same adds, one item at a time.
+for (int j = 0; j &lt; words.Length; j++)
+    sequential.Add(new HologramItem(Key: 9, Flags: words[j]), counts[j]);
+
+System.Console.WriteLine($&quot;total {batched.Total()}, word 0001 {batched.Flags()[0b0001]}, word 1111 {batched.Flags()[0b1111]}&quot;);
+System.Console.WriteLine($&quot;equal to {words.Length} sequential Adds: {batched.Equals(sequential)}&quot;);</code></pre></div><div class="code out"><div class="code-bar"><span>Output</span><button class="copy" type="button" aria-label="Copy Output">copy</button></div><pre><code class="language-text">total 14, word 0001 5, word 1111 7
+equal to 3 sequential Adds: True</code></pre></div><div class="code"><div class="code-bar"><span>Tenants as flag bits</span><button class="copy" type="button" aria-label="Copy Tenants as flag bits">copy</button></div><pre><code class="language-csharp">using Phasor;
+
+// Four tenants, two data bits each, and two tenant bits. The tenant id sits in the high bits of one store: FlagBits = 2 + 2 = 4.
+const int dataBits = 2;
+const int tenants = 4;
+var shared = new Pleroma(new HologramShape { FlagBits = 2 + dataBits });
+var separate = new Pleroma[tenants];
+for (int t = 0; t &lt; tenants; t++)
+    separate[t] = new Pleroma(new HologramShape { FlagBits = dataBits });
+
+// Each write goes to the shared store (tenant in the high bits) and to that tenant&#39;s own store.
+void Write(int tenant, uint data, long count)
+{
+    shared.Add(new HologramItem(Key: 1, Flags: ((uint)tenant &lt;&lt; dataBits) | data), count);
+    separate[tenant].Add(new HologramItem(Key: 1, Flags: data), count);
+}
+Write(0, 0b01, 2);
+Write(1, 0b01, 3);
+Write(1, 0b10, 1);
+Write(3, 0b11, 4);
+
+// All-tenant aggregate: the marginal on the data bits (the tenant bits are summed out, one transform).
+long[] aggregate = shared.Flags(new[] { 0, 1 });
+long[] sumOfSeparate = new long[1 &lt;&lt; dataBits];
+foreach (var s in separate)
+    for (int u = 0; u &lt; sumOfSeparate.Length; u++)
+        sumOfSeparate[u] += s.Flags()[u];
+System.Console.WriteLine($&quot;aggregate {string.Join(&quot; &quot;, aggregate)}; equals the sum of tenant stores: {aggregate.SequenceEqual(sumOfSeparate)}&quot;);
+
+// Per-tenant read: the marginal on tenant bits plus data bits, then the tenant&#39;s slice.
+long[] perTenant = shared.Flags(new[] { 0, 1, 2, 3 });
+for (int t = 0; t &lt; tenants; t++)
+{
+    long[] slice = perTenant.Skip(t &lt;&lt; dataBits).Take(1 &lt;&lt; dataBits).ToArray();
+    System.Console.WriteLine($&quot;tenant {t}: {string.Join(&quot; &quot;, slice)}; equals its own store: {slice.SequenceEqual(separate[t].Flags())}&quot;);
+}</code></pre></div><div class="code out"><div class="code-bar"><span>Output</span><button class="copy" type="button" aria-label="Copy Output">copy</button></div><pre><code class="language-text">aggregate 0 5 1 4; equals the sum of tenant stores: True
+tenant 0: 0 2 0 0; equals its own store: True
+tenant 1: 0 3 1 0; equals its own store: True
+tenant 2: 0 0 0 0; equals its own store: True
+tenant 3: 0 0 0 4; equals its own store: True</code></pre></div>
+  
+  <p class="more-link"><a href="/phasor/pleroma/#symmetry">How these fit the kernel and the symmetry</a></p>
 </div></section><section class="sec doc-sec" aria-labelledby="more-operations"><div class="wrap">
   <div class="sec-head"><span class="sec-dot cat-foundation" aria-hidden="true"></span><h2 id="more-operations">More operations</h2></div>
   

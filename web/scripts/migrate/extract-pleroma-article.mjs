@@ -1,16 +1,17 @@
-// Turns the Phasor owner's article source (Phasor/docs/pleroma-article.md) into the research article data/research/forty-five-reads-one-store.json.
-// Nothing about the article is typed here except what the page needs that the source does not carry (headline, sub-line, topics, table captions,
-// the three tiles' wording). Every tile figure and every line of small print is checked against the article text, so a re-measured source that no
-// longer says it makes this script fail.
+// Turns the Phasor owner's article source (Phasor/docs/pleroma-article.md) into the research article data/research/<slug>.json.
+// The title and the slug come from the article's front matter, so a renamed article is a re-run, not an edit here. Nothing else about the
+// article is typed here except what the page needs that the source does not carry (sub-line, topics, table captions, the three tiles'
+// wording). Every tile figure and every line of small print is checked against the article text, so a re-measured source that no longer
+// says it makes this script fail.
 //   node web/scripts/migrate/extract-pleroma-article.mjs
-// What it strips: the title and byline lines, the Sources section and the "Not cited" line, every bracketed [n] reference marker, the licence
-// footer and copyright line (the page ends with the site's own licence sentence). The one wording edit it applies is listed in EDITS.
+// What it strips: the front matter, the title and byline lines, the Sources section from "## Sources" to the end of the file (which holds
+// the "Not cited" line), every bracketed [n] reference marker, the licence footer and copyright line (the page ends with the site's own
+// licence sentence). The one wording edit it applies is listed in EDITS. An older file for the same article under another slug is removed.
 import fs from 'node:fs';
 import path from 'node:path';
 import { MONOREPO, DATA } from '../lib/data.mjs';
 
 const SRC = path.join(MONOREPO, 'Phasor', 'docs', 'pleroma-article.md');
-const OUTF = path.join(DATA, 'research', 'forty-five-reads-one-store.json');
 
 // wording changes needed to render (each is reported by the build notes; none changes a claim)
 const EDITS = [
@@ -19,12 +20,11 @@ const EDITS = [
 const CAPTIONS = [
   'The ladder: eight rungs, each read across three faces',
   'The 24 cells: the public member for each rung and face, and the lid',
+  'Where the map\'s statement and the code were checked against each other',
   'The same exact counts held two ways: a hash map and one dense Pleroma page per context',
 ];
 const TOPICS = ['exact stores', 'Pleroma'];
-const HEADLINE = 'Forty-seven reads, one store.';
 const SUB = 'One fixed-size array of exact integers. Counts, order, parity, time and nearest words, each in a single pass. When it is full, it refuses instead of guessing.';
-const DESCRIPTION = 'One fixed-size array of exact integers answers forty-seven different questions, each in a single pass, and refuses instead of guessing when it is full.';
 // tiles: value and label as the user approved them; `small` is quoted from the article and must appear in it verbatim
 const TILES = [
   { value: '64', label: 'items exact, against 4 for the best HRR decoder (200 of 200 trials)',
@@ -37,7 +37,20 @@ const TILES = [
 const CLOSING_LINKS = [{ label: 'Install the Phasor package', href: '/phasor/' }, { label: 'Walk the grid on the Pleroma page', href: '/phasor/pleroma/' }, { label: 'Partner with us', href: '/partner/' }];
 
 let src = fs.readFileSync(SRC, 'utf8').replace(/\r\n/g, '\n');
-src = src.split('\n## Sources')[0];
+// front matter: title and slug
+const fm = src.match(/^---\n([\s\S]*?)\n---\n/);
+if (!fm) throw new Error('no front matter (title and slug) at the top of the article');
+const meta = Object.fromEntries(fm[1].split('\n').map((l) => l.match(/^(\w+):\s*(.*)$/)).filter(Boolean).map((m) => [m[1], m[2].trim()]));
+if (!meta.title || !meta.slug) throw new Error('front matter needs a title and a slug');
+if (!/^[a-z0-9]+(-[a-z0-9]+)*$/.test(meta.slug)) throw new Error('slug is not a lowercase hyphenated word list: ' + meta.slug);
+const TITLE = meta.title, ID = meta.slug;
+const OUTF = path.join(DATA, 'research', ID + '.json');
+src = src.slice(fm[0].length);
+// internal Sources block (from its heading to the end of the file, "Not cited" line included)
+const si = src.indexOf('\n## Sources');
+if (si < 0) throw new Error('the Sources block was not found, so it cannot be stripped');
+src = src.slice(0, si);
+if (/Not cited/.test(src)) throw new Error('a "Not cited" line is left in the text');
 src = src.replace(/\s*(?:\[\d+\])+(?=\s|$)/g, '');
 if (/\[\d+\]/.test(src)) throw new Error('a bracketed reference marker is left in the text');
 for (const [from, to] of EDITS) { if (!src.includes(from)) throw new Error('edit target not found: ' + from); src = src.replace(from, to); }
@@ -74,7 +87,9 @@ const blockOf = (c, ti) => {
 };
 
 let i = 0;
-if (!/^# /.test(chunks[i])) throw new Error('no title line'); i++;
+if (!/^# /.test(chunks[i])) throw new Error('no title line');
+if (chunks[i].replace(/^# /, '').trim() !== TITLE) throw new Error(`the # title line "${chunks[i]}" differs from the front matter title "${TITLE}"`);
+i++;
 i++; // byline: "The Pleroma - Evaluated Applications - <month year>"; no byline or date is carried over
 const intro = [];
 while (!/^\*\*Words\*\*$/.test(chunks[i])) intro.push(chunks[i++]);
@@ -105,10 +120,16 @@ if (ti.n !== CAPTIONS.length) throw new Error(`found ${ti.n} tables, ${CAPTIONS.
 if (closing.length !== 1) throw new Error('expected one closing paragraph, found ' + closing.length);
 const ids = sections.map((s) => s.id); if (new Set(ids).size !== ids.length) throw new Error('duplicate section id');
 
+// the description is the article's own first sentence plus the page's one-clause refusal promise (the sub-line says it too)
+const lead = intro[0].replace(/^\*\*[^*]+\*\*\s*/, '');
+const firstSentence = lead.match(/^(.+?\.)(\s|$)/);
+if (!firstSentence) throw new Error('no first sentence in the opening paragraph');
+const DESCRIPTION = firstSentence[1] + ' It refuses instead of guessing when it is full.';
+
 const out = {
-  id: 'forty-five-reads-one-store',
-  title: 'Forty-seven reads, one store',
-  headline: HEADLINE,
+  id: ID,
+  title: TITLE,
+  headline: TITLE,
   sub: SUB,
   summary: SUB,
   description: DESCRIPTION,
@@ -132,5 +153,11 @@ const out = {
   },
 };
 fs.writeFileSync(OUTF, JSON.stringify(out, null, 2) + '\n', 'utf8');
+// an earlier file for the same article under another slug (a rename) is removed, so the build has one article
+for (const f of fs.readdirSync(path.join(DATA, 'research'))) {
+  if (f === ID + '.json') continue;
+  const o = JSON.parse(fs.readFileSync(path.join(DATA, 'research', f), 'utf8'));
+  if (o.voice === 'owner-authored' && o.diagram && o.diagram.kind === 'pleroma-grid') { fs.rmSync(path.join(DATA, 'research', f)); console.log('removed the earlier file for this article:', f); }
+}
 console.log('wrote', path.relative(DATA, OUTF), fs.statSync(OUTF).size, 'bytes;', sections.length, 'sections (' + sections.filter((s) => s.disclosure).length + ' go-deeper), ' + words.length + ' words, ' + ti.n + ' tables');
 console.log('wording edits applied:', EDITS.map((e) => `"${e[0]}" -> "${e[1]}"`).join('; '));

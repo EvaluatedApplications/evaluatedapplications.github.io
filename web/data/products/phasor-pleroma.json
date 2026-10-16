@@ -9,10 +9,10 @@
       "id": "what-it-is",
       "title": "What it is",
       "paragraphs": [
-        "The Pleroma is a fixed-size array of exact integers (finite-field arithmetic) that holds a multiset of items. Each item is a key, optionally with a flag word, an arrangement and a tick. One array answers many questions: counts by key, by flag word, by Hamming distance, by arrangement, by tick, and joint counts over any chosen faces.",
+        "The Pleroma is a fixed-size array of exact integers (finite-field arithmetic) that holds a multiset of items. Each item is a key, optionally with a flag word, an arrangement and a tick. One array answers {readsWord} different questions, each in a single pass: counts by key, by flag word, by Hamming distance, by arrangement, by tick, and joint counts over any chosen faces.",
         "The store holds a harmonic transform on the product of the key cycle, the flag cube, the symmetric group and the time cycle. Each component of the transform is a harmonic. The store keeps only the harmonics its views need, and each view reads its own slice of the array."
       ],
-      "more": { "label": "How the Pleroma was built", "href": "/research/forty-five-reads-one-store/" }
+      "more": { "label": "How the Pleroma was built", "href": "/research/one-store-many-reads/" }
     },
     {
       "id": "faces",
@@ -32,7 +32,9 @@
         "Turn the pyramid, select a cell, or colour it by kind. Each cell shows its API and what it was checked against."
       ],
       "diagram": { "id": "pleroma-map", "title": "Every operation, one pyramid", "stageLabel": "Interactive 3D pyramid of the Pleroma operation grid. Drag to turn it. Use the arrow keys to move between cells.", "lede": "Three faces, {rungs} rungs and a lid. Each rung adds one thing a single pass can do." },
-      "grid": "pleroma-map"
+      "grid": "pleroma-map",
+      "paragraphsAfter": [ "The pyramid above is the grid map: each cell shows its status, the operator it uses and the checks that cover it. The per-operation classification is in the coverage meter on the Phasor page, which counts every operation that changes the store by how it superposes." ],
+      "more": { "label": "The coverage meter", "href": "/phasor/#coverage" }
     },
     {
       "id": "ladder",
@@ -71,10 +73,44 @@
       "snippets": [ { "source": "snippets/phasor-bind.cs", "output": "snippets/phasor-bind.out.txt", "label": "Bind with a one-item store" } ]
     },
     {
+      "id": "flag-reads",
+      "title": "Flag reads, widening and tenants",
+      "paragraphs": [
+        "Flags(bits) returns the exact count of each flag pattern on a chosen subset of the bits, with no store built. FlagsMany reads one bit set from several stores of one shape in one batched transform per prime, and FlagsUnion takes several bit sets. PleromaReadSet declares several reads and answers them in one call, and Run applies a kernel to clones of the stores before answering. Each read makes its own transform by default. ReadFlagWords returns the counts of a few words without the whole-store transform. WidenFlags(bits, at) inserts zero flag bits and copies the cells natively, with no decode. AddFlagWords adds many flag words in one pass over the cells.",
+        "A tenant takes bits in the high end of the flag word. The all-tenant total is Flags(data bits) on one store, and a tenant's own counts are its slice of Flags(tenant bits + data bits). Tenant bits plus data bits are capped at 16."
+      ],
+      "more": { "label": "Every flag example, with its output", "href": "/phasor/docs/#flags" }
+    },
+    {
+      "id": "symmetry",
+      "title": "The kernel is the symmetry",
+      "paragraphs": [
+        "A symmetry here is a move you can make to every item at once, such as flipping a flag, advancing the clock or reordering the arrangement. A kernel is a weighted mix of such moves, and the store applies the whole mix in one pass instead of one pass per move. This section says which moves can be mixed that way and which cannot. The numbers are how many of the store's {members} operations fall on each side.",
+        "The store holds the harmonic transform of its items on the product of four families: the key cycle Z_N (a cycle of N keys), the flag cube Z_2^m (m flag bits), the arrangements S_k (the orderings of k things) and the tick cycle Z_T (a cycle of T ticks). A harmonic is one component of that transform, and each stored item is one point of that product. A symmetry here is a translation of the product: add a key shift, XOR a flag mask, advance a tick, or multiply an arrangement. A weighted sum of translations is an element of the group algebra, and PleromaKernel holds exactly that element and applies it to every stored item in one pass. For a finite group, the linear maps that commute with its translations are exactly the group-algebra elements, so on the faces the kernel carries, the kernel is the general form of such a map."
+      ],
+      "list": [
+        { "term": "Flag and tick faces", "text": "Every translation is a kernel element. Both are abelian, so their characters diagonalise every translation: a flag mask or a tick shift is one scalar on each harmonic block, and any weighted sum of them is one kernel. Bit permutations and sign flips of the flag word are not translations and are not kernel elements." },
+        { "term": "Arrangement face (S_2 to S_5 as built)", "text": "Left multiplication joins the kernel. A left arrangement element multiplies each irreducible block from the left, and weighted sums of those span every left multiplication. The right action, which relabels the other side of the block, and conjugation, which relabels both sides, are not kernel elements." },
+        { "term": "Key face", "text": "A key shift is a kernel element on a keyed kernel. PleromaKernel(shape, keyHarmonics: true) holds one factor per key harmonic, so AddKeyed puts a key shift in the same kernel as the flag, arrangement and tick elements, and one Apply runs the mix. ShiftKeys(k) gives the same store as a one-element keyed kernel. A keyed kernel holds one number per stored cell. Key scaling, Hadamard products and per-key weights are not kernel elements: each mixes key harmonics together, and no per-harmonic factor can hold that." }
+      ],
+      "diagram": { "id": "commutation-map", "title": "Which operations commute with the symmetry", "stageLabel": "Each square is one operation, coloured by how it commutes with the symmetry group.", "lede": "Each square is one operation. Choose a group to list its operations and what the record says about each." },
+      "paragraphsAfter": [
+        "The measured boundary. The coverage record sorts the {members} operations that transform the store or read it by how they commute with the symmetry group. To commute with the group means that moving first and then applying the operation gives the same result as applying the operation first and then moving. A probe is a test that applies the operation to a store and to its moved copy, and compares the two. Some operations return a list, a count or a boolean, so each of those needs an output-action declaration first: a statement of how its output moves when its input is moved, which the probe needs before it can check the operation.",
+        "Joins here means: commutes with the group and lies on an axis the kernel carries (flag, left arrangement, tick, and the key harmonic of a keyed kernel). Kernel membership is stricter and counts only the {kernelOps} kernel operators in {kernelOps} of {operators}."
+      ],
+      "listAfter": [
+        { "term": "{commuting} commute with every generator of the group", "text": "{joinsAxes} of them join the kernel's axes: {axesKernel} kernel operators (Tick, Diffuse, Apply, the four kernel methods and AddKeyed), {axesSums} store sums (Add and Subtract of another store) and {axesReads} reads of the flag face and the total, answered through a read set (Flags, Flags(bits), FlagsMany, FlagsUnion, Total, and PleromaReadSet Read and Run). The other {joinsOff} commute but lie off those axes: ShiftKeys (its kernel element is AddKeyed), Hadamard, Syndrome, and the reads on the key, arrangement, tick, joint and pair axes." },
+        { "term": "{linearBreak} are linear or affine and break a named symmetry", "text": "For example a bit permutation of the flags, a key scaling, a Frobenius squaring or a bind." },
+        { "term": "{nonlinear} are not linear", "text": "Choices, decodes, order statistics, draws and predicates, such as Sample, MinKey and Nearest." },
+        { "term": "{needDeclaration} need an output-action declaration", "text": "A probe cannot classify them until one is given. Among them are CombineCycles, TimeMap and Project, and the record gives the reason for each." },
+        { "term": "Commuting is necessary, not sufficient", "text": "ShiftKeys is the case that shows it: it commutes with the group, is not an element of an unkeyed kernel, and is an element of a keyed one. {probeBacked} of the {members} operations are checked by a probe run, and the others carry their reason in the record." }
+      ]
+    },
+    {
       "id": "keys-and-bits",
       "title": "Keys, bit maps and exact checks",
       "list": [
-        { "term": "Shift, scale and combine keys", "text": "ShiftKeys(k) adds k to every key in place. ScaleKeys(u) multiplies every key by a unit, or gathers several keys to one for a non-unit. CombineCycles(a, b) joins two stores on coprime key cycles by the Chinese remainder theorem. Scaling and combining need the optional CompleteKeys configuration." },
+        { "term": "Shift, scale and combine keys", "text": "ShiftKeys(k) adds k to every key in place. ScaleKeys(u) multiplies every key by a unit, or gathers several keys to one for a non-unit. CombineCycles(a, b) joins two stores on coprime key cycles by the Chinese remainder theorem. Scaling and combining need the optional CompleteKeys configuration. On a keyed kernel a key shift is also a kernel element (AddKeyed)." },
         { "term": "Frobenius and shift registers", "text": "Frobenius(modulus, steps) squares every flag word as a polynomial over GF(2), and ShiftRegister(polynomial, steps) steps every word through a linear shift register, each exactly and in one pass." },
         { "term": "Exact repair and redundancy", "text": "ReservedKeys lets Verify detect and Repair rebuild up to r lost or corrupted key-line harmonics. CheckPrime mirrors every cell in a second prime so VerifyCheck detects any corruption of one copy. PleromaParity keeps the exact sum of a group of stores and rebuilds any one lost store." },
         { "term": "Dense and sparse pages", "text": "With CompleteKeys, a store is a dense page of up to 4,096 slots where Count and Counts read every slot exactly in one transform. PleromaSparsePage holds exact counts over keys anywhere in a huge key set in memory proportional to the keys present." }
@@ -97,6 +133,8 @@
         { "term": "Kernels", "text": "On a store with a check prime, a kernel runs through a mirror kernel in the check prime, built from the same elements. A kernel built from a shape without that check prime is refused." },
         { "term": "Hardware", "text": "The Pleroma runs on the CPU. There is no GPU kernel." },
         { "term": "Speed", "text": "Exact arithmetic is not faster than a float bundle for a single read. The Pleroma gives you exactness and many views on one array." },
+        { "term": "Reads", "text": "Each read makes its own transform by default. A transform is shared between reads only inside an internal planner that is not exposed." },
+        { "term": "Tenants and widening", "text": "Tenant bits plus data bits must be at most 16, and past that the tenants split across stores. WidenFlags refuses continuous components, relation faces and reserved keys, and any result above 16 flag bits." },
         { "term": "Relations", "text": "Locating the contradiction on a relation face is not provided." }
       ]
     },

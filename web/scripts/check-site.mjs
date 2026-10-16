@@ -68,6 +68,9 @@ for (const [url, p] of real) {
   if (/\son[a-z]+="/.test(text)) err(url, 'inline event handler');
   if ((text.match(/<img\b(?![^>]*\balt=)/g) || []).length) err(url, 'img without alt');
   if (/<!--[\s\S]*?-->/.test(src)) warn(url, 'HTML comment in output');
+  // markup that did not render: a **bold** pair left as literal asterisks in the visible text (code blocks excluded)
+  const shown = text.replace(/<pre[\s\S]*?<\/pre>/g, ' ').replace(/<[^>]+>/g, ' ');
+  if (/\*\*[^*\s][^*]*\*\*/.test(shown)) err(url, `raw ** markdown in the visible text: "${(shown.match(/\*\*[^*\s][^*]*\*\*/) || [''])[0].slice(0, 60)}"`);
 
   // ---- ids ----
   const ids = idsOf(src), seen = new Set();
@@ -224,6 +227,15 @@ for (const [url, p] of real) {
 console.log(`checked ${real.length} pages, ${[...pages].filter(([, p]) => p.stub).length} redirect stubs in ${path.relative(ROOT, dir)}`);
 console.log(`click depth: ${[...depth].map(([u, d]) => d).reduce((a, b) => Math.max(a, b), 0)} max; legacy link targets still on the live site: ${legacyLinks.size} (${[...legacyLinks.values()].reduce((a, b) => a + b, 0)} links)`);
 if (process.argv.includes('--legacy')) for (const [u, n] of legacyLinks) console.log(`  legacy ${u} x${n}`);
+// ---- samples on hold: shown on a page but not yet compiling against the published package (see prove-snippets.mjs) ----
+{
+  const held = (readJson(path.join(DATA, 'snippets', 'manifest.json')).samples || []).filter((s) => s.hold).map((s) => s.name);
+  const prodDir = path.join(DATA, 'products');
+  for (const f of fs.readdirSync(prodDir).filter((x) => x.endsWith('.json'))) {
+    const t = fs.readFileSync(path.join(prodDir, f), 'utf8');
+    for (const n of held) if (t.includes(`snippets/${n}.cs`)) warn(`products/${f}`, `shows the sample "${n}", which is on hold: it does not compile against the published package yet, so do not publish this page before that release`);
+  }
+}
 for (const w of warns) console.log('warning: ' + w);
 for (const e of errors) console.log('ERROR: ' + e);
 console.log(errors.length ? `check: ${errors.length} error(s)` : `check: ok${warns.length ? ` (${warns.length} warning(s))` : ''}`);

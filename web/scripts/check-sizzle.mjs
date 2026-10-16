@@ -66,6 +66,9 @@ for (const f of fs.readdirSync(path.join(DATA, 'products')).filter((x) => x.ends
   const cites = ['monorepo:Phasor/docs/site.md', 'monorepo:Phasor/docs/superposition-coverage.json', 'monorepo:Phasor/docs/pleroma-map.json'];
   checkBlock('phasor.json', { stats: doc.stats.map((s) => ({ ...s, cite: cites })), numbers: { items: [] } });
   blocks++;
+  // the flag reads, widening and tenants tiles and cards: typed from site.md, so every figure must be in it
+  checkBlock('phasor.json flags', { stats: doc.flags.tiles.map((s) => ({ ...s, cite: ['monorepo:Phasor/docs/site.md'] })), numbers: { items: doc.flags.items.map((i) => ({ claim: i.title, text: i.text })) } }, ['monorepo:Phasor/docs/site.md']);
+  blocks++;
 }
 for (const n of [...new Set(notes)]) console.log('note: ' + n);
 for (const w of warns) console.log('warning: ' + w);
