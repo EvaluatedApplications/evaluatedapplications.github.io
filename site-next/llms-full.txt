@@ -2,7 +2,7 @@
 
 Data that answers in microseconds and language models that run in a browser tab. .NET libraries you add with one command, and tools to try now.
 
-Updated: 2026-10-15
+Updated: 2026-10-16
 
 ## Licence
 
@@ -21,7 +21,7 @@ To ask for a commercial licence, or to ask which of your uses needs one, write t
 Build stores that answer exactly, replicas that sync by their differences and tables that repair themselves. One pass applies a thousand operators.
 
 Page: https://evaluatedapplications.github.io/phasor/
-- Package EvaluatedApplications.Phasor, release 2.17.0: `dotnet add package EvaluatedApplications.Phasor`
+- Package EvaluatedApplications.Phasor, release 2.18.0: `dotnet add package EvaluatedApplications.Phasor`
 - Used by: HoloDb, AlgFormer, HoloGenome, HoloVoxel
 
 Do a thousand things in one pass.
@@ -87,7 +87,7 @@ key total (30, 3)
 3 6 2 4 1 2 0
 ```
 
-7 of 36 operators that transform the store join one kernel: a weighted sum of them applies to every stored item in one shared pass. All 45 reads answer from the store array in one pass each (CausalReads is the stated exception: one pass per prefix). This is a fact about reads, not part of the score.
+7 of 38 operators that transform the store join one kernel: a weighted sum of them applies to every stored item in one shared pass. All 47 reads answer from the store array in one pass each (CausalReads is the stated exception: one pass per prefix). This is a fact about reads, not part of the score.
 
 11 established ideas, one store. The Pleroma is a new construction. It is one store that satisfies every brick in the table below. Each brick is established work and is credited in its row. Each row gives what the brick offers on its own, the operation of the Pleroma that carries it, and the check that the operation passes.
 - Reed-Solomon and BCH syndrome decoding (Reed and Solomon 1960; Bose and Ray-Chaudhuri 1960): Recovers up to K distinct symbols exactly from 2K+1 power sums, and refuses beyond that. In the Pleroma: The key view: `TryKeys` and `TryItems` read the key line by syndrome decoding and refuse past `KeyCapacity`. Proof: Keys exact in 30 of 30 trials at 16 keys, and refused in 30 of 30 trials at 17 and 20 keys.
@@ -3411,7 +3411,7 @@ The method is the same for every cell. The prediction and its null are written f
 
 The derivation's operator rule: a symmetry is a group element, and a weighted sum of group elements is one kernel. It acts on each harmonic with one multiplication, so its cost is one pass whatever the size of the sum. The same rule says choosing is not linear, so the one choice is made at the read.
 
-The code was measured against that rule across the public surface. Seven of the 36 operators that change the store join one kernel and apply in one pass. Fourteen take one pass per term in a mix. Fifteen are writes that are not kernel elements. The 45 reads are separate, each one pass.
+The code was measured against that rule across the public surface. Seven of the 38 operators that change the store join one kernel and apply in one pass. Fourteen take one pass per term in a mix. Seventeen are writes that are not kernel elements. The 47 reads are separate, each one pass.
 
 On a 10,464-cell store, `Apply` takes 0.17 to 0.44 ms per call, for a kernel of anything from 1 operator up to 10,368, with no trend across that range. Building the same store from the moved items takes 1,916 ms at 1,000 operators. The figures are a Release build on a loaded machine, two runs.
 
@@ -3464,7 +3464,7 @@ The Pleroma is a new construction. Each brick it stands on is established mathem
 
 - Key shifts and key scaling cost one pass per term in a mix, not one pass.
 - Right relabelling, conjugation and flag sign flips cost one pass per term.
-- A kernel is refused on a store with a check prime.
+- A kernel on a store with a check prime runs through a mirror kernel in the check prime, built from the same elements; a kernel built from a shape without that check prime is refused.
 - Key reads refuse past their capacity. A store keeps 2K+1 harmonics per key line, so K+1 distinct keys always refuse. A complete key band goes to 4,096 keys.
 - Counts are exact within the field's signed range. No read detects a wrap past it.
 - The store runs on the CPU. Its gain is exactness and many views on one array, not raw speed for a single read.
