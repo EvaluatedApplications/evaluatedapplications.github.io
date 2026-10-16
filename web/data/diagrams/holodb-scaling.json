@@ -1,0 +1,604 @@
+{
+  "schema": "ea-diagram/1",
+  "kind": "scaling-curve",
+  "id": "holodb-scaling",
+  "source": {
+    "scaling": "todo/gate-2026-10-15/run3-scaling.txt",
+    "writeThenRead": "todo/gate-2026-10-15/run7-pleromabench2.txt"
+  },
+  "null": {
+    "label": "Fixed work, size ignored",
+    "points": [
+      {
+        "x": 8,
+        "y": 165
+      },
+      {
+        "x": 32,
+        "y": 24
+      },
+      {
+        "x": 128,
+        "y": 10
+      },
+      {
+        "x": 512,
+        "y": 12
+      },
+      {
+        "x": 2048,
+        "y": 9
+      }
+    ],
+    "slope": -0.47,
+    "firstPointIsStartUp": true
+  },
+  "repeats": {
+    "writeThenRead": 200
+  },
+  "placebo": [
+    {
+      "x": 100000,
+      "ratio": 1.04,
+      "low": 0.8,
+      "high": 1.25
+    },
+    {
+      "x": 300000,
+      "ratio": 1.03,
+      "low": 0.8,
+      "high": 1.25
+    },
+    {
+      "x": 1000000,
+      "ratio": 0.97,
+      "low": 0.8,
+      "high": 1.25
+    }
+  ],
+  "panels": [
+    {
+      "id": "write-read",
+      "label": "Write, then read",
+      "title": "One insert, then one group-by",
+      "xLabel": "rows in the table",
+      "xFmt": "count",
+      "charts": [
+        {
+          "id": "write-read-time",
+          "yLabel": "time per pair",
+          "yKind": "time",
+          "series": [
+            {
+              "id": "engine",
+              "label": "engine alone",
+              "role": "base",
+              "points": [
+                {
+                  "x": 100000,
+                  "y": 1030
+                },
+                {
+                  "x": 300000,
+                  "y": 1440
+                },
+                {
+                  "x": 1000000,
+                  "y": 3540
+                }
+              ],
+              "slope": 0.54,
+              "nearlyFlat": false
+            },
+            {
+              "id": "plane",
+              "label": "with the plane",
+              "role": "new",
+              "points": [
+                {
+                  "x": 100000,
+                  "y": 385.2
+                },
+                {
+                  "x": 300000,
+                  "y": 342.6
+                },
+                {
+                  "x": 1000000,
+                  "y": 353.8
+                }
+              ],
+              "slope": -0.04,
+              "nearlyFlat": true,
+              "flat": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "batch",
+      "label": "Changes in a batch",
+      "title": "B changes applied to a table",
+      "xLabel": "changes in the batch",
+      "xFmt": "count",
+      "charts": [
+        {
+          "id": "batch-time",
+          "yLabel": "time",
+          "yKind": "time",
+          "series": [
+            {
+              "id": "sequential",
+              "label": "B statements, one at a time",
+              "role": "base",
+              "points": [
+                {
+                  "x": 8,
+                  "y": 10872
+                },
+                {
+                  "x": 32,
+                  "y": 36262
+                },
+                {
+                  "x": 128,
+                  "y": 138612
+                },
+                {
+                  "x": 512,
+                  "y": 546698
+                },
+                {
+                  "x": 2048,
+                  "y": 2174922
+                }
+              ],
+              "slope": 0.96,
+              "nearlyFlat": false
+            },
+            {
+              "id": "apply",
+              "label": "one ApplyChanges call",
+              "role": "new",
+              "points": [
+                {
+                  "x": 8,
+                  "y": 4582
+                },
+                {
+                  "x": 32,
+                  "y": 1985
+                },
+                {
+                  "x": 128,
+                  "y": 2744
+                },
+                {
+                  "x": 512,
+                  "y": 4906
+                },
+                {
+                  "x": 2048,
+                  "y": 12822
+                }
+              ],
+              "slope": 0.21,
+              "nearlyFlat": true
+            }
+          ]
+        },
+        {
+          "id": "batch-commits",
+          "yLabel": "commit groups written",
+          "yKind": "count",
+          "series": [
+            {
+              "id": "sequential",
+              "label": "B statements, one at a time",
+              "role": "base",
+              "points": [
+                {
+                  "x": 8,
+                  "y": 8
+                },
+                {
+                  "x": 32,
+                  "y": 32
+                },
+                {
+                  "x": 128,
+                  "y": 128
+                },
+                {
+                  "x": 512,
+                  "y": 512
+                },
+                {
+                  "x": 2048,
+                  "y": 2048
+                }
+              ],
+              "slope": 1,
+              "nearlyFlat": false
+            },
+            {
+              "id": "apply",
+              "label": "one ApplyChanges call",
+              "role": "new",
+              "points": [
+                {
+                  "x": 8,
+                  "y": 1
+                },
+                {
+                  "x": 32,
+                  "y": 1
+                },
+                {
+                  "x": 128,
+                  "y": 1
+                },
+                {
+                  "x": 512,
+                  "y": 1
+                },
+                {
+                  "x": 2048,
+                  "y": 1
+                }
+              ],
+              "slope": 0,
+              "nearlyFlat": false
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "flags",
+      "label": "Flag words",
+      "title": "k flag words added to a plane",
+      "xLabel": "flag words added",
+      "xFmt": "count",
+      "charts": [
+        {
+          "id": "flags-time",
+          "yLabel": "time",
+          "yKind": "time",
+          "series": [
+            {
+              "id": "adds",
+              "label": "k separate adds",
+              "role": "base",
+              "points": [
+                {
+                  "x": 16,
+                  "y": 921
+                },
+                {
+                  "x": 64,
+                  "y": 3213
+                },
+                {
+                  "x": 256,
+                  "y": 12834
+                },
+                {
+                  "x": 1024,
+                  "y": 54971
+                },
+                {
+                  "x": 4096,
+                  "y": 193577
+                }
+              ],
+              "slope": 0.98,
+              "nearlyFlat": false
+            },
+            {
+              "id": "words",
+              "label": "one AddFlagWords call",
+              "role": "new",
+              "points": [
+                {
+                  "x": 16,
+                  "y": 170
+                },
+                {
+                  "x": 64,
+                  "y": 169
+                },
+                {
+                  "x": 256,
+                  "y": 196
+                },
+                {
+                  "x": 1024,
+                  "y": 211
+                },
+                {
+                  "x": 4096,
+                  "y": 206
+                }
+              ],
+              "slope": 0.04,
+              "nearlyFlat": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "measures",
+      "label": "Measures in a group-by",
+      "title": "A group-by that sums M measures",
+      "xLabel": "measures summed",
+      "xFmt": "count",
+      "charts": [
+        {
+          "id": "measures-passes",
+          "yLabel": "transform passes per query",
+          "yKind": "count",
+          "series": [
+            {
+              "id": "per-plane",
+              "label": "one read per plane",
+              "role": "base",
+              "points": [
+                {
+                  "x": 1,
+                  "y": 4
+                },
+                {
+                  "x": 2,
+                  "y": 7
+                },
+                {
+                  "x": 4,
+                  "y": 13
+                },
+                {
+                  "x": 8,
+                  "y": 25
+                }
+              ],
+              "slope": 0.88,
+              "nearlyFlat": false
+            },
+            {
+              "id": "many",
+              "label": "one multi-plane read",
+              "role": "new",
+              "points": [
+                {
+                  "x": 1,
+                  "y": 1
+                },
+                {
+                  "x": 2,
+                  "y": 1
+                },
+                {
+                  "x": 4,
+                  "y": 1
+                },
+                {
+                  "x": 8,
+                  "y": 1
+                }
+              ],
+              "slope": 0,
+              "nearlyFlat": false
+            }
+          ]
+        },
+        {
+          "id": "measures-time",
+          "yLabel": "time per query",
+          "yKind": "time",
+          "series": [
+            {
+              "id": "per-plane",
+              "label": "one read per plane",
+              "role": "base",
+              "points": [
+                {
+                  "x": 1,
+                  "y": 55
+                },
+                {
+                  "x": 2,
+                  "y": 78
+                },
+                {
+                  "x": 4,
+                  "y": 115
+                },
+                {
+                  "x": 8,
+                  "y": 203
+                }
+              ],
+              "slope": 0.62,
+              "nearlyFlat": false
+            },
+            {
+              "id": "many",
+              "label": "one multi-plane read",
+              "role": "new",
+              "points": [
+                {
+                  "x": 1,
+                  "y": 48
+                },
+                {
+                  "x": 2,
+                  "y": 58
+                },
+                {
+                  "x": 4,
+                  "y": 80
+                },
+                {
+                  "x": 8,
+                  "y": 116
+                }
+              ],
+              "slope": 0.43,
+              "nearlyFlat": false
+            }
+          ]
+        }
+      ],
+      "resultBuild": {
+        "id": "result",
+        "label": "result build only, repeat with no transform",
+        "role": "other",
+        "points": [
+          {
+            "x": 1,
+            "y": 23
+          },
+          {
+            "x": 2,
+            "y": 27
+          },
+          {
+            "x": 4,
+            "y": 28
+          },
+          {
+            "x": 8,
+            "y": 42
+          }
+        ],
+        "slope": 0.27,
+        "nearlyFlat": true
+      }
+    },
+    {
+      "id": "groupbys",
+      "label": "Group-bys in one refresh",
+      "title": "G group-bys refreshed together (four measures)",
+      "xLabel": "group-bys in the refresh",
+      "xFmt": "count",
+      "charts": [
+        {
+          "id": "groupbys-passes",
+          "yLabel": "transform passes per refresh",
+          "yKind": "count",
+          "series": [
+            {
+              "id": "per-plane",
+              "label": "one read per plane",
+              "role": "base",
+              "points": [
+                {
+                  "x": 1,
+                  "y": 13
+                },
+                {
+                  "x": 2,
+                  "y": 26
+                },
+                {
+                  "x": 4,
+                  "y": 52
+                },
+                {
+                  "x": 8,
+                  "y": 104
+                }
+              ],
+              "slope": 1,
+              "nearlyFlat": false
+            },
+            {
+              "id": "many",
+              "label": "one multi-plane read",
+              "role": "new",
+              "points": [
+                {
+                  "x": 1,
+                  "y": 1
+                },
+                {
+                  "x": 2,
+                  "y": 2
+                },
+                {
+                  "x": 4,
+                  "y": 4
+                },
+                {
+                  "x": 8,
+                  "y": 8
+                }
+              ],
+              "slope": 1,
+              "nearlyFlat": false
+            }
+          ]
+        },
+        {
+          "id": "groupbys-time",
+          "yLabel": "time per refresh",
+          "yKind": "time",
+          "series": [
+            {
+              "id": "per-plane",
+              "label": "one read per plane",
+              "role": "base",
+              "points": [
+                {
+                  "x": 1,
+                  "y": 147
+                },
+                {
+                  "x": 2,
+                  "y": 205
+                },
+                {
+                  "x": 4,
+                  "y": 407
+                },
+                {
+                  "x": 8,
+                  "y": 1259
+                }
+              ],
+              "slope": 1.03,
+              "nearlyFlat": false
+            },
+            {
+              "id": "many",
+              "label": "one multi-plane read",
+              "role": "new",
+              "points": [
+                {
+                  "x": 1,
+                  "y": 130
+                },
+                {
+                  "x": 2,
+                  "y": 170
+                },
+                {
+                  "x": 4,
+                  "y": 301
+                },
+                {
+                  "x": 8,
+                  "y": 1008
+                }
+              ],
+              "slope": 0.97,
+              "nearlyFlat": false
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

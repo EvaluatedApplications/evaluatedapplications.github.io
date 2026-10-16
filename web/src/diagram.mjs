@@ -24,6 +24,7 @@ import * as superpositionScene from './assets/diagrams/superposition-scene.js';
 import * as coverageMeter from './assets/diagrams/coverage-meter.js';
 import * as blazierBoot from './assets/diagrams/blazier-boot.js';
 import * as hologenomeScores from './assets/diagrams/hologenome-scores.js';
+import * as scalingCurve from './assets/diagrams/scaling-curve.js';
 
 const KINDS = {
   'tracer-field': tracerField, 'stack-map': stackMap, 'pleroma-map': pleromaMap, 'pleroma-grid': pleromaGrid,
@@ -31,6 +32,7 @@ const KINDS = {
   'evalapp-gate': evalappGate, 'algformer-cost': algformerCost, 'holovoxel-lod': holovoxelLod, 'prose-pipeline': prosePipeline,
   'round-timeline': roundTimeline, 'slot-grow': slotGrow, 'layer-stack': layerStack, 'size-bars': sizeBars, 'design-effect': designEffect,
   'superposition-scene': superpositionScene, 'coverage-meter': coverageMeter, 'blazier-boot': blazierBoot, 'hologenome-scores': hologenomeScores,
+  'scaling-curve': scalingCurve,
 };
 
 export function diagramModule(kind) {

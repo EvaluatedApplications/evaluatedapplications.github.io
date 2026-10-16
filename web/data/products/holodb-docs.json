@@ -1,6 +1,6 @@
 {
   "title": "HoloDb docs: tables, SQL, transactions",
-  "description": "How to use HoloDb: tables, the SQL dialect, bulk loading, transactions, similarity search, durability and paged tables, with compiled examples.",
+  "description": "How to use HoloDb: tables, SQL, bulk loading, transactions, atomic change batches, similarity search, durability and paged tables, with examples.",
   "intro": "The practical guide: put data in, get answers out. Every program on this page was compiled and run against the published package, and the output shown is what it printed.",
   "sections": [
     {
@@ -33,7 +33,7 @@
         { "provenIn": "holodb-sql-tour", "text": "UPDATE sales SET amount = 0 WHERE region = 'US'" },
         { "provenIn": "holodb-sql-tour", "text": "DELETE FROM sales WHERE amount = 0" }
       ],
-      "paragraphsAfter": [ "Every Execute also takes positional ? placeholders. The arguments are quoted and escaped for you, before the statement is parsed. A null argument, a wrong argument count or an unsupported type throws." ]
+      "paragraphsAfter": [ "Every Execute also takes positional ? placeholders. The arguments are quoted and escaped for you, before the statement is parsed. A null argument, a wrong argument count or an unsupported type throws.", "A plain INSERT of an existing primary key throws. To insert or replace, use the upsert in the section on atomic change batches." ]
     },
     {
       "id": "parameters",
@@ -86,6 +86,26 @@
       "title": "Transactions",
       "paragraphs": [ "ACID transactions with explicit control: wrap statements in BEGIN and COMMIT, or discard them with ROLLBACK. BEGIN costs the same at any table size, because rows are journaled as they change instead of the table being copied, and ROLLBACK replays the journal. With a WalPath set, a committed transaction is durable." ],
       "snippets": [ { "source": "snippets/holodb-transactions.cs", "output": "snippets/holodb-transactions.out.txt" } ]
+    },
+    {
+      "id": "changes",
+      "title": "Atomic change batches and upsert",
+      "paragraphs": [
+        "A live replica turns an ordered change feed from another system into one call per batch. ApplyChanges(table, changes) on Database, and ApplyChanges and ApplyChangesAsync on HoloDbService, applies upserts and deletes atomically under one write lock: a reader sees the table before the batch or after it, never part of it, on every read path including the lock-free live metrics. The batch is one write-ahead-log commit group, so on replay it applies whole or not at all, and a table with a Pleroma plane takes the whole batch in one pass."
+      ],
+      "list": [
+        { "term": "RowChange.Upsert(row)", "text": "Carries a full row: every column, with case-insensitive names. INT takes any integral type, REAL a float or an integer, and TEXT a string. No null and no NaN. It inserts a new key or replaces the whole row of an existing one. A missing column throws, because HoloDb has no NULL and no default for an omitted column, which would silently become 0 or an empty string." },
+        { "term": "RowChange.Delete(key)", "text": "Deletes by primary key. A key that is not there is a counted no-op." },
+        { "term": "Order and result", "text": "Changes count as if applied in order, so the last change to a key wins, and only the net effect runs. ChangeResult reports Inserted, Updated, Deleted and MissingDeletes." },
+        { "term": "All or nothing", "text": "Everything is validated before anything changes, and a failure leaves the table, its aggregates and its plane as they were. Inside BEGIN and COMMIT the batch commits or rolls back with the transaction." },
+        { "term": "What is refused", "text": "A paged table refuses ApplyChanges and the SQL upsert with an error that names the table. A text value that contains a line break throws on a database with a write-ahead log, because the log holds one statement per line." },
+        { "term": "The log", "text": "The log holds the net effect as plain DELETE, UPDATE and INSERT lines, so an older binary can still replay it." }
+      ],
+      "snippets": [ { "source": "snippets/holodb-changes.cs", "output": "snippets/holodb-changes.out.txt" } ],
+      "paragraphsAfter": [
+        "The SQL form is INSERT ... ON CONFLICT (key) DO UPDATE SET column = EXCLUDED.column. The SET list names the columns that change and the others keep their value, which makes it the way to change some columns of a row. It reports Affected as the rows inserted plus the rows updated, and it is allowed inside a transaction. Only EXCLUDED.column of the same column is accepted. DO NOTHING, expressions, a WHERE on the conflict, INSERT OR REPLACE, REPLACE INTO, UPSERT and a conflict target that is not the primary key are each refused with an error that names them. A plain INSERT of an existing primary key still throws."
+      ],
+      "more": { "label": "Scaling: a batch against one statement at a time", "href": "/holodb/evidence/#scaling" }
     },
     {
       "id": "durable",

@@ -113,10 +113,10 @@
     "title": "Know before you start",
     "items": [
       "The key view is exact recovery of a multiset of keys, not similarity search. There is no key-addressed attention.",
-      "Counts are exact within the field's signed range. No read detects a wrap past that range.",
+      "Counts are exact within the field's signed range. A plain read does not check for a wrap. On a store with a check prime, VerifyCheck detects one within the check bound.",
       "The Pleroma runs on the CPU. There is no GPU kernel.",
       "Exact arithmetic is not faster in general. A Pleroma read costs one or more transforms, and a float bundle read is one correlation. The Pleroma gives you exactness and many views on one array.",
-      "A kernel is refused on a store with a check prime.",
+      "On a store with a check prime, a kernel runs through a mirror kernel in the check prime, built from the same elements. A kernel built from a shape without that check prime is refused.",
       "Locating the contradiction on a relation face is not provided."
     ]
   },

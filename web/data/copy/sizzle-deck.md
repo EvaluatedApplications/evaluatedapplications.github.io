@@ -60,6 +60,7 @@ the full feature list, limits, evidence, related.
 - Sub: Put a SQL database inside your app that rolls up a ledger in a blink, ranks rows by resemblance and keeps ACID transactions. Tables can be bigger than memory.
 - Tool under the hero: The Dashboard
 - Tiles: 0.02 ms (a ten-million-invoice rollup; DuckDB 41.63 ms) / 1,600 times and more (faster than DuckDB on that rollup) / 3.3 times (faster than DuckDB on a join to 200,000 customers) / 16 of 16 (queries returning identical results to SQLite and DuckDB)
+- What you can build, added: Apply a thousand changes as one atomic step (readers never see half a batch; one commit group; the SQL upsert is ON CONFLICT). Links to /holodb/docs/#changes.
 - Meta: Put a SQL database inside your .NET app that totals ten million invoices in 0.02 ms, ranks rows by resemblance and survives a crash.
 
 ## /algformer/
@@ -121,7 +122,7 @@ the full feature list, limits, evidence, related.
 - Eyebrow: HoloDb, built on Pleroma
 - H1: Ask a table a question without reading the table.
 - Sub: Switch on the plane for a table and HoloDb answers filters, group-bys, distinct counts and joins from a small exact summary instead of scanning rows. It is optional, off until you ask, and every answer matches the engine's.
-- Tiles: About 600 times (an overdue-invoices rollup on ten million rows, 5.93 ms to 0.01 ms) / 121 times (median on nine ad-hoc filters over a ten-million-event dashboard) / 12 times (a dashboard panel while data keeps loading)
+- Tiles: About 600 times (an overdue-invoices rollup on ten million rows, 5.93 ms to 0.01 ms) / 121 times (median on nine ad-hoc filters over a ten-million-event dashboard) / 343 to 385 microseconds (one insert plus one group-by with the plane on, from 100,000 to 1,000,000 rows; the engine alone climbs from 1.03 to 3.54 ms)
 - Meta: Switch on the plane and HoloDb answers filters, group-bys and joins from a small exact summary instead of scanning rows. Optional, and every answer matches.
 
 ## /algformer/holoformer/

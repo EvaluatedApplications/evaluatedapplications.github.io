@@ -4,18 +4,18 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>HoloDb docs: tables, SQL, transactions | Evaluated Applications</title>
-<meta name="description" content="How to use HoloDb: tables, the SQL dialect, bulk loading, transactions, similarity search, durability and paged tables, with compiled examples.">
+<meta name="description" content="How to use HoloDb: tables, SQL, bulk loading, transactions, atomic change batches, similarity search, durability and paged tables, with examples.">
 <link rel="canonical" href="https://evaluatedapplications.github.io/holodb/docs/">
 
 <meta property="og:type" content="article">
 <meta property="og:site_name" content="Evaluated Applications">
 <meta property="og:title" content="HoloDb docs: tables, SQL, transactions | Evaluated Applications">
-<meta property="og:description" content="How to use HoloDb: tables, the SQL dialect, bulk loading, transactions, similarity search, durability and paged tables, with compiled examples.">
+<meta property="og:description" content="How to use HoloDb: tables, SQL, bulk loading, transactions, atomic change batches, similarity search, durability and paged tables, with examples.">
 <meta property="og:url" content="https://evaluatedapplications.github.io/holodb/docs/">
 <meta name="twitter:card" content="summary">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%23f0796a'/%3E%3Cstop offset='.5' stop-color='%237bd86a'/%3E%3Cstop offset='1' stop-color='%23c07dff'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='32' height='32' rx='7' fill='%23050608'/%3E%3Cpath d='M16 5L27 26H5Z' fill='none' stroke='url(%23g)' stroke-width='2' stroke-linejoin='round'/%3E%3C/svg%3E">
 <script>document.documentElement.classList.add('js')</script>
-<link rel="stylesheet" href="/assets/ea.css?v=dcc706ee">
+<link rel="stylesheet" href="/assets/ea.css?v=ecbd2f46">
 <script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Home","item":"https://evaluatedapplications.github.io/"},{"@type":"ListItem","position":2,"name":"Products","item":"https://evaluatedapplications.github.io/products/"},{"@type":"ListItem","position":3,"name":"HoloDb","item":"https://evaluatedapplications.github.io/holodb/"},{"@type":"ListItem","position":4,"name":"Docs","item":"https://evaluatedapplications.github.io/holodb/docs/"}]}</script>
 
 </head>
@@ -43,7 +43,7 @@
 
 
 <section class="sec"><div class="wrap">
-  <nav class="toc" aria-labelledby="toc-h"><h2 id="toc-h">On this page</h2><ul><li><a href="#install">Install and first query</a></li><li><a href="#types">Tables and types</a></li><li><a href="#writing">Inserting, updating and bulk loading</a></li><li><a href="#parameters">Parameterized queries</a></li><li><a href="#bulk">Bulk loading</a></li><li><a href="#dialect">Querying: the dialect</a></li><li><a href="#results">Reading results</a></li><li><a href="#ways">Three ways to ask one store</a></li><li><a href="#similarity">Similarity search</a></li><li><a href="#transactions">Transactions</a></li><li><a href="#durable">In memory or durable</a></li><li><a href="#paged">Larger than memory: paged tables</a></li><li><a href="#indexes">Indexes, and why aggregates are instant</a></li><li><a href="#alter">Changing a table</a></li><li><a href="#di">Dependency injection and EvalApp</a></li><li><a href="#meter">The usage meter</a></li><li><a href="#browser-and-network">In the browser, and over the network</a></li></ul></nav>
+  <nav class="toc" aria-labelledby="toc-h"><h2 id="toc-h">On this page</h2><ul><li><a href="#install">Install and first query</a></li><li><a href="#types">Tables and types</a></li><li><a href="#writing">Inserting, updating and bulk loading</a></li><li><a href="#parameters">Parameterized queries</a></li><li><a href="#bulk">Bulk loading</a></li><li><a href="#dialect">Querying: the dialect</a></li><li><a href="#results">Reading results</a></li><li><a href="#ways">Three ways to ask one store</a></li><li><a href="#similarity">Similarity search</a></li><li><a href="#transactions">Transactions</a></li><li><a href="#changes">Atomic change batches and upsert</a></li><li><a href="#durable">In memory or durable</a></li><li><a href="#paged">Larger than memory: paged tables</a></li><li><a href="#indexes">Indexes, and why aggregates are instant</a></li><li><a href="#alter">Changing a table</a></li><li><a href="#di">Dependency injection and EvalApp</a></li><li><a href="#meter">The usage meter</a></li><li><a href="#browser-and-network">In the browser, and over the network</a></li></ul></nav>
 </div></section>
 <section class="sec doc-sec" aria-labelledby="install"><div class="wrap">
   <div class="sec-head"><span class="sec-dot cat-holodb" aria-hidden="true"></span><h2 id="install">Install and first query</h2></div>
@@ -94,7 +94,7 @@ Linus
   
   
   
-  <div class="prose-block"><p>Every Execute also takes positional ? placeholders. The arguments are quoted and escaped for you, before the statement is parsed. A null argument, a wrong argument count or an unsupported type throws.</p></div>
+  <div class="prose-block"><p>Every Execute also takes positional ? placeholders. The arguments are quoted and escaped for you, before the statement is parsed. A null argument, a wrong argument count or an unsupported type throws.</p><p>A plain INSERT of an existing primary key throws. To insert or replace, use the upsert in the section on atomic change batches.</p></div>
   <div class="code"><div class="code-bar"><span>SQL</span><button class="copy" type="button" aria-label="Copy SQL">copy</button></div><pre><code class="language-sql">INSERT INTO sales VALUES (1, &#39;EU&#39;, 42.50)</code></pre></div><div class="code"><div class="code-bar"><span>SQL</span><button class="copy" type="button" aria-label="Copy SQL">copy</button></div><pre><code class="language-sql">INSERT INTO sales (id, region, amount) VALUES (2, &#39;US&#39;, 17.00), (3, &#39;EU&#39;, 61.10)</code></pre></div><div class="code"><div class="code-bar"><span>SQL</span><button class="copy" type="button" aria-label="Copy SQL">copy</button></div><pre><code class="language-sql">UPDATE sales SET amount = 0 WHERE region = &#39;US&#39;</code></pre></div><div class="code"><div class="code-bar"><span>SQL</span><button class="copy" type="button" aria-label="Copy SQL">copy</button></div><pre><code class="language-sql">DELETE FROM sales WHERE amount = 0</code></pre></div>
   
   
@@ -264,6 +264,39 @@ Console.WriteLine(&quot;after rollback: &quot; + string.Join(&quot;, &quot;, db.
 after rollback: 400, 200</code></pre></div>
   
   
+</div></section><section class="sec doc-sec" aria-labelledby="changes"><div class="wrap">
+  <div class="sec-head"><span class="sec-dot cat-holodb" aria-hidden="true"></span><h2 id="changes">Atomic change batches and upsert</h2></div>
+  <div class="prose-block"><p>A live replica turns an ordered change feed from another system into one call per batch. ApplyChanges(table, changes) on Database, and ApplyChanges and ApplyChangesAsync on HoloDbService, applies upserts and deletes atomically under one write lock: a reader sees the table before the batch or after it, never part of it, on every read path including the lock-free live metrics. The batch is one write-ahead-log commit group, so on replay it applies whole or not at all, and a table with a Pleroma plane takes the whole batch in one pass.</p></div>
+  <dl class="term-list"><dt>RowChange.Upsert(row)</dt><dd>Carries a full row: every column, with case-insensitive names. INT takes any integral type, REAL a float or an integer, and TEXT a string. No null and no NaN. It inserts a new key or replaces the whole row of an existing one. A missing column throws, because HoloDb has no NULL and no default for an omitted column, which would silently become 0 or an empty string.</dd><dt>RowChange.Delete(key)</dt><dd>Deletes by primary key. A key that is not there is a counted no-op.</dd><dt>Order and result</dt><dd>Changes count as if applied in order, so the last change to a key wins, and only the net effect runs. ChangeResult reports Inserted, Updated, Deleted and MissingDeletes.</dd><dt>All or nothing</dt><dd>Everything is validated before anything changes, and a failure leaves the table, its aggregates and its plane as they were. Inside BEGIN and COMMIT the batch commits or rolls back with the transaction.</dd><dt>What is refused</dt><dd>A paged table refuses ApplyChanges and the SQL upsert with an error that names the table. A text value that contains a line break throws on a database with a write-ahead log, because the log holds one statement per line.</dd><dt>The log</dt><dd>The log holds the net effect as plain DELETE, UPDATE and INSERT lines, so an older binary can still replay it.</dd></dl>
+  
+  
+  
+  
+  <div class="prose-block"><p>The SQL form is INSERT ... ON CONFLICT (key) DO UPDATE SET column = EXCLUDED.column. The SET list names the columns that change and the others keep their value, which makes it the way to change some columns of a row. It reports Affected as the rows inserted plus the rows updated, and it is allowed inside a transaction. Only EXCLUDED.column of the same column is accepted. DO NOTHING, expressions, a WHERE on the conflict, INSERT OR REPLACE, REPLACE INTO, UPSERT and a conflict target that is not the primary key are each refused with an error that names them. A plain INSERT of an existing primary key still throws.</p></div>
+  <div class="code"><div class="code-bar"><span>C#</span><button class="copy" type="button" aria-label="Copy C#">copy</button></div><pre><code class="language-csharp">using HoloDb;
+
+var db = new HoloDbService(new HoloDbOptions());
+db.Execute(&quot;CREATE TABLE orders (id INT PRIMARY KEY, region TEXT, total INT)&quot;);
+
+// one atomic batch: readers see the table before it or after it, never part of it
+var r = db.ApplyChanges(&quot;orders&quot;, new[]
+{
+    RowChange.Upsert(new Dictionary&lt;string, object?&gt; { [&quot;id&quot;] = 1L, [&quot;region&quot;] = &quot;north&quot;, [&quot;total&quot;] = 40L }),
+    RowChange.Upsert(new Dictionary&lt;string, object?&gt; { [&quot;id&quot;] = 2L, [&quot;region&quot;] = &quot;south&quot;, [&quot;total&quot;] = 15L }),
+    RowChange.Upsert(new Dictionary&lt;string, object?&gt; { [&quot;id&quot;] = 1L, [&quot;region&quot;] = &quot;north&quot;, [&quot;total&quot;] = 45L }),
+    RowChange.Delete(2L),
+    RowChange.Delete(99L),
+});
+Console.WriteLine($&quot;{r.Inserted} inserted, {r.Updated} updated, {r.Deleted} deleted, {r.MissingDeletes} missing&quot;);
+
+// the SQL form changes only the columns in the SET list and keeps the rest
+db.Execute(&quot;INSERT INTO orders VALUES (1, &#39;west&#39;, 50), (3, &#39;east&#39;, 7) ON CONFLICT (id) DO UPDATE SET total = EXCLUDED.total&quot;);
+foreach (var row in db.Execute(&quot;SELECT id, region, total FROM orders ORDER BY id&quot;).Rows)
+    Console.WriteLine($&quot;{row[&quot;id&quot;]} {row[&quot;region&quot;]} {row[&quot;total&quot;]}&quot;);</code></pre></div><div class="code out"><div class="code-bar"><span>Output</span><button class="copy" type="button" aria-label="Copy Output">copy</button></div><pre><code class="language-text">2 inserted, 1 updated, 1 deleted, 1 missing
+1 north 50
+3 east 7</code></pre></div>
+  
+  <p class="more-link"><a href="/holodb/evidence/#scaling">Scaling: a batch against one statement at a time</a></p>
 </div></section><section class="sec doc-sec" aria-labelledby="durable"><div class="wrap">
   <div class="sec-head"><span class="sec-dot cat-holodb" aria-hidden="true"></span><h2 id="durable">In memory or durable</h2></div>
   <div class="prose-block"><p>By default the database lives in memory and is gone when the process ends. To make writes durable, give it a write-ahead log path. Durable state is a compact snapshot of the current data plus a short log of the writes since the last checkpoint. A durable commit flushes to disk before it returns. Recovery is bounded by how much data you hold, not by how long the database has been running: reopening loads a snapshot and replays only the recent tail.</p><p>The log is folded into a fresh snapshot automatically once it passes a threshold (CheckpointThresholdBytes, 8 MB by default), and you can force one with Checkpoint, for example before a clean shutdown. In WebAssembly there is no file system, so leave WalPath null and use the in-memory engine. To work with the engine directly, without the async wrapper, call Database.Open with a path, or with null for in memory.</p></div>

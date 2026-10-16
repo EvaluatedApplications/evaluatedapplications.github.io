@@ -44,6 +44,16 @@ export function record(ctx, e) {
       caption: html`Drawn from the table, which holds every value.`,
     }).html;
   };
+  // a section may carry a diagram drawn from a generated data file ({ id, kind, stageLabel, caption }); its table alternative sits beside it
+  const sectionFigure = (s) => {
+    if (!s.diagram) return '';
+    kinds.add(s.diagram.kind);
+    return diagramFigure({
+      id: 'dg-' + s.id, kind: s.diagram.kind, title: '', lede: '', level: 3,
+      data: ctx.diagrams[s.diagram.id], stageLabel: s.diagram.stageLabel || s.title,
+      caption: html`${s.diagram.caption}`,
+    }).html;
+  };
   const main = html`
 ${pageHead({ crumbs, eyebrow: `${p.name} evidence`, h1: e.title, lede: e.claim, wide: true,
     extra: html`<ul class="facts"><li class="fact">${e.scope === 'engine' ? 'Engine alone, without the optional plane' : e.scope}</li><li class="fact">Losses shown</li></ul>` })}
@@ -70,6 +80,7 @@ ${e.sections && e.sections.length > 2 ? html`<section class="sec"><div class="wr
 ${sections.map((s) => html`<section class="sec" aria-labelledby="${s.id}"><div class="wrap">
   ${secHead({ title: s.title, cat: p.cat, id: s.id })}
   ${(s.intro || []).length ? html`<div class="prose-block">${s.intro.map((t) => html`<p>${t}</p>`)}</div>` : ''}
+  ${sectionFigure(s)}
   ${(s.tables || []).map((tb) => (tb.kind === 'matrix' ? matrixTable(tb) : timingFigure(s, tb)))}
   ${(s.notes || []).length ? html`<div class="prose-block">${s.notes.map((t) => html`<p>${t}</p>`)}</div>` : ''}
 </div></section>`)}

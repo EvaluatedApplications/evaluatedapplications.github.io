@@ -93,8 +93,8 @@
       "title": "Limits",
       "list": [
         { "term": "Keys", "text": "The key view is exact recovery of a multiset of keys, not similarity search. Capacity K keeps 2K+1 harmonics per key line and decodes up to K distinct keys." },
-        { "term": "Range", "text": "Counts are exact within the field's signed range, about 1.15 x 10^18 on the default field. No read detects a wrap past that range." },
-        { "term": "Kernels", "text": "A kernel is refused on a store with a check prime." },
+        { "term": "Range", "text": "Counts are exact within the field's signed range, about 1.15 x 10^18 on the default field. A plain read does not check for a wrap. On a store with a check prime, VerifyCheck detects one within the check bound." },
+        { "term": "Kernels", "text": "On a store with a check prime, a kernel runs through a mirror kernel in the check prime, built from the same elements. A kernel built from a shape without that check prime is refused." },
         { "term": "Hardware", "text": "The Pleroma runs on the CPU. There is no GPU kernel." },
         { "term": "Speed", "text": "Exact arithmetic is not faster than a float bundle for a single read. The Pleroma gives you exactness and many views on one array." },
         { "term": "Relations", "text": "Locating the contradiction on a relation face is not provided." }

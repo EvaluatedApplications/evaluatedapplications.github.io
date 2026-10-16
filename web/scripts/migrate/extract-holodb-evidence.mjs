@@ -4,7 +4,20 @@
 //   node web/scripts/migrate/extract-holodb-evidence.mjs [path-to-site.md]
 import fs from 'node:fs';
 import path from 'node:path';
-import { MONOREPO, DATA } from '../lib/data.mjs';
+import { MONOREPO, DATA, readJson } from '../lib/data.mjs';
+
+// The Scaling section is written from data/diagrams/holodb-scaling.json (run node web/scripts/migrate/extract-holodb-scaling.mjs first),
+// so no slope or recorded point is typed here.
+const sc = readJson(path.join(DATA, 'diagrams', 'holodb-scaling.json'));
+const panelOf = (id) => sc.panels.find((p) => p.id === id);
+const seriesOf = (pid, cid, sid) => panelOf(pid).charts.find((c) => c.id === cid).series.find((s) => s.id === sid);
+const grp = (n) => Number(n).toLocaleString('en-GB');
+const slope = (s) => s.slope.toFixed(2);
+const slopeCell = (s, kind) => (kind === 'time' && s.nearlyFlat ? `${slope(s)} (nearly flat)` : slope(s));
+const usText = (v) => (v >= 1000 ? `${(v / 1000).toFixed(2)} ms` : `${Math.round(v)} us`);
+const yRange = (s) => [Math.min(...s.points.map((p) => p.y)), Math.max(...s.points.map((p) => p.y))];
+const xAt = (s, i) => grp(s.points[i].x);
+const lastDecade = (s) => { const a = s.points[s.points.length - 2], b = s.points[s.points.length - 1]; return (Math.log10(b.y / a.y) / Math.log10(b.x / a.x)).toFixed(2); };
 
 const src = process.argv[2] || path.join(MONOREPO, 'HoloDb', 'docs', 'site.md');
 const md = fs.readFileSync(src, 'utf8').replace(/\r\n/g, '\n');
@@ -45,6 +58,66 @@ const matrix = (headerRe, id, caption, opts = {}) => {
 const billingIn = timing(/^Billing query\|SQLite\|DuckDB\|HoloDb embedded/, 'inprocess', 'In process, in memory: HoloDb embedded against DuckDB and SQLite (median milliseconds)', 2, 1);
 const billingNet = timing(/^Billing query\|SQLite\|SQL Server\|HoloDb server/, 'networked', 'Networked: HoloDb server against SQL Server and SQLite (median milliseconds)', 2, 1);
 
+function scalingSection() {
+  const seq = seriesOf('batch', 'batch-time', 'sequential'), app = seriesOf('batch', 'batch-time', 'apply');
+  const seqC = seriesOf('batch', 'batch-commits', 'sequential'), appC = seriesOf('batch', 'batch-commits', 'apply');
+  const adds = seriesOf('flags', 'flags-time', 'adds'), words = seriesOf('flags', 'flags-time', 'words');
+  const mp = seriesOf('measures', 'measures-passes', 'per-plane'), mm = seriesOf('measures', 'measures-passes', 'many');
+  const mtp = seriesOf('measures', 'measures-time', 'per-plane'), mtm = seriesOf('measures', 'measures-time', 'many');
+  const build = panelOf('measures').resultBuild;
+  const gp = seriesOf('groupbys', 'groupbys-passes', 'per-plane'), gm = seriesOf('groupbys', 'groupbys-passes', 'many');
+  const gtp = seriesOf('groupbys', 'groupbys-time', 'per-plane'), gtm = seriesOf('groupbys', 'groupbys-time', 'many');
+  const eng = seriesOf('write-read', 'write-read-time', 'engine'), pl = seriesOf('write-read', 'write-read-time', 'plane');
+  const [wLo, wHi] = yRange(words), [bLo, bHi] = yRange(build), [nLo] = yRange({ points: sc.null.points.slice(0, 1) }), rest = yRange({ points: sc.null.points.slice(1) });
+  const lastX = (s) => grp(s.points[s.points.length - 1].x);
+  const wrRows = eng.points.map((p, i) => [grp(p.x), usText(p.y), usText(pl.points[i].y), sc.placebo[i].ratio.toFixed(2)]);
+  const slopes = {
+    id: 'scaling-slopes', kind: 'matrix', caption: 'Fitted slope of log cost on log size: one step per item, and one step for the whole set',
+    columns: ['What grows, and what is measured', 'One step per item', 'One step for the whole set'],
+    rows: [
+      ['Changes in a batch, time', slopeCell(seq, 'time'), slopeCell(app, 'time')],
+      ['Changes in a batch, commit groups written', slope(seqC), slope(appC)],
+      ['Flag words added to a plane, time', slopeCell(adds, 'time'), slopeCell(words, 'time')],
+      ['Measures in a group-by, transform passes', slope(mp), slope(mm)],
+      ['Measures in a group-by, time', slopeCell(mtp, 'time'), slopeCell(mtm, 'time')],
+      ['Group-bys in one refresh, transform passes', slope(gp), slope(gm)],
+      ['Group-bys in one refresh, time', slopeCell(gtp, 'time'), slopeCell(gtm, 'time')],
+    ],
+  };
+  const writeRead = {
+    id: 'scaling-write-read', kind: 'matrix', caption: 'One insert, then the same two-column group-by, per pair, as the table grows',
+    columns: ['Rows in the table', 'Engine alone', 'With the plane', 'Placebo ratio (a query the plane declines; the band is 0.8 to 1.25)'],
+    rows: wrRows,
+  };
+  return {
+    id: 'scaling',
+    title: 'Scaling',
+    intro: [
+      `This section measures cost against size instead of at one size. Each line is a recorded run on logarithmic axes and its slope says how the cost grows: a slope of 1.00 is one step for every item, and a slope near zero is a cost that does not depend on how many items there are. Only the engine and the plane appear here; no other database is timed in this section.`,
+      `How to read a slope. The run's own control, a fixed amount of work repeated at each size, fitted a slope of ${sc.null.slope.toFixed(2)} because its first point includes start-up compilation (${nLo} microseconds against ${rest[0]} to ${rest[1]} for the other four). The first point of every time series carries the same start-up cost, so a time slope under about 0.4 is shown as nearly flat and is not read as an exact exponent. Counts (commit groups, transform passes) carry no such noise and are exact. The write-then-read pairs are ${sc.repeats.writeThenRead} repetitions of one insert followed by the same two-column group-by at each table size, one run per size, with a placebo pair beside them.`,
+    ],
+    diagram: { id: 'holodb-scaling', kind: 'scaling-curve', stageLabel: 'Scaling curves. Choose what grows, then use the left and right arrows to read each size.', caption: 'Drawn from the recorded runs, which the tables below hold. Both axes are logarithmic.' },
+    tables: [slopes, writeRead],
+    notes: [
+      `Write, then read. With the plane attached, one insert followed by one two-column group-by costs ${usText(pl.points[0].y)}, ${usText(pl.points[1].y)} and ${usText(pl.points[2].y)} per pair at ${grp(pl.points[0].x)}, ${grp(pl.points[1].x)} and ${grp(pl.points[2].x)} rows: flat across a tenfold growth in the table. The engine alone costs ${usText(eng.points[0].y)}, ${usText(eng.points[1].y)} and ${usText(eng.points[2].y)} for the same pair, a slope of ${slope(eng)}, because the group-by scans the table. The group-by is the same statement in every pair, and a placebo pair that runs a query the plane declines (so both arms take the same path) read ${sc.placebo.map((p) => p.ratio.toFixed(2)).join(', ')}, inside its band.`,
+      `Changes in a batch. B changes applied one statement at a time cost one lock, one log commit and one plane update each: the time slope is ${slope(seq)}, and the commit groups written equal the changes made, ${xAt(seqC, 0)} groups for ${xAt(seqC, 0)} changes up to ${lastX(seqC)} for ${lastX(seqC)} (slope ${slope(seqC)}). One ApplyChanges call writes exactly one commit group at every B (slope ${slope(appC)}), and its time grows far more slowly than the statements do. It does not stop growing: from ${xAt(app, 3)} to ${xAt(app, 4)} changes its slope is ${lastDecade(app)}, because the per-row work on the table remains and only the fixed costs are shared.`,
+      `Flag words. Adding k flag words to a 14-bit plane with k separate Add calls has a slope of ${slope(adds)}. One AddFlagWords call, which is a Phasor Pleroma operation, takes ${Math.round(wLo)} to ${Math.round(wHi)} microseconds from k = ${xAt(words, 0)} to k = ${lastX(words)}, nearly flat.`,
+      `Measures in a group-by. A group-by that sums M measures reads 1 + 3M planes, because each measure is held as three limbs beside the count plane: ${mp.points[0].y} planes at M = ${xAt(mp, 0)} and ${mp.points[mp.points.length - 1].y} at M = ${lastX(mp)}. Read plane by plane, the transform passes grow with a slope of ${slope(mp)}; read by one multi-plane call (Pleroma FlagsMany) they are ${mm.points.map((p) => p.y)[0]} at every M (slope ${slope(mm)}). Time falls from a slope of ${slope(mtp)} to ${slope(mtm)}, and no lower, because the answer itself grows with M: a repeat that skips the transform and only builds the result takes ${Math.round(bLo)} to ${Math.round(bHi)} microseconds, so what remains is bound by the size of the output.`,
+      `Group-bys in one refresh. With four measures, refreshing G group-bys together still costs one transform per group-by: the passes grow with a slope of ${slope(gp)} read plane by plane and ${slope(gm)} read by one multi-plane call, and the time with ${slope(gtp)} and ${slope(gtm)}. Each distinct group-by is its own read, so this cost still grows in proportion to the number of group-bys. That is the open item in this section.`,
+    ],
+    losses: [
+      `Group-bys in one refresh: each distinct group-by is its own read, so the time and the transform passes still grow in proportion to the number of group-bys (slope ${slope(gtm)} in time with the multi-plane read).`,
+      `Measures in a group-by: the transform passes stay at one, but the time still grows (slope ${slope(mtm)}), because the answer grows with the number of measures.`,
+      `Changes in a batch: a bigger batch still costs more (slope ${lastDecade(app)} from ${xAt(app, 3)} to ${xAt(app, 4)} changes); only the fixed costs, one lock, one commit and one plane pass, are shared.`,
+    ],
+  };
+}
+
+// The per-round table without its trickle-pair row: that row's ratio is replaced by the write-then-read curve under Scaling.
+const ingestTable = matrix(/^Per round \(ms\)\|SQLite/, 'ingest-rounds', 'Per round, median milliseconds');
+ingestTable.rows = ingestTable.rows.filter((r) => !/^trickle pair/.test(r[0]));
+if (ingestTable.rows.length !== 2) throw new Error('ingest table: expected panel and round total rows');
+
 const record = {
   id: 'holodb',
   product: 'holodb',
@@ -55,11 +128,11 @@ const record = {
   claim: 'On a 10,000,000-invoice ledger joined to 200,000 customers, the dashboard rollups read in microseconds in the embedded engine, and every result is identical across the engines. The queries where HoloDb is slower are listed beside the wins.',
   tieBelow: 1.15,
   method: {
-    workload: 'A billing business\'s invoice ledger (a normalised invoices fact of 10,000,000 rows joined to a customers dimension of 200,000 rows) with sixteen queries: five rollups, a single-invoice lookup, five single-table scans and five joins to the customer dimension. The plane sections use three constructed workloads: a live dashboard, ingest while querying, and multi-tenant slices and joins.',
+    workload: 'A billing business\'s invoice ledger (a normalised invoices fact of 10,000,000 rows joined to a customers dimension of 200,000 rows) with sixteen queries: five rollups, a single-invoice lookup, five single-table scans and five joins to the customer dimension. The plane sections use three constructed workloads: a live dashboard, ingest while querying, and multi-tenant slices and joins. These are out-of-the-box benchmarks: every engine ran as it ships, with default settings, no indexes added and no summary or rollup tables built for the queries.',
     engines: ['SQLite (in memory, the external reference, always listed first)', 'DuckDB (in process, in memory)', 'SQL Server 2022 LocalDB (tables in tempdb on disk)', 'HoloDb embedded (in process)', 'HoloDb server (networked over TLS on the loopback interface)', 'HoloDb engine: the same database without a plane. HoloDb plane: a database with the optional Pleroma plane attached.'],
     verification: 'Before any query is timed, its full result set is normalised and compared across the engines. Every timed result is identical, including on the queries where HoloDb is slower. After each plane workload the plane is compared with a rebuild from the columns and found equal.',
     statistic: 'Medians of repeated calls through each engine\'s typed client API, execute plus consume every row. A cell whose own two timing loops disagree by more than 25 percent is marked noisy, and no ratio is drawn from it. A difference under 1.15x counts as a tie.',
-    machine: 'One 16-core laptop CPU (Intel Core i9-11950H). The billing comparison ran with no other benchmark or heavy application running. The plane showcase ran with ordinary desktop applications and the SQL Server service open.',
+    machine: 'One 16-core laptop CPU (Intel Core i9-11950H). The billing comparison ran with no other benchmark or heavy application running. The plane showcase ran with ordinary desktop applications and the SQL Server service open. The scaling runs used a Release build with no other heavy application running (our Prism trainer was switched off), and each point is the median of three repetitions.',
     memory: 'Every HoloDb figure is an in-memory database with no write-ahead log; SQLite and DuckDB ran in memory and SQL Server used tempdb on disk. The single-row write tables therefore compare the engine alone against in-memory SQLite and do not measure durable commits: a database opened with a write-ahead log flushes each committed statement to disk before returning, which adds one flush per commit, set by the disk and not measured here. Bulk-load rates compare unlike modes: typed arrays into memory, an appender, inserts in one transaction, and a bulk copy into tempdb.',
     tie: 'Fresh process means the first statements of a newly started process, which is what an application feels after it starts. The cost of just-in-time compilation is included.',
   },
@@ -109,7 +182,7 @@ const record = {
         matrix(/^Query\|DuckDB\|SQL Server\|HoloDb engine\|HoloDb plane$/, 'dash-first', 'First call of each query, median milliseconds'),
       ],
       notes: [
-        'The best other engine on the W, G, H and D slices is DuckDB in every row shown. Three of the nine W cells are noisy, because the engine\'s own two timing loops disagreed by more than 25 percent; the class median is as printed.',
+        'The best other engine on the W, G, H and D slices is DuckDB in every row shown, out of the box: no indexes added and no summary table built. Three of the nine W cells are noisy, because the engine\'s own two timing loops disagreed by more than 25 percent; the class median is as printed.',
         'The first call of each query, which pays any one-time work, is also faster with the plane: the median first-call speed-up over the engine is 16.99x for W, 10.90x for G, 13.97x for H and 10.17x for D.',
         'The queries the plane declines or leaves to the engine (the X class: a filter on a non-dimension column, COUNT(DISTINCT user_id), a sum of a non-measure column, a top-10 by user, a filter on a measure, a row list and a point lookup by event id) run the engine\'s own path and tie with it: the seven X queries read 0.95x to 1.04x warm. On the first call five of the seven were slower with the plane attached, at 0.42x to 0.84x of the engine\'s first call; these are single samples.',
       ],
@@ -120,12 +193,9 @@ const record = {
     {
       id: 'ingest',
       title: 'Ingest while querying',
-      intro: ['A 2,000,000-row base table, then 20 rounds of a 10,000-row bulk load, 200 single-row INSERTs and an eight-query dashboard panel, then 300 trickle pairs (one INSERT followed by one group-by query). The panel\'s results matched in every round.'],
-      tables: [matrix(/^Per round \(ms\)\|SQLite/, 'ingest-rounds', 'Per round, median milliseconds')],
-      notes: [
-        'The plane makes the panel 11.95x faster than the engine, the round total 5.78x faster and the trickle pair 7.00x faster. Through the server the round total is 179.34 ms for the engine and 45.65 ms with the plane.',
-        'The first panel query after each ingest gains only 1.66x (2.304 ms against 3.835 ms), while the other seven gain 2.87x to 319.60x. The likely cause is the flush of the plane\'s pending changes that the first query after an ingest triggers; the flush was not timed separately. DuckDB takes 6.288 ms on that query, so the plane is still 2.7x ahead of it.',
-      ],
+      intro: ['A 2,000,000-row base table, then 20 rounds of a 10,000-row bulk load, 200 single-row INSERTs and an eight-query dashboard panel. The panel\'s results matched in every round. This one ran on a desktop with ordinary applications open, as stated above, so read the cells as the medians of one run. How an insert followed by a query scales with the size of the table is under Scaling.'],
+      tables: [ingestTable],
+      notes: [],
       losses: [
         'Writes cost more with the plane attached: the 10,000-row bulk load takes 11.62 ms against 9.85 ms (1.18x), and 200 single-row INSERTs take 1.55 ms against 1.23 ms (1.26x), about 7.8 microseconds against 6.2 per INSERT.',
       ],
@@ -153,13 +223,14 @@ const record = {
       notes: [
         'The engine alone is faster than SQLite on every class, from 9x (the TEXT join) to more than 250x on COUNT(*) and more than 20,000x on SUM, single-column GROUP BY, MIN and MAX and COUNT DISTINCT over the whole table. The plane is faster than SQLite on every class it serves. Against the engine it wins where there is a real scan or join to avoid. Outcome counts for the plane against the engine: 7 classes at least 2x faster, 3 ties, 1 between 1.25x and 2x, 4 slower, 2 noisy.',
         'At 100,000 rows the engine is faster than the plane on seven of the 17 classes: the whole-table classes, the single-column GROUP BY and MIN and MAX (0.33x to 0.51x), the two-column GROUP BY (0.26x), GROUP BY with a WHERE (0.41x) and COUNT DISTINCT with a WHERE (0.58x). At 300,000 rows the plane is faster on every filter and join (24x to 1,887x) and on the two-column GROUP BY (1.77x). Default routing sends GROUP BY with a WHERE to the engine below 140,000 rows.',
-        'The plane\'s cost when attached, against the engine alone: single-row INSERT 1.4x to 1.9x, UPDATE 1.6x to 1.8x (these cells are microseconds and move with the order the two arms run in); batch load of the whole table 1.93 s with the plane against 1.80 s without at 1,000,000 rows; rebuilding the plane from the columns 131 ms; a heap of 139.7 bytes per row with the plane against 135.2 without; the plane\'s cells are a flat 0.92 MB joint slice whatever the row count. One INSERT followed by a two-column GROUP BY costs the plane a floor of roughly 3 ms, which the engine beats on small tables and loses to on large ones.',
+        'The plane\'s cost when attached, against the engine alone: single-row INSERT 1.4x to 1.9x, UPDATE 1.6x to 1.8x (these cells are microseconds and move with the order the two arms run in); batch load of the whole table 1.93 s with the plane against 1.80 s without at 1,000,000 rows; rebuilding the plane from the columns 131 ms; a heap of 139.7 bytes per row with the plane against 135.2 without; the plane\'s cells are a flat 0.92 MB joint slice whatever the row count.',
         'The TEXT-key join is faster than SQLite in the engine alone (39.98 ms against 322.17 ms at 1,000,000 rows, rows identical). It requires both join columns to be TEXT; a join between an INT column and a TEXT column takes the general path and is much slower.',
       ],
       losses: [
         'With the plane attached, whole-table COUNT(*) (0.48x), whole-table SUM (0.47x), single-column GROUP BY (0.43x) and MIN and MAX (0.53x) are slower than the engine alone, because the engine reads a maintained total in microseconds.',
       ],
     },
+    scalingSection(),
     {
       id: 'writes',
       title: 'Single-row writes and transactions, engine alone against SQLite',
@@ -206,6 +277,7 @@ const record = {
     'In the engine alone, GROUP BY with a WHERE is about 3 ms at 1,000,000 rows because the filter and the grouping are separate passes. The dense-code GROUP BY covers INT and TEXT columns whose combined distinct count is at most 65,536, and anything else uses a slower string-key path. REAL aggregates over a filter use the older scan.',
     'The first DDL statement inside a transaction takes a snapshot of every in-memory table, so it costs time proportional to the data. After a ROLLBACK of deleted rows the table holds the same rows but not necessarily in the same internal order.',
     'The plane does not help the billing joins (200,000 join keys against the limit of 4,095) or the top-customers query. A plane join over fewer keys is served, as in the tenant workload.',
+    'The scaling lines are fits over four or five sizes on one machine, and the write-then-read pairs are one run per table size of one repeated group-by. Time slopes under about 0.4 are not read as exact exponents.',
     'Page-store throughput is not reported here.',
   ],
   internal: { source: 'HoloDb/docs/site.md (migrated); run ids, dates and experiment names deliberately not carried' },

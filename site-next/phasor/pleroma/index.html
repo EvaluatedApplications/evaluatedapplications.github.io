@@ -15,7 +15,7 @@
 <meta name="twitter:card" content="summary">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%23f0796a'/%3E%3Cstop offset='.5' stop-color='%237bd86a'/%3E%3Cstop offset='1' stop-color='%23c07dff'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='32' height='32' rx='7' fill='%23050608'/%3E%3Cpath d='M16 5L27 26H5Z' fill='none' stroke='url(%23g)' stroke-width='2' stroke-linejoin='round'/%3E%3C/svg%3E">
 <script>document.documentElement.classList.add('js')</script>
-<link rel="stylesheet" href="/assets/ea.css?v=dcc706ee">
+<link rel="stylesheet" href="/assets/ea.css?v=ecbd2f46">
 <script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Home","item":"https://evaluatedapplications.github.io/"},{"@type":"ListItem","position":2,"name":"Products","item":"https://evaluatedapplications.github.io/products/"},{"@type":"ListItem","position":3,"name":"Phasor","item":"https://evaluatedapplications.github.io/phasor/"},{"@type":"ListItem","position":4,"name":"Pleroma","item":"https://evaluatedapplications.github.io/phasor/pleroma/"}]}</script>
 
 </head>
@@ -256,7 +256,7 @@ if (store.TryItems(out var items))
 </div></section><section class="sec doc-sec" aria-labelledby="limits"><div class="wrap">
   <div class="sec-head"><span class="sec-dot cat-foundation" aria-hidden="true"></span><h2 id="limits">Limits</h2></div>
   
-  <dl class="term-list"><dt>Keys</dt><dd>The key view is exact recovery of a multiset of keys, not similarity search. Capacity K keeps 2K+1 harmonics per key line and decodes up to K distinct keys.</dd><dt>Range</dt><dd>Counts are exact within the field&#39;s signed range, about 1.15 x 10^18 on the default field. No read detects a wrap past that range.</dd><dt>Kernels</dt><dd>A kernel is refused on a store with a check prime.</dd><dt>Hardware</dt><dd>The Pleroma runs on the CPU. There is no GPU kernel.</dd><dt>Speed</dt><dd>Exact arithmetic is not faster than a float bundle for a single read. The Pleroma gives you exactness and many views on one array.</dd><dt>Relations</dt><dd>Locating the contradiction on a relation face is not provided.</dd></dl>
+  <dl class="term-list"><dt>Keys</dt><dd>The key view is exact recovery of a multiset of keys, not similarity search. Capacity K keeps 2K+1 harmonics per key line and decodes up to K distinct keys.</dd><dt>Range</dt><dd>Counts are exact within the field&#39;s signed range, about 1.15 x 10^18 on the default field. A plain read does not check for a wrap. On a store with a check prime, VerifyCheck detects one within the check bound.</dd><dt>Kernels</dt><dd>On a store with a check prime, a kernel runs through a mirror kernel in the check prime, built from the same elements. A kernel built from a shape without that check prime is refused.</dd><dt>Hardware</dt><dd>The Pleroma runs on the CPU. There is no GPU kernel.</dd><dt>Speed</dt><dd>Exact arithmetic is not faster than a float bundle for a single read. The Pleroma gives you exactness and many views on one array.</dd><dt>Relations</dt><dd>Locating the contradiction on a relation face is not provided.</dd></dl>
   
   
   

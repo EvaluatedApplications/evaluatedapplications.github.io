@@ -119,10 +119,10 @@ When another tool fits better:
 
 Know before you start:
 - The key view is exact recovery of a multiset of keys, not similarity search. There is no key-addressed attention.
-- Counts are exact within the field's signed range. No read detects a wrap past that range.
+- Counts are exact within the field's signed range. A plain read does not check for a wrap. On a store with a check prime, VerifyCheck detects one within the check bound.
 - The Pleroma runs on the CPU. There is no GPU kernel.
 - Exact arithmetic is not faster in general. A Pleroma read costs one or more transforms, and a float bundle read is one correlation. The Pleroma gives you exactness and many views on one array.
-- A kernel is refused on a store with a check prime.
+- On a store with a check prime, a kernel runs through a mirror kernel in the check prime, built from the same elements. A kernel built from a shape without that check prime is refused.
 - Locating the contradiction on a relation face is not provided.
 
 #### Phasor docs: stores, kernels and codecs (https://evaluatedapplications.github.io/phasor/docs/)
@@ -550,8 +550,8 @@ The HoloDb holographic plane uses the Pleroma as its data store. COUNT, SUM, MIN
 ##### Limits
 
 - Keys: The key view is exact recovery of a multiset of keys, not similarity search. Capacity K keeps 2K+1 harmonics per key line and decodes up to K distinct keys.
-- Range: Counts are exact within the field's signed range, about 1.15 x 10^18 on the default field. No read detects a wrap past that range.
-- Kernels: A kernel is refused on a store with a check prime.
+- Range: Counts are exact within the field's signed range, about 1.15 x 10^18 on the default field. A plain read does not check for a wrap. On a store with a check prime, VerifyCheck detects one within the check bound.
+- Kernels: On a store with a check prime, a kernel runs through a mirror kernel in the check prime, built from the same elements. A kernel built from a shape without that check prime is refused.
 - Hardware: The Pleroma runs on the CPU. There is no GPU kernel.
 - Speed: Exact arithmetic is not faster than a float bundle for a single read. The Pleroma gives you exactness and many views on one array.
 - Relations: Locating the contradiction on a relation face is not provided.
@@ -1184,7 +1184,7 @@ Licence: Commercial licence for commercial use. Evaluation and non-commercial us
 A SQL database inside your app that answers dashboard queries in microseconds, with transactions, similarity search and tables bigger than memory.
 
 Page: https://evaluatedapplications.github.io/holodb/
-- Package EvaluatedApplications.HoloDb, release 5.1.2: `dotnet add package EvaluatedApplications.HoloDb`
+- Package EvaluatedApplications.HoloDb, release 5.2.0: `dotnet add package EvaluatedApplications.HoloDb`
 - Package EvaluatedApplications.HoloDb.Client, release 1.5.2: `dotnet add package EvaluatedApplications.HoloDb.Client`
 - Package EvaluatedApplications.HoloDb.Protocol, release 1.1.2: `dotnet add package EvaluatedApplications.HoloDb.Protocol`
 - Builds on: EvalApp, Phasor
@@ -1215,6 +1215,7 @@ Capabilities:
 - Content similarity in SQL. NEAREST ranks by graded closeness for numbers, dates and text, with a score column on request. From 8,000 rows an approximate sublinear index ranks candidates, and below that or whenever the query has a WHERE the ranking is an exact scan.
 - Constant-time exact aggregates. COUNT, SUM, MIN, MAX and single-column GROUP BY over integer columns are exact, not approximate. Real-number aggregates use a fast SIMD scan.
 - Durable and larger than memory. A snapshot plus a short log gives recovery that tracks live data. Paged tables spill cold pages to disk and keep the maintained aggregates accurate there.
+- Atomic change batches and upsert. ApplyChanges applies a whole batch of upserts and deletes under one write lock, as one write-ahead-log commit group, so a reader sees the table before the batch or after it and never part of it. INSERT with ON CONFLICT (key) DO UPDATE SET is the SQL upsert. Both work on in-memory tables.
 - Fast scans. A WHERE is evaluated over raw column arrays in tight loops, GROUP BY over INT and TEXT columns uses dense codes, and an equi-join on TEXT keys is a columnar hash join.
 - Metering. A per-query usage meter reports the rows and bytes actually processed, for billing or observability.
 - Embedded or networked. Use it in process, or run it as a server with a matching typed client and a columnar wire protocol. The same managed code also runs in a browser tab.
@@ -1246,7 +1247,7 @@ Linus
 ```
 
 Limits:
-- There is no UPSERT: inserting an existing primary key throws. Delete then insert, or check existence first.
+- A plain INSERT of an existing primary key throws. To insert or replace, use INSERT with ON CONFLICT (key) DO UPDATE SET column = EXCLUDED.column, or ApplyChanges with RowChange.Upsert. Both work on in-memory tables only, and a paged table refuses them.
 - A table has one PRIMARY KEY, an INT or TEXT column. Joins are inner joins, with one INNER JOIN per query.
 - ALTER TABLE supports ADD COLUMN with a DEFAULT only. There is no DROP, rename or type change.
 - There is no NULL and no column aliasing with AS. Table aliases in a join are not supported, so qualify columns with the table name.
@@ -1309,6 +1310,8 @@ CREATE TABLE sales (
 Strings use single quotes, and a quote is escaped by doubling it. Rows go in singly or in batches, with or without a column list.
 
 Every Execute also takes positional ? placeholders. The arguments are quoted and escaped for you, before the statement is parsed. A null argument, a wrong argument count or an unsupported type throws.
+
+A plain INSERT of an existing primary key throws. To insert or replace, use the upsert in the section on atomic change batches.
 
 ```sql
 INSERT INTO sales VALUES (1, 'EU', 42.50)
@@ -1494,6 +1497,50 @@ after commit: 400, 200
 after rollback: 400, 200
 ```
 
+##### Atomic change batches and upsert
+
+A live replica turns an ordered change feed from another system into one call per batch. ApplyChanges(table, changes) on Database, and ApplyChanges and ApplyChangesAsync on HoloDbService, applies upserts and deletes atomically under one write lock: a reader sees the table before the batch or after it, never part of it, on every read path including the lock-free live metrics. The batch is one write-ahead-log commit group, so on replay it applies whole or not at all, and a table with a Pleroma plane takes the whole batch in one pass.
+
+- RowChange.Upsert(row): Carries a full row: every column, with case-insensitive names. INT takes any integral type, REAL a float or an integer, and TEXT a string. No null and no NaN. It inserts a new key or replaces the whole row of an existing one. A missing column throws, because HoloDb has no NULL and no default for an omitted column, which would silently become 0 or an empty string.
+- RowChange.Delete(key): Deletes by primary key. A key that is not there is a counted no-op.
+- Order and result: Changes count as if applied in order, so the last change to a key wins, and only the net effect runs. ChangeResult reports Inserted, Updated, Deleted and MissingDeletes.
+- All or nothing: Everything is validated before anything changes, and a failure leaves the table, its aggregates and its plane as they were. Inside BEGIN and COMMIT the batch commits or rolls back with the transaction.
+- What is refused: A paged table refuses ApplyChanges and the SQL upsert with an error that names the table. A text value that contains a line break throws on a database with a write-ahead log, because the log holds one statement per line.
+- The log: The log holds the net effect as plain DELETE, UPDATE and INSERT lines, so an older binary can still replay it.
+
+The SQL form is INSERT ... ON CONFLICT (key) DO UPDATE SET column = EXCLUDED.column. The SET list names the columns that change and the others keep their value, which makes it the way to change some columns of a row. It reports Affected as the rows inserted plus the rows updated, and it is allowed inside a transaction. Only EXCLUDED.column of the same column is accepted. DO NOTHING, expressions, a WHERE on the conflict, INSERT OR REPLACE, REPLACE INTO, UPSERT and a conflict target that is not the primary key are each refused with an error that names them. A plain INSERT of an existing primary key still throws.
+
+```csharp
+using HoloDb;
+
+var db = new HoloDbService(new HoloDbOptions());
+db.Execute("CREATE TABLE orders (id INT PRIMARY KEY, region TEXT, total INT)");
+
+// one atomic batch: readers see the table before it or after it, never part of it
+var r = db.ApplyChanges("orders", new[]
+{
+    RowChange.Upsert(new Dictionary<string, object?> { ["id"] = 1L, ["region"] = "north", ["total"] = 40L }),
+    RowChange.Upsert(new Dictionary<string, object?> { ["id"] = 2L, ["region"] = "south", ["total"] = 15L }),
+    RowChange.Upsert(new Dictionary<string, object?> { ["id"] = 1L, ["region"] = "north", ["total"] = 45L }),
+    RowChange.Delete(2L),
+    RowChange.Delete(99L),
+});
+Console.WriteLine($"{r.Inserted} inserted, {r.Updated} updated, {r.Deleted} deleted, {r.MissingDeletes} missing");
+
+// the SQL form changes only the columns in the SET list and keeps the rest
+db.Execute("INSERT INTO orders VALUES (1, 'west', 50), (3, 'east', 7) ON CONFLICT (id) DO UPDATE SET total = EXCLUDED.total");
+foreach (var row in db.Execute("SELECT id, region, total FROM orders ORDER BY id").Rows)
+    Console.WriteLine($"{row["id"]} {row["region"]} {row["total"]}");
+```
+
+Output:
+
+```text
+2 inserted, 1 updated, 1 deleted, 1 missing
+1 north 50
+3 east 7
+```
+
 ##### In memory or durable
 
 By default the database lives in memory and is gone when the process ends. To make writes durable, give it a write-ahead log path. Durable state is a compact snapshot of the current data plus a short log of the writes since the last checkpoint. A durable commit flushes to disk before it returns. Recovery is bounded by how much data you hold, not by how long the database has been running: reopening loads a snapshot and replays only the recent tail.
@@ -1628,7 +1675,7 @@ Switch on the plane for a table and HoloDb answers filters, group-bys, distinct 
 
 - About 600 times: faster for an overdue-invoices rollup on 10,000,000 rows with the plane on: 5.93 ms down to 0.01 ms
 - 121 times: median speed-up over the engine on nine ad-hoc filters across a 10,000,000-event dashboard
-- 12 times: faster dashboard panel while new data keeps loading
+- 343 to 385 microseconds: for one insert and one group-by with the plane on, from 100,000 to 1,000,000 rows. The engine alone climbs from 1.03 to 3.54 ms
 
 HoloDb is built with Pleroma, the exact count-and-sum structure in the Phasor package. Three parts of HoloDb are Pleroma parts. This page says what each gives you and what it costs. The first two are optional and off until you ask for them.
 
@@ -1642,6 +1689,7 @@ You name a few small-domain columns (dimensions, INT or TEXT) and the INT column
 
 - Exact and derived: The columns stay the source of truth, and the plane is rebuilt from them. PleromaVerify rebuilds it and compares, and returns nothing when they agree. Sums are held exactly past 64 bits: the plane raises an error rather than wrap, and PleromaSumExact returns the exact 128-bit total.
 - It declines safely: Anything the plane does not hold (AVG, a column that is not a dimension or measure, a dimension over its cap of distinct values, a join over 4,095 keys) goes to the engine, so a query returns the same rows with the plane on or off. The default routing, PleromaMode.Auto, also leaves to the engine the shapes where it already reads a maintained total (whole-table counts and sums, single-column GROUP BY) and GROUP BY with a WHERE below 140,000 rows, because the engine is faster there.
+- Batches: ApplyChanges hands the plane a whole batch of upserts and deletes in one pass, as one commit group. The evidence page shows how the cost of a batch grows with its size, and that one insert followed by a group-by costs about the same at 100,000 rows as at 1,000,000.
 - What it costs: On a 1,000,000-row table the plane is slower than the engine alone on whole-table COUNT, whole-table SUM, single-column GROUP BY and MIN and MAX, because the engine reads a maintained total in microseconds there. It adds to single-row INSERT and UPDATE, and to bulk load a little. Every cost is in the evidence record beside the wins.
 - Limits: Memory-resident tables only: a paged table refuses a plane. A plane attached with EnablePleroma is not persisted, so call it again after Open. A plane created with SQL is replayed from the log and survives Checkpoint. It is opt-in per table.
 
@@ -2874,7 +2922,7 @@ Method:
 - Engines: SQLite (in memory, the external reference, always listed first); DuckDB (in process, in memory); SQL Server 2022 LocalDB (tables in tempdb on disk); HoloDb embedded (in process); HoloDb server (networked over TLS on the loopback interface); HoloDb engine: the same database without a plane. HoloDb plane: a database with the optional Pleroma plane attached.
 - Check: Before any query is timed, its full result set is normalised and compared across the engines. Every timed result is identical, including on the queries where HoloDb is slower. After each plane workload the plane is compared with a rebuild from the columns and found equal.
 - Statistic: Medians of repeated calls through each engine's typed client API, execute plus consume every row. A cell whose own two timing loops disagree by more than 25 percent is marked noisy, and no ratio is drawn from it. A difference under 1.15x counts as a tie.
-- Machine: One 16-core laptop CPU (Intel Core i9-11950H). The billing comparison ran with no other benchmark or heavy application running. The plane showcase ran with ordinary desktop applications and the SQL Server service open.
+- Machine: One 16-core laptop CPU (Intel Core i9-11950H). The billing comparison ran with no other benchmark or heavy application running. The plane showcase ran with ordinary desktop applications and the SQL Server service open. The scaling runs used a Release build with no other heavy application running (our Prism trainer was switched off), and each point is the median of three repetitions.
 - Memory and logging: Every HoloDb figure is an in-memory database with no write-ahead log; SQLite and DuckDB ran in memory and SQL Server used tempdb on disk. The single-row write tables therefore compare the engine alone against in-memory SQLite and do not measure durable commits: a database opened with a write-ahead log flushes each committed statement to disk before returning, which adds one flush per commit, set by the disk and not measured here. Bulk-load rates compare unlike modes: typed arrays into memory, an appender, inserts in one transaction, and a bulk copy into tempdb.
 - Ties: Fresh process means the first statements of a newly started process, which is what an application feels after it starts. The cost of just-in-time compilation is included.
 
@@ -2994,7 +3042,7 @@ Where it is slower:
 
 #### Ingest while querying
 
-A 2,000,000-row base table, then 20 rounds of a 10,000-row bulk load, 200 single-row INSERTs and an eight-query dashboard panel, then 300 trickle pairs (one INSERT followed by one group-by query). The panel's results matched in every round.
+A 2,000,000-row base table, then 20 rounds of a 10,000-row bulk load, 200 single-row INSERTs and an eight-query dashboard panel. The panel's results matched in every round. This one ran on a desktop with ordinary applications open, as stated above, so read the cells as the medians of one run. How an insert followed by a query scales with the size of the table is under Scaling.
 
 Per round, median milliseconds
 
@@ -3002,11 +3050,6 @@ Per round, median milliseconds
 |---|---|---|---|---|---|
 | panel (8 queries) | 3,794.93 | 112.30 | 3,057.90 | 137.90 | 11.53 |
 | round total (bulk load, INSERTs, panel) | 3,816.72 | 239.88 | 3,109.90 | 149.47 | 25.84 |
-| trickle pair (INSERT plus query) | 760.784 | 16.088 | 419.610 | 7.634 | 1.090 |
-
-The plane makes the panel 11.95x faster than the engine, the round total 5.78x faster and the trickle pair 7.00x faster. Through the server the round total is 179.34 ms for the engine and 45.65 ms with the plane.
-
-The first panel query after each ingest gains only 1.66x (2.304 ms against 3.835 ms), while the other seven gain 2.87x to 319.60x. The likely cause is the flush of the plane's pending changes that the first query after an ingest triggers; the flush was not timed separately. DuckDB takes 6.288 ms on that query, so the plane is still 2.7x ahead of it.
 
 Where it is slower:
 - Writes cost more with the plane attached: the 10,000-row bulk load takes 11.62 ms against 9.85 ms (1.18x), and 200 single-row INSERTs take 1.55 ms against 1.23 ms (1.26x), about 7.8 microseconds against 6.2 per INSERT.
@@ -3061,12 +3104,53 @@ The engine alone is faster than SQLite on every class, from 9x (the TEXT join) t
 
 At 100,000 rows the engine is faster than the plane on seven of the 17 classes: the whole-table classes, the single-column GROUP BY and MIN and MAX (0.33x to 0.51x), the two-column GROUP BY (0.26x), GROUP BY with a WHERE (0.41x) and COUNT DISTINCT with a WHERE (0.58x). At 300,000 rows the plane is faster on every filter and join (24x to 1,887x) and on the two-column GROUP BY (1.77x). Default routing sends GROUP BY with a WHERE to the engine below 140,000 rows.
 
-The plane's cost when attached, against the engine alone: single-row INSERT 1.4x to 1.9x, UPDATE 1.6x to 1.8x (these cells are microseconds and move with the order the two arms run in); batch load of the whole table 1.93 s with the plane against 1.80 s without at 1,000,000 rows; rebuilding the plane from the columns 131 ms; a heap of 139.7 bytes per row with the plane against 135.2 without; the plane's cells are a flat 0.92 MB joint slice whatever the row count. One INSERT followed by a two-column GROUP BY costs the plane a floor of roughly 3 ms, which the engine beats on small tables and loses to on large ones.
+The plane's cost when attached, against the engine alone: single-row INSERT 1.4x to 1.9x, UPDATE 1.6x to 1.8x (these cells are microseconds and move with the order the two arms run in); batch load of the whole table 1.93 s with the plane against 1.80 s without at 1,000,000 rows; rebuilding the plane from the columns 131 ms; a heap of 139.7 bytes per row with the plane against 135.2 without; the plane's cells are a flat 0.92 MB joint slice whatever the row count.
 
 The TEXT-key join is faster than SQLite in the engine alone (39.98 ms against 322.17 ms at 1,000,000 rows, rows identical). It requires both join columns to be TEXT; a join between an INT column and a TEXT column takes the general path and is much slower.
 
 Where it is slower:
 - With the plane attached, whole-table COUNT(*) (0.48x), whole-table SUM (0.47x), single-column GROUP BY (0.43x) and MIN and MAX (0.53x) are slower than the engine alone, because the engine reads a maintained total in microseconds.
+
+#### Scaling
+
+This section measures cost against size instead of at one size. Each line is a recorded run on logarithmic axes and its slope says how the cost grows: a slope of 1.00 is one step for every item, and a slope near zero is a cost that does not depend on how many items there are. Only the engine and the plane appear here; no other database is timed in this section.
+
+How to read a slope. The run's own control, a fixed amount of work repeated at each size, fitted a slope of -0.47 because its first point includes start-up compilation (165 microseconds against 9 to 24 for the other four). The first point of every time series carries the same start-up cost, so a time slope under about 0.4 is shown as nearly flat and is not read as an exact exponent. Counts (commit groups, transform passes) carry no such noise and are exact. The write-then-read pairs are 200 repetitions of one insert followed by the same two-column group-by at each table size, one run per size, with a placebo pair beside them.
+
+Fitted slope of log cost on log size: one step per item, and one step for the whole set
+
+| What grows, and what is measured | One step per item | One step for the whole set |
+|---|---|---|
+| Changes in a batch, time | 0.96 | 0.21 (nearly flat) |
+| Changes in a batch, commit groups written | 1.00 | 0.00 |
+| Flag words added to a plane, time | 0.98 | 0.04 (nearly flat) |
+| Measures in a group-by, transform passes | 0.88 | 0.00 |
+| Measures in a group-by, time | 0.62 | 0.43 |
+| Group-bys in one refresh, transform passes | 1.00 | 1.00 |
+| Group-bys in one refresh, time | 1.03 | 0.97 |
+
+One insert, then the same two-column group-by, per pair, as the table grows
+
+| Rows in the table | Engine alone | With the plane | Placebo ratio (a query the plane declines; the band is 0.8 to 1.25) |
+|---|---|---|---|
+| 100,000 | 1.03 ms | 385 us | 1.04 |
+| 300,000 | 1.44 ms | 343 us | 1.03 |
+| 1,000,000 | 3.54 ms | 354 us | 0.97 |
+
+Write, then read. With the plane attached, one insert followed by one two-column group-by costs 385 us, 343 us and 354 us per pair at 100,000, 300,000 and 1,000,000 rows: flat across a tenfold growth in the table. The engine alone costs 1.03 ms, 1.44 ms and 3.54 ms for the same pair, a slope of 0.54, because the group-by scans the table. The group-by is the same statement in every pair, and a placebo pair that runs a query the plane declines (so both arms take the same path) read 1.04, 1.03, 0.97, inside its band.
+
+Changes in a batch. B changes applied one statement at a time cost one lock, one log commit and one plane update each: the time slope is 0.96, and the commit groups written equal the changes made, 8 groups for 8 changes up to 2,048 for 2,048 (slope 1.00). One ApplyChanges call writes exactly one commit group at every B (slope 0.00), and its time grows far more slowly than the statements do. It does not stop growing: from 512 to 2,048 changes its slope is 0.69, because the per-row work on the table remains and only the fixed costs are shared.
+
+Flag words. Adding k flag words to a 14-bit plane with k separate Add calls has a slope of 0.98. One AddFlagWords call, which is a Phasor Pleroma operation, takes 169 to 211 microseconds from k = 16 to k = 4,096, nearly flat.
+
+Measures in a group-by. A group-by that sums M measures reads 1 + 3M planes, because each measure is held as three limbs beside the count plane: 4 planes at M = 1 and 25 at M = 8. Read plane by plane, the transform passes grow with a slope of 0.88; read by one multi-plane call (Pleroma FlagsMany) they are 1 at every M (slope 0.00). Time falls from a slope of 0.62 to 0.43, and no lower, because the answer itself grows with M: a repeat that skips the transform and only builds the result takes 23 to 42 microseconds, so what remains is bound by the size of the output.
+
+Group-bys in one refresh. With four measures, refreshing G group-bys together still costs one transform per group-by: the passes grow with a slope of 1.00 read plane by plane and 1.00 read by one multi-plane call, and the time with 1.03 and 0.97. Each distinct group-by is its own read, so this cost still grows in proportion to the number of group-bys. That is the open item in this section.
+
+Where it is slower:
+- Group-bys in one refresh: each distinct group-by is its own read, so the time and the transform passes still grow in proportion to the number of group-bys (slope 0.97 in time with the multi-plane read).
+- Measures in a group-by: the transform passes stay at one, but the time still grows (slope 0.43), because the answer grows with the number of measures.
+- Changes in a batch: a bigger batch still costs more (slope 0.69 from 512 to 2,048 changes); only the fixed costs, one lock, one commit and one plane pass, are shared.
 
 #### Single-row writes and transactions, engine alone against SQLite
 
@@ -3125,6 +3209,7 @@ Limits:
 - In the engine alone, GROUP BY with a WHERE is about 3 ms at 1,000,000 rows because the filter and the grouping are separate passes. The dense-code GROUP BY covers INT and TEXT columns whose combined distinct count is at most 65,536, and anything else uses a slower string-key path. REAL aggregates over a filter use the older scan.
 - The first DDL statement inside a transaction takes a snapshot of every in-memory table, so it costs time proportional to the data. After a ROLLBACK of deleted rows the table holds the same rows but not necessarily in the same internal order.
 - The plane does not help the billing joins (200,000 join keys against the limit of 4,095) or the top-customers query. A plane join over fewer keys is served, as in the tenant workload.
+- The scaling lines are fits over four or five sizes on one machine, and the write-then-read pairs are one run per table size of one repeated group-by. Time slopes under about 0.4 are not read as exact exponents.
 - Page-store throughput is not reported here.
 
 ### How HoloGenome scores against the lab
