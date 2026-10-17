@@ -14,10 +14,12 @@ const readSnip = (rel) => fs.readFileSync(path.join(DATA, rel), 'utf8').replace(
 
 export function composeSitemap(ctx, pages) {
   // The tool pages are published by Showroom, not built here, but they are real indexable pages: list them right after /tools/.
+  // A tool whose page is built here (a demo page, e.g. /umbrarium/) is listed once.
   const urls = [];
+  const add = (u) => { if (!urls.includes(u)) urls.push(u); };
   for (const p of pages.filter((q) => !q.noindex && !q.hidden)) {
-    urls.push(abs(ctx, p.url));
-    if (p.url === '/tools/') for (const t of ctx.tools) urls.push(abs(ctx, t.href));
+    add(abs(ctx, p.url));
+    if (p.url === '/tools/') for (const t of ctx.tools) add(abs(ctx, t.href));
   }
   return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls.map((u) => `  <url><loc>${u}</loc></url>`).join('\n')}\n</urlset>\n`;
 }
@@ -40,7 +42,7 @@ export function composeLlms(ctx, stamp) {
   L.push('## Tools', '', ...ctx.tools.map((t) => `- [${t.name}](${abs(ctx, t.href)}): ${t.line}${t.poweredBy.length ? ` Powered by ${list(t.poweredBy.map((id) => ctx.byId[id].name))}.` : ''}`), '');
   if (ctx.evidence.length) L.push('## Evidence', '', ...ctx.evidence.map((e) => `- [${e.title}](${abs(ctx, e.slug)}): ${e.claim}`), '');
   L.push('## Research', '', ...ctx.research.map((r) => `- [${r.title}](${abs(ctx, r.href)}): ${r.summary}`), '');
-  if (ctx.pageList) L.push('## Every page', '', ...ctx.pageList.filter((p) => !p.noindex && !p.hidden && p.url !== '/').map((p) => `- [${p.title}](${abs(ctx, p.url)})`), '');
+  if (ctx.pageList) L.push('## Every page', '', ...ctx.pageList.filter((p) => !p.noindex && !p.hidden && p.url !== '/' && !ctx.tools.some((t) => t.href === p.url)).map((p) => `- [${p.title}](${abs(ctx, p.url)})`), '');
   L.push('## Company', '', `- [Partner with us](${s.url}/partner/): ${ctx.pages.partner.lede}`, `- [Licence](${s.url}/licence/): ${ctx.licence.ribbon}`, `- [For AI readers](${s.url}/ai/): a plain summary for AI systems`, `- [NuGet profile](${s.navExternal.href}): every package we publish`, `- Contact: ${s.contactEmail}`, '');
   L.push('## Machine-readable', '', `- [llms-full.txt](${s.url}/llms-full.txt): every product described in plain text`, `- [sitemap.xml](${s.url}/sitemap.xml)`, '');
   return L.join('\n');

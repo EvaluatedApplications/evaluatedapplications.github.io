@@ -25,6 +25,7 @@ fs.mkdirSync(path.join(T, 'tools'), { recursive: true });
 cp(DIST, path.join(T, 'tools'));                                             // Showroom's pre-built dist under /tools
 cp(OUT, T);                                                                  // the generated site wins at the root, including /tools/index.html (the gallery)
 cp(path.join(SITE, 'council-live'), path.join(T, 'council-live'));           // unlinked client page, unchanged
+cp(path.join(ROOT, 'umbrarium-demo'), path.join(T, 'umbrarium', 'demo'));    // the Umbrarium preset demo's static shell (its runtime is in website-data)
 fs.mkdirSync(path.join(T, 'assets'), { recursive: true });
 fs.copyFileSync(path.join(SITE, 'assets', 'site.css'), path.join(T, 'assets', 'site.css'));   // legacy stylesheet the tool shells still link
 cp(TOKENS, path.join(T, 'SiteKit', 'tokens'));                              // imported by that stylesheet

@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="dark" />
+    <meta name="description" content="The real Umbrarium dashboard, computing exact answers over up to a million generated rows inside your browser tab. Click any chart to slice all the others." />
+    <title>Umbrarium: the dashboard, running in your tab</title>
+    <meta name="robots" content="noindex" />
+    <link rel="canonical" href="https://evaluatedapplications.github.io/umbrarium/" />
+    <base href="/umbrarium/demo/" />
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23050608'/%3E%3Cpath d='M16 5L27 26H5Z' fill='none' stroke='%238b7dff' stroke-width='2' stroke-linejoin='round'/%3E%3C/svg%3E" />
+    <link rel="stylesheet" href="css/app.css" />
+    <script type="importmap">{
+  "imports": {
+    "./_framework/blazor.webassembly.js": "./_framework/blazor.webassembly.w3qd1tpl0e.js",
+    "./_framework/dotnet.js": "./_framework/dotnet.a8dkacu94q.js",
+    "./_framework/dotnet.native.js": "./_framework/dotnet.native.txxjckmdl2.js",
+    "./_framework/dotnet.runtime.js": "./_framework/dotnet.runtime.azrfhwb804.js"
+  },
+  "scopes": {},
+  "integrity": {
+    "./_framework/blazor.webassembly.js": "sha256-lDXsDYFgm62F+YUvxES7IOTCXYpiHpU3uR45YdC6mq4=",
+    "./_framework/blazor.webassembly.w3qd1tpl0e.js": "sha256-lDXsDYFgm62F+YUvxES7IOTCXYpiHpU3uR45YdC6mq4=",
+    "./_framework/dotnet.a8dkacu94q.js": "sha256-BmZx4TxUc3vVr0zpyQ0gdV7DOzUIO1MJTdNbJQKUcUQ=",
+    "./_framework/dotnet.js": "sha256-BmZx4TxUc3vVr0zpyQ0gdV7DOzUIO1MJTdNbJQKUcUQ=",
+    "./_framework/dotnet.native.js": "sha256-kS4YBAW1/Hwr67HyeekoqbZJC0PXtC3sDnq0DnaT0gg=",
+    "./_framework/dotnet.native.txxjckmdl2.js": "sha256-kS4YBAW1/Hwr67HyeekoqbZJC0PXtC3sDnq0DnaT0gg=",
+    "./_framework/dotnet.runtime.azrfhwb804.js": "sha256-muN076HgyOCoAaid7zD7a2/GN7aQ7tmK/BzdnKgw78g=",
+    "./_framework/dotnet.runtime.js": "sha256-muN076HgyOCoAaid7zD7a2/GN7aQ7tmK/BzdnKgw78g="
+  }
+}</script>
+    <meta name="blazier-scaffold" content="" />
+</head>
+<body>
+    <!-- Blazier: on publish every [BlazierPage] component is rendered to real HTML and written into #app of this file (the pristine copy is kept as
+         blazier-template.html). The page therefore reads at once; the .NET runtime downloads on intent (the start button, a deep link, or a return
+         visit). Nothing on this page calls another origin. -->
+    <div id="app"><p class="demo-banner" role="note">Preset demo data. The real dashboard engine runs inside your browser on generated rows. Nothing leaves this tab.</p><a class="skip" href="#main">Skip to the content</a>
+<header class="app-top"><a class="brand" href>Umbrarium</a><nav aria-label="Main"><a href>Dashboard</a></nav></header>
+<main id="main" tabindex="-1">
+
+<div class="room"><header class="room-head"><h1>Dashboard</h1><p class="lede">This is the real dashboard engine, computing over generated rows in your own browser. Click any chart to slice all the others: every answer is exact, and each panel says how it was answered and how long it took.</p>
+            <div class="badges"><span>Preset data</span><span>Exact, not sampled</span><span>Real engine, in this tab</span><span>Nothing leaves this tab</span></div></header><section class="tool-start" aria-label="Open the demo" data-shell-path="umbrarium/demo"><p class="tool-start-note">The demo runs in this tab on generated rows, with no server doing the work. Opening it downloads the .NET runtime that does the computing the first time; your browser keeps it for next time.</p>
+    <div class="tool-start-actions"><button type="button" class="btn btn-primary" data-blazier-go>Open the demo</button></div>
+    <div class="tool-start-boot" data-boot-slot></div>
+    <noscript><p class="hint">This page needs JavaScript to run.</p></noscript></section></div></main></div>
+    <script src="js/app.js" defer></script>
+    <script>
+      // Starting the app. INTENT, in the order the code checks it:
+      //   1. an unpublished run (no blazier-scaffold meta: dotnet run), or an address this shell was not published for (the shell of a page carries
+      //      data-shell-path: "" for the dashboard, "health", "settings", "setup"; any other address gets the root shell, the wrong page to read): start at once;
+      //   2. a return visit (the runtime is cached by then, and this person has opened the dashboard before): start at once;
+      //   3. everyone else reads the shell and presses the start button.
+      // Scrolling, tapping text and following links never start it. The routed App is mounted over the shell and takes the current URL.
+      // This script comes BEFORE the loader so a press of the button while the loader is still arriving is remembered (want) and answered once it is there.
+      (function () {
+        var started = false, want = false, ready = false;
+        function slot() { return document.querySelector('[data-boot-slot]'); }
+        function say(text, cls) {
+          var s = slot();
+          if (!s) { var app = document.getElementById('app'); app.innerHTML = '<div class="boot"></div>'; s = app.firstChild; }
+          s.innerHTML = '<p class="' + (cls || 'boot-msg') + '" role="status" aria-live="polite"></p>';
+          s.firstChild.textContent = text;
+        }
+        function start() {
+          if (started) return; started = true;
+          try { localStorage.setItem('umbra.opened', '1'); } catch (e) { }
+          var a = document.querySelector('.tool-start-actions'); if (a) a.hidden = true;
+          say('Starting the dashboard. The first time this downloads the .NET runtime, then your browser keeps it.');
+          window.Blazier.mount('#app', 'app').then(function () { }, function () { });
+        }
+        document.addEventListener('blazier:error', function (e) {
+          started = false;
+          var a = document.querySelector('.tool-start-actions'); if (a) a.hidden = false;
+          say('The dashboard could not start (' + ((e.detail && e.detail.message) || 'unknown error') + '). Reload the page to try again.', 'boot-msg err');
+        });
+        document.addEventListener('click', function (e) {
+          if (e.target && e.target.closest && e.target.closest('[data-blazier-go]')) { want = true; if (ready) start(); }
+        });
+        document.addEventListener('DOMContentLoaded', function () {
+          ready = true;                    // the loader (a classic script below) has run by now
+          var scaffolded = !!document.querySelector('meta[name=blazier-scaffold]');
+          var path = location.pathname.replace(/index\.html$/, '').replace(/^\/+|\/+$/g, '');
+          var shell = document.querySelector('[data-shell-path]');
+          var wrongShell = !shell || shell.getAttribute('data-shell-path') !== path;
+          var opened = false; try { opened = localStorage.getItem('umbra.opened') === '1'; } catch (e) { }
+          if (want || !scaffolded || wrongShell || opened) start();
+        });
+      })();
+    </script>
+    <script src="_content/EvaluatedApplications.Blazier/blazier.js" data-framework-base="/website-data/umbrarium/_framework/" data-blazor-script="_framework/blazor.webassembly.w3qd1tpl0e.js"></script></body>
+</html>

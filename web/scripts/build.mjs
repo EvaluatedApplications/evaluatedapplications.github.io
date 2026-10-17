@@ -21,6 +21,7 @@ import * as evidenceT from '../src/templates/evidence.mjs';
 import partner from '../src/templates/partner.mjs';
 import licence from '../src/templates/licence.mjs';
 import ai from '../src/templates/ai.mjs';
+import demo from '../src/templates/demo.mjs';
 import notFound from '../src/templates/404.mjs';
 import { diagramModule } from '../src/diagram.mjs';
 import { minJs } from './lib/minjs.mjs';
@@ -101,6 +102,7 @@ async function main() {
     for (const sp of p.subpages) pages.push(productDocs(ctx, p, sp));
   }
   pages.push(toolsIndex(ctx));
+  pages.push(demo(ctx));
   pages.push(evidenceT.hub(ctx));
   for (const e of ctx.evidence) pages.push(evidenceT.record(ctx, e));
   pages.push(researchIndex(ctx));

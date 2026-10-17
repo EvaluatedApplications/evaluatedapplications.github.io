@@ -39,6 +39,8 @@ function legacyExists(u) {
   const clean = decodeURIComponent(u.split('#')[0].split('?')[0]);
   const cands = [];
   if (clean.startsWith('/tools/')) cands.push(path.join(ROOT, 'Showroom', 'dist', clean.slice('/tools/'.length), clean.endsWith('/') ? 'index.html' : ''));
+  // the Umbrarium preset demo's static shell is its own folder, copied to /umbrarium/demo/ by the workflow
+  if (clean.startsWith('/umbrarium/demo/')) cands.push(path.join(ROOT, 'umbrarium-demo', clean.slice('/umbrarium/demo/'.length), clean.endsWith('/') ? 'index.html' : ''));
   const base = path.join(ROOT, 'site', clean);
   cands.push(base, path.join(base, 'index.html'));
   return cands.some((c) => fs.existsSync(c) && fs.statSync(c).isFile());
