@@ -43,6 +43,10 @@ if (d && !d.open) { d.open = true; el.scrollIntoView(); }
 }
 window.addEventListener('hashchange', openTarget);
 openTarget();
+document.querySelectorAll('.demo-more').forEach(function (g) {
+var ds = g.querySelectorAll('details');
+ds.forEach(function (d) { d.addEventListener('toggle', function () { if (d.open) ds.forEach(function (o) { if (o !== d) o.open = false; }); }); });
+});
 var fwd = document.getElementById('hash-forward');
 if (fwd && location.hash) {
 try { var to = JSON.parse(fwd.textContent)[location.hash]; if (to) location.replace(to); } catch (e) { /* ignore */ }

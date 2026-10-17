@@ -1,4 +1,29 @@
-/* Demo pages: a standalone shell embedded under the headline. The shell has its own stylesheet, so it sits in a frame. */
-.demo-frame{display:block;width:100%;height:min(88vh,980px);min-height:640px;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg)}
-.demo-list{margin:var(--sp-2) 0 0;padding-left:1.2em;display:grid;gap:var(--sp-1);color:var(--ink-soft);max-width:var(--measure)}
-@media (max-width:640px){.demo-frame{height:88vh;min-height:560px}}
+/* Demo pages: the demo is an app and runs full-bleed. Slim intro strip, then a frame that fills the viewport under the site header
+   (header = 63px + 1px rule), then the editorial text below the fold. The shell inside has its own stylesheet, so it sits in a frame. */
+.demo-page{--head-h:64px}
+.demo-strip{position:relative;padding:var(--sp-2) var(--sp-4) var(--sp-3)}
+.demo-strip .crumbs{margin:0 0 var(--sp-1)}
+.demo-strip h1{font-size:clamp(1.45rem,2.6vw,2.3rem);line-height:1.15;margin:0;max-width:none}
+.demo-strip-row{display:flex;align-items:flex-start;justify-content:space-between;gap:var(--sp-2) var(--sp-4);flex-wrap:wrap;margin-top:var(--sp-1)}
+.demo-strip .lede{margin:0;max-width:118ch;flex:1 1 30rem;font-size:clamp(.98rem,1.4vw,1.1rem)}
+body[data-page="demo"] .site-header .wrap{max-width:none;padding-inline:var(--sp-4)}
+@media (max-width:640px){body[data-page="demo"] .site-header .wrap{padding-inline:var(--sp-3)}}
+.demo-more{display:flex;flex-wrap:wrap;gap:var(--sp-1) var(--sp-2);align-items:flex-start;flex:0 1 auto}
+.demo-disc summary{cursor:pointer;color:var(--accent-ink);font-size:.92rem;border:1px solid var(--border-2);border-radius:999px;padding:6px 14px;background:var(--surface);white-space:nowrap}
+.demo-disc summary:hover{border-color:var(--accent)}
+.demo-disc[open] summary{border-color:var(--accent)}
+.demo-panel{margin-top:var(--sp-2);padding:var(--sp-3);border:1px solid var(--border-2);border-radius:var(--radius);background:var(--surface);max-width:46rem}
+.demo-panel .tool-note{margin:0 0 var(--sp-2)}
+.demo-panel .prose-block{margin-top:var(--sp-2);font-size:.95rem}
+.demo-list{margin:0;padding-left:1.2em;display:grid;gap:var(--sp-1);color:var(--ink-soft);max-width:var(--measure)}
+.demo-stage{border-top:1px solid var(--border);border-bottom:1px solid var(--border);background:var(--bg)}
+.demo-frame{display:block;width:100%;height:calc(100vh - var(--head-h));height:calc(100dvh - var(--head-h));min-height:560px;border:0;margin:0;padding:0;background:var(--bg)}
+.demo-open{margin:var(--sp-1) 0 0;padding:0 var(--sp-4);text-align:right}
+/* wide screens: the open panels drop over the top of the app instead of pushing it down */
+@media (min-width:900px){
+  .demo-more{position:relative;justify-content:flex-end}
+  .demo-disc[open] .demo-panel{position:absolute;right:0;top:calc(100% + var(--sp-1));z-index:25;width:min(46rem,calc(100vw - 2 * var(--sp-4)));margin:0;box-shadow:0 18px 40px rgba(0,0,0,.5)}}
+@media (max-width:640px){
+  .demo-strip{padding-inline:var(--sp-3)}
+  .demo-open{padding-inline:var(--sp-3);text-align:left}
+}
