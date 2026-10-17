@@ -10,13 +10,14 @@
       "title": "The client",
       "paragraphs": [
         "Run SQL queries and bulk-load data with the same API as the embedded, in-process HoloDbService, so you can move from embedded to networked by changing only how you create the handle. Building a data-driven app usually means choosing between speed (embed the database) and scale (run it on its own server), with two APIs that behave differently. The client gives you one code path for both.",
-        "Install it with dotnet add package EvaluatedApplications.HoloDb.Client. It targets .NET 8 and .NET 10 and needs a HoloDb server it can reach over TLS."
+        "Install it with dotnet add package EvaluatedApplications.HoloDb.Client, or pin it in a project file with the version range 1.5.*. It targets .NET 8 and .NET 10 and needs a HoloDb server it can reach over TLS."
       ],
       "list": [
         { "term": "Same API, embedded or networked", "text": "Execute, ExecuteAsync, BulkLoadAsync, GetStatsAsync and PingAsync have the same surface whether you talk to the in-process service or a remote server." },
         { "term": "Columnar over the wire", "text": "Results are typed column arrays that match the in-process engine's QueryResult. There is no row buffering and no JSON serialization." },
         { "term": "Secure by default", "text": "TLS is on. Trust a self-signed server by pinning its certificate thumbprint, or skip it in development only." },
         { "term": "Resilience when you opt in", "text": "Exponential backoff with full jitter, a circuit breaker and a per-operation deadline budget across retries." },
+        { "term": "SQL NULL", "text": "A NULL cell arrives as DBNull.Value, and IsNull(row, col) tells you which cells are NULL." },
         { "term": "Built for concurrency", "text": "One client per concurrent worker, or pool clients up front with HoloDbClientPool." }
       ]
     },
@@ -37,6 +38,8 @@
         { "term": "One client is one session", "text": "Requests serialize through an internal queue, and concurrent callers share the same TCP connection. Use one client per worker, or a pool." },
         { "term": "No automatic reconnect", "text": "A dropped socket raises an exception, and you reconnect explicitly. ResilientHoloDbClient does this for you when you use it." },
         { "term": "Transient and application errors differ", "text": "HoloRemoteException (SQL errors, authentication failures) is not retried. The resilient client retries only transport failures such as IOException and SocketException." },
+        { "term": "NULL", "text": "Write NULL as the literal NULL in the SQL text. Read it with IsNull(row, col) or GetValue(row, col). A result that holds a NULL is row-form, so the typed GetLong and GetText accessors are for columnar results only. Bulk loads are dense arrays and carry no NULL." },
+        { "term": "No parameterised Execute", "text": "The client takes SQL text. Use HoloDb.Database.Bind(sql, args) to build the text from values." },
         { "term": "Timeouts", "text": "ConnectAsync takes a TimeSpan for the connection only. The resilient client adds an operation timeout to every method, a budget across all its retries." }
       ]
     },
@@ -44,10 +47,11 @@
       "id": "protocol",
       "title": "The wire protocol",
       "paragraphs": [
-        "HoloDb.Protocol defines how the server and client communicate. Instead of sending results as JSON or row objects it keeps the columnar shape: a long[], double[] or string[] travels as a typed array. That keeps the engine's columnar advantage intact when data moves between processes. You normally get the package through HoloDb.Client. Depend on it directly only to implement a server.",
+        "HoloDb.Protocol defines how the server and client communicate. Instead of sending results as JSON or row objects it keeps the columnar shape: a long[], double[] or string[] travels as a typed array. That keeps the engine's columnar advantage intact when data moves between processes. You normally get the package through HoloDb.Client (version range 1.5.*). Depend on it directly, as EvaluatedApplications.HoloDb.Protocol with the version range 1.1.*, only to implement a server.",
         "The wire format is stable: opcode byte values never change, and field order and types are fixed. Clients and servers from different builds negotiate a version and fail cleanly when incompatible."
       ],
       "list": [
+        { "term": "SQL NULL", "text": "A NULL cell travels as its own tag and reaches the client as DBNull.Value (QueryResult.IsNull), never as an empty string." },
         { "term": "Length-prefixed TCP framing", "text": "Safe message boundaries, with frame size limits and count bounds checks that stop a hostile length prefix from forcing a huge allocation." },
         { "term": "Binary columnar codec", "text": "Typed long, double and string arrays in little-endian format. Non-columnar results (joins, GROUP BY) are packed in a compact binary row format." },
         { "term": "Request and response dispatch", "text": "Opcodes for Hello (handshake), Exec (SQL), BulkLoad, Stats and Ping." },

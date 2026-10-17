@@ -43,7 +43,7 @@
 
 
 <section class="sec"><div class="wrap">
-  <nav class="toc" aria-labelledby="toc-h"><h2 id="toc-h">On this page</h2><ul><li><a href="#install">Install and first query</a></li><li><a href="#types">Tables and types</a></li><li><a href="#writing">Inserting, updating and bulk loading</a></li><li><a href="#parameters">Parameterized queries</a></li><li><a href="#bulk">Bulk loading</a></li><li><a href="#dialect">Querying: the dialect</a></li><li><a href="#results">Reading results</a></li><li><a href="#ways">Three ways to ask one store</a></li><li><a href="#similarity">Similarity search</a></li><li><a href="#transactions">Transactions</a></li><li><a href="#changes">Atomic change batches and upsert</a></li><li><a href="#durable">In memory or durable</a></li><li><a href="#paged">Larger than memory: paged tables</a></li><li><a href="#indexes">Indexes, and why aggregates are instant</a></li><li><a href="#alter">Changing a table</a></li><li><a href="#di">Dependency injection and EvalApp</a></li><li><a href="#meter">The usage meter</a></li><li><a href="#browser-and-network">In the browser, and over the network</a></li></ul></nav>
+  <nav class="toc" aria-labelledby="toc-h"><h2 id="toc-h">On this page</h2><ul><li><a href="#install">Install and first query</a></li><li><a href="#types">Tables and types</a></li><li><a href="#writing">Inserting, updating and bulk loading</a></li><li><a href="#null">NULL</a></li><li><a href="#parameters">Parameterized queries</a></li><li><a href="#bulk">Bulk loading</a></li><li><a href="#dialect">Querying: the dialect</a></li><li><a href="#results">Reading results</a></li><li><a href="#ways">Three ways to ask one store</a></li><li><a href="#similarity">Similarity search</a></li><li><a href="#transactions">Transactions</a></li><li><a href="#changes">Atomic change batches and upsert</a></li><li><a href="#durable">In memory or durable</a></li><li><a href="#paged">Larger than memory: paged tables</a></li><li><a href="#indexes">Indexes, and why aggregates are instant</a></li><li><a href="#alter">Changing a table</a></li><li><a href="#di">Dependency injection and EvalApp</a></li><li><a href="#meter">The usage meter</a></li><li><a href="#browser-and-network">In the browser, and over the network</a></li></ul></nav>
 </div></section>
 <section class="sec doc-sec" aria-labelledby="install"><div class="wrap">
   <div class="sec-head"><span class="sec-dot cat-holodb" aria-hidden="true"></span><h2 id="install">Install and first query</h2></div>
@@ -78,7 +78,7 @@ Linus
   
   
   
-  <div class="prose-block"><p>One column may be PRIMARY KEY, and it is enforced unique. For money, store integer minor units, cents as an INT: it is exact, and it lets the constant-time integer aggregates serve your revenue totals.</p></div>
+  <div class="prose-block"><p>One column may be PRIMARY KEY, and it is enforced unique and is never NULL. A column is NOT NULL unless its definition says NULL: see the section on NULL. For money, store integer minor units, cents as an INT: it is exact, and it lets the constant-time integer aggregates serve your revenue totals.</p></div>
   <div class="code"><div class="code-bar"><span>SQL</span><button class="copy" type="button" aria-label="Copy SQL">copy</button></div><pre><code class="language-sql">CREATE TABLE sales (
   id     INT PRIMARY KEY,
   region TEXT,
@@ -94,8 +94,47 @@ Linus
   
   
   
-  <div class="prose-block"><p>Every Execute also takes positional ? placeholders. The arguments are quoted and escaped for you, before the statement is parsed. A null argument, a wrong argument count or an unsupported type throws.</p><p>A plain INSERT of an existing primary key throws. To insert or replace, use the upsert in the section on atomic change batches.</p></div>
+  <div class="prose-block"><p>Every Execute also takes positional ? placeholders. The arguments are quoted and escaped for you, before the statement is parsed. A null argument is the SQL literal NULL (a value in INSERT and UPDATE SET; in a comparison it throws, write IS NULL). A wrong argument count or an unsupported type throws.</p><p>A plain INSERT of an existing primary key throws. To insert or replace, use the upsert in the section on atomic change batches.</p></div>
   <div class="code"><div class="code-bar"><span>SQL</span><button class="copy" type="button" aria-label="Copy SQL">copy</button></div><pre><code class="language-sql">INSERT INTO sales VALUES (1, &#39;EU&#39;, 42.50)</code></pre></div><div class="code"><div class="code-bar"><span>SQL</span><button class="copy" type="button" aria-label="Copy SQL">copy</button></div><pre><code class="language-sql">INSERT INTO sales (id, region, amount) VALUES (2, &#39;US&#39;, 17.00), (3, &#39;EU&#39;, 61.10)</code></pre></div><div class="code"><div class="code-bar"><span>SQL</span><button class="copy" type="button" aria-label="Copy SQL">copy</button></div><pre><code class="language-sql">UPDATE sales SET amount = 0 WHERE region = &#39;US&#39;</code></pre></div><div class="code"><div class="code-bar"><span>SQL</span><button class="copy" type="button" aria-label="Copy SQL">copy</button></div><pre><code class="language-sql">DELETE FROM sales WHERE amount = 0</code></pre></div>
+  
+  
+</div></section><section class="sec doc-sec" aria-labelledby="null"><div class="wrap">
+  <div class="sec-head"><span class="sec-dot cat-holodb" aria-hidden="true"></span><h2 id="null">NULL</h2></div>
+  <div class="prose-block"><p>A column holds SQL NULL when it is declared NULL: CREATE TABLE orders (id INT PRIMARY KEY, region TEXT NULL, amount INT NULL, qty INT NOT NULL). Every other column is NOT NULL (the words are accepted and mean the default), and a primary key is never NULL. A NOT NULL column left out of an INSERT still gets its type zero (0, 0.0 or an empty string); a NULL column left out is NULL.</p><p>NULL is a value in INSERT, UPDATE ... SET, ON CONFLICT ... SET, ALTER ... DEFAULT, Database.Bind(.., null), RowChange.Upsert (a C# null) and Database.BulkLoad (a mask per column). It is refused, with a message that says to write IS NULL, in = != &lt; &gt; &lt;= &gt;=, IN, BETWEEN, LIKE, NEAREST and a join ON, because a comparison with NULL is never true.</p></div>
+  <dl class="term-list"><dt>Three-valued logic</dt><dd>WHERE and HAVING keep a row only when the predicate is true. A comparison, LIKE, IN or BETWEEN on a NULL is unknown; false AND unknown is false, true OR unknown is true, NOT unknown is unknown. x NOT IN (SELECT ...) is never true when the subquery returns a NULL. IS NULL and IS NOT NULL are always true or false.</dd><dt>Aggregates skip NULL</dt><dd>COUNT(*) counts rows; COUNT(col), COUNT(DISTINCT col), SUM, AVG, MIN and MAX count and combine the non-NULL values. SUM, AVG, MIN and MAX of a group whose values are all NULL are NULL. Whole-table COUNT, SUM, AVG, MIN and MAX of an INT column and a one-column GROUP BY with COUNT, SUM and AVG stay maintained answers with NULLs present: no row is read. On an empty selection SUM is 0 and AVG is 0.0, as for a NOT NULL column.</dd><dt>Groups, order and joins</dt><dd>GROUP BY and DISTINCT make one group of all the NULLs, apart from 0 and the empty string. ORDER BY puts NULL first ascending and last descending. An INNER JOIN never matches a NULL key, not even another NULL. In NEAREST a NULL cell adds nothing to the row&#39;s similarity.</dd><dt>Results</dt><dd>A result that holds a NULL is row-form: read it with Rows or GetValue, where the cell is DBNull.Value, and QueryResult.IsNull(row, col) says so. GetLong, GetDouble and GetText serve a non-NULL cell of the matching type and throw a HoloException on a NULL.</dd><dt>Where it stops</dt><dd>CREATE INDEX (sorted, text, composite) takes NOT NULL columns only. A Pleroma plane stores the type zero for a NULL and declines, so the engine answers, any statement that touches a plane column holding one; it never answers wrongly. A summary table keeps no rows to fall back on and refuses a NULL, and paged tables do not take NULL columns.</dd><dt>Speed</dt><dd>A column that has never received a NULL has no null bitmap, and a statement that touches no column holding a NULL and has no IS [NOT] NULL takes the routes it takes for a NOT NULL column. The maintained answers above stay flat with NULLs present. Any other statement on a column that holds NULLs filters with a null-aware compiled predicate and then builds boxed rows, slower than the typed columnar result a NOT NULL column returns. A table that declares a NULL column is not read lock-free, and the live snapshot does not serve a statement that references a declared NULL column, even before it holds a NULL: declare a column NULL only where you need it.</dd><dt>Older binaries</dt><dd>A log with a NULL in it, or a snapshot of a table with a NULL column, is refused by an older HoloDb binary with a clear error until a newer one has opened it and called Checkpoint(). A database with no NULL column writes the same files as before.</dd></dl>
+  
+  
+  
+  
+  
+  <div class="code"><div class="code-bar"><span>C#</span><button class="copy" type="button" aria-label="Copy C#">copy</button></div><pre><code class="language-csharp">using HoloDb;
+
+var db = new HoloDbService(new HoloDbOptions());
+db.Execute(&quot;CREATE TABLE orders (id INT PRIMARY KEY, region TEXT NULL, amount INT NULL, qty INT NOT NULL)&quot;);
+db.Execute(&quot;INSERT INTO orders VALUES (1, &#39;north&#39;, 10, 1), (2, NULL, 20, 1), (3, &#39;north&#39;, NULL, 2)&quot;);
+var r = db.Execute(&quot;SELECT COUNT(*), COUNT(amount), SUM(amount), AVG(amount) FROM orders&quot;).Rows[0];
+Console.WriteLine($&quot;{r[&quot;count(*)&quot;]} rows, {r[&quot;count(amount)&quot;]} amounts, sum {r[&quot;sum(amount)&quot;]}, avg {r[&quot;avg(amount)&quot;]}&quot;);
+// 3 rows, 2 amounts, sum 30, avg 15
+Console.WriteLine(db.Execute(&quot;SELECT COUNT(*) FROM orders WHERE region IS NULL&quot;).Rows[0][&quot;count(*)&quot;]);
+// 1
+Console.WriteLine(db.Execute(&quot;SELECT COUNT(*) FROM orders WHERE region != &#39;north&#39;&quot;).Rows[0][&quot;count(*)&quot;]);
+// 0   (the NULL region is neither equal nor different)
+foreach (var g in db.Execute(&quot;SELECT region, COUNT(*) FROM orders GROUP BY region ORDER BY region&quot;).Rows)
+    Console.WriteLine($&quot;{(g[&quot;region&quot;] is DBNull ? &quot;(null)&quot; : g[&quot;region&quot;])}: {g[&quot;count(*)&quot;]}&quot;);
+// (null): 1
+// north: 2
+
+// A change feed carries NULLs as C# nulls; BulkLoad takes a mask per column (true = NULL) and a left-out nullable column is NULL.
+db.ApplyChanges(&quot;orders&quot;, new[] { RowChange.Upsert(new Dictionary&lt;string, object?&gt; { [&quot;id&quot;] = 4L, [&quot;region&quot;] = null, [&quot;amount&quot;] = 5L, [&quot;qty&quot;] = 1L }) });
+db.BulkLoad(&quot;orders&quot;, new[] { &quot;id&quot;, &quot;amount&quot;, &quot;qty&quot; }, new Array[] { new long[] { 5, 6 }, new long[] { 0, 7 }, new long[] { 1, 1 } }, 2,
+    new bool[]?[] { null, new[] { true, false }, null });
+Console.WriteLine(db.Execute(&quot;SELECT COUNT(*) FROM orders WHERE amount IS NULL&quot;).Rows[0][&quot;count(*)&quot;]);
+// 2   (id 3 and id 5)</code></pre></div><div class="code out"><div class="code-bar"><span>Output</span><button class="copy" type="button" aria-label="Copy Output">copy</button></div><pre><code class="language-text">3 rows, 2 amounts, sum 30, avg 15
+1
+0
+(null): 1
+north: 2
+2</code></pre></div>
   
   
 </div></section><section class="sec doc-sec" aria-labelledby="parameters"><div class="wrap">
@@ -146,7 +185,7 @@ US: 1 rows, 17</code></pre></div>
   
 </div></section><section class="sec doc-sec" aria-labelledby="dialect"><div class="wrap">
   <div class="sec-head"><span class="sec-dot cat-holodb" aria-hidden="true"></span><h2 id="dialect">Querying: the dialect</h2></div>
-  <div class="prose-block"><p>A SELECT supports aggregates (COUNT, SUM, AVG, MIN, MAX), a full boolean WHERE (AND, OR, NOT, parentheses, the comparisons = != &lt; &gt; &lt;= &gt;=, LIKE, IN, IN (SELECT ...) and BETWEEN ... AND ...), GROUP BY with HAVING, ORDER BY with several keys, LIMIT, DISTINCT and INNER JOIN.</p></div>
+  <div class="prose-block"><p>A SELECT supports aggregates (COUNT, SUM, AVG, MIN, MAX), a full boolean WHERE (AND, OR, NOT, parentheses, the comparisons = != &lt; &gt; &lt;= &gt;=, LIKE, IN, IN (SELECT ...), BETWEEN ... AND ... and IS [NOT] NULL), GROUP BY with HAVING, ORDER BY with several keys, LIMIT, DISTINCT and INNER JOIN.</p></div>
   
   
   
@@ -267,7 +306,7 @@ after rollback: 400, 200</code></pre></div>
 </div></section><section class="sec doc-sec" aria-labelledby="changes"><div class="wrap">
   <div class="sec-head"><span class="sec-dot cat-holodb" aria-hidden="true"></span><h2 id="changes">Atomic change batches and upsert</h2></div>
   <div class="prose-block"><p>A live replica turns an ordered change feed from another system into one call per batch. ApplyChanges(table, changes) on Database, and ApplyChanges and ApplyChangesAsync on HoloDbService, applies upserts and deletes atomically under one write lock: a reader sees the table before the batch or after it, never part of it, on every read path including the lock-free live metrics. The batch is one write-ahead-log commit group, so on replay it applies whole or not at all, and a table with a Pleroma plane takes the whole batch in one pass.</p></div>
-  <dl class="term-list"><dt>RowChange.Upsert(row)</dt><dd>Carries a full row: every column, with case-insensitive names. INT takes any integral type, REAL a float or an integer, and TEXT a string. No null and no NaN. It inserts a new key or replaces the whole row of an existing one. A missing column throws, because HoloDb has no NULL and no default for an omitted column, which would silently become 0 or an empty string.</dd><dt>RowChange.Delete(key)</dt><dd>Deletes by primary key. A key that is not there is a counted no-op.</dd><dt>Order and result</dt><dd>Changes count as if applied in order, so the last change to a key wins, and only the net effect runs. ChangeResult reports Inserted, Updated, Deleted and MissingDeletes.</dd><dt>All or nothing</dt><dd>Everything is validated before anything changes, and a failure leaves the table, its aggregates and its plane as they were. Inside BEGIN and COMMIT the batch commits or rolls back with the transaction.</dd><dt>What is refused</dt><dd>A paged table refuses ApplyChanges and the SQL upsert with an error that names the table. A text value that contains a line break throws on a database with a write-ahead log, because the log holds one statement per line.</dd><dt>The log</dt><dd>The log holds the net effect as plain DELETE, UPDATE and INSERT lines, so an older binary can still replay it.</dd></dl>
+  <dl class="term-list"><dt>RowChange.Upsert(row)</dt><dd>Carries a full row: every column, with case-insensitive names. INT takes any integral type, REAL a float or an integer, and TEXT a string. A C# null (or DBNull) is SQL NULL and is accepted only for a column declared NULL; there is no NaN. It inserts a new key or replaces the whole row of an existing one. A missing column throws, because there is no default for an omitted column: it would silently become 0, an empty string or NULL. For a partial update use INSERT ... ON CONFLICT.</dd><dt>RowChange.Delete(key)</dt><dd>Deletes by primary key. A key that is not there is a counted no-op.</dd><dt>Order and result</dt><dd>Changes count as if applied in order, so the last change to a key wins, and only the net effect runs. ChangeResult reports Inserted, Updated, Deleted and MissingDeletes.</dd><dt>All or nothing</dt><dd>Everything is validated before anything changes, and a failure leaves the table, its aggregates and its plane as they were. Inside BEGIN and COMMIT the batch commits or rolls back with the transaction.</dd><dt>What is refused</dt><dd>A paged table refuses ApplyChanges and the SQL upsert with an error that names the table. A text value that contains a line break throws on a database with a write-ahead log, because the log holds one statement per line.</dd><dt>The log</dt><dd>The log holds the net effect as plain DELETE, UPDATE and INSERT lines, so an older binary can still replay it.</dd></dl>
   
   
   
@@ -375,7 +414,7 @@ odd: 500 rows, sum 250000
   <p class="more-link"><a href="/holodb/pleroma/#index-sql">The plane, index SQL and EXPLAIN</a></p>
 </div></section><section class="sec doc-sec" aria-labelledby="alter"><div class="wrap">
   <div class="sec-head"><span class="sec-dot cat-holodb" aria-hidden="true"></span><h2 id="alter">Changing a table</h2></div>
-  <div class="prose-block"><p>ALTER TABLE supports ADD COLUMN with a mandatory DEFAULT, which backfills the rows that exist. There is no DROP, rename or type change.</p></div>
+  <div class="prose-block"><p>ALTER TABLE supports ADD COLUMN only. A NOT NULL column needs a literal DEFAULT, which backfills the rows that exist; a column declared NULL may leave the DEFAULT out, and the existing rows are NULL. There is no DROP, rename or type change.</p></div>
   
   
   

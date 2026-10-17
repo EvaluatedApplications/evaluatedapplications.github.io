@@ -21,7 +21,7 @@ To ask for a commercial licence, or to ask which of your uses needs one, write t
 Build stores that answer exactly, replicas that sync by their differences and tables that repair themselves. One pass applies a thousand operators.
 
 Page: https://evaluatedapplications.github.io/phasor/
-- Package EvaluatedApplications.Phasor, release 2.19.0: `dotnet add package EvaluatedApplications.Phasor`
+- Package EvaluatedApplications.Phasor, release 2.19.1: `dotnet add package EvaluatedApplications.Phasor`
 - Used by: HoloDb, AlgFormer, HoloGenome, HoloVoxel
 
 Do a thousand things in one pass.
@@ -1433,9 +1433,9 @@ Licence: Commercial licence for commercial use. Evaluation and non-commercial us
 A SQL database inside your app that answers dashboard queries in microseconds, with transactions, similarity search and tables bigger than memory.
 
 Page: https://evaluatedapplications.github.io/holodb/
-- Package EvaluatedApplications.HoloDb, release 5.2.0: `dotnet add package EvaluatedApplications.HoloDb`
-- Package EvaluatedApplications.HoloDb.Client, release 1.5.2: `dotnet add package EvaluatedApplications.HoloDb.Client`
-- Package EvaluatedApplications.HoloDb.Protocol, release 1.1.2: `dotnet add package EvaluatedApplications.HoloDb.Protocol`
+- Package EvaluatedApplications.HoloDb, release 5.3.0: `dotnet add package EvaluatedApplications.HoloDb`
+- Package EvaluatedApplications.HoloDb.Client, release 1.5.3: `dotnet add package EvaluatedApplications.HoloDb.Client`
+- Package EvaluatedApplications.HoloDb.Protocol, release 1.1.3: `dotnet add package EvaluatedApplications.HoloDb.Protocol`
 - Builds on: EvalApp, Phasor
 - Used by: Prose, HoloGenome
 - Tools: The Dashboard, The Analyst, Prose
@@ -1459,7 +1459,8 @@ Why use it:
 - Real ACID, and past RAM. Write-ahead logging with an fsync on each durable commit, crash recovery bounded by live data and not by write history, reader and writer locking, and paged tables on an 8 KB buffer pool that let a table exceed memory.
 
 Capabilities:
-- A substantial SQL dialect. CREATE TABLE, INSERT, UPDATE, DELETE, SELECT with DISTINCT, COUNT, SUM, MIN, MAX and AVG, a single INNER JOIN, WHERE with AND, OR, NOT, LIKE, IN, BETWEEN and IN (SELECT ...), GROUP BY and HAVING, ORDER BY, LIMIT, ALTER TABLE ADD COLUMN, indexes, EXPLAIN, and explicit BEGIN, COMMIT and ROLLBACK.
+- A substantial SQL dialect. CREATE TABLE, INSERT, UPDATE, DELETE, SELECT with DISTINCT, COUNT, SUM, MIN, MAX and AVG, a single INNER JOIN, WHERE with AND, OR, NOT, LIKE, IN, BETWEEN, IS NULL and IN (SELECT ...), GROUP BY and HAVING, ORDER BY, LIMIT, ALTER TABLE ADD COLUMN, indexes, EXPLAIN, and explicit BEGIN, COMMIT and ROLLBACK.
+- Real SQL NULL. Declare a column NULL and it holds true NULLs with three-valued logic: COUNT(col), SUM, AVG, MIN and MAX skip them, GROUP BY makes one NULL group, ORDER BY puts them first, and a join never matches one. Whole-table aggregates and one-column group-bys stay maintained answers with NULLs present: 0 rows read at 10,000 to 640,000 rows with half the values NULL. Checked against SQLite and an independent oracle on 98,340 generated statements, with no difference except the empty-selection SUM and AVG convention (0 and 0.0, where SQLite returns NULL).
 - Parameterized queries. Every Execute has a ? placeholder overload with positional binding, correctly quoted and escaped, beside the raw SQL string form.
 - Content similarity in SQL. NEAREST ranks by graded closeness for numbers, dates and text, with a score column on request. From 8,000 rows an approximate sublinear index ranks candidates, and below that or whenever the query has a WHERE the ranking is an exact scan.
 - Constant-time exact aggregates. COUNT, SUM, MIN, MAX and single-column GROUP BY over integer columns are exact, not approximate. Real-number aggregates use a fast SIMD scan.
@@ -1498,8 +1499,9 @@ Linus
 Limits:
 - A plain INSERT of an existing primary key throws. To insert or replace, use INSERT with ON CONFLICT (key) DO UPDATE SET column = EXCLUDED.column, or ApplyChanges with RowChange.Upsert. Both work on in-memory tables only, and a paged table refuses them.
 - A table has one PRIMARY KEY, an INT or TEXT column. Joins are inner joins, with one INNER JOIN per query.
-- ALTER TABLE supports ADD COLUMN with a DEFAULT only. There is no DROP, rename or type change.
-- There is no NULL and no column aliasing with AS. Table aliases in a join are not supported, so qualify columns with the table name.
+- ALTER TABLE supports ADD COLUMN only: a NOT NULL column needs a DEFAULT, a column declared NULL may leave it out. There is no DROP, rename or type change.
+- There is no column aliasing with AS. Table aliases in a join are not supported, so qualify columns with the table name.
+- A column holds NULL only when it is declared NULL. An index takes NOT NULL columns only, paged tables and summary tables refuse NULL, and the Pleroma plane hands any statement that touches a column holding a NULL to the engine. A statement on a column holding NULLs that is not a maintained aggregate reads boxed rows, slower than a NOT NULL column. A table that declares a NULL column is not read lock-free.
 - NEAREST with a WHERE filters first and then ranks the survivors, and NEAREST does not combine with GROUP BY.
 - Only integer aggregates are constant time. Real-number aggregates scan.
 - The optional plane works on in-memory tables only, and a plane attached through the API is not persisted: call it again after opening. A paged table refuses a plane, and paged tables support a single join only, with no GROUP BY over a join.
@@ -1544,7 +1546,7 @@ There are three storage types, each with the usual SQL aliases.
 - REAL: A .NET double. Aliases: FLOAT, DOUBLE, DECIMAL, NUMERIC. DECIMAL and NUMERIC map to a 64-bit float, so they are not exact decimals.
 - TEXT: A .NET string. Aliases: VARCHAR, STRING.
 
-One column may be PRIMARY KEY, and it is enforced unique. For money, store integer minor units, cents as an INT: it is exact, and it lets the constant-time integer aggregates serve your revenue totals.
+One column may be PRIMARY KEY, and it is enforced unique and is never NULL. A column is NOT NULL unless its definition says NULL: see the section on NULL. For money, store integer minor units, cents as an INT: it is exact, and it lets the constant-time integer aggregates serve your revenue totals.
 
 ```sql
 CREATE TABLE sales (
@@ -1558,7 +1560,7 @@ CREATE TABLE sales (
 
 Strings use single quotes, and a quote is escaped by doubling it. Rows go in singly or in batches, with or without a column list.
 
-Every Execute also takes positional ? placeholders. The arguments are quoted and escaped for you, before the statement is parsed. A null argument, a wrong argument count or an unsupported type throws.
+Every Execute also takes positional ? placeholders. The arguments are quoted and escaped for you, before the statement is parsed. A null argument is the SQL literal NULL (a value in INSERT and UPDATE SET; in a comparison it throws, write IS NULL). A wrong argument count or an unsupported type throws.
 
 A plain INSERT of an existing primary key throws. To insert or replace, use the upsert in the section on atomic change batches.
 
@@ -1576,6 +1578,57 @@ UPDATE sales SET amount = 0 WHERE region = 'US'
 
 ```sql
 DELETE FROM sales WHERE amount = 0
+```
+
+##### NULL
+
+A column holds SQL NULL when it is declared NULL: CREATE TABLE orders (id INT PRIMARY KEY, region TEXT NULL, amount INT NULL, qty INT NOT NULL). Every other column is NOT NULL (the words are accepted and mean the default), and a primary key is never NULL. A NOT NULL column left out of an INSERT still gets its type zero (0, 0.0 or an empty string); a NULL column left out is NULL.
+
+NULL is a value in INSERT, UPDATE ... SET, ON CONFLICT ... SET, ALTER ... DEFAULT, Database.Bind(.., null), RowChange.Upsert (a C# null) and Database.BulkLoad (a mask per column). It is refused, with a message that says to write IS NULL, in = != < > <= >=, IN, BETWEEN, LIKE, NEAREST and a join ON, because a comparison with NULL is never true.
+
+- Three-valued logic: WHERE and HAVING keep a row only when the predicate is true. A comparison, LIKE, IN or BETWEEN on a NULL is unknown; false AND unknown is false, true OR unknown is true, NOT unknown is unknown. x NOT IN (SELECT ...) is never true when the subquery returns a NULL. IS NULL and IS NOT NULL are always true or false.
+- Aggregates skip NULL: COUNT(*) counts rows; COUNT(col), COUNT(DISTINCT col), SUM, AVG, MIN and MAX count and combine the non-NULL values. SUM, AVG, MIN and MAX of a group whose values are all NULL are NULL. Whole-table COUNT, SUM, AVG, MIN and MAX of an INT column and a one-column GROUP BY with COUNT, SUM and AVG stay maintained answers with NULLs present: no row is read. On an empty selection SUM is 0 and AVG is 0.0, as for a NOT NULL column.
+- Groups, order and joins: GROUP BY and DISTINCT make one group of all the NULLs, apart from 0 and the empty string. ORDER BY puts NULL first ascending and last descending. An INNER JOIN never matches a NULL key, not even another NULL. In NEAREST a NULL cell adds nothing to the row's similarity.
+- Results: A result that holds a NULL is row-form: read it with Rows or GetValue, where the cell is DBNull.Value, and QueryResult.IsNull(row, col) says so. GetLong, GetDouble and GetText serve a non-NULL cell of the matching type and throw a HoloException on a NULL.
+- Where it stops: CREATE INDEX (sorted, text, composite) takes NOT NULL columns only. A Pleroma plane stores the type zero for a NULL and declines, so the engine answers, any statement that touches a plane column holding one; it never answers wrongly. A summary table keeps no rows to fall back on and refuses a NULL, and paged tables do not take NULL columns.
+- Speed: A column that has never received a NULL has no null bitmap, and a statement that touches no column holding a NULL and has no IS [NOT] NULL takes the routes it takes for a NOT NULL column. The maintained answers above stay flat with NULLs present. Any other statement on a column that holds NULLs filters with a null-aware compiled predicate and then builds boxed rows, slower than the typed columnar result a NOT NULL column returns. A table that declares a NULL column is not read lock-free, and the live snapshot does not serve a statement that references a declared NULL column, even before it holds a NULL: declare a column NULL only where you need it.
+- Older binaries: A log with a NULL in it, or a snapshot of a table with a NULL column, is refused by an older HoloDb binary with a clear error until a newer one has opened it and called Checkpoint(). A database with no NULL column writes the same files as before.
+
+```csharp
+using HoloDb;
+
+var db = new HoloDbService(new HoloDbOptions());
+db.Execute("CREATE TABLE orders (id INT PRIMARY KEY, region TEXT NULL, amount INT NULL, qty INT NOT NULL)");
+db.Execute("INSERT INTO orders VALUES (1, 'north', 10, 1), (2, NULL, 20, 1), (3, 'north', NULL, 2)");
+var r = db.Execute("SELECT COUNT(*), COUNT(amount), SUM(amount), AVG(amount) FROM orders").Rows[0];
+Console.WriteLine($"{r["count(*)"]} rows, {r["count(amount)"]} amounts, sum {r["sum(amount)"]}, avg {r["avg(amount)"]}");
+// 3 rows, 2 amounts, sum 30, avg 15
+Console.WriteLine(db.Execute("SELECT COUNT(*) FROM orders WHERE region IS NULL").Rows[0]["count(*)"]);
+// 1
+Console.WriteLine(db.Execute("SELECT COUNT(*) FROM orders WHERE region != 'north'").Rows[0]["count(*)"]);
+// 0   (the NULL region is neither equal nor different)
+foreach (var g in db.Execute("SELECT region, COUNT(*) FROM orders GROUP BY region ORDER BY region").Rows)
+    Console.WriteLine($"{(g["region"] is DBNull ? "(null)" : g["region"])}: {g["count(*)"]}");
+// (null): 1
+// north: 2
+
+// A change feed carries NULLs as C# nulls; BulkLoad takes a mask per column (true = NULL) and a left-out nullable column is NULL.
+db.ApplyChanges("orders", new[] { RowChange.Upsert(new Dictionary<string, object?> { ["id"] = 4L, ["region"] = null, ["amount"] = 5L, ["qty"] = 1L }) });
+db.BulkLoad("orders", new[] { "id", "amount", "qty" }, new Array[] { new long[] { 5, 6 }, new long[] { 0, 7 }, new long[] { 1, 1 } }, 2,
+    new bool[]?[] { null, new[] { true, false }, null });
+Console.WriteLine(db.Execute("SELECT COUNT(*) FROM orders WHERE amount IS NULL").Rows[0]["count(*)"]);
+// 2   (id 3 and id 5)
+```
+
+Output:
+
+```text
+3 rows, 2 amounts, sum 30, avg 15
+1
+0
+(null): 1
+north: 2
+2
 ```
 
 ##### Parameterized queries
@@ -1630,7 +1683,7 @@ US: 1 rows, 17
 
 ##### Querying: the dialect
 
-A SELECT supports aggregates (COUNT, SUM, AVG, MIN, MAX), a full boolean WHERE (AND, OR, NOT, parentheses, the comparisons = != < > <= >=, LIKE, IN, IN (SELECT ...) and BETWEEN ... AND ...), GROUP BY with HAVING, ORDER BY with several keys, LIMIT, DISTINCT and INNER JOIN.
+A SELECT supports aggregates (COUNT, SUM, AVG, MIN, MAX), a full boolean WHERE (AND, OR, NOT, parentheses, the comparisons = != < > <= >=, LIKE, IN, IN (SELECT ...), BETWEEN ... AND ... and IS [NOT] NULL), GROUP BY with HAVING, ORDER BY with several keys, LIMIT, DISTINCT and INNER JOIN.
 
 Qualify joined columns with the table name, as above. Table aliases are not supported.
 
@@ -1750,7 +1803,7 @@ after rollback: 400, 200
 
 A live replica turns an ordered change feed from another system into one call per batch. ApplyChanges(table, changes) on Database, and ApplyChanges and ApplyChangesAsync on HoloDbService, applies upserts and deletes atomically under one write lock: a reader sees the table before the batch or after it, never part of it, on every read path including the lock-free live metrics. The batch is one write-ahead-log commit group, so on replay it applies whole or not at all, and a table with a Pleroma plane takes the whole batch in one pass.
 
-- RowChange.Upsert(row): Carries a full row: every column, with case-insensitive names. INT takes any integral type, REAL a float or an integer, and TEXT a string. No null and no NaN. It inserts a new key or replaces the whole row of an existing one. A missing column throws, because HoloDb has no NULL and no default for an omitted column, which would silently become 0 or an empty string.
+- RowChange.Upsert(row): Carries a full row: every column, with case-insensitive names. INT takes any integral type, REAL a float or an integer, and TEXT a string. A C# null (or DBNull) is SQL NULL and is accepted only for a column declared NULL; there is no NaN. It inserts a new key or replaces the whole row of an existing one. A missing column throws, because there is no default for an omitted column: it would silently become 0, an empty string or NULL. For a partial update use INSERT ... ON CONFLICT.
 - RowChange.Delete(key): Deletes by primary key. A key that is not there is a counted no-op.
 - Order and result: Changes count as if applied in order, so the last change to a key wins, and only the net effect runs. ChangeResult reports Inserted, Updated, Deleted and MissingDeletes.
 - All or nothing: Everything is validated before anything changes, and a failure leaves the table, its aggregates and its plane as they were. Inside BEGIN and COMMIT the batch commits or rolls back with the transaction.
@@ -1874,7 +1927,7 @@ CREATE INDEX ON sales (region)
 
 ##### Changing a table
 
-ALTER TABLE supports ADD COLUMN with a mandatory DEFAULT, which backfills the rows that exist. There is no DROP, rename or type change.
+ALTER TABLE supports ADD COLUMN only. A NOT NULL column needs a literal DEFAULT, which backfills the rows that exist; a column declared NULL may leave the DEFAULT out, and the existing rows are NULL. There is no DROP, rename or type change.
 
 ```sql
 ALTER TABLE sales ADD COLUMN note TEXT DEFAULT ''
@@ -2039,12 +2092,13 @@ HoloDb.Client connects your .NET app to a HoloDb server over TCP with mandatory 
 
 Run SQL queries and bulk-load data with the same API as the embedded, in-process HoloDbService, so you can move from embedded to networked by changing only how you create the handle. Building a data-driven app usually means choosing between speed (embed the database) and scale (run it on its own server), with two APIs that behave differently. The client gives you one code path for both.
 
-Install it with dotnet add package EvaluatedApplications.HoloDb.Client. It targets .NET 8 and .NET 10 and needs a HoloDb server it can reach over TLS.
+Install it with dotnet add package EvaluatedApplications.HoloDb.Client, or pin it in a project file with the version range 1.5.*. It targets .NET 8 and .NET 10 and needs a HoloDb server it can reach over TLS.
 
 - Same API, embedded or networked: Execute, ExecuteAsync, BulkLoadAsync, GetStatsAsync and PingAsync have the same surface whether you talk to the in-process service or a remote server.
 - Columnar over the wire: Results are typed column arrays that match the in-process engine's QueryResult. There is no row buffering and no JSON serialization.
 - Secure by default: TLS is on. Trust a self-signed server by pinning its certificate thumbprint, or skip it in development only.
 - Resilience when you opt in: Exponential backoff with full jitter, a circuit breaker and a per-operation deadline budget across retries.
+- SQL NULL: A NULL cell arrives as DBNull.Value, and IsNull(row, col) tells you which cells are NULL.
 - Built for concurrency: One client per concurrent worker, or pool clients up front with HoloDbClientPool.
 
 ##### Connect and query
@@ -2058,7 +2112,7 @@ using HoloDb.Client;
 var client = await HoloDbClient.ConnectAsync("db.example.com", 5433);
 try
 {
-    // The same surface as the in-process HoloDbService
+    // The same surface as the in-process HoloDbService; a NULL value is DBNull.Value
     var result = await client.ExecuteAsync("SELECT id, value FROM data LIMIT 10");
     foreach (var row in result.Rows)
         Console.WriteLine($"id={row["id"]}, value={row["value"]}");
@@ -2103,14 +2157,17 @@ await client.DisposeAsync();
 - One client is one session: Requests serialize through an internal queue, and concurrent callers share the same TCP connection. Use one client per worker, or a pool.
 - No automatic reconnect: A dropped socket raises an exception, and you reconnect explicitly. ResilientHoloDbClient does this for you when you use it.
 - Transient and application errors differ: HoloRemoteException (SQL errors, authentication failures) is not retried. The resilient client retries only transport failures such as IOException and SocketException.
+- NULL: Write NULL as the literal NULL in the SQL text. Read it with IsNull(row, col) or GetValue(row, col). A result that holds a NULL is row-form, so the typed GetLong and GetText accessors are for columnar results only. Bulk loads are dense arrays and carry no NULL.
+- No parameterised Execute: The client takes SQL text. Use HoloDb.Database.Bind(sql, args) to build the text from values.
 - Timeouts: ConnectAsync takes a TimeSpan for the connection only. The resilient client adds an operation timeout to every method, a budget across all its retries.
 
 ##### The wire protocol
 
-HoloDb.Protocol defines how the server and client communicate. Instead of sending results as JSON or row objects it keeps the columnar shape: a long[], double[] or string[] travels as a typed array. That keeps the engine's columnar advantage intact when data moves between processes. You normally get the package through HoloDb.Client. Depend on it directly only to implement a server.
+HoloDb.Protocol defines how the server and client communicate. Instead of sending results as JSON or row objects it keeps the columnar shape: a long[], double[] or string[] travels as a typed array. That keeps the engine's columnar advantage intact when data moves between processes. You normally get the package through HoloDb.Client (version range 1.5.*). Depend on it directly, as EvaluatedApplications.HoloDb.Protocol with the version range 1.1.*, only to implement a server.
 
 The wire format is stable: opcode byte values never change, and field order and types are fixed. Clients and servers from different builds negotiate a version and fail cleanly when incompatible.
 
+- SQL NULL: A NULL cell travels as its own tag and reaches the client as DBNull.Value (QueryResult.IsNull), never as an empty string.
 - Length-prefixed TCP framing: Safe message boundaries, with frame size limits and count bounds checks that stop a hostile length prefix from forcing a huge allocation.
 - Binary columnar codec: Typed long, double and string arrays in little-endian format. Non-columnar results (joins, GROUP BY) are packed in a compact binary row format.
 - Request and response dispatch: Opcodes for Hello (handshake), Exec (SQL), BulkLoad, Stats and Ping.

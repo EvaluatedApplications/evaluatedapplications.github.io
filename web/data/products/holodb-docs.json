@@ -21,7 +21,7 @@
         { "term": "TEXT", "text": "A .NET string. Aliases: VARCHAR, STRING." }
       ],
       "snippets": [ { "provenIn": "holodb-sql-tour", "text": "CREATE TABLE sales (\n  id     INT PRIMARY KEY,\n  region TEXT,\n  amount REAL\n)" } ],
-      "paragraphsAfter": [ "One column may be PRIMARY KEY, and it is enforced unique. For money, store integer minor units, cents as an INT: it is exact, and it lets the constant-time integer aggregates serve your revenue totals." ]
+      "paragraphsAfter": [ "One column may be PRIMARY KEY, and it is enforced unique and is never NULL. A column is NOT NULL unless its definition says NULL: see the section on NULL. For money, store integer minor units, cents as an INT: it is exact, and it lets the constant-time integer aggregates serve your revenue totals." ]
     },
     {
       "id": "writing",
@@ -33,7 +33,25 @@
         { "provenIn": "holodb-sql-tour", "text": "UPDATE sales SET amount = 0 WHERE region = 'US'" },
         { "provenIn": "holodb-sql-tour", "text": "DELETE FROM sales WHERE amount = 0" }
       ],
-      "paragraphsAfter": [ "Every Execute also takes positional ? placeholders. The arguments are quoted and escaped for you, before the statement is parsed. A null argument, a wrong argument count or an unsupported type throws.", "A plain INSERT of an existing primary key throws. To insert or replace, use the upsert in the section on atomic change batches." ]
+      "paragraphsAfter": [ "Every Execute also takes positional ? placeholders. The arguments are quoted and escaped for you, before the statement is parsed. A null argument is the SQL literal NULL (a value in INSERT and UPDATE SET; in a comparison it throws, write IS NULL). A wrong argument count or an unsupported type throws.", "A plain INSERT of an existing primary key throws. To insert or replace, use the upsert in the section on atomic change batches." ]
+    },
+    {
+      "id": "null",
+      "title": "NULL",
+      "paragraphs": [
+        "A column holds SQL NULL when it is declared NULL: CREATE TABLE orders (id INT PRIMARY KEY, region TEXT NULL, amount INT NULL, qty INT NOT NULL). Every other column is NOT NULL (the words are accepted and mean the default), and a primary key is never NULL. A NOT NULL column left out of an INSERT still gets its type zero (0, 0.0 or an empty string); a NULL column left out is NULL.",
+        "NULL is a value in INSERT, UPDATE ... SET, ON CONFLICT ... SET, ALTER ... DEFAULT, Database.Bind(.., null), RowChange.Upsert (a C# null) and Database.BulkLoad (a mask per column). It is refused, with a message that says to write IS NULL, in = != < > <= >=, IN, BETWEEN, LIKE, NEAREST and a join ON, because a comparison with NULL is never true."
+      ],
+      "list": [
+        { "term": "Three-valued logic", "text": "WHERE and HAVING keep a row only when the predicate is true. A comparison, LIKE, IN or BETWEEN on a NULL is unknown; false AND unknown is false, true OR unknown is true, NOT unknown is unknown. x NOT IN (SELECT ...) is never true when the subquery returns a NULL. IS NULL and IS NOT NULL are always true or false." },
+        { "term": "Aggregates skip NULL", "text": "COUNT(*) counts rows; COUNT(col), COUNT(DISTINCT col), SUM, AVG, MIN and MAX count and combine the non-NULL values. SUM, AVG, MIN and MAX of a group whose values are all NULL are NULL. Whole-table COUNT, SUM, AVG, MIN and MAX of an INT column and a one-column GROUP BY with COUNT, SUM and AVG stay maintained answers with NULLs present: no row is read. On an empty selection SUM is 0 and AVG is 0.0, as for a NOT NULL column." },
+        { "term": "Groups, order and joins", "text": "GROUP BY and DISTINCT make one group of all the NULLs, apart from 0 and the empty string. ORDER BY puts NULL first ascending and last descending. An INNER JOIN never matches a NULL key, not even another NULL. In NEAREST a NULL cell adds nothing to the row's similarity." },
+        { "term": "Results", "text": "A result that holds a NULL is row-form: read it with Rows or GetValue, where the cell is DBNull.Value, and QueryResult.IsNull(row, col) says so. GetLong, GetDouble and GetText serve a non-NULL cell of the matching type and throw a HoloException on a NULL." },
+        { "term": "Where it stops", "text": "CREATE INDEX (sorted, text, composite) takes NOT NULL columns only. A Pleroma plane stores the type zero for a NULL and declines, so the engine answers, any statement that touches a plane column holding one; it never answers wrongly. A summary table keeps no rows to fall back on and refuses a NULL, and paged tables do not take NULL columns." },
+        { "term": "Speed", "text": "A column that has never received a NULL has no null bitmap, and a statement that touches no column holding a NULL and has no IS [NOT] NULL takes the routes it takes for a NOT NULL column. The maintained answers above stay flat with NULLs present. Any other statement on a column that holds NULLs filters with a null-aware compiled predicate and then builds boxed rows, slower than the typed columnar result a NOT NULL column returns. A table that declares a NULL column is not read lock-free, and the live snapshot does not serve a statement that references a declared NULL column, even before it holds a NULL: declare a column NULL only where you need it." },
+        { "term": "Older binaries", "text": "A log with a NULL in it, or a snapshot of a table with a NULL column, is refused by an older HoloDb binary with a clear error until a newer one has opened it and called Checkpoint(). A database with no NULL column writes the same files as before." }
+      ],
+      "snippets": [ { "source": "snippets/holodb-null.cs", "output": "snippets/holodb-null.out.txt" } ]
     },
     {
       "id": "parameters",
@@ -50,7 +68,7 @@
     {
       "id": "dialect",
       "title": "Querying: the dialect",
-      "paragraphs": [ "A SELECT supports aggregates (COUNT, SUM, AVG, MIN, MAX), a full boolean WHERE (AND, OR, NOT, parentheses, the comparisons = != < > <= >=, LIKE, IN, IN (SELECT ...) and BETWEEN ... AND ...), GROUP BY with HAVING, ORDER BY with several keys, LIMIT, DISTINCT and INNER JOIN." ],
+      "paragraphs": [ "A SELECT supports aggregates (COUNT, SUM, AVG, MIN, MAX), a full boolean WHERE (AND, OR, NOT, parentheses, the comparisons = != < > <= >=, LIKE, IN, IN (SELECT ...), BETWEEN ... AND ... and IS [NOT] NULL), GROUP BY with HAVING, ORDER BY with several keys, LIMIT, DISTINCT and INNER JOIN." ],
       "snippets": [
         { "provenIn": "holodb-sql-tour", "text": "SELECT region, COUNT(*), SUM(amount), AVG(amount)\nFROM sales\nWHERE amount BETWEEN 10 AND 1000\nGROUP BY region\nHAVING SUM(amount) > 50\nORDER BY sum(amount) DESC\nLIMIT 10" },
         { "provenIn": "holodb-sql-tour", "label": "A join across two tables", "text": "SELECT orders.id, customers.name, orders.total\nFROM orders\nINNER JOIN customers ON orders.customer_id = customers.id\nWHERE orders.total > 100\nORDER BY orders.total DESC" }
@@ -94,7 +112,7 @@
         "A live replica turns an ordered change feed from another system into one call per batch. ApplyChanges(table, changes) on Database, and ApplyChanges and ApplyChangesAsync on HoloDbService, applies upserts and deletes atomically under one write lock: a reader sees the table before the batch or after it, never part of it, on every read path including the lock-free live metrics. The batch is one write-ahead-log commit group, so on replay it applies whole or not at all, and a table with a Pleroma plane takes the whole batch in one pass."
       ],
       "list": [
-        { "term": "RowChange.Upsert(row)", "text": "Carries a full row: every column, with case-insensitive names. INT takes any integral type, REAL a float or an integer, and TEXT a string. No null and no NaN. It inserts a new key or replaces the whole row of an existing one. A missing column throws, because HoloDb has no NULL and no default for an omitted column, which would silently become 0 or an empty string." },
+        { "term": "RowChange.Upsert(row)", "text": "Carries a full row: every column, with case-insensitive names. INT takes any integral type, REAL a float or an integer, and TEXT a string. A C# null (or DBNull) is SQL NULL and is accepted only for a column declared NULL; there is no NaN. It inserts a new key or replaces the whole row of an existing one. A missing column throws, because there is no default for an omitted column: it would silently become 0, an empty string or NULL. For a partial update use INSERT ... ON CONFLICT." },
         { "term": "RowChange.Delete(key)", "text": "Deletes by primary key. A key that is not there is a counted no-op." },
         { "term": "Order and result", "text": "Changes count as if applied in order, so the last change to a key wins, and only the net effect runs. ChangeResult reports Inserted, Updated, Deleted and MissingDeletes." },
         { "term": "All or nothing", "text": "Everything is validated before anything changes, and a failure leaves the table, its aggregates and its plane as they were. Inside BEGIN and COMMIT the batch commits or rolls back with the transaction." },
@@ -138,7 +156,7 @@
     {
       "id": "alter",
       "title": "Changing a table",
-      "paragraphs": [ "ALTER TABLE supports ADD COLUMN with a mandatory DEFAULT, which backfills the rows that exist. There is no DROP, rename or type change." ],
+      "paragraphs": [ "ALTER TABLE supports ADD COLUMN only. A NOT NULL column needs a literal DEFAULT, which backfills the rows that exist; a column declared NULL may leave the DEFAULT out, and the existing rows are NULL. There is no DROP, rename or type change." ],
       "snippets": [ { "provenIn": "holodb-sql-tour", "text": "ALTER TABLE sales ADD COLUMN note TEXT DEFAULT ''" } ]
     },
     {

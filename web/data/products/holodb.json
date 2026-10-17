@@ -58,7 +58,8 @@
     "output": "snippets/holodb-quickstart.out.txt"
   },
   "capabilities": [
-    { "title": "A substantial SQL dialect", "text": "CREATE TABLE, INSERT, UPDATE, DELETE, SELECT with DISTINCT, COUNT, SUM, MIN, MAX and AVG, a single INNER JOIN, WHERE with AND, OR, NOT, LIKE, IN, BETWEEN and IN (SELECT ...), GROUP BY and HAVING, ORDER BY, LIMIT, ALTER TABLE ADD COLUMN, indexes, EXPLAIN, and explicit BEGIN, COMMIT and ROLLBACK." },
+    { "title": "A substantial SQL dialect", "text": "CREATE TABLE, INSERT, UPDATE, DELETE, SELECT with DISTINCT, COUNT, SUM, MIN, MAX and AVG, a single INNER JOIN, WHERE with AND, OR, NOT, LIKE, IN, BETWEEN, IS NULL and IN (SELECT ...), GROUP BY and HAVING, ORDER BY, LIMIT, ALTER TABLE ADD COLUMN, indexes, EXPLAIN, and explicit BEGIN, COMMIT and ROLLBACK." },
+    { "title": "Real SQL NULL", "text": "Declare a column NULL and it holds true NULLs with three-valued logic: COUNT(col), SUM, AVG, MIN and MAX skip them, GROUP BY makes one NULL group, ORDER BY puts them first, and a join never matches one. Whole-table aggregates and one-column group-bys stay maintained answers with NULLs present: 0 rows read at 10,000 to 640,000 rows with half the values NULL. Checked against SQLite and an independent oracle on 98,340 generated statements, with no difference except the empty-selection SUM and AVG convention (0 and 0.0, where SQLite returns NULL)." },
     { "title": "Parameterized queries", "text": "Every Execute has a ? placeholder overload with positional binding, correctly quoted and escaped, beside the raw SQL string form." },
     { "title": "Content similarity in SQL", "text": "NEAREST ranks by graded closeness for numbers, dates and text, with a score column on request. From 8,000 rows an approximate sublinear index ranks candidates, and below that or whenever the query has a WHERE the ranking is an exact scan." },
     { "title": "Constant-time exact aggregates", "text": "COUNT, SUM, MIN, MAX and single-column GROUP BY over integer columns are exact, not approximate. Real-number aggregates use a fast SIMD scan." },
@@ -72,8 +73,9 @@
   "limits": [
     "A plain INSERT of an existing primary key throws. To insert or replace, use INSERT with ON CONFLICT (key) DO UPDATE SET column = EXCLUDED.column, or ApplyChanges with RowChange.Upsert. Both work on in-memory tables only, and a paged table refuses them.",
     "A table has one PRIMARY KEY, an INT or TEXT column. Joins are inner joins, with one INNER JOIN per query.",
-    "ALTER TABLE supports ADD COLUMN with a DEFAULT only. There is no DROP, rename or type change.",
-    "There is no NULL and no column aliasing with AS. Table aliases in a join are not supported, so qualify columns with the table name.",
+    "ALTER TABLE supports ADD COLUMN only: a NOT NULL column needs a DEFAULT, a column declared NULL may leave it out. There is no DROP, rename or type change.",
+    "There is no column aliasing with AS. Table aliases in a join are not supported, so qualify columns with the table name.",
+    "A column holds NULL only when it is declared NULL. An index takes NOT NULL columns only, paged tables and summary tables refuse NULL, and the Pleroma plane hands any statement that touches a column holding a NULL to the engine. A statement on a column holding NULLs that is not a maintained aggregate reads boxed rows, slower than a NOT NULL column. A table that declares a NULL column is not read lock-free.",
     "NEAREST with a WHERE filters first and then ranks the survivors, and NEAREST does not combine with GROUP BY.",
     "Only integer aggregates are constant time. Real-number aggregates scan.",
     "The optional plane works on in-memory tables only, and a plane attached through the API is not persisted: call it again after opening. A paged table refuses a plane, and paged tables support a single join only, with no GROUP BY over a join.",

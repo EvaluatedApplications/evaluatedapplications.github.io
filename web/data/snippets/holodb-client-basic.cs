@@ -4,7 +4,7 @@ using HoloDb.Client;
 var client = await HoloDbClient.ConnectAsync("db.example.com", 5433);
 try
 {
-    // The same surface as the in-process HoloDbService
+    // The same surface as the in-process HoloDbService; a NULL value is DBNull.Value
     var result = await client.ExecuteAsync("SELECT id, value FROM data LIMIT 10");
     foreach (var row in result.Rows)
         Console.WriteLine($"id={row["id"]}, value={row["value"]}");
