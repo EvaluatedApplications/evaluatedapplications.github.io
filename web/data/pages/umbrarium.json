@@ -1,49 +1,124 @@
 {
-  "title": "Umbrarium: 100M rows in a browser tab",
-  "description": "The real Umbrarium dashboard engine in your browser tab: 2,000,000 rows built in 4.2 seconds, 100,000,000 rows in 3.6 minutes. Every chart exact.",
-  "eyebrow": "Umbrarium, preset demo",
-  "headline": "Umbrarium: 100,000,000 rows, exact, in one browser tab.",
-  "lede": "Press Build. The real dashboard engine generates the rows in your tab and answers every chart exactly: 2,000,000 rows in 4.2 seconds, 100,000,000 in 3.6 minutes, then every click slices every chart. The whole stack runs in your tab, on one thread. Scale it up with the size chips.",
-  "demo": {
-    "src": "/umbrarium/demo/?theme=dark",
-    "openHref": "/umbrarium/demo/",
-    "frameTitle": "Umbrarium preset demo: the dashboard running in this tab",
-    "openLabel": "Open the demo on its own page"
-  },
-  "looking": {
-    "summary": "What you are looking at",
-    "items": [
-      "The rows are generated in this tab when you press Build. They are demo data, not anyone's records, and they do not change while the page is open.",
-      "The engine is the same code Umbrarium runs as a service, compiled to run in the browser. The dashboard on screen is the real one, not a mock-up.",
-      "Every answer is exact, not sampled. A panel tagged \"exact summary\" was answered from the totals kept next to the rows, so the click did not rescan them. A panel tagged \"row scan\" was answered by scanning the rows in this tab (a row list, or a column that is not a slicing dimension).",
-      "\"Rows behind this view\" shows the rows that make up the current slice.",
-      "The whole stack is running in your browser: the database engine, the exact-summary layer, the pipeline runtime and the dashboard. A browser tab runs it on one thread, because WebAssembly here is single-threaded. The same code on a server uses every core, so what you see here is the floor, not the ceiling. The demo opens at 2,000,000 rows, and the Scale up button steps it to 5M, 10M, 50M and 100M rows; the size chips set any size from 100k to 100M.",
-      "The live feed is simulated. Inserts, updates and deletes arrive at the rate you choose in the configuration panel, produced by the demo itself. No database is connected.",
-      "Nothing leaves this tab, and the generated rows and the answers are gone once you close it. The first visit downloads the .NET runtime that does the computing; your browser keeps that, and a one-word note that you have opened the demo before, for next time."
-    ]
-  },
-  "measured": {
-    "summary": "Measured: how big it goes",
-    "intro": "A single headless Edge run on one development laptop (i9-11950H, 16 cores, Windows, the AOT build), with generated rows. The footer of the demo shows your own timings.",
-    "caption": "Build time and memory by table size, as measured",
-    "head": ["Rows", "What to keep in your tab", "Built in the tab", "WebAssembly memory"],
-    "rows": [
-      ["1,000,000", "Every row", "2.1 s", "286 MiB"],
-      ["2,000,000", "Every row", "4.2 s", "495 MiB"],
-      ["5,000,000", "Totals only", "12.5 s", "115 MiB"],
-      ["10,000,000", "Totals only", "23.9 s", "115 MiB"],
-      ["50,000,000", "Totals only", "1.9 min", "115 MiB"],
-      ["100,000,000", "Totals only", "3.6 min", "115 MiB"]
-    ],
-    "paragraphs": [
-      "The rows are generated in your tab by a pure function. Totals only keeps exact counts and sums for every slice, not the rows, which is why memory stays flat at 115 MiB from 5,000,000 rows to 100,000,000. At 100,000,000 rows a brush on a chart is answered in a median 148 ms."
-    ]
-  },
-  "adds": {
-    "title": "What a live Umbrarium adds",
-    "paragraphs": [
-      "Umbrarium is built for SQL Server. A live Umbrarium keeps a replica of your SQL Server database and the dashboard exact over it, and it keeps that replica fresh as the database changes. The capture modes are rowversion, Change Tracking and an updated-at column. The dashboard then states how current its numbers are. This demo has none of that: it has no database behind it and no capture, only the engine, the generated rows and a simulated feed."
-    ]
-  },
-  "licence": "Umbrarium is proprietary software. A limited use is permitted without a licence; commercial or production use needs a commercial licence from Evaluated Applications."
+    "title":  "Umbrarium: up to 3 million rows, running in your tab",
+    "description":  "The whole Umbrarium app running in your browser tab: pick up to 3 million rows, press Build, then slice the charts and run SQL. Nothing leaves your tab.",
+    "eyebrow":  "Umbrarium, in-browser demo",
+    "headline":  "Three million rows. One browser tab. Press Build.",
+    "lede":  "This is the real Umbrarium app, not a cut-down copy. Pick 100,000 to 3 million generated rows and press Build: the data engine, the dashboard and the SQL console all run inside your tab, on one thread.",
+    "demo":  {
+                 "src":  "/umbrarium/demo/?theme=dark",
+                 "openHref":  "/umbrarium/demo/",
+                 "frameTitle":  "Umbrarium demo: the dashboard running in this tab",
+                 "openLabel":  "Open the demo on its own page"
+             },
+    "looking":  {
+                    "summary":  "What you can do, and what you are looking at",
+                    "intro":  "Pick 100,000, 500,000, 1 million, 2 million or 3 million generated rows and press Build. At 3 million rows the build takes 6.3 seconds on a fast laptop, and a chart click then redraws every panel in about a tenth of a second. A server install of Umbrarium uses every core; your tab uses one. Each panel tells you how it was answered and how long that took, and the footer shows how long your own machine took to build the data.",
+                    "items":  [
+                                  "Click any bar and every other chart slices to match. Every number is exact, not sampled.",
+                                  "Write SQL. A full SQL console runs on the same data. It reads only: anything that would change the demo tables is refused. You can make scratch tables of your own and fill them. The built-in examples include a join and a nearest-name search.",
+                                  "Watch a live feed. A simulated feed adds, changes and removes rows while you look. It is labelled simulated wherever it appears; the rows are generated, not anyone's records.",
+                                  "Take the guided tour. It starts the first time you open the demo and takes seven short steps. Press Esc to skip.",
+                                  "The rows are generated in this tab when you press Build. They are demo data, not anyone's records.",
+                                  "The engine is the same code Umbrarium runs as a service, compiled to run in the browser. The dashboard on screen is the real one, not a mock-up.",
+                                  "A panel tagged \"exact summary\" was answered from a summary the engine keeps next to the rows, so your click did not rescan them. A panel tagged \"row scan\" was answered by reading the rows in this tab (for example the list of largest orders). \"Rows behind this view\" shows the rows that make up the current slice.",
+                                  "Nothing leaves this tab, and the generated rows, your scratch tables and your answers are gone once you close it. The first visit downloads the .NET runtime that does the computing; your browser keeps that, plus a one-word note that you have opened the demo before, for next time.",
+                                  "A larger table needs more memory and a longer wait. See the measured numbers."
+                              ]
+                },
+    "measured":  {
+                     "summary":  "Measured in a browser tab",
+                     "intro":  "One run of this page on a fast laptop (Intel Core i9-11950H, 32 GiB), headless Edge, one browser thread, and nothing else running. Slower devices take longer. The 3 million row size needs about 1.6 GiB of free memory: peak 1,564 MiB measured.",
+                     "tables":  [
+                                    {
+                                        "caption":  "At 3 million rows",
+                                        "head":  [
+                                                     "What",
+                                                     "Time"
+                                                 ],
+                                        "rows":  [
+                                                     [
+                                                         "Build the data in the tab",
+                                                         "6.3 s"
+                                                     ],
+                                                     [
+                                                         "Press Build to first panel on screen",
+                                                         "8.2 s"
+                                                     ],
+                                                     [
+                                                         "SQL: count and sum by status (group-by)",
+                                                         "0.3 ms"
+                                                     ],
+                                                     [
+                                                         "SQL: sales by region and month",
+                                                         "5.9 ms"
+                                                     ],
+                                                     [
+                                                         "SQL: the 20 largest returned orders (scans the rows)",
+                                                         "32 ms"
+                                                     ],
+                                                     [
+                                                         "SQL: top 10 customers by spend (join of orders to customers)",
+                                                         "3.6 s"
+                                                     ],
+                                                     [
+                                                         "SQL: nearest customer name (first use builds its index)",
+                                                         "5.9 s"
+                                                     ],
+                                                     [
+                                                         "Chart click, every panel redrawn (median of 4 clicks)",
+                                                         "119 ms"
+                                                     ],
+                                                     [
+                                                         "Peak memory (WebAssembly, after running all of the above)",
+                                                         "1,564 MiB"
+                                                     ]
+                                                 ]
+                                    },
+                                    {
+                                        "caption":  "By size, same run",
+                                        "head":  [
+                                                     "Rows",
+                                                     "Build",
+                                                     "Press Build to first panel"
+                                                 ],
+                                        "rows":  [
+                                                     [
+                                                         "100,000",
+                                                         "0.5 s",
+                                                         "2.2 s"
+                                                     ],
+                                                     [
+                                                         "500,000",
+                                                         "1.2 s",
+                                                         "3.0 s"
+                                                     ],
+                                                     [
+                                                         "1,000,000",
+                                                         "2.1 s",
+                                                         "3.9 s"
+                                                     ],
+                                                     [
+                                                         "2,000,000",
+                                                         "4.3 s",
+                                                         "6.2 s"
+                                                     ],
+                                                     [
+                                                         "3,000,000",
+                                                         "6.3 s",
+                                                         "8.2 s"
+                                                     ]
+                                                 ]
+                                    }
+                                ],
+                     "paragraphs":  [
+                                        "The nearest-name search builds its index the first time you use it, so the first run is slow and later runs reuse it. Your browser stays responsive during the longer queries only as far as one thread allows; the page may pause for a few seconds while the join or the first nearest-name search runs."
+                                    ]
+                 },
+    "adds":  {
+                 "title":  "What a live Umbrarium adds",
+                 "paragraphs":  [
+                                    "Umbrarium is built for SQL Server. A live Umbrarium keeps a copy of your SQL Server database and the dashboard exact over it, and it keeps that copy fresh as the database changes. The capture modes are rowversion, Change Tracking and an updated-at column. The dashboard then states how current its numbers are. This demo has none of that: it has no database behind it and no capture, only the engine and the generated rows."
+                                ]
+             },
+    "licence":  "Umbrarium is proprietary software. A limited use is permitted without a licence; commercial or production use needs a commercial licence from Evaluated Applications."
 }

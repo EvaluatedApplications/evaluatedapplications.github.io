@@ -273,14 +273,6 @@ fieldset.field legend, .field .lbl { color: var(--ink-soft); font-size: 0.85rem;
 .opt:hover { border-color: var(--accent); }
 .opt.on { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 16%, var(--surface)); font-weight: 600; }
 .opt.off { color: var(--ink-faint); cursor: not-allowed; }
-.keep .opt { align-items: flex-start; font-weight: 400; }
-.keep .opt.on { font-weight: 400; }
-.keep .opt input { margin-top: 0.2rem; }
-.keep .opt b { display: block; font-weight: 650; }
-.keep-hint { display: block; margin: 0.1rem 0 0; font-size: 0.82rem; line-height: 1.35; }
-.keep-reason { margin: 0.5rem 0 0; color: var(--ink); font-weight: 550; }
-.needs-rows h2 { color: var(--ink-soft); }
-.needs-rows .hint { margin: 0; }
 .opt input { accent-color: var(--accent); }
 .sizes .opt { min-width: 3.6rem; justify-content: center; }
 .sizes .opt input { position: absolute; opacity: 0; pointer-events: none; width: 1px; height: 1px; }
@@ -320,7 +312,6 @@ input[type=range] { width: 100%; accent-color: var(--accent); min-height: 1.6rem
 .dash-side .sizes .opt { padding: 0.25rem 0.5rem; min-width: 2.7rem; min-height: 1.9rem; }
 .dash-side .scale { margin: 0.2rem 0 0.4rem; padding: 0.4rem 0.5rem; border: 1px dashed var(--border-2); border-radius: 9px; }
 .dash-side .scale .btn { width: 100%; }
-.scale-switch { color: var(--ink-soft); }
 .dash-side label.field.range { grid-template-columns: auto 1fr; align-items: center; column-gap: 0.6rem; }
 .dash-side label.field.range input { min-width: 0; }
 .dash-side label.field.seed.inline { grid-template-columns: auto 1fr; align-items: center; column-gap: 0.6rem; }
@@ -335,3 +326,63 @@ input[type=range] { width: 100%; accent-color: var(--accent); min-height: 1.6rem
   .side-foot { position: sticky; bottom: 0; }
   .dash-side.open { display: block; }
 }
+
+/* the SQL console (demo): the same tokens as the dashboard, so it reads as one app in dark and light */
+.sqlview { display: grid; grid-template-columns: minmax(0, 1fr) 21rem; gap: 1rem; align-items: start; }
+.sqlview > .notice { grid-column: 1 / -1; }
+.sql-main { min-width: 0; display: grid; gap: 1rem; }
+.sql-main .panel + .panel, .sql-side .panel + .panel { margin-top: 0; }
+.sql-side { display: grid; gap: 1rem; min-width: 0; align-content: start; }
+.sql-editor-panel .row { margin-top: 0.5rem; }
+.sql-editor { display: block; width: 100%; min-height: 9rem; resize: vertical; font-family: var(--mono); font-size: 0.88rem; line-height: 1.5; tab-size: 2; white-space: pre; overflow: auto; padding: 0.7rem 0.9rem; background: var(--bg-2); color: var(--ink); border: 1px solid var(--border-2); border-radius: 10px; }
+.sql-editor::placeholder { color: var(--ink-faint); }
+.sql-editor-panel .feed-readout { margin-left: auto; font-family: var(--mono); font-size: 0.78rem; color: var(--ink-soft); border: 1px solid var(--border-2); border-radius: 999px; padding: 0.05rem 0.65rem; font-variant-numeric: tabular-nums; }
+.sql-editor-panel .feed-readout.moving { color: var(--ink); border-color: color-mix(in srgb, var(--ok) 55%, transparent); }
+.sql-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 0.3rem 1.1rem; font-family: var(--mono); font-size: 0.82rem; color: var(--ink-soft); font-variant-numeric: tabular-nums; }
+.sql-meta .sql-time { color: var(--ink); font-weight: 600; }
+.sql-copy { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; margin-left: auto; font-family: var(--font); }
+.sql-copy .hint { margin: 0; }
+.sql-scroll { max-height: 30rem; overflow: auto; }
+table.sql-grid td, table.sql-grid th { max-width: 28rem; overflow: hidden; text-overflow: ellipsis; }
+table.sql-grid thead th { z-index: 1; }
+table.sql-grid td { color: var(--ink); }
+table.sql-grid .null { color: var(--ink-faint); font-style: italic; font-size: 0.8em; letter-spacing: 0.04em; border: 1px solid var(--border); border-radius: 4px; padding: 0 0.3rem; }
+table.sql-grid tbody tr:nth-child(even) td { background: color-mix(in srgb, var(--ink) 3%, transparent); }
+.sql-error-text { margin: 0.4rem 0 0; white-space: pre-wrap; overflow-wrap: anywhere; font-family: var(--mono); font-size: 0.84rem; color: var(--bad); }
+pre.sql-plan { max-height: 20rem; color: var(--ink); }
+.sql-table { margin: 0.4rem 0; padding: 0.2rem 0.6rem; }
+.sql-table summary { flex-wrap: wrap; gap: 0.2rem 0.6rem; font-size: 0.9rem; }
+.sql-table summary b { font-family: var(--mono); }
+.sql-rowcount { margin-left: auto; font-family: var(--mono); font-size: 0.8rem; color: var(--ink-soft); font-variant-numeric: tabular-nums; }
+.sql-cols { list-style: none; margin: 0.2rem 0 0.4rem; padding: 0; display: grid; gap: 0.15rem; }
+.sql-cols li { display: flex; justify-content: space-between; gap: 0.8rem; font-size: 0.82rem; }
+.sql-type { font-family: var(--mono); font-size: 0.76rem; color: var(--ink-faint); }
+.sql-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.1rem; }
+.sqlview > *, .sql-main > *, .sql-side > *, .sql-list li, .sql-table { min-width: 0; }
+.sql-list button.link { display: block; width: 100%; text-decoration: none; font-weight: 500; color: var(--accent-ink); text-align: left; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sql-list button.link:hover { text-decoration: underline; }
+.sql-list button.link.mono { font-family: var(--mono); font-size: 0.78rem; }
+.sqlbox .run-in-console { margin-top: 0.1rem; }
+@media (max-width: 1000px) {
+  .sqlview { grid-template-columns: minmax(0, 1fr); }
+  .sql-editor-panel .feed-readout { margin-left: 0; }
+}
+
+/* the first-run tour (demo): a dimmed spotlight on the real element and a small popover; the same tokens as the rest */
+.tour-help { width: 1.9rem; height: 1.9rem; border-radius: 50%; border: 1px solid var(--border-2); background: transparent; color: var(--ink-soft); font: inherit; font-weight: 700; cursor: pointer; line-height: 1; }
+.tour-help:hover { color: var(--ink); border-color: var(--accent); }
+.tour-backdrop { position: fixed; inset: 0; z-index: 90; background: transparent; }
+.tour-spot { position: fixed; z-index: 91; border-radius: 12px; pointer-events: none; box-shadow: 0 0 0 100vmax rgba(5, 6, 8, 0.62); outline: 2px solid var(--accent-ink); outline-offset: 0; }
+.tour-pop { position: fixed; z-index: 92; width: min(340px, calc(100vw - 24px)); padding: 0.8rem 1rem 0.9rem; background: var(--surface); color: var(--ink); border: 1px solid var(--border-2); border-radius: 12px; box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45); }
+.tour-pop h2 { font-size: 1.02rem; margin: 0 0 0.3rem; }
+.tour-pop p { margin: 0.2rem 0; font-size: 0.9rem; color: var(--ink-soft); }
+.tour-pop .tour-count { font-family: var(--mono); font-size: 0.74rem; color: var(--ink-faint); margin: 0 0 0.2rem; }
+.tour-actions { display: flex; align-items: center; gap: 0.4rem; margin-top: 0.7rem; }
+.tour-spacer { flex: 1; }
+.tour-pop.dock { left: 8px; right: 8px; bottom: 8px; top: auto; width: auto; }
+@media (prefers-reduced-motion: no-preference) {
+  .tour-spot { transition: top 0.18s ease, left 0.18s ease, width 0.18s ease, height 0.18s ease; }
+  .tour-pop { animation: tour-in 0.16s ease-out; }
+  @keyframes tour-in { from { transform: translateY(6px); } to { transform: none; } }
+}
+@media (max-width: 700px) { .app-top .tour-help { margin-left: auto; } }

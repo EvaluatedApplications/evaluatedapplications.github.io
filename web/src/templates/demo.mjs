@@ -8,9 +8,10 @@ import { breadcrumbs, crumbsLd, secHead } from '../layout.mjs';
 export default function demo(ctx) {
   const d = ctx.pages.umbrarium, s = d.demo, m = d.measured;
   const crumbs = [{ label: 'Home', href: '/' }, { label: 'Tools', href: '/tools/' }, { label: 'Umbrarium', href: '/umbrarium/' }];
-  const measured = html`<div class="tbl-wrap"><table class="tbl"><caption>${m.caption}</caption>
-    <thead><tr>${m.head.map((h, i) => html`<th scope="col"${i > 1 ? raw(' class="num"') : ''}>${h}</th>`)}</tr></thead>
-    <tbody>${m.rows.map((r) => html`<tr>${r.map((c, i) => (i === 0 ? html`<th scope="row">${c}</th>` : html`<td${i > 1 ? raw(' class="num"') : ''}>${c}</td>`))}</tr>`)}</tbody></table></div>`;
+  const numCls = (i) => (i > 0 ? raw(' class="num"') : '');
+  const measured = html`${m.tables.map((t) => html`<div class="tbl-wrap"><table class="tbl"><caption>${t.caption}</caption>
+    <thead><tr>${t.head.map((h, i) => html`<th scope="col"${numCls(i)}>${h}</th>`)}</tr></thead>
+    <tbody>${t.rows.map((r) => html`<tr>${r.map((c, i) => (i === 0 ? html`<th scope="row">${c}</th>` : html`<td${numCls(i)}>${c}</td>`))}</tr>`)}</tbody></table></div>`)}`;
   const main = html`
 <div class="demo-page">
 <section class="demo-strip" aria-labelledby="h-demo-title">
@@ -20,7 +21,7 @@ export default function demo(ctx) {
     <p class="lede">${d.lede}</p>
     <div class="demo-more">
       <details class="demo-disc"><summary>${d.looking.summary}</summary>
-        <div class="demo-panel"><ul class="demo-list">${d.looking.items.map((t) => html`<li>${t}</li>`)}</ul></div>
+        <div class="demo-panel"><p class="tool-note">${d.looking.intro}</p><ul class="demo-list">${d.looking.items.map((t) => html`<li>${t}</li>`)}</ul></div>
       </details>
       <details class="demo-disc"><summary>${m.summary}</summary>
         <div class="demo-panel"><p class="tool-note">${m.intro}</p>${measured}${m.paragraphs.map((t) => html`<p class="prose-block">${t}</p>`)}</div>
