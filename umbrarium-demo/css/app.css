@@ -263,8 +263,8 @@ details.fold > summary { cursor: pointer; font-weight: 600; min-height: 2rem; di
 
 /* browser demo: the permanent banner and the size picker */
 .demo-banner { margin: 0; padding: 0.1rem 0.7rem; font-size: 0.74rem; line-height: 1.4; color: var(--ink-soft); border: 1px solid var(--border-2); border-radius: 999px; background: transparent; }
-.demo-picker { max-width: 60rem; margin: 1.5rem auto; padding: 1.2rem 1.4rem 1.4rem; }
-.picker-cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr)); gap: 0.4rem 2rem; }
+.demo-picker { max-width: none; margin: 0.8rem 0; padding: 1.2rem clamp(1rem, 2vw, 2rem) 1.4rem; }
+.picker-cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr)); gap: 0.4rem clamp(1.5rem, 3vw, 3rem); }
 fieldset.field { border: 0; padding: 0; margin: 0.6rem 0; min-width: 0; }
 fieldset.field legend, .field .lbl { color: var(--ink-soft); font-size: 0.85rem; padding: 0; margin-bottom: 0.3rem; }
 .optset { display: flex; flex-wrap: wrap; gap: 0.4rem; }
@@ -288,15 +288,42 @@ input[type=range] { width: 100%; accent-color: var(--accent); min-height: 1.6rem
 .dash { display: block; }
 .dash.has-side { display: grid; grid-template-columns: 17.5rem minmax(0, 1fr); gap: 0 1.1rem; align-items: start; }
 .dash-main { min-width: 0; }
-.dash-side { position: sticky; top: 0.6rem; max-height: calc(100vh - 1.2rem); overflow-y: auto; align-self: start; }
-.dash-side .panel { padding: 0.8rem 0.9rem 0.9rem; }
-.dash-side .panel h2 { font-size: 1rem; }
-.dash-side .panel h3.sub { margin-top: 0.9rem; }
-.dash-side .sizes .opt { padding: 0.3rem 0.55rem; min-width: 3rem; min-height: 2.1rem; }
+/* the strip scrolls on its own; Rebuild / Reset stay in a footer that never scrolls away */
+.dash-side { position: sticky; top: 0.6rem; max-height: calc(100vh - 4.2rem); align-self: start; display: flex; flex-direction: column; }
+.dash-side .demo-panel { display: flex; flex-direction: column; min-height: 0; max-height: calc(100vh - 4.2rem); padding: 0; overflow: hidden; }
+.dash-side .demo-panel h2 { font-size: 1rem; margin: 0; padding: 0.6rem 0.9rem 0.3rem; }
+.side-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 0 0.9rem 0.5rem; }
+.side-foot { flex: none; display: flex; flex-wrap: wrap; gap: 0.5rem; padding: 0.55rem 0.9rem; border-top: 1px solid var(--border); background: var(--surface); }
+.side-foot .btn { flex: 1 1 auto; }
+.dash-side .panel h3.sub { margin: 0.55rem 0 0.25rem; font-size: 0.9rem; }
+.dash-side .row { margin: 0.25rem 0 0; gap: 0.4rem; }
+.dash-side .row.tight { margin: 0.1rem 0 0.2rem; }
+.dash-side fieldset.field { margin: 0.3rem 0; }
+.dash-side .field { margin-top: 0.3rem; margin-bottom: 0.2rem; }
+.dash-side fieldset.field legend, .dash-side .field .lbl { font-size: 0.8rem; margin-bottom: 0.15rem; }
+.dash-side .hint { margin: 0.2rem 0; font-size: 0.8rem; line-height: 1.4; }
+.dash-side .estimate { margin: 0.2rem 0; font-size: 0.78rem; }
+.dash-side label.check { min-height: 1.8rem; }
+.dash-side .seg button { min-height: 1.9rem; padding: 0.25rem 0.6rem; }
+.dash-side input[type=range] { min-height: 1.2rem; }
+.dash-side .opt { min-height: 2rem; padding: 0.25rem 0.55rem; }
+.dash-side .stack-opts { gap: 0.25rem; }
+.dash-side .optset { gap: 0.3rem; }
+.dash-side .sizes .opt { padding: 0.25rem 0.5rem; min-width: 2.7rem; min-height: 1.9rem; }
+.dash-side .scale { margin: 0.2rem 0 0.4rem; padding: 0.4rem 0.5rem; border: 1px dashed var(--border-2); border-radius: 9px; }
+.dash-side .scale .btn { width: 100%; }
+.scale-switch { color: var(--ink-soft); }
+.dash-side label.field.range { grid-template-columns: auto 1fr; align-items: center; column-gap: 0.6rem; }
+.dash-side label.field.range input { min-width: 0; }
+.dash-side label.field.seed.inline { grid-template-columns: auto 1fr; align-items: center; column-gap: 0.6rem; }
+.dash-side label.field.seed.inline input { max-width: none; }
 .side-toggle { display: none; margin: 0 0 0.6rem; }
 @media (max-width: 1000px) {
   .dash.has-side { display: block; }
   .side-toggle { display: inline-flex; }
   .dash-side { display: none; position: static; max-height: none; margin: 0 0 0.8rem; }
+  .dash-side .demo-panel { max-height: none; overflow: visible; }
+  .side-body { overflow: visible; }
+  .side-foot { position: sticky; bottom: 0; }
   .dash-side.open { display: block; }
 }
