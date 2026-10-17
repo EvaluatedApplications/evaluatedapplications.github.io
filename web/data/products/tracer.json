@@ -36,7 +36,7 @@
   "intro": "Tracer is a pathfinding and game-AI SDK for real-time simulations with many moving agents: crowds, RTS-style unit groups and tactical squads. It bakes triangle navmeshes, routes single agents and whole swarms across them, reacts to obstacles that appear or vanish mid-game, and adds the game-AI toolkit around pathfinding: line of sight, fog of war, influence maps and combat engagement.",
   "facts": ["Triangle navmesh and a bake-free tile lane", "Self-tuning concurrency", "net8.0 and net10.0"],
   "why": [
-    { "title": "A swarm costs close to one agent", "text": "Agents that share a goal share one solve, so five hundred agents heading to the same point cost close to one. Adaptive path budgeting keeps large swarms inside a frame-time budget under pressure." },
+    { "title": "A swarm that shares a goal shares the work", "text": "Agents that share a goal share one guidance solve. In a measured 500-agent tick on a 1,152-triangle mesh, a shared goal with a bounded conflict radius took about 3.8 ms against about 22 ms for 500 distinct goals. Adaptive path budgeting keeps large swarms inside a frame-time budget under pressure." },
     { "title": "Obstacles change without a re-bake", "text": "Block and unblock regions of a baked mesh while the game runs. The mesh handle is immutable, so you swap the new one in between ticks." },
     { "title": "Everything around the path", "text": "Line of sight, fog of war, influence maps, congestion analysis, steering behaviors and combat resolution ship in the same SDK, on the same pipeline runtime." }
   ],

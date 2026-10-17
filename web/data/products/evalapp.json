@@ -81,6 +81,8 @@
         { "title": "One line to turn on", "text": "Call WithNeuralTuning() on the app builder, after WithResource and before DefineDomain. Nothing else changes." },
         { "title": "One model for the process", "text": "NeuralTuning.UseGlobally installs a shared model for every app in the process that has tuning enabled. UseGloballyPersisted saves it to a file as it trains and loads it next time." },
         { "title": "Coordinated moves", "text": "With several gates it credits the gate it moved last and moves only the one under the most contention, so coupled gates are not all changed at once." },
+        { "title": "Paced and light", "text": "It makes at most one decision per 25 ms of wall time, so its cost does not grow with the rate of work. Measured at about 2 ms of work per decision, on Windows 11 in Release." },
+        { "title": "Keeps what it learned", "text": "Save the trained model to bytes or a file and load it in the next run. A starting model ships inside the package, so there is nothing to configure." },
         { "title": "No licence key", "text": "It runs the same with or without a licence key." }
       ],
       "snippet": {
@@ -91,6 +93,8 @@
       "good": [
         "It depends on EvalApp and AlgFormer, which are pulled in with it, and it needs .NET 8 or later.",
         "UseGlobally and UseGloballyPersisted change a process-wide default, so drive one workload at a time under them.",
+        "The tuner only learns from gated work, meaning a ForEach or a Gate. Steps outside a gate are invisible to it.",
+        "For a single pipeline whose best concurrency is about the core count, the built-in tuner is simpler and enough.",
         "If the EVALAPP_NEURAL_MODEL environment variable is set, any process that loads the assembly installs the persisted tuner and trains against that file. Leave it unset unless you mean it.",
         "A model file that does not match the expected shape is replaced silently by a fresh one, so a run that seems to have forgotten what it learned may have discarded a stale file."
       ]
