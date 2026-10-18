@@ -42,8 +42,11 @@ native rubric.
 
 A doctrine is up to 4 slots per round. Two families of token:
 - **Army orders (Pleroma, one pass over the whole army):** Rotate the line (ShiftKeys / formation relabel), Flip a trait
-  (RelabelFlags), Age the veterans (Tick), Merge two cohorts (Bind: pairs, keys add, traits combine), Aura (a Boolean
-  condition over traits via FlagPredicate; effect scales with CountWhere), Cull (Restrict where the shape allows).
+  (RelabelFlags), Age the veterans (Tick), Merge one kind into another (AS BUILT: a move, read then subtract and add;
+  Bind multiplies counts, so it cannot merge; Phasor gap AG1 asks for MergeKeys), Aura (a Boolean condition over traits via
+  FlagPredicate; effect scales with CountWhere), Cull (Restrict: BLOCKED on the army shape, Phasor gap CG1/AG2, so Cull is never
+  legal until that is fixed). Formation slots are the three rotations of one 3-cycle in S_3 (lex indices 0, 3, 4), and Rotate is a
+  RelabelArrangements 3-cycle.
 - **Field orders (Tracer behaviour per cohort group):** Advance, Hold, Flank, Fall back, Guard (stay near an ally), Hunt
   (seek NearestInRange).
 A weighted doctrine splits an army exactly (integer weights, no dice): "3 parts hold, 1 part flanks".
