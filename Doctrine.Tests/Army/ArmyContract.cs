@@ -47,7 +47,7 @@ public static class ArmyContract
                 Expect.Equal(0, r.Round, "a fresh army starts at round 0");
                 Expect.True(r.Gold >= 0, "gold is never negative");
                 Expect.True(r.Soldiers > 0, "a fresh army has soldiers");
-                Expect.True(r.Kinds <= Roster.Size, "at most 8 kinds (the command span)");
+                Expect.True(r.Kinds <= Roster.Size, "at most 8 kinds (the roster: there is no ninth kind, so no separate command-span refusal exists)");
                 Expect.True(r.Cohorts.All(c => (uint)c.Key < Roster.Size && c.Count > 0 && (uint)c.Slot < DoctrineVocabulary.Groups && c.Veterancy >= 0 && c.PowerPct > 0),
                     "every cohort has a valid kind, count > 0, slot 0..2, veterancy >= 0, power > 0");
                 Expect.True(r.Cohorts.Select(c => c.Key).Distinct().Count() == r.Cohorts.Count, "one cohort per kind");
@@ -128,7 +128,9 @@ public static class ArmyContract
             var before = a.Read().Digest();
             var rep = await a.DraftAsync(new DraftRequest(0, 1, [new DraftPick(99, 1), new DraftPick(-1, 1), new DraftPick(0, 0), new DraftPick(0, -5), new DraftPick(7, 100000)]), default);
             Expect.Equal(5, rep.Refused.Count, "every bad pick is refused (and reported, not thrown)");
+            Expect.True(rep.Refused.All(x => !string.IsNullOrWhiteSpace(x.Reason)), "every refusal says why");
             Expect.Equal(0, rep.Accepted.Count, "nothing accepted");
+            Expect.Equal(0, rep.GoldSpent, "a refused draft spends nothing");
             Expect.Equal(before, a.Read().Digest(), "a refused draft changed the army");
         }),
         new("legal-list-matches-behaviour", async s =>
@@ -218,5 +220,99 @@ public static class ArmyContract
             await a.EndRoundAsync(default);
             Expect.Equal(r + 1, a.Read().Round, "round number");
         }),
+        new("orders-see-the-state-earlier-orders-left", async s =>
+        {
+            // Legality is judged per token, in slot order, against the army the earlier tokens left (not once before the doctrine).
+            // (a) legal then illegal: the first merge takes kind 1 into kind 0, so the second finds nothing to merge.
+            var a = Fresh(s, 5); await a.ApplySpoilsAsync(new Spoils(40, 0), default);
+            await a.DraftAsync(new DraftRequest(0, 1, [new DraftPick(0, 1), new DraftPick(1, 1)]), default);
+            var merge0 = DoctrineVocabulary.Army(ArmyOrderKind.Merge, 0);
+            Expect.True(a.Read().Legal.Allows(merge0), "setup: merging kind 1 into kind 0 is legal while both are present");
+            var rep = await a.ApplyArmyOrdersAsync(Doctrine.Of(merge0, merge0), default);
+            Expect.Equal(1, rep.Applied, "the first merge applies");
+            Expect.Equal(1, rep.Skipped, "the second merge was legal before the doctrine but not after the first token: it must be skipped");
+            // (b) illegal then legal: flipping a trait bit that no cohort holds gives every cohort that trait, so its aura is legal after the flip only.
+            bool found = false;
+            for (int seed = 1; seed <= 40 && !found; seed++)
+            {
+                var b = Fresh(s, seed); var read = b.Read();
+                int held = read.Cohorts.Aggregate(0, (m, c) => m | (int)c.Traits);
+                int x = Enumerable.Range(0, DoctrineVocabulary.Traits).FirstOrDefault(t => (held >> t & 1) == 0, -1);
+                if (x < 0) continue;
+                var aura = DoctrineVocabulary.Army(ArmyOrderKind.Aura, x);
+                Expect.True(!read.Legal.Allows(aura), $"setup: an aura on trait {x} that no cohort holds must not be legal");
+                rep = await b.ApplyArmyOrdersAsync(Doctrine.Of(DoctrineVocabulary.Army(ArmyOrderKind.Flip, x), aura), default);
+                Expect.Equal(2, rep.Applied, "flip, then the aura the flip made legal: both apply (legality is read after each token)");
+                Expect.Equal(0, rep.Skipped, "nothing is skipped");
+                found = true;
+            }
+            Expect.True(found, "setup: no army in seeds 1..40 had a trait nobody holds (the case needs one)");
+        }),
+        new("loss-names-its-cohort-by-kind-not-slot", async s =>
+        {
+            // An army has one cohort per kind, so the kind is the cohort's name; Slot on a loss is a record, never a condition.
+            var a = Fresh(s, 6);
+            var c0 = a.Read().Cohorts.OrderByDescending(c => c.Count).First();
+            int wrong = (c0.Slot + 1) % DoctrineVocabulary.Groups;
+            int removed = await a.ApplyLossesAsync([new CohortLoss(c0.Key, wrong, 1)], default);
+            Expect.Equal(1, removed, "a loss applies by kind whatever slot it names");
+            Expect.Equal(c0.Count - 1, a.Read().Cohorts.FirstOrDefault(c => c.Key == c0.Key)?.Count ?? 0, "the cohort lost that soldier");
+        }),
+        new("draft-is-decided-by-the-picks-alone", async s =>
+        {
+            // Round and Seed on a request are labels. Chance enters an army once, in Create; a draft never rolls.
+            var a = Fresh(s, 4); await a.ApplySpoilsAsync(new Spoils(30, 0), default);
+            var x = Clone(s, a); var y = Clone(s, a);
+            IReadOnlyList<DraftPick> picks = [new DraftPick(2, 2), new DraftPick(5, 1), new DraftPick(99, 1)];
+            var rx = await x.DraftAsync(new DraftRequest(0, 1, picks), default);
+            var ry = await y.DraftAsync(new DraftRequest(7, 12345, picks), default);
+            Expect.Equal(rx.GoldSpent, ry.GoldSpent, "gold spent must not depend on the request's round or seed");
+            Expect.Equal(rx.Accepted.Count, ry.Accepted.Count, "accepted picks must not depend on the request's round or seed");
+            Expect.Equal(rx.Refused.Count, ry.Refused.Count, "refused picks must not depend on the request's round or seed");
+            Expect.Equal(x.Read().Digest(), y.Read().Digest(), "the army after a draft must not depend on the request's round or seed");
+        }),
+        new("veterancy-lives-on-a-ring", async s =>
+        {
+            // Veterancy is a position on a ring of at most RingBound places: ageing and experience move it round and it wraps to 0, so it
+            // stays inside 0..RingBound-1 however long the war lasts, and power stays positive at every place.
+            var a = Fresh(s, 8);
+            Expect.True(a.Read().Legal.Allows(DoctrineVocabulary.Army(ArmyOrderKind.Age)), "setup: Age is legal for an army with soldiers");
+            int top = 0; bool wrapped = false;
+            for (int i = 0; i < 200; i++)
+            {
+                await a.ApplyArmyOrdersAsync(Doctrine.Of(DoctrineVocabulary.Army(ArmyOrderKind.Age)), default);
+                if (i % 7 == 0) await a.ApplySpoilsAsync(new Spoils(0, 3), default);
+                var r = a.Read();
+                Expect.True(r.Cohorts.All(c => c.Veterancy >= 0 && c.Veterancy < RingBound), $"after {i + 1} ageing steps a veterancy left the ring 0..{RingBound - 1}");
+                Expect.True(r.Cohorts.All(c => c.PowerPct > 0), "power stays positive at every place on the ring");
+                int now = r.Cohorts.Max(c => c.Veterancy);
+                if (now < top) wrapped = true;
+                top = now;
+            }
+            Expect.True(wrapped, "veterancy never wrapped in 200 steps: it is a ring, not a counter or a ceiling");
+        }),
+        new("score-follows-soldiers-and-gold", async s =>
+        {
+            // The scale and the formula are the section's own. What must hold of ANY scale: gold counts, soldiers count, and nothing a battle
+            // takes away ever raises the score.
+            var a = await Worked(s);
+            var s0 = a.Score();
+            await a.ApplySpoilsAsync(new Spoils(5, 0), default);
+            Expect.True(a.Score() > s0, "winning gold raises the score");
+            var start = a.Score(); var prev = start;
+            for (int guard = 0; a.Read().Cohorts.Count > 0; guard++)
+            {
+                Expect.True(guard < 10_000, "an army that loses a soldier at a time must run out of soldiers");
+                var c = a.Read().Cohorts[0];
+                await a.ApplyLossesAsync([new CohortLoss(c.Key, c.Slot, 1)], default);
+                var now = a.Score();
+                Expect.True(now <= prev, "losing a soldier raised the score");
+                prev = now;
+            }
+            Expect.True(prev < start, "an army with no soldiers must be worth less than the same army with them");
+        }),
     ];
+
+    /// <summary>Veterancy places a ring may have at most (CONTRACT.md a). A section picks its own period at or below this.</summary>
+    public const int RingBound = 64;
 }

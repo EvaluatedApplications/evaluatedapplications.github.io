@@ -2,8 +2,9 @@ namespace Doctrine.Battle;
 
 // STUB for seam (b), owned by tracer-owner. A fake battle in integer arithmetic: cohort blobs walk toward each other on a flat
 // arena and trade damage in range. It exists so the pipeline, the replay and every contract test run headless today.
-// The real section (Tracer navmesh, behaviours, engagement service) replaces THIS FILE'S classes, keeps the folder Doctrine\Battle\,
-// and must pass BattleContractTests and ReplayContractTests. Nothing outside Battle\ may reference these types.
+// The real section (Tracer navmesh, behaviours, engagement service) is written beside this file, in the folder Doctrine\Battle\, and
+// must pass BattleContractTests and ReplayContractTests. This file STAYS as the reference for the shared mutants and the headless
+// default (SECTIONS.md). Only tests and composition roots may name these types.
 
 public sealed class StubBattleEngine : IBattleEngine
 {

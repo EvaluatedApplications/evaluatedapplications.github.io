@@ -25,16 +25,21 @@ they run inline anyway). Package extensions (`WithTracer`, `WithEngagement`, ...
 HOLDS it in `DoctrineContext.Tracer` (EvalApp PACKAGE.md section 20, snippet 4). `WithBattle(ctx => ...)` hands the finished context to
 the engine factory.
 
-**Builder.** `DoctrineBuilder.New().WithArmy().WithBattle().WithGeneral().WithPlayer().WithRules().WithTracer().WithSingleThread().Build()`
-returns a `DoctrineGame` (three compiled pipelines). Any seam left unset gets its stub. `game.PlayAsync(seed)` plays headless and returns
-a `GameResult` (every `RoundRecord` with its `BattleReplay`, plus the player's army code).
+**Builder.** `DoctrineBuilder.New().WithDefaults().WithArmy().WithBattle().WithGeneral().WithPlayer().WithRules().WithTracer().WithSingleThread().Build()`
+returns a `DoctrineGame` (three compiled pipelines). A seam is taken from the caller's own `With*`, else from the `WithDefaults` composition
+root (one place that names the real sections and builds the world an engine needs), else the reference stub. `game.PlayAsync(seed)` plays
+headless and returns a `GameResult` (every `RoundRecord` with its `BattleReplay`, plus the player's army code).
 
 **One thread, no disk.** Nothing here starts a thread or touches a file. EvalApp detects a browser (`ExecutionHost.IsSingleThreaded`, reason
-"browser (no worker threads)") and yields to the host about every 12 ms between steps (3-4 yields for an 8-round game). The loop
-inside `Battle.Ticks` is one step, but each tick runs the nested `BattleTick` pipeline, whose entry and steps are yield points on the same
-process-wide slice clock, so a long battle does not freeze the page. A single long step inside a section does not yield. MEASURED: the full 8-round game, trimmed
-AOT browser-wasm under Node, plays the same game as desktop (identical digest) in about 4 ms per round on a loaded machine. See `Doctrine.Tests`
-and the probe notes in the hand-off report.
+"browser (no worker threads)") and yields to the host about every 12 ms between steps. The loop inside `Battle.Ticks` is one step, but each
+tick runs the nested `BattleTick` pipeline, whose entry and steps are yield points on the same process-wide slice clock, so a long battle does
+not freeze the page. A single long step inside a section does not yield, and the FIRST tick of a Tracer battle is one such step.
+
+**Cost (per section; the figures belong to the section that was running).** With the reference stub battle the full 8-round game, trimmed AOT
+browser-wasm under Node, plays the same game as desktop (identical digest) in about 4 ms per round on a loaded machine, and yields 3-4 times.
+With the Tracer battle a round is about 100 ms, so an 8-round game takes about 0.8 s on desktop and on wasm (tracer-owner's measurement), and the
+pipeline yields about every 12 ms of that work. The page should treat a round as a ~100 ms job and show progress while it runs; the first tick
+of each battle cannot be interrupted. See `Doctrine.Tests` and the probe notes in the hand-off report.
 
 **Limits.** A pipeline nested deeper than 256 fails with `PipelineRecursionException`, so `MaxRounds` is capped at 200 (`WithRules` refuses
 more). The per-tick loop uses a loop in a step because recursion per tick would hit that same guard. Task data holds live objects (armies,

@@ -538,12 +538,15 @@ public sealed class TracerBattleSession : IBattleSession
         return l;
     }
 
-    public ReplayFrame Snapshot() => new(Tick, Blobs(), Array.Empty<ReplayEvent>());
+    /// <summary>The arena's changing state for the recording: the gate bit is set from the frame after the gate fell.</summary>
+    int WorldFlags() => _gateFallen ? WorldFlag.GateFallen : 0;
+
+    public ReplayFrame Snapshot() => new(Tick, Blobs(), Array.Empty<ReplayEvent>(), WorldFlags());
 
     public ReplayFrame Record()
     {
         Tick++;
-        var frame = new ReplayFrame(Tick, Blobs(), _events.ToList());
+        var frame = new ReplayFrame(Tick, Blobs(), _events.ToList(), WorldFlags());
         _events.Clear();
         return frame;
     }

@@ -78,17 +78,32 @@ public sealed class DoctrineBuilder
     internal TracerContext? Tracer;
     internal DoctrineDomain Rules = new();
     internal bool? SingleThread;
+    internal Action<DoctrineBuilder>? Defaults;
 
     public static DoctrineBuilder New() => new();
 
+    /// <summary>
+    /// Builds the game. A seam is taken from, in order: the caller's own <c>With*</c>, the <see cref="DoctrineBuilderExtensions.WithDefaults"/>
+    /// composition root, the reference stub. Nothing else in the game names an implementation.
+    /// </summary>
     public DoctrineGame Build()
     {
-        var armies = Armies ?? new global::Doctrine.Army.StubArmyService();
-        var player = Player ?? new global::Doctrine.Player.ScriptedPlayer(1);
-        var general = General ?? new global::Doctrine.General.TableLookupGeneral();
-        var ctx = new DoctrineContext(armies, Battle ?? new global::Doctrine.Battle.StubBattleEngine(), general, player, Tracer);
+        IArmyService? armies = Armies; IBattleEngine? engine = Battle; IGeneral? general = General; IPlayerInput? player = Player;
+        var factory = BattleFactory; var tracer = Tracer;
+        if (Defaults is not null)
+        {
+            // The composition root fills ONLY what the caller left unset; an explicit With* always wins.
+            var d = new DoctrineBuilder();
+            Defaults(d);
+            armies ??= d.Armies; general ??= d.General; player ??= d.Player; tracer ??= d.Tracer;
+            if (engine is null && factory is null) { engine = d.Battle; factory = d.BattleFactory; }
+        }
+        armies ??= new global::Doctrine.Army.StubArmyService();
+        player ??= new global::Doctrine.Player.ScriptedPlayer(1);
+        general ??= new global::Doctrine.General.TableLookupGeneral();
+        var ctx = new DoctrineContext(armies, engine ?? new global::Doctrine.Battle.StubBattleEngine(), general, player, tracer);
         // A battle engine can need the finished context (it reads the Tracer context out of it), so a factory is resolved last.
-        if (BattleFactory is not null) ctx.Battle = BattleFactory(ctx);
+        if (factory is not null) ctx.Battle = factory(ctx);
         return new DoctrineGame(ctx, Rules, SingleThread);
     }
 }
@@ -96,6 +111,14 @@ public sealed class DoctrineBuilder
 /// <summary>Builder extensions in the published-extension style: <c>Doctrine.New().WithArmy(..).WithBattle(..).Build()</c>.</summary>
 public static class DoctrineBuilderExtensions
 {
+    /// <summary>
+    /// The COMPOSITION ROOT hook. <paramref name="sections"/> receives a scratch builder and names the real sections with the ordinary
+    /// <c>With*</c> calls (<c>b.WithArmy(..).WithTracer(world).WithBattle(ctx =&gt; new TracerBattleEngine(ctx.Tracer!))</c>); at <c>Build()</c>
+    /// every seam the caller did not set directly is taken from it, and any seam it leaves unset falls back to the stub. Put this in ONE
+    /// place per app (the page's startup, a test fixture) so "which sections is the game made of" has one answer; the world an engine needs is
+    /// built there. Rules (<c>WithRules</c>) and the single-thread pin are the caller's own and are never taken from here.
+    /// </summary>
+    public static DoctrineBuilder WithDefaults(this DoctrineBuilder b, Action<DoctrineBuilder> sections) { b.Defaults = sections; return b; }
     public static DoctrineBuilder WithArmy(this DoctrineBuilder b, IArmyService armies) { b.Armies = armies; return b; }
     public static DoctrineBuilder WithBattle(this DoctrineBuilder b, IBattleEngine engine) { b.Battle = engine; b.BattleFactory = null; return b; }
     /// <summary>Late-bound battle engine: the factory receives the context so it can read <see cref="DoctrineContext.Tracer"/>.</summary>

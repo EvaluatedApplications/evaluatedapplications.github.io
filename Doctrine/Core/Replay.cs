@@ -5,7 +5,9 @@ namespace Doctrine;
 /// <summary>
 /// The replay record format (seam e). A battle is simulated ONCE by one authority; every other device PLAYS BACK this
 /// recording and never recomputes it. Hand-written binary (varints), so no reflection serialisation and no float on the wire.
-/// Layout: "DRP" + version, arena, seed, tick limit, frames (tick, blobs, events), result.
+/// Layout: "DRP" + version, arena, seed, tick limit, frames (tick, blobs, events, world flags from version 2), result.
+/// Version 2 added the per-frame world flags; version 1 is still read (flags 0) and a version-1 replay is written back in the version-1
+/// layout, so a stored recording round-trips bit for bit in the version it was made in.
 /// </summary>
 public static class ReplayCodec
 {
@@ -24,6 +26,7 @@ public static class ReplayCodec
             foreach (var b in f.Blobs) { w.Var(b.Id); w.Byte((byte)b.Side); w.Var(b.Key); w.Var(b.Slot); w.Var(b.X); w.Var(b.Y); w.Var(b.Strength); }
             w.Var(f.Events.Count);
             foreach (var e in f.Events) { w.Var(e.Source); w.Var(e.Target); w.Var(e.Damage); }
+            if (r.Version >= 2) w.Var(f.WorldFlags);   // version 1 had no world flags: a version-1 replay is written in the version-1 layout
         }
         w.Byte((byte)r.Result.Outcome); w.Var(r.Result.Ticks);
         Losses(w, r.Result.AttackerLosses); Losses(w, r.Result.DefenderLosses);
@@ -45,7 +48,7 @@ public static class ReplayCodec
             var rd = new Reader(data.ToArray());
             foreach (var m in Magic) if (rd.Byte() != m) { error = "not a replay"; return false; }
             int version = rd.Var();
-            if (version != BattleReplay.CurrentVersion) { error = $"unknown replay version {version}"; return false; }
+            if (version is < 1 or > BattleReplay.CurrentVersion) { error = $"unknown replay version {version}"; return false; }
             string arena = rd.Str(); int seed = rd.Var(); int limit = rd.Var();
             int n = rd.Count();
             var frames = new List<ReplayFrame>(n);
@@ -58,7 +61,8 @@ public static class ReplayCodec
                 int ec = rd.Count();
                 var ev = new List<ReplayEvent>(ec);
                 for (int j = 0; j < ec; j++) ev.Add(new(rd.Var(), rd.Var(), rd.Var()));
-                frames.Add(new(tick, blobs, ev));
+                int flags = version >= 2 ? rd.Var() : 0;
+                frames.Add(new(tick, blobs, ev, flags));
             }
             var outcome = (BattleStatus)rd.Byte(); int ticks = rd.Var();
             var al = ReadLosses(rd); var dl = ReadLosses(rd);
@@ -90,6 +94,7 @@ public static class ReplayCodec
             h.Add(f.Tick);
             foreach (var b in f.Blobs) { h.Add(b.Id); h.Add((int)b.Side); h.Add(b.Key); h.Add(b.Slot); h.Add(b.X); h.Add(b.Y); h.Add(b.Strength); }
             foreach (var e in f.Events) { h.Add(e.Source); h.Add(e.Target); h.Add(e.Damage); }
+            h.Add(f.WorldFlags);
         }
         h.Add((int)r.Result.Outcome); h.Add(r.Result.Ticks);
         foreach (var l in r.Result.AttackerLosses) { h.Add(l.Key); h.Add(l.Slot); h.Add(l.Lost); }

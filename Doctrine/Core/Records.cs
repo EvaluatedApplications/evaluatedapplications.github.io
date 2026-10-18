@@ -36,14 +36,22 @@ public sealed record ArmyReadModel(
 /// <summary>Buy <see cref="Count"/> soldiers of kind <see cref="Kind"/>.</summary>
 public readonly record struct DraftPick(int Kind, int Count);
 
+/// <summary>
+/// The picks to buy. <see cref="Round"/> and <see cref="Seed"/> say which round of which game this is, for logs and displays ONLY: a draft is
+/// fully decided by the picks, so an army must give the same result whatever Round and Seed say (chance enters the army once, in
+/// <see cref="IArmyService.Create"/>, never in a draft).
+/// </summary>
 public sealed record DraftRequest(int Round, int Seed, IReadOnlyList<DraftPick> Picks);
 
-/// <summary>What the draft did. Refusals are data (a ninth kind, too little gold), never exceptions.</summary>
+/// <summary>What the draft did. Refusals are data (an unknown kind, a count of zero, too little gold), each with a reason; never exceptions.</summary>
 public sealed record DraftReport(IReadOnlyList<DraftPick> Accepted, IReadOnlyList<(DraftPick Pick, string Reason)> Refused, int GoldSpent);
 
 public sealed record ArmyOrdersReport(int Applied, int Skipped);
 
-/// <summary>Soldiers lost by one cohort in a battle (Key and Slot name the cohort).</summary>
+/// <summary>
+/// Soldiers lost by one cohort in a battle. An army holds one cohort per kind, so <see cref="Key"/> alone names the cohort; <see cref="Slot"/>
+/// is the slot the cohort fought in, carried for the battle's records and displays. The army applies a loss by Key and ignores Slot.
+/// </summary>
 public readonly record struct CohortLoss(int Key, int Slot, int Lost);
 
 public sealed record Spoils(int Gold, int Experience);
@@ -78,13 +86,27 @@ public readonly record struct ReplayBlob(int Id, Side Side, int Key, int Slot, i
 /// <summary>One engagement result in a tick: Source struck Target for Damage soldiers.</summary>
 public readonly record struct ReplayEvent(int Source, int Target, int Damage);
 
-/// <summary>State after <see cref="Tick"/> completed ticks (frame 0 = the start). Strength is soldiers still standing.</summary>
-public sealed record ReplayFrame(int Tick, IReadOnlyList<ReplayBlob> Blobs, IReadOnlyList<ReplayEvent> Events);
+/// <summary>
+/// State after <see cref="Tick"/> completed ticks (frame 0 = the start). Strength is soldiers still standing. <see cref="WorldFlags"/> is
+/// the arena's own changing state at that tick, an int bitset (see <see cref="WorldFlag"/>); 0 means the arena is as it started.
+/// The recording carries cohorts and world flags, never terrain: the page draws the ground from the arena layout.
+/// </summary>
+public sealed record ReplayFrame(int Tick, IReadOnlyList<ReplayBlob> Blobs, IReadOnlyList<ReplayEvent> Events, int WorldFlags = 0);
+
+/// <summary>The defined bits of <see cref="ReplayFrame.WorldFlags"/>. A bit is only ever set by an event of the battle, and a bit that is set stays set.</summary>
+public static class WorldFlag
+{
+    /// <summary>Bit 0: the arena's gate has fallen (the ground it blocked is open or closed from this frame on, per the arena).</summary>
+    public const int GateFallen = 1 << 0;
+    /// <summary>Every defined bit. A recording that sets any other bit is refused by the replay contract (reserved for later versions).</summary>
+    public const int Defined = GateFallen;
+}
 
 public sealed record BattleReplay(
     int Version, string ArenaId, int Seed, int TickLimit, IReadOnlyList<ReplayFrame> Frames, BattleResult Result)
 {
-    public const int CurrentVersion = 1;
+    /// <summary>2 = frames carry <see cref="ReplayFrame.WorldFlags"/>. Version 1 is still read (every frame's flags are 0).</summary>
+    public const int CurrentVersion = 2;
     public const int Quantum = 16;   // positions are stored as (arena unit * 16)
 }
 

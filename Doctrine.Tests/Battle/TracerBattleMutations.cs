@@ -9,34 +9,7 @@ namespace Doctrine.Tests;
 // MUTATION PROOFS for the Tracer battle section. A test nobody has watched fail is only an assertion, so each of these breaks the real
 // engine in ONE way and requires the named case or check to go red. (The shared MutationProofs break the stub; these break THIS section.)
 
-/// <summary>The shared battle mutants, applied over any engine (the shared MutantBattleEngine is hard-wired to the stub).</summary>
-public sealed class MutantOver(IBattleEngine inner, BattleMut m) : IBattleEngine
-{
-    static int _runs;
-    public IReadOnlyList<ArenaInfo> Arenas => inner.Arenas;
-    public async ValueTask<IBattleSession> StartAsync(BattleSetup setup, CancellationToken ct)
-        => new MutantSession(await inner.StartAsync(setup, ct), m, Interlocked.Increment(ref _runs));
-}
-
-/// <summary>Rewrites every recorded frame, over any engine.</summary>
-public sealed class FrameMutantEngine(IBattleEngine inner, Func<ReplayFrame, ReplayFrame> rewrite) : IBattleEngine
-{
-    public IReadOnlyList<ArenaInfo> Arenas => inner.Arenas;
-    public async ValueTask<IBattleSession> StartAsync(BattleSetup setup, CancellationToken ct) => new Session(await inner.StartAsync(setup, ct), rewrite);
-
-    sealed class Session(IBattleSession s, Func<ReplayFrame, ReplayFrame> rewrite) : IBattleSession
-    {
-        public int Tick => s.Tick;
-        public BattleStatus Status => s.Status;
-        public ValueTask FieldOrdersAsync(CancellationToken ct) => s.FieldOrdersAsync(ct);
-        public ValueTask MoveAsync(CancellationToken ct) => s.MoveAsync(ct);
-        public ValueTask EngageAsync(CancellationToken ct) => s.EngageAsync(ct);
-        public ValueTask ApplyLossesAsync(CancellationToken ct) => s.ApplyLossesAsync(ct);
-        public ReplayFrame Snapshot() => rewrite(s.Snapshot());
-        public ReplayFrame Record() => rewrite(s.Record());
-        public BattleResult Finish(bool tickLimitReached) => s.Finish(tickLimitReached);
-    }
-}
+// MutantOver and FrameMutantEngine (promoted from here) live in Mutation\Mutants.cs, shared by every section.
 
 /// <summary>An engagement service whose resolution never lands a hit (the engine is told to use the one its Tracer context carries).</summary>
 sealed class SilentEngagement(IEngagementService inner) : IEngagementService

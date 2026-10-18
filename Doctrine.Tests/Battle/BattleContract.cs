@@ -23,6 +23,14 @@ public static class Sample
         return r.GetData();
     }
 
+    /// <summary>Both sides hold every group: nobody advances, so a fight this short cannot wipe either side out and only the tick limit can end it.</summary>
+    public static BattleSetup HoldSetup(string arena, int seed, int tickLimit, int soldiers = 60)
+    {
+        var holds = Enumerable.Range(0, DoctrineVocabulary.Groups).Select(g => new FieldOrder(g, FieldOrderKind.Hold, 1)).ToList();
+        var s = Setup(arena, seed, tickLimit, soldiers, soldiers);
+        return s with { Attacker = s.Attacker with { Orders = holds }, Defender = s.Defender with { Orders = holds } };
+    }
+
     public static int Standing(ReplayFrame f, Side s) => f.Blobs.Where(b => b.Side == s).Sum(b => b.Strength);
 }
 
@@ -61,6 +69,22 @@ public static class BattleContract
             int a = Sample.Standing(last, Side.Player), d = Sample.Standing(last, Side.Enemy);
             var expect = a > d ? BattleStatus.AttackerWon : d > a ? BattleStatus.DefenderWon : BattleStatus.Draw;
             if (a > 0 && d > 0) Expect.Equal(expect, b.Result.Outcome, "when the limit stops a battle the side with more soldiers wins (equal is a Draw)");
+        }),
+        new("a-battle-nobody-can-win-in-time-runs-to-the-limit-and-is-decided", async e =>
+        {
+            // The sample fight of the case above can end before its limit, which would leave the limit unexercised. Here both sides hold
+            // every group with a limit too short to wipe anyone out, so the LIMIT must be what ends the battle, on every arena.
+            foreach (var a in e.Arenas)
+            {
+                var b = await Sample.RunAsync(e, Sample.HoldSetup(a.Id, 11, 10));
+                Expect.Equal(10, b.Result!.Ticks, $"{a.Id}: with both sides holding, only the tick limit ends the battle");
+                Expect.Equal(11, b.Replay!.Frames.Count, $"{a.Id}: one frame per tick plus the start");
+                var last = b.Replay.Frames[^1];
+                int att = Sample.Standing(last, Side.Player), def = Sample.Standing(last, Side.Enemy);
+                Expect.True(att > 0 && def > 0, $"{a.Id}: setup: nobody should be wiped out in 10 ticks of holding");
+                var want = att > def ? BattleStatus.AttackerWon : def > att ? BattleStatus.DefenderWon : BattleStatus.Draw;
+                Expect.Equal(want, b.Result.Outcome, $"{a.Id}: the limit decides by soldiers left (equal is a Draw), never Running");
+            }
         }),
         new("frames-are-consecutive-and-complete", async e =>
         {

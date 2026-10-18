@@ -21,16 +21,22 @@ public interface IArmy
     Side Side { get; }
     /// <summary>Reads: cohorts, gold, and the legal doctrine list for the coming round. Pure; no side effects.</summary>
     ArmyReadModel Read();
-    /// <summary>Scoring read: a single non-negative number summarising army worth (used for the ladder and for training weights).</summary>
+    /// <summary>
+    /// Scoring read: a single non-negative number summarising army worth (used for the ladder and for training weights). Its scale and formula
+    /// are the section's own, so compare only scores from the same section; CONTRACT.md (a) states what must hold of any scale.
+    /// </summary>
     int Score();
-    /// <summary>Buy cohorts. Refusals (command span, gold, bad kind) come back in the report; a refused pick changes nothing.</summary>
+    /// <summary>Buy cohorts. Refusals (unknown kind, count of zero or less, gold) come back in the report with a reason; a refused pick changes nothing. Deterministic: no chance in a draft.</summary>
     ValueTask<DraftReport> DraftAsync(DraftRequest request, CancellationToken ct);
-    /// <summary>Apply the army-order tokens of a doctrine in slot order. Illegal or impossible tokens are skipped, never thrown.</summary>
+    /// <summary>
+    /// Apply the army-order tokens of a doctrine in slot order. Legality is judged PER TOKEN, against the army as the earlier tokens left it
+    /// (not once before the doctrine). Illegal tokens are skipped and counted, never thrown.
+    /// </summary>
     ValueTask<ArmyOrdersReport> ApplyArmyOrdersAsync(Doctrine doctrine, CancellationToken ct);
     /// <summary>Subtract battle losses. Counts never go below zero; returns the soldiers actually removed.</summary>
     ValueTask<int> ApplyLossesAsync(IReadOnlyList<CohortLoss> losses, CancellationToken ct);
     ValueTask ApplySpoilsAsync(Spoils spoils, CancellationToken ct);
-    /// <summary>Close the round: advance the army's own clock (aura wears off, veterancy ring turns). Round number increases by one.</summary>
+    /// <summary>Close the round: advance the army's own clock (auras wear off). Round number increases by one.</summary>
     ValueTask EndRoundAsync(CancellationToken ct);
     /// <summary>The army as a short code (a few hundred bytes, URL-safe text). Parse(ToCode()) reads back identically.</summary>
     string ToCode();

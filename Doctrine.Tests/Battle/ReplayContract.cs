@@ -29,6 +29,20 @@ public static class ReplayContract
                     Expect.True(b.X >= 0 && b.Y >= 0 && b.X <= 4096 * BattleReplay.Quantum && b.Y <= 4096 * BattleReplay.Quantum, $"blob {b.Id} is out of range at tick {f.Tick}");
             return Task.CompletedTask;
         }),
+        new("world-flags-use-only-defined-bits-and-never-clear", r =>
+        {
+            // The recording carries the arena's changing state as a bitset per frame. Only defined bits may be used, and a bit set by an
+            // event of the battle (the gate falling) stays set for the rest of the recording; the start frame is the arena as it began.
+            int seen = 0;
+            foreach (var f in r.Frames)
+            {
+                Expect.True(f.WorldFlags >= 0 && (f.WorldFlags & ~WorldFlag.Defined) == 0, $"frame {f.Tick} sets a bit that is not defined ({f.WorldFlags:x})");
+                Expect.True((seen & ~f.WorldFlags) == 0, $"frame {f.Tick} clears a world flag that an earlier frame set ({seen:x} -> {f.WorldFlags:x})");
+                seen |= f.WorldFlags;
+            }
+            Expect.Equal(0, r.Frames[0].WorldFlags, "the start frame shows the arena as it began");
+            return Task.CompletedTask;
+        }),
         new("final-strengths-agree-with-the-result", r =>
         {
             foreach (var (side, losses) in new[] { (Side.Player, r.Result.AttackerLosses), (Side.Enemy, r.Result.DefenderLosses) })

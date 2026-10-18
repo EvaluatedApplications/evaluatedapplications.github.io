@@ -4,8 +4,9 @@ using System.Text;
 namespace Doctrine.Army;
 
 // STUB for seam (a), owned by phasor-owner. Plain arrays stand in for the Pleroma stores so the whole game runs headless today.
-// The real section replaces THIS FILE'S classes (keep the folder Doctrine\Army\) and must pass ArmyContractTests.
-// Nothing outside Army\ may reference StubArmy / StubArmyService by type: the game reaches armies only through IArmyService.
+// The real section is written beside this file (folder Doctrine\Army\) and must pass ArmyContractTests. This file STAYS: it is the
+// reference the shared mutants and the headless default are built on (SECTIONS.md). Only tests and composition roots may name
+// these types; the game itself reaches armies only through IArmyService.
 
 public sealed class StubArmyService : IArmyService
 {
@@ -39,7 +40,7 @@ public sealed class StubArmyService : IArmyService
                 var f = c.Split(':');
                 int k = int.Parse(f[0], CultureInfo.InvariantCulture), n = int.Parse(f[1], CultureInfo.InvariantCulture);
                 int s = int.Parse(f[2], CultureInfo.InvariantCulture), v = int.Parse(f[3], CultureInfo.InvariantCulture);
-                if ((uint)k >= Roster.Size || n < 0 || (uint)s >= DoctrineVocabulary.Groups || v < 0) { error = "bad cohort"; return false; }
+                if ((uint)k >= Roster.Size || n < 0 || (uint)s >= DoctrineVocabulary.Groups || (uint)v >= StubArmy.VeterancyPeriod) { error = "bad cohort"; return false; }
                 a.Count[k] = n; a.Slot[k] = s; a.Vet[k] = v;
             }
             army = a; return true;
@@ -54,6 +55,8 @@ public sealed class StubArmyService : IArmyService
 public sealed class StubArmy(Side side) : IArmy
 {
     public Side Side { get; } = side;
+    /// <summary>Veterancy is a position on a ring of this many places (CONTRACT.md a): it wraps, it never grows without limit.</summary>
+    internal const int VeterancyPeriod = 9;
     internal int Round, Gold, AuraPct;
     internal byte FlipMask, AuraMask;
     internal readonly int[] Count = new int[Roster.Size];
@@ -138,15 +141,15 @@ public sealed class StubArmy(Side side) : IArmy
     public ValueTask<ArmyOrdersReport> ApplyArmyOrdersAsync(Doctrine doctrine, CancellationToken ct)
     {
         int applied = 0, skipped = 0;
-        var legal = Legal();
         foreach (var o in DoctrineVocabulary.ArmyOrders(doctrine))
         {
-            if (!legal.Allows(DoctrineVocabulary.Encode(o))) { skipped++; continue; }
+            // Legality is judged per token against the army the earlier tokens left (CONTRACT.md a), so it is read fresh each time.
+            if (!Legal().Allows(DoctrineVocabulary.Encode(o))) { skipped++; continue; }
             switch ((ArmyOrderKind)o.Kind)
             {
                 case ArmyOrderKind.Rotate: for (int k = 0; k < Roster.Size; k++) Slot[k] = (Slot[k] + o.A) % DoctrineVocabulary.Groups; break;
                 case ArmyOrderKind.Flip: FlipMask ^= (byte)(1 << o.A); break;
-                case ArmyOrderKind.Age: for (int k = 0; k < Roster.Size; k++) if (Count[k] > 0) Vet[k]++; break;
+                case ArmyOrderKind.Age: for (int k = 0; k < Roster.Size; k++) if (Count[k] > 0) Vet[k] = (Vet[k] + 1) % VeterancyPeriod; break;
                 case ArmyOrderKind.Merge:
                     { int k = o.A, j = (k + 1) % Roster.Size; Count[k] += Count[j]; Count[j] = 0; break; }
                 case ArmyOrderKind.Aura:
@@ -176,7 +179,7 @@ public sealed class StubArmy(Side side) : IArmy
     public ValueTask ApplySpoilsAsync(Spoils spoils, CancellationToken ct)
     {
         Gold += Math.Max(0, spoils.Gold);
-        for (int k = 0; k < Roster.Size; k++) if (Count[k] > 0) Vet[k] += Math.Max(0, spoils.Experience);
+        for (int k = 0; k < Roster.Size; k++) if (Count[k] > 0) Vet[k] = (int)((Vet[k] + (long)Math.Max(0, spoils.Experience)) % VeterancyPeriod);
         return ValueTask.CompletedTask;
     }
 
