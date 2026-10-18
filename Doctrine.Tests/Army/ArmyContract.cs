@@ -1,0 +1,222 @@
+using System.Text;
+
+namespace Doctrine.Tests;
+
+/// <summary>
+/// The ARMY contract (CONTRACT.md section a). Every case is a statement about <see cref="IArmyService"/> / <see cref="IArmy"/> that a stub
+/// AND the real Pleroma-backed section must satisfy. Add cases when you find a real invariant; never weaken one to make an implementation pass.
+/// </summary>
+public static class ArmyContract
+{
+    static IArmy Fresh(IArmyService s, int seed = 5, Side side = Side.Player) => s.Create(side, seed);
+
+    static IArmy Clone(IArmyService s, IArmy a)
+    {
+        Expect.True(s.TryParse(a.ToCode(), out var c, out var err) && c is not null, $"army code did not parse back: {err}");
+        return c!;
+    }
+
+    /// <summary>An army that has been through the whole verb set, so every field of the code is non-trivial.</summary>
+    static async Task<IArmy> Worked(IArmyService s)
+    {
+        var a = Fresh(s);
+        await a.ApplySpoilsAsync(new Spoils(30, 2), default);
+        await a.DraftAsync(new DraftRequest(0, 1, [new DraftPick(2, 3), new DraftPick(4, 2)]), default);
+        var legal = a.Read().Legal;
+        foreach (var t in new[] { DoctrineVocabulary.Army(ArmyOrderKind.Age), DoctrineVocabulary.Army(ArmyOrderKind.Rotate, 1), DoctrineVocabulary.Army(ArmyOrderKind.Flip, 3) })
+            if (legal.Allows(t)) await a.ApplyArmyOrdersAsync(Doctrine.Of(t), default);
+        await a.ApplyLossesAsync([new CohortLoss(0, 0, 2)], default);
+        return a;
+    }
+
+    static IEnumerable<int> ArmyTokens() => Enumerable.Range(1, DoctrineVocabulary.Size - 1).Where(t => DoctrineVocabulary.Decode(t).Family == OrderFamily.Army);
+
+    public static IReadOnlyList<ContractCase<IArmyService>> Cases { get; } =
+    [
+        new("create-is-deterministic", async s =>
+        {
+            Expect.Equal(Fresh(s, 11).Read().Digest(), Fresh(s, 11).Read().Digest(), "same (side, seed) must give an identical army");
+            await Task.CompletedTask;
+        }),
+        new("fresh-army-is-well-formed", s =>
+        {
+            foreach (var side in new[] { Side.Player, Side.Enemy })
+            {
+                var r = Fresh(s, 3, side).Read();
+                Expect.Equal(side, r.Side, "side");
+                Expect.Equal(0, r.Round, "a fresh army starts at round 0");
+                Expect.True(r.Gold >= 0, "gold is never negative");
+                Expect.True(r.Soldiers > 0, "a fresh army has soldiers");
+                Expect.True(r.Kinds <= Roster.Size, "at most 8 kinds (the command span)");
+                Expect.True(r.Cohorts.All(c => (uint)c.Key < Roster.Size && c.Count > 0 && (uint)c.Slot < DoctrineVocabulary.Groups && c.Veterancy >= 0 && c.PowerPct > 0),
+                    "every cohort has a valid kind, count > 0, slot 0..2, veterancy >= 0, power > 0");
+                Expect.True(r.Cohorts.Select(c => c.Key).Distinct().Count() == r.Cohorts.Count, "one cohort per kind");
+                Expect.True(r.Legal.Allows(0), "End is always legal");
+                Expect.True(DoctrineVocabulary.Size >= 64 || (r.Legal.Bits >> DoctrineVocabulary.Size) == 0, "legal bits stay inside the vocabulary");
+            }
+            return Task.CompletedTask;
+        }),
+        new("reads-are-pure", async s =>
+        {
+            var a = await Worked(s);
+            var d1 = a.Read().Digest(); var sc = a.Score();
+            _ = a.Read(); _ = a.Read(); _ = a.Score();
+            Expect.Equal(d1, a.Read().Digest(), "Read() changed the army");
+            Expect.Equal(sc, a.Score(), "Score() changed");
+            Expect.True(sc >= 0, "score is never negative");
+        }),
+        new("code-is-short-and-url-safe", async s =>
+        {
+            var code = (await Worked(s)).ToCode();
+            Expect.True(Encoding.UTF8.GetByteCount(code) <= 600, $"an army code is a few hundred bytes at most, got {code.Length}");
+            Expect.True(code.Length > 0 && code.All(ch => char.IsAsciiLetterOrDigit(ch) || "-_.~:;,+=".Contains(ch)), "code must be URL-safe text");
+        }),
+        new("code-round-trips-everything", async s =>
+        {
+            var a = await Worked(s);
+            var b = Clone(s, a);
+            Expect.Equal(a.Read().Digest(), b.Read().Digest(), "parsed army reads differently (a field is lost in the code)");
+            Expect.Equal(a.Score(), b.Score(), "score differs after round trip");
+            Expect.Equal(a.ToCode(), b.ToCode(), "re-encoding a parsed army gives a different code");
+        }),
+        new("parsed-army-continues-identically", async s =>
+        {
+            var a = await Worked(s); var b = Clone(s, a);
+            foreach (var x in new[] { a, b })
+            {
+                await x.DraftAsync(new DraftRequest(1, 1, [new DraftPick(5, 1), new DraftPick(1, 1)]), default);
+                await x.ApplyArmyOrdersAsync(Doctrine.Of(DoctrineVocabulary.Army(ArmyOrderKind.Age)), default);
+                await x.EndRoundAsync(default);
+            }
+            Expect.Equal(a.Read().Digest(), b.Read().Digest(), "an army restored from its code behaves differently afterwards (hidden state is not in the code)");
+        }),
+        new("parse-never-throws-on-garbage", s =>
+        {
+            var good = Fresh(s).ToCode();
+            var inputs = new List<string> { "", " ", "x", "DA1", "{}", "\u0000\u0001", new string('9', 5000), good + good, good[..(good.Length / 2)], good.Replace('1', 'Z'), good.Replace(":", ";;") };
+            for (int cut = 1; cut < good.Length; cut += 7) inputs.Add(good[..cut]);
+            foreach (var bad in inputs)
+            {
+                bool ok = s.TryParse(bad, out var army, out var err);
+                if (!ok) { Expect.True(army is null, "a failed parse must return no army"); Expect.True(!string.IsNullOrEmpty(err), "a failed parse must say why"); }
+                else Expect.True(army is not null, "a successful parse must return an army");
+            }
+            return Task.CompletedTask;
+        }),
+        new("armies-do-not-share-state", async s =>
+        {
+            var a = Fresh(s, 9); var b = Fresh(s, 9);
+            var before = b.Read().Digest();
+            await a.ApplySpoilsAsync(new Spoils(50, 1), default);
+            await a.DraftAsync(new DraftRequest(0, 1, [new DraftPick(1, 4)]), default);
+            Expect.Equal(before, b.Read().Digest(), "drafting on one army changed another");
+        }),
+        new("draft-spends-exact-price", async s =>
+        {
+            var a = Fresh(s); await a.ApplySpoilsAsync(new Spoils(40, 0), default);
+            var r0 = a.Read();
+            var rep = await a.DraftAsync(new DraftRequest(0, 1, [new DraftPick(3, 4)]), default);
+            var r1 = a.Read();
+            Expect.Equal(1, rep.Accepted.Count, "the pick should be accepted");
+            Expect.Equal(Roster.PriceOf(3) * 4, rep.GoldSpent, "gold spent in the report");
+            Expect.Equal(r0.Gold - rep.GoldSpent, r1.Gold, "gold after");
+            Expect.Equal((r0.Cohorts.FirstOrDefault(c => c.Key == 3)?.Count ?? 0) + 4, r1.Cohorts.First(c => c.Key == 3).Count, "soldiers bought");
+        }),
+        new("refused-draft-changes-nothing", async s =>
+        {
+            var a = await Worked(s);
+            var before = a.Read().Digest();
+            var rep = await a.DraftAsync(new DraftRequest(0, 1, [new DraftPick(99, 1), new DraftPick(-1, 1), new DraftPick(0, 0), new DraftPick(0, -5), new DraftPick(7, 100000)]), default);
+            Expect.Equal(5, rep.Refused.Count, "every bad pick is refused (and reported, not thrown)");
+            Expect.Equal(0, rep.Accepted.Count, "nothing accepted");
+            Expect.Equal(before, a.Read().Digest(), "a refused draft changed the army");
+        }),
+        new("legal-list-matches-behaviour", async s =>
+        {
+            // Every army-order token: legal means it applies, not legal means it is skipped and changes nothing.
+            foreach (var t in ArmyTokens())
+            {
+                var a = Clone(s, await Worked(s));
+                var legal = a.Read().Legal.Allows(t);
+                var before = a.Read().Digest();
+                var rep = await a.ApplyArmyOrdersAsync(Doctrine.Of(t), default);
+                if (legal) Expect.Equal(1, rep.Applied, $"token {DoctrineVocabulary.Name(t)} is legal but was not applied");
+                else
+                {
+                    Expect.Equal(0, rep.Applied, $"token {DoctrineVocabulary.Name(t)} is NOT legal but was applied");
+                    Expect.Equal(1, rep.Skipped, $"token {DoctrineVocabulary.Name(t)} is not legal and must be reported skipped");
+                    Expect.Equal(before, a.Read().Digest(), $"a skipped token ({DoctrineVocabulary.Name(t)}) changed the army");
+                }
+            }
+        }),
+        new("some-orders-are-legal-and-some-are-not", async s =>
+        {
+            var legal = (await Worked(s)).Read().Legal;
+            var n = ArmyTokens().Count(legal.Allows);
+            Expect.True(n > 0, "a healthy army has at least one legal army order");
+            Expect.True(n < ArmyTokens().Count(), "the legal list must actually restrict (otherwise it is not a list)");
+        }),
+        new("orders-keep-the-army-valid", async s =>
+        {
+            foreach (var t in ArmyTokens())
+            {
+                var a = Clone(s, await Worked(s));
+                if (!a.Read().Legal.Allows(t)) continue;
+                await a.ApplyArmyOrdersAsync(Doctrine.Of(t), default);
+                var r = a.Read();
+                Expect.True(r.Cohorts.All(c => c.Count > 0 && (uint)c.Slot < DoctrineVocabulary.Groups && (uint)c.Key < Roster.Size), $"after {DoctrineVocabulary.Name(t)} a cohort is invalid");
+                Expect.True(r.Gold >= 0 && r.Kinds <= Roster.Size, $"after {DoctrineVocabulary.Name(t)} gold or span is invalid");
+            }
+        }),
+        new("field-orders-are-not-army-orders", async s =>
+        {
+            var a = await Worked(s); var before = a.Read().Digest();
+            var field = Enumerable.Range(1, DoctrineVocabulary.Size - 1).First(t => DoctrineVocabulary.Decode(t).Family == OrderFamily.Field);
+            var rep = await a.ApplyArmyOrdersAsync(Doctrine.Of(field), default);
+            Expect.Equal(0, rep.Applied + rep.Skipped, "field tokens are ignored by the army entirely (they belong to the battle)");
+            Expect.Equal(before, a.Read().Digest(), "a field order changed the army");
+        }),
+        new("losses-are-exact-and-clamped", async s =>
+        {
+            var a = await Worked(s);
+            var c0 = a.Read().Cohorts.OrderByDescending(c => c.Count).First();
+            int take = Math.Min(3, c0.Count);
+            int removed = await a.ApplyLossesAsync([new CohortLoss(c0.Key, c0.Slot, take)], default);
+            Expect.Equal(take, removed, "soldiers removed");
+            var after = a.Read().Cohorts.FirstOrDefault(c => c.Key == c0.Key)?.Count ?? 0;
+            Expect.Equal(c0.Count - take, after, "cohort count after a loss");
+            var left = after;
+            int over = await a.ApplyLossesAsync([new CohortLoss(c0.Key, c0.Slot, left + 1000), new CohortLoss(99, 0, 5), new CohortLoss(c0.Key, c0.Slot, -4)], default);
+            Expect.Equal(left, over, "a loss beyond the cohort removes only what is there; unknown kinds and negative losses remove nothing");
+            Expect.True(a.Read().Cohorts.All(c => c.Count > 0), "counts never go negative (an empty cohort leaves the read)");
+        }),
+        new("losses-apply-once", async s =>
+        {
+            var a = await Worked(s); var c0 = a.Read().Cohorts.OrderByDescending(c => c.Count).First();
+            var before = a.Read().Soldiers;
+            await a.ApplyLossesAsync([new CohortLoss(c0.Key, c0.Slot, 2)], default);
+            Expect.Equal(before - 2, a.Read().Soldiers, "one loss record removes exactly its soldiers");
+        }),
+        new("losses-never-raise-score", async s =>
+        {
+            var a = await Worked(s); var c0 = a.Read().Cohorts.First();
+            var before = a.Score();
+            await a.ApplyLossesAsync([new CohortLoss(c0.Key, c0.Slot, 1)], default);
+            Expect.True(a.Score() <= before, "losing soldiers must not raise the score");
+        }),
+        new("spoils-add-gold", async s =>
+        {
+            var a = Fresh(s); var g = a.Read().Gold;
+            await a.ApplySpoilsAsync(new Spoils(17, 0), default);
+            Expect.Equal(g + 17, a.Read().Gold, "gold after spoils");
+            await a.ApplySpoilsAsync(new Spoils(-5, 0), default);
+            Expect.True(a.Read().Gold >= g + 17, "negative spoils never take gold away");
+        }),
+        new("end-of-round-advances-the-clock", async s =>
+        {
+            var a = Fresh(s); var r = a.Read().Round;
+            await a.EndRoundAsync(default);
+            Expect.Equal(r + 1, a.Read().Round, "round number");
+        }),
+    ];
+}
