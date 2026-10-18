@@ -1,0 +1,73 @@
+{
+  "title": "The Plenum: a card game on one array",
+  "description": "A card game where every card is one operation on one array of exact numbers, and you see which cells it changed. Play solo or in a two-player duel.",
+  "eyebrow": "Game",
+  "headline": "Play a card. Watch the numbers it changed.",
+  "sub": "Your whole game is one array of exact whole numbers. Every card is one operation on it, and the cells it changed are outlined beside your hand.",
+  "playLabel": "Play The Plenum",
+  "playNote": "Solo or a two-player duel. It runs in your browser tab. Built for phones.",
+  "sections": [
+    {
+      "id": "goal",
+      "title": "The goal",
+      "paragraphs": [
+        "Get 8 Fire cards on the Board, then play **Tally** on Fire.",
+        "Each turn you play up to 3 cards. Drawing is free. When you end your turn, the Flipper takes its turn: it uses Flip on your Board, on Fire, so it undoes what you built."
+      ]
+    },
+    {
+      "id": "cards",
+      "title": "The cards",
+      "paragraphs": [
+        "Your hand holds unit cards, each with tags such as Fire. Tap one to put it on the Board. Three operation cards act on the cards you have played. Each costs one play, and the **?** beside each shows the exact call it makes."
+      ],
+      "terms": [
+        { "term": "Tally", "text": "Counts the cards on the Board that carry a tag you choose. This is how you score. `Board.CountWhere(...)`" },
+        { "term": "Flip", "text": "Turns a tag on or off for every card on the Board at once. Flip a tag twice and everything is back as it was, so Flip undoes itself. `Board.RelabelFlags(null, mask)`" },
+        { "term": "Fuse", "text": "Tap two cards in your hand and bind them into one new card: their keys add and their tags XOR. `a.Bind(b)`" }
+      ]
+    },
+    {
+      "id": "array",
+      "title": "The array",
+      "paragraphs": [
+        "Beside your hand is the array itself, drawn as a grid of cells. Pick the Board, Hand, Deck, Discard or Engine store to see its cells. Tap a cell to read its exact number. After each card, a **What that did** panel names the call and says what happened, and the cells that changed are outlined.",
+        "Draw odds are shown exactly: a draw is one whole number below the Deck total, and each card's share is its copies over that total."
+      ]
+    },
+    {
+      "id": "hand-limit",
+      "title": "The hand limit",
+      "paragraphs": [
+        "You can hold any number of copies of a card, but a hand can only be read while it holds 8 kinds of card or fewer. Add a ninth kind and the hand turns face down: the store refuses to list it rather than guess. The total and the tag counts stay exact, and you can put the hand back in the Deck to read it again. Variety costs you; duplicates are free."
+      ]
+    },
+    {
+      "id": "engine",
+      "title": "The Engine",
+      "paragraphs": [
+        "In solo play an idle Engine strip runs beside the game. It is a ring of six positions, and cards at the front are ready. What is ready is a read of the store, not a counter that was incremented. The Engine ticks every couple of seconds while the tab is showing. If you leave and come back, the time you were away is applied in one call, `Engine.Tick(n)`."
+      ]
+    },
+    {
+      "id": "duel",
+      "title": "The Duel",
+      "paragraphs": [
+        "Switch to Duel for two players. A lobby lists open rooms; create one (listed, or private with a code), join one, or watch as a spectator. The first to cash the Goal with Tally wins, and both in the same round is a draw.",
+        "Each round you build up to 3 plays, see their effect on your own Board, and send them as one order. When both orders are in they are applied together, seat 1 first. Then the Flipper acts on each Board and each player draws. Flip can aim at either Board; Tally and Fuse use yours. A turn clock of 90 seconds sends an empty order if you run out of time, and you can claim the match if the other player leaves.",
+        "After every round the two sides compare a fingerprint of both players' stores, and a mismatch stops the match instead of being hidden. Orders travel through a message relay, and a duel is a casual game: anyone who knows a room code can watch it."
+      ]
+    },
+    {
+      "id": "power",
+      "title": "What powers it",
+      "paragraphs": [
+        "The Deck, Hand, Board, Discard and Engine are each one Pleroma store from the [Phasor](/phasor/) package. Moving a card is a Subtract from one store and an Add to another, a draw is one exact integer draw, and every score is a read. There is no other game state, and no floating point in it, so both players' stores can be compared number for number. Read more on [the Pleroma page](/phasor/pleroma/)."
+      ]
+    }
+  ],
+  "closing": {
+    "title": "Ready when you are",
+    "text": "Press play. The game loads once in your browser tab, and nothing needs installing."
+  }
+}

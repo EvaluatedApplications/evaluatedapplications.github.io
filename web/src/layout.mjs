@@ -26,6 +26,7 @@ export function footer(ctx) {
   <div class="foot-grid">
     <div><h2>Products</h2><ul>${ctx.products.map((p) => html`<li><a href="${p.href}">${p.name}</a></li>`)}</ul></div>
     <div><h2>Tools</h2><ul>${ctx.tools.map((t) => html`<li><a href="${t.href}">${t.name}</a></li>`)}</ul></div>
+    <div><h2>Games</h2><ul>${ctx.games.map((g) => html`<li><a href="${g.href}">${g.name}</a></li>`)}<li><a href="/games/">All games</a></li></ul></div>
     <div><h2>Learn</h2><ul><li><a href="/evidence/">Evidence</a></li><li><a href="/research/">Research</a></li><li><a href="/products/">All products</a></li><li><a href="/tools/">All tools</a></li></ul></div>
     <div><h2>Company</h2><ul><li><a href="/about/">About</a></li><li><a href="/partner/">Partner with us</a></li><li><a href="/licence/">Licence</a></li><li><a href="/ai/">For agents</a></li><li><a href="${s.navExternal.href}" rel="noopener">NuGet</a></li></ul></div>
     <div><h2>Machine-readable</h2><ul><li><a href="/llms.txt">llms.txt</a></li><li><a href="/llms-full.txt">llms-full.txt</a></li><li><a href="/sitemap.xml">sitemap.xml</a></li></ul></div>

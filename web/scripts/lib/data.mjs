@@ -127,6 +127,15 @@ export async function loadAll(opts = {}) {
     byId[toolsFile.platform].tools = tools;
   }
 
+  // Games: one card per game (games.json); a game with a `content` file also gets its own page.
+  const games = readJson(path.join(DATA, 'games.json')).games.map((g) => ({ ...g }));
+  for (const g of games) {
+    g.href = g.slug;
+    for (const pid of g.poweredBy) if (!byId[pid]) throw new Error(`game ${g.id} references unknown product ${pid}`);
+    if (g.tool && !tools.some((t) => t.id === g.tool)) throw new Error(`game ${g.id} references unknown tool ${g.tool}`);
+    if (g.content) g.doc = readJson(path.join(DATA, g.content));
+  }
+
   // Content blocks authored per product (only migrated products have one).
   for (const p of products) {
     if (p.content) p.doc = readJson(path.join(DATA, p.content));
@@ -172,5 +181,5 @@ export async function loadAll(opts = {}) {
   const groups = productsFile.groups.map((g) => ({ ...g, products: products.filter((p) => p.group === g.id) }));
   const year = Number(process.env.SOURCE_DATE_EPOCH ? new Date(Number(process.env.SOURCE_DATE_EPOCH) * 1000).getUTCFullYear() : new Date().getFullYear());
 
-  return { site, licence, products, groups, byId, tools, evidence, research, redirects, pages, diagrams, versions, toolRuntimeMb, year, fmt2 };
+  return { site, licence, products, groups, byId, tools, games, evidence, research, redirects, pages, diagrams, versions, toolRuntimeMb, year, fmt2 };
 }

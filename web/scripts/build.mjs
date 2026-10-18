@@ -15,6 +15,8 @@ import phasorPage from '../src/templates/phasor.mjs';
 import productDocs from '../src/templates/product-docs.mjs';
 import productsIndex from '../src/templates/products-index.mjs';
 import toolsIndex from '../src/templates/tools-index.mjs';
+import gamesIndex from '../src/templates/games-index.mjs';
+import gamePage from '../src/templates/game.mjs';
 import researchIndex from '../src/templates/research-index.mjs';
 import researchArticle from '../src/templates/research-article.mjs';
 import * as evidenceT from '../src/templates/evidence.mjs';
@@ -104,6 +106,8 @@ async function main() {
   }
   pages.push(toolsIndex(ctx));
   pages.push(demo(ctx));
+  pages.push(gamesIndex(ctx));
+  for (const g of ctx.games) if (g.doc) pages.push(gamePage(ctx, g));
   pages.push(evidenceT.hub(ctx));
   for (const e of ctx.evidence) pages.push(evidenceT.record(ctx, e));
   pages.push(researchIndex(ctx));

@@ -21,6 +21,21 @@ export function toolCard(t, byId) {
 </li>`;
 }
 
+// A game card: the sizzle line first, then the Play button, then what it teaches and what powers it. Modes are pills.
+// The title links to the game's own page when it has one; the Play button always goes to the tool that runs it.
+export function gameCard(g, byId) {
+  return html`<li class="card game-card cat-${g.cat}">
+  <h3><a href="${g.href}">${g.name}</a></h3>
+  <p class="game-sizzle">${g.sizzle}</p>
+  <p>${g.line}</p>
+  <div class="actions"><a class="btn btn-primary" href="${g.play}">Play ${g.name}</a><a class="btn btn-ghost" href="${g.href}">How it plays</a></div>
+  <p>${g.teaches}</p>
+  <div class="meta"><span>Modes</span>${g.modes.map((m) => html`<span class="pill">${m}</span>`)}</div>
+  <div class="meta"><span>Powered by</span>${g.poweredBy.map((id) => html`<a href="${byId[id].href}">${byId[id].name}</a>`)}</div>
+  ${g.phone ? html`<p class="game-phone">${g.phone}</p>` : ''}
+</li>`;
+}
+
 export function researchCard(r) {
   return html`<li class="card cat-neutral" data-topics="${r.topics.join('|')}">
   <h3><a href="${r.href}">${r.title}</a></h3>

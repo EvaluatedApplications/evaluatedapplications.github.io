@@ -40,6 +40,7 @@ export function composeLlms(ctx, stamp) {
   L.push(`# ${s.name}`, '', `> ${s.description} ${ctx.licence.oneLine}`, '', `Updated: ${stamp}`, '');
   L.push('## Products', '', ...ctx.products.map((p) => productLine(ctx, p)), '');
   L.push('## Tools', '', ...ctx.tools.map((t) => `- [${t.name}](${abs(ctx, t.href)}): ${t.line}${t.poweredBy.length ? ` Powered by ${list(t.poweredBy.map((id) => ctx.byId[id].name))}.` : ''}`), '');
+  if (ctx.games.length) L.push('## Games', '', `- [All games](${abs(ctx, '/games/')}): games that run in your browser tab on our libraries.`, ...ctx.games.map((g) => `- [${g.name}](${abs(ctx, g.href)}): ${g.sizzle} ${g.line} Modes: ${list(g.modes)}. Play it at ${abs(ctx, g.play)}. Powered by ${list(g.poweredBy.map((id) => ctx.byId[id].name))}.`), '');
   if (ctx.evidence.length) L.push('## Evidence', '', ...ctx.evidence.map((e) => `- [${e.title}](${abs(ctx, e.slug)}): ${e.claim}`), '');
   L.push('## Research', '', ...ctx.research.map((r) => `- [${r.title}](${abs(ctx, r.href)}): ${r.summary}`), '');
   if (ctx.pageList) L.push('## Every page', '', ...ctx.pageList.filter((p) => !p.noindex && !p.hidden && p.url !== '/' && !ctx.tools.some((t) => t.href === p.url)).map((p) => `- [${p.title}](${abs(ctx, p.url)})`), '');
@@ -110,6 +111,16 @@ export function composeLlmsFull(ctx, stamp) {
   }
   L.push('## Tools', '');
   for (const t of ctx.tools) L.push(`### ${t.name}`, '', t.line, '', `Page: ${abs(ctx, t.href)}`, t.poweredBy.length ? `Powered by ${list(t.poweredBy.map((id) => ctx.byId[id].name))}.` : '', '');
+  if (ctx.games.length) {
+    L.push('## Games', '');
+    for (const g of ctx.games) {
+      L.push(`### ${g.name}`, '', g.sizzle, '', g.line, '', g.teaches, '', `Page: ${abs(ctx, g.href)}`, `Play: ${abs(ctx, g.play)}`, `Modes: ${list(g.modes)}.`, `Powered by ${list(g.poweredBy.map((id) => ctx.byId[id].name))}.`, g.phone, '');
+      for (const s of g.doc?.sections || []) {
+        L.push(`#### ${s.title}`, '', ...(s.paragraphs || []).flatMap((t) => [plain(t), '']));
+        if (s.terms) L.push(...s.terms.map((x) => `- ${x.term}: ${plain(x.text)}`), '');
+      }
+    }
+  }
   if (ctx.evidence.length) {
     L.push('## Evidence', '');
     for (const e of ctx.evidence) {

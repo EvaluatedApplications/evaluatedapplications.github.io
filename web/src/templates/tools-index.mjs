@@ -12,6 +12,7 @@ ${pageHead({ crumbs, eyebrow: d.eyebrow, h1: d.headline, wide: true, lede: d.led
 <section class="sec" aria-labelledby="h-all"><div class="wrap"><h2 class="sr-only" id="h-all">All tools</h2>
   <ul class="cards">${ctx.tools.map((t) => toolCard(t, ctx.byId))}</ul>
   ${mb ? html`<p class="tool-note">The first tool you start downloads a runtime of about ${mb} MB. Your browser keeps it for the next one.</p>` : ''}
+  <p class="tool-note">Looking for something to play? <a href="/games/">The games</a> run the same way.</p>
 </div></section>
 </div>`;
   return {

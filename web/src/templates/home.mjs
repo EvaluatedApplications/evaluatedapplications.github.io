@@ -1,6 +1,6 @@
 import { html, raw } from '../../scripts/lib/html.mjs';
 import { secHead } from '../layout.mjs';
-import { productCard, toolCard, researchCard, stat, resolveStats } from '../partials.mjs';
+import { productCard, toolCard, gameCard, researchCard, stat, resolveStats } from '../partials.mjs';
 import { diagramFigure } from '../diagram.mjs';
 
 // The home tiles are other pages' own tiles (a product's sizzle stats, or Phasor's), so a number is typed in one place only.
@@ -47,6 +47,11 @@ export default function home(ctx) {
 <section class="sec" aria-labelledby="h-tools"><div class="wrap">
   ${secHead({ title: d.toolsTitle, line: d.toolsLine, more: { href: '/tools/', label: 'All tools' }, id: 'h-tools' })}
   <ul class="cards">${ctx.tools.map((t) => toolCard(t, ctx.byId))}</ul>
+</div></section>
+
+<section class="sec" aria-labelledby="h-games"><div class="wrap">
+  ${secHead({ title: d.gamesTitle, line: d.gamesLine, more: { href: '/games/', label: 'All games' }, id: 'h-games' })}
+  <ul class="cards game-cards">${ctx.games.map((g) => gameCard(g, ctx.byId))}</ul>
 </div></section>
 
 <section class="sec" aria-labelledby="h-products"><div class="wrap">
