@@ -21,5 +21,6 @@ public sealed class ShowroomPrerender : IBlazierPrerenderSetup
         services.AddScoped<CouncilWebData>();
         services.AddScoped<FoiTray>();
         services.AddSingleton<ShowroomPlenum.IPlenumClock, ShowroomPlenum.StopwatchPlenumClock>();
+        services.AddSingleton<ShowroomPlenum.IPlenumRelayFactory, ShowroomPlenum.MqttWsRelayFactory>();    // never asked to connect at build time
     }
 }

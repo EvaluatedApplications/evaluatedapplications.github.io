@@ -7,6 +7,10 @@ public sealed class PlenumRng : Random
 {
     private ulong _s;
 
+    /// <summary>The seed one side of a duel deals and draws from: the match seed mixed with the seat (0 or 1), so the two
+    /// sides use separate streams of the same generator.</summary>
+    public static ulong SeatSeed(ulong matchSeed, int seat) => Mix(matchSeed ^ Mix((ulong)seat + 0xD1B54A32D192ED03UL));
+
     public PlenumRng(ulong seed, ulong stream) : base(0)
     {
         _s = Mix(seed ^ Mix(stream + 0x9E3779B97F4A7C15UL));

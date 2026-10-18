@@ -4,6 +4,7 @@
 @inject IBuildTime Build
 @inject IJSRuntime JS
 @inject ShowroomPlenum.IPlenumClock Clock
+@inject ShowroomPlenum.IPlenumRelayFactory Relays
 @using ShowroomPlenum
 
 <PageTitle>The Plenum: a card game played on one array</PageTitle>
@@ -23,12 +24,34 @@
     }
     else if (_g is not null)
     {
+        <div class="pl-modes" role="group" aria-label="Solo or duel">
+            <button type="button" class="pl-mode @(!Duel ? "on" : "")" aria-pressed="@(!Duel ? "true" : "false")" disabled="@SoloLocked" @onclick="OpenSolo">Solo</button>
+            <button type="button" class="pl-mode @(Duel ? "on" : "")" aria-pressed="@(Duel ? "true" : "false")" @onclick="OpenDuel">Duel</button>
+        </div>
+        @if (SoloLocked) { <p class="hint">Leave the room to go back to solo.</p> }
+
+        @if (Duel)
+        {
+            @DuelFrame
+        }
+
+        @if (G is not null)
+        {
         <section class="pl-status" aria-label="Goal and turn">
-            <p class="pl-goal"><b>Goal</b> Get @PlenumGame.GoalFire Fire cards on the Board, then play Tally on Fire.</p>
+            <p class="pl-goal"><b>Goal</b> Get @PlenumGame.GoalFire Fire cards on the Board, then play Tally on Fire.@(Duel ? " The first player to do it wins." : "")</p>
             <ul class="pl-chips">
-                <li>Turn @_g.Turn</li>
-                <li>Plays left @_g.PlaysLeft of @PlenumGame.PlaysPerTurn</li>
+                @if (Duel)
+                {
+                    <li>Round @_ses!.Match!.Round</li>
+                    <li>Plays left @G.PlaysLeft of @PlenumGame.PlaysPerTurn</li>
+                }
+                else
+                {
+                    <li>Turn @G.Turn</li>
+                    <li>Plays left @G.PlaysLeft of @PlenumGame.PlaysPerTurn</li>
+                }
                 <li class="@(_goal ? "ok" : "")">@(_goal ? "Goal reached" : $"Fire on the Board: {_fire} of {PlenumGame.GoalFire}")</li>
+                @if (Duel && ClockText is { } ct) { <li class="@(ClockLow ? "low" : "")">Turn clock @ct</li> }
             </ul>
         </section>
 
@@ -39,10 +62,17 @@
             <p class="pl-says">@_last.Says</p>
         </section>
 
+        @if (Duel)
+        {
+            @DuelOrderPanel
+        }
+
         <div class="pl-cols">
             <div class="pl-left">
+                @if (!Duel || CanDraft)
+                {
                 <section class="pl-hand" aria-label="Your hand">
-                    <h2>Your hand <span class="pl-sub">@Cards(_g.HandTotal)</span></h2>
+                    <h2>Your hand <span class="pl-sub">@Cards(G.HandTotal)</span></h2>
                     @if (_hand is not null)
                     {
                         <p class="hint">@(_armed ? (_pick is null ? "Fuse: tap the first card." : $"Fuse: {PlenumCards.NameOf(_pick.Value)} chosen, tap the second card.") : "Tap a card to play all your copies of it.")
@@ -58,16 +88,16 @@
                                     <span class="tg">@Tags.List(u.Tags)</span>
                                 </button>
                             }
-                            @if (_hand.Count == 0) { <p class="hint">Your hand is empty. Draw a card.</p> }
+                            @if (_hand.Count == 0) { <p class="hint">Your hand is empty.@(Duel ? "" : " Draw a card.")</p> }
                         </div>
                     }
                     else
                     {
                         <div class="pl-unread" role="status">
                             <div class="pl-backs" aria-hidden="true">
-                                @for (int i = 0; i < Math.Min(_g.HandTotal, 10); i++) { <span class="pl-back">?</span> }
+                                @for (int i = 0; i < Math.Min(G.HandTotal, 10); i++) { <span class="pl-back">?</span> }
                             </div>
-                            <p><b>This hand cannot be read.</b> A hand can only be read with 8 kinds or fewer. This one holds @_g.HandTotal cards of more than 8 kinds, so
+                            <p><b>This hand cannot be read.</b> A hand can only be read with 8 kinds or fewer. This one holds @G.HandTotal cards of more than 8 kinds, so
                                 <code>Hand.TryKeys</code> refuses instead of guessing. The total and the tag counts are still exact:</p>
                             <ul class="pl-chips">
                                 @for (int b = 0; b < 8; b++) { <li>@Tags.Names[b] @_handTags![b]</li> }
@@ -87,6 +117,14 @@
                             <button type="button" class="pl-tag @(_tag == b ? "on" : "")" role="radio" aria-checked="@(_tag == b ? "true" : "false")" @onclick="() => _tag = bit">@Tags.Names[b]</button>
                         }
                     </div>
+                    @if (Duel)
+                    {
+                        <p class="hint" id="pl-aim-hint">Flip can aim at either Board. Tally and Fuse use yours.</p>
+                        <div class="pl-aim" role="radiogroup" aria-labelledby="pl-aim-hint">
+                            <button type="button" class="pl-tag @(!_flipOther ? "on" : "")" role="radio" aria-checked="@(!_flipOther ? "true" : "false")" @onclick="() => _flipOther = false">Flip my Board</button>
+                            <button type="button" class="pl-tag @(_flipOther ? "on" : "")" role="radio" aria-checked="@(_flipOther ? "true" : "false")" @onclick="() => _flipOther = true">Flip their Board</button>
+                        </div>
+                    }
                     <div class="pl-opcards">
                         @foreach (var v in new[] { Verb.Tally, Verb.Flip, Verb.Fuse })
                         {
@@ -101,11 +139,14 @@
                             @if (_info.Contains(verb)) { <p class="pl-callnote"><code>@CallFor(verb)</code></p> }
                         }
                     </div>
-                    <div class="pl-turn">
-                        <button type="button" class="pl-btn" @onclick="Draw">Draw a card</button>
-                        <button type="button" class="pl-btn strong" @onclick="EndTurn">End turn</button>
-                    </div>
-                    <p class="hint">Drawing is free. The Flipper takes its turn when you end yours: it uses Flip on the Board, on Fire.</p>
+                    @if (!Duel)
+                    {
+                        <div class="pl-turn">
+                            <button type="button" class="pl-btn" @onclick="Draw">Draw a card</button>
+                            <button type="button" class="pl-btn strong" @onclick="EndTurn">End turn</button>
+                        </div>
+                        <p class="hint">Drawing is free. The Flipper takes its turn when you end yours: it uses Flip on the Board, on Fire.</p>
+                    }
                     <details class="pl-odds">
                         <summary>Draw odds, exactly</summary>
                         <p class="hint">A draw is one whole number below the Deck total, and the card that holds it is drawn. Each card's share is its copies over @_dealTotal.</p>
@@ -117,9 +158,10 @@
                         </ul>
                     </details>
                 </section>
+                }
 
                 <section class="pl-board" aria-label="The Board">
-                    <h2>The Board <span class="pl-sub">@Cards(_g.Board.Total())</span></h2>
+                    <h2>@(Duel && !IsPlayer ? SeatName(0) + "'s Board" : "The Board") <span class="pl-sub">@Cards(G.Board.Total())</span></h2>
                     <ul class="pl-kinds">
                         @foreach (var (key, c) in _boardKinds)
                         {
@@ -139,14 +181,18 @@
             <div class="pl-right">
                 <section class="pl-array" aria-label="The array">
                     <h2>The array</h2>
-                    <div class="pl-zones" role="tablist" aria-label="Which store to show">
-                        @foreach (var z in Zones)
+                    <div class="pl-zones @(Duel ? "six" : "")" role="group" aria-label="Which store to show">
+                        @foreach (var z in ZonesNow)
                         {
                             var zone = z;
-                            <button type="button" class="pl-zone @(_zone == z ? "on" : "")" role="tab" aria-selected="@(_zone == z ? "true" : "false")" @onclick="() => ShowZone(zone)">@z</button>
+                            <button type="button" class="pl-zone @(_zone == z && !_theirs ? "on" : "")" aria-pressed="@(_zone == z && !_theirs ? "true" : "false")" @onclick="() => ShowZone(zone)">@z</button>
+                        }
+                        @if (Duel && IsPlayer)
+                        {
+                            <button type="button" class="pl-zone @(_theirs ? "on" : "")" aria-pressed="@(_theirs ? "true" : "false")" @onclick="ShowTheirs">Theirs</button>
                         }
                     </div>
-                    <p class="hint">These are the @_cells.Length cells of the @_zone store, each one an exact number. Tap a cell to read it. Cells outlined in white were changed by the last action.</p>
+                    <p class="hint">These are the @_cells.Length cells of the @(_theirs ? "opponent's Board" : _zone + " store") store, each one an exact number. Tap a cell to read it. Cells outlined in white were changed by the last action.</p>
                     <div class="pl-grid" aria-label="Cells of the @_zone store">
                         @for (int i = 0; i < _cells.Length; i++)
                         {
@@ -159,6 +205,8 @@
                         @(_nChanged == 0 ? "The last action did not change this store." : $"The last action changed {_nChanged} of its cells.")</p>
                 </section>
 
+                @if (!Duel)
+                {
                 <section class="pl-engine" aria-label="Engine">
                     <h2>Engine</h2>
                     <div class="pl-ring" aria-label="Cards at each of the six positions of the cycle">
@@ -171,12 +219,17 @@
                     <p class="hint">@_engineLine</p>
                     <p class="hint">The Engine ticks every @(_ticker.TickMs / 1000) seconds while this tab is showing. If you leave and come back, the time away is applied once with <code>Tick(n)</code>.</p>
                 </section>
+                }
             </div>
         </div>
+        }
 
-        <div class="pl-foot">
-            <button type="button" class="pl-btn" @onclick="NewDeal">New deal (deal @_g.Seed)</button>
-        </div>
+        @if (!Duel)
+        {
+            <div class="pl-foot">
+                <button type="button" class="pl-btn" @onclick="NewDeal">New deal (deal @_g.Seed)</button>
+            </div>
+        }
     }
 
     <section class="outro">
@@ -186,23 +239,32 @@
             keys add and tags XOR. A draw is one exact integer draw, and the odds are the counts shown above. There is no other game state
             than those stores. The hand limit is the store's own read limit: a store of this shape can list its kinds only while there are
             8 or fewer.</p>
+        <p>A duel runs the same stores for two players. The lobby, the room, the clocks and the order messages are ordinary program state,
+            not Pleroma: they only carry who is playing and what each player ordered.</p>
     </section>
 </div>
 
 @code {
-    private static readonly Zone[] Zones = { Zone.Board, Zone.Hand, Zone.Deck, Zone.Discard, Zone.Engine };
+    private enum Mode { Solo, Duel }
+
+    private static readonly Zone[] SoloZones = { Zone.Board, Zone.Hand, Zone.Deck, Zone.Discard, Zone.Engine };
+    private static readonly Zone[] DuelZones = { Zone.Board, Zone.Hand, Zone.Deck, Zone.Discard };
 
     private PlenumGame? _g;
     private EngineTicker _ticker = default!;
-    private OpResult _last = new("Ready", "", "Tap a card in your hand to play it, or tap an operation card.", Array.Empty<(Zone, int[])>());
+    private OpResult _last = Ready;
     private OpResult? _engineRes;
     private string _engineLine = "";
     private bool _armed;
     private ulong? _pick;
     private int _tag = Tags.Fire;
+    private bool _flipOther;
     private Zone _zone = Zone.Board;
+    private bool _theirs;
     private int? _sel;
     private readonly HashSet<Verb> _info = new();
+
+    private static readonly OpResult Ready = new("Ready", "", "Tap a card in your hand to play it, or tap an operation card.", Array.Empty<(Zone, int[])>());
 
     // reads, refreshed after each action
     private IReadOnlyList<(ulong Key, long Count)>? _hand;
@@ -223,6 +285,44 @@
     private bool _hidden;
     private DotNetObjectReference<Plenum>? _self;
 
+    // ----------------------------------------------------------------------------------------------- duel state
+    private Mode _mode = Mode.Solo;
+    private PlenumSession? _ses;
+    private string _nick = "";
+    private string _codeText = "";
+    private bool _private;
+    private bool _busy;
+    private DuelMatch? _preview;
+    private DuelMatch? _previewOf;
+    private int _previewRound;
+    private readonly List<string> _draft = new();
+    private readonly List<string> _draftTitles = new();
+    private int _ticks;
+
+    private bool Duel => _mode == Mode.Duel;
+    private bool InRoom => Duel && _ses is { Phase: SessionPhase.Room };
+    private bool Playing => InRoom && _ses!.Match is not null;
+    private bool IsPlayer => _ses is { IsPlayer: true };
+    private bool MatchOver => _ses?.Match is { Over: true };
+    private bool CanDraft => Playing && IsPlayer && !MatchOver && !_ses!.MyOrderIn && _preview is not null;
+    private bool SoloLocked => _ses is { Phase: SessionPhase.Room } && !MatchOver && Duel;
+    private Zone[] ZonesNow => Duel ? DuelZones : SoloZones;
+
+    /// <summary>The game whose cards the page shows: solo = the solo game; duel = my side (with my unsent plays applied) or, for a spectator, seat 0.</summary>
+    private PlenumGame? G
+    {
+        get
+        {
+            if (!Duel) return _g;
+            if (!Playing) return null;
+            var m = _ses!.Match!;
+            if (!IsPlayer) return m.Side[0];
+            return CanDraft ? _preview!.Side[_ses.Seat] : m.Side[_ses.Seat];
+        }
+    }
+
+    private PlenumGame? Opp => Playing && IsPlayer ? _ses!.Match!.Side[1 - _ses.Seat] : null;
+
     protected override void OnInitialized()
     {
         if (Build.IsPrerender) return;
@@ -236,14 +336,16 @@
         _cts = new CancellationTokenSource();
         _self = DotNetObjectReference.Create(this);
         try { await JS.InvokeVoidAsync("plenumWatch", _self); } catch (JSException) { } catch (InvalidOperationException) { }
+        try { _nick = PlenumJson.Clean(await JS.InvokeAsync<string?>("plenumNickGet") ?? ""); } catch (JSException) { } catch (InvalidOperationException) { }
+        if (_nick.Length > 0) StateHasChanged();
         _ = EngineLoop(_cts.Token);
     }
 
     private void Deal(ulong seed)
     {
         _g = new PlenumGame(seed);
-        _last = new OpResult("Ready", "", "Tap a card in your hand to play it, or tap an operation card.", Array.Empty<(Zone, int[])>());
-        _armed = false; _pick = null; _sel = null; _zone = Zone.Board; _engineRes = null; _engineLine = "";
+        _last = Ready;
+        _armed = false; _pick = null; _sel = null; _zone = Zone.Board; _theirs = false; _engineRes = null; _engineLine = "";
         Refresh();
     }
 
@@ -256,8 +358,15 @@
             while (!ct.IsCancellationRequested)
             {
                 await Task.Delay(250, ct);
-                if (_hidden) continue;
-                if (CatchUp()) await InvokeAsync(StateHasChanged);
+                bool changed = false;
+                if (Duel && _ses is not null)
+                {
+                    // the session keeps its heartbeat and turn clock even in a hidden tab (as far as the browser lets timers run)
+                    await _ses.TickAsync();
+                    if (++_ticks % 4 == 0) changed = true;       // the turn clock shows whole seconds
+                }
+                else if (!_hidden && CatchUp()) changed = true;
+                if (changed && !_hidden) await InvokeAsync(StateHasChanged);
             }
         }
         catch (OperationCanceledException) { }
@@ -270,7 +379,7 @@
         if (n <= 0 || _g is null) return false;
         _engineRes = _g.EngineTick(n);
         _engineLine = n == 1 ? "Last call: Engine.Tick(1)." : $"Last call: Engine.Tick({n}). {n} steps were applied in one call.";
-        Refresh();
+        if (!Duel) Refresh();
         return true;
     }
 
@@ -278,16 +387,155 @@
     public void OnVisibility(bool hidden)
     {
         _hidden = hidden;
-        if (!hidden && CatchUp()) _ = InvokeAsync(StateHasChanged);
+        if (hidden) return;
+        if (Duel && _ses is not null) { _ = _ses.OnVisibleAsync(); _ = InvokeAsync(StateHasChanged); return; }
+        if (CatchUp()) _ = InvokeAsync(StateHasChanged);
     }
 
-    // ------------------------------------------------------------------------------------------ actions
+    // ---------------------------------------------------------------------------------------------- lobby actions
+    private async Task OpenSolo()
+    {
+        if (SoloLocked) return;
+        _mode = Mode.Solo;
+        if (_ses is not null && _ses.Phase != SessionPhase.Idle) { await _ses.DisposeAsync(); _ses = null; }
+        _preview = null;
+        Refresh();
+    }
+
+    private async Task OpenDuel()
+    {
+        _mode = Mode.Duel;
+        if (_ses is null)
+        {
+            _ses = new PlenumSession(Relays, Clock, _nick);
+            _ses.Changed += OnSessionChanged;
+        }
+        if (_ses.Phase is SessionPhase.Idle or SessionPhase.Unreachable) await Connect();
+    }
+
+    private async Task Connect()
+    {
+        if (_ses is null || _busy) return;
+        _busy = true;
+        try { await _ses.OpenLobbyAsync(); }
+        finally { _busy = false; SyncDuel(); }
+    }
+
+    private void OnSessionChanged() => _ = InvokeAsync(() => { SyncDuel(); StateHasChanged(); });
+
+    private async Task NickChanged(ChangeEventArgs e)
+    {
+        _nick = PlenumJson.Clean(e.Value?.ToString() ?? "");
+        if (_ses is not null) _ses.Nick = _nick;
+        try { await JS.InvokeVoidAsync("plenumNickSet", _nick); } catch (JSException) { } catch (InvalidOperationException) { }
+    }
+
+    private void CodeChanged(ChangeEventArgs e) => _codeText = (e.Value?.ToString() ?? "").ToUpperInvariant();
+
+    private async Task Create()
+    {
+        if (_ses is null || _busy) return;
+        _ses.Nick = _nick;
+        _busy = true;
+        try { await _ses.CreateRoomAsync(_private); }
+        finally { _busy = false; _draft.Clear(); _draftTitles.Clear(); SyncDuel(); }
+    }
+
+    private async Task JoinCode() => await Join(_codeText);
+
+    private async Task Join(string code)
+    {
+        if (_ses is null || _busy) return;
+        _ses.Nick = _nick;
+        _busy = true;
+        try { await _ses.JoinAsync(code); }
+        finally { _busy = false; _draft.Clear(); _draftTitles.Clear(); SyncDuel(); }
+    }
+
+    private async Task Leave()
+    {
+        if (_ses is null) return;
+        await _ses.LeaveAsync();
+        _preview = null; _draft.Clear(); _draftTitles.Clear();
+        SyncDuel();
+    }
+
+    private async Task CopyCode()
+    {
+        try { await JS.InvokeVoidAsync("copyText", _ses!.Code); _last = new OpResult("Code copied", "", "The room code is on your clipboard.", Array.Empty<(Zone, int[])>()); }
+        catch (JSException) { } catch (InvalidOperationException) { }
+    }
+
+    private async Task Claim() { if (_ses is not null) await _ses.ClaimForfeitAsync(); SyncDuel(); }
+
+    // -------------------------------------------------------------------------------------------- duel order actions
+    /// <summary>Keep the page in step with the session: rebuild the preview when the round changes and re-read everything.</summary>
+    private void SyncDuel()
+    {
+        if (!Duel) return;
+        var m = _ses?.Match;
+        if (m is not null && _ses!.IsPlayer && !m.Over && m.HaltReason is null)
+        {
+            if (!ReferenceEquals(_previewOf, m) || _previewRound != m.Round)
+            {
+                bool newRound = _previewOf is not null && ReferenceEquals(_previewOf, m);
+                _preview = m.Fork(); _previewOf = m; _previewRound = m.Round;
+                _draft.Clear(); _draftTitles.Clear(); _armed = false; _pick = null;
+                _last = newRound ? RoundSummary(m.Round - 1) : Ready;
+            }
+        }
+        else { _preview = null; _previewOf = m; }
+        _theirs &= Opp is not null;
+        if (G is not null) Refresh();
+    }
+
+    private OpResult RoundSummary(int round)
+    {
+        var m = _ses!.Match!;
+        var mine = m.Log.Where(l => l.Round == round).ToList();
+        string says = mine.Count == 0 ? "Both orders were empty." : string.Join(" ", mine.Select(l => $"{SeatName(l.Seat)}: {l.Title}."));
+        return new OpResult($"Round {round} was applied", "", says + " The Flipper then acted on each Board.", Array.Empty<(Zone, int[])>());
+    }
+
+    private void Act(string token, Func<OpResult> solo)
+    {
+        if (!Duel) { Take(solo()); return; }
+        if (!CanDraft) return;
+        var r = _preview!.ApplyPlay(_ses!.Seat, token);
+        if (r.Refused) r = r with { Says = r.Says.Replace("End the turn.", "Submit your order.") };
+        else { _draft.Add(token); _draftTitles.Add(r.Title); }
+        Take(r);
+    }
+
+    private async Task SubmitOrder()
+    {
+        if (_ses is null || !CanDraft) return;
+        var plays = _draft.ToArray();
+        _armed = false; _pick = null;
+        await _ses.SubmitAsync(plays);
+        _last = new OpResult("Order sent", "", plays.Length == 0 ? "You sent an empty order." : $"You sent {plays.Length} {(plays.Length == 1 ? "play" : "plays")}. They are applied when both orders are in.", Array.Empty<(Zone, int[])>());
+        SyncDuel();
+    }
+
+    private void UndoPlay()
+    {
+        if (!CanDraft || _draft.Count == 0) return;
+        _draft.RemoveAt(_draft.Count - 1);
+        _draftTitles.RemoveAt(_draftTitles.Count - 1);
+        _preview = _ses!.Match!.Fork();
+        foreach (var t in _draft) _preview.ApplyPlay(_ses.Seat, t);
+        _armed = false; _pick = null; _last = Ready;
+        Refresh();
+    }
+
+    // ------------------------------------------------------------------------------------------------------ play
     private void Take(OpResult r)
     {
         _last = r;
         _sel = null;
         if (!r.Refused)
         {
+            _theirs = false;
             if (r.CellsOf(Zone.Board).Length > 0) _zone = Zone.Board;
             else if (r.Changed.Count > 0) _zone = r.Changed[0].Zone;
         }
@@ -301,20 +549,20 @@
             if (_pick is null) { _pick = key; return; }
             var a = _pick.Value;
             _pick = null; _armed = false;
-            Take(_g!.Fuse(a, key));
+            Act(ShowroomPlenum.Play.Fuse(a, key), () => _g!.Fuse(a, key));
             return;
         }
-        Take(_g!.PlayUnit(key));
+        Act(ShowroomPlenum.Play.Unit(key), () => _g!.PlayUnit(key));
     }
 
     private void Play(Verb v)
     {
         switch (v)
         {
-            case Verb.Tally: _armed = false; _pick = null; Take(_g!.Tally(_tag)); break;
-            case Verb.Flip: _armed = false; _pick = null; Take(_g!.Flip(_tag)); break;
+            case Verb.Tally: _armed = false; _pick = null; Act(ShowroomPlenum.Play.Tally(_tag), () => _g!.Tally(_tag)); break;
+            case Verb.Flip: _armed = false; _pick = null; Act(ShowroomPlenum.Play.Flip(_tag, Duel && _flipOther), () => _g!.Flip(_tag)); break;
             case Verb.Fuse:
-                if (!_g!.HandReadable) { Take(_g.Fuse(0, 0)); break; }
+                if (!G!.HandReadable) { Act(ShowroomPlenum.Play.Fuse(0, 0), () => _g!.Fuse(0, 0)); break; }
                 _armed = !_armed; _pick = null;
                 break;
         }
@@ -322,9 +570,10 @@
 
     private void Draw() { _armed = false; _pick = null; Take(_g!.Draw()); }
     private void EndTurn() { _armed = false; _pick = null; Take(_g!.EndTurn()); }
-    private void PutBack() { _armed = false; _pick = null; Take(_g!.PutBack()); }
+    private void PutBack() { _armed = false; _pick = null; Act(ShowroomPlenum.Play.PutBack, () => _g!.PutBack()); }
     private void ToggleInfo(Verb v) { if (!_info.Remove(v)) _info.Add(v); }
-    private void ShowZone(Zone z) { _zone = z; _sel = null; RefreshCells(); }
+    private void ShowZone(Zone z) { _zone = z; _theirs = false; _sel = null; RefreshCells(); }
+    private void ShowTheirs() { _theirs = true; _sel = null; RefreshCells(); }
 
     private static string Cards(long n) => n == 1 ? "1 card" : $"{n} cards";
 
@@ -338,21 +587,21 @@
     private string CallFor(Verb v) => v switch
     {
         Verb.Tally => $"Board.CountWhere(FlagPredicate.Match(8, {Tags.Bits(Tags.Mask(_tag))}, {Tags.Bits(Tags.Mask(_tag))}))",
-        Verb.Flip => $"Board.RelabelFlags(null, {Tags.Bits(Tags.Mask(_tag))})",
+        Verb.Flip => (Duel && _flipOther ? "Opponent." : "") + $"Board.RelabelFlags(null, {Tags.Bits(Tags.Mask(_tag))})",
         _ => "a.Bind(b): keys add, tags XOR",
     };
 
-    // ----------------------------------------------------------------------------------------- reads
+    // ----------------------------------------------------------------------------------------------------- reads
     private void Refresh()
     {
-        var g = _g!;
+        var g = G;
+        if (g is null) return;
         _hand = g.TryHand(out var h) ? h : null;
         _handTags = _hand is null ? g.HandTagCounts() : null;
         _boardKinds = g.BoardKinds();
         _boardPatterns = g.BoardPatterns();
         (_deal, _dealTotal) = g.DrawShares();
-        _ring = g.EngineRing();
-        _harvest = g.Harvest();
+        if (!Duel) { _ring = g.EngineRing(); _harvest = g.Harvest(); }
         _fire = g.Board.CountWhere(PlenumGame.HasTag(Tags.Fire));
         _goal = g.GoalReached;
         RefreshCells();
@@ -360,12 +609,14 @@
 
     private void RefreshCells()
     {
-        var store = _g!.Of(_zone);
+        var g = G;
+        if (g is null) return;
+        var store = _theirs && Opp is not null ? Opp.Board : g.Of(_zone);
         var raw = store.RawCells;
         if (_cells.Length != raw.Length) { _cells = new ulong[raw.Length]; _changed = new bool[raw.Length]; }
         raw.CopyTo(_cells);
         Array.Clear(_changed);
-        var idx = (_zone == Zone.Engine ? _engineRes : _last)?.CellsOf(_zone) ?? Array.Empty<int>();
+        var idx = _theirs ? Array.Empty<int>() : (_zone == Zone.Engine ? _engineRes : _last)?.CellsOf(_zone) ?? Array.Empty<int>();
         foreach (var i in idx) if (i < _changed.Length) _changed[i] = true;
         _nChanged = idx.Length;
     }
@@ -373,10 +624,253 @@
     private static string CellStyle(ulong v) =>
         v == 0 ? "background:#15181f" : $"background:hsl({(int)(v % 360)} 55% 42%)";
 
+    // ------------------------------------------------------------------------------------------------ duel text
+    private string SeatName(int seat) => seat == 0 ? (_ses?.Setup?.Host ?? "Host") : (_ses?.Setup?.Guest ?? "Guest");
+
+    private string RoleText => _ses?.Role switch
+    {
+        RoomRole.Host => "seat 1, the host",
+        RoomRole.Guest => "seat 2",
+        RoomRole.Spectator => "watching",
+        _ => "joining",
+    };
+
+    private string? ClockText
+    {
+        get
+        {
+            if (_ses is null) return null;
+            int s = _ses.TurnSecondsLeft;
+            return s < 0 ? null : $"{s / 60}:{s % 60:00}";
+        }
+    }
+
+    private bool ClockLow => _ses is { TurnSecondsLeft: >= 0 and <= 15 };
+
+    private string ResultText
+    {
+        get
+        {
+            var m = _ses!.Match!;
+            string who(int seat) => IsPlayer && _ses.Seat == seat ? "You win." : SeatName(seat) + " wins.";
+            return m.End switch
+            {
+                DuelEnd.Seat0Wins => who(0) + " " + m.EndReason,
+                DuelEnd.Seat1Wins => who(1) + " " + m.EndReason,
+                DuelEnd.Draw => "Draw. " + m.EndReason,
+                DuelEnd.Halted => m.HaltReason ?? "The match was stopped.",
+                _ => "",
+            };
+        }
+    }
+
+    private string SideLine(int seat)
+    {
+        var g = _ses!.Match!.Side[seat];
+        long fire = g.Board.CountWhere(PlenumGame.HasTag(Tags.Fire));
+        return $"Fire {fire} of {PlenumGame.GoalFire}, hand {Cards(g.HandTotal)}";
+    }
+
+    private string OrderState(int seat)
+    {
+        var m = _ses!.Match!;
+        if (m.Over) return "match over";
+        return m.HasOrder(seat, m.Round) ? "order sent" : "still choosing";
+    }
+
+    private string LastPlays(int seat)
+    {
+        var m = _ses!.Match!;
+        int r = m.ResolvedRounds;
+        if (r < 1) return "no rounds yet";
+        var list = m.Log.Where(l => l.Round == r && l.Seat == seat && !l.Refused).Select(l => l.Title).ToList();
+        return list.Count == 0 ? $"round {r}: no plays" : $"round {r}: " + string.Join(", ", list);
+    }
+
+    private IEnumerable<(ulong Key, long Count)> KindsOf(PlenumGame g) => PlenumGame.Kinds(g.Board);
+    private List<(uint Word, long Count)> PatternsOf(PlenumGame g)
+    {
+        var res = new List<(uint, long)>();
+        var f = g.Board.Flags();
+        for (int w = 0; w < f.Length; w++) if (f[w] != 0) res.Add(((uint)w, f[w]));
+        return res;
+    }
+
+    // ------------------------------------------------------------------------------------------- duel fragments
+    private RenderFragment DuelFrame => @<text>
+        @if (_ses is null || _ses.Phase is SessionPhase.Idle or SessionPhase.Connecting)
+        {
+            <section class="pl-lobby" aria-label="Duel lobby" role="status"><h2>Duel lobby</h2><p class="hint">Connecting to the lobby.</p></section>
+        }
+        else if (_ses.Phase == SessionPhase.Unreachable)
+        {
+            <section class="pl-lobby" aria-label="Duel lobby">
+                <h2>Duel lobby</h2>
+                <p class="err" role="alert">@(_ses.Problem ?? "Can't reach the lobby. Solo still works.")</p>
+                <button type="button" class="pl-btn strong" @onclick="Connect" disabled="@_busy">Retry</button>
+            </section>
+        }
+        else if (_ses.Phase == SessionPhase.Lobby)
+        {
+            <section class="pl-lobby" aria-label="Duel lobby">
+                <h2>Duel lobby</h2>
+                <label class="pl-label" for="pl-nick">Nickname</label>
+                <input id="pl-nick" class="pl-input" type="text" maxlength="16" inputmode="text" autocapitalize="words" autocomplete="nickname" autocorrect="off" spellcheck="false" enterkeyhint="done" value="@_nick" @onchange="NickChanged" />
+                @if (_ses.Problem is not null) { <p class="err" role="alert">@_ses.Problem</p> }
+                @if (_ses.LinkLost) { <p class="hint" role="status">The connection dropped. Reconnecting.</p> }
+                <div class="pl-create">
+                    <button type="button" class="pl-btn strong" @onclick="Create" disabled="@_busy">Create a room</button>
+                    <button type="button" class="pl-btn @(_private ? "on" : "")" role="switch" aria-checked="@(_private ? "true" : "false")" @onclick="() => _private = !_private">Private: @(_private ? "on" : "off")</button>
+                </div>
+                <p class="hint">A private room is not listed. Others join it with its code.</p>
+                <h3 class="pl-h3">Open rooms</h3>
+                @if (_ses.Rooms.Count == 0)
+                {
+                    <p class="hint">No open rooms right now. Create one, or enter a code below.</p>
+                }
+                else
+                {
+                    <ul class="pl-roomlist">
+                        @foreach (var r in _ses.Rooms)
+                        {
+                            var code = r.Code;
+                            <li>
+                                <button type="button" class="pl-room" @onclick="() => Join(code)" disabled="@_busy">
+                                    <span class="who">@r.Host</span>
+                                    <span class="go">@(r.Seats >= 2 ? "Watch" : "Join")</span>
+                                    <span class="meta">@r.Seats of 2 seats, @r.Status, code @r.Code</span>
+                                </button>
+                            </li>
+                        }
+                    </ul>
+                }
+                <label class="pl-label" for="pl-code">Room code</label>
+                <div class="pl-codeline">
+                    <input id="pl-code" class="pl-input pl-code" type="text" maxlength="8" inputmode="text" autocapitalize="characters" autocomplete="off" autocorrect="off" spellcheck="false" enterkeyhint="go" value="@_codeText" @onchange="CodeChanged" />
+                    <button type="button" class="pl-btn" @onclick="JoinCode" disabled="@_busy">Join</button>
+                </div>
+                @DuelHelp
+            </section>
+        }
+        else
+        {
+            <section class="pl-roombar" aria-label="Room">
+                <p class="pl-roomline"><b>Room @_ses.Code</b> <span class="pl-sub">You are @RoleText</span></p>
+                @if (_ses.LinkLost) { <p class="hint" role="status">The connection dropped. Reconnecting.</p> }
+                @if (_ses.Match is null)
+                {
+                    <p class="pl-says">Waiting for an opponent. Share the code @_ses.Code@(_ses.Setup?.Private == true ? ". This room is not listed." : ". It is listed in the lobby.")</p>
+                }
+                else if (_ses.Match.HaltReason is not null)
+                {
+                    <p class="err" role="alert">@_ses.Match.HaltReason</p>
+                }
+                <div class="pl-turn">
+                    <button type="button" class="pl-btn" @onclick="CopyCode">Copy code</button>
+                    <button type="button" class="pl-btn" @onclick="Leave">Leave room</button>
+                </div>
+                @if (_ses.Match is null) { @DuelHelp }
+            </section>
+
+            @if (_ses.Match is not null)
+            {
+                @DuelSummary
+            }
+        }
+    </text>;
+
+    private RenderFragment DuelHelp => @<details class="pl-help">
+        <summary>How duels work</summary>
+        <p class="hint">Each round you build up to 3 plays and send them as one order. When both orders are in they are applied together, seat 1 first, then the Flipper acts on each Board and each player draws a card. Flip can aim at either Board; Tally and Fuse use yours. The first player to cash the Goal with Tally wins; both in the same round is a draw.</p>
+        <p class="hint">Your turn clock is 90 seconds. If it runs out before you send, an empty order is sent for you. If the other player leaves, you can claim the match after 60 seconds.</p>
+        <p class="hint">Rooms use the same message relay as Prism's swarm; rooms and orders are public to anyone who knows the room code. This is a casual game: anyone who knows the room can see it, and seats are not checked against an account.</p>
+        <p class="hint">If your device clock is far off, the room list may look empty; a code still works.</p>
+    </details>;
+
+    private RenderFragment DuelSummary => @<text>
+        @if (MatchOver)
+        {
+            <section class="pl-result" role="status" aria-label="Result">
+                <h2>Match over</h2>
+                <p class="pl-says">@ResultText</p>
+                <button type="button" class="pl-btn strong" @onclick="Leave">Back to the lobby</button>
+            </section>
+        }
+        @if (IsPlayer)
+        {
+            <section class="pl-opp" aria-label="Opponent">
+                <p class="pl-oppline"><b>@_ses!.OpponentNick</b> <span class="pl-sub">@OrderState(1 - _ses.Seat)</span></p>
+                <ul class="pl-chips">
+                    <li>@SideLine(1 - _ses.Seat)</li>
+                    <li>@LastPlays(1 - _ses.Seat)</li>
+                </ul>
+                @if (_ses.OpponentGone && !MatchOver)
+                {
+                    <p class="err" role="status">Opponent left (@_ses.GoneSeconds s ago).@(_ses.CanClaimForfeit ? "" : $" You can claim the match in {_ses.ForfeitSecondsLeft} s.")</p>
+                    @if (_ses.CanClaimForfeit) { <button type="button" class="pl-btn strong" @onclick="Claim">Claim the match</button> }
+                }
+                @if (_ses.OpponentSeemsStuck) { <p class="hint" role="status">Their order has not arrived for two minutes. You can wait or leave.</p> }
+                <details class="pl-oppboard">
+                    <summary>Their Board</summary>
+                    <ul class="pl-kinds">
+                        @foreach (var (key, c) in KindsOf(Opp!)) { <li><span>@PlenumCards.NameOf(key)</span><span>x@c</span></li> }
+                    </ul>
+                    <p class="hint">By tags:</p>
+                    <ul class="pl-pat">
+                        @foreach (var (word, c) in PatternsOf(Opp!)) { <li><span>@Tags.List(word)</span><span>x@c</span></li> }
+                    </ul>
+                </details>
+            </section>
+        }
+        else
+        {
+            <section class="pl-opp" aria-label="Players">
+                @for (int s = 0; s < 2; s++)
+                {
+                    var seat = s;
+                    <p class="pl-oppline"><b>@SeatName(seat)</b> <span class="pl-sub">@OrderState(seat)</span></p>
+                    <ul class="pl-chips"><li>@SideLine(seat)</li><li>@LastPlays(seat)</li></ul>
+                }
+                <details class="pl-oppboard">
+                    <summary>@SeatName(1)'s Board</summary>
+                    <ul class="pl-kinds">
+                        @foreach (var (key, c) in KindsOf(_ses!.Match!.Side[1])) { <li><span>@PlenumCards.NameOf(key)</span><span>x@c</span></li> }
+                    </ul>
+                </details>
+                <p class="hint">You are watching. Spectators cannot send orders.</p>
+            </section>
+        }
+    </text>;
+
+    private RenderFragment DuelOrderPanel => @<text>
+        @if (CanDraft)
+        {
+            <section class="pl-draft" aria-label="Your order">
+                <h2>Your order this round</h2>
+                @if (_draft.Count == 0) { <p class="hint">No plays yet. Pick cards below; they show their effect on your Board before you send.</p> }
+                else
+                {
+                    <ol class="pl-plays">
+                        @foreach (var t in _draftTitles) { <li>@t</li> }
+                    </ol>
+                }
+                <div class="pl-turn">
+                    <button type="button" class="pl-btn" @onclick="UndoPlay" disabled="@(_draft.Count == 0)">Undo last play</button>
+                    <button type="button" class="pl-btn strong" @onclick="SubmitOrder">Send order (@_draft.Count)</button>
+                </div>
+            </section>
+        }
+        else if (Playing && IsPlayer && !MatchOver && _ses!.MyOrderIn)
+        {
+            <section class="pl-draft" aria-label="Your order"><h2>Your order is in</h2><p class="hint" role="status">Waiting for @_ses.OpponentNick. The round is applied when both orders are in.</p></section>
+        }
+    </text>;
+
     public async ValueTask DisposeAsync()
     {
         _cts?.Cancel();
         _cts?.Dispose();
+        if (_ses is not null) { try { await _ses.DisposeAsync(); } catch { } }
         try { await JS.InvokeVoidAsync("plenumUnwatch"); } catch { }
         _self?.Dispose();
     }

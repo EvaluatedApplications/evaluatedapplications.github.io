@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Proof for The Plenum duel and its relay (no UI). The core is compiled straight from Services/Plenum (the same files the page uses).
+       Default run (offline, about a minute): MQTT 3.1.1 packets byte for byte against hand-computed bytes, the relay client against a scripted
+       transport, topic filters, the lobby and the duel over the in-memory broker (scripted wins for each seat, a draw, Flip on either board,
+       duplicate / late / out-of-order orders, drop and resume, forfeit, spectator, hash-mismatch halt, 20 random matches), and 7 mutants
+       that must each turn a check red. the argument "live" (dotnet run -c Release then live after the double hyphen) runs the ONE live check against the public relay in a throwaway
+       namespace (about 12 messages); it is never part of the default run.
+       Exit code 0 = every check passed and every mutant was caught. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="..\..\Services\Plenum\*.cs" LinkBase="Plenum" />
+    <PackageReference Include="EvaluatedApplications.Phasor" Version="2.17.0" />
+  </ItemGroup>
+</Project>

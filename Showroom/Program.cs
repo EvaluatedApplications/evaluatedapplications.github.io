@@ -40,9 +40,13 @@ builder.Services.AddScoped<FoiTray>();
 
 // The Plenum's clock: a service so a proof can drive time by hand (Services/Plenum/PlenumClock.cs).
 builder.Services.AddSingleton<ShowroomPlenum.IPlenumClock, ShowroomPlenum.StopwatchPlenumClock>();
+// The Plenum's message relay (MQTT over a secure WebSocket). It connects only when a visitor opens the Duel lobby; the address is
+// window.EA_PLENUM_RELAY in wwwroot/index.html.
+builder.Services.AddSingleton<ShowroomPlenum.IPlenumRelayFactory, ShowroomPlenum.MqttWsRelayFactory>();
 
 // Big data (council data, Prism checkpoint) lives in the website-data repo. ONE setting says where: window.EA_DATA_BASE in
 // wwwroot/index.html (the same value drives the framework redirect there). See Services/DataUrl.cs.
 var host = builder.Build();
 DataUrl.Configure(await host.Services.GetRequiredService<IJSRuntime>().InvokeAsync<string?>("eval", "window.EA_DATA_BASE"));
+ShowroomPlenum.PlenumRelayConfig.Configure(await host.Services.GetRequiredService<IJSRuntime>().InvokeAsync<string?>("eval", "window.EA_PLENUM_RELAY"));
 await host.RunAsync();

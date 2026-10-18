@@ -87,6 +87,34 @@ code { font-family: var(--mono); font-size: 0.82rem; overflow-wrap: anywhere; }
 .pl-slot .n { font-weight: 700; font-size: 1.1rem; }
 .pl-slot.ready { border-color: var(--ok); }
 
+/* solo / duel switch, lobby, room, order: one column on a phone, every control 44px or more, inputs 16px so the phone does not zoom */
+.pl-modes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.4rem; margin: 0 0 0.9rem; }
+.pl-mode { background: var(--bg-2); color: var(--ink); border: 1px solid var(--border-2); border-radius: 10px; padding: 0.5rem 0.9rem; font-weight: 600; }
+.pl-mode.on { background: var(--accent); color: #fff; border-color: transparent; }
+.pl-mode:disabled, .plenum button:disabled { opacity: 0.5; cursor: default; }
+.pl-lobby, .pl-roombar, .pl-opp, .pl-draft, .pl-result { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1rem; margin: 0 0 0.9rem; min-width: 0; }
+.pl-result { border-left: 3px solid var(--ok); }
+.pl-h3 { font-size: 0.95rem; font-weight: 650; margin: 1rem 0 0.3rem; }
+.pl-label { display: block; font-size: 0.85rem; color: var(--ink-soft); margin: 0.7rem 0 0.3rem; }
+.pl-input { display: block; width: 100%; box-sizing: border-box; min-height: 48px; font-size: 16px; padding: 0.5rem 0.8rem; background: var(--bg-2); color: var(--ink); border: 1px solid var(--border-2); border-radius: 10px; font-family: inherit; }
+.pl-code { font-family: var(--mono); letter-spacing: 0.12em; text-transform: uppercase; }
+.pl-codeline { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0.5rem; align-items: stretch; }
+.pl-create { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 0.5rem; margin-top: 0.8rem; }
+.pl-btn.on { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 16%, var(--bg-2)); }
+.pl-roomlist { list-style: none; padding: 0; margin: 0.3rem 0 0.6rem; display: grid; gap: 0.4rem; }
+.pl-room { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0.1rem 0.6rem; width: 100%; text-align: left; align-items: baseline; background: var(--bg-2); color: var(--ink); border: 1px solid var(--border-2); border-radius: 10px; padding: 0.55rem 0.8rem; min-height: 56px; }
+.pl-room .who { font-weight: 700; overflow-wrap: anywhere; }
+.pl-room .go { font-weight: 700; color: var(--accent-ink); }
+.pl-room .meta { grid-column: 1 / -1; font-size: 0.78rem; color: var(--ink-faint); }
+.pl-roomline, .pl-oppline { margin: 0 0 0.4rem; overflow-wrap: anywhere; }
+.pl-help { margin-top: 0.8rem; }
+.pl-help summary, .pl-oppboard summary { display: flex; align-items: center; color: var(--ink-soft); }
+.pl-oppboard { margin-top: 0.5rem; }
+.pl-aim { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.4rem; margin: 0.3rem 0 0.8rem; }
+.pl-plays { margin: 0.3rem 0; padding-left: 1.4rem; line-height: 1.6; }
+.pl-chips li.low { color: var(--warn); border-color: var(--warn); }
+.err { color: var(--bad); line-height: 1.45; margin: 0.5rem 0; }
+
 .pl-foot { margin: 0 0 1rem; }
 .outro { margin-top: 1.5rem; max-width: 70ch; line-height: 1.55; color: var(--ink-soft); }
 

@@ -6,11 +6,14 @@ namespace ShowroomPlenum;
 public interface IPlenumClock
 {
     long NowMs { get; }
+    /// <summary>Wall-clock time (Unix milliseconds). Used only to date and age lobby entries; never by the game rules.</summary>
+    long UnixMs { get; }
 }
 
 public sealed class StopwatchPlenumClock : IPlenumClock
 {
     public long NowMs => Stopwatch.GetTimestamp() * 1000 / Stopwatch.Frequency;
+    public long UnixMs => DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
 }
 
 /// <summary>Says how many Engine ticks are due. It holds only a clock reading (a request for time, like a player's order); the

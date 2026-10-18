@@ -258,6 +258,24 @@ public sealed class PlenumGame
             zones, before);
     }
 
+    /// <summary>Duel only: Flip aimed at the OPPONENT'S Board. The play is spent here, the RelabelFlags runs on the target's Board.</summary>
+    public OpResult FlipOther(PlenumGame target, int bit)
+    {
+        uint mask = Tags.Mask(bit);
+        string call = $"Opponent.Board.RelabelFlags(null, {Tags.Bits(mask)})";
+        if (NeedsPlay("Flip", call) is { } r) return r;
+        long had = target.Board.CountWhere(HasTag(bit));
+        long total = target.Board.Total();
+        target.Board.RelabelFlags(null, mask);
+        long now = target.Board.CountWhere(HasTag(bit));
+        Tempo.Remove(new HologramItem(KPlays), 1);
+        string name = Tags.Names[bit];
+        // the cells that changed belong to the other side's Board, so no cell of this side's stores is reported
+        return new OpResult("Flip " + name + " on their Board", call,
+            $"Flip = RelabelFlags(null, {Tags.Bits(mask)}) on THEIR Board: their {name} count went from {had} to {now} of their {total} cards. Twice undoes it.",
+            Array.Empty<(Zone, int[])>());
+    }
+
     /// <summary>Fuse two cards from the hand with Bind: keys add, tags XOR. The result goes to the Board, the two inputs to the
     /// Discard. Costs one play.</summary>
     public OpResult Fuse(ulong keyA, ulong keyB)
