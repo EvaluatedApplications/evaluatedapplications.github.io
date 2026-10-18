@@ -5,7 +5,7 @@
   "headline": "Play a card. Watch the numbers it changed.",
   "sub": "Your whole game is one array of exact whole numbers. Every card is one operation on it, and the cells it changed are outlined beside your hand.",
   "playLabel": "Play The Plenum",
-  "playNote": "Solo or a two-player duel. It runs in your browser tab. Built for phones.",
+  "playNote": "Solo or a two-player duel. It runs in your browser tab. Laid out for a phone screen: one column, 44 px tap targets.",
   "sections": [
     {
       "id": "goal",
@@ -31,7 +31,7 @@
       "id": "array",
       "title": "The array",
       "paragraphs": [
-        "Beside your hand is the array itself, drawn as a grid of cells. Pick the Board, Hand, Deck, Discard or Engine store to see its cells. Tap a cell to read its exact number. After each card, a **What that did** panel names the call and says what happened, and the cells that changed are outlined.",
+        "Beside your hand is the array itself, drawn as a grid of cells. Pick the Board, Hand, Deck, Discard or Engine (Engine in solo play) store to see its cells. Tap a cell to read its exact number. After each card, a **What that did** panel names the call and says what happened, and the cells that changed are outlined.",
         "Draw odds are shown exactly: a draw is one whole number below the Deck total, and each card's share is its copies over that total."
       ]
     },
@@ -55,14 +55,15 @@
       "paragraphs": [
         "Switch to Duel for two players. A lobby lists open rooms; create one (listed, or private with a code), join one, or watch as a spectator. The first to cash the Goal with Tally wins, and both in the same round is a draw.",
         "Each round you build up to 3 plays, see their effect on your own Board, and send them as one order. When both orders are in they are applied together, seat 1 first. Then the Flipper acts on each Board and each player draws. Flip can aim at either Board; Tally and Fuse use yours. A turn clock of 90 seconds sends an empty order if you run out of time, and you can claim the match if the other player leaves.",
-        "After every round the two sides compare a fingerprint of both players' stores, and a mismatch stops the match instead of being hidden. Orders travel through a message relay, and a duel is a casual game: anyone who knows a room code can watch it."
+        "Each order carries a fingerprint of both players' stores as its sender saw them. If the two devices disagree, the match stops with a message instead of carrying on.",
+        "Orders and your nickname travel through a public message relay. A listed room can be seen by anyone in the lobby, and a private room is only unlisted: anyone who has its code can watch it. A duel is a casual game."
       ]
     },
     {
       "id": "power",
       "title": "What powers it",
       "paragraphs": [
-        "The Deck, Hand, Board, Discard and Engine are each one Pleroma store from the [Phasor](/phasor/) package. Moving a card is a Subtract from one store and an Add to another, a draw is one exact integer draw, and every score is a read. There is no other game state, and no floating point in it, so both players' stores can be compared number for number. Read more on [the Pleroma page](/phasor/pleroma/)."
+        "The Deck, Hand, Board, Discard and Engine are each one Pleroma store from the [Phasor](/phasor/) package. Moving a card is a Subtract from one store and an Add to another, a draw is one exact integer draw, and every score is a read. There is no other game state; a duel's lobby, clocks and messages are ordinary program state. The stores hold whole numbers only, so both players' stores can be compared number for number. Read more on [the Pleroma page](/phasor/pleroma/)."
       ]
     }
   ],

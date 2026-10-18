@@ -88,7 +88,7 @@ key total (30, 3)
 3 6 2 4 1 2 0
 ```
 
-8 of 39 operators that transform the store join one kernel: a weighted sum of them applies to every stored item in one shared pass. All 50 reads answer from the store array in one pass each (CausalReads is the stated exception: one pass per prefix). Nine of them are answered through a read set.
+8 of 40 operators that transform the store join one kernel: a weighted sum of them applies to every stored item in one shared pass. All 50 reads answer from the store array in one pass each (CausalReads is the stated exception: one pass per prefix). Nine of them are answered through a read set.
 
 11 established ideas, one store. The Pleroma is a new construction. It is one store that satisfies every brick in the table below. Each brick is established work and is credited in its row. Each row gives what the brick offers on its own, the operation of the Pleroma that carries it, and the check that the operation passes.
 - Reed-Solomon and BCH syndrome decoding (Reed and Solomon 1960; Bose and Ray-Chaudhuri 1960): Recovers up to K distinct symbols exactly from 2K+1 power sums, and refuses beyond that. In the Pleroma: The key view: `TryKeys` and `TryItems` read the key line by syndrome decoding and refuse past `KeyCapacity`. Proof: Keys exact in 30 of 30 trials at 16 keys, and refused in 30 of 30 trials at 17 and 20 keys.
@@ -772,7 +772,7 @@ A tenant takes bits in the high end of the flag word. The all-tenant total is Fl
 
 ##### The kernel is the symmetry
 
-A symmetry here is a move you can make to every item at once, such as flipping a flag, advancing the clock or reordering the arrangement. A kernel is a weighted mix of such moves, and the store applies the whole mix in one pass instead of one pass per move. This section says which moves can be mixed that way and which cannot. The numbers are how many of the store's 89 operations fall on each side.
+A symmetry here is a move you can make to every item at once, such as flipping a flag, advancing the clock or reordering the arrangement. A kernel is a weighted mix of such moves, and the store applies the whole mix in one pass instead of one pass per move. This section says which moves can be mixed that way and which cannot. The numbers are how many of the store's 90 operations fall on each side.
 
 The store holds the harmonic transform of its items on the product of four families: the key cycle Z_N (a cycle of N keys), the flag cube Z_2^m (m flag bits), the arrangements S_k (the orderings of k things) and the tick cycle Z_T (a cycle of T ticks). A harmonic is one component of that transform, and each stored item is one point of that product. A symmetry here is a translation of the product: add a key shift, XOR a flag mask, advance a tick, or multiply an arrangement. A weighted sum of translations is an element of the group algebra, and PleromaKernel holds exactly that element and applies it to every stored item in one pass. For a finite group, the linear maps that commute with its translations are exactly the group-algebra elements, so on the faces the kernel carries, the kernel is the general form of such a map.
 
@@ -3070,13 +3070,13 @@ Play a card and watch the numbers it changed.
 
 A card game where the whole game is one array of exact numbers. Every card you play is one operation on that array, and the cells it changed light up beside your hand.
 
-You learn what an operation does by playing it: count a tag, flip it across the whole Board, bind two cards into one.
+Each card shows the exact call it makes, so you can see what an operation does: count a tag, flip it across the whole Board, bind two cards into one.
 
 Page: https://evaluatedapplications.github.io/games/plenum/
 Play: https://evaluatedapplications.github.io/tools/plenum/
 Modes: Solo and Duel.
 Powered by Phasor.
-Built for phones: one column and large tap targets.
+Laid out for a phone screen: one column, 44 px tap targets.
 
 #### The goal
 
@@ -3094,7 +3094,7 @@ Your hand holds unit cards, each with tags such as Fire. Tap one to put it on th
 
 #### The array
 
-Beside your hand is the array itself, drawn as a grid of cells. Pick the Board, Hand, Deck, Discard or Engine store to see its cells. Tap a cell to read its exact number. After each card, a What that did panel names the call and says what happened, and the cells that changed are outlined.
+Beside your hand is the array itself, drawn as a grid of cells. Pick the Board, Hand, Deck, Discard or Engine (Engine in solo play) store to see its cells. Tap a cell to read its exact number. After each card, a What that did panel names the call and says what happened, and the cells that changed are outlined.
 
 Draw odds are shown exactly: a draw is one whole number below the Deck total, and each card's share is its copies over that total.
 
@@ -3112,11 +3112,13 @@ Switch to Duel for two players. A lobby lists open rooms; create one (listed, or
 
 Each round you build up to 3 plays, see their effect on your own Board, and send them as one order. When both orders are in they are applied together, seat 1 first. Then the Flipper acts on each Board and each player draws. Flip can aim at either Board; Tally and Fuse use yours. A turn clock of 90 seconds sends an empty order if you run out of time, and you can claim the match if the other player leaves.
 
-After every round the two sides compare a fingerprint of both players' stores, and a mismatch stops the match instead of being hidden. Orders travel through a message relay, and a duel is a casual game: anyone who knows a room code can watch it.
+Each order carries a fingerprint of both players' stores as its sender saw them. If the two devices disagree, the match stops with a message instead of carrying on.
+
+Orders and your nickname travel through a public message relay. A listed room can be seen by anyone in the lobby, and a private room is only unlisted: anyone who has its code can watch it. A duel is a casual game.
 
 #### What powers it
 
-The Deck, Hand, Board, Discard and Engine are each one Pleroma store from the Phasor package. Moving a card is a Subtract from one store and an Add to another, a draw is one exact integer draw, and every score is a read. There is no other game state, and no floating point in it, so both players' stores can be compared number for number. Read more on the Pleroma page.
+The Deck, Hand, Board, Discard and Engine are each one Pleroma store from the Phasor package. Moving a card is a Subtract from one store and an Add to another, a draw is one exact integer draw, and every score is a read. There is no other game state; a duel's lobby, clocks and messages are ordinary program state. The stores hold whole numbers only, so both players' stores can be compared number for number. Read more on the Pleroma page.
 
 ## Evidence
 
@@ -3838,7 +3840,7 @@ The method is the same for every cell. The prediction and its null are written f
 
 The derivation's operator rule: a symmetry is a group element, and a weighted sum of group elements is one kernel. It acts on each harmonic with one multiplication, so its cost is one pass whatever the size of the sum. The same rule says choosing is not linear, so the one choice is made at the read.
 
-The code was measured against that rule across the public surface. Eight of the 39 operators that change the store join one kernel and apply in one pass; key shifts do so on a keyed kernel. Fourteen take one pass per term in a mix. Seventeen are writes that are not kernel elements. The 50 reads are separate, each one pass, and nine of them are answered through a read set.
+The code was measured against that rule across the public surface. Eight of the 40 operators that change the store join one kernel and apply in one pass; key shifts do so on a keyed kernel. Fifteen take one pass per term in a mix. Seventeen are writes that are not kernel elements. The 50 reads are separate, each one pass, and nine of them are answered through a read set.
 
 On a 10,464-cell store, `Apply` takes 0.17 to 0.44 ms per call, for a kernel of anything from 1 operator up to 10,368, with no trend across that range. Building the same store from the moved items takes 1,916 ms at 1,000 operators. The figures are a Release build on a loaded machine, two runs.
 
