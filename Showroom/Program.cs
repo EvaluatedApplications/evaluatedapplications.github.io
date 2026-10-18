@@ -5,6 +5,7 @@ using HoloKernel;
 using Microsoft.JSInterop;
 using Showroom;
 using Showroom.Services;
+using Showroom.Services.PrismTab;
 
 var builder = WebAssemblyHostBuilder.CreateDefault(args);
 
@@ -17,12 +18,15 @@ builder.RootComponents.Add<HeadOutlet>("head::after");
 
 builder.Services.AddScoped(sp => new HttpClient { BaseAddress = new Uri(builder.HostEnvironment.BaseAddress) });
 
-// One instance for the lifetime of the page load (a WASM singleton IS the page load), so navigating
-// between Creature/Forecaster/Prism reuses whichever of their (structurally incompatible) models is
-// already loaded instead of rebuilding/re-downloading it on every visit. See HoloKernel/SessionHost.cs.
+// One instance for the lifetime of the page load (a WASM singleton IS the page load), so the loaded Prism
+// checkpoint (the Prism tool's five tabs, and the Analyst's novelty scan) is reused instead of re-downloaded
+// on every visit. See HoloKernel/SessionHost.cs.
 // A HARD navigation (typed URL, reload, a link followed before the app has started) loads another static
 // shell in a new page load, so this instance and the models in it are gone; only the browser's HTTP cache remains.
 builder.Services.AddSingleton<SessionHost>();
+
+// The Prism tool's one checkpoint load (vocabulary, sidecars, boot log) and its one-trainer-at-a-time lock. Fetches nothing until a tab asks.
+builder.Services.AddScoped<PrismLoader>();
 
 // Content-DB spike (see Services/ContentDbHost.cs, Pages/ContentDbSpike.razor). Registering this
 // costs nothing at boot -- the constructor does no I/O -- the actual fetch/open pipeline only runs

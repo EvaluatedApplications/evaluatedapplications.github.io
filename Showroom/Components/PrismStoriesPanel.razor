@@ -1,0 +1,362 @@
+@implements IDisposable
+@inject Microsoft.JSInterop.IJSRuntime JS
+@using System.Text
+@using PrismFormer
+@using HoloKernel
+@using Showroom.Services.PrismTab
+@using global::Prism.Inference
+@* The Stories tab: one-shot story continuation over the SAME Prism checkpoint as Chat (not a fine-tune). Everything here was
+   Stories.razor; the model now comes in as a parameter. *@
+
+@if (_ready)
+{
+    <TokenVoiceControls Voice="_voice!" />
+    <p class="sound-note hint">Each word piece plays a short chord as it's written: the exact same voice
+        as <a href="/tools/prism/#chat">Chat</a>, same tuning, nothing retuned for this tab. Off by default.</p>
+
+    <div class="cr-stats">
+        <div class="stat"><div class="n">@_stats.ParamCount.ToString("N0")</div><div class="l">parameters</div></div>
+        @* 8 bytes per parameter (they are doubles), the same figure the Chat tab shows for the same checkpoint. *@
+        <div class="stat"><div class="n">@((_stats.ParamCount * 8 / 1024).ToString("N0"))&nbsp;KB</div><div class="l">how big it is, in total</div></div>
+        @if (Model.Rounds is not null)
+        {
+            <div class="stat"><div class="n">@Model.Rounds.Value.ToString("N0")</div><div class="l">practice rounds so far</div></div>
+        }
+    </div>
+
+    <div class="ns-panel">
+        <label class="prompt-field">
+            opening line
+            <input class="prompt-input" @bind="_promptInput" @bind:event="oninput" maxlength="120"
+                   placeholder="@DefaultPrompt" disabled="@_generating" />
+        </label>
+
+        <div class="variety-row" role="group" aria-label="Variety">
+            <span class="variety-label">variety</span>
+            @foreach (var opt in VarietyOptions)
+            {
+                <button type="button" class="variety-btn @(_variety == opt.Value ? "on" : "")"
+                        title="@opt.Hint" disabled="@_generating" @onclick="() => _variety = opt.Value">@opt.Label</button>
+            }
+        </div>
+
+        <div class="ns-controls">
+            <button class="go" @onclick="() => TellStory(reuseSeed: false)"
+                    disabled="@(_generating || string.IsNullOrWhiteSpace(_promptInput))">
+                @(_generating ? "writing…" : _story is null ? "Tell me a story" : "Tell me another")
+            </button>
+            @if (_generating)
+            {
+                <button class="ghost" @onclick="SkipToEnd" disabled="@_skipRequested">
+                    @(_skipRequested ? "finishing…" : "Skip to the end")
+                </button>
+            }
+            else if (_story is not null)
+            {
+                <button class="ghost" @onclick="() => TellStory(reuseSeed: true)"
+                        title="Same prompt, same variety, same seed: reproduces this exact story">
+                    Replay this seed
+                </button>
+            }
+        </div>
+
+        @if (_generating || _story is not null)
+        {
+            <p class="story-text">
+                <span class="story-prompt">@_activePrompt</span><span class="story-body">@Paragraphs(_generating ? _pendingContinuation : _story)</span>@if (_generating)
+                {
+                    <span class="car" aria-hidden="true"></span>
+                }
+            </p>
+            @if (_lastSeed is not null && !_generating)
+            {
+                <p class="seed-line hint">seed @_lastSeed.Value · @VarietyLabel(_lastVariety) variety@(_lastStopReason == "loop" ? " · stopped early, it started repeating" : _lastStopReason == "cap" ? " · ran on until it was stopped" : "")</p>
+            }
+        }
+        else
+        {
+            <p class="hint">Write an opening line above, or keep the one already there, and press
+                Tell me a story.</p>
+        }
+
+        @if (_error is not null) { <p class="err">@_error</p> }
+    </div>
+
+    <p class="hint story-caveat">This is a @_stats.ParamCount.ToString("N0")-parameter model, remarkable
+        for that size, not remarkable in absolute terms. Expect sentence-shaped output with weak semantics,
+        not a coherent plot.</p>
+
+    <div class="outro">
+        <p>This is the exact same model as <a href="/tools/prism/#chat">Chat</a>: same weights, the same single training run, not a
+            fine-tune and not a sibling. Its training text is mostly TinyStories plus a smaller mix of chat, reasoning, maths and Q&amp;A
+            pairs, so one small model learned to both hold a conversation and tell a story. Chat is this checkpoint asked to do the
+            first; this tab is the same checkpoint asked to do the second.</p>
+    </div>
+}
+
+@code {
+    [Parameter, EditorRequired] public PrismModel Model { get; set; } = default!;
+
+    // ---- decode policy: its OWN DecodePolicy per variety, Floor = TopP (the ResonanceSigma floor degenerates to top-1 here and makes
+    // Temperature inert). The three presets are named Focused / Balanced / Wild, not a raw P slider, because a visitor does not know what
+    // nucleus mass is. Values are read off the cumulative softmax mass the final face needs to admit about 3 / 8 / 20 candidates on the
+    // CURRENT checkpoint: CHECKPOINT-SPECIFIC (re-measured on r3,970: Focused 0.43 = Chat's P, Balanced 0.77, Wild 0.89) and to be
+    // re-measured as training continues. DegenNonGreedyRun is zeroed, as on Chat.
+    static DecodePolicy PolicyFor(double p) => new()
+    {
+        ConfidentThreshold = 0.60,
+        Temperature = 0.80,
+        Floor = FloorMode.TopP,
+        P = p,
+        DegenRepeat = 4,
+        DegenNonGreedyRun = 0,
+    };
+
+    enum Variety { Focused, Balanced, Wild }
+    static double PFor(Variety v) => v switch
+    {
+        Variety.Focused => 0.43,
+        Variety.Wild => 0.89,
+        _ => 0.77,
+    };
+    sealed record VarietyOption(Variety Value, string Label, string Hint);
+    static readonly VarietyOption[] VarietyOptions =
+    {
+        new(Variety.Focused, "Focused", "Closest to Prism's own chat behaviour: occasional variety"),
+        new(Variety.Balanced, "Balanced", "The default: real variety without drifting into noise"),
+        new(Variety.Wild, "Wild", "The widest spread this checkpoint's own ranking still supports"),
+    };
+    static string VarietyLabel(Variety v) => v switch { Variety.Focused => "Focused", Variety.Wild => "Wild", _ => "Balanced" };
+    Variety _variety = Variety.Balanced;
+
+    const string DefaultPrompt = "Once upon a time,";
+    string _promptInput = DefaultPrompt;
+    string _activePrompt = DefaultPrompt;   // frozen at the start of a generation, so editing the input never relabels a story on screen.
+
+    // Step CEILING tuned on a ctx=512 checkpoint (448 steps + 64 prompt tokens never fills the window). The caps in force come from the
+    // LOADED model's Context via HoloKernel.ContextBudget: StoryFitsWindow is the no-roll cap, StoryCap rolls on a smaller window.
+    // SLIDING WINDOW: on a small-context checkpoint a story is StoryRollTarget steps whatever the window: when the serve cache fills
+    // (Filled == Context) it re-Primes on the most recent HALF window (ContextBudget.RollTail) and carries on with O(1) StepToken calls.
+    const int MaxStorySteps = 448;
+    const int StoryRollTarget = 400;
+    int StoryFitsWindow => ContextBudget.StoryCap(_stats.Context, MaxStorySteps);
+    int StoryCap => ContextBudget.RollingStoryCap(_stats.Context, MaxStorySteps, StoryRollTarget);
+    bool Rolls => StoryCap > StoryFitsWindow;
+    int PromptCap => Rolls ? ContextBudget.RollTail(_stats.Context) : ContextBudget.PromptBudget(_stats.Context, StoryFitsWindow);
+
+    // The model never emits a newline (its vocabulary has none), so "paragraphs" are layout: after a sentence that takes the running
+    // paragraph to ParagraphChars or more, the next sentence starts a new one. A pure function of the text so far, so the live reveal and
+    // the finished story break in the same places.
+    const int ParagraphChars = 130;
+    static string Paragraphs(string? text)
+    {
+        if (string.IsNullOrEmpty(text)) return "";
+        var sb = new StringBuilder(text.Length + 8);
+        var paraStart = 0;
+        for (var i = 0; i < text.Length; i++)
+        {
+            var c = text[i];
+            if (Array.IndexOf(SentenceEnders, c) >= 0 && i + 2 < text.Length && text[i + 1] == ' ' && i + 1 - paraStart >= ParagraphChars)
+            {
+                sb.Append(c).Append("\n\n");
+                i++;                   // swallow the space the paragraph break replaces
+                paraStart = i + 1;
+                continue;
+            }
+            sb.Append(c);
+        }
+        return sb.ToString();
+    }
+    static readonly char[] SentenceEnders = { '.', '!', '?' };
+
+    TokenVoice? _voice;
+    HoloSession _session = default!;
+    ModelStats _stats = default!;
+    SubwordVocab _vocab = default!;
+    bool _ready;
+    string? _error;
+    bool _generating;
+    bool _skipRequested;            // "Skip to the end": drops pacing and sound for the rest of THIS generation only
+    string? _story;                 // the finished continuation (without the prompt); null until the first generation completes
+    string _pendingContinuation = "";
+    int? _lastSeed;
+    Variety _lastVariety;
+    string? _lastStopReason;        // "stop" | "loop" | "cap"
+
+    protected override async Task OnInitializedAsync()
+    {
+        _session = Model.Session; _stats = Model.Stats; _vocab = Model.Vocab;
+        try
+        {
+            _voice = new TokenVoice(JS);
+            await _voice.InitializeAsync();
+            // Silent warm-up: pay WASM's cold-start cost for the generation path before the visitor's first click, show nothing.
+            try
+            {
+                var warm = _session.NewServeCache();
+                var warmTokens = _vocab.Encode(DefaultPrompt);
+                var warmCtx = BuildContext(new List<int>(warmTokens.Length > 0 ? warmTokens : new[] { 0 }), _stats.Context);
+                _ = _session.Prime(warm, warmCtx);
+                _ = _session.StepToken(warm, warmCtx[^1]);
+            }
+            catch { /* warm-up only, never user-visible */ }
+            _ready = true;
+        }
+        catch (Exception ex) { _error = "Couldn't start the story writer: " + ex.Message; _ready = true; }
+    }
+
+    static int[] BuildContext(List<int> seq, int maxContext)
+    {
+        var take = Math.Min(seq.Count, maxContext);
+        if (take == 0) return new[] { 0 };
+        var ctx = new int[take];
+        seq.CopyTo(seq.Count - take, ctx, 0, take);
+        return ctx;
+    }
+
+    // One-shot continuation from a plain prompt, deliberately NOT the "user: .../prism: ..." chat wire format: this model's corpus is mostly
+    // plain narrative text (TinyStories), so a story prompt is ordinary continuation text, the shape that slice of training data had.
+    async Task<(string Text, string StopReason)> GenerateStoryAsync(string prompt, int seed, Variety variety, Func<string, Task>? onPartial)
+    {
+        var policy = PolicyFor(PFor(variety));
+        var promptTokens = _vocab.Encode(HoloKernel.AsciiPunctuation.Fold(prompt));
+        var seq = new List<int>(promptTokens.Length > 0 ? promptTokens : new[] { 0 });
+        // A window that holds the story (ctx=512: 448 steps + 64 prompt tokens) never fills, so nothing re-Primes; a longer opening line keeps
+        // only its tail. A window too small for it SLIDES instead: see StoryRollTarget.
+        var maxSteps = StoryCap;
+        var window = _stats.Context;
+        var rolls = Rolls;
+        var rollTail = ContextBudget.RollTail(window);
+        ContextBudget.KeepTail(seq, PromptCap);
+        var outIds = new List<int>();
+        var vocabLimit = _vocab.Size;
+        var guard = new DegenGuard(policy);
+        // Seeded per generation: "Tell me another" gets a different Random each time, and replaying the SAME seed reproduces the exact same
+        // draws from Gate.Pick, hence the exact same story for the same prompt and variety.
+        var rng = new Random(seed);
+        var reason = "cap";
+
+        var cache = _session.NewServeCache();
+        var logits = _session.Prime(cache, BuildContext(seq, window));
+
+        _voice!.ResetBeat();
+        for (var step = 0; step < maxSteps && !_disposed; step++)   // leaving the tab ends the loop
+        {
+            if (step > 0)
+            {
+                if (cache.Filled < window) logits = _session.StepToken(cache, seq[^1]);
+                else logits = _session.Prime(cache, BuildContext(seq, rolls ? rollTail : window));
+            }
+
+            var decision = Gate.Evaluate(logits, vocabLimit, policy);
+            var t = Gate.Pick(logits, vocabLimit, policy, rng);
+
+            if (t == CharVocab.End)
+            {
+                reason = "stop";
+                if (onPartial is not null) await onPartial(Trim(outIds));
+                break;
+            }
+
+            outIds.Add(t); seq.Add(t);
+
+            // DEGENERATE-TAIL CUT, live per step: the repeat is cut the moment it completes and PaintPrefix holds a still-forming repeat back.
+            var cut = DegenerateTail.Start(outIds);
+            if (cut < outIds.Count)
+            {
+                outIds.RemoveRange(cut, outIds.Count - cut);
+                reason = "loop";
+                if (onPartial is not null) await onPartial(Trim(outIds));
+                break;
+            }
+
+            var skipping = _skipRequested;
+            if (onPartial is not null && _voice.SoundOn && !skipping)
+                await _voice.WaitForBeatAsync();
+
+            var stopping = guard.Observe(t, decision.Greedy);
+            if (stopping) reason = "loop";
+
+            if (onPartial is not null)
+            {
+                var isLastStep = step == maxSteps - 1;
+                if (skipping || stopping || isLastStep || TokenVoice.ShouldRepaint(outIds.Count, stopping, isLastStep, _voice.SoundOn))
+                    // On any step that ENDS the story, paint the trimmed text, so the last frame is exactly what the finished story says.
+                    await onPartial(stopping || isLastStep ? Trim(outIds) : _vocab.Decode(PaintPrefix(outIds)));
+            }
+            if (!skipping) _voice.PlayTone(_session, t);
+            if (stopping) break;
+        }
+
+        return (Trim(outIds), reason);
+    }
+
+    // The whole output-trimming policy in ONE place, so the live reveal and the finished story cannot disagree. The model almost never
+    // emits its stop token, so a story that runs out of steps ends wherever the drift landed: drop an incomplete trailing fragment back to
+    // the last sentence end. With no sentence-ending punctuation at all keep the untrimmed text rather than emit nothing.
+    string Trim(List<int> ids)
+    {
+        var text = _vocab.Decode(ids).TrimEnd();
+        var lastEnd = text.LastIndexOfAny(SentenceEnders);
+        if (lastEnd >= 0) text = text[..(lastEnd + 1)];
+        return text;
+    }
+
+    static List<int> PaintPrefix(List<int> ids)
+    {
+        var n = DegenerateTail.SafePrefix(ids);
+        return n >= ids.Count ? ids : ids.GetRange(0, n);
+    }
+
+    async Task TellStory(bool reuseSeed)
+    {
+        if (!_ready || _generating) return;
+
+        string prompt; int seed; Variety variety;
+        if (reuseSeed && _lastSeed is not null)
+        {
+            // Exact reproduction: the prompt and variety the LAST story used, not whatever the inputs show now.
+            prompt = _activePrompt; seed = _lastSeed.Value; variety = _lastVariety;
+        }
+        else
+        {
+            prompt = string.IsNullOrWhiteSpace(_promptInput) ? DefaultPrompt : _promptInput.Trim();
+            seed = Random.Shared.Next();
+            variety = _variety;
+        }
+
+        _skipRequested = false;
+        _activePrompt = prompt;
+        _pendingContinuation = "";
+        _generating = true; _error = null;
+        StateHasChanged();
+        await Task.Yield();
+
+        try
+        {
+            var (text, reason) = await GenerateStoryAsync(prompt, seed, variety, async partial =>
+            {
+                if (_disposed) return;
+                _pendingContinuation = partial;
+                StateHasChanged();
+                await Task.Yield();
+            });
+            _story = text;
+            _lastSeed = seed;
+            _lastVariety = variety;
+            _lastStopReason = reason;
+        }
+        catch (Exception ex) { _error = "Nano Stories stumbled: " + ex.Message; }
+        finally
+        {
+            _generating = false; _pendingContinuation = "";
+            if (!_disposed) StateHasChanged();
+        }
+    }
+
+    void SkipToEnd() => _skipRequested = true;
+
+    bool _disposed;
+
+    public void Dispose() { _disposed = true; _voice?.Dispose(); }
+}

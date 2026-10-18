@@ -5,10 +5,11 @@
 //                    opened directly downloads no runtime file at all, even after a scroll and a tap on text
 //   2 shell          /tools/prism/ opened directly (no referrer): content + start button, ZERO runtime requests while the visitor only reads/scrolls
 //   3 start          pressing the button boots the app over the shell and the tool works (Prism's stats appear)
-//   4 in-app nav     from the running Prism, the page's own link to Nano Stories is a client-side navigation: the page is NOT reloaded
-//                    (a window marker survives), the checkpoint is NOT fetched again (SessionHost shared), and Stories shows its UI
-//   5 hard nav       typing /tools/stories directly is a new page load: marker gone, the checkpoint IS fetched again
-//   6 from-site      following a link from another page of the site to a tool shell starts the app without a button press
+//   4 in-app nav     from the running Prism, the Stories tab link is a client-side navigation: the page is NOT reloaded
+//                    (a window marker survives), the checkpoint is NOT fetched again (one model for every tab), and Stories shows its UI
+//   5 hard nav       typing /tools/prism/?tab=stories directly is a new page load: marker gone, the checkpoint IS fetched again, Stories opens
+//   6 from-site      following a link from another page of the site to an OLD tool address (/tools/forecaster/, now a redirect stub) lands on
+//                    the Forecaster tab of Prism and starts the app without a button press
 //   7 bounce         /tools/council-spending/wokingham (no shell) goes through 404.html -> /tools/app/?/..., keeps its URL, boots, shows the council page
 //   8 not found      an unknown /tools/ path stays on the site's 404 page (no bounce, no runtime download)
 import http from 'node:http';
@@ -78,13 +79,13 @@ check('3 the app is mounted over the shell', await ev(`document.querySelector('[
 const n1 = brainFetches();
 
 // 4 in-app navigation
-await ev(`document.querySelector('a[href="/tools/stories"]').click()`);
+await ev(`document.querySelector('a.pt-tab-btn[href="/tools/prism/#stories"]').click()`);
 const stories = await poll(`document.querySelector('.ns-panel .prompt-input')`, 60000);
-check('4 in-app link is client-side navigation', (await ev('window.__marker')) === 1 && (await ev('location.pathname')) === '/tools/stories', `marker=${await ev('window.__marker')} path=${await ev('location.pathname')}`);
+check('4 tab link is client-side navigation', (await ev('window.__marker')) === 1 && (await ev('location.hash')) === '#stories', `marker=${await ev('window.__marker')} path=${await ev('location.pathname')} hash=${await ev('location.hash')}`);
 check('4 Stories reused the loaded model', stories != null && brainFetches() === n1 && n1 === 1, `checkpoint fetches: ${n1} before, ${brainFetches()} after; Stories UI after ${stories} ms`);
 
 // 5 hard navigation
-await go(origin + '/tools/stories');
+await go(origin + '/tools/prism/?tab=stories');
 await ev(`document.querySelector('[data-blazier-go]').click()`);
 const stories2 = await poll(`document.querySelector('.ns-panel .prompt-input')`);
 check('5 hard navigation is a fresh page load', (await ev('window.__marker')) === undefined && stories2 != null && brainFetches() === 1, `marker=${await ev('window.__marker')} checkpoint fetched again: ${brainFetches()}x; working ${stories2} ms after the press`);
@@ -93,8 +94,8 @@ check('5 hard navigation is a fresh page load', (await ev('window.__marker')) ==
 await go(origin + '/tools/app/');
 reqs = [];
 await ev(`(function(){var a=document.createElement('a');a.href='/tools/forecaster/';a.id='fromsite';document.body.appendChild(a);a.click();})()`);
-const fc = await poll(`document.querySelector('.fc-stage')`);
-check('6 a link from the site starts the app without a button press', fc != null && (await ev('location.pathname')) === '/tools/forecaster/', `Forecaster working ${fc} ms after the click`);
+const fc = await poll(`document.querySelector('.fc-source')`);
+check('6 an old tool link redirects to its Prism tab and starts the app without a button press', fc != null && (await ev('location.pathname')) === '/tools/prism/' && (await ev('location.hash')) === '#forecaster', `Forecaster tab working ${fc} ms after the click, at ${await ev('location.pathname')}${await ev('location.hash')}`);
 
 // 7 bounce for a path with no shell
 await go(origin + '/tools/council-spending/wokingham');

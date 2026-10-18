@@ -1,0 +1,21 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+  <!-- UI proof for the Prism tool: drives the REAL page and tab components (the built Showroom.dll) under bUnit against the shipped
+       checkpoint, since no browser is launched here. Clicks Test, Start retraining, Stop, Reset, Guess, Let it forage and the tab links,
+       and checks the shared model's bytes before and after. Build Showroom (Release) first. Usage: dotnet run -c Release (project tools/PrismTabUiProof). -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <PackageReference Include="bunit" Version="2.11.3" />
+    <Reference Include="Showroom"><HintPath>..\..\bin\Release\net10.0\Showroom.dll</HintPath></Reference>
+    <ProjectReference Include="..\..\..\HoloKernel\HoloKernel.csproj" />
+    <PackageReference Include="EvaluatedApplications.AlgFormer" Version="2.20.1" />
+    <PackageReference Include="EvaluatedApplications.Prism" Version="1.3.3" />
+    <PackageReference Include="EvaluatedApplications.Tracer" Version="2.0.0" />
+    <PackageReference Include="EvaluatedApplications.Blazier" Version="1.0.0" />
+  </ItemGroup>
+</Project>

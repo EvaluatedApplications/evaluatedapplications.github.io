@@ -1,6 +1,7 @@
 using Blazier;
 using HoloKernel;
 using Microsoft.Extensions.DependencyInjection;
+using Showroom.Services.PrismTab;
 
 namespace Showroom.Services;
 
@@ -16,6 +17,7 @@ public sealed class ShowroomPrerender : IBlazierPrerenderSetup
     public void ConfigureServices(IServiceCollection services)
     {
         services.AddSingleton<SessionHost>();
+        services.AddScoped<PrismLoader>();
         services.AddScoped<CouncilWebData>();
         services.AddScoped<FoiTray>();
     }

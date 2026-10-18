@@ -42,3 +42,24 @@ fit rows 500..4,000 (<= 200,000 bases), 5,000 iterations (package default; the f
 ## Shell verification scripts
 `scripts/shell-check.mjs <dist> <website-data>` (7 behaviours; ALL PASS 2026-10-15), `shell-metrics.mjs` (bytes/paint/click-to-working; `local` vs `live`), via
 `scripts/pages-server.mjs`; full deploy tree `AboutUs/web/scripts/cutover-dry-run.mjs`. Chat/story timing: `chat-turns.mjs <dist> <website-data> 9 6`, `story-times.mjs`.
+
+## Council scanner rules moved out of CLAUDE.md (2026-10-18, verbatim)
+- **Audit rules (2026-10-04)**: no raw engine code is ever printed: `Services/CouncilCodes.cs` maps every code to words (unlisted = "Other (not
+  described here)"); `CouncilWebBuilder` and `CouncilTermsCheck` FAIL (exit 1) on a code the table lacks. No "fault" label, no "published twice"/"lead"/"actual
+  target" wording (twins = "identical lines under two transaction numbers"). A council paying itself (`IsSelf`) is left out of flows/debt/misfits/loan checks
+  and counted. Say where a check cannot run (`CheckCannotRun`); the letter quotes facts, never a class or cause. Builder `Clean` PRINTS `HELD LINES` for review.
+- **Regression**: `dotnet run -c Release --project CouncilTermsCheck -- <council-web> out.txt [slugs]`; diff against `CouncilTermsCheck/golden.txt` (regenerated
+  2026-10-05; explain every diff) and read the builder's REWORDED/HELD BACK/HELD LINES. `BudgetTestPanel`'s stage prose numbers are still TYPED (frozen 49 of 52 / 96;
+  Stage 2d 37 units, 26 below, 133 pooled): recompute from `budget_units*.csv` when a stage moves.
+- **Load by financial year**: `LoadPicker` = tick-list of April-March years, ONE Load with progress + Cancel. `MonthScan` keeps raw bytes only for
+  recent years (`RawBudget` 40 MB, LRU); an evicted year re-inflates (`EnsureRawAsync`) before a list opens.
+
+## The five pre-merge pages (retired 2026-10-18; facts only, for history)
+- Creature: own HoloFormer d=384 L=1 `MaxCtx=32` `MinShifts=8` (ShiftsFor(32,384) floors to 1), K from `oracle-stackk.txt`, vocab = 400 cells + 8 moves, eight-way moves, ε-greedy forage,
+  advantage-weighted `RefinementLoop.Observe` per step on a channel-fed background trainer, optional per-pass inspector (`Inspector.Capture`). Forecaster: own HoloFormer d=128 L=1
+  `CandleContext=128` (ctx 256) vocab 17 (8 time buckets + 9 return buckets, `RetEdges`), lr 0.005, predict/countdown/reveal animation, optional Finnhub top-up when
+  `data/finnhub-key.txt` existed (research in `forecaster-live-data-research.md`; the merged tab has NO live data). Both trained a model from scratch in the tab; neither is in the code any more.
+- Prism, Stories and Cartographer pages became `PrismChatPanel`, `PrismStoriesPanel`, `PrismMapPanel` (code moved, comments condensed; behaviour and constants unchanged).
+
+## Dashboard gotchas (moved 2026-10-18)
+Type `Stmt` clashes with `HoloDb.Stmt` (ours is `DashQuery`); `QueryResult.GetLong` only on a columnar projection; sibling refreshes go through `DashboardSession.Repaint`. Never write "N lines" by hand (`Plural`/`NumLines`). Chat/Stories: `AsciiPunctuation.Fold` runs at every tokenizer entry.

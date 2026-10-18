@@ -1,48 +1,9 @@
-@page "/cartographer"
-@attribute [BlazierPage("cartographer", Title = "The Cartographer — watch a model think, live", Layout = typeof(MainLayout), Static = true)]
-@inject IBuildTime Build
-@inject HttpClient Http
-@inject HoloKernel.SessionHost Sessions
 @using System.Text
 @using PrismFormer
 @using HoloKernel
-
-<PageTitle>The Cartographer — watch a model think, live</PageTitle>
-
-<div class="room" data-cat="algformer">
-    <header class="room-head">
-        <nav class="crumb"><a href="/">Evaluated Applications</a> <span>/</span> The Cartographer</nav>
-        <h1>The Cartographer</h1>
-        <p class="lede">Every word this model knows lives at a point in a real, high-dimensional space. Type a
-            prompt and watch the exact path its own next-word decision takes through that space — the same faces
-            <a href="/tools/prism">Prism</a> and <a href="/tools/stories">Nano Stories</a> compute, just watched
-            instead of spoken. Nothing here is simulated: every point is decoded straight off the model's own
-            forward pass with <code>DecodeFace</code>.</p>
-    </header>
-
-    @if (Build.IsPrerender)
-    {
-        <ToolStart Tool="The Cartographer" Data="the model file" />
-    }
-    else if (_loadError is not null)
-    {
-        <p class="err">@_loadError</p>
-    }
-    else if (!_loaded)
-    {
-        <div class="boot-crt ck-boot">
-            <div class="boot-head"><span class="boot-dot" aria-hidden="true"></span>downloading the model</div>
-            <div class="boot-sub">the same checkpoint Prism and Nano Stories use — shared, so this may already be loaded.</div>
-            <div class="boot-log">
-                @foreach (var s in _loadSteps)
-                {
-                    <span class="l @s.Cls"><span class="p">&gt;</span> @s.Label <span class="boot-status">@s.Status</span></span>
-                }
-            </div>
-        </div>
-    }
-    else
-    {
+@using Showroom.Services.PrismTab
+@* The Map tab (the old Cartographer): a 2D view of ONE next-token decision of the shared Prism checkpoint. No training loop, ever; it only
+   inspects one forward pass. The model comes in as a parameter (PrismLoader loads it once for all five tabs). *@
         <div class="cg-stats">
             <div class="stat"><div class="n">@_stats!.Layers</div><div class="l">layers</div></div>
             <div class="stat"><div class="n">@_stats.KPass</div><div class="l">passes per layer</div></div>
@@ -57,7 +18,7 @@
                 @(_busy ? "computing…" : "Visualize")
             </button>
         </div>
-        <p class="hint">One prompt, one decision — the token that comes right after it. Not a chat, not a story:
+        <p class="hint">One prompt, one decision: the token that comes right after it. Not a chat, not a story:
             just the single next word and the path the model took to pick it.</p>
 
         @if (_vizError is not null) { <p class="err">@_vizError</p> }
@@ -69,12 +30,12 @@
                 <span class="cg-answer-word">"@_answerSymbol"</span>
                 <span class="cg-answer-meta">id @_answerId · @((_answerConfidence * 100).ToString("0.#"))% of the model's own probability mass</span>
             </div>
-            <p class="hint">This is the model's single most confident continuation, not what Prism or Nano Stories
-                would actually say — those pick from a gated, sometimes-random shortlist so replies don't all read
+            <p class="hint">This is the model's single most confident continuation, not what the Chat or Stories tab
+                would actually say, because those pick from a gated, sometimes-random shortlist so replies don't all read
                 identically. A picture needs one definite path, so this view always shows the greedy one.</p>
             @if (_truncated)
             {
-                <p class="hint">Your prompt tokenized longer than this view shows — using only the last @PromptCap tokens.</p>
+                <p class="hint">Your prompt tokenized longer than this view shows, so only the last @PromptCap tokens.</p>
             }
 
             <div class="cg-panel">
@@ -83,7 +44,7 @@
                         These two axes are the ones that spread <strong>this path</strong> out the most in 2D. They
                         capture <strong>@((_varianceCaptured * 100).ToString("0.#"))%</strong> of how far apart the
                         @(_trajPoints.Count) points on it really are, out of @_stats.Dim real dimensions. That is a
-                        shadow, not a map — <strong>two points that look close together here can still be far apart
+                        shadow, not a map: <strong>two points that look close together here can still be far apart
                         in the model's real space.</strong>
                     </p>
                     <div class="cg-basis">
@@ -156,15 +117,11 @@
             </table>
             </div>
         }
-
         <div class="outro">
-            <p>This reads the exact same trained checkpoint as <a href="/tools/prism">Prism</a> and
-                <a href="/tools/stories">Nano Stories</a> — no separate download, no separate model. Nothing here
-                changes the model's weights; it only inspects one forward pass. See also
-                <a href="/tools/creature">The Creature</a> and <a href="/tools/forecaster">The Forecaster</a>.</p>
+            <p>This reads the exact same trained checkpoint as <a href="/tools/prism/#chat">Chat</a> and
+                <a href="/tools/prism/#stories">Stories</a>: no separate download, no separate model. Nothing here
+                changes the model's weights; it only inspects one forward pass.</p>
         </div>
-    }
-</div>
 
 @code {
     // 24 -> 64 on 2026-10-04: r3,970 emitted ~1.15 chars/token, so 24 tokens was ~28 characters, shorter than the page's own
@@ -183,15 +140,11 @@
     const int LabelEvery = 11;
     const double PlotW = 760, PlotH = 540;
 
-    sealed class LoadStep { public string Label = ""; public string Status = "fetching…"; public string Cls = ""; }
-    readonly List<LoadStep> _loadSteps = new();
-    LoadStep Begin(string label) { var s = new LoadStep { Label = label }; _loadSteps.Add(s); StateHasChanged(); return s; }
-    void Finish(LoadStep s, string status, string cls = "core") { s.Status = status; s.Cls = cls; StateHasChanged(); }
+    [Parameter, EditorRequired] public PrismModel Model { get; set; } = default!;
 
-    HoloSession? _session;
-    ModelStats? _stats;
-    SubwordVocab? _vocab;
-    bool _loaded; string? _loadError;
+    HoloSession _session = default!;
+    ModelStats _stats = default!;
+    SubwordVocab _vocab = default!;
 
     string _prompt = "";
     bool _busy; string? _vizError; bool _hasResult;
@@ -256,53 +209,10 @@
     }
     IEnumerable<(string, CloudDot)> LabeledCloudPairs() => _cloudDots.Where(c => c.Label is not null).Select(c => (c.Label!, c));
 
-    protected override async Task OnInitializedAsync()
+    protected override void OnInitialized()
     {
-        if (Build.IsPrerender) return;   // the static shell fetches nothing (Blazier); the live page starts here
-        try
-        {
-            var s = Begin(DataUrl.For("prism/oracle-vocab.txt"));
-            var vocabBytes = await Http.GetByteArrayAsync(DataUrl.For("prism/oracle-vocab.txt"));
-            var merges = Encoding.UTF8.GetString(vocabBytes).Replace("\r\n", "\n").Split('\n').Where(l => l.Length > 0).ToList();
-            _vocab = new SubwordVocab(merges);
-            Finish(s, $"{vocabBytes.Length:N0} B → {_vocab.Size:N0}-symbol vocab");
-
-            s = Begin(DataUrl.For("prism/oracle-rounds.txt"));
-            long? rounds = null;
-            try { rounds = long.Parse((await Http.GetStringAsync(DataUrl.For("prism/oracle-rounds.txt"))).Trim()); Finish(s, $"{rounds:N0} rounds trained"); }
-            catch { Finish(s, "not shipped (optional)", "fail"); }
-
-            s = Begin(DataUrl.For("prism/oracle-stackk.txt"));
-            int? trainedStackK = null;
-            try { trainedStackK = int.Parse((await Http.GetStringAsync(DataUrl.For("prism/oracle-stackk.txt"))).Trim()); Finish(s, $"K={trainedStackK}"); }
-            catch { Finish(s, "not shipped (optional)", "fail"); }
-
-            s = Begin(DataUrl.For("prism/oracle-iterwarm.txt"));
-            int? trainedIterWarm = null;
-            try { trainedIterWarm = int.Parse((await Http.GetStringAsync(DataUrl.For("prism/oracle-iterwarm.txt"))).Trim()); Finish(s, $"{trainedIterWarm:N0}-round ramp"); }
-            catch { Finish(s, "not shipped (optional)", "fail"); }
-
-            var k = PrismCheckpoint.ResolveK(trainedStackK);
-
-            // SessionHost dedupes by MODEL key ("prism") — if Prism or Nano Stories already loaded this
-            // checkpoint this page load, this reuses it instantly instead of re-downloading it.
-            var reused = Sessions.IsLoaded(PrismCheckpoint.SessionKey);
-            _session = await Sessions.GetOrCreateAsync(PrismCheckpoint.SessionKey, async () =>
-            {
-                var sb = Begin(DataUrl.For("prism/oracle-brain.bin.gz"));
-                var (bytes, gzLen) = await CheckpointFetch.FetchAndDecompressGzipAsync(Http, DataUrl.For("prism/oracle-brain.bin.gz"));
-                var peek = HoloFormer.Deserialize(bytes);
-                Finish(sb, $"{gzLen:N0} B gzip → {bytes.Length:N0} B → {peek.ParamCount:N0} params deserialized");
-                var alpha = PrismCheckpoint.ReconstructAlpha(peek.Layers, rounds, trainedIterWarm);
-                return HoloSession.FromCheckpoint(bytes, k, alpha);
-            });
-            if (reused) Finish(Begin(DataUrl.For("prism/oracle-brain.bin.gz")), "reused from earlier this visit (no re-download)");
-            _stats = _session.Stats();
-            _loaded = true;
-        }
-        catch (Exception ex) { _loadError = "Couldn't load the checkpoint: " + ex.Message; }
+        _session = Model.Session; _stats = Model.Stats; _vocab = Model.Vocab;
     }
-
     async Task OnKeyDown(KeyboardEventArgs e) { if (e.Key == "Enter") await Visualize(); }
 
     async Task SetBasis(string mode)
@@ -326,7 +236,7 @@
         try
         {
             var toks = _vocab.Encode(folded);
-            if (toks.Length == 0) { _vizError = "Couldn't tokenize that — try a normal sentence."; return; }
+            if (toks.Length == 0) { _vizError = "Couldn't tokenize that. Try a normal sentence."; return; }
 
             var capLen = PromptCap;
             _truncated = toks.Length > capLen;

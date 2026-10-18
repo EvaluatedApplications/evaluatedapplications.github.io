@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Proof for the Prism tool's Creature and Forecaster tabs. It links the pure files the tabs run (Services/PrismTab/*.cs,
+       Cooperative.cs) and checks them against the SHIPPED checkpoint (website-data/prism): the text tasks and their answer keys, the
+       train/eval split, and above all that a private retrained copy never touches the shared model (same bytes before and after).
+       Usage: dotnet run -c Release (project tools/PrismTabProof), arguments after a double dash: [website-data/prism dir] [forecaster-history.json] [mutant flag].
+       The mutant flag trains the SHARED session on purpose: the isolation check must then go red (a test nobody has watched fail is an assertion). -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="..\..\Services\PrismTab\TextTask.cs" LinkBase="Linked" />
+    <Compile Include="..\..\Services\PrismTab\CreatureTask.cs" LinkBase="Linked" />
+    <Compile Include="..\..\Services\PrismTab\ForecasterTask.cs" LinkBase="Linked" />
+    <Compile Include="..\..\Services\PrismTab\PrivateCopy.cs" LinkBase="Linked" />
+    <Compile Include="..\..\Services\PrismTab\PrismTabs.cs" LinkBase="Linked" />
+    <Compile Include="..\..\Services\Cooperative.cs" LinkBase="Linked" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\HoloKernel\HoloKernel.csproj" />
+    <PackageReference Include="EvaluatedApplications.AlgFormer" Version="2.20.1" />
+    <PackageReference Include="EvaluatedApplications.Tracer" Version="2.0.0" />
+  </ItemGroup>
+
+</Project>

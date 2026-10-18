@@ -1,0 +1,221 @@
+@using System.Globalization
+@using System.Text
+@using HoloKernel
+@using Showroom.Services.PrismTab
+@implements IDisposable
+@inject PrismLoader Loader
+@* Train-it-yourself panel shared by the Creature and Forecaster tabs. The visitor sets every knob (weights, learning rate, steps, examples per
+   step, seed, and whatever the tab adds), presses Train, and watches the score on a fixed set of held-out items. The model is their OWN copy
+   (PrivateCopy, a new session): the shared Prism session is only ever read and is never passed to anything that writes. Leaving the tab
+   (Dispose) stops the trainer and drops the copy. *@
+
+<section class="tl-panel" aria-labelledby="tl-train-@_id">
+    <h3 id="tl-train-@_id">Train it</h3>
+    <p class="tl-copy">Your copy of the model, trained in your browser. The shared model is not changed.</p>
+    <div class="tl-knobs">
+        <label>Weights
+            <select value="@(_fresh ? "fresh" : "trained")" @onchange="OnWeights" disabled="@(Busy || Locked || _copy is not null)">
+                <option value="fresh">Fresh</option>
+                <option value="trained">Prism's trained weights</option>
+            </select>
+        </label>
+        <label>Learning rate
+            <input type="number" step="any" min="0" @bind="_lr" @bind:culture="CultureInfo.InvariantCulture" @bind:after="() => _lrEdited = true" disabled="@(Busy || Locked)" />
+        </label>
+        <label>Steps
+            <input type="number" step="1" min="1" @bind="_runSteps" disabled="@(Busy || Locked)" />
+        </label>
+        <label>Examples per step
+            <input type="number" step="1" min="1" @bind="_batch" disabled="@(Busy || Locked)" />
+        </label>
+        @if (_fresh)
+        {
+            <label>Seed
+                <input type="number" step="1" @bind="_seed" disabled="@(Busy || Locked || _copy is not null)" />
+            </label>
+        }
+        @ChildContent
+    </div>
+    <div class="tl-row">
+        <button class="go" type="button" @onclick="StartAsync" disabled="@(Busy || Locked)">@(_state == LabState.Training ? "Training…" : "Train")</button>
+        <button class="ghost" type="button" @onclick="Stop" disabled="@(_state == LabState.Idle)">Stop</button>
+        <button class="ghost" type="button" @onclick="Reset" disabled="@(Busy || _copy is null)">Reset</button>
+        @if (_state == LabState.Training && _copy is not null)
+        {
+            <progress class="tl-progress" max="@Math.Max(1, _runSteps)" value="@(_copy.Steps - _runStart)"></progress>
+            <span class="hint">step @((_copy.Steps - _runStart).ToString("N0", CultureInfo.InvariantCulture)) of @_runSteps.ToString("N0", CultureInfo.InvariantCulture)</span>
+        }
+    </div>
+    @if (_error is not null) { <p class="err">@_error</p> }
+    @if (_copy is not null)
+    {
+        <div class="cr-stats tl-stats">
+            <div class="stat"><div class="n">@_copy.Steps.ToString("N0", CultureInfo.InvariantCulture)</div><div class="l">steps so far</div></div>
+            <div class="stat"><div class="n">@(_latest is null ? "…" : Pct(_latest.Accuracy))</div><div class="l">score on @EvalN @Unit</div></div>
+            <div class="stat"><div class="n">@(_copy.Steps == 0 ? "…" : _copy.LastLoss.ToString("0.00", CultureInfo.InvariantCulture))</div><div class="l">last loss</div></div>
+        </div>
+        <figure class="cr-curve">
+            <figcaption>score on the same @EvalN @Unit, against steps</figcaption>
+            @((MarkupString)CurveSvg())
+        </figure>
+    }
+</section>
+
+@code {
+    static int _next;
+    readonly int _id = Interlocked.Increment(ref _next);
+
+    [Parameter, EditorRequired] public PrismModel Model { get; set; } = default!;
+    [Parameter, EditorRequired] public ITextTask Job { get; set; } = default!;
+    /// <summary>What an item is, plural: "grid situations".</summary>
+    [Parameter] public string Unit { get; set; } = "situations";
+    /// <summary>The parent is busy with its own compute (for example foraging); Train will not start while true.</summary>
+    [Parameter] public bool Locked { get; set; }
+    [Parameter] public EventCallback OnChanged { get; set; }
+    /// <summary>Extra knobs the tab adds next to the shared ones.</summary>
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    enum LabState { Idle, Training }
+    LabState _state;
+    TextTaskScorer? _scorer;
+    TaskItem[]? _eval;
+    ITextTask? _jobSeen;
+    EvalResult? _latest;
+    PrivateCopy? _copy;
+    readonly List<(int Step, double Acc)> _points = new();
+    readonly Random _rng = new(1234);
+    CancellationTokenSource? _cts;
+    string? _error;
+    bool _fresh = true, _lrEdited;
+    double _lr = PrismTabDefaults.FreshLearningRate;
+    int _runSteps = PrismTabDefaults.StepsPerRun, _batch = PrismTabDefaults.ExamplesPerStep, _seed = PrismTabDefaults.FreshSeed, _runStart;
+
+    const int EvalN = PrismTabDefaults.EvalN;
+
+    public bool Busy => _state != LabState.Idle;
+    public bool IsPrivate => _copy is not null;
+    public bool IsFresh => _copy is { IsFresh: true };
+    public int PrivateSteps => _copy?.Steps ?? 0;
+    /// <summary>The model decisions should use: the visitor's copy once there is one, else the shared model. Always served fully composed.</summary>
+    public HoloSession Active { get { if (_copy is not null && !Busy) _copy.ServeComposed(); return _copy?.Session ?? Model.Session; } }
+    public TextTaskScorer Scorer { get { EnsureScorer(); return _scorer!; } }
+
+    protected override void OnParametersSet()
+    {
+        // A tab that changes the task (the Forecaster's history window) hands in a new Job: start over on it.
+        if (_jobSeen is not null && !ReferenceEquals(_jobSeen, Job) && !Busy) { _scorer = null; _eval = null; DropCopy(); }
+        _jobSeen = Job;
+    }
+
+    void EnsureScorer()
+    {
+        _scorer ??= new TextTaskScorer(Model.Vocab, Model.Stats.Context, Job.Labels);
+        _eval ??= Job.MakeEvalSet(EvalN);
+    }
+
+    void OnWeights(ChangeEventArgs e)
+    {
+        _fresh = (e.Value?.ToString() ?? "fresh") == "fresh";
+        if (!_lrEdited) _lr = _fresh ? PrismTabDefaults.FreshLearningRate : PrismTabDefaults.LearningRate;
+    }
+
+    static string Pct(double v) => (v * 100).ToString("F0", CultureInfo.InvariantCulture) + "%";
+
+    async Task Raise() { StateHasChanged(); await OnChanged.InvokeAsync(); }
+
+    void DropCopy() { _copy = null; _latest = null; _points.Clear(); _error = null; }
+
+    async Task<EvalResult?> ScoreAsync(HoloSession s, CancellationToken ct) =>
+        await PrismEvaluator.EvaluateAsync(_scorer!, s, _eval!, Job, ct);
+
+    async Task StartAsync()
+    {
+        if (Busy || Locked) return;
+        if (!Loader.TryBeginTraining(this)) { _error = "Another job in this tab is still running."; return; }
+        _cts = new CancellationTokenSource(); var ct = _cts.Token;
+        _state = LabState.Training; _error = null;
+        StateHasChanged();
+        try
+        {
+            await Task.Delay(1);   // let the new button state paint before the first heavy step
+            EnsureScorer();
+            double lr = double.IsFinite(_lr) && _lr > 0 ? _lr : (_fresh ? PrismTabDefaults.FreshLearningRate : PrismTabDefaults.LearningRate);
+            int steps = Math.Clamp(_runSteps, 1, 1_000_000), batch = Math.Clamp(_batch, 1, 256);
+            if (_copy is null)
+            {
+                _copy = _fresh ? PrivateCopy.Fresh(Model.Session, _seed, lr) : PrivateCopy.Clone(Model.Session, lr);
+                _points.Clear(); _latest = null;
+                await Raise();
+            }
+            _copy.LearningRate = lr;
+            if (_points.Count == 0)
+            {
+                _copy.ServeComposed();
+                var start = await ScoreAsync(_copy.Session, ct);
+                if (start is not null) { _points.Add((0, start.Accuracy)); _latest = start; }
+            }
+            int stop = _copy.Steps + steps;
+            _runStart = _copy.Steps;
+            var batchItems = new TaskItem[batch];
+            while (_copy.Steps < stop && !ct.IsCancellationRequested)
+            {
+                for (int i = 0; i < batch; i++) batchItems[i] = Job.NextTrainItem(_rng);
+                _copy.TrainBatch(_scorer!, batchItems, _rng);
+                if (_copy.Steps % PrismTabDefaults.EvalEvery == 0 || _copy.Steps == stop)
+                {
+                    _copy.ServeComposed();   // scored fully composed; the next training step puts the ramp back
+                    var r = await ScoreAsync(_copy.Session, ct);
+                    if (r is not null) { _latest = r; _points.Add((_copy.Steps, r.Accuracy)); }
+                }
+                StateHasChanged();
+                await Task.Delay(1);
+            }
+        }
+        catch (Exception ex) { _error = "Training stopped: " + ex.Message; }
+        finally { _state = LabState.Idle; Loader.EndTraining(this); await Raise(); }
+    }
+
+    void Stop() => _cts?.Cancel();
+
+    async Task Reset()
+    {
+        if (Busy) return;
+        DropCopy();
+        await Raise();
+    }
+
+    // ---- the chart: score against steps ----
+    string CurveSvg()
+    {
+        const int w = 640, h = 130, padL = 34, padR = 8, padT = 8, padB = 18;
+        double Y(double acc) => padT + (1 - acc) * (h - padT - padB);
+        int maxStep = Math.Max(Math.Max(1, _points.Count == 0 ? 1 : _points.Max(p => p.Step)), _copy is null ? 1 : _copy.Steps);
+        double X(int step) => padL + (double)step / maxStep * (w - padL - padR);
+        var inv = CultureInfo.InvariantCulture;
+        string F(double v) => v.ToString("F1", inv);
+        var sb = new StringBuilder();
+        sb.Append($"<svg viewBox=\"0 0 {w} {h}\" class=\"curve-svg tl-svg\" role=\"img\" aria-label=\"score against training steps\">");
+        foreach (var g in new[] { 0.0, 0.5, 1.0 })
+        {
+            sb.Append($"<line class=\"tl-grid\" x1=\"{padL}\" y1=\"{F(Y(g))}\" x2=\"{w - padR}\" y2=\"{F(Y(g))}\"/>");
+            sb.Append($"<text class=\"tl-axis\" x=\"{padL - 4}\" y=\"{F(Y(g) + 3)}\" text-anchor=\"end\">{(int)(g * 100)}%</text>");
+        }
+        if (_points.Count > 1)
+        {
+            sb.Append("<polyline class=\"curve-line\" points=\"");
+            foreach (var (step, acc) in _points) sb.Append(F(X(step))).Append(',').Append(F(Y(acc))).Append(' ');
+            sb.Append("\"/>");
+        }
+        foreach (var (step, acc) in _points) sb.Append($"<circle class=\"tl-dot\" cx=\"{F(X(step))}\" cy=\"{F(Y(acc))}\" r=\"3\"/>");
+        sb.Append($"<text class=\"tl-axis\" x=\"{padL}\" y=\"{h - 4}\">0</text>");
+        sb.Append($"<text class=\"tl-axis\" x=\"{w - padR}\" y=\"{h - 4}\" text-anchor=\"end\">{maxStep.ToString("N0", inv)} steps</text>");
+        sb.Append("</svg>");
+        return sb.ToString();
+    }
+
+    public void Dispose()
+    {
+        _cts?.Cancel();
+        Loader.EndTraining(this);
+    }
+}

@@ -3,7 +3,8 @@
   Rebuilds Showroom/dist (the committed publish output the Pages deploy copies) and the Blazor runtime in the website-data repo.
 .DESCRIPTION
   Showroom/dist holds only what is small and ours: the static HTML shells (one folder per tool plus app/ the boot shell for bounced deep
-  links, written by Blazier during the publish), css, blazor.webassembly.*.js, data/forecaster-history.json. It has NO root index.html:
+  links, written by Blazier during the publish), the four redirect stubs for the tools that became Prism tabs (written by finish-shells.mjs),
+  css, blazor.webassembly.*.js, data/forecaster-history.json. It has NO root index.html:
   the /tools/ gallery is generated (web/, site-next/tools/index.html) and finish-shells.mjs drops the raw template the publish copies there.
   The runtime (the 30 MB AOT wasm, assemblies, ICU data: everything else under _framework) goes to <DataRepo>/_framework, where
   index.html's loadBootResource hook fetches it (window.EA_FRAMEWORK_BASE). The precompressed .br/.gz copies are not copied:
@@ -33,6 +34,9 @@ if (Test-Path $dist) { Get-ChildItem $dist -Force | Remove-Item -Recurse -Force 
 robocopy $pub $dist /E /XD _framework /XF *.br *.gz /NFL /NDL /NJH /NJS /NP | Out-Null
 if (Test-Path (Join-Path $dist 'index.html')) { throw 'dist has a root index.html: the generated gallery owns /tools/ (see finish-shells.mjs)' }
 if (-not (Test-Path (Join-Path $dist 'app\index.html'))) { throw 'dist/app/index.html (the boot shell for bounced deep links) is missing' }
+foreach ($old in 'creature', 'forecaster', 'stories', 'cartographer') {
+    if (-not (Test-Path (Join-Path $dist "$old\index.html"))) { throw "dist/$old/index.html (the redirect stub to the Prism tab) is missing; finish-shells.mjs writes it" }
+}
 New-Item -ItemType Directory -Force (Join-Path $dist '_framework') | Out-Null
 Get-ChildItem (Join-Path $pub '_framework') -File -Filter 'blazor.webassembly.*' | Where-Object { $_.Extension -notin '.br', '.gz' } | Copy-Item -Destination (Join-Path $dist '_framework')
 

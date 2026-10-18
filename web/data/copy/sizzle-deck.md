@@ -35,7 +35,7 @@ the full feature list, limits, evidence, related.
 - H1: Run a real database and train a real model in this browser tab.
 - Sub: Our libraries, live. Nothing is uploaded: the work happens on your machine.
 - CTA: [Start with The Dashboard]
-- Meta: Run a SQL database, train a language model and raise a learning creature in your browser tab. Nothing is uploaded; the work happens on your machine.
+- Meta: Run a SQL database, train a language model in your browser tab. Nothing is uploaded; the work happens on your machine.
 
 ## /research/
 
@@ -68,7 +68,7 @@ the full feature list, limits, evidence, related.
 - Eyebrow: AlgFormer, a transformer engine for .NET
 - H1: Train a language model in plain C#. Nothing else to install.
 - Sub: Define, train and run transformer models with no Python, no GPU and no native runtime. Pick classic attention, or the holographic core that reads long prompts in a fraction of the time.
-- Tool under the hero: The Forecaster (also The Creature, Prism, Nano Stories, The Cartographer)
+- Tool under the hero: Prism
 - Tiles (from the evidence record): 26 times / 50 times / 663 times
 - Meta: Train and run language models in plain C# with no Python, GPU or native runtime. The holographic core reads long prompts in a fraction of the time.
 
@@ -95,7 +95,7 @@ the full feature list, limits, evidence, related.
 - Eyebrow: Tracer, pathfinding and game AI for .NET
 - H1: Send a whole crowd to one exit with a single search.
 - Sub: Bake a navmesh, route single agents or whole swarms across it, close a doorway mid-game and watch the crowd find another way. Line of sight, fog of war and combat are in the same package.
-- Tool under the hero: The Creature
+- Tool under the hero: Prism
 - Tiles (generated from the recorded level): paths found in the swarm tick / paths found with the doorway closed / agents that took a new route / goals for the whole crowd
 - Meta: Send a whole crowd to one exit with a single search. Navmesh pathfinding for .NET with dynamic obstacles, line of sight and combat.
 

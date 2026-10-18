@@ -289,7 +289,7 @@
                 </button>
                 @if (_prismSession is null && !_novBusy)
                 {
-                    <span class="hint">First scan downloads the Prism checkpoint (shared instantly with the Prism/Creature/Forecaster tools if you've already loaded one this visit). Scans up to @NoveltyCellCap.ToString("N0") values, capped for browser responsiveness.</span>
+                    <span class="hint">First scan downloads the Prism checkpoint (shared instantly with the Prism tool if you've already opened it this visit). Scans up to @NoveltyCellCap.ToString("N0") values, capped for browser responsiveness.</span>
                 }
             </div>
 
@@ -491,7 +491,7 @@
     // ---- novelty scan: perplexity/surprisal against Prism's trained HoloFormer checkpoint. Opt-in and lazy —
     // the checkpoint is only fetched the first time a visitor actually clicks "Scan for novelty", never on page
     // load, so the (much broader, non-text-heavy-by-default) Analyst audience never pays for it unasked. Shares
-    // HoloKernel.SessionHost's "prism" key with Prism/Creature/Forecaster: if any of those already loaded it this
+    // HoloKernel.SessionHost's "prism" key with the Prism tool: if it already loaded the model this
     // visit, this reuses that in-memory session instantly instead of re-downloading.
     List<Col> _textCols = new();
     string _novCol = "";
@@ -1332,8 +1332,8 @@
     // FromCheckpoint(bytes, kPass, alpha) call, same LineageJournal.AlphaFor call for a mid-ramp snapshot —
     // migrated 2026-09-05 off HoloKernel's own AlphaRamp.Reconstruct hand-copy) rather than re-deriving it
     // differently. Sidecar metadata (rounds/stackK/iterWarm) is fetched fresh here even when
-    // Prism already loaded the model, because SessionHost's factory only ever runs ONCE per key — if Prism (or
-    // Creature/Forecaster) got there first, GetOrCreateAsync below just returns their already-built session and
+    // Prism already loaded the model, because SessionHost's factory only ever runs ONCE per key — if the Prism
+    // tool got there first, GetOrCreateAsync below just returns its already-built session and
     // this method's own locally-fetched K/alpha are discarded in favour of the real session's ground truth.
     async Task<bool> EnsurePrismLoadedAsync()
     {

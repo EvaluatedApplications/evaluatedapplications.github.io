@@ -93,9 +93,8 @@ public sealed class RefinementLoop
             throw new ArgumentOutOfRangeException(nameof(maxPositions), requested, "Scoring zero positions is a silent no-op.");
 
         var model = Session.Model;
-        // AlgFormer 2.0.0 made StackIterAccumulateAllPos take a PER-LAYER double[] alpha (length MUST ==
-        // layer count) instead of a scalar — every Showroom tool is Layers=1, so a uniform 1-length array
-        // reproduces the old scalar path bit-for-bit (signature adapter, not a behavior change).
+        // StackIterAccumulateAllPos takes a PER-LAYER double[] alpha (length MUST == layer count). A uniform
+        // array at the ramp's alpha is the old scalar behaviour: one entry per layer (Prism's checkpoint has 9).
         var alpha = new double[Math.Max(1, model.Layers)];
         Array.Fill(alpha, Ramp.Alpha);
 

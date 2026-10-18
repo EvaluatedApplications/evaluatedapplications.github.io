@@ -13,11 +13,8 @@ const PAGES = {
   // The boot shell for bounced deep links (/tools/app/?/<path>). The GALLERY is not here: it is generated (web/, site-next/tools/index.html).
   // noindex, and canonical points at the gallery, so a stray visit to /tools/app/ is never a search result of its own.
   'app': { d: 'Starting the in-browser runtime for the tool you asked for.', noindex: true, canonical: '/tools/' },
-  'prism': { d: 'Talk to a tiny trained language model that runs entirely in your browser, computed live on your own device. It is still learning, so the replies are rough.' },
-  'stories': { d: 'The same tiny model as Prism, asked to write a story: give it an opening line and watch it continue, live, one word piece at a time, in your browser.' },
-  'cartographer': { d: "Watch one next-word decision of a tiny language model take shape as a path through its representation space, decoded live from the model's own forward pass." },
-  'creature': { d: "Draw a world and watch a small holographic-transformer brain learn to forage in it, live in your browser, sensing food through Tracer's distance field." },
-  'forecaster': { d: 'Train a small holographic transformer on real historical price ticks and watch its next-move accuracy climb, live in your browser. A demo, not investment advice.' },
+  // ONE tool, five tabs (Chat, Stories, Map, Creature, Forecaster) on one shared model: one shell, one description.
+  'prism': { d: 'A tiny trained language model that runs entirely in your browser: chat with it, have it write a story, watch one of its decisions on a map, then retrain a private copy on a foraging task or a price tape.' },
   'analyst': { d: 'A real SQL database running in your browser tab profiles any CSV, JSON or log you give it, charts it, and answers your SQL. Nothing is uploaded.' },
   'dashboard': { d: 'A live dashboard over a database of orders built inside your browser tab. Click any chart, every panel re-queries, and the page times each query on your own device.' },
   'helix': { d: 'Paste DNA sequences and measurements and see the helix in the numbers: a score graded in your browser, with the controls that would expose a false win shown beside it.' },
@@ -41,6 +38,11 @@ if (fs.existsSync(rootIndex)) {
   console.log('finish-shells: removed the raw template index.html (the generated gallery owns /tools/)');
 }
 
+// The four tools that became tabs of Prism keep their old addresses as redirect stubs (GitHub Pages cannot send a 301): /tools/<old>/ goes
+// to /tools/prism/ with the query and hash kept, or the matching tab when there is no hash. Written below, so a republish brings them back;
+// publish-site.ps1 asserts they reached dist. Not shells (no blazier-scaffold meta, noindex, canonical on the Prism page).
+const STUBS = { creature: '#creature', forecaster: '#forecaster', stories: '#stories', cartographer: '#map' };
+
 // every shell Blazier wrote must have an entry
 const found = [];
 (function walk(dir) {
@@ -50,7 +52,7 @@ const found = [];
     else if (e.name === 'index.html') found.push(path.relative(root, path.dirname(f)).split(path.sep).join('/'));
   }
 })(root);
-for (const k of found) if (!(k in PAGES)) { console.error(`finish-shells: tools/${k}/ has a shell but no entry in PAGES`); bad++; }
+for (const k of found) if (!(k in PAGES) && !(k in STUBS)) { console.error(`finish-shells: tools/${k}/ has a shell but no entry in PAGES`); bad++; }
 
 for (const [key, page] of Object.entries(PAGES)) {
   const file = path.join(root, key, 'index.html');
@@ -79,5 +81,37 @@ for (const [key, page] of Object.entries(PAGES)) {
   // Blazier left .gz/.br copies of the shell it wrote; they are stale now and GitHub Pages never serves them
   for (const ext of ['.gz', '.br']) { const s = file + ext; if (fs.existsSync(s)) fs.rmSync(s); }
   console.log(`finish-shells: tools/${key}/${(Buffer.byteLength(html) / 1024).toFixed(1)} KB${page.noindex ? '  noindex' : ''}`);
+}
+for (const [key, tab] of Object.entries(STUBS)) {
+  const dir = path.join(root, key);
+  if (fs.existsSync(path.join(dir, 'index.html')) && /<meta name="blazier-scaffold"/.test(fs.readFileSync(path.join(dir, 'index.html'), 'utf8'))) {
+    console.error('finish-shells: tools/' + key + '/ is a generated shell but is a redirect stub now; remove its [BlazierPage]'); bad++; continue;
+  }
+  const target = '/tools/prism/' + tab;
+  const html = [
+    '<!DOCTYPE html>',
+    '<html lang="en">',
+    '<head>',
+    '<meta charset="utf-8">',
+    '<meta name="viewport" content="width=device-width, initial-scale=1">',
+    '<title>Moved to Prism | Evaluated Applications</title>',
+    '<meta name="description" content="This tool is now a tab of Prism, at ' + ORIGIN + target + '.">',
+    '<meta name="robots" content="noindex">',
+    '<link rel="canonical" href="' + ORIGIN + '/tools/prism/">',
+    '<meta http-equiv="refresh" content="0; url=' + target + '">',
+    // keep whatever query and hash the visitor arrived with; with no hash, open the tab this tool became
+    '<script>(function(){location.replace("/tools/prism/"+location.search+(location.hash||"' + tab + '"));})();</script>',
+    '<meta name="generator" content="redirect-stub">',
+    '</head>',
+    '<body data-stub>',
+    '<p>This tool is now a tab of <a href="' + target + '">Prism</a>.</p>',
+    '</body>',
+    '</html>',
+    '',
+  ].join('\n');
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, 'index.html'), html, 'utf8');
+  for (const ext of ['.gz', '.br']) { const s = path.join(dir, 'index.html') + ext; if (fs.existsSync(s)) fs.rmSync(s); }
+  console.log('finish-shells: tools/' + key + '/ redirect stub -> ' + target);
 }
 process.exit(bad ? 1 : 0);

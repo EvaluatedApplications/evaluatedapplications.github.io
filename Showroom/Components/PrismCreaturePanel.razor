@@ -1,0 +1,282 @@
+@using System.Globalization
+@using System.Text
+@using HoloKernel
+@using Showroom.Services.PrismTab
+@implements IDisposable
+@inject PrismLoader Loader
+@* The Creature tab: the SAME Prism checkpoint as every other tab, pointed at a foraging task written as text (CreatureTask).
+   Tracer's BFS is the answer key and the "scent" overlay; the model only ever sees the 5x5 text window. Test as shipped,
+   retrain a private copy (PrismTaskLab), then let whichever model is active forage in a world the visitor draws. *@
+
+<section class="tl-panel tl-intro">
+    <h3>What the model reads</h3>
+    <p class="tl-copy">The 5 by 5 window around the creature, as plain characters. The model answers with one letter, the way it picks a next word:</p>
+    <pre class="tl-prompt" aria-label="the text the model reads at the creature's cell">@CurrentPrompt</pre>
+    <p class="hint"><code>#</code> wall or edge, <code>.</code> free, <code>A</code> apple, <code>@@</code> the creature, north at the top.
+        @if (CurrentItem is { } it && it.Good.Contains(true))
+        {
+            <span>Tracer's pathfinder says the right move here is <strong>@GoodMoves(it)</strong>.</span>
+        }
+        else
+        {
+            <span>Tracer has no apple to reach from this cell.</span>
+        }
+    </p>
+</section>
+
+<PrismTaskLab @ref="_lab" Model="Model" Job="_task" Unit="grid situations" Locked="_running" OnChanged="OnLabChanged" />
+
+<section class="tl-panel" aria-labelledby="cr-world-title">
+    <h3 id="cr-world-title">Try it in a world you draw</h3>
+    <p class="tl-copy">Draw walls, place the egg and the apples, then let the creature forage with <strong>@(_lab?.IsPrivate == true ? "your copy" : "the shared model")</strong>.</p>
+
+    <div class="cr-tools">
+        <div class="tool-group">
+            <span class="tool-lbl">draw</span>
+            <button class="tool @(_tool == "wall" ? "on" : "")" @onclick='() => _tool = "wall"' type="button">🧱 wall</button>
+            <button class="tool @(_tool == "erase" ? "on" : "")" @onclick='() => _tool = "erase"' type="button">⌫ erase</button>
+            <button class="tool @(_tool == "start" ? "on" : "")" @onclick='() => _tool = "start"' type="button">🥚 start</button>
+            <button class="tool @(_tool == "apple" ? "on" : "")" @onclick='() => _tool = "apple"' type="button">🍎 apple</button>
+        </div>
+        <div class="tool-group">
+            <button class="tool ghost" @onclick="ClearWalls" type="button">clear walls</button>
+            <button class="tool ghost" @onclick="Scatter" type="button">scatter apples</button>
+            <button class="tool ghost @(_showScent ? "on" : "")" @onclick="ToggleScent" type="button">show Tracer's distances</button>
+        </div>
+    </div>
+
+    <div class="cr-stage" @onmouseup="StopPaint" @onmouseleave="StopPaint">
+        <svg class="cr-grid" viewBox="0 0 @(W * CS) @(H * CS)" role="img" aria-label="creature world">
+            @for (int y = 0; y < H; y++)
+            {
+                @for (int x = 0; x < W; x++)
+                {
+                    int gx = x, gy = y;
+                    <rect class="cell @(_wall[gy * W + gx] ? "wall" : "")" x="@(gx * CS)" y="@(gy * CS)" width="@CS" height="@CS"
+                          @onmousedown="() => Paint(gx, gy, true)" @onmouseenter="() => Paint(gx, gy, false)" />
+                    @if (_showScent && !_wall[gy * W + gx]) { @ScentTint(gx, gy) }
+                }
+            }
+            @if (_trail.Count > 1)
+            {
+                <polyline class="trail" points="@PathPoints(_trail)" />
+            }
+            <rect class="startmark" x="@(_startX * CS + 3)" y="@(_startY * CS + 3)" width="@(CS - 6)" height="@(CS - 6)" rx="3" />
+            @foreach (var ap in _apples)
+            {
+                @Glyph(ap % W, ap / W, "food", "🍎")
+            }
+            @Glyph(_cx, _cy, "critter", _running ? "🐛" : "🥚")
+        </svg>
+    </div>
+
+    @if (_error is not null) { <p class="err">@_error</p> }
+
+    <div class="cr-controls">
+        <button class="go" @onclick="ToggleRun" disabled="@(!CanRun)">@(_running ? "Pause" : "Let it forage")</button>
+        <label class="speed">speed
+            <input type="range" min="1" max="10" @bind="_speed" @bind:event="oninput" />
+        </label>
+        @if (_lab?.Busy == true) { <span class="hint">Foraging is off while the model trains.</span> }
+        else if (_applesInit.Count == 0) { <span class="hint">Place at least one 🍎 apple (or hit scatter apples).</span> }
+    </div>
+
+    @if (_lastScores is not null)
+    {
+        <p class="hint tl-scores">last decision: @_lastScores</p>
+    }
+    @if (_episodes > 0)
+    {
+        <div class="cr-stats">
+            <div class="stat"><div class="n">@_episodes</div><div class="l">runs</div></div>
+            <div class="stat"><div class="n">@_lastEaten / @_applesAtStart</div><div class="l">apples eaten, last run</div></div>
+            <div class="stat"><div class="n">@(_lastDecisions == 0 ? "-" : (100.0 * _lastAgree / _lastDecisions).ToString("F0", CultureInfo.InvariantCulture) + "%")</div><div class="l">moves matching Tracer's route, last run</div></div>
+        </div>
+    }
+</section>
+
+@code {
+    const int W = CreatureTask.W, H = CreatureTask.H, CS = 26;
+    const int StepBudget = 150;   // steps per foraging run
+    const int NApples = CreatureTask.NApples;
+
+    [Parameter, EditorRequired] public PrismModel Model { get; set; } = default!;
+
+    readonly CreatureTask _task = new();
+    PrismTaskLab? _lab;
+
+    bool[] _wall = new bool[W * H];
+    int _startX = W / 2, _startY = H / 2;
+    readonly HashSet<int> _applesInit = new();
+    readonly HashSet<int> _apples = new();
+    int[] _dist = new int[W * H];
+    string _tool = "apple";
+    bool _painting;
+
+    int _cx, _cy, _steps, _eaten, _agree, _decisions;
+    int _episodes, _lastEaten, _applesAtStart, _lastAgree, _lastDecisions;
+    readonly List<(int x, int y)> _trail = new();
+    string? _lastScores, _error;
+    bool _running, _showScent;
+    int _speed = 5;
+    readonly Random _rng = new();
+    CancellationTokenSource? _cts;
+
+    bool CanRun => _running || (_applesInit.Count > 0 && _lab is { Busy: false });
+
+    // The lab reference is only set after the first render; draw once more so the button knows it can run.
+    protected override void OnAfterRender(bool firstRender) { if (firstRender) StateHasChanged(); }
+
+    TaskItem? CurrentItem => CreatureTask.ItemAt(_wall, _apples, _dist, _cx, _cy);
+    string CurrentPrompt => CurrentItem?.Prompt ?? "";
+    static string GoodMoves(TaskItem it)
+    {
+        var parts = new List<string>();
+        for (int a = 0; a < 4; a++) if (it.Good[a]) parts.Add(CreatureTask.MoveLetters[a] + " " + CreatureTask.MoveArrows[a]);
+        return string.Join(" or ", parts);
+    }
+
+    protected override void OnInitialized()
+    {
+        _cx = _startX; _cy = _startY;
+        Scatter();
+    }
+
+    Task OnLabChanged() { StateHasChanged(); return Task.CompletedTask; }
+
+    // ---- world editing (unchanged behaviour from the old Creature page) ----
+    void Paint(int x, int y, bool down)
+    {
+        if (down) _painting = true;
+        if (!down && !_painting) return;
+        if (_running) return;
+        int i = y * W + x;
+        switch (_tool)
+        {
+            case "wall": if (i != _startY * W + _startX) { _wall[i] = true; _applesInit.Remove(i); } break;
+            case "erase": _wall[i] = false; break;
+            case "start": if (!_wall[i]) { _startX = x; _startY = y; _cx = x; _cy = y; _applesInit.Remove(i); } break;
+            case "apple": if (!_wall[i]) { if (!_applesInit.Add(i)) _applesInit.Remove(i); } break;
+        }
+        if (_tool == "start") _painting = false;
+        InvalidateOnEdit();
+    }
+    void StopPaint() => _painting = false;
+    void ClearWalls() { if (_running) return; Array.Clear(_wall); InvalidateOnEdit(); }
+
+    void Scatter()
+    {
+        if (_running) return;
+        _applesInit.Clear();
+        int guard = 0;
+        while (_applesInit.Count < NApples && guard++ < 4000)
+        {
+            int x = _rng.Next(W), y = _rng.Next(H), i = y * W + x;
+            if (_wall[i] || (x == _startX && y == _startY)) continue;
+            _applesInit.Add(i);
+        }
+        InvalidateOnEdit();
+    }
+
+    void InvalidateOnEdit()
+    {
+        _trail.Clear(); _lastScores = null;
+        _apples.Clear(); foreach (var a in _applesInit) _apples.Add(a);
+        _cx = _startX; _cy = _startY; _eaten = 0; _steps = 0;
+        ComputeDist();
+        StateHasChanged();
+    }
+
+    // Tracer's BFS distance to the nearest live apple. It is the answer key and the overlay; the model never sees it.
+    void ComputeDist() => _dist = CreatureTask.DistanceField(_wall, _apples);
+
+    // ---- the forage loop: the active model reads the window, the best LEGAL move is taken ----
+    void StepOnce()
+    {
+        var item = CreatureTask.ItemAt(_wall, _apples, _dist, _cx, _cy);
+        var scorer = _lab!.Scorer;
+        var logits = scorer.LabelLogits(_lab.Active, item.Prompt);
+        int act = TextTaskScorer.Pick(logits, item.Allowed);
+        var probs = TextTaskScorer.Probabilities(logits, item.Allowed);
+        _lastScores = string.Join("   ", Enumerable.Range(0, 4).Where(a => item.Allowed[a]).Select(a => $"{CreatureTask.MoveLetters[a]} {CreatureTask.MoveArrows[a]} {(probs[a] * 100).ToString("F0", CultureInfo.InvariantCulture)}%"))
+            + (act >= 0 ? $"   (took {CreatureTask.MoveLetters[act]})" : "   (boxed in)");
+
+        if (item.Good.Contains(true)) { _decisions++; if (act >= 0 && item.Good[act]) _agree++; }
+
+        if (act >= 0) { _cx += CreatureTask.Moves[act].Dx; _cy += CreatureTask.Moves[act].Dy; }
+        if (_apples.Remove(_cy * W + _cx)) { _eaten++; ComputeDist(); }
+        _steps++;
+        _trail.Add((_cx, _cy)); if (_trail.Count > 400) _trail.RemoveAt(0);
+    }
+
+    async Task ToggleRun()
+    {
+        if (_running) { _cts?.Cancel(); return; }
+        if (_applesInit.Count == 0 || _lab is null || _lab.Busy) return;
+        if (!Loader.TryBeginTraining(this)) { _error = "Another job in this tab is still running."; return; }
+        _cts = new CancellationTokenSource(); var ct = _cts.Token;
+        _running = true; _error = null;
+        _apples.Clear(); foreach (var a in _applesInit) _apples.Add(a);
+        ComputeDist();
+        _cx = _startX; _cy = _startY; _steps = 0; _eaten = 0; _agree = 0; _decisions = 0; _trail.Clear();
+        _applesAtStart = _applesInit.Count;
+        StateHasChanged();
+        bool finished = false;
+        try
+        {
+            await Task.Delay(1);
+            while (!ct.IsCancellationRequested)
+            {
+                int burst = 1 + _speed / 4;
+                for (int b = 0; b < burst && !ct.IsCancellationRequested; b++)
+                {
+                    StepOnce();
+                    if (_apples.Count == 0 || _steps >= StepBudget) { finished = true; break; }
+                }
+                StateHasChanged();
+                if (finished) break;
+                await Task.Delay(Math.Max(16, 200 - _speed * 18));
+            }
+        }
+        catch (Exception ex) { _error = "The creature stumbled: " + ex.Message; }
+        finally
+        {
+            _running = false;
+            Loader.EndTraining(this);
+            if (finished)
+            {
+                _episodes++; _lastEaten = _eaten; _lastAgree = _agree; _lastDecisions = _decisions;
+            }
+            StateHasChanged();
+        }
+    }
+
+    void ToggleScent() { _showScent = !_showScent; StateHasChanged(); }
+
+    // ---- rendering helpers ----
+    MarkupString Glyph(int cx, int cy, string cls, string ch)
+        => (MarkupString)$"<text class=\"{cls}\" x=\"{cx * CS + CS / 2}\" y=\"{cy * CS + CS - 4}\" text-anchor=\"middle\">{ch}</text>";
+
+    // A faint tint per cell for Tracer's distance field: brighter is closer to an apple.
+    MarkupString ScentTint(int x, int y)
+    {
+        int d = _dist[y * W + x];
+        if (d == int.MaxValue) return (MarkupString)"";
+        double closeness = 1.0 / (1.0 + d);
+        double op = 0.05 + 0.55 * closeness;
+        return (MarkupString)$"<rect class=\"scent\" x=\"{x * CS}\" y=\"{y * CS}\" width=\"{CS}\" height=\"{CS}\" opacity=\"{op.ToString("F2", CultureInfo.InvariantCulture)}\"/>";
+    }
+
+    string PathPoints(List<(int x, int y)> p)
+    {
+        var sb = new StringBuilder();
+        foreach (var (x, y) in p) sb.Append(x * CS + CS / 2).Append(',').Append(y * CS + CS / 2).Append(' ');
+        return sb.ToString();
+    }
+
+    public void Dispose()
+    {
+        _cts?.Cancel();
+        Loader.EndTraining(this);
+    }
+}

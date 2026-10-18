@@ -134,8 +134,9 @@ try {
   for (const s of shells) {
     await b.goto(`${base}/tools/${s}/`, { width: 1280, height: 900 });
     await new Promise((r) => setTimeout(r, 400));
-    const info = await b.evaluate('({h1:(document.querySelector("h1")||{}).textContent||"",len:document.body.innerText.trim().length,sw:document.documentElement.scrollWidth,cw:document.documentElement.clientWidth})');
+    const info = await b.evaluate('({stub:!!document.body.hasAttribute("data-stub"),h1:(document.querySelector("h1")||{}).textContent||"",len:document.body.innerText.trim().length,sw:document.documentElement.scrollWidth,cw:document.documentElement.clientWidth})');
     if (b.errors.length) fail(`tool shell /tools/${s}/ logged console errors: ${JSON.stringify(b.errors).slice(0, 160)}`);
+    if (info.stub) continue;                                 // redirect stub (<body data-stub>): no static text expected
     if (info.len < 150) fail(`tool shell /tools/${s}/ has almost no static text (${info.len} characters)`);
     if (info.sw > info.cw) fail(`tool shell /tools/${s}/ overflows horizontally`);
     if (info.len >= 150 && !b.errors.length) booted++;

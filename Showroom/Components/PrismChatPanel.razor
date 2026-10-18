@@ -1,0 +1,366 @@
+@implements IDisposable
+@inject Microsoft.JSInterop.IJSRuntime JS
+@using System.Text
+@using System.Globalization
+@using PrismFormer
+@using HoloKernel
+@using Showroom.Services.PrismTab
+@* global:: required: the Prism PAGE class (Showroom.Pages.Prism) shadows the "Prism" NuGet package's root namespace inside
+   the Showroom.Pages namespace; written the same way here so the two files never disagree. *@
+@using global::Prism.Inference
+@* The Chat tab: a turn-based chat REPL over the shared Prism checkpoint. Everything here was Prism.razor; the model now comes
+   in as a parameter (PrismLoader loads it once for all five tabs). *@
+
+@if (_ready)
+{
+    <TokenVoiceControls Voice="_voice!" />
+    <p class="sound-note hint">Each piece of a reply plays a short chord built from the model's own numbers for that
+        word piece. Off by default. <a href="/tools/prism/#explain-title">What you're hearing</a> is explained below the chat.
+        <a href="/tools/prism/#stories">Nano Stories</a> shares this exact voice: same model, same sound.</p>
+
+    <div class="cr-stats">
+        <div class="stat"><div class="n">@_stats.ParamCount.ToString("N0")</div><div class="l">parameters</div></div>
+        @* 8 bytes per parameter: the size the weights take in memory once loaded (they are doubles). The download is smaller
+           (the checkpoint ships as packed 32-bit values, gzipped); the boot log shows it. *@
+        <div class="stat"><div class="n">@((_stats.ParamCount * 8 / 1024).ToString("N0"))&nbsp;KB</div><div class="l">how big it is, in total</div></div>
+        @if (Model.Rounds is not null)
+        {
+            <div class="stat"><div class="n">@Model.Rounds.Value.ToString("N0")</div><div class="l">practice rounds so far</div></div>
+        }
+    </div>
+
+    <div class="or-runs">
+        @* the ref goes on .or-run-list, not .or-runs: the outer box is overflow:hidden, the inner list is the one that scrolls *@
+        <div class="or-run-list" @ref="_scrollBox">
+            @if (_turns.Count == 0)
+            {
+                <p class="hint">Say hi. It only remembers the latest stretch of the conversation (as much as fits its window), and nothing is saved.</p>
+            }
+            @foreach (var turn in _turns)
+            {
+                <div class="or-turn @(turn.IsUser ? "user" : "prism")">
+                    <span class="or-who">@(turn.IsUser ? "you" : "prism")</span>
+                    <span class="or-text">@DisplayText(turn)</span>
+                    @if (turn.Reason == StopReason.DegenLoop)
+                    {
+                        <span class="or-note">⋯ got stuck repeating itself</span>
+                    }
+                    else if (turn.Reason == StopReason.Cap)
+                    {
+                        <span class="or-note">⋯ ran on until it was stopped</span>
+                    }
+                </div>
+            }
+            @if (_generating)
+            {
+                <div class="or-turn prism pending">
+                    <span class="or-who">prism</span>
+                    <span class="or-text">@_pendingReply<span class="car" aria-hidden="true"></span></span>
+                </div>
+            }
+        </div>
+        <div class="or-input-row">
+            <input class="or-input" @bind="_prompt" @bind:event="oninput" @onkeydown="OnKeyDown" disabled="@_generating"
+                   placeholder="Say hi to Prism" maxlength="140" />
+            <button class="go" @onclick="Ask" disabled="@(_generating || string.IsNullOrWhiteSpace(_prompt))">
+                @(_generating ? "thinking…" : "Send")
+            </button>
+            <button class="ghost" @onclick="ClearChat" disabled="@(_generating || _turns.Count == 0)"
+                    title="Start a new conversation">
+                Clear
+            </button>
+        </div>
+    </div>
+
+    @if (_error is not null) { <p class="err">@_error</p> }
+
+    @* The "What you're hearing" numbers are READ OFF THE LOADED MODEL, never typed: the tone count is
+       HoloKernel.TokenVoice.CodecComponents and "how many times" a layer plays is the K the checkpoint is served at. *@
+    <section class="explain" aria-labelledby="explain-title">
+        <h2 id="explain-title">How Prism works, as sound</h2>
+        <p>Prism is a holographic transformer, and the easiest way to understand one is as music. This is the short
+            version of <a href="/holoformer.html">Meaning as chords</a>.</p>
+        <ul>
+            <li><strong>Every word is a chord.</strong> Prism stores each piece of a word as a chord, a stack of pure tones
+                played together. Chords that sound alike mean alike, so related ideas end up close to each other.</li>
+            <li><strong>Ideas combine by playing chords together.</strong> To link two things it plays both chords at once and
+                they merge into a new one. Number chords are tuned so that merging them is the arithmetic itself.</li>
+            <li><strong>It remembers like a radio.</strong> Everything it has read folds into one running sound. To recall
+                something it tunes to that frequency, and the match rings out while the rest cancels to silence.</li>
+            @if (_stats.KPass > 1)
+            {
+                <li><strong>It thinks by replaying.</strong> Each layer plays its part @TimesWord(_stats.KPass) before handing the sound on. The
+                    early passes sketch, the last turns the sketch into the answer.</li>
+            }
+        </ul>
+        @if (_toneCount > 0)
+        {
+            <h3>What you're hearing</h3>
+            <p>Turn sound on and every piece of a word Prism writes plays its own chord, right as it appears. That chord is not
+                a sound effect someone picked. It is built from the model's own numbers for that word piece: @_toneCount tones, each
+                taking its loudness and starting point from the model, with its frequency worked out from those same numbers.</p>
+            <p>The note and the tone colour come from opposite halves of the model's numbers for that word. The note comes from
+                what Prism has learned about the word, so its pitch moves as Prism keeps training. The tone colour comes from the
+                word's fixed identity, which never changes, so every word keeps its own sound. The one choice we made is where the
+                chord sits in your hearing range.</p>
+            <p>That is also why it doesn't sound like an ordinary instrument. The model's tones aren't tuned to any musical
+                scale, and we left them that way rather than dress them up.</p>
+        }
+    </section>
+}
+
+@code {
+    [Parameter, EditorRequired] public PrismModel Model { get; set; } = default!;
+
+    // ---- decode policy (Prism.Inference.DecodePolicy). Floor = TopP, because the older ResonanceSigma floor degenerates to an
+    // effective top-1 filter on this checkpoint and makes Temperature inert; P is the cumulative softmax mass at the final face that
+    // admits about three candidates. A conventional p=0.9 admits 200-300 tokens here and produces word salad.
+    // CHECKPOINT-SPECIFIC: P=0.43 was re-measured on r3,970 (V=320 d=64 L=33 ctx=512 K=3); re-measure on every re-mint.
+    // DegenNonGreedyRun is explicitly ZEROED so DegenGuard keeps its repeat trigger only (the stop behaviour this page always had).
+    static readonly DecodePolicy Policy = DecodePolicy.Default with
+    {
+        Floor = FloorMode.TopP,
+        P = 0.43,
+        DegenNonGreedyRun = 0,
+    };
+
+    // Per-reply token-step CEILING, one HoloFormer step each (not one character). Measured on a ctx=512 checkpoint; the cap in force
+    // is HoloKernel.ContextBudget.ReplyCap, never more than half the loaded model's window (ctx=64 -> 32 steps). THE WINDOW RULE:
+    // prompt + reply must stay under Context or every step past it re-Primes the whole window. Re-measure on every re-mint (it depends
+    // on the vocabulary's bytes per token). Chat quality is fixed by training, not by trimming at a sentence boundary.
+    const int MaxReplyStepsConst = 160;
+    int MaxReplySteps => ContextBudget.ReplyCap(_stats.Context, MaxReplyStepsConst);
+
+    // Tones per note (the frozen codec band), read off the loaded model; 0 = this checkpoint has no codec band.
+    int _toneCount;
+    static string TimesWord(int k) => k switch { 2 => "twice", 3 => "three times", 4 => "four times", 5 => "five times", _ => k + " times" };
+
+    TokenVoice? _voice;
+    HoloSession _session = default!;
+    ModelStats _stats = default!;
+    SubwordVocab _vocab = default!;
+    bool _ready;
+    string? _error;
+    bool _generating;
+    string _prompt = "";
+    string _pendingReply = "";   // the in-flight reply, streamed live; the markup binds to THIS field so each batch repaint has new text
+
+    // ---- turn-based chat, rolling context. TAGGED WIRE FORMAT: the transcript the model sees is one tagged line per turn, exactly what
+    // the studio trains the pairs lane on:  user: Q\nprism: A  with every finished exchange closed by STOP (CharVocab.End, id 95).
+    // Two facts about newlines: (1) a newline in TEXT is not a token, SubwordVocab folds every non-printable character (\n included) to a
+    // SPACE, so "user: Q\nprism: " reaches the model as "user: Q prism: " in training and here alike; (2) id 95 is the STOP token and the only
+    // id that decodes as "\n", but nothing ever ENCODES to it, it is only appended as an id after an answer.
+    sealed record ChatTurn(bool IsUser, string Text, StopReason? Reason = null);
+
+    enum StopReason
+    {
+        Stop,       // the model emitted its own trained stop token (CharVocab.End): the clean case
+        DegenLoop,  // DegenGuard / DegenerateTail caught a repetition collapse and cut it short
+        Cap,        // ran to MaxReplySteps without either; STOP is only ever a training target on PAIR data, so this is real and expected
+    }
+
+    // Bounds the DOM and render-diff cost across a long session (Blazor rediffs the whole tree on every StateHasChanged).
+    const int TurnCap = 60;
+    readonly List<ChatTurn> _turns = new();
+    void AddTurn(ChatTurn t) { _turns.Add(t); while (_turns.Count > TurnCap) _turns.RemoveAt(0); }
+    static string CleanTurnText(string s) => s.Replace('\r', ' ').Replace('\n', ' ').Trim();
+
+    // PACKED-TURN CONTEXT: every FINISHED exchange is its prompt run + answer run + STOP, and the question being answered is its prompt run
+    // alone, so the model's next token is the first word of its reply. Prompt and answer are encoded SEPARATELY, exactly as PairSource does.
+    // Typed text goes through AsciiPunctuation.Fold first (phone keyboards autocorrect the apostrophe to U+2019, which the vocabulary
+    // would turn into a space). Capping drops whole leading EXCHANGES so the context always starts on a turn boundary.
+    static List<int> BuildContextTokens(SubwordVocab vocab, IReadOnlyList<ChatTurn> turns, int maxTokens)
+    {
+        var chunks = new List<List<int>>();
+        List<int>? open = null;
+        foreach (var t in turns)
+        {
+            if (t.IsUser)
+            {
+                open = new List<int>(vocab.Encode(HoloKernel.AsciiPunctuation.Fold(GroupChat.HumanTag + t.Text.Trim() + "\n" + GroupChat.AiTag)));
+                chunks.Add(open);
+            }
+            else if (open is not null)   // a reply closes the exchange it answers; a reply with no question in view is dropped
+            {
+                open.AddRange(vocab.Encode(HoloKernel.AsciiPunctuation.Fold(t.Text)));
+                open.Add(CharVocab.End);
+                open = null;
+            }
+        }
+        var start = 0; var total = 0; foreach (var c in chunks) total += c.Count;
+        while (start < chunks.Count - 1 && total > maxTokens) { total -= chunks[start].Count; start++; }
+        var seq = new List<int>(total);
+        for (var i = start; i < chunks.Count; i++) seq.AddRange(chunks[i]);
+        return seq;
+    }
+
+    static string DisplayText(ChatTurn t) => t.Text.Length > 0 ? t.Text : "(blank: this checkpoint is still very early in training)";
+
+    // The one generation loop. `onPartial`, when supplied, is awaited every RenderBatch tokens so the browser paints a live typewriter.
+    async Task<(string Text, StopReason Reason)> GenerateReplyAsync(Func<string, Task>? onPartial)
+    {
+        // BUDGET = Context - the reply cap in force: the prompt must leave room for a full reply or the cache fills mid-reply and every
+        // remaining step re-Primes the whole window (~2.9 s per step at ctx=512 L=33). With prompt <= Context - cap the loop is O(1)/token.
+        var maxSteps = MaxReplySteps;
+        var promptBudget = ContextBudget.PromptBudget(_stats.Context, maxSteps);
+        var seq = BuildContextTokens(_vocab, _turns, promptBudget);
+        // BuildContextTokens always keeps the newest exchange even when it alone is over budget; keep its TAIL (still ends in "prism: ").
+        ContextBudget.KeepTail(seq, promptBudget);
+        var outIds = new List<int>();
+        var vocabLimit = _vocab.Size;
+        var guard = new DegenGuard(Policy);
+        var reason = StopReason.Cap;   // overwritten the moment either real stop condition fires
+
+        // KV-CACHE SERVING PATH (HoloSession.ServeCache): AlgFormer's StackK-aware NewCache/PrimeIter/StepIter pair, O(1) per token. Verified
+        // bit-identical to the per-step Logits() loop for a multi-layer checkpoint (Prism ships one). EVICTION: the cache cannot forget its
+        // oldest token, so once cache.Filled reaches Context the loop re-Primes from the freshly-sliced window instead of Stepping.
+        var cache = _session.NewServeCache();
+        var primedTail = BuildContext(seq, _stats.Context);
+        var logits = _session.Prime(cache, primedTail);
+
+        _voice!.ResetBeat();
+        for (var step = 0; step < maxSteps && !_disposed; step++)   // leaving the tab ends the loop
+        {
+            if (step > 0)
+            {
+                logits = cache.Filled < _stats.Context
+                    ? _session.StepToken(cache, seq[^1])
+                    : _session.Prime(cache, BuildContext(seq, _stats.Context));
+            }
+
+            // Evaluate before Pick to get the real greedy flag DegenGuard.Observe needs; Evaluate draws nothing from rng.
+            var decision = Gate.Evaluate(logits, vocabLimit, Policy);
+            var t = Gate.Pick(logits, vocabLimit, Policy, Random.Shared);
+
+            if (t == CharVocab.End) { reason = StopReason.Stop; break; }   // the model's own stop token: never shown, never fed back
+
+            outIds.Add(t); seq.Add(t);
+
+            // HARD CUT, not a hide: a degenerate tail is REMOVED from outIds before it is decoded, so it never reaches the visible turn AND
+            // never reaches the next turn's context. Runs per step, and PaintPrefix holds a still-forming repeat back from the DOM.
+            var cut = DegenerateTail.Start(outIds);
+            if (cut < outIds.Count)
+            {
+                outIds.RemoveRange(cut, outIds.Count - cut);
+                reason = StopReason.DegenLoop;
+                if (onPartial is not null) await onPartial(_vocab.Decode(outIds));
+                break;
+            }
+
+            if (onPartial is not null && _voice.SoundOn)   // re-read every step, so toggling sound mid-reply takes effect on the next note
+                await _voice.WaitForBeatAsync();
+            var stopping = guard.Observe(t, decision.Greedy);
+            if (stopping) reason = StopReason.DegenLoop;
+
+            if (onPartial is not null)
+            {
+                // Batch the RENDER, not the compute: every token is computed and appended, the DOM repaints every RenderBatch tokens or on the last.
+                var isLastStep = step == maxSteps - 1;
+                if (TokenVoice.ShouldRepaint(outIds.Count, stopping, isLastStep, _voice.SoundOn))
+                    await onPartial(_vocab.Decode(PaintPrefix(outIds)));
+            }
+            _voice.PlayTone(_session, t);   // AFTER the paint: the last printed token is always the one sounding. A no-op while sound is off.
+            if (stopping) break;
+        }
+
+        var text = _vocab.Decode(outIds).TrimEnd();
+        return (text, reason);
+    }
+
+    // The tokens a streaming repaint may show: everything except a repeat that is still forming and might be cut a token or two from now.
+    static List<int> PaintPrefix(List<int> ids)
+    {
+        var n = DegenerateTail.SafePrefix(ids);
+        return n >= ids.Count ? ids : ids.GetRange(0, n);
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        _session = Model.Session; _stats = Model.Stats; _vocab = Model.Vocab;
+        _toneCount = TokenVoice.CodecComponents(_session);
+        try
+        {
+            // The sound preference is restored first. Audible tokens are OFF by default: a page that makes noise unannounced is hostile.
+            _voice = new TokenVoice(JS);
+            await _voice.InitializeAsync();
+
+            // Silent warm-up: one prime and one step through the serve cache GenerateReplyAsync uses, result discarded, so WASM's cold-start
+            // cost is paid before the first real Send. Nothing is added to the chat.
+            try
+            {
+                var warm = _session.NewServeCache();
+                var warmCtx = BuildContext(BuildContextTokens(_vocab, new List<ChatTurn> { new(IsUser: true, Text: "hi") }, _stats.Context), _stats.Context);
+                _ = _session.Prime(warm, warmCtx);
+                _ = _session.StepToken(warm, warmCtx[^1]);
+            }
+            catch { /* warm-up only, never user-visible */ }
+            _ready = true;
+        }
+        catch (Exception ex) { _error = "Couldn't start the chat: " + ex.Message; }
+    }
+
+    static int[] BuildContext(List<int> seq, int maxContext)
+    {
+        var take = Math.Min(seq.Count, maxContext);
+        if (take == 0) return new[] { 0 };
+        var ctx = new int[take];
+        seq.CopyTo(seq.Count - take, ctx, 0, take);
+        return ctx;
+    }
+
+    // Leaving the tab must not leave a note ringing (the AudioContext lives on window). Does not touch the sound-on/volume preference.
+    bool _disposed;
+    public void Dispose() { _disposed = true; _voice?.Dispose(); }
+
+    async Task OnKeyDown(KeyboardEventArgs e) { if (e.Key == "Enter") await Ask(); }
+
+    // The chat scroll container. Auto-scroll is STICKY: forced when you send, and during the streaming reply only if you were already near
+    // the bottom (window.prismScrollToBottom in index.html).
+    ElementReference _scrollBox;
+    async Task ScrollToBottom(bool force)
+    {
+        try { await JS.InvokeVoidAsync("prismScrollToBottom", _scrollBox, force); }
+        catch { /* interop unavailable (torn-down circuit): scrolling is cosmetic, never fail a reply over it */ }
+    }
+
+    async Task Ask()
+    {
+        if (!_ready || string.IsNullOrWhiteSpace(_prompt) || _generating) return;
+        var userText = CleanTurnText(_prompt.Trim());
+        _prompt = "";
+        AddTurn(new ChatTurn(IsUser: true, Text: userText));
+        _pendingReply = "";
+        _generating = true; _error = null;
+        StateHasChanged();
+        await Task.Yield();   // let the user's own turn paint before the first real compute call blocks the thread
+        await ScrollToBottom(force: true);
+
+        try
+        {
+            var (text, reason) = await GenerateReplyAsync(async partial =>
+            {
+                if (_disposed) return;
+                // NOT trimmed mid-stream: trimming would make trailing spaces flicker; the final Decode(...).TrimEnd() trims once.
+                _pendingReply = partial;
+                StateHasChanged();
+                await Task.Yield();
+                await ScrollToBottom(force: false);
+            });
+            AddTurn(new ChatTurn(IsUser: false, Text: text, Reason: reason));
+        }
+        catch (Exception ex) { _error = "Prism stumbled: " + ex.Message; }
+        finally
+        {
+            _generating = false; _pendingReply = "";
+            if (!_disposed) { StateHasChanged(); await ScrollToBottom(force: false); }
+        }
+    }
+
+    // Forgets the CONVERSATION only; the checkpoint's weights are untouched (visitors here never train the shared model).
+    void ClearChat()
+    {
+        if (_generating) return;
+        _turns.Clear();
+        _error = null;
+    }
+}

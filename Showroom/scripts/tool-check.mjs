@@ -37,7 +37,7 @@ const go = async p => { await sendCdp('Page.navigate', { url: `http://127.0.0.1:
 
 try {
   // ---- Nano Stories: one story per variety; the 448-step cap plus the clamped prompt must never re-prime ----
-  await go('stories');
+  await go('prism?tab=stories');
   await waitFor(`!!document.querySelector('.prompt-input') || !!document.querySelector('.err')`, 300000, 'stories load');
   for (const v of ['Focused', 'Balanced', 'Wild']) {
     await ev(`[...document.querySelectorAll('.variety-btn')].find(b => b.textContent.trim() === ${JSON.stringify(v)}).click()`);
@@ -50,7 +50,7 @@ try {
     console.log(`stories ${v.padEnd(8)} ${((Date.now() - t) / 1000).toFixed(1).padStart(6)} s  ${String(text.length).padStart(5)} chars  ${JSON.stringify(text.slice(0, 80))}`);
   }
   // ---- Cartographer: 100 boundaries ----
-  await go('cartographer');
+  await go('prism?tab=map');
   await waitFor(`!!document.querySelector('.cg-input') || !!document.querySelector('.err')`, 300000, 'cartographer load');
   console.log('cartographer stats: ' + await ev(`[...document.querySelectorAll('.cg-stats .stat')].map(s => s.innerText.replace(/\\n/g, ' ')).join(' | ')`));
   await setInput('.cg-input', 'Once upon a time there was a little girl named Lily who loved to play with her mom and the');

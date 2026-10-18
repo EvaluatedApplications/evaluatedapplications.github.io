@@ -38,7 +38,7 @@ async function waitFor(expr, ms, what) { const t = Date.now(); while (Date.now()
 
 const rows = [];
 try {
-  await sendCdp('Page.navigate', { url: `http://127.0.0.1:${PORT}/tools/stories` });
+  await sendCdp('Page.navigate', { url: `http://127.0.0.1:${PORT}/tools/prism?tab=stories` });
   await waitFor(`!!document.querySelector('.cr-stats .stat .n') || !!document.querySelector('.err')`, 300000, 'checkpoint load');
   if (await ev(`!!document.querySelector('.err')`)) throw new Error('page shows error: ' + await ev(`document.querySelector('.err').textContent`));
   console.log('loaded: ' + await ev(`[...document.querySelectorAll('.cr-stats .stat')].map(s => s.innerText.replace(/\\n/g, ' ')).join(' | ')`));

@@ -1,3 +1,5 @@
+> OBSOLETE 2026-10-18: the Forecaster is now a tab of Prism on a stored tape and ships NO live data (no Finnhub top-up). Kept only as research.
+
 # The Forecaster — live multi-market data source research
 
 Researched 2026-08-28. Goal: replace the single bundled 450-row static AAPL JSON
