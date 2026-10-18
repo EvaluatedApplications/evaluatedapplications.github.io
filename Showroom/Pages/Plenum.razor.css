@@ -1,0 +1,116 @@
+/* The Plenum. PHONE FIRST: the base rules are the portrait phone layout (360 to 430 px wide, 16px gutters, one column, every
+   tap target at least 44px, nothing that needs hover). Wider screens add rules inside the media queries at the end. tools/PlenumUiProof
+   reads this file and fails if a fixed width above 360px appears, the 44px rule goes, or the media queries go. */
+.room { max-width: 1100px; margin: 0 auto; padding: 1.5rem max(16px, env(safe-area-inset-left)) calc(3rem + env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-right)); box-sizing: border-box; overflow-x: clip; }
+.crumb { font-family: var(--mono); font-size: 0.82rem; color: var(--ink-faint); margin-bottom: 0.75rem; }
+.crumb a { color: var(--ink-soft); display: inline-block; padding: 0.7rem 0; }
+.crumb span { margin: 0 0.4rem; opacity: 0.6; }
+.room-head h1 { font-size: clamp(1.8rem, 6vw, 2.6rem); font-weight: 700; letter-spacing: -0.02em; margin: 0 0 0.5rem; }
+.lede { font-size: 1.02rem; line-height: 1.55; color: var(--ink-soft); margin: 0 0 1rem; max-width: 64ch; }
+.hint { color: var(--ink-faint); font-size: 0.9rem; line-height: 1.45; margin: 0.4rem 0; }
+h2 { font-size: 1.1rem; font-weight: 650; margin: 0 0 0.6rem; letter-spacing: -0.01em; }
+.pl-sub { font-size: 0.85rem; font-weight: 500; color: var(--ink-faint); margin-left: 0.4rem; }
+code { font-family: var(--mono); font-size: 0.82rem; overflow-wrap: anywhere; }
+
+/* every tappable thing */
+.plenum button, .plenum summary { min-height: 44px; min-width: 44px; touch-action: manipulation; font: inherit; cursor: pointer; }
+.plenum button { -webkit-tap-highlight-color: transparent; }
+
+/* panels */
+.pl-status, .pl-did, .pl-hand, .pl-ops, .pl-board, .pl-array, .pl-engine { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1rem; margin: 0 0 0.9rem; min-width: 0; }
+.pl-cols { display: block; }
+.pl-left, .pl-right { min-width: 0; }
+
+.pl-goal { margin: 0 0 0.5rem; line-height: 1.45; }
+.pl-goal b { color: var(--accent-ink); margin-right: 0.4rem; }
+.pl-chips { list-style: none; display: flex; flex-wrap: wrap; gap: 0.4rem; padding: 0; margin: 0.4rem 0 0; }
+.pl-chips li { font-family: var(--mono); font-size: 0.8rem; color: var(--ink-soft); border: 1px solid var(--border-2); border-radius: 999px; padding: 0.3rem 0.7rem; background: var(--bg-2); }
+.pl-chips li.ok { color: var(--ok); border-color: var(--ok); }
+
+.pl-did { border-left: 3px solid var(--accent); }
+.pl-title { font-weight: 700; margin: 0 0 0.3rem; }
+.pl-call { margin: 0 0 0.4rem; }
+.pl-call code, .pl-callnote code { display: block; background: var(--bg-2); border: 1px solid var(--border); border-radius: 8px; padding: 0.5rem 0.6rem; color: var(--ink); white-space: pre-wrap; }
+.pl-says { margin: 0; line-height: 1.5; color: var(--ink); }
+
+/* hand cards: wrap, never overlap */
+.pl-cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.5rem; margin-top: 0.5rem; }
+.pl-card { display: grid; grid-template-columns: 1fr auto; align-items: baseline; gap: 0.1rem 0.4rem; text-align: left; background: var(--bg-2); color: var(--ink); border: 1px solid var(--border-2); border-radius: 10px; padding: 0.55rem 0.7rem; min-height: 64px; }
+.pl-card .nm { font-weight: 700; }
+.pl-card .ct { font-family: var(--mono); color: var(--accent-ink); }
+.pl-card .tg { grid-column: 1 / -1; font-size: 0.78rem; color: var(--ink-faint); line-height: 1.3; }
+.pl-card.picked { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, var(--bg-2)); }
+
+.pl-unread { border: 1.5px dashed var(--warn); border-radius: 10px; padding: 0.7rem 0.8rem; margin-top: 0.5rem; }
+.pl-unread p { margin: 0.5rem 0; line-height: 1.5; }
+.pl-backs { display: flex; flex-wrap: wrap; gap: 0.35rem; }
+.pl-back { display: inline-flex; align-items: center; justify-content: center; width: 2rem; height: 2.8rem; border-radius: 6px; border: 1px solid var(--border-2); background: repeating-linear-gradient(135deg, var(--bg-2) 0 6px, var(--surface-2) 6px 12px); color: var(--ink-faint); font-family: var(--mono); }
+
+/* buttons */
+.pl-btn, .pl-opbtn, .pl-tag, .pl-zone, .pl-q { background: var(--bg-2); color: var(--ink); border: 1px solid var(--border-2); border-radius: 10px; padding: 0.5rem 0.9rem; font-weight: 600; }
+.pl-btn.strong { background: var(--accent); color: #fff; border-color: transparent; }
+.pl-btn:active, .pl-opbtn:active, .pl-card:active, .pl-tag:active { filter: brightness(1.2); }
+
+.pl-tags { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0.4rem; margin: 0.5rem 0 0.8rem; }
+.pl-tag { padding: 0.4rem 0.2rem; font-size: 0.8rem; }
+.pl-tag.on, .pl-zone.on { background: var(--accent); color: #fff; border-color: transparent; }
+
+.pl-opcards { display: grid; grid-template-columns: minmax(0, 1fr) 44px; gap: 0.4rem 0.4rem; align-items: stretch; }
+.pl-op { display: contents; }
+.pl-opbtn { display: flex; flex-direction: column; align-items: flex-start; text-align: left; min-height: 56px; }
+.pl-opbtn .nm { font-size: 1.05rem; }
+.pl-opbtn .sub { font-size: 0.8rem; font-weight: 400; color: var(--ink-faint); }
+.pl-opbtn.armed { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 16%, var(--bg-2)); }
+.pl-q { padding: 0; border-radius: 50%; width: 44px; align-self: center; }
+.pl-callnote { grid-column: 1 / -1; margin: 0; }
+.pl-turn { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.5rem; margin-top: 0.8rem; }
+
+.pl-odds { margin-top: 0.6rem; }
+.pl-odds summary { display: flex; align-items: center; color: var(--ink-soft); }
+.pl-share, .pl-kinds, .pl-pat { list-style: none; padding: 0; margin: 0.3rem 0; }
+.pl-share li, .pl-kinds li, .pl-pat li { display: flex; justify-content: space-between; gap: 0.6rem; padding: 0.3rem 0; border-bottom: 1px solid var(--border); font-size: 0.9rem; }
+.pl-share li span:last-child, .pl-kinds li span:last-child, .pl-pat li span:last-child { font-family: var(--mono); color: var(--ink-soft); white-space: nowrap; }
+
+/* the array view: 13 columns suits the 286-cell stores (13 x 22) and keeps every cell about 22px at 360px wide */
+.pl-zones { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 0.3rem; }
+.pl-zone { padding: 0.3rem 0.1rem; font-size: 0.75rem; }
+.pl-grid { display: grid; grid-template-columns: repeat(13, minmax(0, 1fr)); gap: 2px; margin: 0.5rem 0; }
+.pl-cell { aspect-ratio: 1 / 1; border-radius: 3px; min-width: 0; }
+.pl-cell.changed { outline: 2px solid #fff; outline-offset: -1px; z-index: 1; }
+.pl-cell.sel { box-shadow: 0 0 0 2px var(--accent); }
+.pl-readout { font-family: var(--mono); font-size: 0.8rem; color: var(--ink-soft); margin: 0.2rem 0 0; line-height: 1.5; overflow-wrap: anywhere; }
+
+/* engine */
+.pl-ring { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 0.3rem; margin: 0.4rem 0 0.6rem; }
+.pl-slot { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 48px; border: 1px solid var(--border-2); border-radius: 8px; background: var(--bg-2); }
+.pl-slot .p { font-family: var(--mono); font-size: 0.68rem; color: var(--ink-faint); }
+.pl-slot .n { font-weight: 700; font-size: 1.1rem; }
+.pl-slot.ready { border-color: var(--ok); }
+
+.pl-foot { margin: 0 0 1rem; }
+.outro { margin-top: 1.5rem; max-width: 70ch; line-height: 1.55; color: var(--ink-soft); }
+
+/* wider screens: two columns, more cells per row */
+@media (min-width: 700px) {
+    .room { padding-top: 2.5rem; }
+    .pl-cards { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .pl-opcards { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .pl-op { display: flex; gap: 0.4rem; }
+    .pl-op .pl-opbtn { flex: 1 1 auto; }
+    .pl-callnote { grid-column: 1 / -1; }
+}
+@media (min-width: 960px) {
+    .pl-cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 1rem; align-items: start; }
+    .pl-grid { grid-template-columns: repeat(22, minmax(0, 1fr)); }
+}
+@media (max-width: 359px) {
+    .pl-cards { grid-template-columns: minmax(0, 1fr); }
+    .pl-tags { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (orientation: landscape) and (max-height: 500px) {
+    .room { padding-top: 0.75rem; }
+    .pl-cards { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+@media (prefers-reduced-motion: reduce) {
+    .plenum * { transition: none !important; animation: none !important; }
+}

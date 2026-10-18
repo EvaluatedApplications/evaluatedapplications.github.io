@@ -102,6 +102,16 @@
       window.copyText = function (text) {
         return navigator.clipboard.writeText(text);
       };
+      // The Plenum: tell the page when the tab is hidden or shown, so its Engine pauses while hidden and applies the time away
+      // as one Tick(n) on return. The page's .NET side owns the clock; this only reports visibility.
+      window.plenumWatch = function (ref) {
+        window.plenumUnwatch();
+        window.__plenumHandler = function () { ref.invokeMethodAsync('OnVisibility', document.hidden); };
+        document.addEventListener('visibilitychange', window.__plenumHandler);
+      };
+      window.plenumUnwatch = function () {
+        if (window.__plenumHandler) { document.removeEventListener('visibilitychange', window.__plenumHandler); window.__plenumHandler = null; }
+      };
       // Scroll an element into view by id (Council Spending Scanner's request tray). The page's base href is
       // /tools/, so a bare "#id" link would navigate away instead of scrolling; this does not.
       window.scrollToId = function (id) {

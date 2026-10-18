@@ -63,3 +63,21 @@ fit rows 500..4,000 (<= 200,000 bases), 5,000 iterations (package default; the f
 
 ## Dashboard gotchas (moved 2026-10-18)
 Type `Stmt` clashes with `HoloDb.Stmt` (ours is `DashQuery`); `QueryResult.GetLong` only on a columnar projection; sibling refreshes go through `DashboardSession.Repaint`. Never write "N lines" by hand (`Plural`/`NumLines`). Chat/Stories: `AsciiPunctuation.Fold` runs at every tokenizer entry.
+
+
+## Prism Creature/Forecaster/Sound detail (moved from CLAUDE.md 2026-10-18)
+  **Creature/Forecaster = the same model on other jobs, a TECH DEMO**: the task is TEXT scored by next-token logits over one-token labels (`Services/PrismTab/`). `CreatureTask`:
+  `map: <5 rows of 5 glyphs, joined by " | "> best move: ` -> N/E/S/W, four-way, Tracer BFS (`GridTactics.Reachable`) is the answer key and the "scent" overlay, never shown to the
+  model. `ForecasterTask`: `aapl hourly moves: <last 16 up/down/flat words> then:` -> " up"/" down", flat targets skipped.
+  Formats: `MonoRepo/AlgFormer/todo/prism-tab-probe-2026-10-18.md`. **Playing and training are ONE act** (user): `PrismTaskLab` owns the knobs and Run / Pause / Stop / Reset and
+  the cooperative loop (`Task.Delay(1)` between ticks); the TAB supplies the tick (`Tick` callback taking a `LabTick`) which acts, trains the visitor's copy on what just happened
+  (`PrivateCopy.TrainBatch`, the current state plus `Examples per step - 1` recent ones) and paces itself by Speed. Creature: each tick the creature moves by the copy's four-way logits
+  (Exploration = chance of a random legal move, default 0.1), Tracer's BFS route is the answer it trains on at that same state; apples/resets as before. Forecaster: each beat shows the
+  window, the copy's guess, a countdown, the real candle, then trains and steps on through the tape (`ForecasterTask.NextTarget`; History window knob, 2..40). Knobs, all free: Weights
+  (Fresh = random weights of the shared shape, DEFAULT; or Prism's trained weights), learning rate (1e-3 / 3e-4), examples per step, seed, exploration, speed. Readout = share of the
+  copy's last 50 calls right (+ history chart, steps, loss) and NOTHING else: no baseline, chance line, verdict or "learns" wording (user steer: a demo, not a claim). `PrivateCopy` = a NEW
+  session (`Fresh` or `Clone` of `shared.Export()`; K and alpha are set because they do NOT serialize); the shared session is only READ, proofs assert its bytes are identical after runs.
+  Leaving the tab stops the run and drops the copy. Forecaster data = stored `wwwroot/data/forecaster-history.json` ("Data as of" its last candle, NO live claim). Measured, NOT for the page: Creature scores varied 38 to 53% across seeds; Forecaster stays flat.
+  **Sound**: `TokenVoice.PlayTone` was SILENT on the shipped d=64 checkpoint (its frozen codec covers the whole face, so there was no "learned tail" to take the pitch from); it now takes
+  the pitch from the whole face when there is no tail, and `TokenVoice.Unlock()` (called first in Send / Tell me a story) resumes the AudioContext from the user's click.
+  Gotchas: a component parameter named `Task` shadows `Task` (lab uses `Job`); no Razor folder named `Prism`; `R` is a PowerShell alias.

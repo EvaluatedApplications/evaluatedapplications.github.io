@@ -1,0 +1,383 @@
+@page "/plenum"
+@attribute [BlazierPage("plenum", Title = "The Plenum: a card game played on one array", Layout = typeof(MainLayout), Static = true)]
+@implements IAsyncDisposable
+@inject IBuildTime Build
+@inject IJSRuntime JS
+@inject ShowroomPlenum.IPlenumClock Clock
+@using ShowroomPlenum
+
+<PageTitle>The Plenum: a card game played on one array</PageTitle>
+
+<div class="room plenum">
+    <header class="room-head">
+        <nav class="crumb"><a href="/tools/">Tools</a> <span>/</span> The Plenum</nav>
+        <h1>The Plenum</h1>
+        <p class="lede">Your cards are one array of exact whole numbers. Every card you play is one operation on that array, and the
+            array is drawn beside your hand so you can see which cells the operation changed. It runs in your browser, on the Pleroma
+            from the Phasor package.</p>
+    </header>
+
+    @if (Build.IsPrerender)
+    {
+        <ToolStart Tool="The Plenum" Label="Start The Plenum" />
+    }
+    else if (_g is not null)
+    {
+        <section class="pl-status" aria-label="Goal and turn">
+            <p class="pl-goal"><b>Goal</b> Get @PlenumGame.GoalFire Fire cards on the Board, then play Tally on Fire.</p>
+            <ul class="pl-chips">
+                <li>Turn @_g.Turn</li>
+                <li>Plays left @_g.PlaysLeft of @PlenumGame.PlaysPerTurn</li>
+                <li class="@(_goal ? "ok" : "")">@(_goal ? "Goal reached" : $"Fire on the Board: {_fire} of {PlenumGame.GoalFire}")</li>
+            </ul>
+        </section>
+
+        <section class="pl-did" aria-live="polite" aria-label="What that did">
+            <h2>What that did</h2>
+            <p class="pl-title">@_last.Title</p>
+            @if (_last.Call.Length > 0) { <p class="pl-call"><code>@_last.Call</code></p> }
+            <p class="pl-says">@_last.Says</p>
+        </section>
+
+        <div class="pl-cols">
+            <div class="pl-left">
+                <section class="pl-hand" aria-label="Your hand">
+                    <h2>Your hand <span class="pl-sub">@Cards(_g.HandTotal)</span></h2>
+                    @if (_hand is not null)
+                    {
+                        <p class="hint">@(_armed ? (_pick is null ? "Fuse: tap the first card." : $"Fuse: {PlenumCards.NameOf(_pick.Value)} chosen, tap the second card.") : "Tap a card to play all your copies of it.")
+                            Holding @_hand.Count of @PlenumShapes.HandKinds kinds.</p>
+                        <div class="pl-cards">
+                            @foreach (var (key, count) in _hand)
+                            {
+                                var u = PlenumCards.ByKey(key)!;
+                                var k = key;
+                                <button type="button" class="pl-card @(_pick == key ? "picked" : "")" @onclick="() => TapCard(k)" aria-pressed="@(_pick == key ? "true" : "false")">
+                                    <span class="nm">@u.Name</span>
+                                    <span class="ct">x@count</span>
+                                    <span class="tg">@Tags.List(u.Tags)</span>
+                                </button>
+                            }
+                            @if (_hand.Count == 0) { <p class="hint">Your hand is empty. Draw a card.</p> }
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="pl-unread" role="status">
+                            <div class="pl-backs" aria-hidden="true">
+                                @for (int i = 0; i < Math.Min(_g.HandTotal, 10); i++) { <span class="pl-back">?</span> }
+                            </div>
+                            <p><b>This hand cannot be read.</b> A hand can only be read with 8 kinds or fewer. This one holds @_g.HandTotal cards of more than 8 kinds, so
+                                <code>Hand.TryKeys</code> refuses instead of guessing. The total and the tag counts are still exact:</p>
+                            <ul class="pl-chips">
+                                @for (int b = 0; b < 8; b++) { <li>@Tags.Names[b] @_handTags![b]</li> }
+                            </ul>
+                            <button type="button" class="pl-btn" @onclick="PutBack">Put the hand back in the Deck</button>
+                        </div>
+                    }
+                </section>
+
+                <section class="pl-ops" aria-label="Operation cards">
+                    <h2>Operation cards</h2>
+                    <p class="hint" id="pl-tag-hint">Tally and Flip act on the tag you pick. Each one costs a play.</p>
+                    <div class="pl-tags" role="radiogroup" aria-labelledby="pl-tag-hint">
+                        @for (int b = 0; b < 8; b++)
+                        {
+                            var bit = b;
+                            <button type="button" class="pl-tag @(_tag == b ? "on" : "")" role="radio" aria-checked="@(_tag == b ? "true" : "false")" @onclick="() => _tag = bit">@Tags.Names[b]</button>
+                        }
+                    </div>
+                    <div class="pl-opcards">
+                        @foreach (var v in new[] { Verb.Tally, Verb.Flip, Verb.Fuse })
+                        {
+                            var verb = v;
+                            <div class="pl-op">
+                                <button type="button" class="pl-opbtn @(verb == Verb.Fuse && _armed ? "armed" : "")" @onclick="() => Play(verb)">
+                                    <span class="nm">@verb</span>
+                                    <span class="sub">@Blurb(verb)</span>
+                                </button>
+                                <button type="button" class="pl-q" aria-expanded="@(_info.Contains(verb) ? "true" : "false")" aria-label="What does @verb call?" @onclick="() => ToggleInfo(verb)">?</button>
+                            </div>
+                            @if (_info.Contains(verb)) { <p class="pl-callnote"><code>@CallFor(verb)</code></p> }
+                        }
+                    </div>
+                    <div class="pl-turn">
+                        <button type="button" class="pl-btn" @onclick="Draw">Draw a card</button>
+                        <button type="button" class="pl-btn strong" @onclick="EndTurn">End turn</button>
+                    </div>
+                    <p class="hint">Drawing is free. The Flipper takes its turn when you end yours: it uses Flip on the Board, on Fire.</p>
+                    <details class="pl-odds">
+                        <summary>Draw odds, exactly</summary>
+                        <p class="hint">A draw is one whole number below the Deck total, and the card that holds it is drawn. Each card's share is its copies over @_dealTotal.</p>
+                        <ul class="pl-share">
+                            @foreach (var (key, c) in _deal)
+                            {
+                                <li><span>@PlenumCards.NameOf(key)</span><span>@c of @_dealTotal</span></li>
+                            }
+                        </ul>
+                    </details>
+                </section>
+
+                <section class="pl-board" aria-label="The Board">
+                    <h2>The Board <span class="pl-sub">@Cards(_g.Board.Total())</span></h2>
+                    <ul class="pl-kinds">
+                        @foreach (var (key, c) in _boardKinds)
+                        {
+                            <li><span>@PlenumCards.NameOf(key)</span><span>x@c</span></li>
+                        }
+                    </ul>
+                    <p class="hint">By tags right now (this is what Flip changes):</p>
+                    <ul class="pl-pat">
+                        @foreach (var (word, c) in _boardPatterns)
+                        {
+                            <li><span>@Tags.List(word)</span><span>x@c</span></li>
+                        }
+                    </ul>
+                </section>
+            </div>
+
+            <div class="pl-right">
+                <section class="pl-array" aria-label="The array">
+                    <h2>The array</h2>
+                    <div class="pl-zones" role="tablist" aria-label="Which store to show">
+                        @foreach (var z in Zones)
+                        {
+                            var zone = z;
+                            <button type="button" class="pl-zone @(_zone == z ? "on" : "")" role="tab" aria-selected="@(_zone == z ? "true" : "false")" @onclick="() => ShowZone(zone)">@z</button>
+                        }
+                    </div>
+                    <p class="hint">These are the @_cells.Length cells of the @_zone store, each one an exact number. Tap a cell to read it. Cells outlined in white were changed by the last action.</p>
+                    <div class="pl-grid" aria-label="Cells of the @_zone store">
+                        @for (int i = 0; i < _cells.Length; i++)
+                        {
+                            var idx = i;
+                            var v = _cells[i];
+                            <span class="pl-cell @(_changed[i] ? "changed" : "") @(_sel == i ? "sel" : "")" style="@CellStyle(v)" @onclick="() => _sel = idx"></span>
+                        }
+                    </div>
+                    <p class="pl-readout">@(_sel is { } s && s < _cells.Length ? $"Cell {s} of {_cells.Length}: {_cells[s]}" : "No cell chosen.")
+                        @(_nChanged == 0 ? "The last action did not change this store." : $"The last action changed {_nChanged} of its cells.")</p>
+                </section>
+
+                <section class="pl-engine" aria-label="Engine">
+                    <h2>Engine</h2>
+                    <div class="pl-ring" aria-label="Cards at each of the six positions of the cycle">
+                        @for (int t = 0; t < _ring.Length; t++)
+                        {
+                            <div class="pl-slot @(t == 0 ? "ready" : "")"><span class="p">@(t == 0 ? "ready" : $"+{t}")</span><span class="n">@_ring[t]</span></div>
+                        }
+                    </div>
+                    <p class="pl-says">Ready now: @_harvest @(_harvest == 1 ? "card" : "cards"). This is a read of <code>Engine.Times()</code>, not a counter.</p>
+                    <p class="hint">@_engineLine</p>
+                    <p class="hint">The Engine ticks every @(_ticker.TickMs / 1000) seconds while this tab is showing. If you leave and come back, the time away is applied once with <code>Tick(n)</code>.</p>
+                </section>
+            </div>
+        </div>
+
+        <div class="pl-foot">
+            <button type="button" class="pl-btn" @onclick="NewDeal">New deal (deal @_g.Seed)</button>
+        </div>
+    }
+
+    <section class="outro">
+        <h2>How it works</h2>
+        <p>The Deck, the Hand, the Board, the Discard and the Engine are each one Pleroma store. A move is a Subtract from one store and an Add to
+            another. Tally is a <code>CountWhere</code> read, Flip is <code>RelabelFlags</code> with an XOR mask, and Fuse is <code>Bind</code>:
+            keys add and tags XOR. A draw is one exact integer draw, and the odds are the counts shown above. There is no other game state
+            than those stores. The hand limit is the store's own read limit: a store of this shape can list its kinds only while there are
+            8 or fewer.</p>
+    </section>
+</div>
+
+@code {
+    private static readonly Zone[] Zones = { Zone.Board, Zone.Hand, Zone.Deck, Zone.Discard, Zone.Engine };
+
+    private PlenumGame? _g;
+    private EngineTicker _ticker = default!;
+    private OpResult _last = new("Ready", "", "Tap a card in your hand to play it, or tap an operation card.", Array.Empty<(Zone, int[])>());
+    private OpResult? _engineRes;
+    private string _engineLine = "";
+    private bool _armed;
+    private ulong? _pick;
+    private int _tag = Tags.Fire;
+    private Zone _zone = Zone.Board;
+    private int? _sel;
+    private readonly HashSet<Verb> _info = new();
+
+    // reads, refreshed after each action
+    private IReadOnlyList<(ulong Key, long Count)>? _hand;
+    private long[]? _handTags;
+    private List<(ulong Key, long Count)> _boardKinds = new();
+    private List<(uint Word, long Count)> _boardPatterns = new();
+    private List<(ulong Key, long Count)> _deal = new();
+    private long _dealTotal;
+    private long[] _ring = new long[PlenumShapes.EngineTicks];
+    private long _harvest;
+    private long _fire;
+    private bool _goal;
+    private ulong[] _cells = Array.Empty<ulong>();
+    private bool[] _changed = Array.Empty<bool>();
+    private int _nChanged;
+
+    private CancellationTokenSource? _cts;
+    private bool _hidden;
+    private DotNetObjectReference<Plenum>? _self;
+
+    protected override void OnInitialized()
+    {
+        if (Build.IsPrerender) return;
+        _ticker = new EngineTicker(Clock, 2000);
+        Deal(PlenumGame.DefaultSeed);
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender || Build.IsPrerender) return;
+        _cts = new CancellationTokenSource();
+        _self = DotNetObjectReference.Create(this);
+        try { await JS.InvokeVoidAsync("plenumWatch", _self); } catch (JSException) { } catch (InvalidOperationException) { }
+        _ = EngineLoop(_cts.Token);
+    }
+
+    private void Deal(ulong seed)
+    {
+        _g = new PlenumGame(seed);
+        _last = new OpResult("Ready", "", "Tap a card in your hand to play it, or tap an operation card.", Array.Empty<(Zone, int[])>());
+        _armed = false; _pick = null; _sel = null; _zone = Zone.Board; _engineRes = null; _engineLine = "";
+        Refresh();
+    }
+
+    private void NewDeal() => Deal(_g!.Seed + 1);
+
+    private async Task EngineLoop(CancellationToken ct)
+    {
+        try
+        {
+            while (!ct.IsCancellationRequested)
+            {
+                await Task.Delay(250, ct);
+                if (_hidden) continue;
+                if (CatchUp()) await InvokeAsync(StateHasChanged);
+            }
+        }
+        catch (OperationCanceledException) { }
+    }
+
+    /// <summary>Apply the ticks that are due: one Tick(n) call.</summary>
+    private bool CatchUp()
+    {
+        long n = _ticker.Due();
+        if (n <= 0 || _g is null) return false;
+        _engineRes = _g.EngineTick(n);
+        _engineLine = n == 1 ? "Last call: Engine.Tick(1)." : $"Last call: Engine.Tick({n}). {n} steps were applied in one call.";
+        Refresh();
+        return true;
+    }
+
+    [JSInvokable]
+    public void OnVisibility(bool hidden)
+    {
+        _hidden = hidden;
+        if (!hidden && CatchUp()) _ = InvokeAsync(StateHasChanged);
+    }
+
+    // ------------------------------------------------------------------------------------------ actions
+    private void Take(OpResult r)
+    {
+        _last = r;
+        _sel = null;
+        if (!r.Refused)
+        {
+            if (r.CellsOf(Zone.Board).Length > 0) _zone = Zone.Board;
+            else if (r.Changed.Count > 0) _zone = r.Changed[0].Zone;
+        }
+        Refresh();
+    }
+
+    private void TapCard(ulong key)
+    {
+        if (_armed)
+        {
+            if (_pick is null) { _pick = key; return; }
+            var a = _pick.Value;
+            _pick = null; _armed = false;
+            Take(_g!.Fuse(a, key));
+            return;
+        }
+        Take(_g!.PlayUnit(key));
+    }
+
+    private void Play(Verb v)
+    {
+        switch (v)
+        {
+            case Verb.Tally: _armed = false; _pick = null; Take(_g!.Tally(_tag)); break;
+            case Verb.Flip: _armed = false; _pick = null; Take(_g!.Flip(_tag)); break;
+            case Verb.Fuse:
+                if (!_g!.HandReadable) { Take(_g.Fuse(0, 0)); break; }
+                _armed = !_armed; _pick = null;
+                break;
+        }
+    }
+
+    private void Draw() { _armed = false; _pick = null; Take(_g!.Draw()); }
+    private void EndTurn() { _armed = false; _pick = null; Take(_g!.EndTurn()); }
+    private void PutBack() { _armed = false; _pick = null; Take(_g!.PutBack()); }
+    private void ToggleInfo(Verb v) { if (!_info.Remove(v)) _info.Add(v); }
+    private void ShowZone(Zone z) { _zone = z; _sel = null; RefreshCells(); }
+
+    private static string Cards(long n) => n == 1 ? "1 card" : $"{n} cards";
+
+    private static string Blurb(Verb v) => v switch
+    {
+        Verb.Tally => "count a tag on the Board",
+        Verb.Flip => "turn a tag on or off, whole Board",
+        _ => "bind two hand cards into one",
+    };
+
+    private string CallFor(Verb v) => v switch
+    {
+        Verb.Tally => $"Board.CountWhere(FlagPredicate.Match(8, {Tags.Bits(Tags.Mask(_tag))}, {Tags.Bits(Tags.Mask(_tag))}))",
+        Verb.Flip => $"Board.RelabelFlags(null, {Tags.Bits(Tags.Mask(_tag))})",
+        _ => "a.Bind(b): keys add, tags XOR",
+    };
+
+    // ----------------------------------------------------------------------------------------- reads
+    private void Refresh()
+    {
+        var g = _g!;
+        _hand = g.TryHand(out var h) ? h : null;
+        _handTags = _hand is null ? g.HandTagCounts() : null;
+        _boardKinds = g.BoardKinds();
+        _boardPatterns = g.BoardPatterns();
+        (_deal, _dealTotal) = g.DrawShares();
+        _ring = g.EngineRing();
+        _harvest = g.Harvest();
+        _fire = g.Board.CountWhere(PlenumGame.HasTag(Tags.Fire));
+        _goal = g.GoalReached;
+        RefreshCells();
+    }
+
+    private void RefreshCells()
+    {
+        var store = _g!.Of(_zone);
+        var raw = store.RawCells;
+        if (_cells.Length != raw.Length) { _cells = new ulong[raw.Length]; _changed = new bool[raw.Length]; }
+        raw.CopyTo(_cells);
+        Array.Clear(_changed);
+        var idx = (_zone == Zone.Engine ? _engineRes : _last)?.CellsOf(_zone) ?? Array.Empty<int>();
+        foreach (var i in idx) if (i < _changed.Length) _changed[i] = true;
+        _nChanged = idx.Length;
+    }
+
+    private static string CellStyle(ulong v) =>
+        v == 0 ? "background:#15181f" : $"background:hsl({(int)(v % 360)} 55% 42%)";
+
+    public async ValueTask DisposeAsync()
+    {
+        _cts?.Cancel();
+        _cts?.Dispose();
+        try { await JS.InvokeVoidAsync("plenumUnwatch"); } catch { }
+        _self?.Dispose();
+    }
+}

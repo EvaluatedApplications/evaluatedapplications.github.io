@@ -20,5 +20,6 @@ public sealed class ShowroomPrerender : IBlazierPrerenderSetup
         services.AddScoped<PrismLoader>();
         services.AddScoped<CouncilWebData>();
         services.AddScoped<FoiTray>();
+        services.AddSingleton<ShowroomPlenum.IPlenumClock, ShowroomPlenum.StopwatchPlenumClock>();
     }
 }

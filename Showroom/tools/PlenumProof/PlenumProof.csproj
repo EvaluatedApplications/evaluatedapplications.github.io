@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Proof for The Plenum (logic): runs every card operation against a brute-force rebuild of the expected store (cell for cell via
+       Pleroma.Equals), watches mutants of those operations go red, checks the draw against the exact cumulative pick, and plays the
+       scripted three-play win. The game core is compiled straight from Services/Plenum (the same files the page uses).
+       Usage: dotnet run -c Release (project tools/PlenumProof). Exit code 0 = every check passed and every mutant was caught. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="..\..\Services\Plenum\*.cs" LinkBase="Plenum" />
+    <PackageReference Include="EvaluatedApplications.Phasor" Version="2.17.0" />
+  </ItemGroup>
+</Project>

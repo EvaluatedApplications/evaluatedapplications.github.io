@@ -38,6 +38,9 @@ builder.Services.AddScoped<CouncilWebData>();
 // The visitor's records-request tray (items ticked on the council pages). Lives for the page load; nothing is stored or sent.
 builder.Services.AddScoped<FoiTray>();
 
+// The Plenum's clock: a service so a proof can drive time by hand (Services/Plenum/PlenumClock.cs).
+builder.Services.AddSingleton<ShowroomPlenum.IPlenumClock, ShowroomPlenum.StopwatchPlenumClock>();
+
 // Big data (council data, Prism checkpoint) lives in the website-data repo. ONE setting says where: window.EA_DATA_BASE in
 // wwwroot/index.html (the same value drives the framework redirect there). See Services/DataUrl.cs.
 var host = builder.Build();
