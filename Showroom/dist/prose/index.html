@@ -26,6 +26,9 @@
       // itself) is served from the same place, website-data/_framework, so every rebuild's new hashed files land in that repo and not in
       // this one. Empty on localhost, where dotnet run serves its own _framework. Used by loadBootResource in the boot script below.
       window.EA_FRAMEWORK_BASE = location.hostname === 'localhost' ? '' : window.EA_DATA_BASE + '_framework/';
+      // THE ONE RELAY SETTING. The Plenum's lobby and duels talk MQTT over a secure WebSocket to the same message relay Prism's swarm
+      // uses. C# reads this value at boot (Program.cs -> PlenumRelayConfig). Every Plenum topic lives under plenum/v1/.
+      window.EA_PLENUM_RELAY = 'wss://79-72-78-90.sslip.io/';
     </script>
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%23f0796a'/%3E%3Cstop offset='.166' stop-color='%23f0a15a'/%3E%3Cstop offset='.333' stop-color='%23e6c450'/%3E%3Cstop offset='.5' stop-color='%237bd86a'/%3E%3Cstop offset='.666' stop-color='%234aa3ff'/%3E%3Cstop offset='.833' stop-color='%237d7dff'/%3E%3Cstop offset='1' stop-color='%23c07dff'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='32' height='32' rx='7' fill='%23050608'/%3E%3Cpath d='M16 5L27 26H5Z' fill='none' stroke='url(%23g)' stroke-width='2' stroke-linejoin='round'/%3E%3C/svg%3E" />
     <link rel="stylesheet" href="/assets/site.css" />
@@ -42,18 +45,18 @@
     <script type="importmap">{
   "imports": {
     "./_framework/blazor.webassembly.js": "./_framework/blazor.webassembly.w3qd1tpl0e.js",
+    "./_framework/dotnet.js": "./_framework/dotnet.92b790ejhl.js",
     "./_framework/dotnet.native.js": "./_framework/dotnet.native.qnq7qrjz03.js",
-    "./_framework/dotnet.js": "./_framework/dotnet.rk1wz7fgbh.js",
     "./_framework/dotnet.runtime.js": "./_framework/dotnet.runtime.azrfhwb804.js"
   },
   "scopes": {},
   "integrity": {
     "./_framework/blazor.webassembly.js": "sha256-lDXsDYFgm62F+YUvxES7IOTCXYpiHpU3uR45YdC6mq4=",
     "./_framework/blazor.webassembly.w3qd1tpl0e.js": "sha256-lDXsDYFgm62F+YUvxES7IOTCXYpiHpU3uR45YdC6mq4=",
-    "./_framework/dotnet.js": "sha256-BcEI+NNpJ22a6PcWPgFTdi0j019nPgytxiV1+Paz07g=",
+    "./_framework/dotnet.92b790ejhl.js": "sha256-wXwyfkaFGnNaQvf5JKcjOj4+EuZuPiz0NEauoMpErv8=",
+    "./_framework/dotnet.js": "sha256-wXwyfkaFGnNaQvf5JKcjOj4+EuZuPiz0NEauoMpErv8=",
     "./_framework/dotnet.native.js": "sha256-Suejg9jzPYnS/wVeYG+1jRtd6dxLLh/f28zyxWiU39Y=",
     "./_framework/dotnet.native.qnq7qrjz03.js": "sha256-Suejg9jzPYnS/wVeYG+1jRtd6dxLLh/f28zyxWiU39Y=",
-    "./_framework/dotnet.rk1wz7fgbh.js": "sha256-BcEI+NNpJ22a6PcWPgFTdi0j019nPgytxiV1+Paz07g=",
     "./_framework/dotnet.runtime.azrfhwb804.js": "sha256-muN076HgyOCoAaid7zD7a2/GN7aQ7tmK/BzdnKgw78g=",
     "./_framework/dotnet.runtime.js": "sha256-muN076HgyOCoAaid7zD7a2/GN7aQ7tmK/BzdnKgw78g="
   }
@@ -159,6 +162,23 @@
       // analystDownload above.
       window.copyText = function (text) {
         return navigator.clipboard.writeText(text);
+      };
+      // The Plenum: tell the page when the tab is hidden or shown, so its Engine pauses while hidden and applies the time away
+      // as one Tick(n) on return. The page's .NET side owns the clock; this only reports visibility.
+      window.plenumWatch = function (ref) {
+        window.plenumUnwatch();
+        window.__plenumHandler = function () { ref.invokeMethodAsync('OnVisibility', document.hidden); };
+        document.addEventListener('visibilitychange', window.__plenumHandler);
+      };
+      window.plenumUnwatch = function () {
+        if (window.__plenumHandler) { document.removeEventListener('visibilitychange', window.__plenumHandler); window.__plenumHandler = null; }
+      };
+      // The Plenum nickname: kept in this browser only (localStorage can be blocked, so every access is guarded).
+      window.plenumNickGet = function () {
+        try { return window.localStorage.getItem('plenum.nick'); } catch (e) { return null; }
+      };
+      window.plenumNickSet = function (v) {
+        try { window.localStorage.setItem('plenum.nick', v); } catch (e) { }
       };
       // Scroll an element into view by id (Council Spending Scanner's request tray). The page's base href is
       // /tools/, so a bare "#id" link would navigate away instead of scrolling; this does not.
