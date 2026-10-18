@@ -1,0 +1,28 @@
+﻿Doctrine UI mutation proof, 2026-10-18T23:19:53
+M1 [CAUGHT] an illegal order is enabled in the palette: 3 failing check(s)
+    FAIL  doctrine: the palette holds all 53 orders and each is enabled exactly when the army's legal list allows it  [53 enabled, 0 disabled]
+    FAIL  doctrine: the list really restricts (some enabled, some disabled) and Cull is never offered
+    FAIL  no soldiers: nothing is legal, every order is greyed out and the page says why
+M2 [CAUGHT] the general is wired so that it never records an example: 12 failing check(s)
+    FAIL  round 0: the general has learned twice (the doctrine, then the result)  [0]
+    FAIL  round 0: the status strip follows (2 examples seen)
+    FAIL  ghost: the general had something to suggest after seeing the visitor's first doctrine
+    FAIL  round 1: the general has now learned 4 times  [0]
+    FAIL  ghost: after 4 examples a suggestion is offered, its confidence within 0..1000, every token legal  [confidence 0]
+    FAIL  accept: the accepted ghost is the doctrine that fought, recorded as NOT overridden
+M3 [CAUGHT] the scrubber ignores the frames' WorldFlags (the gate never falls): 2 failing check(s)
+    FAIL  watch: on the frame the flag is set the gate's picture swaps to fallen
+    FAIL  watch: the gate stays fallen to the end (a bit never clears)
+M4 [CAUGHT] Accept reports the suggestion as overridden: 3 failing check(s)
+    FAIL  accept: the accepted ghost is the doctrine that fought, recorded as NOT overridden
+    FAIL  accept: the spoils screen says the suggestion was taken as it stood
+    FAIL  determinism: the page game and the headless game with the same hands have the SAME digest  [a2d02b4b4bf06ccf vs ef86ce7f3291bbb2]
+M5 [CAUGHT] a cancelled round does not put the army back: 1 failing check(s)
+    FAIL  cancel: the army is back exactly as it stood at the start of the round (same read)
+M6 [CAUGHT] the end screen hands back the army from before the last round: 4 failing check(s)
+    FAIL  code: it parses back to an army with the same read, score and code
+    FAIL  determinism: the page game and the headless game with the same hands have the SAME digest  [0d073a1a0440e03a vs ef86ce7f3291bbb2]
+    FAIL  determinism: the final army code is the same
+    FAIL  reload: pasting the code starts a game on that very army (same read, round and gold)  [0423cfbd841e8696 vs ef1266fbad6949ee]
+M7 [CAUGHT] the scrubber shows the frame after the one asked for: 1 failing check(s)
+    FAIL  watch: the tick before the fall shows the gate standing (no fallen block)

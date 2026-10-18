@@ -1,5 +1,7 @@
 # Doctrine: design v0 (2026-10-18)
 
+STATUS 2026-10-18 (showroom-owner): S1 + S2 (manual play with a learning general) are BUILT as `Pages/DoctrinePage.razor` on the sibling `Doctrine` RCL; proofs pass; unseen in a browser. How it is built: `CLAUDE.md` "Doctrine". S3 (ladder) and S4 (training ground) are not started.
+
 Working title. Replaces the card design for new work. The live "The Plenum" (cards, lobby, duel) stays up unchanged until
 this game can take its place; nothing here retires it yet. Status: DESIGN. Decisions below were made by the coordinator
 from the user's brief ("army sim, players add modifiers like an auto battler, Tracer, a tiny HoloFormer per player to play

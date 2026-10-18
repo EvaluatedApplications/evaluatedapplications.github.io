@@ -1,0 +1,53 @@
+/* The Doctrine replay. PHONE FIRST like the page: one column, every tap target at least 44px, nothing that needs hover.
+   tools/DoctrineUiProof reads this file together with Pages/DoctrinePage.razor.css. */
+.dc-replay { min-width: 0; }
+.dc-replay button, .dc-replay input[type=range] { min-height: 44px; min-width: 44px; touch-action: manipulation; font: inherit; }
+.dc-replay button { cursor: pointer; -webkit-tap-highlight-color: transparent; }
+
+.dc-arena { display: block; width: 100%; height: auto; max-height: 60vh; background: var(--bg-2); border: 1px solid var(--border); border-radius: 10px; }
+.dc-floor { fill: color-mix(in srgb, var(--surface) 70%, var(--bg-2)); }
+.dc-ground.wall { fill: color-mix(in srgb, var(--ink-faint) 55%, var(--bg)); }
+.dc-ground.cover { fill: color-mix(in srgb, var(--ok) 38%, transparent); }
+.dc-ground.gate { fill: none; stroke: var(--warn); stroke-width: 0.35; stroke-dasharray: 0.9 0.6; }
+.dc-ground.gate.fallen { fill: color-mix(in srgb, var(--warn) 70%, var(--bg)); stroke: var(--warn); stroke-dasharray: none; }
+
+/* The blob is placed by two custom properties, so a change of tick is a CSS transition from the old place to the new one. */
+.dc-blob { transform: translate(calc(var(--x) * 1px), calc(var(--y) * 1px)); transition: transform var(--tick-ms, 140ms) linear; }
+.dc-blob circle { stroke-width: 0.3; fill-opacity: 0.85; }
+.dc-blob.mine circle { fill: var(--accent); stroke: #fff; }
+.dc-blob.theirs circle { fill: var(--bad); stroke: #fff; }
+.dc-blob.dead { opacity: 0.3; }
+.dc-blob ::deep .dc-lbl { font-family: var(--mono); font-size: 1.7px; fill: #fff; pointer-events: none; }
+.dc-hit { stroke: #fff; stroke-width: 0.25; stroke-opacity: 0.8; }
+
+.dc-chips { list-style: none; display: flex; flex-wrap: wrap; gap: 0.4rem; padding: 0; margin: 0.6rem 0; }
+.dc-chips li { font-family: var(--mono); font-size: 0.8rem; color: var(--ink-soft); border: 1px solid var(--border-2); border-radius: 999px; padding: 0.3rem 0.7rem; background: var(--bg-2); }
+.dc-chips li.mine { border-color: var(--accent); }
+.dc-chips li.theirs { border-color: var(--bad); }
+.dc-chips li.fallen { color: var(--warn); border-color: var(--warn); }
+
+.dc-controls { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 0.35rem; margin: 0.4rem 0; }
+.dc-btn { background: var(--bg-2); color: var(--ink); border: 1px solid var(--border-2); border-radius: 10px; padding: 0.4rem 0.3rem; font-weight: 600; font-size: 0.85rem; }
+.dc-btn.strong { background: var(--accent); color: #fff; border-color: transparent; }
+.dc-btn:active { filter: brightness(1.2); }
+.dc-range { display: block; width: 100%; box-sizing: border-box; margin: 0.2rem 0 0.8rem; accent-color: var(--accent); }
+
+.dc-sides { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0.6rem; }
+.dc-side h3 { font-size: 0.95rem; margin: 0 0 0.3rem; }
+.dc-side.mine h3 { color: var(--accent-ink); }
+.dc-side.theirs h3 { color: var(--bad); }
+.dc-cohorts { list-style: none; padding: 0; margin: 0; }
+.dc-cohorts li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0.1rem 0.6rem; padding: 0.35rem 0; border-bottom: 1px solid var(--border); font-size: 0.9rem; }
+.dc-cohorts .sl { color: var(--ink-faint); font-size: 0.78rem; margin-left: 0.3rem; }
+.dc-cohorts .ct { font-family: var(--mono); color: var(--ink-soft); white-space: nowrap; }
+.dc-cohorts .bar { grid-column: 1 / -1; display: block; height: 6px; border-radius: 3px; background: var(--bg-2); overflow: hidden; }
+.dc-cohorts .fill { display: block; height: 100%; width: calc(var(--w) * 1%); background: var(--accent); }
+.dc-side.theirs .fill { background: var(--bad); }
+.hint { color: var(--ink-faint); font-size: 0.9rem; line-height: 1.45; margin: 0.4rem 0; }
+
+@media (min-width: 700px) {
+    .dc-sides { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
+}
+@media (prefers-reduced-motion: reduce) {
+    .dc-blob { transition: none; }
+}

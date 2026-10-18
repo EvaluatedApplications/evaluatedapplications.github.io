@@ -1,0 +1,109 @@
+/* Doctrine. PHONE FIRST: the base rules are the portrait phone layout (360 to 430 px wide, 16px gutters, one column, every tap target at
+   least 44px, nothing that needs hover). Wider screens add rules inside the media queries at the end. tools/DoctrineUiProof reads this file
+   (and Components/DoctrineArena.razor.css) and fails if a fixed width above 360px appears, the 44px rule goes, or the media queries go. */
+.room { max-width: 1100px; margin: 0 auto; padding: 1.5rem max(16px, env(safe-area-inset-left)) calc(3rem + env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-right)); box-sizing: border-box; overflow-x: clip; }
+.crumb { font-family: var(--mono); font-size: 0.82rem; color: var(--ink-faint); margin-bottom: 0.75rem; }
+.crumb a { color: var(--ink-soft); display: inline-block; padding: 0.7rem 0; }
+.crumb span { margin: 0 0.4rem; opacity: 0.6; }
+.room-head h1 { font-size: clamp(1.8rem, 6vw, 2.6rem); font-weight: 700; letter-spacing: -0.02em; margin: 0 0 0.5rem; }
+.lede { font-size: 1.02rem; line-height: 1.55; color: var(--ink-soft); margin: 0 0 1rem; max-width: 64ch; }
+.hint { color: var(--ink-faint); font-size: 0.9rem; line-height: 1.45; margin: 0.4rem 0; }
+h2 { font-size: 1.1rem; font-weight: 650; margin: 0 0 0.6rem; letter-spacing: -0.01em; }
+.dc-sub { font-size: 0.85rem; font-weight: 500; color: var(--ink-faint); margin-left: 0.4rem; }
+.dc-h3 { font-size: 0.95rem; font-weight: 650; margin: 1rem 0 0.3rem; }
+code { font-family: var(--mono); font-size: 0.82rem; overflow-wrap: anywhere; }
+
+/* every tappable thing */
+.dc button, .dc summary { min-height: 44px; min-width: 44px; touch-action: manipulation; font: inherit; cursor: pointer; }
+.dc button { -webkit-tap-highlight-color: transparent; }
+.dc button:disabled { opacity: 0.45; cursor: default; }
+
+/* panels */
+.dc-panel { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1rem; margin: 0 0 0.9rem; min-width: 0; }
+.dc-notice { border-left: 3px solid var(--warn); background: var(--surface); padding: 0.6rem 0.9rem; border-radius: 8px; margin: 0 0 0.9rem; line-height: 1.45; }
+.err { color: var(--bad); line-height: 1.45; margin: 0.5rem 0; }
+.dc-says { margin: 0 0 0.4rem; line-height: 1.5; color: var(--ink); }
+
+.dc-chips { list-style: none; display: flex; flex-wrap: wrap; gap: 0.4rem; padding: 0; margin: 0; }
+.dc-chips li { font-family: var(--mono); font-size: 0.8rem; color: var(--ink-soft); border: 1px solid var(--border-2); border-radius: 999px; padding: 0.3rem 0.7rem; background: var(--bg-2); }
+
+/* buttons */
+.dc-btn { background: var(--bg-2); color: var(--ink); border: 1px solid var(--border-2); border-radius: 10px; padding: 0.5rem 0.9rem; font-weight: 600; }
+.dc-btn.strong { background: var(--accent); color: #fff; border-color: transparent; }
+.dc-btn:active, .dc-chip:active, .dc-slot:active { filter: brightness(1.2); }
+.dc-btn.on { background: var(--accent); color: #fff; border-color: transparent; }
+.dc-foot { margin: 0 0 1rem; }
+.dc-next, #dc-confirm, #dc-new { width: 100%; }
+
+/* start */
+.dc-opts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.4rem; margin: 0.3rem 0 0.8rem; }
+.dc-label { display: block; font-size: 0.85rem; color: var(--ink-soft); margin: 0.7rem 0 0.3rem; }
+.dc-input { display: block; width: 100%; box-sizing: border-box; min-height: 48px; font-size: 16px; padding: 0.5rem 0.8rem; background: var(--bg-2); color: var(--ink); border: 1px solid var(--border-2); border-radius: 10px; font-family: inherit; }
+.dc-codebox { font-family: var(--mono); resize: vertical; margin-bottom: 0.6rem; }
+
+/* army and roster */
+.dc-cohortlist, .dc-roster { list-style: none; padding: 0; margin: 0.3rem 0; }
+.dc-cohortlist li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0.1rem 0.6rem; padding: 0.4rem 0; border-bottom: 1px solid var(--border); }
+.dc-cohortlist .nm, .dc-kind .nm { font-weight: 700; }
+.dc-cohortlist .ct { font-family: var(--mono); color: var(--accent-ink); }
+.dc-cohortlist .meta, .dc-kind .meta { grid-column: 1 / -1; font-size: 0.8rem; color: var(--ink-faint); line-height: 1.35; }
+.dc-kind { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0.1rem 0.6rem; align-items: center; padding: 0.4rem 0; border-bottom: 1px solid var(--border); }
+.dc-kind .meta { grid-column: 1; grid-row: 2; }
+.dc-step { grid-column: 2; grid-row: 1 / span 2; display: grid; grid-template-columns: 44px 2rem 44px; align-items: center; text-align: center; }
+.dc-step .dc-n { font-family: var(--mono); font-weight: 700; }
+.dc-step .dc-btn { padding: 0; }
+.dc-sum { font-weight: 650; margin: 0.8rem 0 0.3rem; }
+.dc-refused { margin: 0.4rem 0; padding-left: 1.2rem; color: var(--warn); line-height: 1.5; }
+
+/* doctrine editor */
+.dc-formation { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.4rem; }
+.dc-lane { display: flex; flex-direction: column; gap: 0.15rem; border: 1px solid var(--border-2); border-radius: 8px; padding: 0.4rem 0.5rem; background: var(--bg-2); font-size: 0.82rem; overflow-wrap: anywhere; }
+.dc-ghost { border-color: var(--accent); box-shadow: 0 0 calc(4px + var(--glow) * 24px) color-mix(in srgb, var(--accent) calc(var(--glow) * 100%), transparent); }
+.dc-ghostchips { list-style: decimal inside; padding: 0; margin: 0.3rem 0; line-height: 1.7; }
+.dc-conf { margin: 0.4rem 0 0.6rem; color: var(--ink-soft); line-height: 1.45; }
+.dc-ghostbtns { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.4rem; }
+.dc-slots { list-style: none; padding: 0; margin: 0.3rem 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.4rem; }
+.dc-slot { display: flex; gap: 0.5rem; align-items: center; width: 100%; text-align: left; min-height: 56px; background: var(--bg-2); color: var(--ink); border: 1px solid var(--border-2); border-radius: 10px; padding: 0.4rem 0.6rem; }
+.dc-slot.empty { border-style: dashed; color: var(--ink-faint); }
+.dc-slot .n { font-family: var(--mono); color: var(--accent-ink); }
+.dc-slot .t { overflow-wrap: anywhere; line-height: 1.25; }
+.dc-says li { margin: 0.2rem 0; line-height: 1.45; font-size: 0.9rem; color: var(--ink-soft); }
+.dc-tabs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.4rem; margin: 0.8rem 0 0.2rem; }
+.dc-chipgrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.4rem; }
+.dc-chip { background: var(--bg-2); color: var(--ink); border: 1px solid var(--border-2); border-radius: 10px; padding: 0.4rem 0.6rem; text-align: left; font-size: 0.88rem; line-height: 1.25; overflow-wrap: anywhere; }
+.dc-chip.off { color: var(--ink-faint); border-style: dashed; }
+.dc-fight { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.5rem; margin-top: 1rem; }
+
+/* working, result, end */
+.dc-progress { display: block; width: 100%; height: 12px; margin: 0.5rem 0; accent-color: var(--accent); }
+.dc-result { border-left: 3px solid var(--ok); }
+.dc-list { margin: 0.3rem 0; padding-left: 1.2rem; line-height: 1.55; }
+.dc-rounds-list { margin: 0.3rem 0; padding-left: 1.4rem; line-height: 1.6; }
+.dc-armycode { display: block; background: var(--bg-2); border: 1px solid var(--border); border-radius: 8px; padding: 0.6rem; overflow-wrap: anywhere; user-select: all; }
+.dc-endbtns { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.5rem; margin-bottom: 0.9rem; }
+.dc-about { margin-top: 0.8rem; }
+.dc-about summary { display: flex; align-items: center; color: var(--ink-soft); }
+
+.outro { margin-top: 1.5rem; max-width: 70ch; line-height: 1.55; color: var(--ink-soft); }
+
+/* wider screens: more room per row */
+@media (min-width: 700px) {
+    .room { padding-top: 2.5rem; }
+    .dc-chipgrid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .dc-slots { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    .dc-next, #dc-confirm, #dc-new { width: auto; min-width: 14rem; }
+}
+@media (min-width: 960px) {
+    .dc-chipgrid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+@media (max-width: 359px) {
+    .dc-chipgrid, .dc-slots { grid-template-columns: minmax(0, 1fr); }
+    .dc-ghostbtns { grid-template-columns: minmax(0, 1fr); }
+    .dc-formation { grid-template-columns: minmax(0, 1fr); }
+}
+@media (orientation: landscape) and (max-height: 500px) {
+    .room { padding-top: 0.75rem; }
+}
+@media (prefers-reduced-motion: reduce) {
+    .dc * { transition: none !important; animation: none !important; }
+}

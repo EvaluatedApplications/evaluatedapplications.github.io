@@ -44,6 +44,9 @@ builder.Services.AddSingleton<ShowroomPlenum.IPlenumClock, ShowroomPlenum.Stopwa
 // window.EA_PLENUM_RELAY in wwwroot/index.html.
 builder.Services.AddSingleton<ShowroomPlenum.IPlenumRelayFactory, ShowroomPlenum.MqttWsRelayFactory>();
 
+// Doctrine's replay pace and autoplay: a service so a proof can switch the autoplay off (Services/Doctrine/DoctrineSettings.cs).
+builder.Services.AddSingleton<ShowroomDoctrine.IDoctrineSettings>(new ShowroomDoctrine.DoctrineSettings());
+
 // Big data (council data, Prism checkpoint) lives in the website-data repo. ONE setting says where: window.EA_DATA_BASE in
 // wwwroot/index.html (the same value drives the framework redirect there). See Services/DataUrl.cs.
 var host = builder.Build();

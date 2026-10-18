@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- UI proof for Doctrine: renders the REAL page (Showroom.Pages.DoctrinePage, from the built Showroom.dll) under bUnit, drives it the way a visitor
+       taps (no browser is launched) through complete scripted games on the real sections (Pleroma army, Tracer battle, tiny HoloFormer general),
+       and checks the layout rules that can be checked without a browser. Build Showroom (Release) first.
+       Usage: dotnet run -c Release (project tools/DoctrineUiProof). Exit code 0 = every check passed. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <PackageReference Include="bunit" Version="2.11.3" />
+    <Reference Include="Showroom"><HintPath>..\..\bin\Release\net10.0\Showroom.dll</HintPath></Reference>
+    <ProjectReference Include="..\..\..\Doctrine\Doctrine.csproj" />
+    <PackageReference Include="EvaluatedApplications.Blazier" Version="1.0.0" />
+  </ItemGroup>
+</Project>

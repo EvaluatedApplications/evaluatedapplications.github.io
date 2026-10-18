@@ -1,0 +1,528 @@
+@page "/doctrine"
+@attribute [BlazierPage("doctrine", Title = "Doctrine: an army game with a general that learns from you", Layout = typeof(MainLayout), Static = true)]
+@implements IDisposable
+@inject IBuildTime Build
+@inject IJSRuntime JS
+@using ShowroomDoctrine
+@using Doctrine
+@using Plan = global::Doctrine.Doctrine
+
+<PageTitle>Doctrine: an army game with a general that learns from you</PageTitle>
+
+<div class="room dc">
+    <header class="room-head">
+        <nav class="crumb"><a href="/tools/">Tools</a> <span>/</span> Doctrine</nav>
+        <h1>Doctrine</h1>
+        <p class="lede">Draft an army, give it up to four orders, and watch the battle. Your general learns how you set a doctrine from your own
+            choices, in your browser, with nothing pre-trained, and suggests the next one. The army is a set of Pleroma stores from the Phasor
+            package, the battle runs on a Tracer navigation mesh, the rounds run as EvalApp pipelines, and the general is a tiny AlgFormer model.
+            Nothing is uploaded.</p>
+    </header>
+
+    @if (Build.IsPrerender)
+    {
+        <ToolStart Tool="Doctrine" Label="Start Doctrine" />
+    }
+    else if (_s is not null)
+    {
+        @if (_s.InGame)
+        {
+            <section class="dc-panel dc-status" aria-label="Where the game stands">
+                <ul class="dc-chips">
+                    <li>Round @(_s.RoundIndex + 1) of @_s.TotalRounds</li>
+                    @if (_s.Army is { } a)
+                    {
+                        <li>Gold @a.Gold</li>
+                        <li>Soldiers @a.Soldiers</li>
+                        <li>@a.Kinds of @Roster.Size kinds</li>
+                    }
+                    <li>General: @_s.Sections.General.ExamplesSeen @(_s.Sections.General.ExamplesSeen == 1 ? "example" : "examples") seen</li>
+                </ul>
+            </section>
+        }
+        @if (_s.Notice.Length > 0) { <p class="dc-notice" role="status">@_s.Notice</p> }
+        @if (_s.Error.Length > 0) { <p class="err" role="alert">@_s.Error</p> }
+
+        @switch (_s.Stage)
+        {
+            case DoctrineStage.Start:
+                @StartView
+                break;
+            case DoctrineStage.Draft:
+                @DraftView
+                break;
+            case DoctrineStage.Doctrine:
+                @DoctrineView
+                break;
+            case DoctrineStage.Working:
+                @WorkingView
+                break;
+            case DoctrineStage.Watch:
+                @WatchView
+                break;
+            case DoctrineStage.Over:
+                @OverView
+                break;
+        }
+
+        @if (_s.InGame && _s.Stage is DoctrineStage.Draft or DoctrineStage.Doctrine or DoctrineStage.Watch)
+        {
+            <div class="dc-foot">
+                <button type="button" class="dc-btn" id="dc-leave" @onclick="_s.Leave">Leave this game</button>
+            </div>
+        }
+    }
+
+    <section class="outro">
+        <h2>How it works</h2>
+        <p>Each cohort of soldiers is an item in a Pleroma store: its kind is the key, its traits are the flags, its place in the line is the
+            arrangement, and its veterancy is a position on a ring of nine. An order is one operation on that store. Flip relabels a trait, Rotate
+            relabels the line, Age ticks the ring, Aura counts the soldiers who carry a trait, and the list of orders you may give is read from
+            the store, which is why some are greyed out. Field orders go to the battle: the ground is a baked Tracer navigation mesh, and each
+            cohort is a group of agents that path, take cover and strike on it.</p>
+        <p>A battle is simulated once, on your device, and recorded. The replay is a recording of that one battle: playing it back does not
+            run it again.</p>
+        <details class="dc-about">
+            <summary>About the general</summary>
+            <p>Your general starts empty. It learns how you set a doctrine from your own choices, in your browser, with nothing pre-trained, and
+                different players end up with different generals. It suggests and you decide: every doctrine you set is an example for it, and so is each
+                battle result.</p>
+            <p>Inside it are a small habit table and a tiny HoloFormer from the AlgFormer package. For each of the four slots, whichever of the two has
+                guessed your choices better so far speaks. The confidence shown is how often its whole suggestion has matched what you then chose,
+                out of 1000. Nothing is saved: refresh the page and the general is gone.</p>
+        </details>
+    </section>
+</div>
+
+@code {
+    private DoctrineSession? _s;
+    private DoctrineStage _seen = DoctrineStage.Start;
+
+    // start screen
+    private int _rounds = DoctrineSession.DefaultRounds;
+    private string _seedText = "";
+    private string _codeText = "";
+    private string _loadError = "";
+
+    // draft screen
+    private readonly int[] _buy = new int[Roster.Size];
+    private DraftPreview? _preview;
+    private int _previewSeq;
+
+    // doctrine screen
+    private readonly int[] _slots = new int[DoctrineVocabulary.MaxSlots];
+    private bool _fieldTab;
+    private bool _ghostHidden;
+
+    private string _copied = "";
+
+    /// <summary>The session behind the page (the proofs drive and read it).</summary>
+    public DoctrineSession? Session => _s;
+
+    protected override void OnInitialized()
+    {
+        if (Build.IsPrerender) return;
+        _s = new DoctrineSession();
+        _s.Changed += OnChanged;
+    }
+
+    private void OnChanged() => _ = InvokeAsync(() =>
+    {
+        if (_s is null) return;
+        if (_s.Stage != _seen) { _seen = _s.Stage; EnterStage(_seen); }
+        StateHasChanged();
+    });
+
+    private void EnterStage(DoctrineStage st)
+    {
+        _copied = "";
+        if (st == DoctrineStage.Draft) { Array.Clear(_buy); _preview = null; _ = RefreshPreview(); }
+        if (st == DoctrineStage.Doctrine) { Array.Clear(_slots); _fieldTab = false; _ghostHidden = false; }
+    }
+
+    public void Dispose()
+    {
+        if (_s is null) return;
+        _s.Changed -= OnChanged;
+        _s.Dispose();
+    }
+
+    // ------------------------------------------------------------------------------------------------------- start
+    private RenderFragment StartView => @<div>
+        <section class="dc-panel dc-start" id="dc-start" aria-label="Start a game">
+            <h2>Start a game</h2>
+            <p class="hint">Every game starts with an army levied for you, some gold to spend, and a run of rounds against armies the game raises. Each round you
+                draft, set a doctrine, and watch one battle.</p>
+            <p class="dc-h3" id="dc-rounds-label">Rounds</p>
+            <div class="dc-opts" role="radiogroup" aria-labelledby="dc-rounds-label">
+                @foreach (var n in new[] { 3, 5, 8 })
+                {
+                    var r = n;
+                    <button type="button" class="dc-btn dc-opt @(_rounds == r ? "on" : "")" role="radio" aria-checked="@(_rounds == r ? "true" : "false")" @onclick="() => _rounds = r">@r rounds</button>
+                }
+            </div>
+            <label class="dc-label" for="dc-seed">Game seed (optional)</label>
+            <input id="dc-seed" class="dc-input" type="text" inputmode="numeric" autocomplete="off" autocorrect="off" spellcheck="false" maxlength="9"
+                   placeholder="A whole number" value="@_seedText" @oninput="e => _seedText = e.Value?.ToString() ?? string.Empty" />
+            <p class="hint">The same seed raises the same enemies on the same ground, so you can replay a game. Leave it empty for a new one.</p>
+            <button type="button" class="dc-btn strong" id="dc-new" @onclick="StartNew">Start a new game</button>
+        </section>
+
+        <section class="dc-panel dc-load" aria-label="Load an army code">
+            <h2>Load an army code</h2>
+            <p class="hint">An army code is a short piece of text that holds an army. Paste one from an earlier game to play on with that army.</p>
+            <label class="dc-label" for="dc-code">Army code</label>
+            <textarea id="dc-code" class="dc-input dc-codebox" rows="3" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"
+                      placeholder="DA2.0...." @oninput="e => _codeText = e.Value?.ToString() ?? string.Empty">@_codeText</textarea>
+            @if (_loadError.Length > 0) { <p class="err dc-loaderr" role="alert">@_loadError</p> }
+            <button type="button" class="dc-btn" id="dc-load" @onclick="LoadCode">Load this army and play</button>
+        </section>
+
+        @if (_s!.Sections.General.ExamplesSeen > 0)
+        {
+            <section class="dc-panel" aria-label="Your general">
+                <h2>Your general</h2>
+                <p class="hint">It has seen @_s.Sections.General.ExamplesSeen examples since you opened this page and will carry them into the next game. A refresh forgets them.</p>
+                <button type="button" class="dc-btn" id="dc-resetgeneral" @onclick="ResetGeneral">Start with a new, empty general</button>
+            </section>
+        }
+    </div>;
+
+    private void StartNew()
+    {
+        _loadError = "";
+        int seed;
+        if (_seedText.Trim().Length == 0) seed = (int)(Environment.TickCount64 & 0x7fffffff);
+        else if (!int.TryParse(_seedText.Trim(), System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out seed))
+        { _loadError = "A seed is a whole number, digits only."; return; }
+        _s!.NewGame(seed, _rounds, null, out var why);
+        if (why.Length > 0) _loadError = why;
+    }
+
+    private void LoadCode()
+    {
+        _loadError = "";
+        if (_codeText.Trim().Length == 0) { _loadError = "Paste an army code first."; return; }
+        int seed = _seedText.Trim().Length > 0 && int.TryParse(_seedText.Trim(), System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var sd)
+            ? sd : (int)(Environment.TickCount64 & 0x7fffffff);
+        if (!_s!.NewGame(seed, _rounds, _codeText, out var why)) _loadError = why;
+    }
+
+    private void ResetGeneral() => _s!.ResetGeneral();
+
+    // ------------------------------------------------------------------------------------------------------- army
+    private RenderFragment ArmyPanel(ArmyReadModel a, string title) => @<section class="dc-panel dc-army" aria-label="@title">
+        <h2>@title <span class="dc-sub">@a.Soldiers soldiers, @a.Gold gold</span></h2>
+        @if (a.Cohorts.Count == 0) { <p class="hint">No cohorts.</p> }
+        else
+        {
+            <ul class="dc-cohortlist">
+                @foreach (var c in a.Cohorts)
+                {
+                    <li>
+                        <span class="nm">@DoctrineWords.KindName(c.Key)</span>
+                        <span class="ct">@c.Count</span>
+                        <span class="meta">@DoctrineWords.Slot(c.Slot) line, @DoctrineWords.TraitList(c.Traits), veterancy @c.Veterancy, power @(c.PowerPct)%</span>
+                    </li>
+                }
+            </ul>
+        }
+    </section>;
+
+    // ------------------------------------------------------------------------------------------------------- draft
+    private IReadOnlyList<DraftPick> Picks() => Enumerable.Range(0, Roster.Size).Where(k => _buy[k] > 0).Select(k => new DraftPick(k, _buy[k])).ToList();
+    private int Cost() => Enumerable.Range(0, Roster.Size).Sum(k => _buy[k] * Roster.PriceOf(k));
+
+    private async Task RefreshPreview()
+    {
+        int seq = ++_previewSeq;
+        var p = await _s!.PreviewDraftAsync(Picks());
+        if (seq != _previewSeq) return;
+        _preview = p;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private void Step(int kind, int delta)
+    {
+        _buy[kind] = Math.Clamp(_buy[kind] + delta, 0, 99);
+        _ = RefreshPreview();
+    }
+
+    private RenderFragment DraftView => @<div>
+        @if (_s!.Draft is { } d)
+        {
+            @ArmyPanel(d.Army, "Your army")
+            <section class="dc-panel dc-draft" aria-label="Draft">
+                <h2>Draft <span class="dc-sub">you have @d.Army.Gold gold</span></h2>
+                <p class="hint">Buy soldiers for the coming battle. A kind you already hold joins its cohort; a new kind starts one. The army itself decides what it will accept.</p>
+                @if (d.Army.Soldiers == 0) { <p class="dc-notice" role="status">Your army has no soldiers left. Spend your gold on cohorts, or the next battle starts lost.</p> }
+                <ul class="dc-roster">
+                    @for (int k = 0; k < Roster.Size; k++)
+                    {
+                        int kind = k;
+                        <li class="dc-kind">
+                            <span class="nm">@Roster.NameOf(kind)</span>
+                            <span class="meta">@DoctrineWords.TraitList(Roster.TraitsOf(kind)), @Roster.PriceOf(kind) gold each</span>
+                            <span class="dc-step">
+                                <button type="button" class="dc-btn dc-minus" aria-label="One fewer @Roster.NameOf(kind)" disabled="@(_buy[kind] == 0)" @onclick="() => Step(kind, -1)">-</button>
+                                <span class="dc-n" aria-live="polite">@_buy[kind]</span>
+                                <button type="button" class="dc-btn dc-plus" aria-label="One more @Roster.NameOf(kind)" @onclick="() => Step(kind, 1)">+</button>
+                            </span>
+                        </li>
+                    }
+                </ul>
+                <p class="dc-sum">This draft costs @Cost() of @d.Army.Gold gold.</p>
+                @if (_preview is { } pv)
+                {
+                    @if (pv.Report.Refused.Count > 0)
+                    {
+                        <ul class="dc-refused" role="alert">
+                            @foreach (var (pick, why) in pv.Report.Refused)
+                            {
+                                <li>@DoctrineWords.KindName(pick.Kind) x@(pick.Count): @DoctrineWords.Refusal(why)</li>
+                            }
+                        </ul>
+                    }
+                    <p class="hint dc-after">After the picks the army would hold @pv.After.Soldiers soldiers in @pv.After.Kinds of @Roster.Size kinds (the command span), with @(pv.After.Legal.Count - 1) orders legal.</p>
+                }
+                <button type="button" class="dc-btn strong" id="dc-confirm" @onclick="ConfirmDraft">@(Cost() == 0 ? "Keep the army as it is" : "Confirm the draft")</button>
+            </section>
+        }
+    </div>;
+
+    private void ConfirmDraft() => _s!.SubmitDraft(Picks());
+
+    // ------------------------------------------------------------------------------------------------------- doctrine
+    private Plan Slots() => new(_slots[0], _slots[1], _slots[2], _slots[3]);
+
+    private void AddToken(int token)
+    {
+        // A greyed chip is disabled in the browser; this guard keeps the rule even where a tap reaches a disabled button.
+        if (_s?.Army is not { } a || !a.Legal.Allows(token)) return;
+        for (int i = 0; i < _slots.Length; i++) if (_slots[i] == 0) { _slots[i] = token; return; }
+    }
+
+    private RenderFragment DoctrineView => @<div>
+        @if (_s!.Army is { } army && _s.Ghost is { } ghost)
+        {
+            var legal = army.Legal;
+            @ArmyPanel(army, "Your army")
+            <section class="dc-panel dc-line" aria-label="Your line">
+                <h2>Your line</h2>
+                <p class="hint">A field order goes to a whole line. A line with no order advances.</p>
+                <div class="dc-formation">
+                    @for (int sl = 0; sl < DoctrineVocabulary.Groups; sl++)
+                    {
+                        int slot = sl;
+                        <div class="dc-lane">
+                            <b>@DoctrineWords.Slot(slot)</b>
+                            @{ var inLane = army.Cohorts.Where(c => c.Slot == slot).ToList(); }
+                            @if (inLane.Count == 0) { <span class="hint">empty</span> }
+                            @foreach (var c in inLane) { <span>@DoctrineWords.KindName(c.Key) @c.Count</span> }
+                        </div>
+                    }
+                </div>
+            </section>
+
+            @if (!ghost.Doctrine.IsEmpty && !_ghostHidden)
+            {
+                <section class="dc-panel dc-ghost" style="--glow:@Glow(ghost.ConfidencePermille)" aria-label="Your general's suggestion">
+                    <h2>Your general suggests</h2>
+                    <ol class="dc-ghostchips">
+                        @foreach (var t in ghost.Doctrine.Tokens.Where(t => t != 0)) { <li>@DoctrineWords.Label(t)</li> }
+                    </ol>
+                    <p class="dc-conf">Confidence <b>@ghost.ConfidencePermille</b> of 1000: how often its whole suggestion has matched what you then chose.</p>
+                    <div class="dc-ghostbtns">
+                        <button type="button" class="dc-btn strong" id="dc-accept" @onclick="() => Accept(ghost)">Accept</button>
+                        <button type="button" class="dc-btn" id="dc-edit" @onclick="() => EditGhost(ghost)">Edit</button>
+                        <button type="button" class="dc-btn" id="dc-ignore" @onclick="IgnoreGhost">Ignore</button>
+                    </div>
+                </section>
+            }
+            else if (ghost.Doctrine.IsEmpty)
+            {
+                <p class="hint dc-noghost">@(_s.Sections.General.ExamplesSeen == 0
+                    ? "Your general starts empty, so it has no suggestion yet. Set a doctrine; it learns from every one you set."
+                    : "Your general has no suggestion for this army yet. Set a doctrine; it learns from every one you set.")</p>
+            }
+
+            <section class="dc-panel dc-editor" aria-label="Doctrine">
+                <h2>Doctrine <span class="dc-sub">up to four orders, in this order</span></h2>
+                <ol class="dc-slots">
+                    @for (int i = 0; i < _slots.Length; i++)
+                    {
+                        int slot = i;
+                        string slotText = DoctrineWords.Label(_slots[slot]);
+                        string slotAria = $"Slot {slot + 1}: {slotText}" + (_slots[slot] == 0 ? "" : ". Tap to clear.");
+                        string slotCls = _slots[slot] == 0 ? "dc-slot empty" : "dc-slot";
+                        <li>
+                            <button type="button" class="@slotCls" aria-label="@slotAria" @onclick="() => _slots[slot] = 0">
+                                <span class="n">@(slot + 1)</span><span class="t">@slotText</span>
+                            </button>
+                        </li>
+                    }
+                </ol>
+                @if (!Slots().IsEmpty)
+                {
+                    <ul class="dc-says">
+                        @foreach (var t in _slots.Where(t => t != 0)) { <li>@DoctrineWords.Sentence(t)</li> }
+                    </ul>
+                }
+                else { <p class="hint">Tap an order below to put it in the first empty slot. No orders is allowed: every line then advances.</p> }
+
+                <div class="dc-tabs" role="group" aria-label="Kind of order">
+                    <button type="button" class="dc-btn dc-tab @(_fieldTab ? "" : "on")" aria-pressed="@(_fieldTab ? "false" : "true")" @onclick="() => _fieldTab = false">Army orders</button>
+                    <button type="button" class="dc-btn dc-tab @(_fieldTab ? "on" : "")" aria-pressed="@(_fieldTab ? "true" : "false")" @onclick="() => _fieldTab = true">Field orders</button>
+                </div>
+                <p class="hint">Greyed out means the army says that order is not legal right now.@(legal.Count <= 1 ? " With no soldiers in the army, no order is legal." : "")</p>
+                @if (!_fieldTab)
+                {
+                    @Palette("Rotate the line", Tokens(ArmyOrderKind.Rotate), legal)
+                    @Palette("Flip a trait", Tokens(ArmyOrderKind.Flip), legal)
+                    @Palette("Age the veterans", Tokens(ArmyOrderKind.Age), legal)
+                    @Palette("Merge a kind into the one before it", Tokens(ArmyOrderKind.Merge), legal)
+                    @Palette("Aura on a trait", Tokens(ArmyOrderKind.Aura), legal)
+                    @Palette("Cull a trait", Tokens(ArmyOrderKind.Cull), legal)
+                    @if (Tokens(ArmyOrderKind.Cull).All(t => !legal.Allows(t))) { <p class="hint dc-cullnote">Cull is greyed out for every army: the Pleroma refuses the Restrict operation on a store of this shape.</p> }
+                }
+                else
+                {
+                    @for (int g = 0; g < DoctrineVocabulary.Groups; g++)
+                    {
+                        @Palette(DoctrineWords.Slot(g) + " line", Enumerable.Range(0, 6).Select(f => DoctrineVocabulary.Field((FieldOrderKind)f, g)).ToList(), legal)
+                    }
+                }
+                <div class="dc-fight">
+                    <button type="button" class="dc-btn" id="dc-clear" @onclick="() => Array.Clear(_slots)">Clear the slots</button>
+                    <button type="button" class="dc-btn strong" id="dc-fight" @onclick="() => Fight(ghost)">Fight with this doctrine</button>
+                </div>
+            </section>
+        }
+    </div>;
+
+    private static IReadOnlyList<int> Tokens(ArmyOrderKind k)
+    {
+        var l = new List<int>();
+        for (int t = 1; t < DoctrineVocabulary.Size; t++)
+        {
+            var o = DoctrineVocabulary.Decode(t);
+            if (o.Family == OrderFamily.Army && (ArmyOrderKind)o.Kind == k) l.Add(t);
+        }
+        return l;
+    }
+
+    private RenderFragment Palette(string title, IReadOnlyList<int> tokens, LegalMask legal) => @<div class="dc-palette">
+        <p class="dc-h3">@title</p>
+        <div class="dc-chipgrid">
+            @foreach (var tk in tokens)
+            {
+                int token = tk;
+                bool ok = legal.Allows(token);
+                <button type="button" class="dc-chip @(ok ? "" : "off")" data-token="@token" disabled="@(!ok)" @onclick="() => AddToken(token)">@DoctrineWords.Label(token)</button>
+            }
+        </div>
+    </div>;
+
+    private static string Glow(int permille) => (Math.Clamp(permille, 0, 1000) / 1000.0).ToString("0.###", System.Globalization.CultureInfo.InvariantCulture);
+
+    private void Accept(GeneralOutput ghost) => _s!.SubmitChoice(ghost.Doctrine, false);
+    private void EditGhost(GeneralOutput ghost)
+    {
+        Array.Clear(_slots);
+        int i = 0;
+        foreach (var t in ghost.Doctrine.Tokens) if (t != 0 && i < _slots.Length) _slots[i++] = t;
+        _ghostHidden = true;
+    }
+    private void IgnoreGhost() { _ghostHidden = true; Array.Clear(_slots); }
+    private void Fight(GeneralOutput ghost) { var d = Slots(); _s!.SubmitChoice(d, d != ghost.Doctrine); }
+
+    // ------------------------------------------------------------------------------------------------------- working
+    private RenderFragment WorkingView => @<section class="dc-panel dc-working" id="dc-working" role="status" aria-live="polite" aria-label="Working">
+        <h2>@(_s!.Status.Length > 0 ? _s.Status : "Working")</h2>
+        @if (_s.BattleTick > 0)
+        {
+            <progress class="dc-progress" max="@_s.BattleTickLimit" value="@_s.BattleTick">Tick @_s.BattleTick</progress>
+            <p class="hint">Tick @_s.BattleTick of up to @_s.BattleTickLimit. The battle ends sooner if one side falls.</p>
+        }
+        <p class="hint">This runs on your device, one small step at a time, so the page stays usable.</p>
+        <button type="button" class="dc-btn" id="dc-cancel" @onclick="_s.CancelBattle">Cancel</button>
+    </section>;
+
+    // ------------------------------------------------------------------------------------------------------- watch
+    private RenderFragment WatchView => @<div>
+        @if (_s!.Last is { } v)
+        {
+            var rec = v.Record;
+            var lost = rec.Result.AttackerLosses.Sum(l => l.Lost);
+            var theirLost = rec.Result.DefenderLosses.Sum(l => l.Lost);
+            var arena = _s.Sections.Engine?.Arenas.FirstOrDefault(x => x.Id == rec.ArenaId)?.Name ?? rec.ArenaId;
+            <section class="dc-panel dc-result" aria-label="Round result">
+                <h2>Round @(rec.Round + 1): @DoctrineWords.OutcomeShort(rec.Result.Outcome) <span class="dc-sub">@arena, @rec.Result.Ticks ticks</span></h2>
+                <p class="dc-says">@DoctrineWords.Outcome(rec.Result.Outcome)</p>
+            </section>
+            <DoctrineArena Replay="rec.Replay" Layout="v.Layout" />
+            <section class="dc-panel dc-spoils" aria-label="Losses and spoils">
+                <h2>Losses and spoils</h2>
+                <ul class="dc-list">
+                    <li>You brought @v.YourSoldiers soldiers and lost @lost. The enemy brought @v.EnemySoldiers and lost @theirLost.</li>
+                    <li>Spoils: @rec.Spoils.Gold gold@(rec.Spoils.Experience > 0 ? $" and {rec.Spoils.Experience} veterancy step{(rec.Spoils.Experience == 1 ? "" : "s")}" : "").</li>
+                    <li>Your doctrine: @DoctrineWords.Orders(rec.PlayerDoctrine).</li>
+                    @if (!rec.Ghost.IsEmpty)
+                    {
+                        <li>Your general suggested: @DoctrineWords.Orders(rec.Ghost) (confidence @rec.GhostConfidence of 1000). @(rec.Overrode ? "You set something different." : "You took it as it stood.")</li>
+                    }
+                    @if (rec.IllegalDropped > 0) { <li>@rec.IllegalDropped order@(rec.IllegalDropped == 1 ? "" : "s") were not legal and were dropped.</li> }
+                </ul>
+            </section>
+            @ArmyPanel(v.ArmyAfter, "Your army now")
+            <button type="button" class="dc-btn strong dc-next" id="dc-next" @onclick="_s.NextRound">@(v.Last ? "See the end of the game" : "Next round")</button>
+        }
+    </div>;
+
+    // ------------------------------------------------------------------------------------------------------- over
+    private RenderFragment OverView => @<div>
+        @if (_s!.Result is { } r)
+        {
+            int won = r.Rounds.Count(x => x.Result.Outcome == BattleStatus.AttackerWon), lost = r.Rounds.Count(x => x.Result.Outcome == BattleStatus.DefenderWon), drawn = r.Rounds.Count - won - lost;
+            <section class="dc-panel dc-end" aria-label="The end of the game">
+                <h2>The game is over</h2>
+                <p class="dc-says">@r.Rounds.Count @(r.Rounds.Count == 1 ? "round" : "rounds") played: @won won, @lost lost, @drawn drawn. Game seed @r.Seed.</p>
+                @if (r.Rounds.Count > 0)
+                {
+                    <ol class="dc-rounds-list">
+                        @foreach (var x in r.Rounds)
+                        {
+                            <li>Round @(x.Round + 1), @DoctrineWords.OutcomeShort(x.Result.Outcome): @DoctrineWords.Orders(x.PlayerDoctrine)@(x.Overrode ? "" : " (general's suggestion)")</li>
+                        }
+                    </ol>
+                }
+                <h3 class="dc-h3">Your army code</h3>
+                <p><code class="dc-armycode" id="dc-armycode">@r.PlayerArmyCode</code></p>
+                <div class="dc-ghostbtns">
+                    <button type="button" class="dc-btn" id="dc-copy" @onclick="() => Copy(r.PlayerArmyCode)">Copy the code</button>
+                </div>
+                @if (_copied.Length > 0) { <p class="hint" role="status">@_copied</p> }
+                <p class="hint">Paste it on the start screen to play on with this army. It holds the army only. Your general is not in it, and a refresh forgets the general.</p>
+                <p class="hint">Your general has seen @_s.Sections.General.ExamplesSeen examples since you opened this page.</p>
+            </section>
+            <div class="dc-endbtns">
+                <button type="button" class="dc-btn strong" id="dc-again" @onclick="() => PlayOn(r)">Play on with this army</button>
+                <button type="button" class="dc-btn" id="dc-fresh" @onclick="_s.BackToStart">Back to the start</button>
+            </div>
+        }
+    </div>;
+
+    private void PlayOn(GameResult r)
+    {
+        _s!.BackToStart();
+        _loadError = "";
+        if (!_s.NewGame((int)(Environment.TickCount64 & 0x7fffffff), _s.TotalRounds, r.PlayerArmyCode, out var why)) _loadError = why;
+    }
+
+    private async Task Copy(string text)
+    {
+        try { await JS.InvokeVoidAsync("copyText", text); _copied = "Copied. Paste it on the start screen to load this army."; }
+        catch (JSException) { _copied = "Your browser would not copy it. Select the code and copy it by hand."; }
+        catch (InvalidOperationException) { _copied = "Your browser would not copy it. Select the code and copy it by hand."; }
+    }
+}

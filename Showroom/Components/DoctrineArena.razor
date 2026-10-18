@@ -1,0 +1,162 @@
+@* The Doctrine replay: the arena from the layout, the cohort blobs from the recording, a scrubber. Plays a RECORDING; nothing is simulated here.
+   Ground comes from the arena layout (the recording carries cohorts and the gate's state only); each frame's WorldFlags say whether the gate has fallen. *@
+@using System.Globalization
+@using System.Net
+@using Doctrine
+@using ShowroomDoctrine
+@inject IDoctrineSettings Settings
+@implements IDisposable
+
+@if (_v is not null)
+{
+    var f = _v.At(_tick);
+    var (w, h) = _v.Units;
+    bool fallen = _v.GateFallen(_tick);
+    <section class="dc-replay" aria-label="Battle replay" style="--tick-ms:@(_tickMs)ms">
+        <svg class="dc-arena" viewBox="0 0 @w @h" preserveAspectRatio="xMidYMid meet" role="img" aria-label="@Alt(f, fallen)">
+            <rect class="dc-floor" x="0" y="0" width="@w" height="@h" />
+            @foreach (var g in _v.Ground)
+            {
+                <rect class="dc-ground @GroundClass(g.Kind, fallen)" x="@N(g.Col * _v.Cell)" y="@N(g.Row * _v.Cell)" width="@N(g.Length * _v.Cell)" height="@N(_v.Cell)" />
+            }
+            @foreach (var e in f.Events)
+            {
+                int si = IndexOf(f, e.Source), ti = IndexOf(f, e.Target);
+                if (si >= 0 && ti >= 0)
+                {
+                    var s = f.Blobs[si];
+                    var t = f.Blobs[ti];
+                    <line class="dc-hit" x1="@N(ReplayView.X(s))" y1="@N(ReplayView.Y(s))" x2="@N(ReplayView.X(t))" y2="@N(ReplayView.Y(t))" />
+                }
+            }
+            @foreach (var b in f.Blobs)
+            {
+                <g @key="b.Id" class="dc-blob @(b.Side == Side.Player ? "mine" : "theirs") @(b.Strength <= 0 ? "dead" : "")" style="--x:@N(ReplayView.X(b)); --y:@N(ReplayView.Y(b))">
+                    <circle r="@N(ReplayView.Radius(b))" />
+                    @((MarkupString)Label(b))
+                </g>
+            }
+        </svg>
+
+        <ul class="dc-chips" aria-live="off">
+            <li>Tick <b class="dc-tick">@_tick</b> of @_v.Last</li>
+            <li class="mine">Your soldiers @_v.Soldiers(_tick, Side.Player)</li>
+            <li class="theirs">Enemy soldiers @_v.Soldiers(_tick, Side.Enemy)</li>
+            @if (_v.HasGate)
+            {
+                <li class="dc-gatechip @(fallen ? "fallen" : "")">@(fallen ? "The gate has fallen" : "The gate is standing")</li>
+            }
+        </ul>
+
+        <div class="dc-controls" role="group" aria-label="Replay controls">
+            <button type="button" class="dc-btn dc-restart" aria-label="Back to the start" @onclick="Restart">Start</button>
+            <button type="button" class="dc-btn dc-back" aria-label="One tick back" @onclick="StepBack">Back</button>
+            <button type="button" class="dc-btn strong dc-play" aria-pressed="@(_playing ? "true" : "false")" @onclick="TogglePlay">@(_playing ? "Pause" : "Play")</button>
+            <button type="button" class="dc-btn dc-fwd" aria-label="One tick forward" @onclick="StepForward">Next</button>
+            <button type="button" class="dc-btn dc-speed" aria-label="Playback speed" @onclick="CycleSpeed">@(_speed)x</button>
+        </div>
+        <input class="dc-range" type="range" min="0" max="@_v.Last" step="1" value="@_tick" @oninput="OnScrub" aria-label="Scrub through the battle" />
+
+        <div class="dc-sides">
+            @foreach (var side in new[] { Side.Player, Side.Enemy })
+            {
+                <div class="dc-side @(side == Side.Player ? "mine" : "theirs")">
+                    <h3>@(side == Side.Player ? "Your cohorts" : "Enemy cohorts")</h3>
+                    <ul class="dc-cohorts">
+                        @foreach (var b in f.Blobs.Where(b => b.Side == side))
+                        {
+                            int start = Math.Max(1, _v.StartStrength(b.Id));
+                            <li @key="b.Id">
+                                <span class="nm">@DoctrineWords.KindName(b.Key) <span class="sl">@DoctrineWords.Slot(b.Slot)</span></span>
+                                <span class="ct">@b.Strength of @start</span>
+                                <span class="bar" aria-hidden="true"><span class="fill" style="--w:@(b.Strength * 100 / start)"></span></span>
+                            </li>
+                        }
+                    </ul>
+                </div>
+            }
+        </div>
+        <p class="hint dc-legend">Dark blocks are walls. Green is cover.@(_v.HasGate ? " The amber block is the gate: open until it falls, then shut." : "") This is a recording of one battle, simulated once on your device; playing it back does not run the battle again.</p>
+    </section>
+}
+
+@code {
+    [Parameter, EditorRequired] public BattleReplay Replay { get; set; } = default!;
+    [Parameter] public global::Doctrine.Battle.ArenaLayout? Layout { get; set; }
+
+    private ReplayView? _v;
+    private BattleReplay? _shown;
+    private int _tick, _speed = 1, _gen;
+    private bool _playing;
+    private int _tickMs = 140;
+
+    /// <summary>The tick on screen (the proofs read it).</summary>
+    public int Tick => _tick;
+    public bool Playing => _playing;
+
+    protected override void OnParametersSet()
+    {
+        if (ReferenceEquals(_shown, Replay)) return;
+        _shown = Replay;
+        _v = new ReplayView(Replay, Layout);
+        _tick = 0; _gen++;
+        _playing = false;
+        _tickMs = Settings.TickMs;
+        if (Settings.AutoPlay) { _playing = true; _ = PlayLoop(_gen); }
+    }
+
+    private async Task PlayLoop(int gen)
+    {
+        while (_playing && gen == _gen && _v is not null && _tick < _v.Last)
+        {
+            await Task.Delay(Math.Max(10, Settings.TickMs / _speed));
+            if (!_playing || gen != _gen) return;
+            _tick++;
+            await InvokeAsync(StateHasChanged);
+        }
+        if (gen == _gen && _playing) { _playing = false; await InvokeAsync(StateHasChanged); }
+    }
+
+    private void Pause() { _playing = false; _gen++; }
+
+    private void TogglePlay()
+    {
+        if (_v is null) return;
+        if (_playing) { Pause(); return; }
+        if (_tick >= _v.Last) _tick = 0;
+        _playing = true; _gen++;
+        _ = PlayLoop(_gen);
+    }
+
+    private void Restart() { Pause(); _tick = 0; }
+    private void StepBack() { Pause(); _tick = Math.Max(0, _tick - 1); }
+    private void StepForward() { Pause(); if (_v is not null) _tick = Math.Min(_v.Last, _tick + 1); }
+    private void CycleSpeed() { _speed = _speed switch { 1 => 2, 2 => 4, 4 => 8, _ => 1 }; _tickMs = Math.Max(10, Settings.TickMs / _speed); }
+
+    private void OnScrub(ChangeEventArgs e)
+    {
+        Pause();
+        if (_v is not null && int.TryParse(e.Value?.ToString(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var t)) _tick = Math.Clamp(t, 0, _v.Last);
+    }
+
+    /// <summary>Jump to a tick (a proof, or a "show me where the gate fell" link).</summary>
+    public void Seek(int tick) { Pause(); if (_v is not null) _tick = Math.Clamp(tick, 0, _v.Last); StateHasChanged(); }
+
+    private static int IndexOf(ReplayFrame f, int blobId)
+    {
+        for (int i = 0; i < f.Blobs.Count; i++) if (f.Blobs[i].Id == blobId) return i;
+        return -1;
+    }
+
+    private static string N(double v) => v.ToString("0.##", CultureInfo.InvariantCulture);
+
+    private static string GroundClass(char kind, bool gateFallen) => kind switch { '#' => "wall", ',' => "cover", 'G' => gateFallen ? "gate fallen" : "gate", _ => "" };
+
+    private static string Label(ReplayBlob b)
+        => $"<text class=\"dc-lbl\" y=\"0.3\" text-anchor=\"middle\" dominant-baseline=\"middle\">{WebUtility.HtmlEncode(b.Strength > 0 ? b.Strength.ToString(CultureInfo.InvariantCulture) : "x")}</text>";
+
+    private string Alt(ReplayFrame f, bool fallen)
+        => $"Arena at tick {f.Tick}: {f.Blobs.Count(b => b.Side == Side.Player && b.Strength > 0)} of your cohorts and {f.Blobs.Count(b => b.Side == Side.Enemy && b.Strength > 0)} enemy cohorts standing." + (_v!.HasGate ? (fallen ? " The gate has fallen." : " The gate is standing.") : "");
+
+    public void Dispose() { _playing = false; _gen++; }
+}
