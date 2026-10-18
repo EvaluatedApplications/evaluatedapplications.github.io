@@ -24,6 +24,9 @@ public static class PrismTabDefaults
     /// <summary>Examples per step.</summary>
     public const int ExamplesPerStep = 1;
 
+    /// <summary>Chance of a random legal move instead of the model's own choice (the Creature's exploration), a modest default.</summary>
+    public const double Exploration = 0.1;
+
     /// <summary>Seed of the fresh weights.</summary>
     public const int FreshSeed = 42;
 
@@ -104,3 +107,6 @@ public sealed class PrivateCopy
     /// <summary>Serve fully composed (every pass at alpha 1), which is how the copy is scored and used.</summary>
     public void ServeComposed() => Session.ApplyServe(1.0);
 }
+
+/// <summary>What the lab hands a tab's tick: the visitor's copy to act with and train, the scorer, and the visitor's knobs.</summary>
+public sealed record LabTick(PrivateCopy Copy, TextTaskScorer Scorer, Random Rng, int Examples, double Explore, int Speed, CancellationToken Ct);

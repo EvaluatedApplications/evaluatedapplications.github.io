@@ -43,7 +43,7 @@ export function composeLlms(ctx, stamp) {
   if (ctx.evidence.length) L.push('## Evidence', '', ...ctx.evidence.map((e) => `- [${e.title}](${abs(ctx, e.slug)}): ${e.claim}`), '');
   L.push('## Research', '', ...ctx.research.map((r) => `- [${r.title}](${abs(ctx, r.href)}): ${r.summary}`), '');
   if (ctx.pageList) L.push('## Every page', '', ...ctx.pageList.filter((p) => !p.noindex && !p.hidden && p.url !== '/' && !ctx.tools.some((t) => t.href === p.url)).map((p) => `- [${p.title}](${abs(ctx, p.url)})`), '');
-  L.push('## Company', '', `- [Partner with us](${s.url}/partner/): ${ctx.pages.partner.lede}`, `- [Licence](${s.url}/licence/): ${ctx.licence.ribbon}`, `- [For AI readers](${s.url}/ai/): a plain summary for AI systems`, `- [NuGet profile](${s.navExternal.href}): every package we publish`, `- Contact: ${s.contactEmail}`, '');
+  L.push('## Company', '', `- [About Evaluated Applications](${s.url}/about/): ${ctx.pages.about.description}`, `- [Partner with us](${s.url}/partner/): ${ctx.pages.partner.lede}`, `- [Licence](${s.url}/licence/): ${ctx.licence.ribbon}`, `- [For agents and other automated readers](${s.url}/ai/): what HoloFormer and Pleroma are, what has been measured, where the packages and docs are, and where to send enquiries`, `- [NuGet profile](${s.navExternal.href}): every package we publish`, `- Contact: ${s.contactEmail}`, '');
   L.push('## Machine-readable', '', `- [llms-full.txt](${s.url}/llms-full.txt): every product described in plain text`, `- [sitemap.xml](${s.url}/sitemap.xml)`, '');
   return L.join('\n');
 }

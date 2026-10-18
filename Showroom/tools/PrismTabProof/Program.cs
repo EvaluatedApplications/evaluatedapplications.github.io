@@ -26,6 +26,7 @@ var shared = HoloSession.FromCheckpoint(raw, k, alpha);
 var st = shared.Stats();
 Console.WriteLine($"checkpoint: {st.ParamCount:N0} params, vocab {st.Vocab}, layers {st.Layers}, context {st.Context}, K {st.KPass}, alpha {st.ServeAlpha}");
 Check("shared session serves K>1 at alpha 1", shared.KPass > 1 && shared.ServeAlpha == 1.0);
+Console.WriteLine($"voice: FrozenPrefix {shared.Model.FrozenPrefix}, face length {shared.Model.Face(0).Length}, codec components {TokenVoice.CodecComponents(shared)}, PlayTone needs a learned tail: {(shared.Model.FrozenPrefix / 2 < shared.Model.Face(0).Length / 2 ? "present" : "absent, pitch from the whole face")}");
 
 // ---- the labels are one token each and distinct ----
 var creature = new CreatureTask();
@@ -215,7 +216,26 @@ Check("verdict wording: interval over the baseline / containing it / under it",
         Check("the forecaster history window is the visitor's setting", fw.Window == 8 && fw.Words(fw.HeldOut[0]).Length == 8 && fw.Prompt(fw.HeldOut[0]).Split(' ').Length < fc.Prompt(fc.HeldOut[0]).Split(' ').Length);
         Check("a wide window still keeps scored prompts inside the held-out part", new ForecasterTask(candles, 40).EvalTargets(50).All(t => t - 40 >= fc.Cut));
     }
-    Check("training the fresh model left the shared model's bytes unchanged", shared.Export().AsSpan().SequenceEqual(before) && TaskStats.Fingerprint(shared) == fpBefore);
+    {
+        // the unified act, without the page: N ticks, each acting from the copy's own logits on a state and training on that same state
+        byte[] b4 = shared.Export();
+        foreach (var kind in new[] { "fresh", "trained" })
+        {
+            var cp = kind == "fresh" ? PrivateCopy.Fresh(shared) : PrivateCopy.Clone(shared);
+            var rt = new Random(3); int ticks = 0;
+            while (ticks < 8)
+            {
+                var it = creature.NextTrainItem(rt);
+                cp.ServeComposed();
+                int greedy = cScorer.Predict(cp.Session, it);
+                if (greedy < 0 || !it.Allowed[greedy]) continue;
+                cp.TrainBatch(cScorer, new[] { it }, rt); ticks++;
+            }
+            Check($"a run of 8 ticks on a {kind} copy trains it and leaves the shared model's bytes unchanged", cp.Steps == 8 && double.IsFinite(cp.LastLoss) && shared.Export().AsSpan().SequenceEqual(b4));
+        }
+        int tg = fc.NextTarget(0);
+        Check("the tape walk starts after a full window, skips flat hours and wraps", tg >= fc.Window + 1 && fc.Direction(tg) != 0 && fc.NextTarget(candles.Count + 5) == fc.NextTarget(0) && fc.NextTarget(candles.Count - 1) >= fc.Window + 1);
+    }    Check("training the fresh model left the shared model's bytes unchanged", shared.Export().AsSpan().SequenceEqual(before) && TaskStats.Fingerprint(shared) == fpBefore);
 }
 
 // ---- tab addressing ----

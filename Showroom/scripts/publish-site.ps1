@@ -34,7 +34,7 @@ if (Test-Path $dist) { Get-ChildItem $dist -Force | Remove-Item -Recurse -Force 
 robocopy $pub $dist /E /XD _framework /XF *.br *.gz /NFL /NDL /NJH /NJS /NP | Out-Null
 if (Test-Path (Join-Path $dist 'index.html')) { throw 'dist has a root index.html: the generated gallery owns /tools/ (see finish-shells.mjs)' }
 if (-not (Test-Path (Join-Path $dist 'app\index.html'))) { throw 'dist/app/index.html (the boot shell for bounced deep links) is missing' }
-foreach ($old in 'creature', 'forecaster', 'stories', 'cartographer') {
+foreach ($old in 'creature', 'forecaster', 'stories', 'cartographer', 'dashboard') {
     if (-not (Test-Path (Join-Path $dist "$old\index.html"))) { throw "dist/$old/index.html (the redirect stub to the Prism tab) is missing; finish-shells.mjs writes it" }
 }
 New-Item -ItemType Directory -Force (Join-Path $dist '_framework') | Out-Null

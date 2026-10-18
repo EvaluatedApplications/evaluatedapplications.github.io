@@ -34,7 +34,7 @@ the full feature list, limits, evidence, related.
 - Eyebrow: Tools
 - H1: Run a real database and train a real model in this browser tab.
 - Sub: Our libraries, live. Nothing is uploaded: the work happens on your machine.
-- CTA: [Start with The Dashboard]
+- CTA: [Start with Umbrarium]
 - Meta: Run a SQL database, train a language model in your browser tab. Nothing is uploaded; the work happens on your machine.
 
 ## /research/
@@ -58,7 +58,7 @@ the full feature list, limits, evidence, related.
 - Eyebrow: HoloDb, an embeddable SQL database for .NET
 - H1: Ten million rows. Dashboard answers in microseconds.
 - Sub: Put a SQL database inside your app that rolls up a ledger in a blink, ranks rows by resemblance and keeps ACID transactions. Tables can be bigger than memory.
-- Tool under the hero: The Dashboard
+- Tool under the hero: Umbrarium, preset demo (up to 3 million rows in the tab, with a SQL console)
 - Tiles: 0.02 ms (a ten-million-invoice rollup; DuckDB 41.63 ms) / 1,600 times and more (faster than DuckDB on that rollup) / 3.3 times (faster than DuckDB on a join to 200,000 customers) / 16 of 16 (queries returning identical results to SQLite and DuckDB)
 - What you can build, added: Apply a thousand changes as one atomic step (readers never see half a batch; one commit group; the SQL upsert is ON CONFLICT). Links to /holodb/docs/#changes.
 - Meta: Put a SQL database inside your .NET app that totals ten million invoices in 0.02 ms, ranks rows by resemblance and survives a crash.

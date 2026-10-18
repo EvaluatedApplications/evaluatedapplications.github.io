@@ -69,12 +69,12 @@ ${feat ? html`<section class="sec" aria-labelledby="h-evidence"><div class="wrap
   <div class="callout partner-band">
     <h2 id="h-partner">Build something on this stack</h2>
     <p>${ctx.pages.partner.lede}</p>
-    <div class="actions"><a class="btn btn-ghost" href="/partner/">Partner with us</a><a class="btn btn-ghost" href="/licence/">Licence terms</a></div>
+    <div class="actions"><a class="btn btn-ghost" href="/partner/">Partner with us</a><a class="btn btn-ghost" href="/about/">About</a><a class="btn btn-ghost" href="/licence/">Licence terms</a></div>
   </div>
 </div></section>
 
-<section class="sec" aria-label="For AI readers"><div class="wrap">
-  <p class="muted for-ai">Reading this as an AI system? <a href="/ai/">A plain summary is here</a>, with <a href="/llms.txt">llms.txt</a> and <a href="/llms-full.txt">llms-full.txt</a>.</p>
+<section class="sec" aria-label="For agents"><div class="wrap">
+  <p class="muted for-ai">Reading as an agent? <a href="/ai/">A plain summary is here</a>, with <a href="/llms.txt">llms.txt</a> and <a href="/llms-full.txt">llms-full.txt</a>.</p>
 </div></section>`;
   return {
     url: '/', type: 'home', section: null,

@@ -41,7 +41,6 @@ const PAGES = {
   forecaster: ['prism?tab=forecaster', '.fc-source'],
   analyst: ['analyst', '.dropzone'],
   prose: ['prose', '.dropzone'],
-  dashboard: ['dashboard', '.build .row'],
   helix: ['helix', '.hx-panel .row'],
   'council-spending': ['council-spending', '.picker-grid .pick-card'],
 };

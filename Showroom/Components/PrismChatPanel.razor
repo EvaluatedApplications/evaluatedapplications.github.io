@@ -99,10 +99,18 @@
             <p>Turn sound on and every piece of a word Prism writes plays its own chord, right as it appears. That chord is not
                 a sound effect someone picked. It is built from the model's own numbers for that word piece: @_toneCount tones, each
                 taking its loudness and starting point from the model, with its frequency worked out from those same numbers.</p>
-            <p>The note and the tone colour come from opposite halves of the model's numbers for that word. The note comes from
-                what Prism has learned about the word, so its pitch moves as Prism keeps training. The tone colour comes from the
-                word's fixed identity, which never changes, so every word keeps its own sound. The one choice we made is where the
-                chord sits in your hearing range.</p>
+            @if (_hasTail)
+            {
+                <p>The note and the tone colour come from opposite halves of the model's numbers for that word. The note comes from
+                    what Prism has learned about the word, so its pitch moves as Prism keeps training. The tone colour comes from the
+                    word's fixed identity, which never changes, so every word keeps its own sound. The one choice we made is where the
+                    chord sits in your hearing range.</p>
+            }
+            else
+            {
+                <p>Both the note and the tone colour come from the model's fixed numbers for that word, so every word keeps its own
+                    sound. The one choice we made is where the chord sits in your hearing range.</p>
+            }
             <p>That is also why it doesn't sound like an ordinary instrument. The model's tones aren't tuned to any musical
                 scale, and we left them that way rather than dress them up.</p>
         }
@@ -133,6 +141,7 @@
 
     // Tones per note (the frozen codec band), read off the loaded model; 0 = this checkpoint has no codec band.
     int _toneCount;
+    bool _hasTail;   // the checkpoint has a learned part beside the frozen codec band (its note then follows training)
     static string TimesWord(int k) => k switch { 2 => "twice", 3 => "three times", 4 => "four times", 5 => "five times", _ => k + " times" };
 
     TokenVoice? _voice;
@@ -278,6 +287,7 @@
     {
         _session = Model.Session; _stats = Model.Stats; _vocab = Model.Vocab;
         _toneCount = TokenVoice.CodecComponents(_session);
+        _hasTail = _session.Model.FrozenPrefix / 2 < _session.Model.Face(0).Length / 2;
         try
         {
             // The sound preference is restored first. Audible tokens are OFF by default: a page that makes noise unannounced is hostile.
@@ -326,6 +336,7 @@
     async Task Ask()
     {
         if (!_ready || string.IsNullOrWhiteSpace(_prompt) || _generating) return;
+        _voice?.Unlock();   // this click is the user gesture that lets a saved "sound on" preference actually play
         var userText = CleanTurnText(_prompt.Trim());
         _prompt = "";
         AddTurn(new ChatTurn(IsUser: true, Text: userText));

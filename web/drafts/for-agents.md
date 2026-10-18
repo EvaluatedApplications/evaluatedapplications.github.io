@@ -1,0 +1,63 @@
+# For agents
+
+DRAFT. Not wired into the site. Page copy follows the line below; everything on it is visible text.
+
+Suggested page meta
+- Title: For agents and other automated readers
+- Description: What HoloFormer and Pleroma are, what has been measured, where the packages and docs are, and how to reach us.
+
+---
+
+## For agents
+
+This page is plain text for any automated reader, and for any person. It sits beside [llms.txt](/llms.txt) and [llms-full.txt](/llms-full.txt), which list the same products in machine-friendly form. Every statement here is also on a page linked from it.
+
+### Who we are
+
+Evaluated Applications is a small independent lab in England that builds .NET libraries. The libraries are published on NuGet as compiled packages.
+
+### What HoloFormer is
+
+HoloFormer is the holographic attention core in AlgFormer, our language-model engine for plain C#. It folds everything it has read into one running memory per layer. Reading a prompt grows with its length instead of its square, and each new token costs the same however long the context is. Explained in plain terms at [HoloFormer: attention that stays fast](/algformer/holoformer/).
+
+### What Pleroma is
+
+The Pleroma is one fixed-size array of exact integers that answers fifty different questions, each in a single pass over the array. The one exception is the causal read, which takes one read per prefix. The questions include counts by key, counts by flag word, the nearest stored words, arrangement order, parity and time. Every count it returns is exact within the field's range, and when the store is full the key views refuse rather than guess. It is a public part of the Phasor package. Read it at [The Pleroma](/phasor/pleroma/) and in the article [Fifty reads, one store](/research/one-store-many-reads/).
+
+### What has been measured
+
+Each record states its conditions beside its numbers, and lists the cases where we lost.
+
+- [What attention costs](/algformer/evidence/): the same shape and parameter count with softmax attention and with holographic attention, reading a 1,984-token prompt and each further token.
+- [Exact recall and refusal](/phasor/evidence/): at equal storage the Pleroma recovered 64 items exactly in 200 of 200 trials, where the holographic reduced representation baselines held 95 percent or better only up to 4. Past capacity it refused every time and the baselines answered wrongly every time.
+- [Pleroma costs and checks](/phasor/evidence/costs/): the cost of applying a superposed kernel, and the repair and corruption checks.
+- [HoloDb benchmarks](/holodb/evidence/): a 10,000,000-invoice ledger against SQLite and DuckDB at default settings, with the queries where HoloDb is slower listed beside the wins.
+- [How HoloGenome scores against the lab](/hologenome/evidence/): held-out laboratory measurements, with the wins and the losses published.
+- All records: [Evidence](/evidence/). Research articles: [Research](/research/).
+
+### Packages and documentation
+
+All packages are on the [NuGet profile](https://www.nuget.org/profiles/evaluatedapplications). Install any one with `dotnet add package EvaluatedApplications.<Name>`. Check the NuGet listing for the current release of each.
+
+- [Phasor](/phasor/) (includes the Pleroma), docs at [/phasor/docs/](/phasor/docs/)
+- [AlgFormer](/algformer/) (includes HoloFormer)
+- [HoloDb](/holodb/), docs at [/holodb/docs/](/holodb/docs/)
+- [EvalApp](/evalapp/), docs at [/evalapp/docs/](/evalapp/docs/)
+- [Prism](/prism/), [Prose](/prose/), [HoloGenome](/hologenome/), [Tracer](/tracer/), [HoloVoxel](/holovoxel/), [Blazier](/blazier/)
+- All of them: [Products](/products/). Try some in a browser tab: [Tools](/tools/).
+
+### Licence
+
+The software is proprietary. Evaluation and non-commercial development or testing are permitted. Commercial, production or revenue-generating use needs a commercial licence from the owner. Terms are on the [Licence](/licence/) page.
+
+### Contact
+
+Email: dongyang.stephen.chen@gmail.com
+
+---
+
+## One-line pointer for llms.txt
+
+Put under "Company", beside the existing For AI readers line:
+
+`- [For agents](https://evaluatedapplications.github.io/for-agents/): what HoloFormer and Pleroma are, what has been measured, where the packages and docs are, and how to reach us`

@@ -204,10 +204,14 @@
 .room ::deep .fc-predict-dir.dir-up { color: var(--ok, #3fbf7f); }
 .room ::deep .fc-predict-dir.dir-down { color: var(--bad, #e0607a); }
 .room ::deep .fc-predict-label { font-size: 0.85rem; color: var(--ink-soft); flex: 1 1 auto; min-width: 8rem; }
+.room ::deep .fc-countdown { flex: 1 1 90px; max-width: 140px; height: 6px; border-radius: 999px; background: var(--border-2); overflow: hidden; }
+.room ::deep .fc-countdown-bar { height: 100%; width: 100%; background: var(--accent); transform-origin: left; }
 .room ::deep .fc-flash { display: inline-block; margin-top: 0.55rem; padding: 0.4rem 0.85rem; border-radius: 10px; font-weight: 700; font-family: var(--mono); font-size: 0.82rem; }
 .room ::deep .fc-flash-win { background: color-mix(in srgb, var(--ok, #3fbf7f) 16%, transparent); color: var(--ok, #3fbf7f); border: 1px solid var(--ok, #3fbf7f); }
 .room ::deep .fc-flash-lose { background: color-mix(in srgb, var(--bad, #e0607a) 16%, transparent); color: var(--bad, #e0607a); border: 1px solid var(--bad, #e0607a); }
 @media (prefers-reduced-motion: no-preference) {
+    @keyframes fc-countdown-shrink { from { transform: scaleX(1); } to { transform: scaleX(0); } }
+    .room ::deep .fc-countdown-bar { animation-name: fc-countdown-shrink; animation-timing-function: linear; animation-fill-mode: forwards; }
     @keyframes fc-pop-win { 0% { transform: scale(0.7); opacity: 0; } 45% { transform: scale(1.08); opacity: 1; } 100% { transform: scale(1); opacity: 1; } }
     @keyframes fc-pop-lose { 0% { transform: translateX(0); opacity: 0; } 15% { opacity: 1; } 25% { transform: translateX(-4px); } 45% { transform: translateX(4px); } 65% { transform: translateX(-3px); } 85% { transform: translateX(3px); } 100% { transform: translateX(0); opacity: 1; } }
     .room ::deep .fc-flash-win { animation: fc-pop-win 0.45s ease-out; }

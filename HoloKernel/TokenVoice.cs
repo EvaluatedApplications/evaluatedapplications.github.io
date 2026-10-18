@@ -102,6 +102,17 @@ public sealed class TokenVoice : IDisposable
         catch { /* audio is decoration, never let it fail the page */ }
     }
 
+    /// <summary>
+    /// Resume the AudioContext from a user gesture. Call it first thing in the handler of the click that starts a generation (Send, Tell me a
+    /// story): a context created while restoring a saved "sound on" preference starts suspended and only a gesture can resume it, so without
+    /// this a returning visitor with sound on heard nothing until they toggled it off and on. A no-op while sound is off.
+    /// </summary>
+    public void Unlock()
+    {
+        if (!SoundOn) return;
+        try { _ = _js.InvokeVoidAsync("prismAudio.unlock"); } catch { /* audio is decoration */ }
+    }
+
     public async Task SetVolumeAsync(double v)
     {
         Volume = Math.Clamp(v, 0, 1);
@@ -147,9 +158,9 @@ public sealed class TokenVoice : IDisposable
 
     /// <summary>The number of frozen codec components a note is built from, read off the loaded model:
     /// FrozenPrefix/2, clipped to the face's component count. This is the number the page copy states
-    /// ("N tones"), so the sentence cannot drift from the voice. NOTE: <see cref="PlayTone"/> additionally
-    /// needs a learned tail beside this band; a checkpoint whose FrozenPrefix covers the whole face
-    /// (Dim == FrozenPrefix, as both d=64 checkpoints so far) has none, and PlayTone is then silent.</summary>
+    /// ("N tones"), so the sentence cannot drift from the voice. NOTE: <see cref="PlayTone"/> takes its pitch
+    /// from a learned tail beside this band; a checkpoint whose FrozenPrefix covers the whole face
+    /// (Dim == FrozenPrefix, as both d=64 checkpoints so far) has none, so the pitch comes from the whole face.</summary>
     public static int CodecComponents(HoloSession session) =>
         Math.Min(session.Model.FrozenPrefix / 2, session.Model.Face(0).Length / 2);
 
@@ -174,9 +185,11 @@ public sealed class TokenVoice : IDisposable
             var face = session.Model.Face(tokenId);
             var comps = face.Length / 2;
             var codec = Math.Min(session.Model.FrozenPrefix / 2, comps);
-            if (codec < 1 || codec >= comps) return;   // needs both a codec band and a learned tail to play
-
-            var f0 = BaseFrequency(face, codec, comps);
+            if (codec < 1) return;   // no codec band: nothing to build a note from
+            // The note comes from the LEARNED TAIL. A checkpoint whose frozen codec covers the whole face (Dim == FrozenPrefix, as both d=64
+            // checkpoints) has no tail: this used to return silently, so Prism and Stories made no sound at all. With no tail the pitch is
+            // taken from the whole face instead (the token's fixed identity), so every token still has its own note and timbre.
+            var f0 = BaseFrequency(face, codec < comps ? codec : 0, comps);
             var n = codec;
             var freqs = new double[n];
             var amps = new double[n];

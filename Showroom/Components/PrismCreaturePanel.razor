@@ -3,10 +3,9 @@
 @using HoloKernel
 @using Showroom.Services.PrismTab
 @implements IDisposable
-@inject PrismLoader Loader
 @* The Creature tab: the SAME Prism checkpoint as every other tab, pointed at a foraging task written as text (CreatureTask).
-   Tracer's BFS is the answer key and the "scent" overlay; the model only ever sees the 5x5 text window. Test as shipped,
-   retrain a private copy (PrismTaskLab), then let whichever model is active forage in a world the visitor draws. *@
+   Tracer's BFS is the answer key and the "scent" overlay; the model only ever sees the 5x5 text window. Playing and training are ONE act
+   (PrismTaskLab runs the ticks): each tick the creature moves by the visitor's copy of the model and trains on that state. *@
 
 <section class="tl-panel tl-intro">
     <h3>What the model reads</h3>
@@ -24,12 +23,10 @@
     </p>
 </section>
 
-<PrismTaskLab @ref="_lab" Model="Model" Job="_task" Unit="grid situations" Locked="_running" OnChanged="OnLabChanged" />
-
 <section class="tl-panel" aria-labelledby="cr-world-title">
-    <h3 id="cr-world-title">Try it in a world you draw</h3>
-    <p class="tl-copy">Draw walls, place the egg and the apples, then let the creature forage with <strong>@(_lab?.IsPrivate == true ? "your copy" : "the shared model")</strong>.</p>
-
+    <h3 id="cr-world-title">Draw a world, then run it</h3>
+    <p class="tl-copy">Draw walls, place the egg and the apples, then press Run. At every step the creature reads its window as text and moves by the model's four-way scores
+        (sometimes at random, set by Exploration). Tracer's route to the nearest apple is the answer the model trains on at that same step.</p>
     <div class="cr-tools">
         <div class="tool-group">
             <span class="tool-lbl">draw</span>
@@ -66,19 +63,8 @@
             {
                 @Glyph(ap % W, ap / W, "food", "🍎")
             }
-            @Glyph(_cx, _cy, "critter", _running ? "🐛" : "🥚")
+            @Glyph(_cx, _cy, "critter", Running ? "🐛" : "🥚")
         </svg>
-    </div>
-
-    @if (_error is not null) { <p class="err">@_error</p> }
-
-    <div class="cr-controls">
-        <button class="go" @onclick="ToggleRun" disabled="@(!CanRun)">@(_running ? "Pause" : "Let it forage")</button>
-        <label class="speed">speed
-            <input type="range" min="1" max="10" @bind="_speed" @bind:event="oninput" />
-        </label>
-        @if (_lab?.Busy == true) { <span class="hint">Foraging is off while the model trains.</span> }
-        else if (_applesInit.Count == 0) { <span class="hint">Place at least one 🍎 apple (or hit scatter apples).</span> }
     </div>
 
     @if (_lastScores is not null)
@@ -90,15 +76,18 @@
         <div class="cr-stats">
             <div class="stat"><div class="n">@_episodes</div><div class="l">runs</div></div>
             <div class="stat"><div class="n">@_lastEaten / @_applesAtStart</div><div class="l">apples eaten, last run</div></div>
-            <div class="stat"><div class="n">@(_lastDecisions == 0 ? "-" : (100.0 * _lastAgree / _lastDecisions).ToString("F0", CultureInfo.InvariantCulture) + "%")</div><div class="l">moves matching Tracer's route, last run</div></div>
+            <div class="stat"><div class="n">@(_bestEaten > 0 ? _bestEaten.ToString() : "-")</div><div class="l">best haul</div></div>
         </div>
     }
 </section>
 
+<PrismTaskLab @ref="_lab" Model="Model" Job="_task" Tick="TickAsync" OnStopped="OnStopped" OnChanged="OnLabChanged" ShowExploration="true" />
+
 @code {
     const int W = CreatureTask.W, H = CreatureTask.H, CS = 26;
-    const int StepBudget = 150;   // steps per foraging run
+    const int StepBudget = 150;   // steps per foraging run (the creature starts again after this many, or when every apple is eaten)
     const int NApples = CreatureTask.NApples;
+    const int ReplayCap = 32;     // recent states kept so a step can train on more than one example
 
     [Parameter, EditorRequired] public PrismModel Model { get; set; } = default!;
 
@@ -113,20 +102,14 @@
     string _tool = "apple";
     bool _painting;
 
-    int _cx, _cy, _steps, _eaten, _agree, _decisions;
-    int _episodes, _lastEaten, _applesAtStart, _lastAgree, _lastDecisions;
+    int _cx, _cy, _steps, _eaten;
+    int _episodes, _lastEaten, _bestEaten, _applesAtStart;
     readonly List<(int x, int y)> _trail = new();
-    string? _lastScores, _error;
-    bool _running, _showScent;
-    int _speed = 5;
-    readonly Random _rng = new();
-    CancellationTokenSource? _cts;
+    readonly List<TaskItem> _replay = new();
+    string? _lastScores;
+    bool _showScent;
 
-    bool CanRun => _running || (_applesInit.Count > 0 && _lab is { Busy: false });
-
-    // The lab reference is only set after the first render; draw once more so the button knows it can run.
-    protected override void OnAfterRender(bool firstRender) { if (firstRender) StateHasChanged(); }
-
+    bool Running => _lab?.Running == true;
     TaskItem? CurrentItem => CreatureTask.ItemAt(_wall, _apples, _dist, _cx, _cy);
     string CurrentPrompt => CurrentItem?.Prompt ?? "";
     static string GoodMoves(TaskItem it)
@@ -142,14 +125,20 @@
         Scatter();
     }
 
+    // The lab reference is only set after the first render; draw once more so the readout knows it.
+    protected override void OnAfterRender(bool firstRender) { if (firstRender) StateHasChanged(); }
+
     Task OnLabChanged() { StateHasChanged(); return Task.CompletedTask; }
 
-    // ---- world editing (unchanged behaviour from the old Creature page) ----
+    // Stop or Reset: the creature goes back to the egg and the apples come back; the trained copy stays until Reset.
+    Task OnStopped() { InvalidateOnEdit(); return Task.CompletedTask; }
+
+    // ---- world editing ----
     void Paint(int x, int y, bool down)
     {
         if (down) _painting = true;
         if (!down && !_painting) return;
-        if (_running) return;
+        if (Running) return;
         int i = y * W + x;
         switch (_tool)
         {
@@ -162,16 +151,17 @@
         InvalidateOnEdit();
     }
     void StopPaint() => _painting = false;
-    void ClearWalls() { if (_running) return; Array.Clear(_wall); InvalidateOnEdit(); }
+    void ClearWalls() { if (Running) return; Array.Clear(_wall); InvalidateOnEdit(); }
 
     void Scatter()
     {
-        if (_running) return;
+        if (Running) return;
         _applesInit.Clear();
         int guard = 0;
+        var rng = Random.Shared;
         while (_applesInit.Count < NApples && guard++ < 4000)
         {
-            int x = _rng.Next(W), y = _rng.Next(H), i = y * W + x;
+            int x = rng.Next(W), y = rng.Next(H), i = y * W + x;
             if (_wall[i] || (x == _startX && y == _startY)) continue;
             _applesInit.Add(i);
         }
@@ -180,7 +170,7 @@
 
     void InvalidateOnEdit()
     {
-        _trail.Clear(); _lastScores = null;
+        _trail.Clear(); _lastScores = null; _replay.Clear();
         _apples.Clear(); foreach (var a in _applesInit) _apples.Add(a);
         _cx = _startX; _cy = _startY; _eaten = 0; _steps = 0;
         ComputeDist();
@@ -190,65 +180,49 @@
     // Tracer's BFS distance to the nearest live apple. It is the answer key and the overlay; the model never sees it.
     void ComputeDist() => _dist = CreatureTask.DistanceField(_wall, _apples);
 
-    // ---- the forage loop: the active model reads the window, the best LEGAL move is taken ----
-    void StepOnce()
+    // ---- ONE act: the creature moves by the model's logits, and the step trains on that same state ----
+    async Task<bool?> TickAsync(LabTick c)
     {
+        if (_applesInit.Count == 0) { Scatter(); }
+        c.Copy.ServeComposed();   // act fully composed (a fresh model eases its passes in only while training)
         var item = CreatureTask.ItemAt(_wall, _apples, _dist, _cx, _cy);
-        var scorer = _lab!.Scorer;
-        var logits = scorer.LabelLogits(_lab.Active, item.Prompt);
-        int act = TextTaskScorer.Pick(logits, item.Allowed);
+        var logits = c.Scorer.LabelLogits(c.Copy.Session, item.Prompt);
+        int greedy = TextTaskScorer.Pick(logits, item.Allowed);
+        bool? hit = greedy >= 0 && item.Good.Contains(true) ? item.Good[greedy] : null;
+        int act = greedy;
+        if (greedy >= 0 && c.Rng.NextDouble() < c.Explore)
+        {
+            var legal = Enumerable.Range(0, 4).Where(a => item.Allowed[a]).ToArray();
+            act = legal[c.Rng.Next(legal.Length)];
+        }
         var probs = TextTaskScorer.Probabilities(logits, item.Allowed);
         _lastScores = string.Join("   ", Enumerable.Range(0, 4).Where(a => item.Allowed[a]).Select(a => $"{CreatureTask.MoveLetters[a]} {CreatureTask.MoveArrows[a]} {(probs[a] * 100).ToString("F0", CultureInfo.InvariantCulture)}%"))
             + (act >= 0 ? $"   (took {CreatureTask.MoveLetters[act]})" : "   (boxed in)");
 
-        if (item.Good.Contains(true)) { _decisions++; if (act >= 0 && item.Good[act]) _agree++; }
+        // Train on this very state (Tracer's BFS gave its answer), plus the most recent earlier states when the visitor asks for more examples per step.
+        if (item.Good.Contains(true))
+        {
+            _replay.Add(item); if (_replay.Count > ReplayCap) _replay.RemoveAt(0);
+            var batch = new List<TaskItem>(c.Examples) { item };
+            for (int i = _replay.Count - 2; i >= 0 && batch.Count < c.Examples; i--) batch.Add(_replay[i]);
+            c.Copy.TrainBatch(c.Scorer, batch, c.Rng);
+        }
 
         if (act >= 0) { _cx += CreatureTask.Moves[act].Dx; _cy += CreatureTask.Moves[act].Dy; }
         if (_apples.Remove(_cy * W + _cx)) { _eaten++; ComputeDist(); }
         _steps++;
         _trail.Add((_cx, _cy)); if (_trail.Count > 400) _trail.RemoveAt(0);
-    }
 
-    async Task ToggleRun()
-    {
-        if (_running) { _cts?.Cancel(); return; }
-        if (_applesInit.Count == 0 || _lab is null || _lab.Busy) return;
-        if (!Loader.TryBeginTraining(this)) { _error = "Another job in this tab is still running."; return; }
-        _cts = new CancellationTokenSource(); var ct = _cts.Token;
-        _running = true; _error = null;
-        _apples.Clear(); foreach (var a in _applesInit) _apples.Add(a);
-        ComputeDist();
-        _cx = _startX; _cy = _startY; _steps = 0; _eaten = 0; _agree = 0; _decisions = 0; _trail.Clear();
-        _applesAtStart = _applesInit.Count;
+        if (_apples.Count == 0 || _steps >= StepBudget)
+        {
+            _episodes++; _lastEaten = _eaten; _applesAtStart = _applesInit.Count; if (_eaten > _bestEaten) _bestEaten = _eaten;
+            _apples.Clear(); foreach (var a in _applesInit) _apples.Add(a);
+            ComputeDist();
+            _cx = _startX; _cy = _startY; _steps = 0; _eaten = 0; _trail.Clear();
+        }
         StateHasChanged();
-        bool finished = false;
-        try
-        {
-            await Task.Delay(1);
-            while (!ct.IsCancellationRequested)
-            {
-                int burst = 1 + _speed / 4;
-                for (int b = 0; b < burst && !ct.IsCancellationRequested; b++)
-                {
-                    StepOnce();
-                    if (_apples.Count == 0 || _steps >= StepBudget) { finished = true; break; }
-                }
-                StateHasChanged();
-                if (finished) break;
-                await Task.Delay(Math.Max(16, 200 - _speed * 18));
-            }
-        }
-        catch (Exception ex) { _error = "The creature stumbled: " + ex.Message; }
-        finally
-        {
-            _running = false;
-            Loader.EndTraining(this);
-            if (finished)
-            {
-                _episodes++; _lastEaten = _eaten; _lastAgree = _agree; _lastDecisions = _decisions;
-            }
-            StateHasChanged();
-        }
+        await Task.Delay(Math.Max(16, 300 - c.Speed * 27), c.Ct).ContinueWith(_ => { });   // the animation pace; Pause cuts the wait short
+        return hit;
     }
 
     void ToggleScent() { _showScent = !_showScent; StateHasChanged(); }
@@ -274,9 +248,5 @@
         return sb.ToString();
     }
 
-    public void Dispose()
-    {
-        _cts?.Cancel();
-        Loader.EndTraining(this);
-    }
+    public void Dispose() { }
 }

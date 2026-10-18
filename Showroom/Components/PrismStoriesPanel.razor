@@ -311,6 +311,7 @@
     async Task TellStory(bool reuseSeed)
     {
         if (!_ready || _generating) return;
+        _voice?.Unlock();   // this click is the user gesture that lets a saved "sound on" preference actually play
 
         string prompt; int seed; Variety variety;
         if (reuseSeed && _lastSeed is not null)

@@ -16,7 +16,6 @@ const PAGES = {
   // ONE tool, five tabs (Chat, Stories, Map, Creature, Forecaster) on one shared model: one shell, one description.
   'prism': { d: 'A tiny trained language model that runs entirely in your browser: chat with it, have it write a story, watch one of its decisions on a map, then retrain a private copy on a foraging task or a price tape.' },
   'analyst': { d: 'A real SQL database running in your browser tab profiles any CSV, JSON or log you give it, charts it, and answers your SQL. Nothing is uploaded.' },
-  'dashboard': { d: 'A live dashboard over a database of orders built inside your browser tab. Click any chart, every panel re-queries, and the page times each query on your own device.' },
   'helix': { d: 'Paste DNA sequences and measurements and see the helix in the numbers: a score graded in your browser, with the controls that would expose a false win shown beside it.' },
   'prose': { d: 'Paste in text and a rules-first English grammar mines it in your browser, then recombines what it learned into sentences and question and answer pairs.' },
   'council-spending': { d: "Mechanical checks over English councils' published spending data, the same rules for every council, run in your browser. Nothing is uploaded." },
@@ -38,10 +37,13 @@ if (fs.existsSync(rootIndex)) {
   console.log('finish-shells: removed the raw template index.html (the generated gallery owns /tools/)');
 }
 
-// The four tools that became tabs of Prism keep their old addresses as redirect stubs (GitHub Pages cannot send a 301): /tools/<old>/ goes
+// The four tools that became tabs of Prism, and the Dashboard (superseded by the Umbrarium demo), keep their old addresses as redirect stubs (GitHub Pages cannot send a 301): /tools/<old>/ goes
 // to /tools/prism/ with the query and hash kept, or the matching tab when there is no hash. Written below, so a republish brings them back;
 // publish-site.ps1 asserts they reached dist. Not shells (no blazier-scaffold meta, noindex, canonical on the Prism page).
-const STUBS = { creature: '#creature', forecaster: '#forecaster', stories: '#stories', cartographer: '#map' };
+const STUBS = {
+  creature: { to: '/tools/prism/', tab: '#creature' }, forecaster: { to: '/tools/prism/', tab: '#forecaster' }, stories: { to: '/tools/prism/', tab: '#stories' }, cartographer: { to: '/tools/prism/', tab: '#map' },
+  dashboard: { to: '/umbrarium/' },   // the Dashboard tool was superseded by the Umbrarium demo
+};
 
 // every shell Blazier wrote must have an entry
 const found = [];
@@ -82,29 +84,29 @@ for (const [key, page] of Object.entries(PAGES)) {
   for (const ext of ['.gz', '.br']) { const s = file + ext; if (fs.existsSync(s)) fs.rmSync(s); }
   console.log(`finish-shells: tools/${key}/${(Buffer.byteLength(html) / 1024).toFixed(1)} KB${page.noindex ? '  noindex' : ''}`);
 }
-for (const [key, tab] of Object.entries(STUBS)) {
+for (const [key, stub] of Object.entries(STUBS)) {
   const dir = path.join(root, key);
   if (fs.existsSync(path.join(dir, 'index.html')) && /<meta name="blazier-scaffold"/.test(fs.readFileSync(path.join(dir, 'index.html'), 'utf8'))) {
     console.error('finish-shells: tools/' + key + '/ is a generated shell but is a redirect stub now; remove its [BlazierPage]'); bad++; continue;
   }
-  const target = '/tools/prism/' + tab;
+  const target = stub.to + (stub.tab ?? '');
   const html = [
     '<!DOCTYPE html>',
     '<html lang="en">',
     '<head>',
     '<meta charset="utf-8">',
     '<meta name="viewport" content="width=device-width, initial-scale=1">',
-    '<title>Moved to Prism | Evaluated Applications</title>',
-    '<meta name="description" content="This tool is now a tab of Prism, at ' + ORIGIN + target + '.">',
+    '<title>Moved | Evaluated Applications</title>',
+    '<meta name="description" content="This tool has moved to ' + ORIGIN + target + '.">',
     '<meta name="robots" content="noindex">',
-    '<link rel="canonical" href="' + ORIGIN + '/tools/prism/">',
+    '<link rel="canonical" href="' + ORIGIN + stub.to + '">',
     '<meta http-equiv="refresh" content="0; url=' + target + '">',
     // keep whatever query and hash the visitor arrived with; with no hash, open the tab this tool became
-    '<script>(function(){location.replace("/tools/prism/"+location.search+(location.hash||"' + tab + '"));})();</script>',
+    stub.tab ? '<script>(function(){location.replace("' + stub.to + '"+location.search+(location.hash||"' + stub.tab + '"));})();</script>' : '<script>location.replace("' + stub.to + '");</script>',
     '<meta name="generator" content="redirect-stub">',
     '</head>',
     '<body data-stub>',
-    '<p>This tool is now a tab of <a href="' + target + '">Prism</a>.</p>',
+    '<p>This tool has moved to <a href="' + target + '">' + (stub.tab ? 'Prism' : 'the Umbrarium demo') + '</a>.</p>',
     '</body>',
     '</html>',
     '',

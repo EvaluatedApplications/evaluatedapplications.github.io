@@ -57,6 +57,19 @@ public sealed class ForecasterTask : ITextTask
 
     public int Direction(int index) => _dir[index];
 
+    /// <summary>The first scoreable (non-flat) target at or after <paramref name="from"/>, wrapping to the start of the tape. A target needs a full window before it.</summary>
+    public int NextTarget(int from)
+    {
+        int n = _dir.Length, lo = Window + 1;
+        if (from < lo || from >= n) from = lo;
+        for (int i = 0; i < n; i++)
+        {
+            int t = from + i; if (t >= n) t = lo + (t - n);
+            if (t >= lo && _dir[t] != 0) return t;
+        }
+        return lo;
+    }
+
     /// <summary>The words of the 16 hours before <paramref name="target"/>, oldest first.</summary>
     public string[] Words(int target)
     {

@@ -21,6 +21,7 @@ import * as evidenceT from '../src/templates/evidence.mjs';
 import partner from '../src/templates/partner.mjs';
 import licence from '../src/templates/licence.mjs';
 import ai from '../src/templates/ai.mjs';
+import about from '../src/templates/about.mjs';
 import demo from '../src/templates/demo.mjs';
 import notFound from '../src/templates/404.mjs';
 import { diagramModule } from '../src/diagram.mjs';
@@ -107,7 +108,7 @@ async function main() {
   for (const e of ctx.evidence) pages.push(evidenceT.record(ctx, e));
   pages.push(researchIndex(ctx));
   for (const r of ctx.research) if (r.status === 'migrated') pages.push(researchArticle(ctx, r));
-  pages.push(partner(ctx), licence(ctx), ai(ctx), notFound(ctx));
+  pages.push(partner(ctx), about(ctx), licence(ctx), ai(ctx), notFound(ctx));
 
   const urls = new Set();
   for (const pg of pages) {

@@ -22,6 +22,7 @@ async Task<bool> Until(Func<bool> cond, int seconds, string what)
 
 using var ctx = new BunitContext();
 ctx.JSInterop.Mode = JSRuntimeMode.Loose;
+ctx.JSInterop.Setup<string>("prismAudio.getPref", _ => true).SetResult("1");   // a saved preference: sound ON, volume 1
 var handler = new FileHandler(webData, wwwroot);
 var http = new HttpClient(handler) { BaseAddress = new Uri("http://localhost/tools/") };
 ctx.Services.AddSingleton(http);
@@ -59,91 +60,113 @@ Check("the Map tab renders its form", await Until(() => Has(".cg-form"), 30, "ma
     Check("the Map draws a path for a prompt", await Until(() => Has(".cg-answer") && Has(".cg-svg"), 60, "map result"), Has(".cg-answer") ? Text(".cg-answer-word") : "");
 }
 
-// ---- Creature: the knobs, Train, Stop, Reset, the Weights choice ----
+// ---- sound: the Chat tab calls the voice for every generated token; leaving and coming back recreates it ----
+{
+    int PrefReads() => ctx.JSInterop.Invocations["prismAudio.getPref"].Count();
+    int Partials() => ctx.JSInterop.Invocations.Where(i => i.Identifier == "prismAudio.partials").Count();
+    await ClickAsync("a.pt-tab-btn[href='/tools/prism/#chat']");
+    Check("back on Chat for the sound check", await Until(() => Has(".or-input"), 30, "chat"));
+    int prefsBefore = PrefReads();
+    int unlocksBefore = ctx.JSInterop.Invocations.Where(i => i.Identifier == "prismAudio.unlock").Count();
+    page.Find(".or-input").Input("hello there");
+    await ClickAsync(".or-input-row .go");
+    Check("Send resumes the AudioContext (unlock is called from the click)", ctx.JSInterop.Invocations.Where(i => i.Identifier == "prismAudio.unlock").Count() > unlocksBefore);
+    Check("the reply finishes", await Until(() => Has(".or-turn.prism") && !Has(".or-turn.pending"), 240, "reply"));
+    int tones = Partials();
+    Console.WriteLine($"  tones played for the reply: {tones}");
+    Check("every generated token plays a tone (the voice is called per token)", tones >= 3, $"{tones} tones");
+    var firstTone = ctx.JSInterop.Invocations.First(i => i.Identifier == "prismAudio.partials");
+    Check("a tone carries real partials (frequencies, amplitudes, phases)", firstTone.Arguments.Count >= 5 && ((double[])firstTone.Arguments[0]!).Length >= 8 && ((double[])firstTone.Arguments[0]!).All(f => f > 0));
+    await ClickAsync("a.pt-tab-btn[href='/tools/prism/#map']");
+    await Until(() => Has(".cg-form"), 30, "map");
+    Check("leaving Chat stops the notes (stopAll)", ctx.JSInterop.Invocations.Any(i => i.Identifier == "prismAudio.stopAll"));
+    await ClickAsync("a.pt-tab-btn[href='/tools/prism/#chat']");
+    Check("coming back to Chat creates the voice again (the saved preference is read again)", await Until(() => Has(".or-input") && PrefReads() > prefsBefore, 30, "chat re-entered"), $"{PrefReads() - prefsBefore} new reads");
+    int before2 = Partials();
+    page.Find(".or-input").Input("tell me more");
+    await ClickAsync(".or-input-row .go");
+    await Until(() => Has(".or-turn.pending"), 30, "second reply started");
+    Check("the re-created voice plays too", await Until(() => Partials() > before2 + 2, 120, "tones after re-entry"), $"{Partials() - before2} new tones");
+    await Until(() => !Has(".or-turn.pending"), 240, "second reply done");
+}
+
+// ---- Creature: ONE act. Run plays and trains in the same ticks; Pause, Stop, Reset ----
 const string Lab = "section[aria-labelledby^='tl-train']";
 string[] banned = { "chance", "baseline", "beats", "verdict", "learns", "experiment" };
 bool PageSaysNothingScientific() { var txt = page.Find(".pt-tab").TextContent; return banned.All(b => !txt.Contains(b, StringComparison.OrdinalIgnoreCase)); }
-void SetKnob(int index, string value) => page.FindAll(Lab + " .tl-knobs input")[index].Change(value);   // 0 learning rate, 1 steps, 2 examples per step, 3 seed
+AngleSharp.Dom.IElement Knob(string label) => page.FindAll(Lab + " .tl-knobs label").First(l => l.TextContent.Contains(label)).QuerySelector("input,select")!;
+int Steps() => int.Parse(Text(Lab + " .tl-stats .stat .n").Replace(",", ""));
+string RunLabel() => Text(Lab + " .tl-row .go");
 await ClickAsync("a.pt-tab-btn[href='/tools/prism/#creature']");
-Check("the Creature tab shows its prompt, lab and world", await Until(() => Has(".tl-prompt") && Has(".cr-grid") && Has(Lab), 30, "creature tab"));
-Check("the Creature tab has one short line and says the shared model is not changed", Text(".pt-tab .lede").Length < 200 && Text(Lab).Contains("The shared model is not changed"));
-Check("every knob is there: weights, learning rate, steps, examples per step, seed", page.FindAll(Lab + " .tl-knobs select").Count == 1 && page.FindAll(Lab + " .tl-knobs input").Count == 4);
-Check("defaults: fresh weights, learning rate 0.001, 200 steps, 1 example, seed 42",
-    page.Find(Lab + " .tl-knobs select").GetAttribute("value") == "fresh" && page.FindAll(Lab + " .tl-knobs input")[0].GetAttribute("value") == "0.001"
-    && page.FindAll(Lab + " .tl-knobs input")[1].GetAttribute("value") == "200" && page.FindAll(Lab + " .tl-knobs input")[2].GetAttribute("value") == "1" && page.FindAll(Lab + " .tl-knobs input")[3].GetAttribute("value") == "42");
+Check("the Creature tab shows its prompt, world and lab", await Until(() => Has(".tl-prompt") && Has(".cr-grid") && Has(Lab), 30, "creature tab"));
+Check("one short line, and the shared model is not changed", Text(".pt-tab .lede").Length < 200 && Text(Lab).Contains("The shared model is not changed"));
+Check("every knob: weights, learning rate, examples per step, seed, exploration, speed", new[] { "Weights", "Learning rate", "Examples per step", "Seed", "Exploration", "Speed" }.All(k => page.FindAll(Lab + " .tl-knobs label").Any(l => l.TextContent.Contains(k))));
+Check("there is no separate Train / Forage / Steps: one Run, Stop and Reset", RunLabel() == "Run" && !Text(Lab).Contains("Steps\n") && page.FindAll(".cr-controls").Count == 0 && page.FindAll("button").Count(b => b.TextContent.Trim() is "Train" or "Let it forage") == 0);
+Check("defaults: fresh weights, learning rate 0.001, 1 example, seed 42, exploration 0.1",
+    Knob("Weights").GetAttribute("value") == "fresh" && Knob("Learning rate").GetAttribute("value") == "0.001" && Knob("Examples per step").GetAttribute("value") == "1"
+    && Knob("Seed").GetAttribute("value") == "42" && Knob("Exploration").GetAttribute("value") == "0.1");
 Check("no verdict, baseline or chance wording on the Creature tab", PageSaysNothingScientific());
-Console.WriteLine("  prompt shown: " + Text(".tl-prompt").Trim());
+Knob("Speed").Input("10");
+Knob("Examples per step").Change("2");
 {
-    SetKnob(1, "1000");   // a long run, to Stop it
-    await ClickAsync(Lab + " .go");
-    Check("Train starts: stats and chart appear, trainer lock held, foraging locked", await Until(() => Has(".tl-svg") && loader.TrainingActive, 120, "training started") && page.Find(".cr-controls .go").HasAttribute("disabled"));
-    Check("training advances", await Until(() => Regex.IsMatch(Text(".tl-stats .stat .n"), @"^[1-9]"), 120, "first steps"), Text(".tl-stats .stat .n"));
-    Check("a progress bar shows the run", Has(Lab + " progress"));
-    await ClickAsync(Lab + " .ghost");   // Stop
-    Check("Stop ends the run and frees the trainer lock", await Until(() => !loader.TrainingActive, 60, "stop"));
-    Check("the shared model is unchanged after training a fresh model", TaskStats.Fingerprint(shared) == fp0);
-    Check("the weights choice is locked while a copy exists", page.Find(Lab + " .tl-knobs select").HasAttribute("disabled"));
+    await ClickAsync(Lab + " .tl-row .go");
+    Check("Run starts: the button becomes Pause, the trainer lock is held, weights are locked", await Until(() => RunLabel() == "Pause" && loader.TrainingActive && Has(".tl-svg"), 120, "run") && Knob("Weights").HasAttribute("disabled"));
+    Check("the creature acts and the same ticks train: steps climb", await Until(() => Has(".tl-svg") && Steps() >= 4, 180, "steps climbing"), Has(".tl-svg") ? Text(Lab + " .tl-stats .stat .n") : "");
+    Check("the creature's decisions and trail show on the grid", await Until(() => Has(".tl-scores") && Has(".trail"), 60, "animation"), Has(".tl-scores") ? Text(".tl-scores") : "");
+    Check("the readout is a live number, not a verdict", Regex.IsMatch(Text(Lab + " .tl-stats .stat:nth-of-type(2) .n"), @"^(\d+%|…)$") && PageSaysNothingScientific());
+    Check("the shared model is unchanged mid-run", TaskStats.Fingerprint(shared) == fp0);
+    await ClickAsync(Lab + " .tl-row .go");   // Pause
+    Check("Pause frees the lock and offers Resume", await Until(() => !loader.TrainingActive && RunLabel() == "Resume", 60, "pause"));
+    int atPause = Steps(); await Task.Delay(1500);
+    Check("while paused nothing trains", Steps() == atPause);
+    await ClickAsync(Lab + " .tl-row .go");   // Resume
+    Check("Resume carries on from the same copy", await Until(() => Steps() > atPause + 1, 120, "resume"));
+    await ClickAsync(Lab + " .tl-row .ghost");   // Stop
+    Check("Stop ends the run and puts the creature back at the egg", await Until(() => !loader.TrainingActive && !Has(".trail"), 60, "stop"));
+    Check("after Stop the trained copy is kept (Resume available)", RunLabel() == "Resume");
+    Check("the shared model is unchanged after a run of fresh-weights ticks", TaskStats.Fingerprint(shared) == fp0);
 }
 {
-    SetKnob(1, "25"); SetKnob(2, "2");   // 25 steps of 2 examples
-    await ClickAsync(Lab + " .go");
-    await Until(() => loader.TrainingActive, 30, "run started");
-    Check("a short run ends by itself and charts its scores", await Until(() => !loader.TrainingActive && page.FindAll(".tl-dot").Count >= 2, 600, "run finished"), $"{page.FindAll(".tl-dot").Count} points, {Text(".tl-stats .stat .n")} steps");
-    Console.WriteLine("  score now: " + Text(".tl-stats .stat:nth-of-type(2) .n") + ", last loss " + Text(".tl-stats .stat:nth-of-type(3) .n"));
-    Check("still no verdict or baseline wording after a run", PageSaysNothingScientific());
-    Check("the shared model is unchanged after a full run", TaskStats.Fingerprint(shared) == fp0);
-}
-{
-    await ClickAsync(Lab + " .ghost", 1);   // Reset
-    Check("Reset drops the copy and unlocks the weights choice", await Until(() => !Has(".tl-svg"), 30, "reset") && !page.Find(Lab + " .tl-knobs select").HasAttribute("disabled"));
-    page.Find(Lab + " .tl-knobs select").Change("trained");
-    Check("choosing Prism's trained weights moves the learning rate to its default and hides the seed", await Until(() => page.FindAll(Lab + " .tl-knobs input").Count == 3, 10, "trained knobs") && page.FindAll(Lab + " .tl-knobs input")[0].GetAttribute("value") == "0.0003");
-    SetKnob(1, "10");
-    await ClickAsync(Lab + " .go");
-    await Until(() => loader.TrainingActive, 30, "trained run started");
-    Check("a run from Prism's trained weights also ends", await Until(() => !loader.TrainingActive && Has(".tl-svg"), 600, "trained run"));
+    await ClickAsync(Lab + " .tl-row .ghost", 1);   // Reset
+    Check("Reset drops the copy and unlocks the weights choice", await Until(() => !Has(".tl-svg") && RunLabel() == "Run", 30, "reset") && !Knob("Weights").HasAttribute("disabled"));
+    Knob("Weights").Change("trained");
+    Check("Prism's trained weights: learning rate moves to its default and the seed is hidden", await Until(() => !page.FindAll(Lab + " .tl-knobs label").Any(l => l.TextContent.Contains("Seed")), 10, "trained knobs") && Knob("Learning rate").GetAttribute("value") == "0.0003");
+    Knob("Speed").Input("10");
+    await ClickAsync(Lab + " .tl-row .go");
+    Check("a run from Prism's trained weights plays and trains too", await Until(() => Has(".tl-svg") && Steps() >= 3, 180, "trained run"));
+    await ClickAsync(Lab + " .tl-row .ghost");   // Stop
+    await Until(() => !loader.TrainingActive, 60, "trained stop");
     Check("the shared model is unchanged after training a copy of it", TaskStats.Fingerprint(shared) == fp0);
 }
+// ---- leaving a tab mid-run stops the trainer ----
 {
-    await ClickAsync(".cr-controls .go");
-    Check("the creature forages and shows the model's scores", await Until(() => Has(".tl-scores"), 60, "forage step"), Has(".tl-scores") ? Text(".tl-scores") : "");
-    Check("the world says it is using your copy", Text("#cr-world-title ~ .tl-copy").Contains("your copy"));
-    await ClickAsync(".cr-controls .go");   // Pause
-    Check("Pause stops the forage and frees the lock", await Until(() => !loader.TrainingActive, 30, "pause"));
-    await ClickAsync(Lab + " .ghost", 1);   // Reset
-    Check("after Reset the world uses the shared model again", await Until(() => Text("#cr-world-title ~ .tl-copy").Contains("the shared model"), 30, "world back"));
-}
-// ---- leaving a tab mid-training stops the trainer ----
-{
-    SetKnob(1, "1000");
-    await ClickAsync(Lab + " .go");
+    await ClickAsync(Lab + " .tl-row .go");
     await Until(() => loader.TrainingActive, 30, "trainer running");
     await ClickAsync("a.pt-tab-btn[href='/tools/prism/#chat']");
-    Check("leaving the tab disposes the trainer (lock released)", await Until(() => !loader.TrainingActive, 60, "lock released after tab leave"));
+    Check("leaving the tab mid-run releases the lock", await Until(() => !loader.TrainingActive, 60, "lock released after tab leave"));
     Check("back on Chat, nothing of the lab is rendered", await Until(() => Has(".or-input") && !Has(".tl-panel"), 30, "chat again"));
     Check("the shared model is unchanged after leaving mid-run", TaskStats.Fingerprint(shared) == fp0);
 }
 
-// ---- Forecaster ----
+// ---- Forecaster: ONE act, a beat of guess, countdown, reveal, train ----
 await ClickAsync("a.pt-tab-btn[href='/tools/prism/#forecaster']");
 Check("the Forecaster tab loads the tape and says 'Data as of'", await Until(() => Has(".fc-source"), 60, "tape") && Text(".fc-source").Contains("Data as of"), Has(".fc-source") ? Text(".fc-src-note") : "");
-Check("the Forecaster has the same wiring: weights, learning rate, steps, examples, seed, plus the history window", page.FindAll(Lab + " .tl-knobs input").Count == 5 && Has(Lab + " .tl-knobs select"));
+Check("the Forecaster has the same wiring plus the history window", new[] { "Weights", "Learning rate", "Examples per step", "Seed", "Speed" }.All(k => page.FindAll(Lab + " .tl-knobs label").Any(l => l.TextContent.Contains(k))) && page.FindAll(Lab + " .tl-knobs label").Any(l => l.TextContent.Contains("History window")) && RunLabel() == "Run");
 Check("no verdict, baseline or chance wording on the Forecaster tab", PageSaysNothingScientific());
 string promptBefore = Text(".tl-prompt").Trim();
-Console.WriteLine("  prompt shown: " + promptBefore);
 {
-    var win = page.Find(Lab + " .tl-knobs input[min='2']");   // the history window input
-    win.Change("6");
+    page.Find(Lab + " .tl-knobs input[min='2']").Change("6");
     Check("the history window changes what the model reads", await Until(() => Text(".tl-prompt").Trim().Split(' ').Length < promptBefore.Split(' ').Length, 20, "window applied"), Text(".tl-prompt").Trim());
-    SetKnob(1, "10");
-    await ClickAsync(Lab + " .go");
-    await Until(() => loader.TrainingActive, 30, "forecaster training started");
-    Check("the Forecaster trains and charts", await Until(() => !loader.TrainingActive && Has(".tl-svg"), 600, "forecaster run"));
-    Console.WriteLine("  score now: " + Text(".tl-stats .stat:nth-of-type(2) .n"));
+    Knob("Speed").Input("10");
+    await ClickAsync(Lab + " .tl-row .go");
+    Check("Run plays beats: a guess with a countdown, then the real candle and a verdict flash", await Until(() => Has(".fc-predict-strip"), 120, "first beat") && await Until(() => Has(".fc-flash"), 120, "reveal"), Has(".fc-predict-label") ? Text(".fc-predict-label").Trim() : "");
+    Check("the same ticks train: steps climb", await Until(() => Has(".tl-svg") && Steps() >= 3, 180, "steps"));
+    await ClickAsync(Lab + " .tl-row .go");   // Pause
+    Check("Pause frees the lock", await Until(() => !loader.TrainingActive, 60, "pause"));
+    await ClickAsync(Lab + " .tl-row .ghost");   // Stop
+    Check("Stop puts the tape back at the start", await Until(() => !Has(".fc-predict-strip"), 30, "tape reset"));
+    Check("the shared model is unchanged after the Forecaster run", TaskStats.Fingerprint(shared) == fp0);
 }
-await ClickAsync("#fc-guess-title ~ .tl-row .go");
-Check("Guess a random hour shows the model's call against the real candle", await Until(() => Has(".fc-flash") && Has(".fc-chart-svg"), 60, "guess"), Has(".fc-predict-label") ? Text(".fc-predict-label") : "");
-Check("the shared model is unchanged after the Forecaster tab", TaskStats.Fingerprint(shared) == fp0);
 // ---- deep links ----
 {
     using var ctx2 = new BunitContext();

@@ -20,9 +20,9 @@ public static class PrismTabs
         new(TabId.Map, "map", "Map", "The Cartographer",
             "Every word this model knows lives at a point in a real, high-dimensional space. Type a prompt and watch the exact path its own next-word decision takes through that space, decoded straight off the model's own forward pass."),
         new(TabId.Creature, "creature", "Creature", "The Creature",
-            "The same model as the chat, reading a window of a grid as text and answering with a move. Train it yourself and watch the score."),
+            "The same model as the chat, reading a window of a grid as text and answering with a move. Press Run: it plays and trains at the same time."),
         new(TabId.Forecaster, "forecaster", "Forecaster", "The Forecaster",
-            "The same model as the chat, reading hourly stock moves as words and calling the next one. Train it yourself and watch the score."),
+            "The same model as the chat, reading hourly stock moves as words and calling the next one. Press Run: it plays and trains at the same time."),
     };
 
     public static Info Of(TabId tab) => All[(int)tab];

@@ -5,8 +5,8 @@
 @using Showroom.Services.PrismTab
 @inject HttpClient Http
 @* The Forecaster tab: the SAME Prism checkpoint, pointed at a real hourly AAPL tape written as words (ForecasterTask).
-   The tape is a stored snapshot (wwwroot/data/forecaster-history.json); nothing here fetches a live price. Test as shipped,
-   retrain a private copy (PrismTaskLab), then guess single held-out hours with whichever model is active. *@
+   The tape is a stored snapshot (wwwroot/data/forecaster-history.json); nothing here fetches a live price. Playing and training are ONE act:
+   each beat guesses, reveals the real candle, and trains the visitor's copy on it (PrismTaskLab runs the beats). *@
 
 @if (_loadError is not null)
 {
@@ -26,63 +26,60 @@ else
 
     <section class="tl-panel tl-intro">
         <h3>What the model reads</h3>
-        <p class="tl-copy">Each hour's move becomes a word (<code>up</code>, <code>down</code>, <code>flat</code>). The model sees the recent words and answers with the next one. Scores use the newest 20% of the tape; training uses the older 80%.</p>
-        <pre class="tl-prompt" aria-label="a sample of the text the model reads">@_sample.Prompt</pre>
+        <p class="tl-copy">Each hour's move becomes a word (<code>up</code>, <code>down</code>, <code>flat</code>). Every beat the model sees the recent words and guesses the next one, the real candle lands, and it trains on it. Then it steps on through the tape. Not investment advice.</p>
+        <pre class="tl-prompt" aria-label="the text the model reads">@(_beat is null ? _sample.Prompt : _task.Prompt(_beatTarget))</pre>
     </section>
 
-    <PrismTaskLab @ref="_lab" Model="Model" Job="_task" Unit="held-out hours" OnChanged="OnLabChanged">
-        <label>History window (hours)
-            <input type="number" step="1" min="@ForecasterTask.MinWindow" max="@ForecasterTask.MaxWindow" value="@_window" @onchange="OnWindow" disabled="@(_lab?.Busy == true)" />
-        </label>
-    </PrismTaskLab>
-
-    <section class="tl-panel" aria-labelledby="fc-guess-title">
-        <h3 id="fc-guess-title">Guess one hour</h3>
-        <p class="tl-copy">A random held-out hour: <strong>@(_lab?.IsPrivate == true ? "your copy" : "the shared model")</strong> calls it from the hours before, then the real candle is shown. Not investment advice.</p>
-        <div class="tl-row">
-            <button class="go" type="button" @onclick="GuessAsync" disabled="@(_lab is null || _lab.Busy || _guessing)">Guess a random hour</button>
-            @if (_guessTotal > 0) { <span class="hint">@_guessHits of @_guessTotal called right in this session</span> }
-        </div>
-        @if (_guess is not null)
+    <section class="tl-panel" aria-labelledby="fc-stage-title">
+        <h3 id="fc-stage-title">The tape</h3>
+        @if (_beat is not null)
         {
             <div class="fc-stage">
-                @((MarkupString)ChartSvg(_guess))
-                <div class="fc-predict-strip">
-                    <span class="fc-predict-dir dir-@(_guess.PredUp ? "up" : "down")">@(_guess.PredUp ? "▲" : "▼")</span>
-                    <span class="fc-predict-label">The model said <strong>@(_guess.PredUp ? "up" : "down")</strong>
-                        (up @((_guess.PUp * 100).ToString("F0", CultureInfo.InvariantCulture))%, down @(((1 - _guess.PUp) * 100).ToString("F0", CultureInfo.InvariantCulture))%).
-                        The hour went <strong>@(_guess.ActualUp ? "up" : "down")</strong>, on @Stamp(_guess.Target.T).</span>
+                @((MarkupString)ChartSvg(_beat))
+                <div class="fc-predict-strip" @key="_beatId">
+                    <span class="fc-predict-dir dir-@(_beat.PredUp ? "up" : "down")">@(_beat.PredUp ? "▲" : "▼")</span>
+                    <span class="fc-predict-label">The model guesses <strong>@(_beat.PredUp ? "up" : "down")</strong>
+                        (up @((_beat.PUp * 100).ToString("F0", CultureInfo.InvariantCulture))%, down @(((1 - _beat.PUp) * 100).ToString("F0", CultureInfo.InvariantCulture))%)
+                        @if (_beat.Revealed) { <span> The hour went <strong>@(_beat.ActualUp ? "up" : "down")</strong>, on @Stamp(_beat.Target.T).</span> } else { <span> Revealing…</span> }</span>
+                    @if (!_beat.Revealed) { <div class="fc-countdown"><div class="fc-countdown-bar" style="animation-duration:@(_revealMs)ms"></div></div> }
                 </div>
-                <div class="fc-flash fc-flash-@(_guess.Hit ? "win" : "lose")">@(_guess.Hit ? "called it" : "missed it")</div>
+                @if (_beat.Revealed) { <div class="fc-flash fc-flash-@(_beat.Hit ? "win" : "lose")" @key="@("flash" + _beatId)">@(_beat.Hit ? "called it" : "missed it")</div> }
             </div>
         }
+        else { <p class="hint">Press Run below.</p> }
     </section>
-}
 
+    <PrismTaskLab @ref="_lab" Model="Model" Job="_task" Tick="TickAsync" OnStopped="OnStopped" OnChanged="OnLabChanged">
+        <label>History window (hours)
+            <input type="number" step="1" min="@ForecasterTask.MinWindow" max="@ForecasterTask.MaxWindow" value="@_window" @onchange="OnWindow" disabled="@(_lab?.Running == true)" />
+        </label>
+    </PrismTaskLab>
+}
 @code {
     [Parameter, EditorRequired] public PrismModel Model { get; set; } = default!;
 
     ForecasterTask? _task;
     List<Candle>? _raw;
     int _window = ForecasterTask.DefaultWindow;
+    TaskItem _sample = default!;
+    PrismTaskLab? _lab;
+    string? _loadError;
+    int _pos;                 // next target index on the tape; the run walks it forward and wraps
+    int _beatId, _beatTarget, _revealMs = 500;
+    const int ReplayCap = 32;
+    readonly List<TaskItem> _replay = new();
+
+    sealed record Beat(Candle[] Window, Candle Target, bool PredUp, double PUp, bool Revealed, bool ActualUp, bool Hit);
+    Beat? _beat;
 
     void OnWindow(ChangeEventArgs e)
     {
         if (_raw is null || !int.TryParse(e.Value?.ToString(), out var w)) return;
         _window = Math.Clamp(w, ForecasterTask.MinWindow, ForecasterTask.MaxWindow);
         _task = new ForecasterTask(_raw, _window);   // the lab starts over on the new task
-        _sample = _task.ItemFor(_task.HeldOut[_task.HeldOut.Count / 2]);
-        _guess = null;
+        _sample = _task.ItemFor(_task.NextTarget(200));
+        _beat = null; _pos = 0; _replay.Clear();
     }
-    TaskItem _sample = default!;
-    PrismTaskLab? _lab;
-    string? _loadError;
-    bool _guessing;
-    int _guessHits, _guessTotal;
-    readonly Random _rng = new();
-
-    sealed record Guess(Candle[] Window, Candle Target, bool PredUp, double PUp, bool ActualUp, bool Hit);
-    Guess? _guess;
 
     protected override async Task OnInitializedAsync()
     {
@@ -92,7 +89,7 @@ else
             var raw = await Http.GetFromJsonAsync<List<Candle>>("data/forecaster-history.json", opts) ?? new();
             _raw = raw;
             _task = new ForecasterTask(raw);
-            _sample = _task.ItemFor(_task.HeldOut[_task.HeldOut.Count / 2]);
+            _sample = _task.ItemFor(_task.NextTarget(200));
         }
         catch (Exception ex) { _loadError = "Couldn't load the price tape: " + ex.Message; }
     }
@@ -101,38 +98,53 @@ else
 
     Task OnLabChanged() { StateHasChanged(); return Task.CompletedTask; }
 
+    // Stop or Reset: back to the start of the tape.
+    Task OnStopped() { _beat = null; _pos = 0; _replay.Clear(); StateHasChanged(); return Task.CompletedTask; }
+
     static string Stamp(long unix) => DateTimeOffset.FromUnixTimeSeconds(unix).UtcDateTime.ToString("d MMM yyyy HH:mm", CultureInfo.InvariantCulture) + " UTC";
 
-    async Task GuessAsync()
+    // ---- ONE act, one beat: show the window, the model guesses, a short countdown, the real candle lands, the step trains on it ----
+    async Task<bool?> TickAsync(LabTick c)
     {
-        if (_task is null || _lab is null || _lab.Busy || _guessing) return;
-        _guessing = true; StateHasChanged();
-        await Task.Delay(1);
-        try
-        {
-            int t = _task.HeldOut[_rng.Next(_task.HeldOut.Count)];
-            var item = _task.ItemFor(t);
-            var logits = _lab.Scorer.LabelLogits(_lab.Active, item.Prompt);
-            var probs = TextTaskScorer.Probabilities(logits, item.Allowed);
-            bool predUp = TextTaskScorer.Pick(logits, item.Allowed) == 0;
-            bool actualUp = item.Good[0];
-            var window = Enumerable.Range(t - _task.Window, _task.Window).Select(i => _task.Candles[i]).ToArray();
-            _guess = new Guess(window, _task.Candles[t], predUp, probs[0], actualUp, predUp == actualUp);
-            _guessTotal++; if (_guess.Hit) _guessHits++;
-        }
-        finally { _guessing = false; StateHasChanged(); }
+        var task = _task!;
+        int t = task.NextTarget(_pos);
+        _beatTarget = t;
+        var item = task.ItemFor(t);
+        c.Copy.ServeComposed();   // guess fully composed
+        var logits = c.Scorer.LabelLogits(c.Copy.Session, item.Prompt);
+        var probs = TextTaskScorer.Probabilities(logits, item.Allowed);
+        bool predUp = TextTaskScorer.Pick(logits, item.Allowed) == 0;
+        var window = Enumerable.Range(t - task.Window, task.Window).Select(i => task.Candles[i]).ToArray();
+        _revealMs = Math.Max(100, 800 - c.Speed * 70);
+        _beat = new Beat(window, task.Candles[t], predUp, probs[0], false, false, false);
+        _beatId++;
+        StateHasChanged();
+
+        await Task.Delay(_revealMs, c.Ct).ContinueWith(_ => { });   // the countdown; Pause cuts it short and the beat is replayed on Resume
+        if (c.Ct.IsCancellationRequested) return null;
+
+        bool actualUp = item.Good[0], hit = predUp == actualUp;
+        _beat = _beat with { Revealed = true, ActualUp = actualUp, Hit = hit };
+        _replay.Add(item); if (_replay.Count > ReplayCap) _replay.RemoveAt(0);
+        var batch = new List<TaskItem>(c.Examples) { item };
+        for (int i = _replay.Count - 2; i >= 0 && batch.Count < c.Examples; i--) batch.Add(_replay[i]);
+        c.Copy.TrainBatch(c.Scorer, batch, c.Rng);
+        _pos = t + 1;
+        StateHasChanged();
+        await Task.Delay(Math.Max(60, 400 - c.Speed * 35), c.Ct).ContinueWith(_ => { });   // a moment for the reveal to be seen
+        return hit;
     }
 
-    // A small candlestick chart: the 16 hours the model read, then the hour it was asked about (outlined).
-    static string ChartSvg(Guess g)
+    // A small candlestick chart: the hours the model read, then the hour it was asked about (outlined once revealed).
+    static string ChartSvg(Beat g)
     {
         const int w = 720, h = 170, axisBand = 22;
         int chartH = h - axisBand;
-        var all = g.Window.Append(g.Target).ToArray();
+        var all = g.Revealed ? g.Window.Append(g.Target).ToArray() : g.Window;
         double maxP = all.Max(p => p.H), minP = all.Min(p => p.L);
         if (maxP <= minP) maxP = minP + 1;
         int n = all.Length;
-        double slot = (double)w / n, bodyW = Math.Max(1.5, Math.Min(14, slot * 0.6));
+        double slot = (double)w / (g.Window.Length + 1), bodyW = Math.Max(1.5, Math.Min(14, slot * 0.6));
         double Y(double price) => 8 + (chartH - 16) - (price - minP) / (maxP - minP) * (chartH - 16);
         string F(double v) => v.ToString("F1", CultureInfo.InvariantCulture);
         var sb = new StringBuilder();
@@ -144,7 +156,7 @@ else
             double cx = slot * i + slot / 2;
             double top = Math.Min(Y(p.O), Y(p.C)), bh = Math.Max(1.2, Math.Abs(Y(p.C) - Y(p.O)));
             string dirCls = p.C >= p.O ? "up" : "down";
-            string last = i == n - 1 ? " target" : "";
+            string last = g.Revealed && i == n - 1 ? " target" : "";
             sb.Append($"<line class=\"fc-wick {dirCls}\" x1=\"{F(cx)}\" y1=\"{F(Y(p.H))}\" x2=\"{F(cx)}\" y2=\"{F(Y(p.L))}\"/>");
             sb.Append($"<rect class=\"fc-body {dirCls}{last}\" x=\"{F(cx - bodyW / 2)}\" y=\"{F(top)}\" width=\"{F(bodyW)}\" height=\"{F(bh)}\"/>");
         }
