@@ -119,20 +119,38 @@ public sealed record GeneralInput(int Round, IReadOnlyList<int> Summary, LegalMa
 /// The general's suggestion: a doctrine already masked by <see cref="GeneralInput.Legal"/>, and a confidence in permille
 /// (0 = knows nothing, 1000 = certain). Integers, so a result is exactly reproducible.
 /// </summary>
-public sealed record GeneralOutput(Doctrine Doctrine, int ConfidencePermille);
+/// <remarks>
+/// <see cref="ConfidencePermille"/> is about the WHOLE suggestion: the general's running rate of exact whole-doctrine matches (its answer
+/// equalled the doctrine the player then set), not a per-slot or per-situation figure. <see cref="SlotConfidence"/> is RESERVED for a
+/// per-slot reading (null until a general fills it; the pipeline carries it untouched, the digest ignores it).
+/// </remarks>
+public sealed record GeneralOutput(DoctrineSet Doctrine, int ConfidencePermille, SlotPermille? SlotConfidence = null);
+
+/// <summary>One permille value (0..1000) per doctrine slot. A value type so two equal readings are equal records.</summary>
+public readonly record struct SlotPermille(int S0, int S1, int S2, int S3)
+{
+    public int this[int slot] => slot switch { 0 => S0, 1 => S1, 2 => S2, 3 => S3, _ => throw new ArgumentOutOfRangeException(nameof(slot)) };
+    public bool InRange => S0 is >= 0 and <= 1000 && S1 is >= 0 and <= 1000 && S2 is >= 0 and <= 1000 && S3 is >= 0 and <= 1000;
+}
 
 /// <summary>An imitation example: in this situation the player chose this doctrine.</summary>
-public sealed record GeneralExample(GeneralInput Input, Doctrine Chosen, bool Overrode);
+public sealed record GeneralExample(GeneralInput Input, DoctrineSet Chosen, bool Overrode);
 
 /// <summary>An outcome example: this choice was followed by this result (success-weighted replay).</summary>
-public sealed record GeneralOutcome(GeneralInput Input, Doctrine Chosen, BattleStatus Result, bool PlayerWon);
+public sealed record GeneralOutcome(GeneralInput Input, DoctrineSet Chosen, BattleStatus Result, bool PlayerWon);
 
 // ---- Rounds --------------------------------------------------------------------------------------------------------
 
-/// <summary>What one round left behind: the part of the game the UI shows and the ladder would share.</summary>
+/// <summary>
+/// What one round left behind: the part of the game the UI shows and the ladder would share. <see cref="IllegalDropped"/> counts tokens the
+/// PIPELINE removed (see CONTRACT.md, "Who judges a token"); <see cref="Orders"/> is the ARMY's own count of the player's army orders applied
+/// and skipped (null only in a record built by hand); <see cref="Final"/> is true when this round ended the game. Neither of the last two is
+/// in <c>GameResult.Digest</c>.
+/// </summary>
 public sealed record RoundRecord(
-    int Round, Doctrine PlayerDoctrine, Doctrine Ghost, int GhostConfidence, bool Overrode, int IllegalDropped,
-    string ArenaId, BattleResult Result, BattleReplay Replay, Spoils Spoils, ulong PlayerDigest, ulong EnemyDigest);
+    int Round, DoctrineSet PlayerDoctrine, DoctrineSet Ghost, int GhostConfidence, bool Overrode, int IllegalDropped,
+    string ArenaId, BattleResult Result, BattleReplay Replay, Spoils Spoils, ulong PlayerDigest, ulong EnemyDigest,
+    ArmyOrdersReport? Orders = null, bool Final = false);
 
 // ---- helpers -------------------------------------------------------------------------------------------------------
 

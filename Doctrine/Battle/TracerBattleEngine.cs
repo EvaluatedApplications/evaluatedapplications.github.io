@@ -6,20 +6,27 @@ using Tracer.Services;
 namespace Doctrine.Battle;
 
 /// <summary>
+/// What a page needs to draw an arena under a recording (the recording carries cohorts, never terrain): the map as text
+/// (<c>.</c> open, <c>#</c> wall, <c>,</c> cover, <c>G</c> gate, one string per row) and the gate that falls.
+/// UNITS: a cell is <see cref="CellSize"/> ARENA UNITS wide and tall, so the row string at index r, character c covers arena x in
+/// [c * CellSize, (c + 1) * CellSize) and y in [r * CellSize, (r + 1) * CellSize); the same arena units the recording's blob positions use
+/// once divided by <see cref="BattleReplay.Quantum"/> (positions are stored at 1/16 of a unit).
+/// THE GATE: <c>G</c> cells are walkable ground until the gate falls and BLOCKED from then on. The fall is in the recording: frames from
+/// the first one with <see cref="WorldFlag.GateFallen"/> set show the ground with the G cells closed; earlier frames show them open.
+/// Gate numbers (<see cref="GateX"/>, <see cref="GateY"/>, <see cref="GateRadius"/>) are integers at 1/16 unit, like positions;
+/// <see cref="GateFallsAtTick"/> is 0 for an arena without a gate.
+/// </summary>
+public sealed record ArenaLayout(string Id, int CellSize, IReadOnlyList<string> Cells, int GateX, int GateY, int GateRadius, int GateFallsAtTick);
+
+/// <summary>
 /// The battle section on Tracer (seam b). It is handed the Tracer extension's own <see cref="TracerContext"/> (the game holds it:
 /// <c>DoctrineBuilder.New().WithTracer(world).WithBattle(ctx =&gt; new TracerBattleEngine(ctx.Tracer!))</c>) and creates every service through
 /// that context's <c>PathfindingWorld</c>. An engagement service the context already carries is used as is.
 /// Arenas are baked once per engine (the baker is the only awaited step of <see cref="StartAsync"/>); every battle gets fresh pathfinding
 /// services, because the multi-agent service remembers agents by id between ticks and a second battle must not inherit the first's.
+/// It is an <see cref="IArenaLayouts"/>: a host draws arenas through <see cref="DoctrineContext.LayoutOf"/>, without naming this type.
 /// </summary>
-/// <summary>
-/// What a page needs to draw an arena under a recording (the recording carries cohorts, never terrain): the map as text
-/// (<c>.</c> open, <c>#</c> wall, <c>,</c> cover, <c>G</c> gate, one string per row, <see cref="CellSize"/> arena units a cell) and the gate that falls.
-/// Gate numbers are integers at 1/16 unit (<see cref="BattleReplay.Quantum"/>), like positions; <see cref="GateFallsAtTick"/> is 0 without a gate.
-/// </summary>
-public sealed record ArenaLayout(string Id, int CellSize, IReadOnlyList<string> Cells, int GateX, int GateY, int GateRadius, int GateFallsAtTick);
-
-public sealed class TracerBattleEngine : IBattleEngine
+public sealed class TracerBattleEngine : IBattleEngine, IArenaLayouts
 {
     readonly TracerContext _tracer;
     readonly TracerBattleOptions _options;

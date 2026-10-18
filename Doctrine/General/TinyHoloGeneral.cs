@@ -59,7 +59,7 @@ public sealed class TinyHoloGeneral : IGeneral
     }
 
     /// <summary>Both learners' raw per-slot tokens, the slot-by-slot choice between them, and the doctrine that leaves (always masked).</summary>
-    (Doctrine Doctrine, int[] Table, int[] Net) Think(int[] s, LegalMask legal)
+    (DoctrineSet Doctrine, int[] Table, int[] Net) Think(int[] s, LegalMask legal)
     {
         var tt = new int[SlotTable.Slots]; var nt = new int[SlotTable.Slots];
         var ask = (_fault & GeneralFault.NetOutputUnmasked) != 0 ? LegalMask.All : legal;   // the mutant lets the learners speak unmasked
@@ -81,7 +81,7 @@ public sealed class TinyHoloGeneral : IGeneral
     }
 
     /// <summary>THE MASK, applied to the output: only legal tokens, End dropped, no token twice, in order, padded with End.</summary>
-    Doctrine Enforce(ReadOnlySpan<int> tokens, LegalMask legal)
+    DoctrineSet Enforce(ReadOnlySpan<int> tokens, LegalMask legal)
     {
         Span<int> o = stackalloc int[SlotTable.Slots]; int n = 0;
         foreach (var t in tokens)
@@ -91,7 +91,7 @@ public sealed class TinyHoloGeneral : IGeneral
             bool dup = false; for (int i = 0; i < n; i++) if (o[i] == t) dup = true;
             if (!dup) o[n++] = t;
         }
-        return new Doctrine(o[0], o[1], o[2], o[3]);
+        return new DoctrineSet(o[0], o[1], o[2], o[3]);
     }
 
     /// <summary>A usable 14-token summary whatever came in: wrong length is padded with 0 or cut, values are clamped to 0..15.</summary>
@@ -163,7 +163,7 @@ public sealed class TinyHoloGeneral : IGeneral
 }
 
 /// <summary>Task data of the learning pipeline: the general (a live handle, like the game's RoundState) and the one example.</summary>
-internal sealed record LearnJob(TinyHoloGeneral General, bool Imitation, int[] Summary, LegalMask Legal, Doctrine Chosen, bool Won);
+internal sealed record LearnJob(TinyHoloGeneral General, bool Imitation, int[] Summary, LegalMask Legal, DoctrineSet Chosen, bool Won);
 
 /// <summary>Nothing is shared through the context: the general rides in the task data, so one compiled pipeline serves every general.</summary>
 internal sealed class GeneralContext : GlobalContext { }

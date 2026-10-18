@@ -9,6 +9,7 @@ sealed class BeginStage : BattleStage_
     protected override async ValueTask<BattleState> ExecuteAsync(BattleState s, DoctrineContext g, DoctrineDomain d, CancellationToken ct)
     {
         var session = await g.Battle.StartAsync(s.Setup, ct);
+        g.Observer?.BattleStarted(s.Setup);
         // Frame 0 = the start. A battle already decided at the start (a side with no soldiers) runs no tick.
         return s with { Session = session, Frames = new List<ReplayFrame> { session.Snapshot() },
                         Done = session.Status != BattleStatus.Running || s.Setup.TickLimit <= 0 };
@@ -36,6 +37,7 @@ sealed class FinishStage : BattleStage_
     protected override ValueTask<BattleState> ExecuteAsync(BattleState s, DoctrineContext g, DoctrineDomain d, CancellationToken ct)
     {
         var result = s.Session!.Finish(s.TickLimitReached);
+        g.Observer?.BattleFinished(result);
         var replay = new BattleReplay(BattleReplay.CurrentVersion, s.Setup.ArenaId, s.Setup.Seed, s.Setup.TickLimit, s.Frames!, result);
         return ValueTask.FromResult(s with { Result = result, Replay = replay });
     }
@@ -68,7 +70,7 @@ sealed class ApplyLossesBattleStage : BattleStage_
 sealed class RecordStage : BattleStage_
 {
     protected override ValueTask<BattleState> ExecuteAsync(BattleState s, DoctrineContext g, DoctrineDomain d, CancellationToken ct)
-    { s.Frames!.Add(s.Session!.Record()); return ValueTask.FromResult(s); }
+    { s.Frames!.Add(s.Session!.Record()); g.Observer?.BattleTick(s.Session.Tick, s.Setup.TickLimit); return ValueTask.FromResult(s); }
 }
 
 sealed class JudgeStage : BattleStage_

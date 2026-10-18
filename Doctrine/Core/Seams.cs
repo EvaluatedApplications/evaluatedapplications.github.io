@@ -32,7 +32,7 @@ public interface IArmy
     /// Apply the army-order tokens of a doctrine in slot order. Legality is judged PER TOKEN, against the army as the earlier tokens left it
     /// (not once before the doctrine). Illegal tokens are skipped and counted, never thrown.
     /// </summary>
-    ValueTask<ArmyOrdersReport> ApplyArmyOrdersAsync(Doctrine doctrine, CancellationToken ct);
+    ValueTask<ArmyOrdersReport> ApplyArmyOrdersAsync(DoctrineSet doctrine, CancellationToken ct);
     /// <summary>Subtract battle losses. Counts never go below zero; returns the soldiers actually removed.</summary>
     ValueTask<int> ApplyLossesAsync(IReadOnlyList<CohortLoss> losses, CancellationToken ct);
     ValueTask ApplySpoilsAsync(Spoils spoils, CancellationToken ct);
@@ -91,13 +91,54 @@ public interface IGeneral
 
 // ---- (f) PLAYER INPUT: the human (the page) or a script (tests) ---------------------------------------------------
 
-public sealed record PlayerChoice(Doctrine Doctrine, bool Overrode);
+public sealed record PlayerChoice(DoctrineSet Doctrine, bool Overrode);
 
 /// <summary>The player's hands. The page implements it with real input; tests use a scripted one.</summary>
 public interface IPlayerInput
 {
     /// <summary>The cohorts to buy this round (may be empty).</summary>
     ValueTask<IReadOnlyList<DraftPick>> DraftAsync(ArmyReadModel army, int round, CancellationToken ct);
+    /// <summary>
+    /// The army's own verdict on the picks just returned (accepted, refused with a reason, gold spent). Called by the draft stage after the
+    /// army applied them, before the enemy is raised. Optional: the default does nothing.
+    /// </summary>
+    ValueTask DraftedAsync(DraftReport report, CancellationToken ct) => ValueTask.CompletedTask;
     /// <summary>Choose the doctrine, seeing the general's ghost suggestion. Accept it as is (Overrode = false) or replace it.</summary>
     ValueTask<PlayerChoice> ChooseAsync(ArmyReadModel army, GeneralOutput ghost, int round, CancellationToken ct);
+    /// <summary>
+    /// A round has closed. <paramref name="record"/> is the whole record (doctrine, orders report, replay, result, spoils, and
+    /// <see cref="RoundRecord.Final"/>: whether this round ended the game); <paramref name="after"/> is the player's army as the next round
+    /// finds it (losses, spoils and the end of the round applied). Called by the close stage once per round, before the next round starts,
+    /// so a host can show a round as it happens inside ONE run of the game. Optional: the default does nothing.
+    /// </summary>
+    ValueTask RoundClosedAsync(RoundRecord record, ArmyReadModel after, CancellationToken ct) => ValueTask.CompletedTask;
+}
+
+// ---- (g) OPTIONAL CAPABILITIES AND HOST HOOKS ------------------------------------------------------------------------
+
+/// <summary>
+/// An optional capability of a battle engine: it can say how to DRAW an arena (the recording carries cohorts, never terrain). A host asks
+/// <see cref="DoctrineContext.LayoutOf"/>, which uses it when the engine has it, so no concrete engine type is named. The Tracer section has it.
+/// </summary>
+public interface IArenaLayouts : IBattleEngine
+{
+    /// <summary>The drawable layout of an arena, or null for an id this engine does not have.</summary>
+    global::Doctrine.Battle.ArenaLayout? LayoutOf(string arenaId);
+}
+
+/// <summary>
+/// An optional watcher of the pipeline, installed with <c>WithObserver</c> or <see cref="DoctrineContext.Observer"/>. Every method is a no-op by
+/// default and takes only integers, constant stage names and records the pipeline already holds, so an observer allocates nothing and a game
+/// with none pays one null check per call. Calls come in pipeline order, must be quick, and must not throw.
+/// </summary>
+public interface IRoundObserver
+{
+    /// <summary>A round-pipeline stage is starting (<paramref name="stage"/> is one of the <see cref="Stages"/> constants, <c>Army.Draft</c> to <c>Round.Advance</c>).</summary>
+    void StageEntered(string stage, int round) { }
+    /// <summary>The battle engine has started the battle (arena baked, frame 0 taken).</summary>
+    void BattleStarted(BattleSetup setup) { }
+    /// <summary>Tick <paramref name="tick"/> of at most <paramref name="tickLimit"/> has just been recorded.</summary>
+    void BattleTick(int tick, int tickLimit) { }
+    /// <summary>The battle is over (a win or the tick limit).</summary>
+    void BattleFinished(BattleResult result) { }
 }

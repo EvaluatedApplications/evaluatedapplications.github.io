@@ -24,7 +24,7 @@ public static class ArmyContract
         await a.DraftAsync(new DraftRequest(0, 1, [new DraftPick(2, 3), new DraftPick(4, 2)]), default);
         var legal = a.Read().Legal;
         foreach (var t in new[] { DoctrineVocabulary.Army(ArmyOrderKind.Age), DoctrineVocabulary.Army(ArmyOrderKind.Rotate, 1), DoctrineVocabulary.Army(ArmyOrderKind.Flip, 3) })
-            if (legal.Allows(t)) await a.ApplyArmyOrdersAsync(Doctrine.Of(t), default);
+            if (legal.Allows(t)) await a.ApplyArmyOrdersAsync(DoctrineSet.Of(t), default);
         await a.ApplyLossesAsync([new CohortLoss(0, 0, 2)], default);
         return a;
     }
@@ -85,7 +85,7 @@ public static class ArmyContract
             foreach (var x in new[] { a, b })
             {
                 await x.DraftAsync(new DraftRequest(1, 1, [new DraftPick(5, 1), new DraftPick(1, 1)]), default);
-                await x.ApplyArmyOrdersAsync(Doctrine.Of(DoctrineVocabulary.Army(ArmyOrderKind.Age)), default);
+                await x.ApplyArmyOrdersAsync(DoctrineSet.Of(DoctrineVocabulary.Army(ArmyOrderKind.Age)), default);
                 await x.EndRoundAsync(default);
             }
             Expect.Equal(a.Read().Digest(), b.Read().Digest(), "an army restored from its code behaves differently afterwards (hidden state is not in the code)");
@@ -141,7 +141,7 @@ public static class ArmyContract
                 var a = Clone(s, await Worked(s));
                 var legal = a.Read().Legal.Allows(t);
                 var before = a.Read().Digest();
-                var rep = await a.ApplyArmyOrdersAsync(Doctrine.Of(t), default);
+                var rep = await a.ApplyArmyOrdersAsync(DoctrineSet.Of(t), default);
                 if (legal) Expect.Equal(1, rep.Applied, $"token {DoctrineVocabulary.Name(t)} is legal but was not applied");
                 else
                 {
@@ -164,7 +164,7 @@ public static class ArmyContract
             {
                 var a = Clone(s, await Worked(s));
                 if (!a.Read().Legal.Allows(t)) continue;
-                await a.ApplyArmyOrdersAsync(Doctrine.Of(t), default);
+                await a.ApplyArmyOrdersAsync(DoctrineSet.Of(t), default);
                 var r = a.Read();
                 Expect.True(r.Cohorts.All(c => c.Count > 0 && (uint)c.Slot < DoctrineVocabulary.Groups && (uint)c.Key < Roster.Size), $"after {DoctrineVocabulary.Name(t)} a cohort is invalid");
                 Expect.True(r.Gold >= 0 && r.Kinds <= Roster.Size, $"after {DoctrineVocabulary.Name(t)} gold or span is invalid");
@@ -174,7 +174,7 @@ public static class ArmyContract
         {
             var a = await Worked(s); var before = a.Read().Digest();
             var field = Enumerable.Range(1, DoctrineVocabulary.Size - 1).First(t => DoctrineVocabulary.Decode(t).Family == OrderFamily.Field);
-            var rep = await a.ApplyArmyOrdersAsync(Doctrine.Of(field), default);
+            var rep = await a.ApplyArmyOrdersAsync(DoctrineSet.Of(field), default);
             Expect.Equal(0, rep.Applied + rep.Skipped, "field tokens are ignored by the army entirely (they belong to the battle)");
             Expect.Equal(before, a.Read().Digest(), "a field order changed the army");
         }),
@@ -228,7 +228,7 @@ public static class ArmyContract
             await a.DraftAsync(new DraftRequest(0, 1, [new DraftPick(0, 1), new DraftPick(1, 1)]), default);
             var merge0 = DoctrineVocabulary.Army(ArmyOrderKind.Merge, 0);
             Expect.True(a.Read().Legal.Allows(merge0), "setup: merging kind 1 into kind 0 is legal while both are present");
-            var rep = await a.ApplyArmyOrdersAsync(Doctrine.Of(merge0, merge0), default);
+            var rep = await a.ApplyArmyOrdersAsync(DoctrineSet.Of(merge0, merge0), default);
             Expect.Equal(1, rep.Applied, "the first merge applies");
             Expect.Equal(1, rep.Skipped, "the second merge was legal before the doctrine but not after the first token: it must be skipped");
             // (b) illegal then legal: flipping a trait bit that no cohort holds gives every cohort that trait, so its aura is legal after the flip only.
@@ -241,7 +241,7 @@ public static class ArmyContract
                 if (x < 0) continue;
                 var aura = DoctrineVocabulary.Army(ArmyOrderKind.Aura, x);
                 Expect.True(!read.Legal.Allows(aura), $"setup: an aura on trait {x} that no cohort holds must not be legal");
-                rep = await b.ApplyArmyOrdersAsync(Doctrine.Of(DoctrineVocabulary.Army(ArmyOrderKind.Flip, x), aura), default);
+                rep = await b.ApplyArmyOrdersAsync(DoctrineSet.Of(DoctrineVocabulary.Army(ArmyOrderKind.Flip, x), aura), default);
                 Expect.Equal(2, rep.Applied, "flip, then the aura the flip made legal: both apply (legality is read after each token)");
                 Expect.Equal(0, rep.Skipped, "nothing is skipped");
                 found = true;
@@ -280,7 +280,7 @@ public static class ArmyContract
             int top = 0; bool wrapped = false;
             for (int i = 0; i < 200; i++)
             {
-                await a.ApplyArmyOrdersAsync(Doctrine.Of(DoctrineVocabulary.Army(ArmyOrderKind.Age)), default);
+                await a.ApplyArmyOrdersAsync(DoctrineSet.Of(DoctrineVocabulary.Army(ArmyOrderKind.Age)), default);
                 if (i % 7 == 0) await a.ApplySpoilsAsync(new Spoils(0, 3), default);
                 var r = a.Read();
                 Expect.True(r.Cohorts.All(c => c.Veterancy >= 0 && c.Veterancy < RingBound), $"after {i + 1} ageing steps a veterancy left the ring 0..{RingBound - 1}");

@@ -25,10 +25,10 @@ public static class GeneralChecks
         return hit / (double)n;
     }
 
-    static async Task<Doctrine[]> Answers(IGeneral g, int seed, int n)
+    static async Task<DoctrineSet[]> Answers(IGeneral g, int seed, int n)
     {
         var (st, _, _) = GeneralSim.Draw(seed, 2, n);
-        var r = new Doctrine[n];
+        var r = new DoctrineSet[n];
         for (int i = 0; i < n; i++) r[i] = (await g.SuggestAsync(In(st[i]), default)).Doctrine;
         return r;
     }
@@ -106,7 +106,7 @@ public static class GeneralChecks
     {
         var g = make();
         var s = GeneralSim.Draw(8, 6, 1).States[0];
-        var a = Doctrine.Of(DoctrineVocabulary.Army(ArmyOrderKind.Age), DoctrineVocabulary.Field(FieldOrderKind.Advance, 0));
+        var a = DoctrineSet.Of(DoctrineVocabulary.Army(ArmyOrderKind.Age), DoctrineVocabulary.Field(FieldOrderKind.Advance, 0));
         var legal = LegalMask.All;
         var input = new GeneralInput(s.S[0], s.S, legal);
         for (int i = 0; i < 3; i++) await g.LearnAsync(new GeneralExample(input, a, true), default);

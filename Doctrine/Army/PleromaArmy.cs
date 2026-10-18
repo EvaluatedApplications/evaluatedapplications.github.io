@@ -217,7 +217,7 @@ internal sealed class PleromaArmy : IArmy
         return ValueTask.FromResult(new DraftReport(ok, no, (int)spent));
     }
 
-    public ValueTask<ArmyOrdersReport> ApplyArmyOrdersAsync(Doctrine doctrine, CancellationToken ct)
+    public ValueTask<ArmyOrdersReport> ApplyArmyOrdersAsync(DoctrineSet doctrine, CancellationToken ct)
     {
         int applied = 0, skipped = 0;
         for (int slot = 0; slot < DoctrineVocabulary.MaxSlots; slot++)

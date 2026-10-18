@@ -62,7 +62,7 @@ sealed class MutantArmy(IArmy inner, ArmyMut m) : IArmy
         var rep = await inner.DraftAsync(request, ct);
         return m == ArmyMut.DraftRefusalNoReason ? rep with { Refused = rep.Refused.Select(x => (x.Pick, "")).ToList() } : rep;
     }
-    public async ValueTask<ArmyOrdersReport> ApplyArmyOrdersAsync(Doctrine doctrine, CancellationToken ct)
+    public async ValueTask<ArmyOrdersReport> ApplyArmyOrdersAsync(DoctrineSet doctrine, CancellationToken ct)
     {
         ArmyOrdersReport rep;
         if (m == ArmyMut.LegalityOnce)
@@ -73,7 +73,7 @@ sealed class MutantArmy(IArmy inner, ArmyMut m) : IArmy
             {
                 var t = DoctrineVocabulary.Encode(o);
                 if (!legalAtStart.Allows(t)) { skipped++; continue; }
-                var one = await inner.ApplyArmyOrdersAsync(Doctrine.Of(t), ct);
+                var one = await inner.ApplyArmyOrdersAsync(DoctrineSet.Of(t), ct);
                 applied += one.Applied; skipped += one.Skipped;
             }
             rep = new ArmyOrdersReport(applied, skipped);
@@ -118,7 +118,7 @@ public sealed class ReadMutantArmyService(IArmyService inner, Func<ArmyReadModel
         public ArmyReadModel Read() => rewrite(i.Read());
         public int Score() => i.Score();
         public ValueTask<DraftReport> DraftAsync(DraftRequest request, CancellationToken ct) => i.DraftAsync(request, ct);
-        public ValueTask<ArmyOrdersReport> ApplyArmyOrdersAsync(Doctrine doctrine, CancellationToken ct) => i.ApplyArmyOrdersAsync(doctrine, ct);
+        public ValueTask<ArmyOrdersReport> ApplyArmyOrdersAsync(DoctrineSet doctrine, CancellationToken ct) => i.ApplyArmyOrdersAsync(doctrine, ct);
         public ValueTask<int> ApplyLossesAsync(IReadOnlyList<CohortLoss> losses, CancellationToken ct) => i.ApplyLossesAsync(losses, ct);
         public ValueTask ApplySpoilsAsync(Spoils spoils, CancellationToken ct) => i.ApplySpoilsAsync(spoils, ct);
         public ValueTask EndRoundAsync(CancellationToken ct) => i.EndRoundAsync(ct);
@@ -222,7 +222,7 @@ public sealed class MutantGeneralOver(IGeneral inner, GeneralMut m) : IGeneral
                     if (!input.Legal.Allows(t)) return o with { Doctrine = o.Doctrine with { S3 = t } };
                 return o;
             case GeneralMut.PreTrained:
-                return o.Doctrine.IsEmpty ? new GeneralOutput(Doctrine.Of(DoctrineVocabulary.Army(ArmyOrderKind.Age)), 500) : o;
+                return o.Doctrine.IsEmpty ? new GeneralOutput(DoctrineSet.Of(DoctrineVocabulary.Army(ArmyOrderKind.Age)), 500) : o;
             case GeneralMut.OverConfident:
                 return o.Doctrine.IsEmpty ? o : o with { ConfidencePermille = 2000 };
             default:
@@ -249,13 +249,13 @@ public sealed class OutputMutantGeneral(IGeneral inner, Func<GeneralInput, Gener
 /// <summary>The original self-contained general mutants (not wrapping a general). Kept for the stub proofs.</summary>
 public sealed class MutantGeneral(GeneralMut m) : IGeneral
 {
-    static Doctrine _shared;   // SharedState: every instance remembers into the same slot
-    Doctrine _last; int _n;
+    static DoctrineSet _shared;   // SharedState: every instance remembers into the same slot
+    DoctrineSet _last; int _n;
     public int ExamplesSeen => m == GeneralMut.PreTrained ? _n + 5 : _n;
     public ValueTask<GeneralOutput> SuggestAsync(GeneralInput input, CancellationToken ct)
     {
         var d = m == GeneralMut.SharedState ? _shared : _last;
-        if (m == GeneralMut.PreTrained && d.IsEmpty) d = Doctrine.Of(DoctrineVocabulary.Army(ArmyOrderKind.Age));
+        if (m == GeneralMut.PreTrained && d.IsEmpty) d = DoctrineSet.Of(DoctrineVocabulary.Army(ArmyOrderKind.Age));
         if (m != GeneralMut.IgnoresMask && m != GeneralMut.PreTrained) d = new(input.Legal.Allows(d.S0) ? d.S0 : 0, input.Legal.Allows(d.S1) ? d.S1 : 0, input.Legal.Allows(d.S2) ? d.S2 : 0, input.Legal.Allows(d.S3) ? d.S3 : 0);
         int conf = d.IsEmpty ? 0 : _n * 1000 / (_n + 2);
         if (m == GeneralMut.OverConfident && !d.IsEmpty) conf = 2000;

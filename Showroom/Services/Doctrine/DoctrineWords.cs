@@ -1,10 +1,8 @@
 using Doctrine;
-using Plan = Doctrine.Doctrine;
 
 namespace ShowroomDoctrine;
 
 // The plain words of the Doctrine page: names for tokens, traits, slots and refusals. No game rule lives here, only how a rule is said.
-// (The namespace `Doctrine` and the struct `Doctrine.Doctrine` share a name, so this repo writes the struct as `Plan`.)
 
 public static class DoctrineWords
 {
@@ -69,7 +67,7 @@ public static class DoctrineWords
         };
     }
 
-    public static string Orders(Plan d) => d.IsEmpty ? "No orders" : string.Join(", ", d.Tokens.Where(t => t != 0).Select(Label));
+    public static string Orders(DoctrineSet d) => d.IsEmpty ? "No orders" : string.Join(", ", d.Tokens.Where(t => t != 0).Select(Label));
 
     /// <summary>The army's own refusal reason, said plainly.</summary>
     public static string Refusal(string reason) => reason switch

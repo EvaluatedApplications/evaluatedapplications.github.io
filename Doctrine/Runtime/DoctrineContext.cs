@@ -22,6 +22,15 @@ public sealed class DoctrineContext : GlobalContext
     /// <summary>The Tracer extension's own context object, if one was supplied (it is a GlobalContext of its own, so it is HELD here, not installed).</summary>
     public TracerContext? Tracer { get; }
 
+    /// <summary>An optional watcher of stages and battle progress (see <see cref="IRoundObserver"/>). Null means nobody is watching. A host may set it at any time between runs.</summary>
+    public IRoundObserver? Observer { get; set; }
+
+    /// <summary>
+    /// How to draw an arena, if the battle engine can say (<see cref="IArenaLayouts"/>; the Tracer section can). Null for an engine without the
+    /// capability or an unknown id. Nothing here names a concrete engine.
+    /// </summary>
+    public global::Doctrine.Battle.ArenaLayout? LayoutOf(string arenaId) => (Battle as IArenaLayouts)?.LayoutOf(arenaId);
+
     /// <summary>Round feeds the next round: its last step runs this ref.</summary>
     public PipelineRef<RoundState> Round { get; } = new("Round");
     /// <summary>One whole battle: begin, tick until it ends, finish.</summary>

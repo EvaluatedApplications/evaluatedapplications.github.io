@@ -138,7 +138,7 @@ public sealed class StubArmy(Side side) : IArmy
         return ValueTask.FromResult(new DraftReport(ok, no, spent));
     }
 
-    public ValueTask<ArmyOrdersReport> ApplyArmyOrdersAsync(Doctrine doctrine, CancellationToken ct)
+    public ValueTask<ArmyOrdersReport> ApplyArmyOrdersAsync(DoctrineSet doctrine, CancellationToken ct)
     {
         int applied = 0, skipped = 0;
         foreach (var o in DoctrineVocabulary.ArmyOrders(doctrine))

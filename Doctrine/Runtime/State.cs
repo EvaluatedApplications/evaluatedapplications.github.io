@@ -20,9 +20,9 @@ public sealed record RoundState(
     int Round, int Seed, IArmy Player,
     IArmy? Enemy = null,
     GeneralInput? Input = null, GeneralOutput? Ghost = null, PlayerChoice? Choice = null, int IllegalDropped = 0,
-    Doctrine EnemyDoctrine = default, BattleSetup? Setup = null, BattleResult? Result = null, BattleReplay? Replay = null,
+    DoctrineSet EnemyDoctrine = default, BattleSetup? Setup = null, BattleResult? Result = null, BattleReplay? Replay = null,
     Spoils? Spoils = null, BattleStatus? LastOutcome = null, bool LastPlayerWon = false,
-    IReadOnlyList<RoundRecord>? History = null, bool Done = false)
+    IReadOnlyList<RoundRecord>? History = null, bool Done = false, ArmyOrdersReport? Orders = null)
 {
     public IReadOnlyList<RoundRecord> Records => History ?? Array.Empty<RoundRecord>();
 

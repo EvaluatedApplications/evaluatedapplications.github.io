@@ -7,14 +7,14 @@ namespace Doctrine.General;
 
 public sealed class TableLookupGeneral : IGeneral
 {
-    readonly Dictionary<ulong, Dictionary<Doctrine, int>> _table = new();
+    readonly Dictionary<ulong, Dictionary<DoctrineSet, int>> _table = new();
 
     public int ExamplesSeen { get; private set; }
 
     public ValueTask<GeneralOutput> SuggestAsync(GeneralInput input, CancellationToken ct)
     {
         if (!_table.TryGetValue(GeneralSummary.Key(input.Summary), out var seen) || seen.Count == 0)
-            return ValueTask.FromResult(new GeneralOutput(Doctrine.Empty, 0));
+            return ValueTask.FromResult(new GeneralOutput(DoctrineSet.Empty, 0));
         var best = seen.OrderByDescending(kv => kv.Value).ThenBy(kv => kv.Key.S0).ThenBy(kv => kv.Key.S1)
                        .ThenBy(kv => kv.Key.S2).ThenBy(kv => kv.Key.S3).First();
         int total = seen.Values.Sum();
@@ -23,7 +23,7 @@ public sealed class TableLookupGeneral : IGeneral
     }
 
     /// <summary>Zero any token the army does not allow. The mask is applied to the OUTPUT: it is a rule, not a hint.</summary>
-    static Doctrine Mask(Doctrine d, LegalMask legal)
+    static DoctrineSet Mask(DoctrineSet d, LegalMask legal)
     {
         int Keep(int t) => legal.Allows(t) ? t : 0;
         return new(Keep(d.S0), Keep(d.S1), Keep(d.S2), Keep(d.S3));
@@ -41,7 +41,7 @@ public sealed class TableLookupGeneral : IGeneral
         return ValueTask.CompletedTask;
     }
 
-    void Bump(GeneralInput input, Doctrine d, int delta)
+    void Bump(GeneralInput input, DoctrineSet d, int delta)
     {
         ExamplesSeen++;
         var key = GeneralSummary.Key(input.Summary);

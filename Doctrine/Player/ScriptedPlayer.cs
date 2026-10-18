@@ -29,7 +29,7 @@ public sealed class ScriptedPlayer(int seed, int acceptGhostPercent = 40) : IPla
         var legal = Enumerable.Range(1, DoctrineVocabulary.Size - 1).Where(army.Legal.Allows).ToList();
         var tokens = new List<int>();
         for (int i = 0; i < 3 && legal.Count > 0; i++) tokens.Add(legal[_rng.Next(legal.Count)]);
-        var d = Doctrine.Of(tokens.ToArray());
+        var d = DoctrineSet.Of(tokens.ToArray());
         return ValueTask.FromResult(new PlayerChoice(d, d != ghost.Doctrine));
     }
 }

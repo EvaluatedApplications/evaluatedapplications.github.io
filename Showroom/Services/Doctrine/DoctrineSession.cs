@@ -1,7 +1,6 @@
 using System.Diagnostics;
 using Doctrine;
 using EvalApp;
-using Plan = Doctrine.Doctrine;
 
 namespace ShowroomDoctrine;
 
@@ -133,7 +132,7 @@ public sealed class DoctrineSession : IDisposable
     }
 
     /// <summary>Set the doctrine. <paramref name="overrode"/> is true when it differs from the general's ghost; it goes through to the general's learn call.</summary>
-    public void SubmitChoice(Plan doctrine, bool overrode)
+    public void SubmitChoice(DoctrineSet doctrine, bool overrode)
     {
         if (Stage != DoctrineStage.Doctrine || _chooseTcs is null) return;
         ChoicesMade++;

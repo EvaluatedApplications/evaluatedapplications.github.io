@@ -56,7 +56,7 @@ public static class GeneralSim
     public static readonly string[] StyleNames = ["aggressive", "turtle", "mirror", "tinkerer", "cautious"];
 
     /// <summary>The player's NOISE-FREE doctrine for a style. A desired token that is not legal is dropped (the player skips it); max 3 slots.</summary>
-    public static Doctrine Clean(int style, Situation st)
+    public static DoctrineSet Clean(int style, Situation st)
     {
         var s = st.S; int tb(int b) => s[4 + b];
         int[] want = style switch
@@ -88,35 +88,35 @@ public static class GeneralSim
     }
 
     /// <summary>Keep wanted tokens that are legal, not End, not repeated; at most 3; pad with End.</summary>
-    public static Doctrine Pack(IEnumerable<int> want, LegalMask legal)
+    public static DoctrineSet Pack(IEnumerable<int> want, LegalMask legal)
     {
         var l = new List<int>();
         foreach (var t in want) if (t != 0 && legal.Allows(t) && !l.Contains(t) && l.Count < 3) l.Add(t);
-        return Doctrine.Of(l.ToArray());
+        return DoctrineSet.Of(l.ToArray());
     }
 
     /// <summary>The player's actual choice: the style's doctrine, or with 10% a random doctrine of 1..3 distinct legal tokens.</summary>
-    public static Doctrine Choose(int style, Situation st, GameRng r)
+    public static DoctrineSet Choose(int style, Situation st, GameRng r)
     {
         if (r.Next(100) >= 10) return Clean(style, st);
         var pool = Enumerable.Range(1, DoctrineVocabulary.Size - 1).Where(st.Legal.Allows).ToList();
         int n = 1 + r.Next(3);
         var l = new List<int>();
         while (l.Count < n && pool.Count > 0) { int i = r.Next(pool.Count); l.Add(pool[i]); pool.RemoveAt(i); }
-        return Doctrine.Of(l.ToArray());
+        return DoctrineSet.Of(l.ToArray());
     }
 
     /// <summary>Stream of states for (seed, kind): train and eval draw from disjoint streams.</summary>
-    public static (Situation[] States, Doctrine[][] ByStyle, Doctrine[][] CleanByStyle) Draw(int seed, int kind, int n)
+    public static (Situation[] States, DoctrineSet[][] ByStyle, DoctrineSet[][] CleanByStyle) Draw(int seed, int kind, int n)
     {
         var r = new GameRng(GameRng.Mix(seed, 7000 + kind));
         var states = new Situation[n];
         for (int i = 0; i < n; i++) states[i] = Make(r);
-        var by = new Doctrine[5][]; var cl = new Doctrine[5][];
+        var by = new DoctrineSet[5][]; var cl = new DoctrineSet[5][];
         for (int s = 0; s < 5; s++)
         {
             var rn = new GameRng(GameRng.Mix(seed, 8000 + kind * 10 + s));
-            by[s] = new Doctrine[n]; cl[s] = new Doctrine[n];
+            by[s] = new DoctrineSet[n]; cl[s] = new DoctrineSet[n];
             for (int i = 0; i < n; i++) { by[s][i] = Choose(s, states[i], rn); cl[s][i] = Clean(s, states[i]); }
         }
         return (states, by, cl);

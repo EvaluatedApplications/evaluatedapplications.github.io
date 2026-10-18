@@ -52,6 +52,16 @@ public class MutationProofs
     [Fact] public async Task General_that_never_learns_is_caught() => Caught(await General(GeneralMut.Forgetful), "imitation-repeats-a-consistent-choice");
     [Fact] public async Task General_that_shares_state_between_players_is_caught() => Caught(await General(GeneralMut.SharedState), "generals-do-not-share-state");
 
+    static Task<IReadOnlyList<ContractFailure>> SlotConfidence(Func<GeneralOutput, GeneralOutput> rewrite)
+        => ContractRunner.RunAllAsync(GeneralContract.Cases, () => (Func<IGeneral>)(() => new OutputMutantGeneral(new TableLookupGeneral(), (_, o) => rewrite(o))));
+
+    [Fact] public async Task General_with_slot_confidence_out_of_range_is_caught()
+        => Caught(await SlotConfidence(o => o with { SlotConfidence = new SlotPermille(100, 200, 300, 1001) }), "slot-confidence-is-absent-or-four-permille");
+    [Fact] public async Task General_with_negative_slot_confidence_is_caught()
+        => Caught(await SlotConfidence(o => o with { SlotConfidence = new SlotPermille(-1, 0, 0, 0) }), "slot-confidence-is-absent-or-four-permille");
+    [Fact] public async Task General_that_fills_slot_confidence_in_range_still_holds_every_case()
+        => Assert.Empty(await SlotConfidence(o => o with { SlotConfidence = new SlotPermille(0, 250, 500, 1000) }));
+
     // ---- replay ----
     static async Task<BattleReplay> Good() => (await Sample.RunAsync(new StubBattleEngine(), Sample.Setup("open-field", 31, 60))).Replay!;
     static async Task<IReadOnlyList<ContractFailure>> Replay(Func<BattleReplay, BattleReplay> break_)

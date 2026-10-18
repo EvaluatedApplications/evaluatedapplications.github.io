@@ -5,13 +5,15 @@ DATA, and pipelines run other pipelines.
 
 **Context.** `DoctrineContext : GlobalContext` holds the services (`IArmyService`, `IBattleEngine`, `IGeneral`, `IPlayerInput`), the
 Tracer extension's own context object (`TracerContext`), and three `PipelineRef`s: `Round`, `BattleRun`, `BattleTick`. Rules live in the
-`DoctrineDomain : DomainContext` (rounds, tick limit, enemy gold). Every step is a `ContextSideEffectStep<DoctrineContext, DoctrineDomain, T>`
+`DoctrineDomain : DomainContext` (rounds, tick limit, enemy gold). The context also carries the optional `IRoundObserver` (stage names and battle
+tick N of limit, set with `WithObserver` or `Observer`) and `LayoutOf(arenaId)` (asks an `IArenaLayouts` engine how to draw an arena). Every step is a `ContextSideEffectStep<DoctrineContext, DoctrineDomain, T>`
 added with `AddStep<TStep>(name)`; it calls a seam and returns the next task data. No step names an implementation.
 
 **Pipelines (one domain, three tasks).**
 - `Round` (task data `RoundState`): `Army.Draft` -> `General.Suggest` -> `Player.Choose` -> `General.Imitate` -> `Army.Orders` ->
   `Battle.Setup` -> `Battle.Run` -> `Army.Losses` -> `Army.Spoils` -> `General.Outcome` -> `Round.Close` -> `If(!Done)`
   { `Round.Advance`, `Round.Next` = this pipeline by `PipelineRef` }. A round feeds the next by RECURSION; history rides in the data.
+  The player's hands also hear the draft report (`DraftedAsync`) and each closed round (`RoundClosedAsync`), so a host plays a whole game in one run.
 - `Battle` (task data `BattleState`): `Battle.Begin` -> `Battle.Ticks` -> `Battle.Finish`. `Battle.Ticks` loops the tick pipeline
   (documented "layers" pattern, `ct` passed down) until a win, loss or the tick limit.
 - `BattleTick`: `Battle.FieldOrders` -> `Move` -> `Engage` -> `ApplyLosses` -> `Record` -> `Judge`.

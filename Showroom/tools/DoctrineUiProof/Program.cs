@@ -5,7 +5,6 @@ using Doctrine;
 using Microsoft.Extensions.DependencyInjection;
 using Showroom.Pages;
 using ShowroomDoctrine;
-using Plan = Doctrine.Doctrine;
 
 // UI proof for Doctrine. See the csproj header. The page is the REAL one, the sections are the REAL ones (Pleroma army, Tracer battle,
 // tiny HoloFormer general), the taps are a visitor's. Nothing is launched: bUnit renders the component in memory.
@@ -452,7 +451,7 @@ sealed class Time : IBuildTime { public Time(bool p) { IsPrerender = p; } public
 sealed class ScriptHands(ScriptHands.How[] plan) : IPlayerInput
 {
     public enum How { Manual, Ignore, Accept, Edit }
-    public sealed record Step(How How, Plan Doctrine, bool Overrode, int[] Tokens, int ClearSlot);
+    public sealed record Step(How How, DoctrineSet Doctrine, bool Overrode, int[] Tokens, int ClearSlot);
 
     public static (int Kind, int N)[] Picks(int round, int gold)
     {
@@ -483,12 +482,12 @@ sealed class ScriptHands(ScriptHands.How[] plan) : IPlayerInput
             int n = g.Count;
             var keep = g.Take(n - 1).ToList();
             int rep = Preferred(99).Concat(Enumerable.Range(1, DoctrineVocabulary.Size - 1)).First(t => legal.Allows(t) && !keep.Contains(t) && t != g[n - 1]);
-            var d = Plan.Of([.. keep, rep]);
+            var d = DoctrineSet.Of([.. keep, rep]);
             return new(How.Edit, d, d != ghost.Doctrine, [rep], n - 1);
         }
         var toks = Preferred(round).Where(legal.Allows).Distinct().Take(3).ToList();
         if (toks.Count == 0) toks.Add(Enumerable.Range(1, DoctrineVocabulary.Size - 1).First(legal.Allows));
-        var dm = Plan.Of(toks.ToArray());
+        var dm = DoctrineSet.Of(toks.ToArray());
         return new(hasGhost && how == How.Ignore ? How.Ignore : How.Manual, dm, dm != ghost.Doctrine, toks.ToArray(), -1);
     }
 

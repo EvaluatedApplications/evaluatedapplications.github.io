@@ -50,7 +50,7 @@ Every mutant wraps ANY section, not only the stub, so a real section's owner run
 |---|---|---|---|
 | Army | `ArmyMut`: `ClaimsEverythingLegal`, `StaleCode`, `LossesAppliedTwice`, `NondeterministicCreate`, `LegalityOnce`, `LossSlotMatters`, `DraftRefusalNoReason`, `DraftUsesSeed`, `ScoreFallsWithGold`, `VeterancyGrows` | `ReadMutantArmyService(inner, rewrite ReadModel)` | `new MutantArmyService(new PleromaArmyService(), ArmyMut.LegalityOnce)` |
 | Battle | `BattleMut`: `FrameTickOffByOne`, `LossesReportedTwice`, `TickLimitIgnored`, `Nondeterministic`, `SoldiersReappear` | `FrameMutantEngine(inner, rewrite ReplayFrame)` | `new MutantOver(TracerWorlds.Engine(), BattleMut.TickLimitIgnored)` |
-| General | `GeneralMut`: `IgnoresMask`, `PreTrained`, `OverConfident`, `Forgetful`, `SharedState` | `OutputMutantGeneral(inner, rewrite (input, output))` | `new MutantGeneralOver(myGeneral, GeneralMut.OverConfident)`; for `SharedState` hand every wrapper the SAME inner |
+| General | `GeneralMut`: `IgnoresMask`, `PreTrained`, `OverConfident`, `Forgetful`, `SharedState` | `OutputMutantGeneral(inner, rewrite (input, output))` (also how `SlotConfidence` is mutated) | `new MutantGeneralOver(myGeneral, GeneralMut.OverConfident)`; for `SharedState` hand every wrapper the SAME inner |
 
 `MutantArmyService(m)`, `MutantBattleEngine(m)` and `MutantGeneral(m)` are the one-argument forms over the stubs. To prove a case you added:
 add a value to the enum (or use a rewriter), apply it over the stub AND over your section, and assert the named case is in the failures
@@ -116,3 +116,24 @@ them in its CONTRACT before the first owner begins.
    to consume randomness (here only `Create`) and test that no other call depends on the seed.
 11. **Cost figures belong to a section, not to the skeleton.** "About 4 ms a round" was measured on stub battles; with the Tracer battle it is about
    100 ms. Quote per-section costs next to the section that has them, and say which are measured.
+12. **A host needs to SEE what the pipeline decides, not rebuild the loop.** The first page ran one round per run to read the closed round and
+   copied the end-of-game rule. Give the player's hands the facts at the seams: the closed round whole (`RoundClosedAsync`, with `Final`), the
+   draft report (`DraftedAsync`), the army's orders report (`RoundRecord.Orders`). Ask of every pipeline decision "can the host see the result
+   without re-running or re-deriving it?".
+13. **Progress is a context hook, not a wrapper.** The page wrapped the engine (and the session) to count ticks, which hid the engine's other
+   capabilities. `IRoundObserver` (stage names, battle tick N of limit) is optional, allocation-free and set on the context.
+14. **State cancel semantics in the contract.** What throws (`PlayAsync` throws `OperationCanceledException`; a raw pipeline run returns a failure
+   carrying it), when it lands (the next step or tick), and what it leaves behind (a half-played round has already changed the army: snapshot
+   `ToCode()` first). A host that ships a Cancel button needs all three on day one.
+15. **A type must not share its namespace's name.** `Doctrine.Doctrine` forced `using Plan = Doctrine.Doctrine` in every consumer and a class
+   named `DoctrinePage`; it is `DoctrineSet` now. Name the namespace and the headline type differently before the first consumer.
+16. **Say WHO judges a rule and AT WHAT TIME.** The contract said "a token illegal at the start but legal after an earlier one applies", the
+   pipeline dropped every token not in the start mask before the army saw it, so the sentence was unreachable. One rule now: the start mask
+   binds the general; the player's army orders go to the army, which judges per token in slot order; the pipeline removes only impossible ids
+   and forbidden field orders. When two layers can judge the same thing, name one and write a pipeline-level case with a mutant.
+17. **Define what a number MEANS, in words.** `Confidence` is the whole-suggestion exact-match rate, not "how sure of each token"; a host puts
+   it on screen, so a wrong gloss becomes a wrong claim. Reserve the next field (`SlotConfidence`) with its range case before anyone needs it.
+18. **Optional capabilities are interfaces, and wrappers hide them.** `IArenaLayouts` lets a host draw arenas without naming the Tracer engine; a
+   decorator that implements only `IBattleEngine` hides it (by design), so hosts attach hooks to the context instead of decorating sections.
+19. **Every clause of an end rule needs an input that reaches it.** The game also ends when the army has no soldiers and under 1 gold, but each
+   round's spoils award at least 2 gold before the close, so that clause cannot fire today. Either change the spoils or drop the clause.

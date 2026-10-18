@@ -72,13 +72,13 @@ public class TinyHoloGeneralTests
     {
         var g = new TinyHoloGeneral(GeneralChecks.Fast());
         using var cts = new CancellationTokenSource(); cts.Cancel();
-        await Assert.ThrowsAnyAsync<Exception>(async () => await g.LearnAsync(new GeneralExample(In(GeneralSim.Draw(1, 0, 1).States[0]), Doctrine.Of(1), false), cts.Token));
+        await Assert.ThrowsAnyAsync<Exception>(async () => await g.LearnAsync(new GeneralExample(In(GeneralSim.Draw(1, 0, 1).States[0]), DoctrineSet.Of(1), false), cts.Token));
         // values outside 0..15, a short and a long summary, tokens outside the vocabulary: learned (and counted), never thrown
         var odd = new[] { new GeneralInput(-5, [99, -3, 7], LegalMask.All), new GeneralInput(1000, Enumerable.Repeat(40, 30).ToArray(), LegalMask.None), new GeneralInput(0, [], LegalMask.All) };
         foreach (var i in odd)
         {
-            await g.LearnAsync(new GeneralExample(i, new Doctrine(500, -3, 1, 2), true), default);
-            await g.LearnOutcomeAsync(new GeneralOutcome(i, new Doctrine(500, -3, 1, 2), BattleStatus.Draw, false), default);
+            await g.LearnAsync(new GeneralExample(i, new DoctrineSet(500, -3, 1, 2), true), default);
+            await g.LearnOutcomeAsync(new GeneralOutcome(i, new DoctrineSet(500, -3, 1, 2), BattleStatus.Draw, false), default);
             Assert.True(i.Legal.AllowsAll((await g.SuggestAsync(i, default)).Doctrine));
         }
     }

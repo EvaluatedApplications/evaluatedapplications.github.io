@@ -39,7 +39,7 @@ internal sealed class GeneralNet
 
     int Summary(int pos, int v) => _doctrineIds + (_o.FeatureTokens ? pos * GeneralSummary.Vocab + v : v);
 
-    int[] Encode(int[] s, Doctrine d)
+    int[] Encode(int[] s, DoctrineSet d)
     {
         var seq = new int[GeneralSummary.Length + Slots];
         for (int i = 0; i < GeneralSummary.Length; i++) seq[i] = Summary(i, s[i]);
@@ -48,21 +48,21 @@ internal sealed class GeneralNet
     }
 
     /// <summary>The player chose <paramref name="d"/> here (imitation, or a battle it won): remember it for replay.</summary>
-    public void Remember(int[] s, Doctrine d)
+    public void Remember(int[] s, DoctrineSet d)
     {
         if (_memory.Count >= _o.MemoryCap) _memory.RemoveAt(0);
         _memory.Add((Encode(s, d), Key(s, d)));
     }
 
     /// <summary>The player chose <paramref name="d"/> here and lost: drop the newest remembered copy of exactly that choice, if any.</summary>
-    public void Forget(int[] s, Doctrine d)
+    public void Forget(int[] s, DoctrineSet d)
     {
         var key = Key(s, d);
         for (int i = _memory.Count - 1; i >= 0; i--)
             if (_memory[i].Key.AsSpan().SequenceEqual(key)) { _memory.RemoveAt(i); return; }
     }
 
-    static int[] Key(int[] s, Doctrine d) => [.. s, d.S0, d.S1, d.S2, d.S3];
+    static int[] Key(int[] s, DoctrineSet d) => [.. s, d.S0, d.S1, d.S2, d.S3];
 
     /// <summary>Adam steps over <paramref name="passes"/> example passes drawn from memory (batches of 8, clip 1, alpha eased in over the first steps).</summary>
     public void Train(int passes)

@@ -15,11 +15,11 @@ public static class GeneralContract
         return new(salt % 10, s, legal ?? LegalMask.All);
     }
 
-    static Doctrine Pick(params int[] t) => Doctrine.Of(t);
-    static readonly Doctrine A = Pick(DoctrineVocabulary.Army(ArmyOrderKind.Age), DoctrineVocabulary.Field(FieldOrderKind.Advance, 0));
-    static readonly Doctrine B = Pick(DoctrineVocabulary.Army(ArmyOrderKind.Flip, 2), DoctrineVocabulary.Field(FieldOrderKind.Hold, 1), DoctrineVocabulary.Army(ArmyOrderKind.Aura, 2));
+    static DoctrineSet Pick(params int[] t) => DoctrineSet.Of(t);
+    static readonly DoctrineSet A = Pick(DoctrineVocabulary.Army(ArmyOrderKind.Age), DoctrineVocabulary.Field(FieldOrderKind.Advance, 0));
+    static readonly DoctrineSet B = Pick(DoctrineVocabulary.Army(ArmyOrderKind.Flip, 2), DoctrineVocabulary.Field(FieldOrderKind.Hold, 1), DoctrineVocabulary.Army(ArmyOrderKind.Aura, 2));
 
-    static async Task Teach(IGeneral g, GeneralInput i, Doctrine d, int n)
+    static async Task Teach(IGeneral g, GeneralInput i, DoctrineSet d, int n)
     { for (int k = 0; k < n; k++) await g.LearnAsync(new GeneralExample(i, d, true), default); }
 
     public static IReadOnlyList<ContractCase<Func<IGeneral>>> Cases { get; } = Build(DefaultImitationExamples);
@@ -66,6 +66,17 @@ public static class GeneralContract
             {
                 var o = await g.SuggestAsync(Input(s), default);
                 Expect.True(o.ConfidencePermille is >= 0 and <= 1000, $"confidence {o.ConfidencePermille} outside 0..1000");
+            }
+        }),
+        new("slot-confidence-is-absent-or-four-permille", async make =>
+        {
+            // RESERVED field (phase 4b may fill it): absent (null) is always allowed; when present it is four readings, each 0..1000.
+            var g = make();
+            for (int s = 0; s < 4; s++) await Teach(g, Input(s), s % 2 == 0 ? A : B, examples);
+            for (int s = 0; s < 6; s++)
+            {
+                var o = await g.SuggestAsync(Input(s), default);
+                if (o.SlotConfidence is { } sc) Expect.True(sc.InRange, $"slot confidence {sc} outside 0..1000 in some slot");
             }
         }),
         new("imitation-repeats-a-consistent-choice", async make =>

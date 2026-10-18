@@ -27,7 +27,7 @@ internal sealed class SlotTable
     public int Token(int t) => DoctrineVocabulary.IsValid(t) ? t : 0;
 
     /// <summary>Add <paramref name="delta"/> to every cell this example touches (a cell never goes below zero).</summary>
-    public void Add(int[] s, Doctrine d, int delta)
+    public void Add(int[] s, DoctrineSet d, int delta)
     {
         for (int k = 0; k < Slots; k++)
         {

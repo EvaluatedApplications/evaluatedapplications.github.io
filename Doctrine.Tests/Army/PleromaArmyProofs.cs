@@ -38,7 +38,7 @@ public sealed class PleromaArmyProofs
         await a.DraftAsync(new DraftRequest(0, 1, [new DraftPick(kind, count)]), default);
 
     static async Task<ArmyOrdersReport> Order(IArmy a, int token) =>
-        await a.ApplyArmyOrdersAsync(Doctrine.Of(token), default);
+        await a.ApplyArmyOrdersAsync(DoctrineSet.Of(token), default);
 
     static void ModelOrder(ArmyModel m, DoctrineOrder o)
     {

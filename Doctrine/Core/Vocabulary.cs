@@ -87,7 +87,7 @@ public static class DoctrineVocabulary
         };
     }
     /// <summary>The field orders carried by a doctrine, in slot order (a group named twice keeps the LAST word).</summary>
-    public static FieldOrder[] FieldOrders(Doctrine d)
+    public static FieldOrder[] FieldOrders(DoctrineSet d)
     {
         var byGroup = new FieldOrder?[Groups];
         for (int i = 0; i < MaxSlots; i++)
@@ -98,7 +98,7 @@ public static class DoctrineVocabulary
         return byGroup.Where(f => f is not null).Select(f => f!.Value).ToArray();
     }
     /// <summary>The army orders carried by a doctrine, in slot order.</summary>
-    public static DoctrineOrder[] ArmyOrders(Doctrine d)
+    public static DoctrineOrder[] ArmyOrders(DoctrineSet d)
     {
         var l = new List<DoctrineOrder>();
         for (int i = 0; i < MaxSlots; i++) { var o = Decode(d[i]); if (o.Family == OrderFamily.Army) l.Add(o); }
@@ -107,11 +107,11 @@ public static class DoctrineVocabulary
 }
 
 /// <summary>A doctrine: up to four tokens (slot order matters; End = empty slot). A value type, so equality is free.</summary>
-public readonly record struct Doctrine(int S0, int S1, int S2, int S3)
+public readonly record struct DoctrineSet(int S0, int S1, int S2, int S3)
 {
-    public static readonly Doctrine Empty = default;
+    public static readonly DoctrineSet Empty = default;
     public int this[int slot] => slot switch { 0 => S0, 1 => S1, 2 => S2, 3 => S3, _ => throw new ArgumentOutOfRangeException(nameof(slot)) };
-    public static Doctrine Of(params int[] tokens)
+    public static DoctrineSet Of(params int[] tokens)
     {
         if (tokens.Length > DoctrineVocabulary.MaxSlots) throw new ArgumentException("a doctrine has at most 4 slots");
         Span<int> s = stackalloc int[4];
@@ -136,7 +136,7 @@ public readonly record struct LegalMask(ulong Bits)
     public LegalMask With(int token) => new(Bits | (1UL << token));
     public LegalMask Without(int token) => token == 0 ? this : new(Bits & ~(1UL << token));
     public int Count => System.Numerics.BitOperations.PopCount(Bits);
-    public bool AllowsAll(Doctrine d) => Allows(d.S0) && Allows(d.S1) && Allows(d.S2) && Allows(d.S3);
+    public bool AllowsAll(DoctrineSet d) => Allows(d.S0) && Allows(d.S1) && Allows(d.S2) && Allows(d.S3);
 }
 
 /// <summary>The roster: 8 kinds, each a named combination of traits and a price. One key, one trait set.</summary>
