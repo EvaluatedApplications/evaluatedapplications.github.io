@@ -118,6 +118,78 @@ public static class GeneralChecks
         return (await g.SuggestAsync(input, default)).Doctrine == a ? null : "two won battles did not bring the choice back";
     }
 
+    // ---- the per-slot match record (SlotConfidence) ----------------------------------------------------------------------
+
+    /// <summary>A player with no habit: 1..3 distinct legal tokens, uniformly.</summary>
+    public static DoctrineSet RandomChoice(Situation st, GameRng r)
+    {
+        var pool = Enumerable.Range(1, DoctrineVocabulary.Size - 1).Where(st.Legal.Allows).ToList();
+        int n = 1 + r.Next(3); var l = new List<int>();
+        while (l.Count < n && pool.Count > 0) { int i = r.Next(pool.Count); l.Add(pool[i]); pool.RemoveAt(i); }
+        return DoctrineSet.Of(l.ToArray());
+    }
+
+    /// <summary>
+    /// Teach one example at a time and, before each, ask the general what it would show; keep the record by hand (a slot counts when the shown or
+    /// the chosen token is not End; a hit when they are equal; halve everything when 64 examples have passed) and require the reported figure to be
+    /// 1000*hits/(counted+2), at most the measured rate, in range, and 0 before anything was seen.
+    /// </summary>
+    public static async Task<string?> SlotRecordMatchesBruteForce(Func<IGeneral> make, int style, int seed, int n, bool random = false)
+    {
+        var g = make();
+        var (st, by, cl) = GeneralSim.Draw(seed, 0, n);
+        var rr = new GameRng(GameRng.Mix(seed, 991));
+        int trials = 0; var hit = new int[4]; var cnt = new int[4];
+        for (int i = 0; i < n; i++)
+        {
+            var input = In(st[i]);
+            var o = await g.SuggestAsync(input, default);
+            if (o.SlotConfidence is not { } sc) return $"example {i}: no SlotConfidence";
+            for (int k = 0; k < 4; k++)
+            {
+                int want = 1000 * hit[k] / (cnt[k] + 2);
+                if (sc[k] != want) return $"example {i} slot {k}: reported {sc[k]}, recomputed {want} (hits {hit[k]} of {cnt[k]})";
+                if (sc[k] < 0 || sc[k] > 1000) return $"example {i} slot {k}: {sc[k]} out of range";
+                if (cnt[k] > 0 && sc[k] * cnt[k] > 1000 * hit[k]) return $"example {i} slot {k}: {sc[k]} is above the measured rate {hit[k]}/{cnt[k]}";
+                if (cnt[k] == 0 && sc[k] != 0) return $"example {i} slot {k}: {sc[k]} with nothing counted";
+            }
+            var chosen = random ? RandomChoice(st[i], rr) : cl[style][i];
+            var shown = o.Doctrine;
+            var want4 = Pack(chosen, st[i].Legal);
+            trials++;
+            for (int k = 0; k < 4; k++) if (shown[k] != 0 || want4[k] != 0) { cnt[k]++; if (shown[k] == want4[k]) hit[k]++; }
+            if (trials >= 64) { trials /= 2; for (int k = 0; k < 4; k++) { hit[k] /= 2; cnt[k] /= 2; } }
+            await g.LearnAsync(new GeneralExample(input, chosen, false), default);
+        }
+        return null;
+    }
+
+    // what the general compares with: the chosen tokens that are legal, not End, not repeated (the mask rule, applied to the player's side)
+    static DoctrineSet Pack(DoctrineSet d, LegalMask legal)
+    {
+        var l = new List<int>();
+        foreach (var t in new[] { d.S0, d.S1, d.S2, d.S3 }) if (t != 0 && legal.Allows(t) && !l.Contains(t) && l.Count < 4) l.Add(t);
+        return DoctrineSet.Of(l.ToArray());
+    }
+
+    /// <summary>The figures after the first <paramref name="n"/> examples of a player (null general output means absent).</summary>
+    public static async Task<SlotPermille?> SlotFiguresAfter(IGeneral g, int style, int seed, int n, bool random)
+    {
+        var (st, _, cl) = GeneralSim.Draw(seed, 0, n); var rr = new GameRng(GameRng.Mix(seed, 991));
+        for (int i = 0; i < n; i++) await g.LearnAsync(new GeneralExample(In(st[i]), random ? RandomChoice(st[i], rr) : cl[style][i], false), default);
+        var probe = GeneralSim.Draw(seed, 1, 1).States[0];
+        return (await g.SuggestAsync(In(probe), default)).SlotConfidence;
+    }
+
+    /// <summary>A new general starts at zero in every slot, however much an earlier general learned (no record leaks between generals).</summary>
+    public static async Task<string?> NewGeneralStartsAtZero(Func<IGeneral> make)
+    {
+        var old = make(); await SlotFiguresAfter(old, 0, 3, 30, false);
+        var fresh = make();
+        var o = await fresh.SuggestAsync(In(GeneralSim.Draw(3, 1, 1).States[0]), default);
+        return o.SlotConfidence is { } s && s.S0 == 0 && s.S1 == 0 && s.S2 == 0 && s.S3 == 0 ? null : $"a new general reported {o.SlotConfidence}";
+    }
+
     public static Func<IGeneral> Real(GeneralMode mode) => () => new TinyHoloGeneral(Fast(mode));
     internal static Func<IGeneral> Broken(GeneralMode mode, GeneralFault fault) => () => new TinyHoloGeneral(Fast(mode), fault);
 }

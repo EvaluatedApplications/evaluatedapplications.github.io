@@ -42,4 +42,7 @@ internal enum GeneralFault
     SharedState = 8,           // every instance learns into one lookup
     NetUnseeded = 16,          // the net's initial weights depend on the clock
     FirstFeatureOnly = 32,     // the lookup always reads feature 0 instead of the feature that fits the player
+    SlotsSwapped = 64,         // slot figures are read from the neighbouring slot (0<->1, 2<->3)
+    SlotsNotReset = 128,       // slot hit counts live in one static array, so a new general inherits an old one's record
+    SlotsOptimistic = 256,     // the figure is (hits+1)/(trials+1): above the measured hit rate
 }

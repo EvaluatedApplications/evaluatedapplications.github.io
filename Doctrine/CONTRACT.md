@@ -113,9 +113,12 @@ Invariants (`GeneralContract`):
 - CONFIDENCE MEANS ONE THING: `ConfidencePermille` is about the WHOLE suggestion, the general's running rate of exact whole-doctrine matches
   (its answer equalled the doctrine the player then set), not a per-slot or per-situation figure. The contract fixes only its range and that it
   rises with consistent evidence; a host must say "how often its whole suggestion has matched yours", never "how sure it is of this token".
-- `SlotConfidence` is RESERVED and optional (null by default, the pipeline carries it untouched, no digest sees it): when a general fills it
-  it is a `SlotPermille`, four readings (one per doctrine slot) each in 0..1000 (`slot-confidence-is-absent-or-four-permille`). No general fills
-  it yet.
+- `SlotConfidence` is optional (null by default, the pipeline carries it untouched, no digest sees it): when a general fills it
+  it is a `SlotPermille`, four readings (one per doctrine slot) each in 0..1000 (`slot-confidence-is-absent-or-four-permille`). `TinyHoloGeneral`
+  fills it as a per-slot MATCH RECORD (not a probability): a slot counts in an imitation example when the doctrine it would have shown or the
+  player's is not End there, a hit when the two tokens are equal; slot k reads `1000 * hits_k / (counted_k + 2)` (integer division, so never above
+  the measured rate, 0 for a new general or a slot never used, 5 straight matches read 714), over the same recent window as the confidence. Computed
+  from observed choices only, deterministic.
 - THE MASK IS THE START MASK: the input's `Legal` is the army's list at the START of the round, and the general only suggests tokens it allows,
   so it never suggests an order that becomes legal only after another (the player may; see "Who judges a token"). The pipeline enforces this on
   the ghost again, so a broken general is cleaned and counted, never trusted.

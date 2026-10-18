@@ -59,6 +59,60 @@ public class TinyHoloGeneralTests
         Assert.True(net < table, $"the probe found the net alone below the lookup: net {net:F3}, lookup {table:F3}");
     }
 
+    // ---- SlotConfidence: the per-slot match record -------------------------------------------------------------------
+
+    [Theory]
+    [InlineData(GeneralMode.Hybrid)] [InlineData(GeneralMode.TableOnly)] [InlineData(GeneralMode.NetOnly)]
+    public async Task An_empty_general_reports_four_zeros(GeneralMode mode)
+    {
+        var o = await GeneralChecks.Real(mode)().SuggestAsync(new GeneralInput(0, new int[14], LegalMask.All), default);
+        Assert.Equal(new SlotPermille(0, 0, 0, 0), o.SlotConfidence);
+        Assert.Equal(0, o.ConfidencePermille);
+    }
+
+    [Theory]
+    [InlineData(GeneralMode.Hybrid, 0, 3)] [InlineData(GeneralMode.TableOnly, 1, 4)] [InlineData(GeneralMode.NetOnly, 0, 5)] [InlineData(GeneralMode.Hybrid, 2, 6, true)]
+    public async Task The_slot_figure_equals_a_brute_force_recomputation_from_the_example_stream(GeneralMode mode, int style, int seed, bool random = false)
+        => Assert.Null(await GeneralChecks.SlotRecordMatchesBruteForce(GeneralChecks.Real(mode), style, seed, 150, random));
+
+    [Fact]
+    public async Task A_habitual_player_reads_high_within_a_few_examples_and_a_random_player_does_not()
+    {
+        foreach (var style in new[] { 0, 1 })
+        {
+            var h = (await GeneralChecks.SlotFiguresAfter(GeneralChecks.Real(GeneralMode.Hybrid)(), style, 11, 12, false))!.Value;
+            Assert.True(new[] { h.S0, h.S1, h.S2 }.Max() >= 400, $"style {style}: after 12 habitual examples the slot figures were {h}");
+            var h30 = (await GeneralChecks.SlotFiguresAfter(GeneralChecks.Real(GeneralMode.Hybrid)(), style, 11, 30, false))!.Value;
+            Assert.True(new[] { h30.S0, h30.S1, h30.S2 }.Count(x => x >= 500) >= 2, $"style {style}: after 30 habitual examples the slot figures were {h30}");
+        }
+        foreach (var seed in new[] { 11, 12 })
+        {
+            var r = (await GeneralChecks.SlotFiguresAfter(GeneralChecks.Real(GeneralMode.Hybrid)(), 0, seed, 40, true))!.Value;
+            Assert.True(new[] { r.S0, r.S1, r.S2, r.S3 }.Max() < 300, $"a random player read {r}");
+        }
+    }
+
+    [Fact]
+    public async Task The_slot_figure_is_deterministic_in_range_and_a_new_general_starts_at_zero()
+    {
+        var a = await GeneralChecks.SlotFiguresAfter(GeneralChecks.Real(GeneralMode.Hybrid)(), 1, 21, 30, false);
+        var b = await GeneralChecks.SlotFiguresAfter(GeneralChecks.Real(GeneralMode.Hybrid)(), 1, 21, 30, false);
+        Assert.Equal(a, b);
+        Assert.True(a!.Value.InRange);
+        Assert.Null(await GeneralChecks.NewGeneralStartsAtZero(GeneralChecks.Real(GeneralMode.TableOnly)));
+    }
+
+    [Fact]
+    public async Task Slot_figures_are_already_nonzero_after_eight_rounds_of_a_habit()
+    {
+        // the first rounds of a short game: the slot figures move although the whole-doctrine rate needs exact matches
+        var g = GeneralChecks.Real(GeneralMode.TableOnly)();
+        var (st, _, cl) = GeneralSim.Draw(31, 0, 8);
+        for (int i = 0; i < 8; i++) await g.LearnAsync(new GeneralExample(In(st[i]), cl[0][i], false), default);
+        var o = await g.SuggestAsync(In(st[0]), default);
+        Assert.True(o.SlotConfidence!.Value.S0 > 0 || o.SlotConfidence.Value.S1 > 0, $"{o.SlotConfidence}");
+    }
+
     [Fact]
     public void Learning_is_an_EvalApp_pipeline_one_remember_step_and_four_replay_slices()
     {
@@ -162,6 +216,21 @@ public class TinyHoloGeneralMutationProofs
         Assert.Null(await GeneralChecks.PlayersStayApart(GeneralChecks.Real(GeneralMode.Hybrid)));
         Assert.Null(await GeneralChecks.HabitIsLearned(GeneralChecks.Real(GeneralMode.Hybrid)));
         Assert.Null(await GeneralChecks.LostBattlesErodeAndWinsRestore(GeneralChecks.Real(GeneralMode.Hybrid)));
+    }
+
+    [Fact] public async Task Slot_figures_read_from_the_neighbouring_slot_are_caught()
+        => Assert.NotNull(await GeneralChecks.SlotRecordMatchesBruteForce(GeneralChecks.Broken(GeneralMode.TableOnly, GeneralFault.SlotsSwapped), 0, 3, 60));
+
+    [Fact] public async Task A_slot_record_that_a_new_general_inherits_is_caught()
+        => Assert.NotNull(await GeneralChecks.NewGeneralStartsAtZero(GeneralChecks.Broken(GeneralMode.TableOnly, GeneralFault.SlotsNotReset)));
+
+    [Fact] public async Task A_slot_figure_above_the_measured_hit_rate_is_caught()
+        => Assert.NotNull(await GeneralChecks.SlotRecordMatchesBruteForce(GeneralChecks.Broken(GeneralMode.TableOnly, GeneralFault.SlotsOptimistic), 0, 3, 60));
+
+    [Fact] public async Task Clean_general_passes_the_slot_record_checks()
+    {
+        Assert.Null(await GeneralChecks.SlotRecordMatchesBruteForce(GeneralChecks.Real(GeneralMode.TableOnly), 0, 3, 60));
+        Assert.Null(await GeneralChecks.NewGeneralStartsAtZero(GeneralChecks.Real(GeneralMode.TableOnly)));
     }
 
     [Fact] public async Task A_net_whose_output_is_not_masked_is_caught()

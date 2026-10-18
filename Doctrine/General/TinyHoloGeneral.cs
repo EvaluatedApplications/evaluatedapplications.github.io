@@ -14,7 +14,10 @@ namespace Doctrine.General;
 public sealed class TinyHoloGeneral : IGeneral
 {
     static readonly SlotTable SharedTable = new();   // used only by the SharedState mutant
-    static int _unseeded;                              // used only by the NetUnseeded mutant
+    static readonly int[] SharedSlotHits = new int[SlotTable.Slots];   // used only by the SlotsNotReset mutant
+    static readonly int[] SharedSlotTrials = new int[SlotTable.Slots];
+    readonly int[] _slotHits = new int[SlotTable.Slots], _slotTrials = new int[SlotTable.Slots];   // per slot, within the window: shown == player's / either was not End
+    static int _unseeded;                            // used only by the NetUnseeded mutant
 
     readonly GeneralOptions _o;
     readonly SlotTable _table;
@@ -55,7 +58,29 @@ public sealed class TinyHoloGeneral : IGeneral
         var s = Clean(input.Summary);
         var (d, _, _) = Think(s, input.Legal);
         int conf = d.IsEmpty || _trials == 0 ? 0 : Math.Clamp((int)(1000L * _exact / (_trials + 2)), 0, 1000);
-        return ValueTask.FromResult(new GeneralOutput(d, conf));
+        return ValueTask.FromResult(new GeneralOutput(d, conf, SlotFigures()));
+    }
+
+    /// <summary>
+    /// THE MATCH RECORD, per slot (CONTRACT section c). Before each imitation example is learned, the doctrine this general would have shown
+    /// (whichever half, table or net, was speaking for each slot, after the mask) is compared slot by slot with the doctrine the player then set.
+    /// A slot COUNTS in an example when either side said something there (shown token or player token is not End); two Ends are not a trial, so a
+    /// slot the player leaves empty and the general leaves empty reads 0, not a flattering 1000. Slot k reads  1000 * hits_k / (counted_k + 2)
+    /// (integer division), hits_k = counted examples where the shown token equalled the player's. counted_k = 0 reads 0. It is a Laplace-style
+    /// lower bound on the slot's recent hit rate, never above it, so it climbs fast on a habit (5 straight matches read 714) and stays low on a
+    /// random player. Window: counts are halved whenever the whole-suggestion window passes 64 examples. A record, not a probability.
+    /// </summary>
+    SlotPermille SlotFigures()
+    {
+        bool shared = (_fault & GeneralFault.SlotsNotReset) != 0;
+        int[] h = shared ? SharedSlotHits : _slotHits, n = shared ? SharedSlotTrials : _slotTrials;
+        int Fig(int k)
+        {
+            int a = (_fault & GeneralFault.SlotsSwapped) != 0 ? (k ^ 1) : k;
+            long v = (_fault & GeneralFault.SlotsOptimistic) != 0 ? 1000L * (h[a] + 1) / (n[a] + 1) : 1000L * h[a] / (n[a] + 2);
+            return (int)Math.Clamp(v, 0, 1000);
+        }
+        return new SlotPermille(Fig(0), Fig(1), Fig(2), Fig(3));
     }
 
     /// <summary>Both learners' raw per-slot tokens, the slot-by-slot choice between them, and the doctrine that leaves (always masked).</summary>
@@ -145,11 +170,16 @@ public sealed class TinyHoloGeneral : IGeneral
             if (net && nt[k] == want) _netHits[k]++;
         }
         _trials++;
-        if (d == Enforce(j.Chosen.Tokens, j.Legal)) _exact++;
+        var shouldHave = Enforce(j.Chosen.Tokens, j.Legal);
+        if (d == shouldHave) _exact++;
+        bool shared = (_fault & GeneralFault.SlotsNotReset) != 0;
+        int[] sh = shared ? SharedSlotHits : _slotHits, sn = shared ? SharedSlotTrials : _slotTrials;
+        for (int k = 0; k < SlotTable.Slots; k++)
+            if (d[k] != 0 || shouldHave[k] != 0) { sn[k]++; if (d[k] == shouldHave[k]) sh[k]++; }
         if (_trials >= 64)
         {
             _trials /= 2; _exact /= 2;
-            for (int k = 0; k < SlotTable.Slots; k++) { _tableHits[k] /= 2; _netHits[k] /= 2; }
+            for (int k = 0; k < SlotTable.Slots; k++) { _tableHits[k] /= 2; _netHits[k] /= 2; sh[k] /= 2; sn[k] /= 2; }
         }
     }
 
