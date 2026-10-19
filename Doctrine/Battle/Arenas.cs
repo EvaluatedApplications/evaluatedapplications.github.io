@@ -36,9 +36,11 @@ internal sealed class Arena
     /// <summary>The circular zone handed to the dynamic-obstacle service when the gate falls (null when the arena has no gate).</summary>
     public NavMeshBlockedZone? GateZone { get; }
 
-    public Arena(ArenaSpec spec)
+    readonly bool _legacyMesh;
+
+    public Arena(ArenaSpec spec, bool legacyMesh = false)
     {
-        Spec = spec;
+        Spec = spec; _legacyMesh = legacyMesh;
         int half = spec.Half[0].Length;
         Rows = spec.Half.Length; Cols = half * 2;
         _cells = new char[Cols, Rows];
@@ -115,7 +117,11 @@ internal sealed class Arena
                 if (_cells[c, r] != '#')
                 {
                     int a = V(c, r), b = V(c + 1, r), cc = V(c + 1, r + 1), d = V(c, r + 1);
-                    triangles.Add((a, b, cc)); triangles.Add((a, cc, d));
+                    // The right half is split along the REFLECTION of the left half's diagonal, so the mesh is its own mirror image. With one diagonal
+                    // everywhere the two armies' ground was not equal (different corridors and sight lines), and mirrored armies leaned to the
+                    // attacker 43 to 8 on the ridge (Doctrine\todo\balance-harness-2026-10-19.md).
+                    if (!_legacyMesh && c >= Cols / 2) { triangles.Add((a, b, d)); triangles.Add((b, cc, d)); }
+                    else { triangles.Add((a, b, cc)); triangles.Add((a, cc, d)); }
                 }
         return (vertices, triangles);
     }
@@ -237,9 +243,9 @@ internal static class ArenaCatalogue
         ],
     };
 
-    public static IReadOnlyList<Arena> Build()
+    public static IReadOnlyList<Arena> Build(bool legacyMesh = false)
     {
         var specs = new[] { OpenField, Chokepoint, Ridge, FallingGate };
-        return specs.Select(s => new Arena(s)).ToList();
+        return specs.Select(s => new Arena(s, legacyMesh)).ToList();
     }
 }

@@ -30,7 +30,7 @@ public sealed class TracerBattleEngine : IBattleEngine, IArenaLayouts
 {
     readonly TracerContext _tracer;
     readonly TracerBattleOptions _options;
-    readonly IReadOnlyList<Arena> _arenas = ArenaCatalogue.Build();
+    readonly IReadOnlyList<Arena> _arenas;
     readonly INavMeshBakerService _baker;
     readonly IEngagementService _engagement;
     readonly IInfluenceMapService _influence;
@@ -41,6 +41,7 @@ public sealed class TracerBattleEngine : IBattleEngine, IArenaLayouts
     {
         _tracer = tracer ?? throw new ArgumentNullException(nameof(tracer));
         _options = options ?? new TracerBattleOptions();
+        _arenas = ArenaCatalogue.Build(legacyMesh: _options.Probe.HasFlag(OrderProbe.LegacyMesh));
         _baker = tracer.World.CreateNavMeshBakerService("doctrine-baker");
         _engagement = tracer.EngagementService ?? tracer.World.CreateEngagementService("doctrine-engagement");
         _influence = tracer.World.CreateInfluenceMapService("doctrine-influence");

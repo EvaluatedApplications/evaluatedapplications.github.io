@@ -26,9 +26,12 @@ public class DigestPinTests
     [Fact]
     public async Task The_eight_round_real_section_game_digest_is_pinned()
     {
-        // Re-pinned 2026-10-19 (was 1827372264668017971): the Tracer battle changed on purpose. The defender's formation block is now mirrored
+        // Re-pinned again 2026-10-19 (was 9094490212791655651): the arena meshes are now baked as their own mirror image (the right half of every arena
+        // is split along the reflection of the left half's diagonal). With one diagonal everywhere, mirrored armies leaned to the attacker 43 to 8 on
+        // the ridge (large-N sweep, same note). Every Tracer battle changes; the stub digest is untouched.
+        // Earlier re-pin 2026-10-19 (was 1827372264668017971): the Tracer battle changed on purpose. The defender's formation block is now mirrored
         // (the attacker's partial last row was its front, the defender's its rear) and agent ids interleave the two sides in conflict priority.
         // Found by the balance harness (Doctrine\todo\balance-harness-2026-10-19.md). The stub digest above is untouched.
-        Assert.Equal(9094490212791655651UL, await Play(true, 1234));
+        Assert.Equal(2333107022278238892UL, await Play(true, 1234));
     }
 }

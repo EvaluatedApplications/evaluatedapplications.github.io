@@ -19,7 +19,12 @@ public static class Sample
     {
         var game = DoctrineBuilder.New().WithBattle(engine).Build();
         var r = await game.Battle.RunAsync(new BattleState(setup));
-        if (r is PipelineResult<BattleState>.Failure f) throw f.Exception;
+        if (r is PipelineResult<BattleState>.Failure f)
+        {
+            // Rethrown with its own stack (a plain "throw f.Exception" would hide where inside the battle it broke).
+            if (f.Exception is null) throw new InvalidOperationException("the battle pipeline failed: " + (f.Message ?? "(no message)"));
+            System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(f.Exception).Throw();
+        }
         return r.GetData();
     }
 

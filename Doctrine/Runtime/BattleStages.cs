@@ -25,7 +25,12 @@ sealed class TicksStage : BattleStage_
         while (!s.Done)
         {
             var r = await g.BattleTick.RunAsync(s, ct);
-            if (r is PipelineResult<BattleState>.Failure f) throw f.Exception;
+            if (r is PipelineResult<BattleState>.Failure f)
+            {
+                // Rethrown WITH its own stack: a plain "throw f.Exception" hides where inside the tick it broke.
+                if (f.Exception is null) throw new InvalidOperationException("a battle tick failed: " + (f.Message ?? "(no message)"));
+                System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(f.Exception).Throw();
+            }
             s = r.GetData();
         }
         return s;

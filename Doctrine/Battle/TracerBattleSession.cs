@@ -47,7 +47,7 @@ public sealed class TracerBattleSession : IBattleSession
 
     sealed class Cohort
     {
-        public int Id, Role, Key, Slot, PowerPct, Start, Strength; public long PendingFp, CarryFp;
+        public int Id, Ord, Role, Key, Slot, PowerPct, Start, Strength; public long PendingFp, CarryFp;   // Ord = place in the attackers-first order (seeds the jitter)
         public Side Side; public Trait Traits; public float Speed, Range; public int DamagePct, TakenPct;
         public List<Unit> Units = new(); public List<(FieldOrderKind Kind, int Weight)> Orders = new();
         public Vector2 Anchor, Centroid; public int Alive;
@@ -114,7 +114,7 @@ public sealed class TracerBattleSession : IBattleSession
     // yield. The id therefore leads with the agent's index in its cohort and breaks each index's tie by a side that alternates with the index:
     // ranks interleave across the two armies and neither side owns the right of way. Layout: index << 12 | side flag << 11 | cohort id.
     const int CohortBits = 11, CohortMask = (1 << CohortBits) - 1, IndexShift = 12;
-    static int UnitIdOf(Cohort c, int k) => (k << IndexShift) | (((c.Role ^ (k & 1)) & 1) << CohortBits) | c.Id;
+    int UnitIdOf(Cohort c, int k) => (k << IndexShift) | (((c.Role ^ (k & 1) ^ (_opt.Probe.HasFlag(OrderProbe.IdParityFlip) ? 1 : 0)) & 1) << CohortBits) | c.Id;
     static int CohortIdOf(int unitId) => unitId & CohortMask;
     static int IndexOfId(int unitId) => unitId >> IndexShift;
     Cohort CohortOfUnit(int unitId) => _cohorts[CohortIdOf(unitId)];
@@ -134,6 +134,12 @@ public sealed class TracerBattleSession : IBattleSession
         var sides = new[] { _setup.Attacker, _setup.Defender };
         var raw = new List<(int Role, CohortRead Read, BattleSide Side)>();
         for (int r = 0; r < 2; r++) foreach (var c in sides[r].Cohorts.Where(c => c.Count > 0)) raw.Add((r, c, sides[r]));
+        var ordinal = Enumerable.Range(0, raw.Count).ToArray();
+        if (_opt.Probe.HasFlag(OrderProbe.SpawnReversed))
+        {
+            var idx = Enumerable.Range(0, raw.Count).OrderByDescending(i => raw[i].Role).ToArray();   // stable: defenders first, each side in its own order
+            raw = idx.Select(i => raw[i]).ToList(); ordinal = idx;
+        }
 
         // The agent sample: about 3 x sqrt(soldiers), capped per cohort, then scaled down together if the field would exceed the cap.
         var agents = raw.Select(x => Math.Clamp((int)MathF.Round(MathF.Sqrt(x.Read.Count) * 3f), 1, Math.Min(_opt.MaxAgentsPerCohort, x.Read.Count))).ToArray();
@@ -145,7 +151,7 @@ public sealed class TracerBattleSession : IBattleSession
             var (role, read, side) = raw[i];
             var c = new Cohort
             {
-                Id = i, Role = role, Side = side.Side, Key = read.Key, Slot = read.Slot, Traits = read.Traits, PowerPct = read.PowerPct,
+                Id = i, Ord = ordinal[i], Role = role, Side = side.Side, Key = read.Key, Slot = read.Slot, Traits = read.Traits, PowerPct = read.PowerPct,
                 Start = read.Count, Strength = read.Count, Speed = UnitRules.Speed(read.Traits), Range = UnitRules.Range(read.Traits),
                 DamagePct = UnitRules.DamagePct(read.Traits), TakenPct = UnitRules.TakenPct(read.Traits),
             };
@@ -172,7 +178,7 @@ public sealed class TracerBattleSession : IBattleSession
         foreach (var c in _cohorts)
         {
             int n = agents[c.Id];
-            var rng = new GameRng(GameRng.Mix(_setup.Seed, c.Id));
+            var rng = new GameRng(GameRng.Mix(_setup.Seed, c.Ord));
             for (int k = 0; k < n; k++)
             {
                 var jitter = new Vector2((rng.Next(1000) / 1000f - 0.5f) * 0.4f, (rng.Next(1000) / 1000f - 0.5f) * 0.4f);
@@ -367,7 +373,7 @@ public sealed class TracerBattleSession : IBattleSession
             var lat = new Vector2(-axis.Y, axis.X);
             var a = SnapGoal(ke + lat * 10f + axis * 3f); var b = SnapGoal(ke - lat * 10f + axis * 3f);
             float ta = Threat(c.Role, a), tb = Threat(c.Role, b);
-            c.FlankPoint = ta < tb ? a : tb < ta ? b : (((_setup.Seed + c.Id) & 1) == 0 ? a : b);   // the side where the enemy's territory is thinner
+            c.FlankPoint = ta < tb ? a : tb < ta ? b : (((_setup.Seed + c.Ord) & 1) == 0 ? a : b);   // the side where the enemy's territory is thinner
             c.FlankSet = true;
         }
         if (Vector2.Distance(c.Centroid, c.FlankPoint) < 5f || c.Engaged) { c.FlankDone = true; return _known[c.Role][target.Id]; }
@@ -423,7 +429,7 @@ public sealed class TracerBattleSession : IBattleSession
     public async ValueTask MoveAsync(CancellationToken ct)
     {
         var free = new List<AgentDto>();
-        foreach (var c in _cohorts) foreach (var u in c.Units)
+        foreach (var c in _opt.Probe.HasFlag(OrderProbe.NavigatorReversed) ? _cohorts.OrderByDescending(c => c.Role) : (IEnumerable<Cohort>)_cohorts) foreach (var u in c.Units)
             if (u.Alive && !(u.Fired && u.Order != FieldOrderKind.FallBack))   // an agent that struck last tick stands and fights
                 free.Add(new AgentDto(u.Id, u.P, u.Goal, Radius: 0.35f, MaxSpeed: c.Speed, GoalChanged: true));
         if (free.Count > 0)
@@ -472,7 +478,9 @@ public sealed class TracerBattleSession : IBattleSession
         }
         if (sides[0].Count == 0 || sides[1].Count == 0) return;
 
-        var outcomes = await _engagement.ResolveOutcomesAsync(sides[0], sides[1], radius, Resolve, ct);
+        var outcomes = _opt.Probe.HasFlag(OrderProbe.EngagementSwap)
+            ? await _engagement.ResolveOutcomesAsync(sides[1], sides[0], radius, Resolve, ct)
+            : await _engagement.ResolveOutcomesAsync(sides[0], sides[1], radius, Resolve, ct);
         Stats.EngagementCalls++;
         foreach (var o in outcomes)
         {

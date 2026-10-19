@@ -22,6 +22,25 @@ public sealed record TracerBattleOptions
     public bool Influence { get; init; } = true;
     /// <summary>The Falling Gate arena drops its gate through the dynamic-obstacle service.</summary>
     public bool DynamicObstacles { get; init; } = true;
+    /// <summary>Test hook of the balance harness: flips ONE ordering of the battle to see whether it carries a side lean. None = the game.</summary>
+    internal OrderProbe Probe { get; init; }
+}
+
+/// <summary>Each switch reverses one ordering that the two sides do not share (see Doctrine\todo\balance-harness-2026-10-19.md). Default None.</summary>
+[Flags]
+internal enum OrderProbe
+{
+    None = 0,
+    /// <summary>Hand the engagement service the defenders as its "attackers" list.</summary>
+    EngagementSwap = 1,
+    /// <summary>Build the cohort list defenders first (jitter streams and flank tie keep the attackers-first ordinal).</summary>
+    SpawnReversed = 2,
+    /// <summary>Build the navigator's free-agent list defenders first.</summary>
+    NavigatorReversed = 4,
+    /// <summary>Flip which role owns the right of way at an index (unit id parity).</summary>
+    IdParityFlip = 8,
+    /// <summary>Bake the arenas as before the mirror fix: every cell split along the same diagonal, so the mesh is not its own reflection.</summary>
+    LegacyMesh = 16,
 }
 
 /// <summary>An agent of the battle: Tracer's <see cref="GameAgent"/> plus the integer facts the deterministic resolver needs.</summary>
