@@ -32,6 +32,15 @@ Showroom\todo\doctrine-story-from-mechanics.md). Decisions below are made; each 
    game's own, recap after each battle, chronicle credits the player's orders, no timer.
 8. **Chronicle.** Built (live): a log of the fight from the recording, every line cited to a frame event.
 
+9. **Endless single player (run mode).** The run lasts until the player loses. Lose = out of STANDARDS: the player starts with 3,
+   a lost field costs one, every 5th field won restores one (max 3), the run ends at zero; score = fields won (best run kept
+   only in the page session unless the user approves saving). Enemy gold grows every round without a cap; every 5th field is a
+   captain's field (stronger enemy, and a free pick from a small offer as the reward). The fixed 3/5/8-round games stay as
+   'Campaign' options. Technical: Rounds = endless in the options; the pipeline run is CHUNKED (EvalApp recursion depth is a
+   limit, so the host runs a few rounds per pipeline run and carries RoundState); RoundRecord history is capped (last N); the
+   'no soldiers and no gold' clause stays but standards are the real end; needs the comeback term so a loss streak is not
+   instant. Mechanics as story: a lost field costs the host a standard.
+
 ## Queued (designed, not dispatched)
 
 - **Campaign layer.** Seeded map of provinces (a Pleroma store), player-chosen number of epochs, win the war not the battle
