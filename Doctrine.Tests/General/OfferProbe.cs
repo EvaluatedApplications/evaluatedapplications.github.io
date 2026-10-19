@@ -43,7 +43,7 @@ public sealed class OfferProbe
     public const int Rounds = 60, Seeds = 16;
     static readonly int[] Horizons = [10, 20, 40, 60];
     public static readonly string[] Styles = ["biggest-army", "front-line-field", "reform-ranks", "random", "streak", "situation"];
-    public static readonly string[] Arms = ["T", "H", "N", "NH", "O", "F", "R"];
+    public static readonly string[] Arms = ["T", "H", "N", "NH", "O", "F", "R", "Rs"];
 
     // ---- the world ------------------------------------------------------------------------------------------------------
 
@@ -171,10 +171,28 @@ public sealed class OfferProbe
         foreach (var arm in arms)
         {
             var sc = new Score[rounds];
-            if (arm == "R")
+            if (arm == "R" || arm == "Rs")
             {
-                var rr = new GameRng(GameRng.Mix(seed, 9300 + style));
-                for (int i = 0; i < rounds; i++) sc[i] = Judge(Random(stream[i].Offer, 3, rr), all[i]);
+                // the random-offer null: as many random offered cards as the player usually takes (first round: 3). R is the exact expectation of that
+                // guess; Rs draws it 200 times per round, so the two can be compared (they must agree within 2x or the instrument is invalid)
+                var rr = new GameRng(GameRng.Mix(seed, 9300 + style)); int sum = 0;
+                for (int i = 0; i < rounds; i++)
+                {
+                    int k = i == 0 ? 3 : Math.Max(1, (int)Math.Round(sum / (double)i)), m = all[i].Length, n = stream[i].Offer.Length;
+                    if (arm == "R")
+                    {
+                        double perm = 1; for (int q = 0; q < m; q++) perm *= n - q;
+                        double comb = perm; for (int q = 2; q <= m; q++) comb /= q;
+                        sc[i] = new Score(k == m ? 1 / perm : 0, k == m ? 1 / comb : 0, k / (double)n);
+                    }
+                    else
+                    {
+                        double ex = 0, st = 0, rc = 0;
+                        for (int d = 0; d < 200; d++) { var s1 = Judge(Random(stream[i].Offer, k, rr), all[i]); ex += s1.Exact; st += s1.Set; rc += s1.Recall; }
+                        sc[i] = new Score(ex / 200, st / 200, rc / 200);
+                    }
+                    sum += m;
+                }
             }
             else if (arm == "F")
             {
@@ -196,22 +214,6 @@ public sealed class OfferProbe
             result[arm] = sc;
         }
         return result;
-    }
-
-    /// <summary>The analytic random null for a stream: mean over rounds of 1/(8!/(8-m)!) (exact) and 1/C(8,m) (set) for a size-3 guess when the player took m = 3, else 0.</summary>
-    public static (double Exact, double Set) AnalyticRandom(int style, int seed, int rounds)
-    {
-        var stream = Stream(seed, rounds);
-        var chooser = new GameRng(GameRng.Mix(seed, 9200 + style));
-        var prev = Array.Empty<int>(); double ex = 0, st = 0;
-        for (int i = 0; i < rounds; i++)
-        {
-            var p = Choose(style, stream[i], prev, chooser); prev = p;
-            if (p.Length != 3) continue;
-            int n = stream[i].Offer.Length;
-            ex += 1.0 / (n * (n - 1.0) * (n - 2)); st += 6.0 / (n * (n - 1.0) * (n - 2));
-        }
-        return (ex / rounds, st / rounds);
     }
 
     // ---- the run ----------------------------------------------------------------------------------------------------------
@@ -256,12 +258,12 @@ public sealed class OfferProbe
             }
         }
         foreach (var n in new[] { 20, 40 }) { Diff("T", "F", n); Diff("T", "R", n); Diff("N", "T", n); Diff("O", "T", n); Diff("H", "T", n); Diff("NH", "N", n); }
-        if (arms.Contains("R"))
+        if (arms.Contains("R") && arms.Contains("Rs"))
             for (int s = 0; s < Styles.Length; s++)
             {
-                var an = Enumerable.Range(1, Seeds).Select(sd => AnalyticRandom(s, sd, 60)).ToArray();
-                var emp = Stat("R", s, 60, x => x.Exact).M; var empS = Stat("R", s, 60, x => x.Set).M;
-                sb.AppendLine($"null check {Styles[s]}: analytic exact {an.Average(a => a.Exact):F5} set {an.Average(a => a.Set):F5}; empirical (size-3 guess) exact {emp:F5} set {empS:F5}");
+                var an = Stat("R", s, 60, x => x.Set).M; var emp = Stat("Rs", s, 60, x => x.Set).M;
+                var anE = Stat("R", s, 60, x => x.Exact).M; var empE = Stat("Rs", s, 60, x => x.Exact).M;
+                sb.AppendLine($"null check {Styles[s]}: analytic set {an:F5} exact {anE:F5}; sampled set {emp:F5} exact {empE:F5}");
             }
         sb.AppendLine($"violations: {violations.Count}");
         foreach (var v in violations.Take(10)) sb.AppendLine(v);

@@ -24,7 +24,7 @@ public class DigestPinTests
         var b = DoctrineBuilder.New().WithPlayer(new ScriptedPlayer(1)).WithRules(new DoctrineDomain { MaxRounds = 8, Siege = false })
             .WithDefaults(r => r.WithArmy(new PleromaArmyService()).WithTracer(TracerWorlds.Scratch())
                 .WithBattle(ctx => new TracerBattleEngine(ctx.Tracer!, new TracerBattleOptions { Set = false, SiegeClock = false })).WithGeneral(new TinyHoloGeneral()));
-        Assert.Equal(11812496190769634675UL, (await b.Build().PlayAsync(1234)).Digest());   // was 985521802167079629 before the canonical pick order (see the real pin below)
+        Assert.Equal(9948558431706531662UL, (await b.Build().PlayAsync(1234)).Digest());   // was 985521802167079629 before the canonical pick order (see the real pin below); was 11812496190769634675 before the general ranked offered cards (2026-10-19: GhostConfidence is in the digest and the taste-table general reports different figures; nothing else moved, the stub pin beside it is unchanged)
         Assert.Equal(6906114545053946481UL, await Play(false, 1234));   // the stub: no siege arena, no stillness, nothing to switch
     }
 
@@ -40,7 +40,9 @@ public class DigestPinTests
         // worth (a Spearman costs 2) for the player, the scripted enemy and the scripted player, and the stub's tick limit counts power, not soldiers. The wire format is unchanged.
         // Re-pinned a fourth time 2026-10-19, fourth round (was 15698248093412764465): the roguelike offers (the scripted player buys offered packs and picks offered tokens) and the balance rule of placement.
         // FOUND: the third-round assertion sat inside a comment (a literal backslash-n joined it to the comment line), so the pin had not been checked since; the old value is reproduced exactly by OfferTests.The_offers_off_reproduce_the_old_game_to_the_digest.
-        // Re-pinned 2026-10-19, fifth round (was 16876537667783564324): a draft buys its picks in KIND order, so the order the picks were listed in no longer decides which rank a new cohort joins\r\n        // (coordinator finding from showroom-owner; CanonicalOrderTests). The scripted players list picks in the order they chose them, so their armies, and every battle, change.\r\n        Assert.Equal(6906114545053946481UL, await Play(false, 1234));
+        // Re-pinned 2026-10-19, fifth round (was 16876537667783564324): a draft buys its picks in KIND order, so the order the picks were listed in no longer decides which rank a new cohort joins
+        // (coordinator finding from showroom-owner; CanonicalOrderTests). The scripted players list picks in the order they chose them, so their armies, and every battle, change.
+        Assert.Equal(6906114545053946481UL, await Play(false, 1234));
     }
 
     [Fact]
@@ -62,6 +64,10 @@ public class DigestPinTests
         // Re-pinned an eighth time 2026-10-19, fifth round (was 985521802167079629): SET (a cohort that holds unhit for six ticks strikes harder; the scripted players hold now and then, so
         // battles with a Holding line change) and the SIEGE (the chokepoint and the falling gate name a besieger by the round, so those battles are recorded in version 3 and a besieger that bides
         // loses its stance). With both off the game is the canonical-order game: With_set_and_the_siege_switched_off_the_fourth_round_game_comes_back_to_the_digest (the fourth round's own digests are NOT reproducible any more: pick order mattered then). The stub pin is unchanged.
-        // Same date, canonical order (was 9065230466072349598 with set and siege only): cohorts are read and fought in kind order and a draft buys in kind order (see the stub pin).\r\n        Assert.Equal(13108978268610124776UL, await Play(true, 1234));
+        // Same date, canonical order (was 9065230466072349598 with set and siege only): cohorts are read and fought in kind order and a draft buys in kind order (see the stub pin).
+        // FOUND 2026-10-19 (general round): this assertion, like the stub's above, sat inside the comment line (a literal backslash-r backslash-n joined it), so it was NOT checked after the fifth round.
+        // Enabled now. The stub value is unchanged (6906114545053946481). The real value was 13108978268610124776 and is now 7875560721776733457: it was never re-checked, so which of the Tracer rounds
+        // and the general (GhostConfidence is in the digest) moved it cannot be told; the neighbouring checked pin (set and siege off) moved only by the general, see its comment.
+        Assert.Equal(7875560721776733457UL, await Play(true, 1234));
     }
 }

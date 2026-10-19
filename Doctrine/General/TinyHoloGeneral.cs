@@ -3,42 +3,50 @@ using EvalApp;
 namespace Doctrine.General;
 
 /// <summary>
-/// The player's general. It starts EMPTY (nothing pre-trained ships) and learns only from its own player: every doctrine the player sets is
-/// an imitation example, every battle result a success-weighted one. Two learners sit inside, a per-slot lookup (<see cref="SlotTable"/>) and a
-/// tiny HoloFormer (<see cref="GeneralNet"/>); for each slot the one that has guessed the player's next choices better so far speaks. MEASURED
-/// (AlgFormer\todo\general-probe-2026-10-18.md): the net alone never beat the best non-parametric baseline, the lookup does nearly all the work, and
-/// the hybrid tracks the lookup to within about a point (a point ahead at 120 choices). The net is there because it is cheap, it never hurts
-/// much, and it may earn a slot from a player whose habit the lookup cannot see. The mask is applied to the OUTPUT: whatever a learner says,
-/// only legal tokens leave. Single thread, no disk, no reflection; training runs as sliced EvalApp steps so a one-thread host can yield.
+/// The player's general. It starts EMPTY (nothing pre-trained ships) and learns only from its own player: every doctrine the player sets is an
+/// imitation example, every battle result a success-weighted one. Under the roguelike offers the player does not pick from everything: each round it
+/// is offered a handful of order cards and takes up to four, in order. The offer IS the general's input: <see cref="GeneralInput.Legal"/> reaches it
+/// already cut down to the offer and the legal list, and the general only ever ranks the cards on it. Three learners sit inside: a per-slot lookup of
+/// exact tokens in a situation (<see cref="SlotTable"/>, the habit of a player on an open market), a taste table over the cards' FEATURES
+/// (<see cref="CardTable"/>: family, order type, the trait or line it touches, whether it repeats last round), and a tiny HoloFormer that scores each
+/// offered card (<see cref="GeneralNet"/>). For each slot the learner that has guessed the player's next picks best so far speaks (the net only after it
+/// is clearly ahead). MEASURED (Doctrine.Tests\General\OfferProbe.cs, EXP-OFFER-1): the net never beat the taste table, so the shipped default is the two
+/// tables (<see cref="GeneralMode.TableOnly"/>, no net weights at all); Hybrid and NetOnly stay available and tested. The mask is applied to the OUTPUT too: whatever a learner says, only offered, legal tokens leave. Single thread, no disk, no
+/// reflection; training runs as sliced EvalApp steps so a one-thread host can yield.
 /// </summary>
 public sealed class TinyHoloGeneral : IGeneral
 {
     static readonly SlotTable SharedTable = new();   // used only by the SharedState mutant
+    static readonly CardTable SharedCards = new(false);
     static readonly int[] SharedSlotHits = new int[SlotTable.Slots];   // used only by the SlotsNotReset mutant
     static readonly int[] SharedSlotTrials = new int[SlotTable.Slots];
     readonly int[] _slotHits = new int[SlotTable.Slots], _slotTrials = new int[SlotTable.Slots];   // per slot, within the window: shown == player's / either was not End
     static int _unseeded;                            // used only by the NetUnseeded mutant
 
     readonly GeneralOptions _o;
-    readonly SlotTable _table;
+    readonly SlotTable _habit;
+    readonly CardTable _taste;
     readonly GeneralNet? _net;
     GeneralFault _fault;
+    int[] _prev = new int[SlotTable.Slots], _prevOfLast = new int[SlotTable.Slots];   // the player's picks last round; the ones the latest example was weighed against
     // prequential record: before the general learns from a choice it first guesses it; these count how often each learner was right.
     // Counters are halved when the window passes 64 choices, so the general follows a player who changes habits.
-    int _trials, _exact; readonly int[] _tableHits = new int[SlotTable.Slots], _netHits = new int[SlotTable.Slots];
+    int _trials, _exact;
+    readonly int[] _habitHits = new int[SlotTable.Slots], _tasteHits = new int[SlotTable.Slots], _netHits = new int[SlotTable.Slots];
 
     public TinyHoloGeneral(GeneralOptions? options = null)
     {
         _o = options ?? new GeneralOptions();
         if (_o.NetDim < 2 || _o.NetDim % 2 != 0) throw new ArgumentOutOfRangeException(nameof(options), "NetDim must be even and at least 2");
-        _table = new SlotTable();
+        _habit = new SlotTable();
+        _taste = new CardTable(_o.History);
         _net = _o.Mode == GeneralMode.TableOnly ? null : new GeneralNet(_o, _o.Seed);
     }
 
     internal TinyHoloGeneral(GeneralOptions options, GeneralFault fault) : this(options with { Seed = (fault & GeneralFault.NetUnseeded) != 0 ? Interlocked.Increment(ref _unseeded) : options.Seed })
     {
         _fault = fault;
-        if ((fault & GeneralFault.FirstFeatureOnly) != 0) _table = new SlotTable(firstFeatureOnly: true);
+        if ((fault & GeneralFault.FirstFeatureOnly) != 0) _habit = new SlotTable(firstFeatureOnly: true);
     }
 
     /// <summary>Learn calls so far (imitation plus outcome). A new general has 0.</summary>
@@ -49,26 +57,27 @@ public sealed class TinyHoloGeneral : IGeneral
     public long NetParameters => _net?.ParamCount ?? 0;
     public int NetPasses => _net?.Passes ?? 0;
 
-    SlotTable Table => (_fault & GeneralFault.SharedState) != 0 ? SharedTable : _table;
+    SlotTable Habit => (_fault & GeneralFault.SharedState) != 0 ? SharedTable : _habit;
+    CardTable Taste => (_fault & GeneralFault.SharedState) != 0 ? SharedCards : _taste;
 
     // ---- reading ---------------------------------------------------------------------------------------------------------
 
     public ValueTask<GeneralOutput> SuggestAsync(GeneralInput input, CancellationToken ct)
     {
         var s = Clean(input.Summary);
-        var (d, _, _) = Think(s, input.Legal);
+        var (d, _, _, _) = Think(s, input.Legal);
         int conf = d.IsEmpty || _trials == 0 ? 0 : Math.Clamp((int)(1000L * _exact / (_trials + 2)), 0, 1000);
         return ValueTask.FromResult(new GeneralOutput(d, conf, SlotFigures()));
     }
 
     /// <summary>
-    /// THE MATCH RECORD, per slot (CONTRACT section c). Before each imitation example is learned, the doctrine this general would have shown
-    /// (whichever half, table or net, was speaking for each slot, after the mask) is compared slot by slot with the doctrine the player then set.
-    /// A slot COUNTS in an example when either side said something there (shown token or player token is not End); two Ends are not a trial, so a
-    /// slot the player leaves empty and the general leaves empty reads 0, not a flattering 1000. Slot k reads  1000 * hits_k / (counted_k + 2)
-    /// (integer division), hits_k = counted examples where the shown token equalled the player's. counted_k = 0 reads 0. It is a Laplace-style
-    /// lower bound on the slot's recent hit rate, never above it, so it climbs fast on a habit (5 straight matches read 714) and stays low on a
-    /// random player. Window: counts are halved whenever the whole-suggestion window passes 64 examples. A record, not a probability.
+    /// THE MATCH RECORD, per slot (CONTRACT section c). Before each imitation example is learned, the doctrine this general would have shown (the
+    /// cards it ranked, first to fourth, from that round's offer) is compared slot by slot with the doctrine the player then set. A slot COUNTS in an
+    /// example when either side said something there (shown card or player's card is not End); two Ends are not a trial, so a slot the player leaves
+    /// empty and the general leaves empty reads 0, not a flattering 1000. Slot k reads  1000 * hits_k / (counted_k + 2) (integer division), hits_k =
+    /// counted examples where the card shown at slot k was the card the player took at slot k. counted_k = 0 reads 0. It is a Laplace-style lower
+    /// bound on the slot's recent hit rate, never above it, so it climbs fast on a habit (5 straight matches read 714) and stays low on a random
+    /// player. Window: counts are halved whenever the whole-suggestion window passes 64 examples. A record, not a probability.
     /// </summary>
     SlotPermille SlotFigures()
     {
@@ -83,29 +92,59 @@ public sealed class TinyHoloGeneral : IGeneral
         return new SlotPermille(Fig(0), Fig(1), Fig(2), Fig(3));
     }
 
-    /// <summary>Both learners' raw per-slot tokens, the slot-by-slot choice between them, and the doctrine that leaves (always masked).</summary>
-    (DoctrineSet Doctrine, int[] Table, int[] Net) Think(int[] s, LegalMask legal)
+    /// <summary>The cards of an offer: the tokens the mask allows, End dropped, ascending (the order an <see cref="OrderOffer"/> lists them).</summary>
+    static int[] Cards(LegalMask legal)
     {
-        var tt = new int[SlotTable.Slots]; var nt = new int[SlotTable.Slots];
-        var ask = (_fault & GeneralFault.NetOutputUnmasked) != 0 ? LegalMask.All : legal;   // the mutant lets the learners speak unmasked
-        if (_o.Mode != GeneralMode.NetOnly) Table.Predict(s, ask, tt);
-        bool net = _net is not null && (_net.Trained || (_fault & GeneralFault.NetAlwaysTrusted) != 0);
-        if (net) _net!.Decode(s, ask, nt, (_fault & GeneralFault.NetAlwaysTrusted) != 0);
+        var l = new List<int>(DoctrineVocabulary.Size);
+        for (int t = 1; t < DoctrineVocabulary.Size; t++) if (legal.Allows(t)) l.Add(t);
+        return l.ToArray();
+    }
+
+    /// <summary>Every learner's raw per-slot tokens, the slot-by-slot choice between them, and the doctrine that leaves (always masked to the offer).</summary>
+    (DoctrineSet Doctrine, int[] Habit, int[] Taste, int[] Net) Think(int[] s, LegalMask legal)
+    {
+        var th = new int[SlotTable.Slots]; var tt = new int[SlotTable.Slots]; var tn = new int[SlotTable.Slots];
+        // the learners read the offer as given; the mutants let them read everything instead
+        var ask = (_fault & (GeneralFault.NetOutputUnmasked | GeneralFault.OfferIgnored)) != 0 ? LegalMask.All : legal;
+        var cards = Cards(ask);
+        if (_o.Mode != GeneralMode.NetOnly)
+        {
+            Habit.Predict(s, ask, th);
+            Taste.Predict(cards, _prev, tt);
+        }
+        bool speakUntrained = (_fault & GeneralFault.NetAlwaysTrusted) != 0;
+        bool net = _net is not null && (_net.Trained || speakUntrained);
+        if (net) _net!.Decode(s, cards, _prev, _o.History, speakUntrained ? SlotTable.Slots : Taste.Fill(), tn, speakUntrained);
         var pick = new int[SlotTable.Slots];
+        int fill = _o.Mode == GeneralMode.NetOnly ? 0 : Taste.Fill();       // how many slots this player usually fills
         for (int k = 0; k < pick.Length; k++)
         {
+            int best = Math.Max(_habitHits[k], _tasteHits[k]);
             bool useNet = _o.Mode switch
             {
                 GeneralMode.NetOnly => net,
                 GeneralMode.TableOnly => false,
-                _ => net && ((_fault & GeneralFault.NetAlwaysTrusted) != 0 || _netHits[k] - _tableHits[k] >= _o.Margin),
+                _ => net && (speakUntrained || _netHits[k] - best >= _o.Margin),
             };
-            pick[k] = useNet ? nt[k] : tt[k];
-        }
-        return (Enforce(pick, legal), tt, nt);
+            int[] table = _habitHits[k] > _tasteHits[k] ? th : tt, spare = ReferenceEquals(table, th) ? tt : th;
+            int[][] order = _o.Mode == GeneralMode.NetOnly ? [tn] : useNet ? [tn, table, spare] : [table, spare];
+            // the learner that speaks for the slot names the card; when it has nothing (End) in a slot this player usually fills, or names a card already
+            // placed, the next learner may; otherwise End ends the doctrine
+            int t = 0;
+            for (int i = 0; i < order.Length; i++)
+            {
+                int c = order[i][k];
+                if (c != 0 && !Used(pick, k, c)) { t = c; break; }
+                if (c == 0 && k >= fill) break;
+            }
+            pick[k] = t;
+            if (t == 0) break;
+        }        return (Enforce(pick, legal), th, tt, tn);
     }
 
-    /// <summary>THE MASK, applied to the output: only legal tokens, End dropped, no token twice, in order, padded with End.</summary>
+    static bool Used(int[] pick, int k, int t) { for (int i = 0; i < k; i++) if (pick[i] == t) return true; return false; }
+
+    /// <summary>THE MASK, applied to the output: only offered, legal tokens, End dropped, no token twice, in order, padded with End.</summary>
     DoctrineSet Enforce(ReadOnlySpan<int> tokens, LegalMask legal)
     {
         Span<int> o = stackalloc int[SlotTable.Slots]; int n = 0;
@@ -142,32 +181,40 @@ public sealed class TinyHoloGeneral : IGeneral
         if (run is PipelineResult<LearnJob>.Failure f) throw f.Exception;
     }
 
-    /// <summary>Step 1 of a Learn call: score our own guess against what the player did, then teach both learners.</summary>
+    /// <summary>Step 1 of a Learn call: score our own guess against what the player did, then teach every learner.</summary>
     internal void Remember(LearnJob j)
     {
         ExamplesSeen++;
+        var cards = Cards(j.Legal);
+        var picks = Enforce(j.Chosen.Tokens, j.Legal).Tokens.Where(t => t != 0).ToArray();   // the picks that were on offer, in order, none twice
         if (j.Imitation)
         {
             Score(j);
-            Table.Add(j.Summary, j.Chosen, 2);
-            _net?.Remember(j.Summary, j.Chosen);
+            Habit.Add(j.Summary, j.Chosen, 2);
+            if ((_fault & GeneralFault.TasteDeaf) == 0) Taste.Add(cards, picks, _prev, 2);
+            _net?.Remember(j.Summary, cards, picks, _prev, _o.History);
+            _prevOfLast = _prev; _prev = Pad(picks);
         }
         else if ((_fault & GeneralFault.OutcomeIgnored) == 0)
         {
-            Table.Add(j.Summary, j.Chosen, j.Won ? 2 : -1);
-            if (j.Won) _net?.Remember(j.Summary, j.Chosen); else _net?.Forget(j.Summary, j.Chosen);
+            Habit.Add(j.Summary, j.Chosen, j.Won ? 2 : -1);
+            if ((_fault & GeneralFault.TasteDeaf) == 0) Taste.Add(cards, picks, _prevOfLast, j.Won ? 2 : -1);
+            if (j.Won) _net?.Remember(j.Summary, cards, picks, _prevOfLast, _o.History); else _net?.Forget(j.Summary, picks);
         }
     }
 
+    static int[] Pad(int[] picks) { var p = new int[SlotTable.Slots]; for (int i = 0; i < p.Length && i < picks.Length; i++) p[i] = picks[i]; return p; }
+
     void Score(LearnJob j)
     {
-        var (d, tt, nt) = Think(j.Summary, j.Legal);
+        var (d, th, tt, tn) = Think(j.Summary, j.Legal);
         bool net = _net is not null && _net.Trained;
         for (int k = 0; k < SlotTable.Slots; k++)
         {
-            int want = Table.Token(j.Chosen[k]);
-            if (_o.Mode != GeneralMode.NetOnly && tt[k] == want) _tableHits[k]++;
-            if (net && nt[k] == want) _netHits[k]++;
+            int want = Habit.Token(j.Chosen[k]);
+            if (_o.Mode != GeneralMode.NetOnly && th[k] == want) _habitHits[k]++;
+            if (_o.Mode != GeneralMode.NetOnly && tt[k] == want) _tasteHits[k]++;
+            if (net && tn[k] == want) _netHits[k]++;
         }
         _trials++;
         var shouldHave = Enforce(j.Chosen.Tokens, j.Legal);
@@ -179,7 +226,7 @@ public sealed class TinyHoloGeneral : IGeneral
         if (_trials >= 64)
         {
             _trials /= 2; _exact /= 2;
-            for (int k = 0; k < SlotTable.Slots; k++) { _tableHits[k] /= 2; _netHits[k] /= 2; sh[k] /= 2; sn[k] /= 2; }
+            for (int k = 0; k < SlotTable.Slots; k++) { _habitHits[k] /= 2; _tasteHits[k] /= 2; _netHits[k] /= 2; sh[k] /= 2; sn[k] /= 2; }
         }
     }
 

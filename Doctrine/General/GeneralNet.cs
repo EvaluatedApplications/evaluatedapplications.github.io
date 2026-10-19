@@ -3,20 +3,22 @@ using PrismFormer;
 namespace Doctrine.General;
 
 /// <summary>
-/// The tiny HoloFormer half. It reads the 14 summary tokens and then writes the four doctrine slots, one token at a time, trained next-token
-/// on the player's own choices by replay from memory. It starts with random weights and says nothing until it has been trained; whatever it
-/// says is cut down by the mask by the caller. Floats live here only: the general decides in its owner's session and its choices leave as
-/// plain doctrine tokens.
+/// The tiny HoloFormer half, now a per-offer scorer. For ONE offered card it reads the 14 summary tokens, the card's order type, its argument and
+/// whether it repeats last round's picks, and says what became of such a card: not taken, or taken at slot 1, 2, 3 or 4. To answer a whole offer it
+/// reads each offered card in turn (the offer IS the input: only cards on it are ever read, so nothing outside it can be named) and fills the slots
+/// greedily. Trained next-token on the player's own choices by replay from memory. It starts with random weights and says nothing until trained.
+/// Floats live here only: the general decides in its owner's session and its choices leave as plain doctrine tokens.
 /// </summary>
 internal sealed class GeneralNet
 {
-    public const int Context = 17;                 // 14 summary + 3 teacher-forced output tokens; the 4th output is the library's overflow target
-    const int Batch = 8, Slots = DoctrineVocabulary.MaxSlots;
+    public const int Context = 17;                 // 14 summary + type + argument + repeat; the label is the one scored token
+    const int Batch = 8, Slots = DoctrineVocabulary.MaxSlots, Labels = Slots + 1, MaxNegatives = 8;
+    const int SumBase = 0, SumSize = GeneralSummary.Length * GeneralSummary.Vocab;
+    const int TypBase = SumBase + SumSize, ArgBase = TypBase + CardFeatures.Types, RepBase = ArgBase + CardFeatures.Args, LabBase = RepBase + CardFeatures.Reps;
     readonly GeneralOptions _o;
     readonly HoloFormer _m;
-    readonly List<(int[] Seq, int[] Key)> _memory = new();
+    readonly List<(int[] Key, int[][] Seqs)> _memory = new();
     readonly GameRng _rng;
-    readonly int _doctrineIds = DoctrineVocabulary.Size;
     long _steps;
 
     public int Passes { get; private set; }
@@ -26,7 +28,7 @@ internal sealed class GeneralNet
     public GeneralNet(GeneralOptions o, int seed)
     {
         _o = o;
-        int vocab = _doctrineIds + (o.FeatureTokens ? GeneralSummary.Length * GeneralSummary.Vocab : GeneralSummary.Vocab);
+        int vocab = LabBase + Labels;
         int shifts = o.NetDim;   // S = d (user rule 2026-10-19): the relation bank is then a full dense map; S < d is a low-rank, gimped net. Always > 1 (NetDim >= 2)
         // (vocab, shifts, layers, context, width, frozenPrefix 0 = every embedding trainable, no embed seed, seed, bindFfn off, golden on, normalize on, unitary off)
         _m = new HoloFormer(vocab, shifts, o.NetLayers, Context, o.NetDim, 0, null, seed, false, true, true, false);
@@ -37,34 +39,55 @@ internal sealed class GeneralNet
     public long ParamCount => _m.ParamCount;
     public byte[] Serialize() => _m.Serialize();
 
-    int Summary(int pos, int v) => _doctrineIds + (_o.FeatureTokens ? pos * GeneralSummary.Vocab + v : v);
-
-    int[] Encode(int[] s, DoctrineSet d)
+    int[] Prefix(int[] s, int card, int rep)
     {
-        var seq = new int[GeneralSummary.Length + Slots];
-        for (int i = 0; i < GeneralSummary.Length; i++) seq[i] = Summary(i, s[i]);
-        for (int k = 0; k < Slots; k++) seq[GeneralSummary.Length + k] = DoctrineVocabulary.IsValid(d[k]) ? d[k] : 0;
-        return seq;
+        var p = new int[Context];
+        for (int i = 0; i < GeneralSummary.Length; i++) p[i] = SumBase + i * GeneralSummary.Vocab + s[i];
+        p[14] = TypBase + CardFeatures.Type(card); p[15] = ArgBase + CardFeatures.Arg_(card); p[16] = RepBase + rep;
+        return p;
     }
 
-    /// <summary>The player chose <paramref name="d"/> here (imitation, or a battle it won): remember it for replay.</summary>
-    public void Remember(int[] s, DoctrineSet d)
+    /// <summary>The player chose <paramref name="picks"/> from <paramref name="offer"/> (imitation, or a battle it won): remember every card's fate for replay.</summary>
+    public void Remember(int[] s, int[] offer, int[] picks, int[] prev, bool history)
     {
         if (_memory.Count >= _o.MemoryCap) _memory.RemoveAt(0);
-        _memory.Add((Encode(s, d), Key(s, d)));
+        var cards = new List<int>();
+        foreach (var c in offer) if (c != 0) cards.Add(c);
+        foreach (var p in picks) if (p != 0 && !cards.Contains(p)) cards.Add(p);
+        // an open market lists dozens of cards: keep the picks and at most MaxNegatives of the rest, spread across the list
+        var keep = new List<int>();
+        foreach (var c in cards) if (Array.IndexOf(picks, c) >= 0) keep.Add(c);
+        var rest = cards.Where(c => Array.IndexOf(picks, c) < 0).ToList();
+        int stride = Math.Max(1, (rest.Count + MaxNegatives - 1) / MaxNegatives);
+        for (int i = (_memory.Count % stride); i < rest.Count && keep.Count < MaxNegatives + Slots; i += stride) keep.Add(rest[i]);
+        var seqs = new int[keep.Count][];
+        for (int i = 0; i < seqs.Length; i++)
+        {
+            int c = keep[i], at = Array.IndexOf(picks, c);
+            var seq = new int[Context + 1];
+            Array.Copy(Prefix(s, c, CardTable.Rep(c, prev, history)), seq, Context);
+            seq[Context] = LabBase + (at >= 0 ? 1 + at : 0);
+            seqs[i] = seq;
+        }
+        _memory.Add((Key(s, picks), seqs));
     }
 
-    /// <summary>The player chose <paramref name="d"/> here and lost: drop the newest remembered copy of exactly that choice, if any.</summary>
-    public void Forget(int[] s, DoctrineSet d)
+    /// <summary>The player chose <paramref name="picks"/> here and lost: drop the newest remembered copy of exactly that choice, if any.</summary>
+    public void Forget(int[] s, int[] picks)
     {
-        var key = Key(s, d);
+        var key = Key(s, picks);
         for (int i = _memory.Count - 1; i >= 0; i--)
             if (_memory[i].Key.AsSpan().SequenceEqual(key)) { _memory.RemoveAt(i); return; }
     }
 
-    static int[] Key(int[] s, DoctrineSet d) => [.. s, d.S0, d.S1, d.S2, d.S3];
+    static int[] Key(int[] s, int[] picks)
+    {
+        var k = new int[s.Length + Slots]; s.CopyTo(k, 0);
+        for (int i = 0; i < Slots && i < picks.Length; i++) k[s.Length + i] = picks[i];
+        return k;
+    }
 
-    /// <summary>Adam steps over <paramref name="passes"/> example passes drawn from memory (batches of 8, clip 1, alpha eased in over the first steps).</summary>
+    /// <summary>Adam steps over <paramref name="passes"/> card passes drawn from memory (batches of 8, clip 1, alpha eased in over the first steps).</summary>
     public void Train(int passes)
     {
         if (_memory.Count == 0 || passes <= 0) return;
@@ -78,9 +101,11 @@ internal sealed class GeneralNet
             int scored = 0;
             for (int b = 0; b < Batch; b++)
             {
-                var seq = _memory[_rng.Next(_memory.Count)].Seq;
-                scored += _m.StackIterAccumulateAllPos(seq, g, Slots, _o.NetK, alpha).count;
+                var seqs = _memory[_rng.Next(_memory.Count)].Seqs;
+                if (seqs.Length == 0) continue;
+                scored += _m.StackIterAccumulateAllPos(seqs[_rng.Next(seqs.Length)], g, 1, _o.NetK, alpha).count;
             }
+            if (scored == 0) continue;
             // Clip the global gradient norm to 1 HERE, not in Step: Step sums the norm across threads in whatever order they finish, so
             // its clip factor differs in the last bits from run to run and two identically taught generals drift apart (measured).
             // Reading the gradient out in its fixed order and summing serially keeps the general exactly reproducible.
@@ -100,28 +125,32 @@ internal sealed class GeneralNet
         return double.IsFinite(norm) && norm > 1.0 ? 1.0 / norm : 1.0;
     }
 
-    /// <summary>Greedy decode, slot by slot, from legal tokens only (End ends the doctrine, no token twice). Returns End everywhere before the first training pass.</summary>
-    public void Decode(int[] s, LegalMask legal, Span<int> tokens, bool speakUntrained = false)
+    /// <summary>
+    /// Fill the first <paramref name="fill"/> slots with offered cards: each card is read once, then slot k takes the not yet used card most likely to
+    /// have been taken at slot k (ties: the lowest id). Returns End everywhere before the first training pass (unless <paramref name="speakUntrained"/>).
+    /// </summary>
+    public void Decode(int[] s, int[] offer, int[] prev, bool history, int fill, Span<int> tokens, bool speakUntrained = false)
     {
         tokens.Clear();
-        if (!Trained && !speakUntrained) return;
-        var seq = new int[GeneralSummary.Length + Slots - 1];
-        for (int i = 0; i < GeneralSummary.Length; i++) seq[i] = Summary(i, s[i]);
-        int len = GeneralSummary.Length;
-        Span<bool> used = stackalloc bool[64];
-        for (int k = 0; k < Slots; k++)
+        if ((!Trained && !speakUntrained) || fill <= 0) return;
+        var cards = new List<int>(); foreach (var c in offer) if (c != 0) cards.Add(c);
+        var p = new double[cards.Count][];
+        for (int i = 0; i < cards.Count; i++)
         {
-            var lg = _m.LogitsFor(seq.AsSpan(0, len).ToArray());
-            int best = 0; double bv = double.NegativeInfinity;
-            for (int t = 0; t < _doctrineIds; t++)
-            {
-                if (!legal.Allows(t) || (t != 0 && used[t])) continue;
-                if (lg[t] > bv) { bv = lg[t]; best = t; }
-            }
-            tokens[k] = best;
-            if (best == 0) return;                 // End ends the doctrine
-            used[best] = true;
-            if (k < Slots - 1) seq[len++] = best;
+            var lg = _m.LogitsFor(Prefix(s, cards[i], CardTable.Rep(cards[i], prev, history)));
+            var q = new double[Labels]; double mx = double.NegativeInfinity;
+            for (int l = 0; l < Labels; l++) mx = Math.Max(mx, lg[LabBase + l]);
+            double z = 0; for (int l = 0; l < Labels; l++) { q[l] = Math.Exp(lg[LabBase + l] - mx); z += q[l]; }
+            for (int l = 0; l < Labels; l++) q[l] /= z;
+            p[i] = q;
+        }
+        var used = new bool[cards.Count];
+        for (int k = 0; k < Slots && k < fill; k++)
+        {
+            int best = -1; double bv = double.NegativeInfinity;
+            for (int i = 0; i < cards.Count; i++) if (!used[i] && p[i][1 + k] > bv) { bv = p[i][1 + k]; best = i; }
+            if (best < 0) return;
+            used[best] = true; tokens[k] = cards[best];
         }
     }
 }
