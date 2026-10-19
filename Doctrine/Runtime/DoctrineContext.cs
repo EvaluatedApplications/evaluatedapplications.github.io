@@ -25,6 +25,9 @@ public sealed class DoctrineContext : GlobalContext
     /// <summary>Where the round's offers come from (default <see cref="SeededOffers"/>; a test may stand in another). Set before a run, not during one.</summary>
     public IOfferSource Offers { get; set; } = SeededOffers.Instance;
 
+    /// <summary>The other side of every battle in the pipeline (default <see cref="ScriptedOpponent"/>, the single-player enemy). Set before a run, not during one.</summary>
+    public IOpponent Opponent { get; set; } = ScriptedOpponent.Instance;
+
     /// <summary>An optional watcher of stages and battle progress (see <see cref="IRoundObserver"/>). Null means nobody is watching. A host may set it at any time between runs.</summary>
     public IRoundObserver? Observer { get; set; }
 

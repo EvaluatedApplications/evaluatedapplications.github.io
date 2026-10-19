@@ -41,11 +41,24 @@ internal static class RoundRules
 
     public static int EnemyGold(DoctrineDomain d, int round) => d.EnemyBaseGold + d.EnemyGoldPerRound * round;
 
-    /// <summary>The enemy of a round, raised exactly as the draft stage raises it.</summary>
-    public static async ValueTask<IArmy> RaiseEnemyAsync(IArmyService armies, DoctrineDomain d, int seed, int round, CancellationToken ct)
+    /// <summary>The enemy of a round, raised exactly as the draft stage raises it: the opponent's packs, then its free turn of the ranks (0 for the scripted enemy: nothing applied).</summary>
+    public static async ValueTask<IArmy> RaiseEnemyAsync(IArmyService armies, IOpponent opponent, DoctrineDomain d, int seed, int round, CancellationToken ct)
     {
+        var turn = new OpponentRound(seed, round, EnemyGold(d, round));
+        var picks = await opponent.DraftAsync(turn, ct);
         var enemy = armies.Create(Side.Enemy, (int)GameRng.Mix(seed, round));
-        await enemy.DraftAsync(new DraftRequest(round, seed, ScriptedOpponent.Picks(round, seed, EnemyGold(d, round))), ct);
+        await enemy.DraftAsync(new DraftRequest(round, seed, picks), ct);
+        await RoundLaws.RotateAsync(enemy, await opponent.FormationAsync(turn, ct), ct);
+        return enemy;
+    }
+
+    /// <summary>The enemy of a round as the briefing shows it, before anyone has chosen: from <see cref="IOpponent.Preview"/>. An opponent that cannot be previewed (a remote seat) is refused.</summary>
+    public static async ValueTask<IArmy> PreviewEnemyAsync(IArmyService armies, IOpponent opponent, DoctrineDomain d, int seed, int round, CancellationToken ct)
+    {
+        var picks = opponent.Preview(new OpponentRound(seed, round, EnemyGold(d, round)))
+            ?? throw new InvalidOperationException("this opponent's picks are secret until it reveals them, so there is no briefing of its army");
+        var enemy = armies.Create(Side.Enemy, (int)GameRng.Mix(seed, round));
+        await enemy.DraftAsync(new DraftRequest(round, seed, picks), ct);
         return enemy;
     }
 }
@@ -71,7 +84,7 @@ public sealed partial class DoctrineGame
             Side? b = RoundRules.BesiegerFor(Rules, info, probe.HasFlag(BriefingProbe.ParityWrong) ? r + 1 : r);
             var arena = new ArenaBrief(info, b, Context.LayoutOf(info.Id));
             int er = probe.HasFlag(BriefingProbe.EnemyWrongRound) ? r + 1 : r;
-            var army = await RoundRules.RaiseEnemyAsync(Context.Armies, Rules, seed, er, ct);
+            var army = await RoundRules.PreviewEnemyAsync(Context.Armies, Context.Opponent, Rules, seed, er, ct);
             var read = army.Read();
             long power = read.Cohorts.Sum(c => UnitRules.Rating(c.Count, c.PowerPct, c.Traits));
             int gold = RoundRules.EnemyGold(Rules, probe.HasFlag(BriefingProbe.GoldCurveWrong) ? r + 1 : r);

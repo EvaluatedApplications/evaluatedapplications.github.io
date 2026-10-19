@@ -79,6 +79,7 @@ public sealed class DoctrineBuilder
     internal TracerContext? Tracer;
     internal IRoundObserver? Observer;
     internal IOfferSource? Offers;
+    internal IOpponent? Opponent;
     internal DoctrineDomain Rules = new();
     internal bool? SingleThread;
     internal Action<DoctrineBuilder>? Defaults;
@@ -109,6 +110,7 @@ public sealed class DoctrineBuilder
         if (factory is not null) ctx.Battle = factory(ctx);
         ctx.Observer = Observer;
         if (Offers is not null) ctx.Offers = Offers;
+        if (Opponent is not null) ctx.Opponent = Opponent;
         return new DoctrineGame(ctx, Rules, SingleThread);
     }
 }
@@ -134,6 +136,8 @@ public static class DoctrineBuilderExtensions
     public static DoctrineBuilder WithObserver(this DoctrineBuilder b, IRoundObserver observer) { b.Observer = observer; return b; }
     /// <summary>Stand in another source of offers (tests, a host with its own deck). The caller's own, never taken from the composition root. Rules: <see cref="DoctrineDomain.Offers"/>.</summary>
     public static DoctrineBuilder WithOffers(this DoctrineBuilder b, IOfferSource offers) { b.Offers = offers; return b; }
+    /// <summary>Stand in another opponent for the pipeline's enemy (see <see cref="IOpponent"/>). The caller's own, never taken from the composition root. Default: <see cref="ScriptedOpponent"/>.</summary>
+    public static DoctrineBuilder WithOpponent(this DoctrineBuilder b, IOpponent opponent) { b.Opponent = opponent; return b; }
     /// <summary>Rules for the game. MaxRounds is limited to 200: each round runs the next, and EvalApp stops a pipeline nested 256 deep.</summary>
     public static DoctrineBuilder WithRules(this DoctrineBuilder b, DoctrineDomain rules)
     {

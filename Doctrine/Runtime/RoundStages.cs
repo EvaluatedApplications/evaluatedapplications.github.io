@@ -18,32 +18,7 @@ abstract class RoundStage(string name) : ContextSideEffectStep<DoctrineContext, 
     protected abstract ValueTask<RoundState> StepAsync(RoundState s, DoctrineContext g, DoctrineDomain d, CancellationToken ct);
 }
 
-/// <summary>Opponent behaviour for the headless game and the training ground: scripted, seeded, round-scaled. Not a section.</summary>
-static class ScriptedOpponent
-{
-    public static IReadOnlyList<DraftPick> Picks(int round, int seed, int gold)
-    {
-        var rng = new GameRng(GameRng.Mix(seed, 1000 + round));
-        var picks = new List<DraftPick>();
-        for (int i = 0; i < 3 && gold > 0; i++)
-        {
-            int kind = rng.Next(Roster.Size);
-            int n = Math.Max(1, (i < 2 ? gold / 2 : gold) / ArmyRules.Default.DraftPrice(kind));
-            if (n * ArmyRules.Default.DraftPrice(kind) > gold) continue;
-            picks.Add(new(kind, n)); gold -= n * ArmyRules.Default.DraftPrice(kind);
-        }
-        return picks;
-    }
-
-    public static DoctrineSet DoctrineFor(int round, int seed, LegalMask legal)
-    {
-        var rng = new GameRng(GameRng.Mix(seed, 2000 + round));
-        var pool = Enumerable.Range(1, DoctrineVocabulary.Size - 1).Where(legal.Allows).ToList();
-        var tokens = new List<int>();
-        for (int i = 0; i < 3 && pool.Count > 0; i++) tokens.Add(pool[rng.Next(pool.Count)]);
-        return DoctrineSet.Of(tokens.ToArray());
-    }
-}
+// The opponent (the other side of every battle) is the IOpponent seam, Core\Opponent.cs; ScriptedOpponent there is the old enemy.
 
 /// <summary>The round's pack offer, scaled to the purse as the round opens (CONTRACT.md, "The offers"). With the offers off it is the open market.</summary>
 sealed class OfferUnitsStage() : RoundStage(Stages.OfferUnits)
@@ -84,7 +59,7 @@ sealed class OfferOrdersStage() : RoundStage(Stages.OfferOrders)
 sealed class DraftStage() : RoundStage(Stages.ArmyDraft)
 {
     /// <summary>The reason an army-less refusal carries: the pick is not one of the offered packs (or the pack was already bought this round).</summary>
-    public const string NotOffered = "not on offer";
+    public const string NotOffered = RoundLaws.NotOffered;
 
     protected override async ValueTask<RoundState> StepAsync(RoundState s, DoctrineContext g, DoctrineDomain d, CancellationToken ct)
     {
@@ -92,22 +67,11 @@ sealed class DraftStage() : RoundStage(Stages.ArmyDraft)
         IReadOnlyList<DraftPick> picks = await g.Player.DraftAsync(s.Player.Read(), offer, s.Round, ct);
         // THE OFFER BINDS THE PLAYER: a pick that is not exactly an offered pack (kind and count), or a pack bought twice, never reaches the army; it comes
         // back in the report with its reason and is counted in the record. The army still judges the gold of what is left.
-        var notOffered = new List<(DraftPick Pick, string Reason)>();
-        if (offer.Active && d.Offers.Enforce)
-        {
-            var left = offer.Packs.ToList();
-            var ok = new List<DraftPick>();
-            foreach (var p in picks)
-            {
-                int i = left.FindIndex(k => k.Kind == p.Kind && k.Count == p.Count);
-                if (i < 0) notOffered.Add((p, NotOffered)); else { left.RemoveAt(i); ok.Add(p); }
-            }
-            picks = ok;
-        }
-        var report = await s.Player.DraftAsync(new DraftRequest(s.Round, s.Seed, picks), ct);
+        var (bound, notOffered) = RoundLaws.BindDraft(offer, picks, d.Offers);
+        var report = await s.Player.DraftAsync(new DraftRequest(s.Round, s.Seed, bound), ct);
         if (notOffered.Count > 0) report = report with { Refused = report.Refused.Concat(notOffered).ToList() };
         await g.Player.DraftedAsync(report, ct);                       // the army's own verdict goes back to the player's hands
-        var enemy = await RoundRules.RaiseEnemyAsync(g.Armies, d, s.Seed, s.Round, ct);   // the briefing raises the same enemy
+        var enemy = await RoundRules.RaiseEnemyAsync(g.Armies, g.Opponent, d, s.Seed, s.Round, ct);   // the briefing raises the same enemy
         return s with { Enemy = enemy, OfferRefused = s.OfferRefused + notOffered.Count };
     }
 }
@@ -145,17 +109,7 @@ sealed class ChooseStage() : RoundStage(Stages.PlayerChoose)
         int dropped = s.IllegalDropped;                                  // the general's, from the suggest stage
         // THE OFFER BINDS THE PLAYER: a token that is not on offer, or one picked twice, is removed and counted apart (OfferRefused); the pick is "up to four of the eight, each once".
         int refused = s.OfferRefused;
-        var picked = new HashSet<int>();
-        bool binding = offer.Active && d.Offers.Enforce;
-        int Keep(int t)
-        {
-            if (t == 0) return 0;
-            if (DoctrineVocabulary.IsValid(t) && binding && (!offer.Allows(t) || !picked.Add(t))) { refused++; return 0; }
-            if (!DoctrineVocabulary.IsValid(t) ||(DoctrineVocabulary.Decode(t).Family is OrderFamily.Field or OrderFamily.Trigger && !legal.Allows(t))) { dropped++; return 0; }
-            return t;
-        }
-        var c = choice.Doctrine;
-        var clean = new DoctrineSet(Keep(c.S0), Keep(c.S1), Keep(c.S2), Keep(c.S3));
+        var clean = RoundLaws.BindChoice(choice.Doctrine, legal, offer, d.Offers, ref dropped, ref refused);
         return s with { Choice = choice with { Doctrine = clean }, IllegalDropped = dropped, OfferRefused = refused };
     }
 }
@@ -174,7 +128,7 @@ sealed class OrdersStage() : RoundStage(Stages.ArmyOrders)
     protected override async ValueTask<RoundState> StepAsync(RoundState s, DoctrineContext g, DoctrineDomain d, CancellationToken ct)
     {
         var report = await s.Player.ApplyArmyOrdersAsync(s.Choice!.Doctrine, ct);
-        var enemyDoctrine = ScriptedOpponent.DoctrineFor(s.Round, s.Seed, s.Enemy!.Read().Legal);
+        var enemyDoctrine = await g.Opponent.DoctrineAsync(new OpponentRound(s.Seed, s.Round, RoundRules.EnemyGold(d, s.Round)), s.Enemy!.Read().Legal, ct);
         await s.Enemy.ApplyArmyOrdersAsync(enemyDoctrine, ct);
         return s with { EnemyDoctrine = enemyDoctrine, Orders = report };
     }
@@ -187,9 +141,7 @@ sealed class SetupStage() : RoundStage(Stages.BattleSetup)
         var arena = RoundRules.ArenaFor(g.Battle.Arenas, s.Seed, s.Round);   // the briefing reads the same rules
         // A siege arena names a besieger, who carries the siege clock; the roles swap every round, so the player besieges in even rounds and the enemy in odd ones.
         Side? besieger = RoundRules.BesiegerFor(d, arena, s.Round);
-        var setup = new BattleSetup(arena.Id, (int)GameRng.Mix(s.Seed, 4000 + s.Round), d.TickLimit,
-            new BattleSide(Side.Player, s.Player.Read().Cohorts, DoctrineVocabulary.FieldOrders(s.Choice!.Doctrine), DoctrineVocabulary.Trigger(s.Choice.Doctrine)),
-            new BattleSide(Side.Enemy, s.Enemy!.Read().Cohorts, DoctrineVocabulary.FieldOrders(s.EnemyDoctrine), DoctrineVocabulary.Trigger(s.EnemyDoctrine)), besieger);
+        var setup = RoundLaws.Setup(d, arena, s.Seed, s.Round, besieger, s.Player.Read(), s.Choice!.Doctrine, s.Enemy!.Read(), s.EnemyDoctrine);
         return ValueTask.FromResult(s with { Setup = setup });
     }
 }
@@ -220,7 +172,7 @@ sealed class SpoilsStage() : RoundStage(Stages.ArmySpoils)
     {
         bool won = s.Result!.AttackerWon;
         int killed = s.Result.DefenderLosses.Sum(l => l.Lost);
-        var spoils = d.FlatSpoils ? new Spoils(killed / 2 + 4, 0) : new Spoils(killed / 2 + (won ? 6 : 2), won ? 1 : 0);
+        var spoils = RoundLaws.BaseSpoils(d, won, killed);
         if (d.Comeback && s.Round + 1 < d.MaxRounds)
         {
             // THE MUSTER: half of what the army lacks against the strength the next enemy is raised at, paid in gold (it cannot lift an army above parity).
