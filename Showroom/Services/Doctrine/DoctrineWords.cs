@@ -58,7 +58,7 @@ public static class DoctrineWords
         return (ArmyOrderKind)o.Kind switch
         {
             ArmyOrderKind.Rotate => $"Move every cohort {o.A} place{(o.A == 1 ? "" : "s")} along the line (front to middle to back, then round to the front).",
-            ArmyOrderKind.Flip => $"Flip the {Traits[o.A]} trait on every cohort: cohorts that had it lose it and the others gain it. Twice undoes it.",
+            ArmyOrderKind.Flip => $"Flip the {Traits[o.A]} trait on every cohort: cohorts that had it lose it and the others gain it. It costs gold for the soldiers who gain power, so it is greyed out when you cannot pay. Twice undoes the traits, not the gold.",
             ArmyOrderKind.Age => "Every cohort moves one step along the veterancy ring of 9 steps. Each step adds 5 power, then the ring wraps to 0.",
             ArmyOrderKind.Merge => $"Move the soldiers of {KindName((o.A + 1) % Roster.Size)} into {KindName(o.A)}.",
             ArmyOrderKind.Aura => $"Cohorts carrying {Traits[o.A]} get a bonus this round, as many percent as soldiers carry it, up to 50. It wears off at the end of the round.",
