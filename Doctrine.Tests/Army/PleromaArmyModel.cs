@@ -62,7 +62,7 @@ internal sealed class ArmyModel(Side side, ArmyRules? rules = null)
     public int Score()
     {
         long s = 0;
-        for (int k = 0; k < Roster.Size; k++) s += (long)Soldiers[k] * Roster.PriceOf(k) * Power(k);
+        for (int k = 0; k < Roster.Size; k++) s += (long)Soldiers[k] * _rules.DraftPrice(k) * Power(k);
         return (int)Math.Clamp(s + 100L * Gold, 0, int.MaxValue);
     }
 
@@ -71,7 +71,7 @@ internal sealed class ArmyModel(Side side, ArmyRules? rules = null)
     {
         if (!Present(kind)) { Slot[kind] = kind % DoctrineVocabulary.Groups; Vet[kind] = 0; }
         Soldiers[kind] += count;
-        Gold -= Roster.PriceOf(kind) * count;
+        Gold -= _rules.DraftPrice(kind) * count;
     }
     public void Rotate(int shift) { for (int k = 0; k < Roster.Size; k++) Slot[k] = (Slot[k] + shift) % DoctrineVocabulary.Groups; }
     /// <summary>A flip is paid for: every soldier whose relabelled traits are worth more costs the difference (Roster.RelabelCost), the rest are free.</summary>

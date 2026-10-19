@@ -1,3 +1,4 @@
+using Doctrine.Army;
 namespace Doctrine.Player;
 
 // Seam (f): the player's hands. This scripted player drives headless runs and tests. The page (showroom-owner) implements IPlayerInput
@@ -15,9 +16,9 @@ public sealed class ScriptedPlayer(int seed, int acceptGhostPercent = 40) : IPla
         for (int i = 0; i < 2 && gold > 0; i++)
         {
             int kind = _rng.Next(Roster.Size);
-            int n = Math.Max(1, (i == 0 ? gold / 2 : gold) / Roster.PriceOf(kind));
-            if (n * Roster.PriceOf(kind) > gold) continue;
-            picks.Add(new(kind, n)); gold -= n * Roster.PriceOf(kind);
+            int n = Math.Max(1, (i == 0 ? gold / 2 : gold) / ArmyRules.Default.DraftPrice(kind));
+            if (n * ArmyRules.Default.DraftPrice(kind) > gold) continue;
+            picks.Add(new(kind, n)); gold -= n * ArmyRules.Default.DraftPrice(kind);
         }
         return ValueTask.FromResult<IReadOnlyList<DraftPick>>(picks);
     }

@@ -7,12 +7,12 @@ namespace Doctrine.Tests;
 public class EconomyRulesTests
 {
     [Fact]
-    public void The_defaults_are_the_game_age_aura_reach_and_interest_on_derived_draft_prices_off()
+    public void The_defaults_are_the_game_age_and_aura_free_reach_and_interest_on()
     {
         var d = ArmyRules.Default;
-        Assert.True(d.PriceAge); Assert.True(d.PriceAura); Assert.True(d.PriceReach); Assert.True(d.BankInterest);
-        Assert.False(d.DerivedDraftPrices);
-        for (int k = 0; k < Roster.Size; k++) Assert.Equal(Roster.PriceOf(k), d.DraftPrice(k));
+        // Third round 2026-10-19 (coordinator): priced Age and Aura made a mass of one-gold Spearmen unbeatable, so they are OFF; the rules stay as switches.
+        Assert.False(d.PriceAge); Assert.False(d.PriceAura); Assert.True(d.PriceReach); Assert.True(d.BankInterest);
+        // and the draft prices are derived from worth (third round): a plain soldier costs 2, not the typed 1\n        Assert.True(d.DerivedDraftPrices); Assert.Equal(2, d.DraftPrice(0)); Assert.Equal(1, Roster.TypedPrice(0)); Assert.Equal(2, Roster.PriceOf(0));   // PriceOf is the game's price
     }
 
     [Fact]
@@ -62,8 +62,9 @@ public class EconomyRulesTests
         }
         async Task<int> Spent(ArmyRules r, int token) { var a = Make(r); int g = a.Read().Gold; await a.ApplyArmyOrdersAsync(DoctrineSet.Of(token), default); return g - a.Read().Gold; }
         int age = DoctrineVocabulary.Army(ArmyOrderKind.Age), flipMachine = DoctrineVocabulary.Army(ArmyOrderKind.Flip, 6);
-        Assert.True(await Spent(ArmyRules.Default, age) > 0);
-        Assert.Equal(0, await Spent(new ArmyRules { PriceAge = false }, age));
+        Assert.Equal(0, await Spent(ArmyRules.Default, age));                                   // the game: an Age is free
+        Assert.True(await Spent(ArmyContract.PricedRules, age) > 0);                           // the rule ON: it costs
+        Assert.Equal(0, await Spent(ArmyContract.PricedRules with { PriceAge = false }, age));
         Assert.True(await Spent(ArmyRules.Default, flipMachine) > await Spent(new ArmyRules { PriceReach = false }, flipMachine));   // a Machine fires from 10 units: dearer with reach
     }
 }

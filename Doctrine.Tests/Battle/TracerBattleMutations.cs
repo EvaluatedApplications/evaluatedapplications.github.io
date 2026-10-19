@@ -52,8 +52,8 @@ public class TracerBattleMutationProofs
     [Fact] public async Task Tracer_losses_reported_twice_are_caught() => Caught(await Battle(() => new MutantOver(TracerWorlds.Engine(), BattleMut.LossesReportedTwice)), "losses-equal-what-the-replay-shows");
     [Fact] public async Task Tracer_that_ignores_the_tick_limit_is_caught()
         // The sample fight of "battle-ends-with-a-decided-result-inside-the-limit" is decided before tick 40 on Tracer (the stub never decided it), so on this
-        // section the limit is exercised by "tick-limit-decides-by-soldiers-left" instead.
-        => Caught(await Battle(() => new MutantOver(TracerWorlds.Engine(), BattleMut.TickLimitIgnored)), "tick-limit-decides-by-soldiers-left");
+        // section the limit is exercised by "tick-limit-decides-by-power-left" instead.
+        => Caught(await Battle(() => new MutantOver(TracerWorlds.Engine(), BattleMut.TickLimitIgnored)), "tick-limit-decides-by-power-left");
     [Fact] public async Task Tracer_that_is_not_deterministic_is_caught() => Caught(await Battle(() => new MutantOver(TracerWorlds.Engine(), BattleMut.Nondeterministic)), "same-setup-same-recording");
     [Fact] public async Task Tracer_where_soldiers_reappear_is_caught() => Caught(await Battle(() => new MutantOver(TracerWorlds.Engine(), BattleMut.SoldiersReappear)), "blobs-are-stable-and-only-lose-soldiers");
 

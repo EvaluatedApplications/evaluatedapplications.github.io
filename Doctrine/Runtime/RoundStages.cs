@@ -1,3 +1,4 @@
+using Doctrine.Army;
 using EvalApp;
 
 namespace Doctrine;
@@ -27,9 +28,9 @@ static class ScriptedOpponent
         for (int i = 0; i < 3 && gold > 0; i++)
         {
             int kind = rng.Next(Roster.Size);
-            int n = Math.Max(1, (i < 2 ? gold / 2 : gold) / Roster.PriceOf(kind));
-            if (n * Roster.PriceOf(kind) > gold) continue;
-            picks.Add(new(kind, n)); gold -= n * Roster.PriceOf(kind);
+            int n = Math.Max(1, (i < 2 ? gold / 2 : gold) / ArmyRules.Default.DraftPrice(kind));
+            if (n * ArmyRules.Default.DraftPrice(kind) > gold) continue;
+            picks.Add(new(kind, n)); gold -= n * ArmyRules.Default.DraftPrice(kind);
         }
         return picks;
     }

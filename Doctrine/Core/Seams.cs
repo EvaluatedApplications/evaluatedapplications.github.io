@@ -70,7 +70,7 @@ public interface IBattleSession
     ReplayFrame Snapshot();
     /// <summary>Close the tick: increases <see cref="Tick"/> by one and returns the frame for the new tick (events of this tick included).</summary>
     ReplayFrame Record();
-    /// <summary>The result. <paramref name="tickLimitReached"/> true means the limit stopped a still-running battle (stronger side wins, equal is a Draw).</summary>
+    /// <summary>The result. <paramref name="tickLimitReached"/> true means the limit stopped a still-running battle (the side with more power left wins, CONTRACT.md b; equal is a Draw).</summary>
     BattleResult Finish(bool tickLimitReached);
 }
 

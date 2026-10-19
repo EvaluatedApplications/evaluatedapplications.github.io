@@ -75,7 +75,7 @@ public sealed record BattleSetup(string ArenaId, int Seed, int TickLimit, Battle
     public const int DefaultTickLimit = 120;
 }
 
-/// <summary>Running while both sides stand. A finished battle's Outcome is never Running: when the tick limit stops a battle, the side with more soldiers left wins (equal = Draw).</summary>
+/// <summary>Running while both sides stand. A finished battle's Outcome is never Running: when the tick limit stops a battle, the side with more POWER left wins (equal = Draw): the sum over its cohorts of soldiers x power x damage x reach / taken (<c>UnitRules.Rating</c>), so a standoff is not won by whoever bought the most bodies.</summary>
 public enum BattleStatus : byte { Running = 0, AttackerWon = 1, DefenderWon = 2, Draw = 3 }
 
 public sealed record BattleResult(

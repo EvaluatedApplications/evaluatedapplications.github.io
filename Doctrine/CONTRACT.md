@@ -48,16 +48,19 @@ Invariants (each is a named case in `ArmyContract`):
   from the battle's stat tables, reach = `UnitRules.ReachPct`, the free fire a longer weapon gets while a melee unit closes: 20 percent for range 7,
   32 for range 10), a soldier made worse is free. The legal list offers the flip only while the army can pay the sum, and
   the order takes exactly that gold. Before this a Flip cost nothing: one "Flip Machine" token took a Spearmen levy from 0.53 to 0.91 wins
-  (todo\difficulty-2026-10-19.md). The worth scale is not the draft price scale on purpose (`PriceOf` is the game's feel).
-- AN AGE IS PAID FOR (second round 2026-10-19, `age-is-paid-for-and-legal-only-when-affordable`). The army pays ceil(sum over its soldiers of worth x the power
+  (todo\difficulty-2026-10-19.md). Since the third round the draft price IS the worth (see DRAFT PRICES below).
+- AN AGE IS PAID FOR WHEN THE RULE IS ON (`ArmyRules.PriceAge`; OFF in the game since the third round, 2026-10-19: priced Age made a mass of cheap Spearmen unbeatable; the case runs on `ArmyContract.PricedRules`, `age-is-paid-for-and-legal-only-when-affordable`). In the game an Age is free and always legal. When ON: The army pays ceil(sum over its soldiers of worth x the power
   points one more veterancy step gives, `Roster.AgeWeight`) / 100 gold; the step that wraps the ring back to 0 loses power and costs nothing. Legal only while the
   army can pay. The sum is a Pleroma read (InnerProduct of the keys-only projection with a weight per kind), not a host multiplication.
-- AN AURA IS RENTED (`aura-is-rented-and-legal-only-when-affordable`). An aura lasts the round, so it costs the sum over soldiers of worth x the power points
+- AN AURA IS RENTED WHEN THE RULE IS ON (`ArmyRules.PriceAura`, OFF in the game, case `aura-is-rented-and-legal-only-when-affordable` on `PricedRules`; free in the game). When ON: An aura lasts the round, so it costs the sum over soldiers of worth x the power points
   it adds (`Roster.AuraWeight`: the new bonus is the soldiers carrying the trait, capped at 50, never below an aura already active) divided by the rounds a
   bought body would still serve (`Roster.AuraRentalDivisor` = 8 - round, at least 1), rounded up. Legal only while the army can pay.
 - BANKED GOLD PAYS INTEREST (`banked-gold-pays-interest-when-a-round-closes`). When a round closes the purse pays `Roster.Interest` = gold / 7 (floor): the rate at
   which banking one round at the start of an 8-round campaign breaks even in soldier-rounds. Done by `Pleroma.MapCounts` on the purse (no new Pleroma operation).
-  The three rules are switches of `ArmyRules` (default = the game): a measurement uses them to price one lever at a time, a mutant turns one off.
+- DRAFT PRICES ARE WORTH (third round, `ArmyRules.DerivedDraftPrices`, ON in the game): a draft costs the kind's worth (`Roster.TraitPrice`, reach in): Spearmen 2, Shieldwall 3, Riders 2, Archers 2,
+  Priests 2, Wights 3, Wolves 3, Catapults 5. `Roster.PriceOf(kind)` is that price; the old typed table (1, 2, 2, 2, 3, 2, 2, 4) is `Roster.TypedPrice`. The scripted enemy and the scripted player size
+  their picks with it, so the enemy follows the same rule. The army charges exactly the price its rules name (`An_army_charges_the_draft_price_its_rules_name`).
+  The rules are switches of `ArmyRules` (default = the game): a measurement uses them to price one lever at a time, a mutant turns one off.
 - Draft spends exactly price x count; a refused pick (unknown kind, count <= 0, too little gold) is reported with a non-empty reason and
   changes nothing. There is no separate "command span" refusal: the span IS the roster (`Roster.Size` = 8 = the Pleroma's key capacity), so a
   ninth kind cannot exist. (A section may keep a guard for it; the contract cannot exercise it.)
@@ -96,9 +99,9 @@ resolves hits. The session owns all simulation state. The pipeline calls, per ti
 Invariants (`BattleContract`, through the game's own battle pipeline):
 - At least one arena; ids unique; every arena runs a battle.
 - A finished battle's outcome is never Running; it ends within the limit; `Result.Ticks == session.Tick`. When the limit stops a
-  running battle the side with more soldiers left wins, equal is a Draw. A side with no soldiers has already lost (zero ticks).
+  running battle the side with more POWER left wins, equal is a Draw (third round: not soldiers, so a standoff is not won by whoever bought the most bodies). Power = the sum over the side's\n  cohorts of soldiers x power% x damage% x (100 + reach) / taken% (`UnitRules.Rating`), the quantity a kind's worth rounds up to gold; of one kind it is the soldier count. A side with no soldiers has already lost (zero ticks).
   The sample fight may end before its limit, so the limit is also forced: with BOTH sides on Hold orders and a limit of 10 ticks, nobody can
-  be wiped out, so on every arena the battle runs exactly 10 ticks (11 frames) and is decided by soldiers left, never Running
+  be wiped out, so on every arena the battle runs exactly 10 ticks (11 frames) and is decided by power left, never Running
   (`a-battle-nobody-can-win-in-time-runs-to-the-limit-and-is-decided`).
 - Frames: tick 0 is the start (no events), then one frame per completed tick, consecutive. `Frames.Count == Ticks + 1`.
 - Blobs: ids unique and stable in every frame (a dead cohort stays with strength 0), strength never negative and never rises; the
@@ -109,6 +112,10 @@ Invariants (`BattleContract`, through the game's own battle pipeline):
   it brought, never before anything was lost, from the side's own losses only, and stays fired; from then on its cohorts follow the Then orders (a group not named
   advances). A side with no trigger, or one that never fires, plays exactly as before. Proved in TracerTriggerTests with three broken variants watched red
   (never fires, fires at the first tick, reads the enemy's losses: TracerBattleMutationProofs).
+- THE COUNTER CYCLE (Tracer section, third round, `TracerBattleOptions.Counters`, ON; the stub has no stat tables and no cycle). A kind's class is read from the stat tables (`UnitRules.ClassOf`: the largest of speed,
+  reach and armour edges over the plain soldier; none = Plain): Spearmen, Wights Plain; Riders, Wolves Swift; Archers, Priests, Catapults Ranged; Shieldwall Armoured. Each class hits the next class half again as hard
+  (the holy-against-cursed factor, `UnitRules.CounterNum/CounterDen`): Plain over Swift, Swift over Ranged, Ranged over Armoured, Armoured over Plain. It stacks with cover and the holy rule and changes no price. Proved in
+  `CounterAndLimitTests` (the class table, the ring, the factor, every edge of the ring clearer than with the option off) with the cycle off and the cycle read backwards watched red.
 - The same setup gives the same recording on the same device (`ReplayCodec.Digest` equal). Overwhelming force wins.
 - A battle is simulated ONCE by one authority and played back everywhere else. Cross-device equality is NOT required (floats); it is
   measured, not promised.

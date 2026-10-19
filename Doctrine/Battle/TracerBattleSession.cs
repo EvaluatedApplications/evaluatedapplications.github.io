@@ -243,6 +243,9 @@ public sealed class TracerBattleSession : IBattleSession
 
     int Strength(int role) => _cohorts.Where(c => c.Role == role).Sum(c => c.Strength);
 
+    /// <summary>The power a side has left: the sum of its cohorts' <see cref="UnitRules.Rating"/> (soldiers standing x power x damage x reach / taken).</summary>
+    long Power(int role) => _cohorts.Where(c => c.Role == role).Sum(c => UnitRules.Rating(c.Strength, c.PowerPct, c.Traits));
+
     public BattleStatus Status
     {
         get
@@ -552,7 +555,7 @@ public sealed class TracerBattleSession : IBattleSession
 
     EngagementOutcome Strike(UnitAgent s, UnitAgent t, float dist)
     {
-        int fp = UnitRules.Hit(s.DamageFp, s.Traits, t.TakenPct, t.Traits, _arena.InCover(t.Position));
+        int fp = UnitRules.Hit(s.DamageFp, s.Traits, t.TakenPct, t.Traits, _arena.InCover(t.Position), _opt.Counters, _opt.Probe.HasFlag(OrderProbe.CounterReversed));
         return new EngagementOutcome(s.Id, t.Id, fp + 0.49f * (1f - dist / s.AttackRange), Hit: true, Crit: false);
     }
 
@@ -616,7 +619,9 @@ public sealed class TracerBattleSession : IBattleSession
         var outcome = Status;
         if (outcome == BattleStatus.Running)
         {
-            int a = Strength(0), d = Strength(1);
+            // The tick limit: more soldiers left wins, or (LimitByPower) the greater power left, so a standoff is not won by whoever bought the most bodies.
+            bool byPower = _opt.LimitByPower && !_opt.Probe.HasFlag(OrderProbe.LimitCountsBodies);
+            long a = byPower ? Power(0) : Strength(0), d = byPower ? Power(1) : Strength(1);
             outcome = a > d ? BattleStatus.AttackerWon : d > a ? BattleStatus.DefenderWon : BattleStatus.Draw;
         }
         IReadOnlyList<CohortLoss> Losses(int role) => _cohorts.Where(c => c.Role == role && c.Start > c.Strength)

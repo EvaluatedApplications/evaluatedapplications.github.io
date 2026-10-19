@@ -117,7 +117,7 @@ public sealed class PleromaArmyProofs
     {
         var a = Service.Create(Side.Player, 9); var m = ModelOf(a);
         await Draft(a, 0, 2); m.Draft(0, 2);
-        await Draft(a, 1, 3); m.Draft(1, 3);
+        await Draft(a, 1, 1); m.Draft(1, 1);          // a Shieldwall costs 3 under the derived prices: 12 gold buy 4 + 3
         int total = a.Read().Soldiers;
         Assert.Equal(1, (await Order(a, DoctrineVocabulary.Army(ArmyOrderKind.Merge, 0))).Applied);
         m.Merge(0);
@@ -186,7 +186,7 @@ public sealed class PleromaArmyProofs
                     case 0:
                     {
                         int kind = r.Next(Roster.Size), count = 1 + r.Next(4);
-                        bool affordable = Roster.PriceOf(kind) * count <= m.Gold;
+                        bool affordable = ArmyRules.Default.DraftPrice(kind) * count <= m.Gold;
                         var rep = await Draft(a, kind, count);
                         Assert.Equal(affordable ? 1 : 0, rep.Accepted.Count);
                         if (affordable) m.Draft(kind, count);

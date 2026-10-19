@@ -25,10 +25,6 @@ public class SectionMutationProofs
     [InlineData(ArmyMut.ScoreFallsWithGold, Score)]
     [InlineData(ArmyMut.FlipAlwaysLegal, FlipPaid)]
     [InlineData(ArmyMut.FlipIsFree, FlipPaid)]
-    [InlineData(ArmyMut.AgeIsFree, AgePaid)]
-    [InlineData(ArmyMut.AgeAlwaysLegal, AgePaid)]
-    [InlineData(ArmyMut.AuraIsFree, AuraRent)]
-    [InlineData(ArmyMut.AuraAlwaysLegal, AuraRent)]
     [InlineData(ArmyMut.InterestDoubled, Interest)]
     public async Task Army_mutants_over_the_stub_are_caught(ArmyMut m, string expected)
         => Caught(await ContractRunner.RunAllAsync(ArmyContract.Cases, () => new MutantArmyService(new StubArmyService(), m)), expected);
@@ -42,10 +38,6 @@ public class SectionMutationProofs
     [InlineData(ArmyMut.ScoreFallsWithGold, Score)]
     [InlineData(ArmyMut.FlipAlwaysLegal, FlipPaid)]
     [InlineData(ArmyMut.FlipIsFree, FlipPaid)]
-    [InlineData(ArmyMut.AgeIsFree, AgePaid)]
-    [InlineData(ArmyMut.AgeAlwaysLegal, AgePaid)]
-    [InlineData(ArmyMut.AuraIsFree, AuraRent)]
-    [InlineData(ArmyMut.AuraAlwaysLegal, AuraRent)]
     [InlineData(ArmyMut.InterestDoubled, Interest)]
     [InlineData(ArmyMut.ClaimsEverythingLegal, "legal-list-matches-behaviour")]
     [InlineData(ArmyMut.StaleCode, "code-round-trips-everything")]
@@ -54,6 +46,28 @@ public class SectionMutationProofs
     public async Task Army_mutants_over_the_pleroma_army_are_caught(ArmyMut m, string expected)
         => Caught(await ContractRunner.RunAllAsync(ArmyContract.Cases, () => new MutantArmyService(new PleromaArmyService(), m)), expected);
 
+
+    // Age and Aura are free in the game (third round), so their two cases run on services built with the rules ON; each mutant breaks one rule and the case must go red.
+    [Theory]
+    [InlineData(ArmyMut.AgeIsFree, AgePaid)]
+    [InlineData(ArmyMut.AgeAlwaysLegal, AgePaid)]
+    [InlineData(ArmyMut.AuraIsFree, AuraRent)]
+    [InlineData(ArmyMut.AuraAlwaysLegal, AuraRent)]
+    public async Task Priced_army_mutants_are_caught_on_both_armies(ArmyMut m, string expected)
+    {
+        Caught(await ContractRunner.RunAllAsync(ArmyContract.PricedCases, () => new MutantArmyService(new StubArmyService(ArmyContract.PricedRules), m)), expected);
+        Caught(await ContractRunner.RunAllAsync(ArmyContract.PricedCases, () => new MutantArmyService(new PleromaArmyService(ArmyContract.PricedRules), m)), expected);
+    }
+
+    [Fact]
+    public async Task The_priced_cases_hold_on_clean_priced_armies_and_would_fail_on_the_free_game()
+    {
+        Assert.Empty(await ContractRunner.RunAllAsync(ArmyContract.PricedCases, () => new StubArmyService(ArmyContract.PricedRules)));
+        Assert.Empty(await ContractRunner.RunAllAsync(ArmyContract.PricedCases, () => new PleromaArmyService(ArmyContract.PricedRules)));
+        // the game's rules: an Age and an Aura cost nothing, which is exactly what the cases forbid
+        Caught(await ContractRunner.RunAllAsync(ArmyContract.PricedCases, () => new StubArmyService()), ArmyContract.AgeCase);
+        Caught(await ContractRunner.RunAllAsync(ArmyContract.PricedCases, () => new PleromaArmyService()), ArmyContract.AuraCase);
+    }
     // The section's own rule switches are mutants too: turn ONE rule off and the case that states it must go red (stub and Pleroma army alike).
     [Theory]
     [InlineData("age", AgePaid)]
@@ -64,13 +78,14 @@ public class SectionMutationProofs
     {
         var rules = rule switch
         {
-            "age" => new ArmyRules { PriceAge = false },
-            "aura" => new ArmyRules { PriceAura = false },
+            "age" => ArmyContract.PricedRules with { PriceAge = false },
+            "aura" => ArmyContract.PricedRules with { PriceAura = false },
             "interest" => new ArmyRules { BankInterest = false },
             _ => new ArmyRules { PriceReach = false },
         };
-        Caught(await ContractRunner.RunAllAsync(ArmyContract.Cases, () => new StubArmyService(rules)), expected);
-        Caught(await ContractRunner.RunAllAsync(ArmyContract.Cases, () => new PleromaArmyService(rules)), expected);
+        var cases = rule is "age" or "aura" ? ArmyContract.PricedCases : ArmyContract.Cases;
+        Caught(await ContractRunner.RunAllAsync(cases, () => new StubArmyService(rules)), expected);
+        Caught(await ContractRunner.RunAllAsync(cases, () => new PleromaArmyService(rules)), expected);
     }
 
     [Fact]
@@ -100,6 +115,42 @@ public class SectionMutationProofs
         Caught(await ContractRunner.RunAllAsync(BattleContract.Cases, () => engine), Limit);
     }
 
+
+    // The tick limit counts POWER left (third round). A section that goes back to counting soldiers must turn the contract red, on the stub and on Tracer.
+    const string PowerLimit = "tick-limit-decides-by-power-left";
+
+    /// <summary>Decides a battle the limit stopped by soldiers left (the old rule), whatever the engine under it says.</summary>
+    sealed class BodiesMutantEngine(IBattleEngine inner) : IBattleEngine
+    {
+        public IReadOnlyList<ArenaInfo> Arenas => inner.Arenas;
+        public async ValueTask<IBattleSession> StartAsync(BattleSetup setup, CancellationToken ct) => new Session(await inner.StartAsync(setup, ct), setup);
+        sealed class Session(IBattleSession s, BattleSetup setup) : IBattleSession
+        {
+            public int Tick => s.Tick;
+            public BattleStatus Status => s.Status;
+            public ValueTask FieldOrdersAsync(CancellationToken ct) => s.FieldOrdersAsync(ct);
+            public ValueTask MoveAsync(CancellationToken ct) => s.MoveAsync(ct);
+            public ValueTask EngageAsync(CancellationToken ct) => s.EngageAsync(ct);
+            public ValueTask ApplyLossesAsync(CancellationToken ct) => s.ApplyLossesAsync(ct);
+            public ReplayFrame Snapshot() => s.Snapshot();
+            public ReplayFrame Record() => s.Record();
+            public BattleResult Finish(bool tickLimitReached)
+            {
+                var r = s.Finish(tickLimitReached);
+                if (!tickLimitReached || r.Outcome is BattleStatus.Running) return r;
+                int a = setup.Attacker.Cohorts.Sum(c => c.Count) - r.AttackerLosses.Sum(l => l.Lost), d = setup.Defender.Cohorts.Sum(c => c.Count) - r.DefenderLosses.Sum(l => l.Lost);
+                return r with { Outcome = a > d ? BattleStatus.AttackerWon : d > a ? BattleStatus.DefenderWon : BattleStatus.Draw };
+            }
+        }
+    }
+
+    [Fact]
+    public async Task A_limit_that_counts_soldiers_instead_of_power_is_caught_on_the_stub()
+        => Caught(await ContractRunner.RunAllAsync(BattleContract.Cases, () => new BodiesMutantEngine(new StubBattleEngine())), Limit);
+
+    [Fact]
+    public async Task A_limit_that_counts_soldiers_instead_of_power_is_caught_on_tracer()
+        => Caught(await ContractRunner.RunAllAsync(BattleContract.Cases, () => new BodiesMutantEngine(TracerWorlds.Engine())), Limit);
     /// <summary>Rewrites the finished result, over any engine (the result twin of <see cref="FrameMutantEngine"/>).</summary>
     sealed class ResultMutantEngine(IBattleEngine inner, Func<BattleResult, BattleResult> rewrite) : IBattleEngine
     {

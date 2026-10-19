@@ -37,6 +37,17 @@ public static class Sample
     }
 
     public static int Standing(ReplayFrame f, Side s) => f.Blobs.Where(b => b.Side == s).Sum(b => b.Strength);
+
+    /// <summary>The power a side has left in a frame (CONTRACT.md b): each standing cohort's soldiers x its power x damage x reach / taken, the cohort's traits and power read from the setup.</summary>
+    public static long PowerLeft(BattleSetup setup, ReplayFrame f, Side s)
+    {
+        var side = setup.Attacker.Side == s ? setup.Attacker : setup.Defender;
+        return f.Blobs.Where(b => b.Side == s).Sum(b =>
+        {
+            var c = side.Cohorts.First(x => x.Key == b.Key && x.Slot == b.Slot);
+            return Doctrine.Battle.UnitRules.Rating(b.Strength, c.PowerPct, c.Traits);
+        });
+    }
 }
 
 /// <summary>The BATTLE contract (CONTRACT.md section b), checked through the game's own battle pipeline.</summary>
@@ -66,14 +77,15 @@ public static class BattleContract
             Expect.True(b.Result.Ticks <= 40, $"ran {b.Result.Ticks} ticks past the limit of 40");
             Expect.Equal(b.Session!.Tick, b.Result.Ticks, "result ticks equal the session's completed ticks");
         }),
-        new("tick-limit-decides-by-soldiers-left", async e =>
+        new("tick-limit-decides-by-power-left", async e =>
         {
-            var b = await Sample.RunAsync(e, Sample.Setup(e.Arenas[0].Id, 1, 1, 60, 60));
+            var setup = Sample.Setup(e.Arenas[0].Id, 1, 1, 60, 60);
+            var b = await Sample.RunAsync(e, setup);
             Expect.Equal(1, b.Result!.Ticks, "tick limit 1 means exactly one tick");
             var last = b.Replay!.Frames[^1];
-            int a = Sample.Standing(last, Side.Player), d = Sample.Standing(last, Side.Enemy);
+            long a = Sample.PowerLeft(setup, last, Side.Player), d = Sample.PowerLeft(setup, last, Side.Enemy);
             var expect = a > d ? BattleStatus.AttackerWon : d > a ? BattleStatus.DefenderWon : BattleStatus.Draw;
-            if (a > 0 && d > 0) Expect.Equal(expect, b.Result.Outcome, "when the limit stops a battle the side with more soldiers wins (equal is a Draw)");
+            if (Sample.Standing(last, Side.Player) > 0 && Sample.Standing(last, Side.Enemy) > 0) Expect.Equal(expect, b.Result.Outcome, "when the limit stops a battle the side with more POWER left wins (equal is a Draw)");
         }),
         new("a-battle-nobody-can-win-in-time-runs-to-the-limit-and-is-decided", async e =>
         {
@@ -81,14 +93,16 @@ public static class BattleContract
             // every group with a limit too short to wipe anyone out, so the LIMIT must be what ends the battle, on every arena.
             foreach (var a in e.Arenas)
             {
-                var b = await Sample.RunAsync(e, Sample.HoldSetup(a.Id, 11, 10));
+                var hold = Sample.HoldSetup(a.Id, 11, 10);
+                var b = await Sample.RunAsync(e, hold);
                 Expect.Equal(10, b.Result!.Ticks, $"{a.Id}: with both sides holding, only the tick limit ends the battle");
                 Expect.Equal(11, b.Replay!.Frames.Count, $"{a.Id}: one frame per tick plus the start");
                 var last = b.Replay.Frames[^1];
                 int att = Sample.Standing(last, Side.Player), def = Sample.Standing(last, Side.Enemy);
                 Expect.True(att > 0 && def > 0, $"{a.Id}: setup: nobody should be wiped out in 10 ticks of holding");
-                var want = att > def ? BattleStatus.AttackerWon : def > att ? BattleStatus.DefenderWon : BattleStatus.Draw;
-                Expect.Equal(want, b.Result.Outcome, $"{a.Id}: the limit decides by soldiers left (equal is a Draw), never Running");
+                long pa = Sample.PowerLeft(hold, last, Side.Player), pd = Sample.PowerLeft(hold, last, Side.Enemy);
+                var want = pa > pd ? BattleStatus.AttackerWon : pd > pa ? BattleStatus.DefenderWon : BattleStatus.Draw;
+                Expect.Equal(want, b.Result.Outcome, $"{a.Id}: the limit decides by power left (equal is a Draw), never Running");
             }
         }),
         new("frames-are-consecutive-and-complete", async e =>

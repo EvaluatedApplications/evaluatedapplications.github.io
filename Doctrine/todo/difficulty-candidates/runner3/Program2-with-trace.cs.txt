@@ -1,0 +1,96 @@
+using System.Diagnostics;
+using System.Globalization;
+using Autopilot;
+
+// dg2: the second-round style instrument. Usage (all CPU, BelowNormal, 6 workers):
+//   dg2 duels|matches <state> <outdir>      run both levels (skips a file that exists)
+//   dg2 rr <state> <outdir>                 draft-rule round robin, expert duels
+//   dg2 nulls <state> <outdir>              N3 sensitivity (+15 percent MASS) and N2 replay of 20 duels
+//   dg2 report <state> <outdir>             the report from the raw files
+//   dg2 smoke <state> <outdir>              a few units of each, to see the pipeline run
+static class P
+{
+    static readonly Stopwatch Clock = Stopwatch.StartNew();
+    static void Log(string s) => Console.WriteLine($"[{Clock.Elapsed.TotalMinutes:F1} min] {s}");
+
+    static Action<int, int> Progress(string what)
+    {
+        int last = -1;
+        return (d, n) => { int pct = d * 20 / n; if (pct != last) { last = pct; Log($"{what} {d}/{n}"); } };
+    }
+
+    static void Main(string[] args)
+    {
+        try { var p = Process.GetCurrentProcess(); p.PriorityClass = ProcessPriorityClass.BelowNormal; } catch { }
+        Pool.Workers = 6;
+        if (args[0] == "summary") { Console.WriteLine(Reports.Summary(args[1], args.Skip(2).Select(State.Get))); return; }
+        if (args[0] == "trace") { Pool.BattleOptions = State.Get(args[1]).Battle; Console.WriteLine(Matches.Trace(State.Get(args[1]), int.Parse(args[2]), int.Parse(args[3]), int.Parse(args[4]), int.Parse(args[5]))); return; }
+        string cmd = args[0], dir = args[2];
+        Directory.CreateDirectory(dir);
+        var st = State.Get(args[1]);
+        Pool.BattleOptions = st.Battle;
+        int n = st.Styles;
+        switch (cmd)
+        {
+            case "duels":
+                foreach (var (lv, eps) in new[] { ("novice", 0.5), ("expert", 0.0) })
+                {
+                    var f = Reports.File_(dir, st.Name, "duels-" + lv);
+                    if (File.Exists(f)) { Log("have " + f); continue; }
+                    Reports.Save(f, Duels.Run(st, eps, n, false, Progress($"{st.Name} duels {lv}")));
+                    Log($"{st.Name} duels {lv} done, retries {WorkerGame.Retries}");
+                }
+                break;
+            case "matches":
+                foreach (var (lv, eps) in new[] { ("novice", 0.5), ("expert", 0.0) })
+                {
+                    var f = Reports.File_(dir, st.Name, "matches-" + lv);
+                    if (File.Exists(f)) { Log("have " + f); continue; }
+                    Reports.Save(f, Matches.Run(st, eps, n, Progress($"{st.Name} matches {lv}")));
+                    Log($"{st.Name} matches {lv} done, retries {WorkerGame.Retries}");
+                }
+                break;
+            case "rr":
+                {
+                    var f = Reports.File_(dir, st.Name, "rr");
+                    if (!File.Exists(f)) Reports.Save(f, Duels.Run(st, 0, 10, true, Progress($"{st.Name} rr")));
+                    break;
+                }
+            case "nulls":
+                {
+                    double boosted = Duels.Sensitivity(st);
+                    File.WriteAllText(Reports.File_(dir, st.Name, "n3"), $"N3 sensitivity: MASS with +15 percent power against MASS (expert duels, 160 battles): the boosted side scores {boosted:F3} (need above .58): {(boosted > 0.58 ? "OK" : "INSENSITIVE, D INVALID")}\n");
+                    // N2: the first 20 rows of the expert duels, replayed
+                    var f = Reports.File_(dir, st.Name, "duels-expert");
+                    if (File.Exists(f))
+                    {
+                        var old = Reports.Load(f).Take(20).ToList();
+                        var again = Duels.Run(st, 0.0, n, false, take: 20);
+                        bool same = old.Zip(again, (a, b) => a.V == b.V && a.A == b.A && a.B == b.B && a.Arena == b.Arena).All(x => x);
+                        File.WriteAllText(Reports.File_(dir, st.Name, "n2"), $"N2 replay: the first 20 expert duels re-run in a new process: {(same ? "identical" : "DIFFERENT, D INVALID")}\n");
+                    }
+                    break;
+                }
+            case "report":
+                {
+                    var txt = Reports.State(dir, st, out var clauses);
+                    File.WriteAllText(Path.Combine(dir, $"report-{st.Name}.txt"), txt);
+                    Console.WriteLine(txt);
+                    break;
+                }
+            case "diag":
+                {
+                    foreach (var (a, b) in new[] { (3, 0), (3, 5), (3, 1), (3, 2), (3, 4), (4, 5), (4, 0), (5, 5), (1, 3) }) if (a < n && b < n) Console.WriteLine(Duels.Diag(st, a, b, 10));
+                    break;
+                }
+            case "smoke":
+                {
+                    var d = Duels.Run(st, 0.5, n, false, take: 24);
+                    Log($"duels smoke {d.Count} rows mean {d.Average(r => r.V):F2}");
+                    var m = Matches.Run(st, 0.5, n, take: 12);
+                    Log($"matches smoke {m.Count} rows mean {m.Average(r => r.V):F2}, retries {WorkerGame.Retries}");
+                    break;
+                }
+        }
+    }
+}

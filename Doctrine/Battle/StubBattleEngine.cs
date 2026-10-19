@@ -62,6 +62,7 @@ public sealed class StubBattleSession : IBattleSession
     }
 
     int StrengthOf(Side s) => _blobs.Where(b => b.Side == s).Sum(b => b.Strength);
+    long PowerOf(Side s) => _blobs.Where(b => b.Side == s).Sum(b => UnitRules.Rating(b.Strength, b.PowerPct, b.Traits));
     IEnumerable<Blob> Alive(Side s) => _blobs.Where(b => b.Side == s && b.Strength > 0);
 
     public int Tick { get; private set; }
@@ -160,7 +161,8 @@ public sealed class StubBattleSession : IBattleSession
         var outcome = Status;
         if (outcome == BattleStatus.Running)
         {
-            int a = StrengthOf(_setup.Attacker.Side), d = StrengthOf(_setup.Defender.Side);
+            // The limit counts POWER left (CONTRACT.md b), the same quantity the Tracer section counts: soldiers x power x damage x reach / taken.
+            long a = PowerOf(_setup.Attacker.Side), d = PowerOf(_setup.Defender.Side);
             outcome = a > d ? BattleStatus.AttackerWon : d > a ? BattleStatus.DefenderWon : BattleStatus.Draw;
         }
         IReadOnlyList<CohortLoss> Losses(Side s) => _blobs.Where(b => b.Side == s && b.Start - b.Strength > 0)

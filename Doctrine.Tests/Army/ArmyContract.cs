@@ -31,7 +31,7 @@ public static class ArmyContract
 
     static IEnumerable<int> ArmyTokens() => Enumerable.Range(1, DoctrineVocabulary.Size - 1).Where(t => DoctrineVocabulary.Decode(t).Family == OrderFamily.Army);
 
-    public static IReadOnlyList<ContractCase<IArmyService>> Cases { get; } =
+    static IReadOnlyList<ContractCase<IArmyService>> All { get; } =
     [
         new("create-is-deterministic", async s =>
         {
@@ -118,7 +118,7 @@ public static class ArmyContract
             var rep = await a.DraftAsync(new DraftRequest(0, 1, [new DraftPick(3, 4)]), default);
             var r1 = a.Read();
             Expect.Equal(1, rep.Accepted.Count, "the pick should be accepted");
-            Expect.Equal(Roster.PriceOf(3) * 4, rep.GoldSpent, "gold spent in the report");
+            Expect.Equal(ArmyRules.Default.DraftPrice(3) * 4, rep.GoldSpent, "gold spent in the report");
             Expect.Equal(r0.Gold - rep.GoldSpent, r1.Gold, "gold after");
             Expect.Equal((r0.Cohorts.FirstOrDefault(c => c.Key == 3)?.Count ?? 0) + 4, r1.Cohorts.First(c => c.Key == 3).Count, "soldiers bought");
         }),
@@ -303,7 +303,7 @@ public static class ArmyContract
             Expect.True(rr.Cohorts.All(c => rich.Read().Cohorts.First(x => x.Key == c.Key).Veterancy == (c.Veterancy + 1) % Roster.VetPeriod), "every cohort steps once");
             // (b) a broke army (its gold spent on Spearmen) may not: legal exactly when affordable, and a refused Age changes nothing
             var broke = Fresh(s, 5); var b0 = broke.Read();
-            await broke.DraftAsync(new DraftRequest(0, 1, [new DraftPick(0, b0.Gold / Roster.PriceOf(0))]), default);
+            await broke.DraftAsync(new DraftRequest(0, 1, [new DraftPick(0, b0.Gold / ArmyRules.Default.DraftPrice(0))]), default);
             var br = broke.Read(); int bcost = CostOf(br);
             Expect.True(bcost > br.Gold, $"setup: the broke army has {br.Gold} gold against an Age of {bcost}");
             Expect.True(!br.Legal.Allows(age), "an Age the army cannot pay is not legal");
@@ -341,7 +341,7 @@ public static class ArmyContract
                 if (cost > 0) paid++;
                 // a broke army (its gold spent on Spearmen): legal exactly when the rent is affordable; a refused aura changes nothing
                 var poor = Fresh(s, 5);
-                await poor.DraftAsync(new DraftRequest(0, 1, [new DraftPick(0, poor.Read().Gold / Roster.PriceOf(0))]), default);
+                await poor.DraftAsync(new DraftRequest(0, 1, [new DraftPick(0, poor.Read().Gold / ArmyRules.Default.DraftPrice(0))]), default);
                 var pr = poor.Read();
                 int pcost = Roster.GoldFor(pr.Cohorts.Sum(c => (long)c.Count * Roster.AuraWeight(c.Traits, 0, 0, mask, Math.Min(50, pr.Cohorts.Where(x => ((int)x.Traits >> bit & 1) != 0).Sum(x => x.Count)), true)), Roster.AuraRentalDivisor(pr.Round));
                 Expect.Equal(pcost <= pr.Gold, pr.Legal.Allows(token), $"aura {bit} rents for {pcost} against {pr.Gold} gold: legal exactly when affordable");
@@ -377,10 +377,12 @@ public static class ArmyContract
                 Expect.Equal(g + Roster.Interest(g), a.Read().Gold, $"{g} gold banked through a round close");
             }
             var poor = Fresh(s, 5);
-            await poor.DraftAsync(new DraftRequest(0, 1, [new DraftPick(0, poor.Read().Gold)]), default);     // spend everything
-            Expect.Equal(0, poor.Read().Gold, "setup: nothing left");
+            await poor.DraftAsync(new DraftRequest(0, 1, [new DraftPick(0, poor.Read().Gold / ArmyRules.Default.DraftPrice(0))]), default);     // spend everything a Spearman can buy
+            long left = poor.Read().Gold;
+            Expect.True(left < ArmyRules.Default.DraftPrice(0), "setup: not enough left for another Spearman");
             await poor.EndRoundAsync(default);
-            Expect.Equal(0, poor.Read().Gold, "no gold, no interest");
+            Expect.Equal(left + Roster.Interest(left), poor.Read().Gold, "a purse too small to pay earns nothing");
+            Expect.Equal(0L, Roster.Interest(left), "setup: the small purse pays no interest (gold / 7 floors to nothing)");
             var rich = Fresh(s, 5); await rich.ApplySpoilsAsync(new Spoils(100, 0), default);
             long before = rich.Read().Gold;
             await rich.EndRoundAsync(default);
@@ -450,6 +452,17 @@ public static class ArmyContract
             Expect.True(prev < start, "an army with no soldiers must be worth less than the same army with them");
         }),
     ];
+
+    public const string AgeCase = "age-is-paid-for-and-legal-only-when-affordable", AuraCase = "aura-is-rented-and-legal-only-when-affordable";
+
+    /// <summary>The cases every army service holds under the game's rules (Age and Aura are free in the game, third round 2026-10-19).</summary>
+    public static IReadOnlyList<ContractCase<IArmyService>> Cases { get; } = All.Where(c => c.Name != AgeCase && c.Name != AuraCase).ToList();
+
+    /// <summary>The cases of the two rules that are OFF in the game: an Age and an Aura that cost gold. Run them on a service built with <see cref="PricedRules"/>.</summary>
+    public static IReadOnlyList<ContractCase<IArmyService>> PricedCases { get; } = All.Where(c => c.Name == AgeCase || c.Name == AuraCase).ToList();
+
+    /// <summary>The rules under which an Age and an Aura are paid for.</summary>
+    public static ArmyRules PricedRules { get; } = new() { PriceAge = true, PriceAura = true };
 
     /// <summary>Veterancy places a ring may have at most (CONTRACT.md a). A section picks its own period at or below this.</summary>
     public const int RingBound = 64;

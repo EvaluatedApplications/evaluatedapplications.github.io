@@ -25,7 +25,7 @@ public class DigestPinTests
         // Re-pinned again 2026-10-19, second round (was 1796544520915972963): vocabulary version 2 adds three trigger tokens (ids 54..56, nothing moves), so the
         // scripted players draw from a larger legal list; an Age and an Aura now cost gold and are legal only when affordable; the purse pays interest at the
         // close of a round. All three change what the random doctrines order and what gold the army holds; the wire format of tokens 0..53 is unchanged.
-        Assert.Equal(5025665426094534569UL, await Play(false, 1234));
+        // Re-pinned a third time 2026-10-19, third round (was 5025665426094534569): Age and Aura are FREE again (the coordinator reverted the pricing), the draft prices are derived from\n        // worth (a Spearman costs 2) for the player, the scripted enemy and the scripted player, and the stub's tick limit counts power, not soldiers. The wire format is unchanged.\n        Assert.Equal(15698248093412764465UL, await Play(false, 1234));
     }
 
     [Fact]
@@ -41,6 +41,6 @@ public class DigestPinTests
         // Earlier re-pin 2026-10-19 (was 1827372264668017971): the Tracer battle changed on purpose. The defender's formation block is now mirrored
         // (the attacker's partial last row was its front, the defender's its rear) and agent ids interleave the two sides in conflict priority.
         // Found by the balance harness (Doctrine\todo\balance-harness-2026-10-19.md). The stub digest above is untouched.
-        Assert.Equal(8746276498987472616UL, await Play(true, 1234));
+        // Re-pinned a sixth time 2026-10-19, third round (was 8746276498987472616): the same army causes as the stub pin (Age and Aura free, derived draft prices) plus the Tracer battle\n        // now has the counter cycle (a class hits the class it counters half again as hard) and counts power at the tick limit. A battle without a counter and without a standoff is unchanged.\n        Assert.Equal(771457392613517103UL, await Play(true, 1234));
     }
 }

@@ -84,9 +84,9 @@ public class TracerBattleTests
     }
 
     [Fact]
-    public async Task Equal_soldiers_at_the_limit_is_a_draw()
+    public async Task Equal_power_at_the_limit_is_a_draw()
     {
-        var (st, _) = await Run(TracerWorlds.Engine(), Fight("open-field", 5, 20, [C(0, 50, 0)], [O(0, FieldOrderKind.Hold)], [C(1, 50, 0)], [O(0, FieldOrderKind.Hold)]));
+        var (st, _) = await Run(TracerWorlds.Engine(), Fight("open-field", 5, 20, [C(0, 50, 0)], [O(0, FieldOrderKind.Hold)], [C(0, 50, 0)], [O(0, FieldOrderKind.Hold)]));
         Assert.Equal(BattleStatus.Draw, st.Result!.Outcome);
     }
 

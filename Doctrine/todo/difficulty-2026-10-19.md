@@ -405,3 +405,153 @@ P5 (T4 fails at A4 on clause c through MASS): YES. A5 was therefore measured; it
 In the tree: Age and Aura priced (A1), reach in the worth (A2), the loss trigger (A3, vocabulary version 2), interest (A4), all through ArmyRules whose defaults are the game; A5 is a switch that ships OFF. Contract cases: ge-is-paid-for-and-legal-only-when-affordable, ura-is-rented-and-legal-only-when-affordable, anked-gold-pays-interest-when-a-round-closes; loss trigger: TracerTriggerTests.
 Mutants watched red: Age free, Aura free, Age always legal, Aura always legal, interest doubled (each over the stub and the Pleroma army); a rule switched off (age, aura, interest, reach) on both armies; the trigger never firing, firing at the first tick, reading the enemy's losses (3 probes, 5 checks). Digest pins re-pinned with reasons (stub 5025665426094534569, real 8746276498987472616).
 Doctrine.Tests: 409 of 409 green (was 365 with one flaky failure). The Showroom page builds (0 errors); its DoctrineUiProof passes 153 of 154: the one failure is the palette check (36 enabled, 9 disabled, 8 Cull not shown) which sees the three trigger tokens outside the palette.
+
+---
+# THIRD ROUND 2026-10-19 (late night; tracer-owner, coordinator decisions): COUNTERS, THE CHEAP BODY, THE HOLD DEADLOCK
+PRE-REGISTERED BEFORE any scored run of the states below (the runner was smoke-tested on 24 duels and 12 matches for timing only, output discarded). CPU only (BelowNormal, 6 workers), no GPU, no HoloFormer named, Pleroma operations only, no new tokens (the vocabulary stays at version 2).
+Coordinator decisions in force: (1) A1 is reverted as the DEFAULT: `ArmyRules.PriceAge` and `PriceAura` default OFF (the switches, the contract cases and the mutants stay; the cases now run on armies built with those rules ON). Flip stays priced, the triggers and the interest stay.
+(2) The lever now is the four root causes of the second round: no counters, the one-gold Spearman, the Hold-vs-Hold deadlock, an economy style that cannot survive a round. (3) Aim: several VALID playstyles across proficiency; MICRO keeps its skill slope; BANKER and COMPOSER must be able to survive and win with skill.
+
+## Change sets (cumulative; each derived from the diagnosis, none from a result; each measured ONCE)
+- R0 REFERENCE = the game after decision 1 and nothing else: Age and Aura free, Flip priced with reach, interest on, the loss trigger in the vocabulary, typed draft prices, the tick limit counted in soldiers. (Same binary as every other state; only switches differ.)
+- K1 COUNTER CYCLE (`TracerBattleOptions.Counters`). A kind's CLASS is read from the battle's stat tables, never typed per kind (`UnitRules.ClassOf`): the largest of three edges over the plain soldier, in percent: Swift = speed over the base pace (+50), Ranged = the free fire of its reach (`ReachPct`, 20 or 32),
+  Armoured = the damage not taken (100 / taken - 100: Shielded 33, Heavy 11, both 49); no positive edge = Plain; the first of Swift, Ranged, Armoured wins a tie. That gives Spearmen and Wights Plain, Riders and Wolves Swift, Archers, Priests and Catapults Ranged (the Machine's reach 32 beats its Heavy 11), Shieldwall Armoured; a Flip changes the class because the tables read live traits.
+  The cycle (`UnitRules.Counters`): Plain counters Swift (a braced line breaks a charge), Swift counters Ranged (it closes the gap the shooter lives on), Ranged counters Armoured (the slow and the shielded are worn down at range), Armoured counters Plain (shields turn an unarmoured soldier's thrusts): each class counters exactly the next in `KindClass` order round the ring, so no class is safe
+  against all and none is hit by two. The factor is the one the game already has for the holy against the cursed (3/2, now `UnitRules.CounterNum/CounterDen`, named once). A counter is a hit multiplier, so it stacks with cover and the holy rule and changes no price: over the ring it gives and takes equally, so worth stays the price of a body.
+- K2 = K1 + DERIVED DRAFT PRICES (`ArmyRules.DerivedDraftPrices`, the former A5). Draft price = worth = ceil(2 x damage x (100 + reach) / (taken x 100)) from the stat tables: Spearmen 2, Shieldwall 3, Riders 2, Archers 2, Priests 2, Wights 3, Wolves 3, Catapults 5. THE SPEARMAN PRICE IS DECIDED BY THE DERIVATION (2, not the typed 1): a body costs what it is worth.
+  Combined with K1 as the coordinator asked: with counters the price is the worth of an average encounter (a class gives and takes the same over the ring), so the derivation needs no counter term. The scripted enemy and the scripted player now size their picks with `ArmyRules.Default.DraftPrice`, so a derived price reaches the enemy too (in the style kit there is no scripted enemy).
+- K3 = K2 + THE TICK LIMIT COUNTS POWER (`TracerBattleOptions.LimitByPower`). When the tick limit stops a running battle the side with the greater `UnitRules.Rating` left wins, equal is a Draw. Rating = sum over cohorts of soldiers x power% x damage% x (100 + reach) / taken%: the quantity worth rounds up to gold, with the cohort's veterancy and aura in. It replaces "more soldiers left", which made a Hold-vs-Hold standoff
+  a count of bodies (BANKER's 42 Shieldwall beat MICRO's 39 Archers 1.00 to 0.00, whatever the fighters were worth).
+- Not in this round, said now: no lever pays a banked gold more than interest (the fortify order needs the per-key Tick, filed as AG4 in the second round and still not built); Age and Aura stay FREE in every state (decision 1), so VETERAN's two Age tokens are free power in all four states.
+
+## Instrument (unchanged kit of the second round; only the seeds are fresh)
+Styles AGGRESSOR, BANKER, COMPOSER, MICRO (Hold Hold Hold WhenLost25), VETERAN (Age, Age, Aura on the top trait, Advance@0; Spearmen while Age is free), MASS, plus the reference row MICRO0 (not in any verdict). Duels: one round, same levy, 24 extra gold, army orders through the army, one battle, tick limit 120, 20 seeds x 4 arenas x both orientations = 160 battles per pair per level (SE .04).
+Matches: 6 rounds, persistent armies, start gold 12, the real spoils rule, roles swap, arena fixed per run, 10 seeds x 2 orders x 4 arenas = 80 matches per pair per level (SE .05). NOVICE = each drafted kind and each doctrine token replaced by a random legal one with probability .5, EXPERT = never; both players of a pairing at the same level.
+SEEDS ARE FRESH: duels 9,700,000+, matches 9,800,000+ (the second round used 9,500,000 and 9,600,000), never used to design anything. Draft prices come from the state's rules for every style (a style that sizes a pick uses `State.Price`).
+Runner (sources as run, scratchpad `dgk\`, copies kept in todo\difficulty-candidates\runner3\): Harness.cs BD95A427246507E2950F45496CA8B0D337692B231435B36851FA93C0160D3F4C, Styles2.cs 80E782A3A71903FE186F556DF0336F9648CB5D3B8EDCB0AB94FE4F50B1A0F007, Report2.cs EF96BBDCED416F2883DA712D7B4C316390136936E6DB50126B84793466EB5653, Program2.cs F74EA5809B4FF893E0BC2F120BE999193D0F39527CC196CC91023E68C6524D06 at lock.
+Search width: 4 states (R0, K1, K2, K3) x 6 styles (+ the reference) x 2 levels x 2 formats x 4 arenas, plus the 10 draft rules per state. No other candidate is tried. If K3 fails there is NO K4 chosen from these results; the report says what is structurally missing.
+
+## Target T4 restated (a to f), read on the pooled (4 arenas) matrices, duels and matches, NOVICE and EXPERT
+A style "beats" another when its pooled score is above max(.55, .5 + 1.64 SE) and "loses" when below the mirror of that.
+(a) every style's mean over the other five lies in .35 to .65 (survival: BANKER and COMPOSER are inside the band, not under .35); (b) every style beats at least one other and loses to at least one; (c) no style, the control included, beats all five others;
+(d) CROSSOVER (matches): some ordered pair is below .45 at NOVICE and above .55 at EXPERT; (e) SKILL GAIN (matches, mean over the others, expert minus novice): MICRO, BANKER AND COMPOSER each at least +.05 (the coordinator's aim names BANKER and COMPOSER; the second round's (e) named MICRO and BANKER, COMPOSER is added here and the runner prints all six gains);
+(f) NO DRAFT RULE BEATS ALL: the ten draft rules (Advance x3, expert duels, pooled): none beats all nine others. PASS = (a)-(c) at both levels in both formats, and (d), (e), (f). Anything less names the failing clauses. Composite gap per state = the mean of the four max-minus-min style means (duels, matches x novice, expert), reported for every state.
+## Nulls (written now)
+N1 mirror: a style against itself reads .50 +- .09 (3 SE) pooled over the duels, else the instrument leans: D. N2 replay: the first 20 expert duels re-run in a new process are identical, else D. N3 sensitivity: MASS +15 percent power against MASS (expert duels, 160 battles) scores above .58, else D.
+N4 reference: R0 must keep the free-Age shape of the recorded C0 (expert duels, row means of VETERAN and MASS within .10 of .97 and .83, COMPOSER under .15), else the plumbing or the fresh seeds changed the instrument: D. Analytic: with 36 cells at SE .04-.05 identical styles show a "beat" in about 5 percent of cells by chance, so a clause (b) pass inside that rate is soft.
+## Predictions (scored afterwards)
+P1 R0 keeps the C0 shape: VETERAN and MASS lead (VETERAN >= .85, MASS >= .70 mean at expert duels), clause (c) fails at expert in both formats.
+P2 K1: the Plain styles (VETERAN, MASS) lose to BANKER (BANKER above .60 against both in the expert duels), so (c) now holds in the expert duels; in the matches it still fails, because BANKER banks half its gold for three rounds and the cheap Spearmen still outnumber everyone.
+P3 K2: MASS falls clearly (its expert duel mean drops by >= .15 from K1) because the one-gold body is gone; a different style takes the lead (a ranged or fast one) and clause (a) still fails at expert in at least one format.
+P4 K3: the MICRO-BANKER pair moves from decided-by-bodies (.00 / 1.00 in R0 and K1) to within .25 of even; K3 has the lowest composite gap of the four.
+P5 BANKER's mean over the others stays under .35 in the MATCHES at expert in all four states (nothing in this round pays a gold held back more than interest), so (e) fails on BANKER and (a) fails at the matches.
+P6 T4 fails in every state, at least on (a) or (e) in the matches.
+## Fix rule (declared now)
+SHIP the earliest cumulative state that passes T4. If none passes: the DEFAULT becomes the state with the lowest composite gap, provided its expert (c) failures (duels and matches, 0..2) are no more than R0's; ties within .02 go to the earlier state. A step that raises the composite gap by more than .05 (K1 to K2, K2 to K3, or R0 to K1) is NAMED as making the game worse for the coordinator whatever ships.
+Every lever stays in the tree as a switch. Contract case and mutant per behavioural change: the counter cycle (class table, the cycle, the hit multiplier; the cycle read backwards and the cycle off watched red), the tick-limit rule (power against bodies; counting bodies watched red), the derived draft prices (already pinned; the enemy now follows the price rule), Age and Aura default OFF (contract cases run on rules with them ON). Digest pins re-pinned with the reason.
+
+# RESULTS, THIRD ROUND (2026-10-19 late night; runner3 as locked above, raw rows styles3-raw.zip, per-state reports styles3-report-<state>.txt, one table styles3-summary.txt, all under todo\difficulty-candidates\)
+The four states ran the scored command sequence once each (duels, matches, draft rules, nulls, report), 6 workers at BelowNormal, ~12 minutes a state. After the scored runs a `trace` verb (one match printed round by round) was added to Styles2.cs/Program2.cs for the diagnosis below; those two files differ from the locked hashes by that verb only (copies: runner3\Styles2-with-trace.cs.txt, Program2-with-trace.cs.txt). Nothing scored used them.
+Nulls: N1 mirror OK in all four (duels, attacker score of a style against itself, mean .495 to .505 at both levels, inside .50 +- .09); N2 replay identical in all four; N3 sensitivity OK (MASS +15 percent against MASS scores .966 R0, .938 K1, .969 K2, .969 K3, all above .58);
+N4 reference OK (R0 expert duels: VETERAN .98, MASS .82, COMPOSER .07; the recorded C0 was .97, .83, .08). The instrument is valid. Its sharpness is itself a result: +15 percent power wins .94 to .97 of the duels.
+
+## Verdict: T4 FAILS in all four states. No state passes, so by the fix rule the DEFAULT is the state with the lowest composite gap: K3.
+Mean score over the other five styles, pooled over 4 arenas (columns AGGR BANKER COMP MICRO VET MASS; clauses a = every mean in .35-.65, b = each style beats one and loses to one, c = none beats all; Y met, n failed):
+```
+state  format  level   AGGR BANKR  COMP MICRO   VET  MASS | (a) (b) (c)  gap(max-min)
+R0     duels   novice   0.54  0.44  0.36  0.53  0.54  0.59 |  Y   n   Y    0.22
+R0     duels   expert   0.44  0.37  0.07  0.33  0.98  0.82 |  n   n   n    0.91
+R0     matches novice   0.50  0.19  0.32  0.41  0.82  0.76 |  n   n   n    0.63
+R0     matches expert   0.52  0.10  0.14  0.45  0.97  0.83 |  n   n   n    0.88
+K1     duels   novice   0.55  0.41  0.38  0.53  0.54  0.58 |  Y   n   Y    0.20
+K1     duels   expert   0.46  0.36  0.08  0.32  0.96  0.82 |  n   n   n    0.88
+K1     matches novice   0.49  0.21  0.31  0.42  0.81  0.76 |  n   n   n    0.59
+K1     matches expert   0.51  0.10  0.14  0.46  0.97  0.83 |  n   n   n    0.88
+K2     duels   novice   0.47  0.33  0.36  0.62  0.63  0.60 |  n   n   Y    0.30
+K2     duels   expert   0.39  0.18  0.11  0.94  0.80  0.59 |  n   n   n    0.83
+K2     matches novice   0.53  0.17  0.34  0.49  0.75  0.72 |  n   n   Y    0.58
+K2     matches expert   0.46  0.09  0.14  0.54  0.97  0.80 |  n   n   n    0.89
+K3     duels   novice   0.46  0.35  0.37  0.61  0.62  0.59 |  Y   n   Y    0.27
+K3     duels   expert   0.39  0.38  0.11  0.74  0.80  0.59 |  n   n   Y    0.69
+K3     matches novice   0.53  0.17  0.35  0.48  0.74  0.72 |  n   n   Y    0.57
+K3     matches expert   0.46  0.09  0.14  0.54  0.97  0.80 |  n   n   n    0.89
+COMPOSITE GAP (mean of the four gaps): R0 0.660   K1 0.639   K2 0.648   K3 0.603
+```
+(d) CROSSOVER (matches): R0 none, K1 none, K2 MICRO over AGGRESSOR .41 to .61 (soft), K3 the same pair, .41 to .61, beyond 1.64 SE both ways. (e) SKILL GAIN (matches, expert minus novice, mean over the others; AGGR BANKER COMP MICRO VET MASS):
+R0 +.02 -.09 -.19 +.04 +.16 +.06; K1 +.02 -.12 -.17 +.04 +.17 +.06; K2 -.07 -.09 -.20 +.05 +.22 +.08; K3 -.07 -.08 -.21 +.06 +.23 +.08. MICRO reaches +.05 from K2 on; BANKER and COMPOSER never gain, they LOSE from expertise in every state (the precisely executed plan of a style that cannot win loses more precisely).
+(f) NO DRAFT RULE BEATS ALL NINE (expert duels): R0 and K1 fail through rule 0 (all Spearmen, mean .96 in both), K2 and K3 fail through rule 3 (all Archers, mean .92; all Priests .88 beside it). The dominant draft MOVED from the cheap body to the ranged body; it did not go.
+PASS count: (a)-(c) at both levels in both formats: met in 0 of 4 states; (d) from K2; (e) in none (BANKER and COMPOSER); (f) in none.
+
+### Before and after, pooled EXPERT (row over column; the reference row MICRO0 is not in any verdict)
+R0 duels (before):
+```
+row over col      AGGR BANKER   COMP  MICRO   VET   MASS | mean of 6
+AGGRESSOR         0.57   0.80   1.00   0.38  0.00   0.00 | 0.44
+BANKER            0.20   0.50   0.66   0.98  0.00   0.00 | 0.37
+COMPOSER          0.00   0.34   0.52   0.00  0.00   0.00 | 0.07
+MICRO             0.62   0.02   1.00   0.50  0.01   0.02 | 0.33
+VETERAN           1.00   1.00   1.00   0.99  0.45   0.89 | 0.98
+MASS              1.00   1.00   1.00   0.98  0.11   0.42 | 0.82
+```
+K3 duels (after):
+```
+AGGRESSOR         0.47   0.89   0.94   0.04  0.02   0.04 | 0.39
+BANKER            0.11   0.50   0.52   0.99  0.08   0.19 | 0.38
+COMPOSER          0.06   0.48   0.53   0.01  0.00   0.00 | 0.11
+MICRO             0.96   0.01   0.99   0.50  0.83   0.90 | 0.74
+VETERAN           0.98   0.92   1.00   0.17  0.46   0.91 | 0.80
+MASS              0.96   0.81   1.00   0.10  0.09   0.49 | 0.59
+```
+R0 matches (before) then K3 matches (after):
+```
+AGGRESSOR         0.62   0.95   0.96   0.68  0.00   0.00 | 0.52        AGGRESSOR  0.58 0.95 0.95 0.39 0.00 0.03 | 0.46
+BANKER            0.05   0.50   0.44   0.00  0.00   0.00 | 0.10        BANKER     0.05 0.50 0.38 0.00 0.00 0.00 | 0.09
+COMPOSER          0.04   0.56   0.49   0.08  0.00   0.00 | 0.14        COMPOSER   0.05 0.62 0.60 0.02 0.00 0.00 | 0.14
+MICRO             0.33   1.00   0.92   0.50  0.00   0.00 | 0.45        MICRO      0.61 1.00 0.98 0.50 0.04 0.09 | 0.54
+VETERAN           1.00   1.00   1.00   1.00  0.42   0.87 | 0.97        VETERAN    1.00 1.00 1.00 0.96 0.53 0.90 | 0.97
+MASS              1.00   1.00   1.00   1.00  0.13   0.35 | 0.83        MASS       0.97 1.00 1.00 0.91 0.10 0.50 | 0.80
+```
+Plain reading: only two things moved a number. K2 (bodies priced by worth) took MASS from .82 to .59 in the duels and MICRO from .33 to .94 (the ranged hold became the strongest draft); K3 turned the MICRO-BANKER hold standoff from MICRO 1.00 (K2: 12 archers and priests outnumber 8 Shieldwall) into BANKER .99 (K3: 8 Shieldwall outweigh them) and so lowered MICRO's mean from .94 to .74.
+The counter cycle (K1) moved NOTHING in the style matrices (R0 to K1: every mean within .03, composite .660 to .639): the mechanism works at equal bodies (the unit test shows every edge of the ring clearer with the cycle on), but a styles duel is decided by the body ratio first (2 to 1 in R0/K1) and by range and stance after that.
+
+### The real game with the shipped state (diagnostic, no verdict; styles3-realgame-K3.txt)
+Random-legal doctrine, the game's own enemy (which now buys with the derived prices too), 8 rounds, 60 games per draft rule, mean round score: all Spearmen .269, Shieldwall .154, Riders .211, Archers .487, Priests .444, Wights .083, Wolves .104, Catapults .329, cycle-all .158, fill-smallest .099. No game ended with the army wiped out. The best draft (Archers) leads the second (Priests) by .044.
+In round one the Spearmen draft read .644 (state S); it is now .269 and the ranged drafts lead, the same shape as the style duels.
+
+## Predictions scored
+P1 R0 keeps the C0 shape: YES (VETERAN .98, MASS .82; (c) fails at expert in both formats).
+P2 K1: the Plain styles lose to BANKER and (c) holds in the expert duels: NO. BANKER scores .00 and .03 against VETERAN and MASS (R0 .00/.00), the cheap body outnumbers the shield wall 2 to 1 and a counter is only 3/2 of the damage; (c) fails in K1 at expert in both formats. Wrong.
+P3 K2: MASS falls by >= .15 and another style leads: YES (.82 to .59; MICRO .94), (a) still fails at expert: YES.
+P4 K3: the MICRO-BANKER pair moves to within .25 of even: NO (it flips from MICRO 1.00 to BANKER .99); K3 has the lowest composite gap: YES (.603, from .648).
+P5 BANKER under .35 in the matches at expert in all four states: YES (.10, .10, .09, .09). P6 T4 fails in every state on (a) or (e) in the matches: YES. Two of six predictions wrong (P2 fully, P4 half), both about the size of the counter and of the power tie-break.
+
+## What each lever did (one measurement each, cumulative)
+- K1 COUNTER CYCLE: no effect on any style row (composite .660 to .639, no clause changes). It decides equal-body fights; it does not decide fights between a 2-to-1 body ratio, a ranged hold or a free +10 percent.
+- K2 DERIVED DRAFT PRICES (a Spearman costs 2): the cheap body stops dominating (MASS .82 to .59 in the expert duels, draft rule 0 from .96 to .67) and the dominator moves to the ranged hold (MICRO .94, draft rule 3 .92). In the matches nothing moves (VETERAN .97, MASS .80): a match starts with a levy of ~30 soldiers both sides share and 12 gold, so the drafted kinds are a small part of round one and the stance and the free Age decide it.
+- K3 TICK LIMIT BY POWER: the standoff is decided by what the draft bought in power, not bodies. It fixes "Hold beats everything that has fewer bodies" but a standoff is still a pre-battle contest of the draft: BANKER now beats MICRO .99 (MICRO's hold plan never meets a loss, so its trigger never fires). Composite gap .648 to .603, the only step that lowers it by more than .04.
+
+## What still fails (plainly, with the cause read from the data and the trace)
+1. AGE AND AURA ARE FREE AGAIN (decision 1), so VETERAN (two Age tokens) is a free +10 percent on a shared levy and N3 says +15 percent wins .94-.97: VETERAN scores .97 in the matches at expert in all four states and beats every style at .96 to 1.00. Nothing in the three levers touches it. This is the whole of clause (c) in the matches.
+2. THE WIN CURVE IS A CLIFF. In the sensitivity null a 15 percent power edge wins .94 to .97 of the duels, and in the matrices most cells are .00 or 1.00. Styles can only be balanced to within a few percent of power, so a one-line counter (3/2), a price rounding (Archers worth 1.68 rounds up to 2) or a reach figure moves a cell from 0 to 1. The ranged hold stays the dominator; my reading (a HYPOTHESIS, not measured) is that the priced reach (20 percent, the free ticks while a melee unit CLOSES on a unit that also advances) is far below what a holder takes: a Hold-er does not close, so the advancing side is under fire for the whole approach.
+3. THE CAMPAIGN SNOWBALLS. The trace of MICRO against MASS (K3, arena open-field, match seed 9,800,001, styles3 trace): round 0 is a near-even fight (MICRO loses all 30, MASS loses 27 of 30), then the winner draws gold (6 + kills/2 against 2 + kills/2), a veterancy step and the survivors, the loser draws a wiped army: 8 soldiers against 15, 2 against 16, 1 against 20, 1 against 24, 1 against 27. The loser never fights again on equal terms, so the match is the first battle and a match score is nearly 0/1.
+   BANKER banks half its gold in rounds 0-2 and meets that first battle with a smaller army: the interest (gold / 7) cannot pay for it, and a spent-down banker never gets a battle that returns the investment. (d) and (e) need a style whose payoff comes later; the campaign has no later.
+4. HOLD VERSUS HOLD is still a draft contest decided before the first tick (now by power, before by bodies): the trigger needs a loss to fire and a holder never meets one.
+5. BANKER and COMPOSER lose from expertise in every state (BANKER -.08 to -.12, COMPOSER -.17 to -.21): the harness's "proficiency" removes execution noise from a plan that cannot win; clause (e) cannot be met by a style whose best plan loses.
+
+## If T4 (c) still fails at expert after this round: the structural change I think is needed (not a number tweak; unmeasured, stated as the recommendation the data points to)
+(c) is failed by two different styles for two different reasons, and neither is a price:
+- In the MATCHES it is VETERAN, through free power: any free multiplier is the dominator when a 15 percent edge wins 95 percent. The structural change is to make power a CHOICE that costs: Age and Aura were priced in A1 and that failed only because the price ran in bodies (a Spearman at 1 gold buys more power as a body than as an Age); with the Spearman now at its worth the same pricing no longer loses to recruiting, and AG4 (a per-key Tick, filed) is what lets gold become a lasting stat on ONE cohort. So: re-measure A1 on top of the K3 prices before deciding it is dead, and build fortify. (This reverses nothing the coordinator decided: it is a measurement he did not have, because A1 was measured at a 1-gold Spearman.)
+- In the DUELS it is the ranged hold (MICRO .94 in K2, .74 in K3): a stance with no cost. The structural change is a rule that makes Hold a cost for the side that holds: a siege clock (an attacker that has not engaged by tick N loses, or the defender's stance expires), so a standoff stops being the best answer to a charge and a trigger has something to fire on.
+- Under both, the CLIFF (finding 2) and the SNOWBALL (finding 3) decide whether any of this can reach a band of .35-.65: flatten the win curve (a front-width cap so that bodies beyond the front are reserve and do not add damage, which turns the square law into something closer to linear) and give the campaign a comeback term (spoils or muster that grow with the deficit) so a lost first battle is a setback and not the match. Without those two, every lever above is a balance of knife-edges.
+
+## What ships (fix rule applied; nothing committed, no version touched)
+The fix rule picked K3 (composite .603, expert (c) failures 1 against R0's 2, no step worse by more than .05). In the tree and in the DEFAULT: Age and Aura FREE (`PriceAge`, `PriceAura` default OFF; switches, contract cases and mutants kept); `ArmyRules.DerivedDraftPrices` ON (`Roster.PriceOf` now returns the derived price, `Roster.TypedPrice` is the old table; the scripted enemy and player use the same rule); `TracerBattleOptions.Counters` ON; `TracerBattleOptions.LimitByPower` ON (the stub counts power at the limit too, the contract case is "tick-limit-decides-by-power-left").
+Flip stays priced, the triggers (vocabulary 2) and the interest stay. Every lever is a switch: R0 is `new ArmyRules { DerivedDraftPrices = false }` + `new TracerBattleOptions { Counters = false, LimitByPower = false }`.
+Tests: Doctrine.Tests 421 (was 409). Of the last full runs after the final code change one was clean (421 of 421), one showed ONE red test whose stack is the known Tracer race (`NullReferenceException` in `PathfindingPipelineBuilder` called through the EvalApp `ForEach`, item 13 of Tracer's list, still open in the other nine ForEach merges), and one showed two unrelated tests red (`The_obstacle_isolates_triangles...`, `The_swap_check_flags_an_attacker_boosted_engine`) whose messages I did not capture and which passed on rerun; an earlier run had `Null_one_a_side_biased_engine...` red once, also green alone. I treat all three as the same race, which is an assumption. Digest pins re-pinned (stub 15698248093412764465, real 771457392613517103) with the reasons in DigestPinTests.
+New contract cases and mutants: `CounterAndLimitTests` (class table from the stat tables, the ring, the factor, every edge of the ring clearer than with the cycle off; cycle off and cycle backwards watched red; limit by power, limit counting bodies and limit switched off watched red; the enemy's picks affordable); `tick-limit-decides-by-power-left` and the forced-limit case now count power, with a soldier-counting engine over the stub and over Tracer watched red; the priced Age and Aura cases run on `ArmyContract.PricedRules` (`PricedCases`, `ArmyPricedContractTests`) with the four mutants and the rule-off mutants watched red on both armies, and a test that the free game fails them on purpose.
+
+## For showroom-owner (their files; not edited here)
+- `Pages\DoctrinePage.razor` lines 235 and 266 call `Roster.PriceOf(k)`: it now returns the derived price, so the screen shows the right prices with no change (Spearmen 2, Shieldwall 3, Riders 2, Archers 2, Priests 2, Wights 3, Wolves 3, Catapults 5). A page that quoted the old table anywhere else must change.
+- `tools\DoctrineUiProof\Program.cs` line 154 expects Catapults "4 gold each": it is now "5 gold each"; line 159 expects "costs 16 of {gold0} gold" for the proof's picks: recompute with the new prices. Line 466 is unaffected.
+- `Services\Doctrine\DoctrineWords.cs`: line 62 (Age: "Every cohort moves one step ... Each step adds 5 power") and line 64 (Aura) are TRUE again as written (free); do not add the "costs gold" wording that A1 would have needed. Line 61 (Flip costs gold) is unchanged. New copy to consider: each kind's class (Plain, Swift, Ranged, Armoured) and the cycle "Plain beats Swift, Swift beats Ranged, Ranged beats Armoured, Armoured beats Plain; the counter hits half again as hard", and the tick-limit rule "if time runs out the side with more POWER left wins, not the side with more soldiers" (a result screen that says "more soldiers" must change). The trigger tokens 54..56 are still missing from the palette (the one failing DoctrineUiProof check of the second round).
+- The draft screen shows `@Roster.PriceOf(kind) gold each` and a cost line: fine. A player with 12 gold now buys half the Spearmen it used to; the first-run hint text, if it names a number of soldiers, must be rechecked.

@@ -1,0 +1,215 @@
+using System.Globalization;
+using System.Text;
+
+namespace Autopilot;
+
+/// <summary>Cell statistics of one format at one level, from the raw rows. Row (a, b) is the score of a's side in pairings where a is the first side.</summary>
+public sealed class Grid
+{
+    readonly int _n;
+    readonly double[,,] _sum, _sq; readonly int[,,] _cnt;   // [arena, a, b]
+
+    public Grid(IEnumerable<Row> rows, int n)
+    {
+        _n = n; _sum = new double[4, n, n]; _sq = new double[4, n, n]; _cnt = new int[4, n, n];
+        foreach (var r in rows) { _sum[r.Arena, r.A, r.B] += r.V; _sq[r.Arena, r.A, r.B] += r.V * r.V; _cnt[r.Arena, r.A, r.B]++; }
+    }
+
+    (double Mean, double VarOfMean, int N) Part(int a, int b, int? arena)
+    {
+        double s = 0, q = 0; int c = 0;
+        for (int ar = 0; ar < 4; ar++) if (arena is null || arena == ar) { s += _sum[ar, a, b]; q += _sq[ar, a, b]; c += _cnt[ar, a, b]; }
+        if (c == 0) return (0.5, 0.25, 0);
+        double m = s / c, v = c > 1 ? Math.Max(0, (q / c - m * m) * c / (c - 1)) : 0.25;
+        return (m, v / c, c);
+    }
+
+    /// <summary>The score of style a over style b: the mean of (a first against b) and (1 - b first against a); a mirror cell is the first side's score. SE from the cell variances.</summary>
+    public (double V, double Se) Cell(int a, int b, int? arena = null)
+    {
+        var p = Part(a, b, arena);
+        if (a == b) return (p.Mean, Math.Sqrt(p.VarOfMean));
+        var q = Part(b, a, arena);
+        return ((p.Mean + 1 - q.Mean) / 2, Math.Sqrt(p.VarOfMean + q.VarOfMean) / 2);
+    }
+
+    public static bool Beats((double V, double Se) c) => c.V > Math.Max(0.55, 0.5 + 1.64 * c.Se);
+    public static bool Loses((double V, double Se) c) => c.V < Math.Min(0.45, 0.5 - 1.64 * c.Se);
+
+    public double MeanOthers(int a, int g, int? arena = null)
+        => Enumerable.Range(0, g).Where(j => j != a).Average(j => Cell(a, j, arena).V);
+
+    public sealed record Verdict(bool Band, bool BeatsOneLosesToOne, bool NoneBeatsAll, string Detail);
+
+    public Verdict T4(int g, int? arena = null)
+    {
+        bool band = true, bw = true, none = true; var d = new StringBuilder();
+        for (int a = 0; a < g; a++)
+        {
+            double mean = MeanOthers(a, g, arena);
+            var others = Enumerable.Range(0, g).Where(j => j != a).ToArray();
+            bool beats = others.Any(j => Beats(Cell(a, j, arena))), loses = others.Any(j => Loses(Cell(a, j, arena))), all = others.All(j => Beats(Cell(a, j, arena)));
+            if (mean < 0.35 || mean > 0.65) { band = false; d.Append($" {Kit.Names[a]}:mean {mean:F2} out of band;"); }
+            if (!(beats && loses)) { bw = false; d.Append($" {Kit.Names[a]}:{(beats ? "" : "beats none")}{(!beats && !loses ? ", " : "")}{(loses ? "" : "loses to none")};"); }
+            if (all) { none = false; d.Append($" {Kit.Names[a]}:beats ALL;"); }
+        }
+        return new Verdict(band, bw, none, d.ToString());
+    }
+
+    public string Matrix(string title, int n, int g, int? arena = null)
+    {
+        var sb = new StringBuilder(title + "\n" + "row over col      " + string.Join(" ", Enumerable.Range(0, n).Select(j => Kit.Names[j].PadLeft(9))) + "   mean(others of 6)\n");
+        for (int a = 0; a < n; a++)
+        {
+            sb.Append(Kit.Names[a].PadRight(16) + "  " + string.Join(" ", Enumerable.Range(0, n).Select(j => Cell(a, j, arena).V.ToString("F2", CultureInfo.InvariantCulture).PadLeft(9))));
+            sb.Append(a < g ? "   " + MeanOthers(a, g, arena).ToString("F2", CultureInfo.InvariantCulture) : "   (reference row)");
+            sb.AppendLine();
+        }
+        return sb.ToString();
+    }
+}
+
+public static class Reports
+{
+    public static List<Row> Load(string file)
+        => File.ReadAllLines(file).Select(l => l.Split(',')).Select(p => new Row(int.Parse(p[0]), int.Parse(p[1]), int.Parse(p[2]), int.Parse(p[3]), double.Parse(p[4], CultureInfo.InvariantCulture))).ToList();
+
+    public static void Save(string file, List<Row> rows)
+        => File.WriteAllLines(file, rows.Select(r => string.Join(",", r.A, r.B, r.Arena, r.Seed, r.V.ToString("R", CultureInfo.InvariantCulture))));
+
+    public static string File_(string dir, string state, string kind) => Path.Combine(dir, $"{state}-{kind}.csv");
+
+    /// <summary>The full report of one state, from the raw files. Returns the text; also returns the clause results for the summary line.</summary>
+    public static string State(string dir, State st, out Dictionary<string, bool> clauses)
+    {
+        clauses = new Dictionary<string, bool>();
+        int n = st.Styles, g = 6;
+        var sb = new StringBuilder($"=== STATE {st.Name}  rules {st.Rules}  timed {st.Timed}  styles {n}  battle: counters {st.Battle.Counters}, limit by power {st.Battle.LimitByPower}\n");
+        var grids = new Dictionary<string, Grid>();
+        foreach (var fmt in new[] { "duels", "matches" })
+            foreach (var lv in new[] { "novice", "expert" })
+            {
+                var f = File_(dir, st.Name, fmt + "-" + lv);
+                if (!File.Exists(f)) { sb.AppendLine($"(missing {fmt}-{lv})"); continue; }
+                grids[fmt + "-" + lv] = new Grid(Load(f), n);
+            }
+        foreach (var kv in grids)
+        {
+            var gr = kv.Value;
+            sb.AppendLine($"--- {kv.Key} POOLED over 4 arenas");
+            sb.Append(gr.Matrix("", n, g));
+            var v = gr.T4(g);
+            sb.AppendLine($"T4 (a) means in .35-.65: {v.Band}; (b) each beats one and loses to one: {v.BeatsOneLosesToOne}; (c) none beats all: {v.NoneBeatsAll}   {v.Detail}");
+            clauses[kv.Key + ":a"] = v.Band; clauses[kv.Key + ":b"] = v.BeatsOneLosesToOne; clauses[kv.Key + ":c"] = v.NoneBeatsAll;
+            for (int ar = 0; ar < 4; ar++)
+            {
+                sb.Append(gr.Matrix($"  [{kv.Key}] ARENA {Kit.Arenas[ar]}", n, g, ar));
+                var va = gr.T4(g, ar);
+                sb.AppendLine($"  per-arena (no verdict): band {va.Band}, each beats and loses {va.BeatsOneLosesToOne}, none beats all {va.NoneBeatsAll}");
+            }
+        }
+        // N1 mirror (duels, pooled): the first side's score against itself
+        foreach (var lv in new[] { "novice", "expert" })
+            if (grids.TryGetValue("duels-" + lv, out var gd))
+            {
+                var mirror = Enumerable.Range(0, g).Select(a => gd.Cell(a, a).V).ToArray();
+                double m = mirror.Average();
+                sb.AppendLine($"N1 mirror (duels {lv}, attacker score of a style against itself): {string.Join(" ", mirror.Select(x => x.ToString("F2", CultureInfo.InvariantCulture)))} mean {m:F3} (need .50 +- .09): {(Math.Abs(m - 0.5) <= 0.09 ? "OK" : "TRIPPED")}");
+                clauses["N1-" + lv] = Math.Abs(m - 0.5) <= 0.09;
+            }
+        // (d) crossover and (e) skill gain, on the matches
+        if (grids.TryGetValue("matches-novice", out var mn) && grids.TryGetValue("matches-expert", out var me))
+        {
+            var cross = new List<string>();
+            for (int a = 0; a < g; a++) for (int b = 0; b < g; b++)
+                {
+                    if (a == b) continue;
+                    var x = mn.Cell(a, b); var y = me.Cell(a, b);
+                    if (x.V < 0.45 && y.V > 0.55) cross.Add($"{Kit.Names[a]} over {Kit.Names[b]} {x.V:F2} -> {y.V:F2}{(Grid.Loses(x) && Grid.Beats(y) ? " (beyond 1.64 SE both ways)" : " (soft)")}");
+                }
+            sb.AppendLine($"(d) CROSSOVER (matches, novice < .45 and expert > .55): {(cross.Count == 0 ? "none" : string.Join("; ", cross))}");
+            clauses["d"] = cross.Count > 0;
+            sb.AppendLine("(e) SKILL GAIN (matches, mean over the others, expert minus novice): " + string.Join("  ", Enumerable.Range(0, n).Select(a => $"{Kit.Names[a]} {(a < g ? me.MeanOthers(a, g) - mn.MeanOthers(a, g) : double.NaN):+0.00;-0.00}")));
+            bool e = me.MeanOthers(1, g) - mn.MeanOthers(1, g) >= 0.05 && me.MeanOthers(3, g) - mn.MeanOthers(3, g) >= 0.05;
+            sb.AppendLine($"(e) MICRO and BANKER each gain at least +.05: {e}");
+            clauses["e"] = e;
+        }
+        // duels crossover is informative too
+        if (grids.TryGetValue("duels-novice", out var dn) && grids.TryGetValue("duels-expert", out var de))
+        {
+            var cross = new List<string>();
+            for (int a = 0; a < g; a++) for (int b = 0; b < g; b++)
+                {
+                    if (a == b) continue;
+                    var x = dn.Cell(a, b); var y = de.Cell(a, b);
+                    if (x.V < 0.45 && y.V > 0.55) cross.Add($"{Kit.Names[a]} over {Kit.Names[b]} {x.V:F2} -> {y.V:F2}");
+                }
+            sb.AppendLine($"(duels, for information) crossover pairs: {(cross.Count == 0 ? "none" : string.Join("; ", cross))}");
+            sb.AppendLine("(duels, for information) skill gain: " + string.Join("  ", Enumerable.Range(0, g).Select(a => $"{Kit.Names[a]} {de.MeanOthers(a, g) - dn.MeanOthers(a, g):+0.00;-0.00}")));
+        }
+        // (f) draft rules
+        var rrf = File_(dir, st.Name, "rr");
+        if (File.Exists(rrf))
+        {
+            var rr = new Grid(Load(rrf), 10);
+            sb.AppendLine("--- draft rules round robin (expert duels, pooled): row over column");
+            sb.AppendLine("row over col   " + string.Join(" ", Enumerable.Range(0, 10).Select(j => ("r" + j).PadLeft(5))) + "   mean");
+            bool noneAll = true; var names = new List<string>();
+            for (int a = 0; a < 10; a++)
+            {
+                sb.AppendLine(("rule " + a).PadRight(14) + string.Join(" ", Enumerable.Range(0, 10).Select(j => rr.Cell(a, j).V.ToString("F2", CultureInfo.InvariantCulture).PadLeft(5))) + "   " + Enumerable.Range(0, 10).Where(j => j != a).Average(j => rr.Cell(a, j).V).ToString("F2", CultureInfo.InvariantCulture));
+                if (Enumerable.Range(0, 10).Where(j => j != a).All(j => Grid.Beats(rr.Cell(a, j)))) { noneAll = false; names.Add("rule " + a); }
+            }
+            sb.AppendLine($"(f) no draft rule beats all nine others: {noneAll} {(noneAll ? "" : "(" + string.Join(", ", names) + " does)")}");
+            clauses["f"] = noneAll;
+        }
+        foreach (var f in new[] { "N3", "N2" })
+        {
+            var nf = File_(dir, st.Name, f.ToLowerInvariant());
+            if (File.Exists(nf)) sb.AppendLine(File.ReadAllText(nf).TrimEnd());
+        }
+        return sb.ToString();
+    }
+
+    /// <summary>One line per (state, format, level) with the six means, clauses a/b/c and the max-min gap; then the skill gain, crossovers and (f) per state. Composite gap = mean of the four gaps.</summary>
+    public static string Summary(string dir, IEnumerable<State> states)
+    {
+        var sb = new StringBuilder("MEAN SCORE OVER THE OTHER FIVE STYLES (row: state, format, level). Gating styles AGGR BANKER COMP MICRO VET MASS; pooled over 4 arenas.\n");
+        sb.AppendLine("state  format  level   AGGR BANKR  COMP MICRO   VET  MASS | (a) (b) (c)  gap(max-min)");
+        var composite = new Dictionary<string, double>();
+        var tail = new StringBuilder();
+        foreach (var st in states)
+        {
+            var gaps = new List<double>();
+            var grids = new Dictionary<string, Grid>();
+            foreach (var fmt in new[] { "duels", "matches" })
+                foreach (var lv in new[] { "novice", "expert" })
+                {
+                    var f = File_(dir, st.Name, fmt + "-" + lv);
+                    if (!File.Exists(f)) continue;
+                    var gr = new Grid(Load(f), st.Styles); grids[fmt + "-" + lv] = gr;
+                    var means = Enumerable.Range(0, 6).Select(a => gr.MeanOthers(a, 6)).ToArray();
+                    var v = gr.T4(6);
+                    double gap = means.Max() - means.Min(); gaps.Add(gap);
+                    sb.AppendLine($"{st.Name,-6} {fmt,-7} {lv,-7} " + string.Join(" ", means.Select(m => m.ToString("F2", CultureInfo.InvariantCulture).PadLeft(5))) + $" |  {(v.Band ? "Y" : "n")}   {(v.BeatsOneLosesToOne ? "Y" : "n")}   {(v.NoneBeatsAll ? "Y" : "n")}    {gap:F2}");
+                }
+            if (gaps.Count == 4) composite[st.Name] = gaps.Average();
+            if (grids.TryGetValue("matches-novice", out var mn) && grids.TryGetValue("matches-expert", out var me))
+            {
+                tail.AppendLine($"{st.Name} skill gain (matches, expert - novice): " + string.Join("  ", Enumerable.Range(0, 6).Select(a => $"{Kit.Names[a]} {me.MeanOthers(a, 6) - mn.MeanOthers(a, 6):+0.00;-0.00}")));
+                var cross = new List<string>();
+                for (int a = 0; a < 6; a++) for (int b = 0; b < 6; b++)
+                    {
+                        if (a == b) continue;
+                        var x = mn.Cell(a, b); var y = me.Cell(a, b);
+                        if (x.V < 0.45 && y.V > 0.55) cross.Add($"{Kit.Names[a]}>{Kit.Names[b]} {x.V:F2}->{y.V:F2}");
+                    }
+                tail.AppendLine($"{st.Name} crossovers (matches): {(cross.Count == 0 ? "none" : string.Join("; ", cross))}");
+            }
+        }
+        sb.AppendLine();
+        sb.Append(tail);
+        sb.AppendLine("COMPOSITE GAP (mean of the four max-min gaps): " + string.Join("   ", composite.Select(kv => $"{kv.Key} {kv.Value:F3}")));
+        return sb.ToString();
+    }
+}

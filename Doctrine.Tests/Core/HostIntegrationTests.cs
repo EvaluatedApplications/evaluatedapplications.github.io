@@ -73,7 +73,7 @@ public class ClosedRoundAndDraftTests
         var p = new RecordingPlayer(new ScriptedPlayer(1));
         var r = await Builder(p, 3).Build().PlayAsync(9);
         Assert.Equal(3, p.Reports.Count);
-        Assert.All(p.Reports, rep => Assert.Equal(rep.Accepted.Sum(a => Roster.PriceOf(a.Kind) * a.Count), rep.GoldSpent));
+        Assert.All(p.Reports, rep => Assert.Equal(rep.Accepted.Sum(a => ArmyRules.Default.DraftPrice(a.Kind) * a.Count), rep.GoldSpent));
         Assert.Contains(p.Reports, rep => rep.Accepted.Count > 0);
 
         // a refused pick comes back WITH its reason: a player that asks for an impossible kind is told so by the army

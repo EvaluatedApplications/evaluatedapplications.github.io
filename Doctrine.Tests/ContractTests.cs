@@ -18,6 +18,15 @@ public abstract class ArmyContractTests
     public async Task Holds(string name) => Assert.Null(await ArmyContract.Cases.Single(c => c.Name == name).RunAsync(Create()));
 }
 
+/// <summary>The two cases of the rules that are OFF in the game (a priced Age, a rented Aura), held by a service built with <see cref="ArmyContract.PricedRules"/>.</summary>
+public abstract class ArmyPricedContractTests
+{
+    protected abstract IArmyService Create();
+    public static TheoryData<string> CaseNames => new(ArmyContract.PricedCases.Select(c => c.Name));
+    [Theory, MemberData(nameof(CaseNames))]
+    public async Task Holds(string name) => Assert.Null(await ArmyContract.PricedCases.Single(c => c.Name == name).RunAsync(Create()));
+}
+
 public abstract class BattleContractTests
 {
     protected abstract IBattleEngine Create();

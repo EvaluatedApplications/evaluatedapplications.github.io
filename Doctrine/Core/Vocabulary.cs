@@ -192,7 +192,10 @@ public static class Roster
     ];
     public static string NameOf(int kind) => Kinds[kind].Name;
     public static Trait TraitsOf(int kind) => Kinds[kind].Traits;
-    public static int PriceOf(int kind) => Kinds[kind].Price;
+    /// <summary>The typed draft price of the old game (Spearmen 1, Shieldwall 2, Riders 2, Archers 2, Priests 3, Wights 2, Wolves 2, Catapults 4). Kept for the rules that switch <see cref="Army.ArmyRules.DerivedDraftPrices"/> off.</summary>
+    public static int TypedPrice(int kind) => Kinds[kind].Price;
+    /// <summary>What one soldier of the kind costs to draft in the GAME: the price the default rules name (derived from worth, a plain soldier costs 2; see <see cref="Army.ArmyRules"/>).</summary>
+    public static int PriceOf(int kind) => Army.ArmyRules.Default.DraftPrice(kind);
 
     /// <summary>One veterancy step adds this many power points (the ring has <see cref="VetPeriod"/> places and wraps).</summary>
     public const int VetStepPct = 5;
@@ -207,9 +210,8 @@ public static class Roster
     /// <summary>
     /// What a soldier with these traits is WORTH in gold: ceil(2 x damage x (100 + reach) / (taken x 100)), read from the battle's own stat tables
     /// (<see cref="Battle.UnitRules"/>), reach being <see cref="Battle.UnitRules.ReachPct"/> (the free fire a longer weapon gets while a melee unit closes).
-    /// It prices a RELABEL (<see cref="RelabelCost"/>), an Age and an Aura, not a draft: drafting costs <see cref="PriceOf"/> (the two scales differ on purpose,
-    /// the draft prices are the game's feel and are the user's to change; see todo\difficulty-2026-10-19.md, where deriving the draft price from this made a
-    /// plain soldier 2 gold). With reach: Spearmen 2, Shieldwall 3, Riders 2, Archers 2, Priests 2, Wights 3, Wolves 3, Catapults 5; a Spearman flipped to
+    /// It prices a RELABEL (<see cref="RelabelCost"/>), an Age and an Aura, and since the third round (todo\difficulty-2026-10-19.md) it IS the draft price
+    /// too (<see cref="Army.ArmyRules.DerivedDraftPrices"/>: a plain soldier costs 2). With reach: Spearmen 2, Shieldwall 3, Riders 2, Archers 2, Priests 2, Wights 3, Wolves 3, Catapults 5; a Spearman flipped to
     /// Machine is worth 7. Without reach (<paramref name="reach"/> false): Catapults 4, that Machine 5.
     /// </summary>
     public static int TraitPrice(Trait t, bool reach = true)

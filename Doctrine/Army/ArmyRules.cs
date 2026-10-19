@@ -10,11 +10,14 @@ public sealed record ArmyRules
     /// <summary>The game as it ships.</summary>
     public static ArmyRules Default { get; } = new();
 
-    /// <summary>An Age costs gold in proportion to the power it adds (<see cref="Roster.AgeWeight"/>), and is legal only while the army can pay.</summary>
-    public bool PriceAge { get; init; } = true;
+    /// <summary>
+    /// OFF in the game (third round, 2026-10-19: with it on, a mass of one-gold Spearmen became unbeatable). When ON an Age costs gold in proportion to the power
+    /// it adds (<see cref="Roster.AgeWeight"/>) and is legal only while the army can pay. The rule, its contract case and its mutants are kept.
+    /// </summary>
+    public bool PriceAge { get; init; }
 
-    /// <summary>An Aura is rented for the round it lasts: gold in proportion to the power it adds, spread over the rounds a body would have served.</summary>
-    public bool PriceAura { get; init; } = true;
+    /// <summary>OFF in the game (see <see cref="PriceAge"/>). When ON an Aura is rented for the round it lasts: gold in proportion to the power it adds, spread over the rounds a body would have served.</summary>
+    public bool PriceAura { get; init; }
 
     /// <summary>The worth of a soldier includes the free fire a longer reach gets (<see cref="Battle.UnitRules.ReachPct"/>); it prices Flip, Age and Aura.</summary>
     public bool PriceReach { get; init; } = true;
@@ -23,11 +26,12 @@ public sealed record ArmyRules
     public bool BankInterest { get; init; } = true;
 
     /// <summary>
-    /// OFF in the shipped game (the draft prices are the game's feel and the user's to change): a draft costs the soldier's worth instead of
-    /// <see cref="Roster.PriceOf"/>. The scripted enemy still sizes its picks with the typed prices, so this is a measurement switch until the enemy reads prices too.
+    /// ON in the game (third round 2026-10-19): a draft costs the soldier's worth (<see cref="Roster.TraitPrice"/>, read from the battle's stat tables) instead of the typed
+    /// <see cref="Roster.TypedPrice"/> (Spearmen 1, Shieldwall 2, Riders 2, Archers 2, Priests 3, Wights 2, Wolves 2, Catapults 4). A plain soldier therefore costs 2: a body costs
+    /// what it is worth. The scripted enemy and the scripted player size their picks with <see cref="Default"/>, so the enemy follows the same price rule.
     /// </summary>
-    public bool DerivedDraftPrices { get; init; }
+    public bool DerivedDraftPrices { get; init; } = true;
 
     /// <summary>What one soldier of <paramref name="kind"/> costs to draft under these rules.</summary>
-    public int DraftPrice(int kind) => DerivedDraftPrices ? Roster.TraitPrice(Roster.TraitsOf(kind), PriceReach) : Roster.PriceOf(kind);
+    public int DraftPrice(int kind) => DerivedDraftPrices ? Roster.TraitPrice(Roster.TraitsOf(kind), PriceReach) : Roster.TypedPrice(kind);
 }

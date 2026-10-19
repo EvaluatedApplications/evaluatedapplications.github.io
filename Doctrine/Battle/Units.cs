@@ -22,6 +22,10 @@ public sealed record TracerBattleOptions
     public bool Influence { get; init; } = true;
     /// <summary>The Falling Gate arena drops its gate through the dynamic-obstacle service.</summary>
     public bool DynamicObstacles { get; init; } = true;
+    /// <summary>A class hits the class it counters half again as hard (<see cref="UnitRules.Counters"/>: Plain over Swift over Ranged over Armoured over Plain).</summary>
+    public bool Counters { get; init; } = true;
+    /// <summary>When the tick limit stops a running battle the side with the greater <see cref="UnitRules.Rating"/> wins (power left), not the side with more soldiers.</summary>
+    public bool LimitByPower { get; init; } = true;
     /// <summary>Test hook of the balance harness: flips ONE ordering of the battle to see whether it carries a side lean. None = the game.</summary>
     internal OrderProbe Probe { get; init; }
 }
@@ -47,6 +51,10 @@ internal enum OrderProbe
     TriggerAtStart = 64,
     /// <summary>Mutant of the loss trigger: it reads the ENEMY's losses instead of the side's own.</summary>
     TriggerReadsEnemy = 128,
+    /// <summary>Mutant of the counter cycle: each class hits the class that counters IT (the cycle read backwards).</summary>
+    CounterReversed = 256,
+    /// <summary>Mutant of the tick-limit rule: it counts soldiers even when LimitByPower is on.</summary>
+    LimitCountsBodies = 512,
 }
 
 /// <summary>An agent of the battle: Tracer's <see cref="GameAgent"/> plus the integer facts the deterministic resolver needs.</summary>
@@ -115,15 +123,54 @@ public static class UnitRules
         return p;
     }
 
-    /// <summary>One hit, in 1/600 soldiers. Cover cuts it by a third; the holy hurt the cursed half again.</summary>
-    public static int Hit(int attackerDamageFp, Trait attacker, int targetTakenPct, Trait target, bool targetInCover)
+    /// <summary>The factor of a counter, as a fraction: the holy against the cursed and a class against the class it counters both hit half again as hard (one shape, named once).</summary>
+    public const int CounterNum = 3, CounterDen = 2;
+
+    /// <summary>
+    /// What a kind of soldier is GOOD AT, read from the stat tables above (never typed per kind): the largest of three edges over the plain soldier, each in percent.
+    /// Swift = speed over the base pace, Ranged = the free fire of its reach (<see cref="ReachPct"/>), Armoured = the damage it does not take (100 / taken - 100).
+    /// A kind with no positive edge is Plain. A kind with several (Catapults are Ranged and Heavy, Shieldwall is Heavy and Shielded) is the class of its largest edge,
+    /// the first of Swift, Ranged, Armoured on a tie. Damage-only traits (Cursed, Beast, Holy) are not an edge in this sense: they change the numbers, not the manner of fighting.
+    /// </summary>
+    public static KindClass ClassOf(Trait t)
+    {
+        int swift = (int)MathF.Round(Speed(t) * 100f / BaseSpeed) - 100, ranged = ReachPct(t), armoured = 10000 / Math.Max(1, TakenPct(t)) - 100;
+        KindClass best = KindClass.Plain; int top = 0;
+        if (swift > top) { best = KindClass.Swift; top = swift; }
+        if (ranged > top) { best = KindClass.Ranged; top = ranged; }
+        if (armoured > top) { best = KindClass.Armoured; top = armoured; }
+        return best;
+    }
+
+    /// <summary>
+    /// The counter cycle: Plain counters Swift (a braced line breaks a charge), Swift counters Ranged (it closes the gap the shooter lives on),
+    /// Ranged counters Armoured (the slow and the shielded are worn down at a distance), Armoured counters Plain (shields turn an unarmoured soldier's thrusts).
+    /// Each class counters exactly the next one in <see cref="KindClass"/> order, round the ring: a real cycle with no class that is safe against all.
+    /// </summary>
+    public static bool Counters(Trait attacker, Trait target)
+        => (int)ClassOf(target) == ((int)ClassOf(attacker) + 1) % KindClassCount;
+    public const int KindClassCount = 4;
+
+    /// <summary>
+    /// What a cohort is worth on the field, on one scale for every kind: soldiers x power x damage x (100 + reach) / taken. It is the same quantity <c>Roster.TraitPrice</c>
+    /// rounds up to gold (worth), without the rounding and with the cohort's veterancy and aura in. Used where a count of bodies would reward the cheapest body (the tick limit).
+    /// </summary>
+    public static long Rating(int soldiers, int powerPct, Trait t)
+        => (long)soldiers * powerPct * DamagePct(t) * (100 + ReachPct(t)) / Math.Max(1, TakenPct(t));
+
+    /// <summary>One hit, in 1/600 soldiers. Cover cuts it by a third; the holy hurt the cursed half again; with <paramref name="counters"/> a class hurts the class it counters half again.</summary>
+    public static int Hit(int attackerDamageFp, Trait attacker, int targetTakenPct, Trait target, bool targetInCover, bool counters = false, bool counterReversed = false)
     {
         long d = (long)attackerDamageFp * targetTakenPct / 100;
         if (targetInCover) d = d * 2 / 3;
-        if ((attacker & Trait.Holy) != 0 && (target & Trait.Cursed) != 0) d = d * 3 / 2;
+        if ((attacker & Trait.Holy) != 0 && (target & Trait.Cursed) != 0) d = d * CounterNum / CounterDen;
+        if (counters && (counterReversed ? Counters(target, attacker) : Counters(attacker, target))) d = d * CounterNum / CounterDen;
         return (int)Math.Clamp(d, 1L, MaxHit);
     }
 }
+
+/// <summary>How a kind fights, from its stat table (see <see cref="UnitRules.ClassOf"/>). The order is the counter cycle.</summary>
+public enum KindClass : byte { Plain = 0, Swift = 1, Ranged = 2, Armoured = 3 }
 
 /// <summary>
 /// Decorates one of Tracer's behaviours so it only competes for the agents it is meant for. Tracer's NavigatorService scores EVERY
