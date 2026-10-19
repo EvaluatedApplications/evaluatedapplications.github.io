@@ -1,4 +1,5 @@
 using Doctrine;
+using Doctrine.Battle;
 
 namespace ShowroomDoctrine;
 
@@ -21,6 +22,36 @@ public static class DoctrineWords
 
     public static string Slot(int slot) => (uint)slot < (uint)Slots.Length ? Slots[slot] : "Off the line";
     public static string KindName(int kind) => (uint)kind < (uint)Roster.Size ? Roster.NameOf(kind) : "Unknown";
+
+    /// <summary>
+    /// What a kind of soldier is, in plain words. Every number is read from the battle's own tables (<see cref="UnitRules"/>), not typed, so the line
+    /// cannot drift from what the soldiers do. No trait names: "Heavy" and "Shielded" are in the Details of a cohort, not here.
+    /// </summary>
+    public static string KindBlurb(int kind)
+    {
+        if ((uint)kind >= (uint)Roster.Size) return "soldiers";
+        var t = Roster.TraitsOf(kind);
+        int dmg = UnitRules.DamagePct(t), taken = UnitRules.TakenPct(t);
+        string hits = dmg > 100 ? $"hit {dmg - 100}% harder" : dmg < 100 ? $"hit at {dmg}% strength" : "";
+        string guard = taken < 100 ? $"take {100 - taken}% less damage" : "";
+        string slowFast = UnitRules.Speed(t) > 2.0f ? "fast " : UnitRules.Speed(t) < 2.0f ? "slow " : "";
+        string far = (t & Trait.Machine) != 0 ? "shoot from far away" : (t & Trait.Ranged) != 0 ? "shoot from a distance" : "";
+        string holy = (t & Trait.Holy) != 0 ? $"hurt cursed soldiers {BattleChronicle.HolyWords()}" : "";
+        string noun = (t & Trait.Machine) != 0 ? "siege engines" : (t & Trait.Beast) != 0 ? "beasts" : (t & Trait.Holy) != 0 ? "holy archers" : (t & Trait.Cursed) != 0 ? "cursed fighters"
+            : (t & Trait.Ranged) != 0 ? "archers" : t == Trait.None ? "basic fighters" : "fighters";
+        var parts = new List<string>();
+        foreach (var p in new[] { far, hits, guard, holy }) if (p.Length > 0) parts.Add(p);
+        string head = (slowFast + noun).Trim();
+        if (noun == "archers" && far.Length > 0) parts.Remove(far);
+        if (noun == "holy archers" && far.Length > 0) parts.Remove(far);
+        return parts.Count == 0 ? head : head + " that " + string.Join(", ", parts);
+    }
+
+    /// <summary>The same, starting with a capital (for a list that gives the price after it).</summary>
+    public static string KindBlurbCap(int kind) { var s = KindBlurb(kind); return s.Length == 0 ? s : char.ToUpperInvariant(s[0]) + s[1..]; }
+
+    /// <summary>One cohort in plain words: "Spearmen, 10: basic fighters in the front line." A kind that is not open yet is not named (the caller says "other").</summary>
+    public static string CohortSentence(int key, int count, int slot) => $"{KindName(key)}, {count}: {KindBlurb(key)} in the {Slot(slot).ToLowerInvariant()} line.";
 
     /// <summary>The traits a trait byte carries, in words ("Heavy, Shielded"), or "None".</summary>
     public static string TraitList(Trait t)

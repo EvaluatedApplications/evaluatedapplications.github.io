@@ -2,6 +2,7 @@ using System.Text.RegularExpressions;
 using Blazier;
 using Bunit;
 using Doctrine;
+using Doctrine.Battle;
 using Microsoft.AspNetCore.Components.Web;
 using Microsoft.Extensions.DependencyInjection;
 using Showroom.Pages;
@@ -244,6 +245,70 @@ roundTimes.Add(swGame.Elapsed.TotalMilliseconds);
     Check("watch: Pause holds the tick", Text(page, ".dc-tick") == frozen, frozen);
     Check("watch: losses and spoils are listed, with the doctrine set and the general's (empty) suggestion left out", Text(page, ".dc-spoils").Contains("Spoils:") && Text(page, ".dc-spoils").Contains("You brought") && Text(page, ".dc-spoils").Contains("Your doctrine:"));
     Check("watch: the army after the round is shown", Has(page, ".dc-army"));
+
+    // ---- the chronicle beside the field (live with the replay, a tapped line jumps the replay, the full account at the end)
+    {
+        var cv = S.Last!;
+        string arenaNm = S.ArenaName(rec0.ArenaId);
+        var expected = BattleChronicle.Build(rec0.Replay, rec0.PlayerDoctrine, arenaNm, DoctrineWords.KindName, cv.TraitsOf);
+        var kids = page.Find(".dc-stage").Children.Select(c => string.Join(" ", c.ClassList)).ToList();
+        Check("chronicle: the docked panel is in the stage after the field and the general, with a sheet button for a phone", kids.Count == 4 && kids[0].Contains("dc-armypanel") && kids[1].Contains("dc-field") && kids[2].Contains("dc-generalpanel") && kids[3].Contains("dc-chroniclepanel") && Has(page, "#dc-open-chronicle") && page.Find("#dc-chronicle").ClassList.Contains("dc-sheet"), string.Join(" | ", kids));
+        Check("chronicle: the battle's set-up was seen (the player is the attacker) and the log reads each cohort's own traits from it", cv.Setup is { } su && su.Attacker.Side == Side.Player && su.Defender.Side == Side.Enemy && su.ArenaId == rec0.ArenaId
+            && su.Attacker.Cohorts.All(c => cv.TraitsOf(Side.Player, c.Key) == c.Traits) && su.Defender.Cohorts.All(c => cv.TraitsOf(Side.Enemy, c.Key) == c.Traits));
+        Check("chronicle: the page's log is the chronicle function applied to the recording (same lines, same why)", expected.Lines.Count >= 4 && ChronicleCheck.Verify(expected, rec0.Replay, DoctrineWords.KindName, cv.TraitsOf).Count == 0 && ChronicleCheck.VerifyWhy(expected, rec0.Replay, rec0.PlayerDoctrine, DoctrineWords.KindName).Count == 0,
+            string.Join(" | ", ChronicleCheck.Verify(expected, rec0.Replay, DoctrineWords.KindName, cv.TraitsOf).Concat(ChronicleCheck.VerifyWhy(expected, rec0.Replay, rec0.PlayerDoctrine, DoctrineWords.KindName)).Take(3)));
+
+        int[] LogTicks() => page.FindAll(".dc-logline[data-tick]").Select(e => int.Parse(e.GetAttribute("data-tick")!)).ToArray();
+        string[] LogTexts() => page.FindAll(".dc-logline[data-tick] .x").Select(e => e.TextContent.Trim()).ToArray();
+        async Task ScrubTo(int t) { await page.InvokeAsync(() => page.Find(".dc-range").Input(t.ToString())); await Until(() => Text(page, ".dc-tick") == t.ToString(), 3000, $"scrub to {t}"); }
+
+        await ScrubTo(0);
+        Check("chronicle: at tick 0 the log holds only the opening line and says it fills in as the battle plays; no Why yet",
+            await Until(() => LogTicks().Length == expected.Lines.Count(l => l.Tick <= 0), 3000, "log at 0") && Has(page, ".dc-logempty") && !Has(page, ".dc-why") && LogTexts().SequenceEqual(expected.Lines.Where(l => l.Tick <= 0).Select(l => l.Text)));
+        int contactTick = expected.Lines.First(l => l.Kind == ChronicleKind.Contact).Tick;
+        int midTick = expected.Lines.Where(l => l.Kind == ChronicleKind.Break).Select(l => (int?)l.Tick).FirstOrDefault() ?? contactTick;
+        await ScrubTo(midTick);
+        var want = expected.Lines.Where(l => l.Tick <= midTick).ToList();
+        Check("chronicle: scrubbing to a tick shows exactly the lines up to it, and the lines of that tick are marked now",
+            await Until(() => LogTicks().Length == want.Count, 3000, "log at mid") && LogTexts().OrderBy(x => x).SequenceEqual(want.Select(l => l.Text).OrderBy(x => x))
+            && page.FindAll(".dc-logline.now").Count == want.Count(l => l.Tick == midTick) && !Has(page, ".dc-why"), $"tick {midTick}, {want.Count} lines");
+        Check("chronicle: the live box is the column-reverse one, newest line first in the markup (so it sits at the bottom and stays pinned there)", Has(page, "ol.dc-log.live") && LogTicks().First() == want.Max(l => l.Tick));
+        Shot("c1-watch-mid", page);
+        if (expected.Lines.FirstOrDefault(l => l.Kind == ChronicleKind.Gate) is { } gl)
+        {
+            await ScrubTo(gl.Tick - 1);
+            bool noGateBefore = await Until(() => !Has(page, ".dc-logline.k-gate"), 3000, "no gate line before");
+            await ScrubTo(gl.Tick);
+            Check("chronicle: the gate line appears on the very tick the recording's flag is set, and not before", noGateBefore && await Until(() => Has(page, ".dc-logline.k-gate"), 3000, "gate line") && page.Find(".dc-logline.k-gate").GetAttribute("data-tick") == gl.Tick.ToString() && gl.Tick == fell, $"gate at {gl.Tick}, flag at {fell}");
+        }
+        else Check("chronicle: the gate line is there when the recording's flag is", fell is null);
+        await ScrubTo(lastTick);
+        Check("chronicle: at the last tick the whole account is there with the Why under it, and the Why lines are the function's",
+            await Until(() => LogTicks().Length == expected.Lines.Count && Has(page, ".dc-why"), 3000, "full account") && page.FindAll(".dc-why-list li").Select(e => e.TextContent.Trim()).SequenceEqual(expected.Why.Lines));
+        Scan(page);
+        Shot("c2-watch-end", page);
+        // a tapped line jumps the replay
+        await Tap(page, $".dc-logline[data-tick='{contactTick}'] .dc-logbtn");
+        Check("chronicle: tapping a line jumps the replay to that tick (and the log follows it back)", await Until(() => Text(page, ".dc-tick") == contactTick.ToString(), 3000, "jump") && await Until(() => LogTicks().Length == expected.Lines.Count(l => l.Tick <= contactTick), 3000, "log follows") && !Has(page, ".dc-why"), Text(page, ".dc-tick"));
+        // the whole account on request, with the lines still to come marked
+        await ScrubTo(0);
+        await Tap(page, "#dc-log-all");
+        Check("chronicle: Show the whole account lists every line in time order, marks the ones to come, and shows the Why",
+            await Until(() => LogTicks().Length == expected.Lines.Count, 3000, "all lines") && LogTicks().SequenceEqual(expected.Lines.Select(l => l.Tick)) && page.FindAll(".dc-logline.later").Count == expected.Lines.Count(l => l.Tick > 0) && Has(page, ".dc-why") && Has(page, "ol.dc-log.all") && page.Find("#dc-log-all").GetAttribute("aria-pressed") == "true");
+        Scan(page);
+        await Tap(page, "#dc-log-all");
+        Check("chronicle: and back to only what has happened", await Until(() => LogTicks().Length == 1 && Has(page, "ol.dc-log.live"), 3000, "back to live"));
+        // the phone's sheet button
+        await ScrubTo(lastTick);
+        await Tap(page, "#dc-open-chronicle");
+        Shot("c3-watch-sheet", page);
+        Check("chronicle: on a phone the Chronicle button pulls the chronicle sheet up (the General button steps aside on the watch screen to make room)", page.Find("#dc-chronicle").ClassList.Contains("open") && page.Find("#dc-open-chronicle").GetAttribute("aria-expanded") == "true" && !Has(page, "#dc-open-general"));
+        await Tap(page, "#dc-open-chronicle");
+        Check("chronicle: tapping the button again puts it away", !page.Find("#dc-chronicle").ClassList.Contains("open"));
+        Console.WriteLine($"  (chronicle of the gate battle: {expected.Lines.Count} lines: {string.Join(", ", expected.Lines.GroupBy(l => l.Kind).Select(g => g.Key + " " + g.Count()))})");
+        foreach (var l in expected.Lines) Console.WriteLine("    " + l.Full);
+        foreach (var w in expected.Why.Lines) Console.WriteLine("    Why: " + w);
+    }
 }
 Console.WriteLine($"  (round 0: doctrine {S.Records[0].PlayerDoctrine}, outcome {S.Records[0].Result.Outcome}, lost {S.Records[0].Result.AttackerLosses.Sum(l => l.Lost)}, army after {S.Last!.ArmyAfter.Soldiers} soldiers, gold {S.Last.ArmyAfter.Gold})");
 Check("round 0: the general has learned twice (the doctrine, then the result)", S.Sections.General.ExamplesSeen == 2, S.Sections.General.ExamplesSeen.ToString());
@@ -541,6 +606,32 @@ string GeneralFree(string s) => Regex.IsMatch(s, "general", RegexOptions.IgnoreC
             Check("HUD: no tabs, no tab roles and no links inside the scene", pageU.FindAll(".dc-hud [role=tab], .dc-hud [role=tablist], .dc-hud .dc-tab, .dc-hud a[href], .dc-hud nav").Count == 0);
             Check("HUD: the top bar carries the round, the gold, a one-line goal and the thing to do now", Text(pageU, ".dc-status").Contains("Round 1 of 5") && Text(pageU, ".dc-status").Contains("Gold ") && Text(pageU, ".dc-goal").StartsWith("Goal:") && Text(pageU, ".dc-todo").Length > 10, Text(pageU, ".dc-todo"));
             Check("HUD: the army list is on the left panel, the field in the centre", Has(pageU, ".dc-armypanel .dc-army") && Has(pageU, ".dc-field .dc-line"));
+
+            // ---- the army panel in the first game: plain words, only the open kinds named, the rest under one collapsed line
+            {
+                var army = SU.Army!;
+                var openC = army.Cohorts.Where(c => DoctrineUnlocks.KindOpen(c.Key, 0)).ToList();
+                var otherC = army.Cohorts.Where(c => !DoctrineUnlocks.KindOpen(c.Key, 0)).ToList();
+                var rows = pageU.FindAll(".dc-armypanel > .dc-cohortlist.dc-army > li");
+                Check("army panel (round 1): one row for each open kind the army holds, and no other kind is named in the list", rows.Count == openC.Count && rows.All(r => r.QuerySelector(".nm")!.TextContent.Trim() is "Spearmen" or "Archers"), string.Join(",", rows.Select(r => r.QuerySelector(".nm")!.TextContent.Trim())));
+                Check("army panel (round 1): each row is one plain sentence in the form 'Spearmen, 10: basic fighters in the front line.'", rows.Zip(openC).All(p => Regex.Replace(p.First.QuerySelector(".plain")!.TextContent, @"\s+", " ").Trim() == DoctrineWords.CohortSentence(p.Second.Key, p.Second.Count, p.Second.Slot)),
+                    string.Join(" | ", rows.Select(r => Regex.Replace(r.QuerySelector(".plain")!.TextContent, @"\s+", " ").Trim())));
+                Check("army panel (round 1): the sentences carry no trait name, no 'veterancy', no 'power' and no 'None'", rows.All(r => !Regex.IsMatch(r.QuerySelector(".plain")!.TextContent, @"Heavy|Swift|Ranged|Holy|Cursed|Beast|Machine|Shielded|[Vv]eterancy|[Pp]ower|None")));
+                Check("army panel (round 1): traits, veterancy and power sit in a Details expander of each cohort, closed", rows.Zip(openC).All(p => p.First.QuerySelector("details.dc-det") is { } d && !d.HasAttribute("open") && d.QuerySelector("summary")!.TextContent.Trim() == "Details"
+                    && Regex.Replace(d.QuerySelector(".meta")!.TextContent, @"\s+", " ").Trim() == $"Traits: {DoctrineWords.TraitList(p.Second.Traits)}. Veterancy {p.Second.Veterancy}. Power {p.Second.PowerPct}%."));
+                var oth = pageU.FindAll(".dc-armypanel details.dc-other");
+                Check("army panel (round 1): the kinds not open yet wait under one collapsed 'Other soldiers: N' line (N is their soldiers), expandable to the same plain rows", otherC.Count == 0 ? oth.Count == 0
+                    : oth.Count == 1 && !oth[0].HasAttribute("open") && oth[0].QuerySelector("summary")!.TextContent.Trim() == $"Other soldiers: {otherC.Sum(c => c.Count)}" && oth[0].QuerySelectorAll(".dc-cohortlist > li").Length == otherC.Count
+                    && !pageU.Find(".dc-armypanel > .dc-cohortlist").TextContent.Contains("Other"), $"{otherC.Count} locked cohorts, {otherC.Sum(c => c.Count)} soldiers");
+                Console.WriteLine($"  (round 1 levy of seed 3: {string.Join(", ", army.Cohorts.Select(c => c.Count + " " + DoctrineWords.KindName(c.Key)))}; {openC.Sum(c => c.Count)} soldiers of open kinds, {otherC.Sum(c => c.Count)} of the others; {army.Gold} gold)");
+                // ---- the field before the first battle: your three lines, back to front from the left
+                var lanes = pageU.FindAll(".dc-field .dc-lines .dc-lane");
+                Check("field (before a battle): your three lines are drawn, back to front, with the enemy's place on the right", lanes.Count == 3 && lanes.Select(l => l.GetAttribute("data-slot")).SequenceEqual(["2", "1", "0"]) && Has(pageU, ".dc-field .dc-foe")
+                    && lanes[0].QuerySelector("b")!.TextContent.Trim() == "Back line" && lanes[2].QuerySelector("b")!.TextContent.Trim() == "Front line");
+                var discs = pageU.FindAll(".dc-field .dc-disc");
+                Check("field (before a battle): every cohort is a disc with its count (they add up to the army), open kinds named and the others called 'Other'", discs.Count == army.Cohorts.Count && discs.Sum(d => int.Parse(d.QuerySelector("b")!.TextContent.Trim())) == army.Soldiers
+                    && discs.All(d => d.QuerySelector("i")!.TextContent.Trim() is "Spearmen" or "Archers" or "Other"));
+            }
         }
         // the unlock announcement
         if (newLines[r].Length == 0) Check($"{tag}: nothing new opens, so no announcement", !Has(pageU, ".dc-unlock"));
@@ -605,7 +696,13 @@ string GeneralFree(string s) => Regex.IsMatch(s, "general", RegexOptions.IgnoreC
             Check($"{tag}: an open order is enabled exactly when the army's legal list allows it (unlocking never makes an illegal order legal)", lawful);
             Check($"{tag}: no locked order is offered to tap", pageU.FindAll(".dc-chip").All(c => ExpectedChips(step).Contains(int.Parse(c.GetAttribute("data-token")!)) || IsCull(int.Parse(c.GetAttribute("data-token")!))));
             Check($"{tag}: the dock shows {slotsOpen[r]} slots in the doctrine step", pageU.FindAll(".dc-dock .dc-slot").Count == slotsOpen[r]);
-            if (r == 0) Shot("u1-doctrine", pageU);
+            if (r == 0)
+            {
+                Shot("u1-doctrine", pageU);
+                Check("field (order tray open): the tray is open and the three lines are still in the field", Has(pageU, ".dc-tray") && pageU.FindAll(".dc-field .dc-lines .dc-lane").Count == 3 && pageU.FindAll(".dc-field .dc-disc").Count == SU.Army!.Cohorts.Count);
+                var fieldChips = pageU.FindAll(".dc-chip").Where(c => DoctrineVocabulary.Decode(int.Parse(c.GetAttribute("data-token")!)).Family == OrderFamily.Field).ToList();
+                Check("orders (round 1): each field order chip says its plain effect under its label", fieldChips.Count == 6 && fieldChips.All(c => c.QuerySelector(".fx")!.TextContent.Trim() == DoctrineWords.FieldSentences[DoctrineVocabulary.Decode(int.Parse(c.GetAttribute("data-token")!)).Kind] && c.QuerySelector(".lb")!.TextContent.Trim() == DoctrineWords.Label(int.Parse(c.GetAttribute("data-token")!))), $"{fieldChips.Count} chips");
+            }
             // more orders than slots are refused: fill every slot, then try one more
             var openLegal = exp.Where(legal.Allows).Where(t => !IsCull(t)).Take(slotsOpen[r] + 1).ToList();
             if (openLegal.Count > slotsOpen[r])
@@ -698,6 +795,186 @@ async Task DoAdviceDraft(IRenderedComponent<DoctrinePage> p)
     await Tap(p, "#dc-confirm");
 }
 
+// ---------------------------------------------------------------------------------------------- the chronicle (no page: the function against recordings)
+{
+    Func<int, string> kn = DoctrineWords.KindName;
+    string Sig(Chronicle c) => string.Join("\n", c.Lines.Select(l => $"{l.Tick}|{l.Kind}|{l.Text}|{l.Cite}")) + "\n" + string.Join("\n", c.Why.Lines);
+
+    // ---- synthetic frames: every line is written out by hand here, from the frames below, not read back from the function
+    // Six cohorts. Yours: 0 Riders (front), 1 Priests (middle), 2 Archers (back). Theirs: 3 Spearmen (front), 4 Wights (middle), 5 Archers (back). Positions are arena units.
+    const int Qm = BattleReplay.Quantum;
+    var kinds = new[] { (Side.Player, 2, 0), (Side.Player, 4, 1), (Side.Player, 3, 2), (Side.Enemy, 0, 0), (Side.Enemy, 5, 1), (Side.Enemy, 3, 2) };
+    var startAt = new[] { (10, 10), (6, 20), (2, 30), (30, 10), (34, 20), (38, 30) };
+    // strength after each tick 0..14, per cohort
+    int[][] str =
+    [
+        [10, 10, 10, 10, 10, 9, 8, 8, 8, 8, 8, 8, 8, 8, 8],   // 0 Riders: hit at ticks 5 and 6
+        [8, 8, 8, 8, 8, 8, 8, 8, 7, 7, 7, 7, 7, 7, 7],        // 1 Priests: hit at tick 8
+        [6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 0, 0],        // 2 Archers: broken at tick 13
+        [10, 10, 10, 10, 8, 5, 2, 0, 0, 0, 0, 0, 0, 0, 0],    // 3 Spearmen: struck at ticks 4, 5, 6, 7
+        [8, 8, 8, 8, 8, 8, 8, 8, 2, 2, 2, 2, 0, 0, 0],        // 4 Wights: struck at 8, broken at 12
+        [6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 4, 0],        // 5 Archers: struck at 13, broken at 14
+    ];
+    var evAt = new Dictionary<int, (int S, int T, int D)[]>
+    {
+        [4] = [(0, 3, 2)], [5] = [(0, 3, 3), (3, 0, 1)], [6] = [(0, 3, 3), (3, 0, 1)], [7] = [(0, 3, 2)],
+        [8] = [(1, 4, 6), (4, 1, 1)], [12] = [(1, 4, 2)], [13] = [(0, 5, 2), (5, 2, 6)], [14] = [(0, 5, 4)],
+    };
+    ReplayFrame SynFrame(int t, Func<int, int, (int X, int Y)>? place = null, int[][]? s = null, Dictionary<int, (int S, int T, int D)[]>? ev = null, int flags = 0)
+    {
+        s ??= str; ev ??= evAt;
+        var blobs = new List<ReplayBlob>();
+        for (int i = 0; i < 6; i++)
+        {
+            var (x, y) = place?.Invoke(t, i) ?? startAt[i];
+            blobs.Add(new ReplayBlob(i, kinds[i].Item1, kinds[i].Item2, kinds[i].Item3, x * Qm, y * Qm, s[i][t]));
+        }
+        return new ReplayFrame(t, blobs, ev.TryGetValue(t, out var e) ? e.Select(x => new ReplayEvent(x.S, x.T, x.D)).ToList() : [], flags);
+    }
+    (int, int) Place(int t, int i) => i == 1 && t >= 8 ? (28, 31) : startAt[i];     // the Priests cross 11 units of the field, to stand beside the Wights, at tick 8
+    var synFrames = Enumerable.Range(0, 15).Select(t => SynFrame(t, Place, flags: t >= 6 ? WorldFlag.GateFallen : 0)).ToList();
+    var synResult = new BattleResult(BattleStatus.AttackerWon, 14, [new CohortLoss(2, 0, 2), new CohortLoss(4, 1, 1), new CohortLoss(3, 2, 6)], [new CohortLoss(0, 0, 10), new CohortLoss(5, 1, 8), new CohortLoss(3, 2, 6)]);
+    var syn = new BattleReplay(2, "test-ground", 1, 120, synFrames, synResult);
+    var synDoctrine = DoctrineSet.Of(DoctrineVocabulary.Field(FieldOrderKind.Flank, 1), DoctrineVocabulary.Field(FieldOrderKind.Hold, 2));
+    Func<Side, int, Trait?> roster = (s, k) => Roster.TraitsOf(k);
+    var cs = BattleChronicle.Build(syn, synDoctrine, "Test Ground", kn, roster);
+    var want = new (int Tick, ChronicleKind Kind, string Text)[]
+    {
+        (0, ChronicleKind.Start, "Test Ground. 24 of your soldiers face the enemy's 24."),
+        (4, ChronicleKind.Contact, "First contact. Your Riders strike the enemy Spearmen, and the enemy has not struck yet."),
+        (6, ChronicleKind.Gate, "The gate has fallen."),
+        (7, ChronicleKind.Run, "The enemy Spearmen have been struck 4 ticks running, 10 in all."),
+        (7, ChronicleKind.Break, "The enemy Spearmen break. The first to fall. The enemy Front line is gone, the first line to fall."),
+        (8, ChronicleKind.Flank, "Your Priests strike the enemy Wights from the side, 11 units across the field from where they began."),
+        (8, ChronicleKind.Holy, "Your Priests strike the enemy Wights, and holy blows hurt the cursed half again as hard."),
+        (8, ChronicleKind.Blow, "The heaviest blow of the battle: your Priests strike the enemy Wights for 6."),
+        (9, ChronicleKind.Lull, "A lull: no blow lands from tick 9 to tick 11."),
+        (12, ChronicleKind.Break, "The enemy Wights break. The enemy Middle line is gone."),
+        (12, ChronicleKind.Stand, "Only the enemy Archers still stand on their side, 6 strong."),
+        (13, ChronicleKind.Blow, "A heavy blow: the enemy Archers strike your Archers for 6."),
+        (13, ChronicleKind.Break, "Your Archers break. Your Back line is gone."),
+        (14, ChronicleKind.Break, "The enemy Archers break. The enemy Back line is gone."),
+        (14, ChronicleKind.End, "The field is yours. 15 of your soldiers stand; the enemy has 0."),
+    };
+    Check("chronicle (synthetic frames): the log is exactly the hand-written account: first contact, the gate, a run, the first break and the first line gone, a flank, holy against cursed, the heaviest blow, a lull, the final stand, the end",
+        cs.Lines.Select(l => (l.Tick, l.Kind, l.Text)).SequenceEqual(want), string.Join(" | ", cs.Lines.Select(l => $"{l.Tick} {l.Kind} {l.Text}").Except(want.Select(w => $"{w.Tick} {w.Kind} {w.Text}")).Take(3)));
+    Check("chronicle (synthetic frames): a line reads as the Count says it ('Tick 12. ...')", cs.Lines.Any(l => l.Full == "Tick 4. First contact. Your Riders strike the enemy Spearmen, and the enemy has not struck yet."));
+    Check("chronicle (synthetic frames): the Why is hand-written too: the turning point (largest swing in soldiers), the first line to fall, and one hint tied to the Flank order given",
+        cs.Why.Lines.SequenceEqual(["Turning point: tick 8, when the enemy lost 6 soldiers and you lost 1.", "The first line to fall: the enemy Front line, at tick 7.", "Your Flank order on the Middle line reached the enemy: your Priests struck from the side at tick 8."])
+        && cs.Why is { TurnTick: 8, TurnYouLost: 1, TurnEnemyLost: 6, FirstBreakTick: 7, FirstBreakBlob: 3, FirstLineTick: 7, FirstLineSide: Side.Enemy, FirstLineSlot: 0 }, string.Join(" | ", cs.Why.Lines));
+    var problems = ChronicleCheck.Verify(cs, syn, kn, roster);
+    Check("chronicle (synthetic frames): the independent checker finds every line backed by a real frame event, break, flag, run, span or stand", problems.Count == 0, string.Join(" | ", problems.Take(3)));
+    var whyProblems = ChronicleCheck.VerifyWhy(cs, syn, synDoctrine, kn);
+    Check("chronicle (synthetic frames): the independent checker finds the Why numbers equal to the record", whyProblems.Count == 0, string.Join(" | ", whyProblems.Take(3)));
+    Check("chronicle (synthetic frames): no holy line without the cohorts' own traits (a flip may have changed them), and none when the traits say no",
+        !BattleChronicle.Build(syn, synDoctrine, "Test Ground", kn, null).Lines.Any(l => l.Kind == ChronicleKind.Holy)
+        && !BattleChronicle.Build(syn, synDoctrine, "Test Ground", kn, (s, k) => Trait.None).Lines.Any(l => l.Kind == ChronicleKind.Holy));
+    Check("chronicle (synthetic frames): the holy factor in the line is the battle's own hit rule (a holy hit on a cursed target is 3/2 of a plain one)",
+        UnitRules.Hit(600_000, Trait.Holy, 100, Trait.Cursed, false) * 2 == UnitRules.Hit(600_000, Trait.None, 100, Trait.Cursed, false) * 3 && BattleChronicle.HolyWords() == "half again as hard");
+    Check("chronicle (determinism): the same recording, doctrine and names give the same log twice, and the same after the recording is encoded and decoded", Sig(cs) == Sig(BattleChronicle.Build(syn, synDoctrine, "Test Ground", kn, roster))
+        && ReplayCodec.TryDecode(ReplayCodec.Encode(syn), out var syn2, out _) && Sig(cs) == Sig(BattleChronicle.Build(syn2!, synDoctrine, "Test Ground", kn, roster)));
+
+    // variants of the opening: the enemy strikes first; both strike at once; no strike at all
+    ReplayFrame Ev(int t, params (int S, int T, int D)[] e) => SynFrame(t, null, ev: new() { [t] = e });
+    var enemyFirst = new BattleReplay(2, "x", 1, 120, [Ev(0), Ev(1, (5, 2, 1))], new BattleResult(BattleStatus.Running, 1, [], []));
+    var cEnemy = BattleChronicle.Build(enemyFirst, DoctrineSet.Empty, "X", kn);
+    Check("chronicle (opening): when only the enemy has struck, it says so and names the enemy's strike", cEnemy.Lines.Any(l => l.Kind == ChronicleKind.Contact && l.Text == "First contact. The enemy Archers strike your Archers, and you have not struck yet."), string.Join(" | ", cEnemy.Lines.Select(l => l.Text)));
+    var both = new BattleReplay(2, "x", 1, 120, [Ev(0), Ev(1, (0, 3, 1), (3, 0, 1), (5, 2, 1))], new BattleResult(BattleStatus.Running, 1, [], []));
+    var cBoth = BattleChronicle.Build(both, DoctrineSet.Empty, "X", kn);
+    Check("chronicle (opening): when both sides strike in the first tick it says both did, in the same tick", cBoth.Lines.Any(l => l.Kind == ChronicleKind.Contact && l.Text == "First contact. Both sides strike in the same tick: your Riders on the enemy Spearmen, the enemy Spearmen on your Riders."));
+    var quiet = new BattleReplay(2, "x", 1, 120, [Ev(0), Ev(1), Ev(2)], new BattleResult(BattleStatus.Draw, 2, [], []));
+    var cQuiet = BattleChronicle.Build(quiet, DoctrineSet.Empty, "X", kn);
+    Check("chronicle (opening): a battle with no strike has no contact, break, blow or lull line, says nobody fell, and the end does not claim anyone fell",
+        cQuiet.Lines.Select(l => l.Kind).SequenceEqual([ChronicleKind.Start, ChronicleKind.End]) && cQuiet.Why.Lines.SequenceEqual(["No soldier fell on either side.", "No cohort broke."]) && cQuiet.Lines[^1].Text.StartsWith("Neither side held the field.") && cQuiet.Why.Hint is null,
+        string.Join(" | ", cQuiet.Lines.Select(l => l.Text)));
+    Check("chronicle (empty recording): no frames, no lines, no error", BattleChronicle.Build(new BattleReplay(2, "x", 1, 120, [], new BattleResult(BattleStatus.Running, 0, [], [])), DoctrineSet.Empty, "X").Lines.Count == 0);
+
+    // ---- mutants of the log: each must be found by the checker
+    {
+        var sw = cs.Lines.First(l => l.Kind == ChronicleKind.Contact);
+        string Swapped(string t) => t.Replace("Your ", "\u0001").Replace("your ", "\u0002").Replace("The enemy ", "Your ").Replace("the enemy ", "your ").Replace("\u0001", "The enemy ").Replace("\u0002", "the enemy ");
+        Chronicle With(Func<ChronicleLine, ChronicleLine> f, Func<ChronicleLine, bool> pick) { var first = cs.Lines.First(pick); return cs with { Lines = cs.Lines.Select(l => ReferenceEquals(l, first) ? f(l) : l).ToList() }; }
+        var swapSide = With(l => l with { Text = Swapped(l.Text) }, l => l.Kind == ChronicleKind.Contact);
+        Check("mutant: a swapped side (your and the enemy exchanged in a line) is found", ChronicleCheck.Verify(swapSide, syn, kn, roster).Count > 0, swapSide.Lines.First(l => l.Kind == ChronicleKind.Contact).Text);
+        var swapBreak = With(l => l with { Text = Swapped(l.Text) }, l => l.Kind == ChronicleKind.Break);
+        Check("mutant: a swapped side in a break line is found", ChronicleCheck.Verify(swapBreak, syn, kn, roster).Count > 0);
+        var wrongTick = With(l => l with { Tick = l.Tick + 1 }, l => l.Kind == ChronicleKind.Flank);
+        Check("mutant: a line moved to the wrong tick is found", ChronicleCheck.Verify(wrongTick, syn, kn, roster).Count > 0);
+        var wrongTick2 = With(l => l with { Tick = l.Tick + 1, Cite = l.Cite with { Tick = l.Cite.Tick + 1 } }, l => l.Kind == ChronicleKind.Break);
+        Check("mutant: a line and its cite both moved one tick (a break that did not happen then) is found", ChronicleCheck.Verify(wrongTick2, syn, kn, roster).Count > 0);
+        var fakeBreak = cs with { Lines = cs.Lines.Concat([new ChronicleLine(13, ChronicleKind.Break, "Your Priests break.", new ChronicleCite(CiteKind.Break, 13, 1))]).OrderBy(l => l.Tick).ToList() };
+        Check("mutant: a fabricated break (a cohort that stood) is found", ChronicleCheck.Verify(fakeBreak, syn, kn, roster).Count > 0);
+        var fakeFlank = cs with { Lines = cs.Lines.Concat([new ChronicleLine(5, ChronicleKind.Flank, "Your Riders strike the enemy Spearmen from the side, 9 units across the field from where they began.", new ChronicleCite(CiteKind.Event, 5, 0, 3, 3))]).OrderBy(l => l.Tick).ToList() };
+        Check("mutant: a flank the positions do not show is found", ChronicleCheck.Verify(fakeFlank, syn, kn, roster).Count > 0);
+        var fakeBlow = cs with { Lines = cs.Lines.Concat([new ChronicleLine(5, ChronicleKind.Blow, "A heavy blow: your Riders strike the enemy Spearmen for 3.", new ChronicleCite(CiteKind.Event, 5, 0, 3, 3))]).OrderBy(l => l.Tick).ToList() };
+        Check("mutant: a heavy blow that was not heavy is found", ChronicleCheck.Verify(fakeBlow, syn, kn, roster).Count > 0);
+        var fakeHoly = cs with { Lines = cs.Lines.Concat([new ChronicleLine(5, ChronicleKind.Holy, "Your Riders strike the enemy Spearmen, and holy blows hurt the cursed half again as hard.", new ChronicleCite(CiteKind.Event, 5, 0, 3, 3))]).OrderBy(l => l.Tick).ToList() };
+        Check("mutant: a holy line where the traits are not holy against cursed is found", ChronicleCheck.Verify(fakeHoly, syn, kn, roster).Count > 0);
+        var fakeGate = cs with { Lines = cs.Lines.Select(l => l.Kind == ChronicleKind.Gate ? l with { Tick = 5, Cite = l.Cite with { Tick = 5 } } : l).OrderBy(l => l.Tick).ToList() };
+        Check("mutant: the gate falling a tick early is found", ChronicleCheck.Verify(fakeGate, syn, kn, roster).Count > 0);
+        var fakeLull = cs with { Lines = cs.Lines.Select(l => l.Kind == ChronicleKind.Lull ? l with { Text = "A lull: no blow lands from tick 8 to tick 11.", Tick = 8, Cite = new ChronicleCite(CiteKind.Span, 8, 8, 11) } : l).OrderBy(l => l.Tick).ToList() };
+        Check("mutant: a lull that covers a tick with a strike is found", ChronicleCheck.Verify(fakeLull, syn, kn, roster).Count > 0);
+        var fakeEnd = cs with { Lines = cs.Lines.Select(l => l.Kind == ChronicleKind.End ? l with { Text = "The enemy holds the field. 0 of theirs stand; you have 15." } : l).ToList() };
+        Check("mutant: an end that names the wrong winner is found", ChronicleCheck.Verify(fakeEnd, syn, kn, roster).Count > 0);
+        var fakeWhy = cs with { Why = cs.Why with { TurnTick = 13 } };
+        Check("mutant: a turning point at the wrong tick is found", ChronicleCheck.VerifyWhy(fakeWhy, syn, synDoctrine, kn).Count > 0);
+        var fakeWhy2 = cs with { Why = cs.Why with { Lines = cs.Why.Lines.Select(w => w.Replace("lost 6 soldiers", "lost 7 soldiers")).ToList() } };
+        Check("mutant: a Why line with the wrong number is found", ChronicleCheck.VerifyWhy(fakeWhy2, syn, synDoctrine, kn).Count > 0);
+        var fakeHint = cs with { Why = cs.Why with { Hint = "Your Back line broke first while ordered to Hold. Try another order for it.", Lines = [.. cs.Why.Lines.Take(2), "Your Back line broke first while ordered to Hold. Try another order for it."] } };
+        Check("mutant: a hint about a line that did not break first is found", ChronicleCheck.VerifyWhy(fakeHint, syn, synDoctrine, kn).Count > 0);
+    }
+
+    // ---- recorded battles: real games on the real sections, several seeds, two rounds each, with orders that move cohorts around
+    var tally = new Dictionary<ChronicleKind, int>();
+    int battles = 0, linesTotal = 0, bad = 0, whyBad = 0, detBad = 0, lossBad = 0;
+    var firstProblems = new List<string>();
+    for (int seed = 1; seed <= 8; seed++)
+    {
+        var tap = new SetupTap();
+        var game = await new DoctrineSections().Build(new VarietyHands(seed), new DoctrineDomain { MaxRounds = 2 }, tap).PlayAsync(seed);
+        for (int rd = 0; rd < game.Rounds.Count; rd++)
+        {
+            var rec = game.Rounds[rd];
+            var setup = tap.Setups[rd];
+            Func<Side, int, Trait?> traitsOf = (s, k) => (s == Side.Player ? setup.Attacker : setup.Defender).Cohorts.Where(c => c.Key == k).Select(c => (Trait?)c.Traits).FirstOrDefault();
+            var c = BattleChronicle.Build(rec.Replay, rec.PlayerDoctrine, "Arena", kn, traitsOf);
+            battles++; linesTotal += c.Lines.Count;
+            foreach (var l in c.Lines) tally[l.Kind] = tally.GetValueOrDefault(l.Kind) + 1;
+            var pr = ChronicleCheck.Verify(c, rec.Replay, kn, traitsOf); if (pr.Count > 0) { bad++; firstProblems.AddRange(pr.Take(2).Select(x => $"seed {seed} round {rd}: {x}")); }
+            var wp = ChronicleCheck.VerifyWhy(c, rec.Replay, rec.PlayerDoctrine, kn); if (wp.Count > 0) { whyBad++; firstProblems.AddRange(wp.Take(2).Select(x => $"seed {seed} round {rd} why: {x}")); }
+            if (Sig(c) != Sig(BattleChronicle.Build(rec.Replay, rec.PlayerDoctrine, "Arena", kn, traitsOf))
+                || !ReplayCodec.TryDecode(ReplayCodec.Encode(rec.Replay), out var back, out _) || Sig(c) != Sig(BattleChronicle.Build(back!, rec.PlayerDoctrine, "Arena", kn, traitsOf))) detBad++;
+            // the record's own losses equal what the frames show (so a Why built from the frames is built from the record)
+            int youDrop = rec.Replay.Frames[0].Blobs.Where(b => b.Side == Side.Player).Sum(b => b.Strength) - rec.Replay.Frames[^1].Blobs.Where(b => b.Side == Side.Player).Sum(b => b.Strength);
+            int enDrop = rec.Replay.Frames[0].Blobs.Where(b => b.Side == Side.Enemy).Sum(b => b.Strength) - rec.Replay.Frames[^1].Blobs.Where(b => b.Side == Side.Enemy).Sum(b => b.Strength);
+            if (youDrop != rec.Result.AttackerLosses.Sum(x => x.Lost) || enDrop != rec.Result.DefenderLosses.Sum(x => x.Lost)) lossBad++;
+        }
+    }
+    Check($"chronicle (recorded battles): every line of {battles} real battles ({linesTotal} lines) is backed by a real frame event, break, flag, run, span or stand, as the independent checker finds", battles >= 12 && bad == 0, string.Join(" | ", firstProblems.Take(3)));
+    Check("chronicle (recorded battles): the Why numbers (turning point, first break, first line gone) equal the record in every battle", whyBad == 0, string.Join(" | ", firstProblems.Where(x => x.Contains("why")).Take(3)));
+    Check("chronicle (recorded battles): the frames' totals equal the record's losses, so the Why is the record's own", lossBad == 0, $"{lossBad} differ");
+    Check("chronicle (recorded battles): the same recording gives the same log twice and after an encode/decode, in every battle", detBad == 0, $"{detBad} differ");
+    Check("chronicle (recorded battles): every battle has an opening, a first contact and an end", tally.GetValueOrDefault(ChronicleKind.Start) == battles && tally.GetValueOrDefault(ChronicleKind.End) == battles && tally.GetValueOrDefault(ChronicleKind.Contact) == battles, string.Join(", ", tally.Select(kv => kv.Key + " " + kv.Value)));
+    Console.WriteLine($"  (chronicle over {battles} recorded battles: {string.Join(", ", tally.OrderBy(kv => kv.Key).Select(kv => kv.Key + " " + kv.Value))})");
+
+    // the log of the gate battle is checked in the page block above; here, the mutants against a recorded battle
+    {
+        var tap = new SetupTap();
+        var game = await new DoctrineSections().Build(new VarietyHands(3), new DoctrineDomain { MaxRounds = 1 }, tap).PlayAsync(3);
+        var rec = game.Rounds[0]; var setup = tap.Setups[0];
+        Func<Side, int, Trait?> traitsOf = (s, k) => (s == Side.Player ? setup.Attacker : setup.Defender).Cohorts.Where(c => c.Key == k).Select(c => (Trait?)c.Traits).FirstOrDefault();
+        var c = BattleChronicle.Build(rec.Replay, rec.PlayerDoctrine, "Arena", kn, traitsOf);
+        var inv = c.Lines.First(l => l.Cite.Kind == CiteKind.Event);
+        string Sw(string t) => t.Replace("Your ", "\u0001").Replace("your ", "\u0002").Replace("The enemy ", "Your ").Replace("the enemy ", "your ").Replace("\u0001", "The enemy ").Replace("\u0002", "the enemy ");
+        var m1 = c with { Lines = c.Lines.Select(l => l == inv ? l with { Text = Sw(l.Text) } : l).ToList() };
+        var m2 = c with { Lines = c.Lines.Select(l => l == inv ? l with { Tick = l.Tick + 1 } : l).ToList() };
+        var standing = rec.Replay.Frames[^1].Blobs.Concat(rec.Replay.Frames[0].Blobs).First(b => rec.Replay.Frames[^1].Blobs.Any(x => x.Id == b.Id && x.Strength > 0));
+        var m3 = c with { Lines = c.Lines.Concat([new ChronicleLine(rec.Replay.Frames[^1].Tick, ChronicleKind.Break, "A cohort breaks.", new ChronicleCite(CiteKind.Break, rec.Replay.Frames[^1].Tick, standing.Id))]).ToList() };
+        Check("mutant (recorded battle): the checker is clean on the real log and finds a swapped side, a wrong tick and a fabricated break in it",
+            ChronicleCheck.Verify(c, rec.Replay, kn, traitsOf).Count == 0 && ChronicleCheck.Verify(m1, rec.Replay, kn, traitsOf).Count > 0 && ChronicleCheck.Verify(m2, rec.Replay, kn, traitsOf).Count > 0 && ChronicleCheck.Verify(m3, rec.Replay, kn, traitsOf).Count > 0);
+    }
+}
+
 // ---------------------------------------------------------------------------------------------- wording
 {
     string all = string.Join("\n", allText);
@@ -727,7 +1004,14 @@ async Task DoAdviceDraft(IRenderedComponent<DoctrinePage> p)
 {
     string css = File.ReadAllText(Path.Combine(showroom, "Pages", "DoctrinePage.razor.css"));
     string acss = File.ReadAllText(Path.Combine(showroom, "Components", "DoctrineArena.razor.css"));
-    string both = css + "\n" + acss;
+    string ccss = File.ReadAllText(Path.Combine(showroom, "Components", "DoctrineChronicle.razor.css"));
+    string both = css + "\n" + acss + "\n" + ccss;
+    Check("chronicle css: lines and the toggle get the 44px minimum, the live box is column-reverse (newest at the bottom, pinned), and it fills the docked panel on a wide screen",
+        Regex.IsMatch(ccss, @"\.dc-logbtn, \.dc-logtoggle \{[^}]*min-height: 44px;[^}]*min-width: 44px;") && Regex.IsMatch(ccss, @"\.dc-log\.live \{[^}]*flex-direction: column-reverse") && Regex.IsMatch(ccss, @"min-width: 900px\) \{[\s\S]*\.dc-log \{[^}]*flex: 1 1 auto"));
+    Check("chronicle layout: on a wide screen it takes the general's column on the watch screen (the general panel steps aside), and on a phone it is a sheet like the others",
+        Regex.IsMatch(css, @"\.dc-generalpanel, \.dc-chroniclepanel \{[^}]*grid-column: 3;[^}]*grid-row: 1 / -1") && Regex.IsMatch(css, @"\.dc-hud\[data-stage=watch\] \.dc-generalpanel \{ display: none; \}") && Regex.IsMatch(css, @"\.dc-sheet, \.dc-tray \{ position: absolute;"));
+    Check("tray layout: on a wide screen the tray is a drawer under the field in its own row (it never overlays the three lines)",
+        Regex.IsMatch(css, @"min-width: 900px\) \{[\s\S]*\.dc-stage \{[^}]*grid-template-rows: minmax\(0, 1fr\) auto") && Regex.IsMatch(css, @"min-width: 900px\) \{[\s\S]*\.dc-tray \{[^}]*grid-row: 2;[^}]*max-height: min\(36dvh") && !Regex.IsMatch(css, @"min-width: 900px\) \{[\s\S]*\.dc-tray \{[^}]*align-self: end"));
     string index = File.ReadAllText(Path.Combine(showroom, "wwwroot", "index.html"));
     Check("viewport meta: width=device-width, initial-scale=1", Regex.IsMatch(index, "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1(\\.0)?\""));
     Check("one rule gives every page button and summary a 44px minimum", Regex.IsMatch(css, @"\.dc button, \.dc summary \{[^}]*min-height: 44px;[^}]*min-width: 44px;"));
@@ -768,6 +1052,256 @@ Console.WriteLine(failures == 0 ? $"ALL PASS ({checks} checks)" : $"{failures} F
 return failures == 0 ? 0 : 1;
 
 sealed class Time : IBuildTime { public Time(bool p) { IsPrerender = p; } public bool IsPrerender { get; } }
+
+/// <summary>Keeps the set-up of every battle a game starts (the set-up carries both sides' cohorts with the traits they fought with).</summary>
+sealed class SetupTap : IRoundObserver
+{
+    public List<BattleSetup> Setups { get; } = new();
+    public void BattleStarted(BattleSetup setup) => Setups.Add(setup);
+}
+
+/// <summary>A visitor who drafts a mix of kinds (priests, wights, wolves, riders among them) and gives orders that move cohorts around (flank, guard, hunt, fall back), varying with the seed.</summary>
+sealed class VarietyHands(int variant) : IPlayerInput
+{
+    public ValueTask<IReadOnlyList<DraftPick>> DraftAsync(ArmyReadModel army, int round, CancellationToken ct)
+    {
+        int gold = army.Gold; var picks = new List<DraftPick>();
+        int[] order = variant % 2 == 0 ? [4, 6, 2, 5, 3, 0] : [6, 4, 5, 1, 2, 0];
+        foreach (var k in order) { int n = Math.Min(gold / Roster.PriceOf(k), 2); if (n > 0) { picks.Add(new DraftPick(k, n)); gold -= n * Roster.PriceOf(k); } }
+        return ValueTask.FromResult<IReadOnlyList<DraftPick>>(picks);
+    }
+
+    public ValueTask<PlayerChoice> ChooseAsync(ArmyReadModel army, GeneralOutput ghost, int round, CancellationToken ct)
+    {
+        int[] want = ((variant + round) % 4) switch
+        {
+            0 => new[] { DoctrineVocabulary.Field(FieldOrderKind.Flank, 1), DoctrineVocabulary.Field(FieldOrderKind.Advance, 0), DoctrineVocabulary.Field(FieldOrderKind.Hunt, 2) },
+            1 => new[] { DoctrineVocabulary.Field(FieldOrderKind.Flank, 0), DoctrineVocabulary.Field(FieldOrderKind.Hold, 2), DoctrineVocabulary.Field(FieldOrderKind.Guard, 1) },
+            2 => new[] { DoctrineVocabulary.Field(FieldOrderKind.FallBack, 0), DoctrineVocabulary.Field(FieldOrderKind.Flank, 1), DoctrineVocabulary.Army(ArmyOrderKind.Age) },
+            _ => [],
+        };
+        var legal = want.Where(army.Legal.Allows).Take(DoctrineVocabulary.MaxSlots).ToArray();
+        return ValueTask.FromResult(new PlayerChoice(DoctrineSet.Of(legal), false));
+    }
+}
+
+/// <summary>
+/// The independent check of a chronicle: it looks every line's cite up again in the recording, with its own code, and checks what the text says of it
+/// (the side and the kind it names, the numbers, the tick). It returns the problems; none means every line is backed.
+/// </summary>
+static class ChronicleCheck
+{
+    const int Q = BattleReplay.Quantum;
+    static readonly string[] SlotNames = ["Front", "Middle", "Back"];
+    static string Nm(Func<int, string> kn, ReplayBlob b) => (b.Side == Side.Player ? "your " : "the enemy ") + kn(b.Key);
+    static string Cap(string s) => char.ToUpperInvariant(s[0]) + s[1..];
+    static ReplayBlob? B(ReplayFrame f, int id) { foreach (var b in f.Blobs) if (b.Id == id) return b; return null; }
+    static int Sum(ReplayFrame f, Side s) => f.Blobs.Where(b => b.Side == s).Sum(b => b.Strength);
+    static int Standing(ReplayFrame f, Side s) => f.Blobs.Count(b => b.Side == s && b.Strength > 0);
+    static bool GroupDown(ReplayFrame f, Side s, int slot) => f.Blobs.Where(b => b.Side == s && b.Slot == slot).All(b => b.Strength <= 0);
+    static bool AnyGroupDown(ReplayFrame f) => f.Blobs.Any(b => GroupDown(f, b.Side, b.Slot));
+
+    /// <summary>The blobs that broke (strength above zero before, zero now) between frame i-1 and i, lowest id first.</summary>
+    static List<ReplayBlob> Broke(BattleReplay r, int i) => r.Frames[i].Blobs.Where(b => b.Strength <= 0 && B(r.Frames[i - 1], b.Id) is { Strength: > 0 }).OrderBy(b => b.Id).ToList();
+
+    public static List<string> Verify(Chronicle c, BattleReplay r, Func<int, string> kn, Func<Side, int, Trait?>? traits)
+    {
+        var bad = new List<string>();
+        var F = r.Frames;
+        var idx = new Dictionary<int, int>();
+        for (int k = 0; k < F.Count; k++) idx[F[k].Tick] = k;
+        int lastTick = int.MinValue;
+        foreach (var l in c.Lines)
+        {
+            string w = $"[{l.Kind} at tick {l.Tick}]";
+            if (l.Tick < lastTick) bad.Add(w + " out of time order");
+            lastTick = l.Tick;
+            var ck = l.Cite;
+            if (ck.Tick != l.Tick) { bad.Add($"{w} its cite is for tick {ck.Tick}"); continue; }
+            if (!idx.TryGetValue(l.Tick, out int i)) { bad.Add(w + " no such frame"); continue; }
+            var f = F[i]; var p = i > 0 ? F[i - 1] : null;
+            string text = l.Text, low = text.ToLowerInvariant();
+            bool kindOk = l.Kind switch
+            {
+                ChronicleKind.Start => ck.Kind == CiteKind.Start,
+                ChronicleKind.Contact or ChronicleKind.Flank or ChronicleKind.Holy or ChronicleKind.Blow => ck.Kind == CiteKind.Event,
+                ChronicleKind.Gate => ck.Kind == CiteKind.Gate,
+                ChronicleKind.Run => ck.Kind == CiteKind.Run,
+                ChronicleKind.Break => ck.Kind == CiteKind.Break,
+                ChronicleKind.Stand => ck.Kind == CiteKind.Stand,
+                ChronicleKind.Lull => ck.Kind == CiteKind.Span,
+                ChronicleKind.End => ck.Kind == CiteKind.End,
+                _ => false,
+            };
+            if (!kindOk) { bad.Add($"{w} the cite is of the wrong kind ({ck.Kind})"); continue; }
+            switch (ck.Kind)
+            {
+                case CiteKind.Start:
+                    if (i != 0 || ck.A != Sum(f, Side.Player) || ck.B != Sum(f, Side.Enemy) || !text.Contains($"{ck.A} of your soldiers") || !text.Contains($"enemy's {ck.B}.")) bad.Add(w + " the opening does not match frame 0");
+                    break;
+                case CiteKind.Event:
+                {
+                    var s = B(f, ck.A); var t = B(f, ck.B);
+                    if (!f.Events.Any(e => e.Source == ck.A && e.Target == ck.B && e.Damage == ck.Value) || s is null || t is null) { bad.Add($"{w} no such strike ({ck.A} on {ck.B} for {ck.Value}) in the frame"); break; }
+                    var sb = s.Value; var tb = t.Value;
+                    if (!low.Contains(Nm(kn, sb).ToLowerInvariant()) || !low.Contains(Nm(kn, tb).ToLowerInvariant())) bad.Add($"{w} the text does not name {Nm(kn, sb)} and {Nm(kn, tb)}");
+                    switch (l.Kind)
+                    {
+                        case ChronicleKind.Contact:
+                        {
+                            bool you = f.Events.Any(e => B(f, e.Source) is { Side: Side.Player }), they = f.Events.Any(e => B(f, e.Source) is { Side: Side.Enemy });
+                            if (F.First(x => x.Events.Count > 0).Tick != l.Tick || !text.StartsWith("First contact. ")) bad.Add(w + " not the first tick with a strike");
+                            else if (text.Contains("Both sides")) { if (!(you && they) || !text.Contains($": {Nm(kn, sb)} on {Nm(kn, tb)}")) bad.Add(w + " 'both sides' but the frame does not show both striking"); }
+                            else if (text.Contains("the enemy has not struck yet")) { if (!(you && !they && sb.Side == Side.Player) || !text.StartsWith($"First contact. {Cap(Nm(kn, sb))} strike {Nm(kn, tb)},")) bad.Add(w + " says the enemy has not struck but the frame shows it did, or names the wrong striker"); }
+                            else if (text.Contains("you have not struck yet")) { if (!(they && !you && sb.Side == Side.Enemy) || !text.StartsWith($"First contact. {Cap(Nm(kn, sb))} strike {Nm(kn, tb)},")) bad.Add(w + " says you have not struck but the frame shows you did, or names the wrong striker"); }
+                            else bad.Add(w + " says neither who struck first nor that both did");
+                            break;
+                        }
+                        case ChronicleKind.Flank:
+                        {
+                            var s0 = B(F[0], ck.A);
+                            int across = s0 is null ? 0 : Math.Abs(sb.Y - s0.Value.Y), dx = Math.Abs(sb.X - tb.X), dy = Math.Abs(sb.Y - tb.Y);
+                            if (s0 is null || across < 8 * Q || dy < dx || !text.Contains($"from the side, {across / Q} units across the field from where they began.")) bad.Add($"{w} the positions do not show a flank (across {across / (double)Q}, beside {dy >= dx})");
+                            break;
+                        }
+                        case ChronicleKind.Holy:
+                        {
+                            var ts = traits?.Invoke(sb.Side, sb.Key); var tt = traits?.Invoke(tb.Side, tb.Key);
+                            if (ts is null || tt is null || (ts.Value & Trait.Holy) == 0 || (tt.Value & Trait.Cursed) == 0) bad.Add(w + " the cohorts' traits are not holy against cursed");
+                            else if (!text.Contains("holy blows hurt the cursed half again as hard")) bad.Add(w + " wrong factor in words");
+                            break;
+                        }
+                        case ChronicleKind.Blow:
+                        {
+                            int before = p is null ? 0 : B(p, ck.B)?.Strength ?? 0;
+                            if (ck.Value < 5 || ck.Value * 4 < before || !text.Contains($" for {ck.Value}.") || !(text.StartsWith("The heaviest blow of the battle: ") || text.StartsWith("A heavy blow: "))) bad.Add($"{w} not a heavy blow ({ck.Value} on a cohort of {before})");
+                            break;
+                        }
+                    }
+                    break;
+                }
+                case CiteKind.Break:
+                {
+                    var b = B(f, ck.A);
+                    if (b is null || b.Value.Strength != 0 || p is null || B(p, ck.A) is not { Strength: > 0 }) { bad.Add(w + " that cohort did not break at this tick"); break; }
+                    var bb = b.Value;
+                    if (!text.StartsWith(Cap(Nm(kn, bb)) + " break.")) bad.Add(w + " names the wrong cohort or side");
+                    var broke = Broke(r, i);
+                    bool earlierBreak = false; for (int j = 1; j < i; j++) if (Broke(r, j).Count > 0) earlierBreak = true;
+                    if (text.Contains("The first to fall.") != (!earlierBreak && broke[0].Id == bb.Id)) bad.Add(w + " 'the first to fall' is wrong");
+                    bool gone = GroupDown(f, bb.Side, bb.Slot);
+                    string lineText = $"{Cap(bb.Side == Side.Player ? "your" : "the enemy")} {SlotNames[bb.Slot]} line is gone";
+                    if (text.Contains(" line is gone") != gone || (gone && !text.Contains(lineText))) bad.Add(w + " the line-gone sentence is wrong");
+                    if (gone)
+                    {
+                        bool anotherGoneNow = broke.TakeWhile(x => x.Id != bb.Id).Any(x => GroupDown(f, x.Side, x.Slot));
+                        bool firstLine = !AnyGroupDown(p) && !anotherGoneNow;
+                        if (text.Contains(", the first line to fall.") != firstLine) bad.Add(w + " 'the first line to fall' is wrong");
+                    }
+                    break;
+                }
+                case CiteKind.Gate:
+                    if ((f.WorldFlags & WorldFlag.GateFallen) == 0 || (p is not null && (p.WorldFlags & WorldFlag.GateFallen) != 0) || text != "The gate has fallen.") bad.Add(w + " the recording's gate flag is not first set in this frame");
+                    break;
+                case CiteKind.Run:
+                {
+                    var t = B(f, ck.A);
+                    int len = ck.Tick - ck.B + 1, dmg = 0; bool ok = t is not null && len == ck.Value && len >= 4;
+                    for (int tk = ck.B; ok && tk <= ck.Tick; tk++)
+                    {
+                        if (!idx.TryGetValue(tk, out int ji)) { ok = false; break; }
+                        var hits = F[ji].Events.Where(e => e.Target == ck.A).ToList();
+                        if (hits.Count == 0) ok = false;
+                        dmg += hits.Sum(e => e.Damage);
+                    }
+                    if (ok && idx.TryGetValue(ck.B - 1, out int pj) && F[pj].Events.Any(e => e.Target == ck.A)) ok = false;
+                    if (!ok || dmg != ck.Value2 || !text.StartsWith(Cap(Nm(kn, t!.Value)) + $" have been struck {ck.Value} ticks running, {ck.Value2} in all.")) bad.Add($"{w} the run is not in the frames (from tick {ck.B}, {ck.Value} ticks, {dmg} damage)");
+                    break;
+                }
+                case CiteKind.Span:
+                {
+                    bool ok = ck.B - ck.A + 1 >= 3 && F.Any(x => x.Tick < ck.A && x.Events.Count > 0);
+                    for (int tk = ck.A; ok && tk <= ck.B; tk++) if (!idx.TryGetValue(tk, out int ji) || F[ji].Events.Count > 0) ok = false;
+                    if (!ok || !text.Contains($"from tick {ck.A} to tick {ck.B}.")) bad.Add($"{w} a strike lands inside the span or it is too short");
+                    break;
+                }
+                case CiteKind.Stand:
+                {
+                    var b = B(f, ck.A);
+                    if (b is null || b.Value.Strength != ck.Value || ck.Value <= 0 || Standing(f, b.Value.Side) != 1 || p is null || Standing(p, b.Value.Side) < 2 || i == F.Count - 1
+                        || !text.Contains(Nm(kn, b.Value)) || !text.Contains($"{ck.Value} strong")) bad.Add(w + " that cohort is not the last of its side at this tick");
+                    break;
+                }
+                case CiteKind.End:
+                {
+                    int me = Sum(f, Side.Player), they = Sum(f, Side.Enemy);
+                    string start = r.Result.Outcome switch { BattleStatus.AttackerWon => "The field is yours.", BattleStatus.DefenderWon => "The enemy holds the field.", BattleStatus.Draw => me > 0 && they > 0 ? "Neither side held the field." : "Both sides fall together.", _ => "The battle did not finish." };
+                    if (i != F.Count - 1 || ck.Value != (int)r.Result.Outcome || ck.A != me || ck.B != they || !text.StartsWith(start) || !text.Contains($"{me}") || !text.Contains($"{they}")
+                        || r.Result.Outcome == BattleStatus.AttackerWon && !(me > they) || r.Result.Outcome == BattleStatus.DefenderWon && !(they > me)) bad.Add(w + " the end does not match the last frame and the recorded outcome");
+                    break;
+                }
+            }
+        }
+        if (c.Lines.Count(x => x.Kind == ChronicleKind.Start) != 1 || c.Lines.Count(x => x.Kind == ChronicleKind.End) != 1 || c.Lines.Count(x => x.Kind == ChronicleKind.Contact) > 1 || c.Lines.Count(x => x.Kind == ChronicleKind.Gate) > 1) bad.Add("a line kind appears the wrong number of times");
+        if (F.Any(x => x.Events.Count > 0) && c.Lines.All(x => x.Kind != ChronicleKind.Contact)) bad.Add("there are strikes in the recording but no first contact");
+        if (F.Any(x => (x.WorldFlags & WorldFlag.GateFallen) != 0) && F.Count > 1 && (F[0].WorldFlags & WorldFlag.GateFallen) == 0 && c.Lines.All(x => x.Kind != ChronicleKind.Gate)) bad.Add("the gate fell in the recording but no line says so");
+        return bad;
+    }
+
+    /// <summary>The Why against the record: recomputed here from the frames, and the hint against the doctrine and the log.</summary>
+    public static List<string> VerifyWhy(Chronicle c, BattleReplay r, DoctrineSet doctrine, Func<int, string> kn)
+    {
+        var bad = new List<string>();
+        var F = r.Frames; var y = c.Why;
+        int tTick = -1, tSwing = 0, tYou = 0, tEn = 0, sumYou = 0, sumEn = 0;
+        int? fbTick = null, fbBlob = null, flTick = null, flSlot = null; Side? flSide = null;
+        for (int i = 1; i < F.Count; i++)
+        {
+            int you = Math.Max(0, Sum(F[i - 1], Side.Player) - Sum(F[i], Side.Player)), en = Math.Max(0, Sum(F[i - 1], Side.Enemy) - Sum(F[i], Side.Enemy));
+            sumYou += you; sumEn += en;
+            int sw = en - you;
+            if (you + en > 0 && (tTick < 0 || Math.Abs(sw) > Math.Abs(tSwing))) { tTick = F[i].Tick; tSwing = sw; tYou = you; tEn = en; }
+            var broke = Broke(r, i);
+            if (fbTick is null && broke.Count > 0) { fbTick = F[i].Tick; fbBlob = broke[0].Id; }
+            if (flTick is null) foreach (var b in broke) if (GroupDown(F[i], b.Side, b.Slot)) { flTick = F[i].Tick; flSide = b.Side; flSlot = b.Slot; break; }
+        }
+        if (sumYou != r.Result.AttackerLosses.Sum(x => x.Lost) || sumEn != r.Result.DefenderLosses.Sum(x => x.Lost)) bad.Add("the frames' losses are not the record's losses");
+        if ((tTick < 0 ? (int?)null : tTick) != y.TurnTick || (tTick >= 0 && (y.TurnYouLost != tYou || y.TurnEnemyLost != tEn))) bad.Add($"turning point is {y.TurnTick} ({y.TurnYouLost}/{y.TurnEnemyLost}), the frames say {tTick} ({tYou}/{tEn})");
+        if (y.FirstBreakTick != fbTick || y.FirstBreakBlob != fbBlob) bad.Add("first break differs from the frames");
+        if (y.FirstLineTick != flTick || y.FirstLineSide != flSide || y.FirstLineSlot != flSlot) bad.Add("first line gone differs from the frames");
+        string l0 = tTick < 0 ? "No soldier fell on either side."
+            : tSwing > 0 ? $"Turning point: tick {tTick}, when the enemy lost {tEn} {(tEn == 1 ? "soldier" : "soldiers")} and you lost {tYou}."
+            : tSwing < 0 ? $"Turning point: tick {tTick}, when you lost {tYou} {(tYou == 1 ? "soldier" : "soldiers")} and the enemy lost {tEn}."
+            : $"Turning point: tick {tTick}, when each side lost {tYou} {(tYou == 1 ? "soldier" : "soldiers")}.";
+        string l1 = flTick is not null ? $"The first line to fall: {(flSide == Side.Player ? "your" : "the enemy")} {SlotNames[flSlot!.Value]} line, at tick {flTick}."
+            : fbTick is not null ? $"No line fell whole. The first cohort to break was {Nm(kn, B(F.First(x => x.Tick == fbTick), fbBlob!.Value)!.Value)} ({SlotNames[B(F.First(x => x.Tick == fbTick), fbBlob.Value)!.Value.Slot]} line) at tick {fbTick}."
+            : "No cohort broke.";
+        if (y.Lines.Count < 2 || y.Lines[0] != l0 || y.Lines[1] != l1) bad.Add($"the Why lines are not the record's: '{(y.Lines.Count > 0 ? y.Lines[0] : "")}' / '{(y.Lines.Count > 1 ? y.Lines[1] : "")}'");
+        if (y.Lines.Count != 2 + (y.Hint is null ? 0 : 1) || (y.Hint is not null && y.Lines[^1] != y.Hint)) bad.Add("the Why holds more than two lines and one hint");
+        if (y.Hint is not null)
+        {
+            var orders = new List<(int Group, FieldOrderKind Kind)>();
+            for (int s = 0; s < 4; s++) if (DoctrineVocabulary.Decode(doctrine[s]) is { Family: OrderFamily.Field } o) orders.Add((o.A, (FieldOrderKind)o.Kind));
+            bool ok = false;
+            if (y.Hint.Contains("broke first while ordered to"))
+            {
+                var fb = fbTick is null ? null : B(F.First(x => x.Tick == fbTick), fbBlob!.Value);
+                ok = fb is { Side: Side.Player } && r.Result.Outcome != BattleStatus.AttackerWon && orders.Any(o => o.Group == fb.Value.Slot)
+                    && y.Hint == $"Your {SlotNames[fb.Value.Slot]} line broke first while ordered to {DoctrineWords.FieldOrders[(int)orders.Last(o => o.Group == fb.Value.Slot).Kind]}. Try another order for it.";
+            }
+            else if (y.Hint.StartsWith("Your Flank order on the "))
+            {
+                foreach (var o in orders.Where(o => o.Kind == FieldOrderKind.Flank))
+                    foreach (var l in c.Lines.Where(l => l.Kind == ChronicleKind.Flank && B(F[idxOf(F, l.Tick)], l.Cite.A) is { Side: Side.Player } sb && sb.Slot == o.Group))
+                        if (y.Hint.Contains($"on the {SlotNames[o.Group]} line") && y.Hint.EndsWith($"struck from the side at tick {l.Tick}.")) ok = true;
+            }
+            if (!ok) bad.Add("the hint is not backed by the doctrine and the record: " + y.Hint);
+        }
+        return bad;
+    }
+
+    static int idxOf(IReadOnlyList<ReplayFrame> F, int tick) { for (int i = 0; i < F.Count; i++) if (F[i].Tick == tick) return i; return 0; }
+}
 
 /// <summary>A general for the per-slot match record: it asks the real general, then (so a suggestion exists on the very first round) makes up one
 /// from the first legal orders if the real one has none, and attaches the given per-slot reading (or none). Used only to drive the page's display.</summary>

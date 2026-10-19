@@ -64,7 +64,17 @@ $mutants = @(
     @{ Id = 'M23'; Name = 'the sheet handle no longer takes a drag'; File = 'Pages\DoctrinePage.razor.css';
        Old = 'background: none; border: 0; color: var(--ink-soft); padding: 0; touch-action: none; }'; New = 'background: none; border: 0; color: var(--ink-soft); padding: 0; }'; Append = ''; Expect = 'the handles take a drag' },
     @{ Id = 'M24'; Name = 'the field becomes a tab'; File = 'Pages\DoctrinePage.razor';
-       Old = '<section class="dc-field" aria-label="The field">'; New = '<section class="dc-field dc-tab" aria-label="The field">'; Append = ''; Expect = 'no tabs, no tab roles' }
+       Old = '<section class="dc-field" aria-label="The field">'; New = '<section class="dc-field dc-tab" aria-label="The field">'; Append = ''; Expect = 'no tabs, no tab roles' },
+    @{ Id = 'M25'; Name = 'the chronicle writes a break for a cohort that still stands (strength 1)'; File = 'Services\Doctrine\BattleChronicle.cs';
+       Old = 'if (Find(prev, b.Id) is not { } p || p.Strength <= 0 || b.Strength > 0) continue;'; New = 'if (Find(prev, b.Id) is not { } p || p.Strength <= 0 || b.Strength > 1) continue;'; Append = ''; Expect = 'chronicle (recorded battles): every line' },
+    @{ Id = 'M26'; Name = 'the chronicle says your where it means the enemy (sides swapped)'; File = 'Services\Doctrine\BattleChronicle.cs';
+       Old = 'string Lab(ReplayBlob b) => (b.Side == Side.Player ? "your " : "the enemy ") + kindName(b.Key);'; New = 'string Lab(ReplayBlob b) => (b.Side == Side.Player ? "the enemy " : "your ") + kindName(b.Key);'; Append = ''; Expect = 'chronicle (synthetic frames): the log is exactly' },
+    @{ Id = 'M27'; Name = 'the chronicle puts the gate line one tick early'; File = 'Services\Doctrine\BattleChronicle.cs';
+       Old = 'Add(cur.Tick, ChronicleKind.Gate, "The gate has fallen.", new ChronicleCite(CiteKind.Gate, cur.Tick));'; New = 'Add(prev.Tick, ChronicleKind.Gate, "The gate has fallen.", new ChronicleCite(CiteKind.Gate, prev.Tick));'; Append = ''; Expect = 'chronicle (synthetic frames): the log is exactly' },
+    @{ Id = 'M28'; Name = 'the Why turns the swing the wrong way (who gained the turning point)'; File = 'Services\Doctrine\BattleChronicle.cs';
+       Old = 'int swing = enemyLost - youLost;'; New = 'int swing = youLost - enemyLost;'; Append = ''; Expect = 'chronicle (synthetic frames): the Why is hand-written too' },
+    @{ Id = 'M29'; Name = 'first contact names the wrong side as not having struck'; File = 'Services\Doctrine\BattleChronicle.cs';
+       Old = '{(youStruck ? "the enemy has" : "you have")} not struck yet'; New = '{(youStruck ? "you have" : "the enemy has")} not struck yet'; Append = ''; Expect = 'chronicle (synthetic frames): the log is exactly' }
 )
 
 $log = Join-Path $PSScriptRoot 'mutants.log'

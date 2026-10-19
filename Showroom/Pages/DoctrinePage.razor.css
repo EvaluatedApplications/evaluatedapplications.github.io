@@ -61,12 +61,19 @@ code { font-family: var(--mono); font-size: 0.82rem; overflow-wrap: anywhere; }
 /* the stage holds the field and everything that rises over it */
 .dc-stage { position: relative; flex: 1 1 auto; min-height: 0; display: block; }
 .dc-field { height: 100%; min-height: 0; box-sizing: border-box; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 0.5rem; overflow: auto; overscroll-behavior: contain; }
-.dc-fieldin { height: 100%; min-height: 0; display: flex; flex-direction: column; justify-content: center; }
-.dc-working { text-align: center; }
+.dc-fieldin { height: 100%; min-height: 0; display: flex; flex-direction: column; }
+.dc-working { text-align: center; margin: auto 0; }
 .dc-progress { display: block; width: 100%; height: 12px; margin: 0.5rem 0; accent-color: var(--accent); }
 .dc-line .hint { margin-top: 0; }
-.dc-formation { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.4rem; }
-.dc-lane { display: flex; flex-direction: column; gap: 0.15rem; border: 1px solid var(--border-2); border-radius: 8px; padding: 0.4rem 0.5rem; background: var(--bg-2); font-size: 0.85rem; overflow-wrap: anywhere; }
+/* your three lines, drawn back to front from the left; the enemy waits on the right (a row of its own on a phone) */
+.dc-lines { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.4rem; }
+.dc-line { margin: auto 0; }
+.dc-lane { display: flex; flex-wrap: wrap; align-content: center; align-items: center; justify-content: center; gap: 0.3rem; min-height: 6rem; border: 1px solid var(--border-2); border-radius: 8px; padding: 0.4rem; background: var(--bg-2); font-size: 0.85rem; overflow-wrap: anywhere; text-align: center; }
+.dc-lane > b { flex: 0 0 100%; color: var(--ink-soft); font-size: 0.8rem; font-weight: 650; }
+.dc-disc { display: inline-flex; flex-direction: column; align-items: center; justify-content: center; box-sizing: border-box; width: calc(2.9rem + var(--w) * 0.02rem); aspect-ratio: 1; padding: 0.15rem; border-radius: 50%; background: color-mix(in srgb, var(--accent) 80%, transparent); border: 2px solid #fff; color: #fff; line-height: 1.1; overflow: hidden; }
+.dc-disc i { font-style: normal; font-size: 0.68rem; max-width: 100%; overflow-wrap: anywhere; }
+.dc-disc b { font-family: var(--mono); font-size: 0.95rem; }
+.dc-foe { grid-column: 1 / -1; display: flex; align-items: center; justify-content: center; min-height: 3rem; border: 2px dashed color-mix(in srgb, var(--bad) 70%, transparent); border-radius: 8px; color: var(--bad); font-size: 0.85rem; text-align: center; padding: 0.4rem; }
 
 /* sheets: the army and general panels, the draft drawer. Phone: pulled up from the bottom edge of the stage. */
 .dc-sheet, .dc-tray { position: absolute; left: 0; right: 0; bottom: 0; z-index: 5; box-sizing: border-box; max-height: 85%; overflow: auto; overscroll-behavior: contain; background: var(--surface); border: 1px solid var(--border-2); border-radius: 14px 14px 0 0; padding: 0 1rem 0.8rem; box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.45); }
@@ -81,7 +88,11 @@ code { font-family: var(--mono); font-size: 0.82rem; overflow-wrap: anywhere; }
 .dc-cohortlist li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0.1rem 0.6rem; padding: 0.4rem 0; border-bottom: 1px solid var(--border); }
 .dc-cohortlist .nm, .dc-kind .nm { font-weight: 700; }
 .dc-cohortlist .ct { font-family: var(--mono); color: var(--accent-ink); }
+.dc-cohortlist .plain { grid-column: 1 / -1; line-height: 1.4; }
 .dc-cohortlist .meta, .dc-kind .meta { grid-column: 1 / -1; font-size: 0.85rem; color: var(--ink-faint); line-height: 1.35; }
+.dc-det, .dc-other { grid-column: 1 / -1; }
+.dc-det summary, .dc-other summary { display: flex; align-items: center; color: var(--ink-soft); font-size: 0.85rem; }
+.dc-other summary { font-weight: 650; font-size: 0.9rem; }
 .dc-leave { width: 100%; margin-top: 0.8rem; }
 .dc-spoils .dc-list { margin: 0.3rem 0; padding-left: 1.1rem; line-height: 1.5; font-size: 0.9rem; }
 
@@ -119,6 +130,11 @@ code { font-family: var(--mono); font-size: 0.82rem; overflow-wrap: anywhere; }
 .dc-chipgrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.4rem; }
 .dc-chip { background: var(--bg-2); color: var(--ink); border: 1px solid var(--border-2); border-radius: 10px; padding: 0.4rem 0.6rem; text-align: left; font-size: 0.9rem; line-height: 1.25; overflow-wrap: anywhere; }
 .dc-chip.off { color: var(--ink-faint); border-style: dashed; }
+.dc-chip .lb { display: block; font-weight: 650; }
+.dc-chip .fx { display: block; margin-top: 0.15rem; font-size: 0.78rem; color: var(--ink-faint); line-height: 1.3; }
+.dc-palhint { margin: 0 0 0.3rem; }
+.dc-chroniclepanel { display: flex; flex-direction: column; }
+.dc-chroniclepanel h2 { margin-top: 0.4rem; }
 
 /* the unlock announcement */
 .dc-unlock { position: absolute; left: 0.5rem; right: 0.5rem; top: 0.5rem; z-index: 6; box-sizing: border-box; max-height: 70%; overflow: auto; background: var(--surface-2, var(--surface)); border: 1px solid var(--accent); border-radius: 12px; padding: 0.7rem 1rem; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5); }
@@ -170,19 +186,25 @@ code { font-family: var(--mono); font-size: 0.82rem; overflow-wrap: anywhere; }
     .dc-sheetbtns { display: none; }
     .dc-goal { align-self: end; }
     .dc-todo { align-self: start; font-size: 1.05rem; }
-    .dc-stage { display: grid; grid-template-columns: minmax(220px, 280px) minmax(0, 1fr) minmax(220px, 300px); grid-template-rows: minmax(0, 1fr); gap: 0.6rem; }
+    /* two rows: the field on top and, when the order tray is open, the tray under it (the tray is a drawer that shares the column, so it never hides the lines) */
+    .dc-stage { display: grid; grid-template-columns: minmax(220px, 280px) minmax(0, 1fr) minmax(220px, 300px); grid-template-rows: minmax(0, 1fr) auto; column-gap: 0.6rem; row-gap: 0; }
     .dc-sheet, .dc-tray, .dc-unlock { position: static; transform: none; max-height: none; box-shadow: none; border-radius: 12px; z-index: auto; }
     .dc-sheet { visibility: visible; transition: none; padding: 0.4rem 1rem 0.8rem; overflow: auto; min-height: 0; }
-    .dc-armypanel { grid-column: 1; grid-row: 1; }
+    .dc-armypanel { grid-column: 1; grid-row: 1 / -1; }
     .dc-field { grid-column: 2; grid-row: 1; }
-    .dc-generalpanel { grid-column: 3; grid-row: 1; }
+    .dc-generalpanel, .dc-chroniclepanel { grid-column: 3; grid-row: 1 / -1; }
+    /* on the watch screen the chronicle takes the general's column (the general has nothing to say until the next doctrine) */
+    .dc-hud[data-stage=watch] .dc-generalpanel { display: none; }
     .dc-grip { display: none; }
     /* the draft drawer opens over the army panel */
-    .dc-draft { grid-column: 1; grid-row: 1; z-index: 4; visibility: hidden; border-color: var(--accent); }
+    .dc-draft { grid-column: 1; grid-row: 1 / -1; z-index: 4; visibility: hidden; border-color: var(--accent); }
     .dc-draft.open { visibility: visible; }
-    /* the tray and the announcement rise over the foot and the head of the field */
-    .dc-tray { grid-column: 2; grid-row: 1; align-self: end; z-index: 4; max-height: 75%; box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.45); padding: 0.5rem 1rem 0.8rem; }
+    /* the tray sits under the field; the announcement rises over the head of the field */
+    .dc-tray { grid-column: 2; grid-row: 2; margin-top: 0.6rem; max-height: min(36dvh, 22rem); padding: 0.5rem 1rem 0.8rem; }
     .dc-unlock { grid-column: 2; grid-row: 1; align-self: start; justify-self: center; z-index: 6; margin-top: 0.5rem; width: auto; max-width: 32rem; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5); }
+    .dc-lines { grid-template-columns: repeat(3, minmax(0, 1fr)) minmax(4.5rem, 0.6fr); }
+    .dc-foe { grid-column: auto; }
+    .dc-lane { min-height: 7rem; }
     .dc-trayhead .dc-sub { display: inline; }
     .dc-trayhead h2 { display: block; }
     .dc-trayhead .dc-advicebtn { flex: 0 0 auto; }
@@ -201,7 +223,7 @@ code { font-family: var(--mono); font-size: 0.82rem; overflow-wrap: anywhere; }
 @media (max-width: 359px) {
     .dc-chipgrid { grid-template-columns: minmax(0, 1fr); }
     .dc-ghostbtns { grid-template-columns: minmax(0, 1fr); }
-    .dc-formation { grid-template-columns: minmax(0, 1fr); }
+    .dc-lines { grid-template-columns: minmax(0, 1fr); }
 }
 /* a short wide screen (a phone on its side): the dock and the top bar share a column beside the field */
 @media (orientation: landscape) and (max-height: 500px) and (max-width: 899px) {

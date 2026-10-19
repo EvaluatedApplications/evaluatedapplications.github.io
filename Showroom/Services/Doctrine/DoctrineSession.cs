@@ -22,7 +22,20 @@ public sealed record DraftView(ArmyReadModel Army, int Round);
 public sealed record DraftPreview(DraftReport Report, ArmyReadModel After);
 
 /// <summary>What a finished round leaves for the watch screen.</summary>
-public sealed record RoundView(RoundRecord Record, ArmyReadModel ArmyAfter, global::Doctrine.Battle.ArenaLayout? Layout, int YourSoldiers, int EnemySoldiers, bool Last);
+public sealed record RoundView(RoundRecord Record, ArmyReadModel ArmyAfter, global::Doctrine.Battle.ArenaLayout? Layout, int YourSoldiers, int EnemySoldiers, bool Last)
+{
+    /// <summary>The battle's own set-up as the pipeline handed it to the battle (both sides' cohorts with the traits they fought with), or null when none was seen.</summary>
+    public BattleSetup? Setup { get; init; }
+
+    /// <summary>The traits the cohort of this side and kind fought with, from the set-up; null when the set-up is not known.</summary>
+    public Trait? TraitsOf(Side side, int key)
+    {
+        if (Setup is null) return null;
+        foreach (var bs in new[] { Setup.Attacker, Setup.Defender })
+            if (bs.Side == side) foreach (var c in bs.Cohorts) if (c.Key == key) return c.Traits;
+        return null;
+    }
+}
 
 public sealed class DoctrineSession : IDisposable
 {
@@ -40,6 +53,7 @@ public sealed class DoctrineSession : IDisposable
     string _roundCode = "";          // the army as the current round began
     string _closedCode = "";         // the army as the closed round left it (valid while parked on the Watch screen)
     bool _parked;                    // the hands are waiting on the Watch screen
+    BattleSetup? _setup;             // the set-up of the battle most recently started (the chronicle reads the traits the cohorts fought with)
     long _lastNotify;
     readonly Watcher _watcher;
 
@@ -246,7 +260,7 @@ public sealed class DoctrineSession : IDisposable
             if (stage == Stages.GeneralImitate) { s.Status = "Your general is learning from this doctrine"; s.Notify(); }
             else if (stage == Stages.GeneralOutcome) { s.Status = "Your general is learning from the result"; s.Notify(); }
         }
-        public void BattleStarted(BattleSetup setup) { s.BattleTick = 0; s.BattleTickLimit = setup.TickLimit; s.Status = "Simulating the battle on this device"; s.Notify(); }
+        public void BattleStarted(BattleSetup setup) { s._setup = setup; s.BattleTick = 0; s.BattleTickLimit = setup.TickLimit; s.Status = "Simulating the battle on this device"; s.Notify(); }
         public void BattleTick(int tick, int tickLimit)
         {
             s.BattleTick = tick; s.BattleTickLimit = tickLimit;
@@ -301,6 +315,7 @@ public sealed class DoctrineSession : IDisposable
             int mine = first?.Blobs.Where(b => b.Side == Side.Player).Sum(b => b.Strength) ?? 0;
             int theirs = first?.Blobs.Where(b => b.Side == Side.Enemy).Sum(b => b.Strength) ?? 0;
             s.Last = new RoundView(rec, after, s._game!.Context.LayoutOf(rec.ArenaId), mine, theirs, rec.Final);
+            s.Last = s.Last with { Setup = s._setup };
             s.Army = after;
             s.Stage = DoctrineStage.Watch; s.Status = ""; s._parked = true;
             var tcs = s._next = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
