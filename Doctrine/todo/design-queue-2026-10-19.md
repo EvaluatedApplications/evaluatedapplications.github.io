@@ -52,6 +52,15 @@ Showroom\todo\doctrine-story-from-mechanics.md). Decisions below are made; each 
    hold, briefing per front, standards, no splitting the army across fronts (fighting two fronts at once is a later stage).
    Combat for fronts nobody fights is NOT simulated: the conceded front just falls; no host-side arithmetic.
 
+10b. **REVISION (user: keep it restrained so multiplayer is still possible).** The map is deliberately small and SYMMETRIC so
+   the same rules serve solo and PvP: two capitals and three lanes of three provinces each (the same graph for both sides, seeded
+   terrain and features mirrored). Each epoch both sides pick a LANE to push (sealed, revealed together). Same lane: a battle
+   there, the winner takes the next province in the lane. Different lanes: both advance unopposed (a race). A held province yields
+   its gold and unlocks its feature (Barracks, Stables, Shrine) while held; a capital taken ends the war. Solo = the enemy picks
+   its lane by a scripted rule (seeded); endless solo = lanes refill as the enemy advances, with standards as the loss rule.
+   PvP = the other seat chooses; the armies are built to the same gold budget; offers come from the shared seed. Nothing in the
+   map needs per-player randomness or hidden state beyond the sealed pick. Splitting the army across lanes stays out of scope.
+
 ## Queued (designed, not dispatched)
 
 - **Campaign layer.** Seeded map of provinces (a Pleroma store), player-chosen number of epochs, win the war not the battle
