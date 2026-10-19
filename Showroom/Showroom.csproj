@@ -108,30 +108,30 @@
          running). Real, measured tradeoff: dotnet.native.wasm grows about 24.8 MB to about 27.0 MB raw,
          roughly 9% bigger, worth it to never need to interrupt live training for a site rebuild again. -->
     <EmccLinkOptimizationFlag>-O1</EmccLinkOptimizationFlag>
-    <!-- REAL WASM MULTITHREADING — REVERTED 2026-08-28 (same day it landed), real device regression.
+    <!-- REAL WASM MULTITHREADING â€” REVERTED 2026-08-28 (same day it landed), real device regression.
          Was <WasmEnableThreads>true</WasmEnableThreads> (pthreads over SharedArrayBuffer, gated behind
          window.crossOriginIsolated via wwwroot/coi-serviceworker.js + the index.html boot-gate script).
-         First real device report: Continue button on /tools/prism stuck permanently disabled — but
+         First real device report: Continue button on /tools/prism stuck permanently disabled â€” but
          ONLY on a laptop; a phone loaded the exact same deploy fine. That platform split is the tell:
          the .NET WASM threaded runtime sizes/spins up its pthread worker pool from
          navigator.hardwareConcurrency at boot, and a laptop routinely reports far more logical cores
-         than a phone — more workers means more redundant WASM-module fetch/compile/instantiate cycles
+         than a phone â€” more workers means more redundant WASM-module fetch/compile/instantiate cycles
          racing in the background right after Blazor.start() resolves and the page paints (this repo's
          own AlgFormer/HoloDb "the fan-out is width-1 at our shapes" finding, ParallelMapping.cs, already
-         proved NOTHING in this app's own code dispatches work across threads — the risk was 100% the
+         proved NOTHING in this app's own code dispatches work across threads â€” the risk was 100% the
          runtime's own boot-time thread-pool machinery, zero app benefit). Emscripten-based multithreaded
-         WASM runtimes have a documented deadlock class here too: worker→main-thread calls proxy through
+         WASM runtimes have a documented deadlock class here too: workerâ†’main-thread calls proxy through
          a synchronous Atomics.wait, which can stall if the main thread's event loop is itself busy
-         servicing the worker-spawn/compile queue at that exact moment — a race whose odds scale with
+         servicing the worker-spawn/compile queue at that exact moment â€” a race whose odds scale with
          worker count, i.e. with core count, i.e. exactly a laptop-not-phone split. Genuinely could not
-         verify the deadlock live (no browser here, per this repo's own boundary) — but with ZERO current
+         verify the deadlock live (no browser here, per this repo's own boundary) â€” but with ZERO current
          consumers of real threading in this app (verified, see HoloKernel/ParallelMapping.cs) this was
          already flagged in Showroom/CLAUDE.md as "the cheapest option of all... pure downside for zero
          benefit right now" BEFORE this incident; the incident is exactly the trigger that was flagged as
          missing. Reverting removes the entire failure class at zero feature cost, and as a side effect
          also removes the ORIGINAL reason the crossOriginIsolated boot-gate/coi-serviceworker existed at
          all (a non-threaded module has no SharedArrayBuffer requirement, so it boots in any browser,
-         including the LinkedIn in-app WebView that motivated the gate in the first place) — see
+         including the LinkedIn in-app WebView that motivated the gate in the first place) â€” see
          index.html for the matching simplification. Re-enable only once a real training loop actually
          dispatches across threads (today: none do) AND this exact regression has been reproduced/fixed
          live on a real high-core-count laptop, not just re-flagged as a hunch. -->
@@ -144,7 +144,7 @@
     <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly.DevServer" Version="10.0.11" PrivateAssets="all" />
   </ItemGroup>
 
-  <!-- HoloKernel: a sibling project IN THIS SAME REPO (AboutUs\HoloKernel), not MonoRepo — a ProjectReference
+  <!-- HoloKernel: a sibling project IN THIS SAME REPO (AboutUs\HoloKernel), not MonoRepo â€” a ProjectReference
        here is the designed consumption path, not a boundary break. It is itself NuGet-only against AlgFormer
        (see its own csproj), so this repo's "never a MonoRepo ProjectReference" rule is unaffected. -->
   <ItemGroup>
@@ -156,7 +156,7 @@
   </ItemGroup>
 
   <!-- The showroom runs our real published libraries client-side (browser-wasm): HoloDb (in-memory SQL),
-       AlgFormer (tiny learning model), Tracer (navigation) — straight from NuGet, exactly what a user gets.
+       AlgFormer (tiny learning model), Tracer (navigation) â€” straight from NuGet, exactly what a user gets.
        EvalApp comes transitively. Versions are set by `dotnet add package` (latest published). -->
   <ItemGroup>
     <PackageReference Include="EvaluatedApplications.HoloDb">
@@ -166,7 +166,7 @@
       <Version>3.3.0</Version>
     </PackageReference>
     <PackageReference Include="EvaluatedApplications.Tracer">
-      <Version>2.0.3</Version>
+      <Version>2.0.4</Version>
     </PackageReference>
     <PackageReference Include="EvaluatedApplications.Prose">
       <Version>1.3.2</Version>
