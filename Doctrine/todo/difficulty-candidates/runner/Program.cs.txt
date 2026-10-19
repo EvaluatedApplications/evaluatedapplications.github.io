@@ -1,0 +1,189 @@
+using System.Diagnostics;
+using System.Globalization;
+using System.Text;
+using Doctrine;
+using Autopilot;
+
+static class P
+{
+    static string Out = "";
+    static readonly StringBuilder Report = new();
+    static readonly Stopwatch Clock = Stopwatch.StartNew();
+
+    static void Say(string s) { Console.WriteLine(s); Report.AppendLine(s); File.WriteAllText(Path.Combine(Out, "report.txt"), Report.ToString()); }
+
+    const int Eval = 120;
+    static int[] EvalSeeds => Enumerable.Range(0, Eval).Select(i => 7_000_000 + i).ToArray();
+    static readonly int[] Flip6 = [DoctrineVocabulary.Army(ArmyOrderKind.Flip, 6)];
+    static readonly int[] FlipSet = new[] { 3, 6, 5, 7 }.Select(b => DoctrineVocabulary.Army(ArmyOrderKind.Flip, b)).ToArray();
+    static readonly HashSet<int> FlipTokens = Enumerable.Range(0, 8).Select(b => DoctrineVocabulary.Army(ArmyOrderKind.Flip, b)).ToHashSet();
+
+    static double[] Cell(string label, Func<double[]> run)
+    {
+        var f = Path.Combine(Out, "cells", label + ".txt");
+        if (File.Exists(f)) return File.ReadAllLines(f).Select(l => double.Parse(l, CultureInfo.InvariantCulture)).ToArray();
+        var sw = Stopwatch.StartNew();
+        var v = run();
+        File.WriteAllLines(f, v.Select(x => x.ToString("R", CultureInfo.InvariantCulture)));
+        Console.WriteLine($"  [{Clock.Elapsed.TotalMinutes:F1} min] cell {label} = {v.Average():F3} ({sw.Elapsed.TotalSeconds:F0} s)");
+        return v;
+    }
+
+    static double[] Score(GameLog[] logs) => logs.Select(g => g.Mean).ToArray();
+
+    static void SaveBandit(BanditPolicy b, string f)
+    {
+        var sb = new StringBuilder();
+        foreach (var (id, row) in b.Table) for (int t = 0; t < DoctrineVocabulary.Size; t++)
+            if (row.N[t] > 0) sb.AppendLine(string.Join(",", id, t, row.Sum[t].ToString("R", CultureInfo.InvariantCulture), row.N[t]));
+        File.WriteAllText(f, sb.ToString());
+    }
+    static BanditPolicy LoadBandit(string f)
+    {
+        var b = new BanditPolicy(0);
+        foreach (var l in File.ReadAllLines(f))
+        {
+            var p = l.Split(',');
+            long id = long.Parse(p[0]); int t = int.Parse(p[1]);
+            if (!b.Table.TryGetValue(id, out var r)) b.Table[id] = r = (new double[DoctrineVocabulary.Size], new int[DoctrineVocabulary.Size]);
+            r.Sum[t] = double.Parse(p[2], CultureInfo.InvariantCulture); r.N[t] = int.Parse(p[3]);
+        }
+        return b;
+    }
+
+    /// <summary>4 iterations x 100 games; iteration 0 is uniform random, later ones epsilon-greedy on the table so far. Deterministic.</summary>
+    static BanditPolicy Train(string label, int draft, int mixSeed, bool shuffle, HashSet<int>? blocked)
+    {
+        var f = Path.Combine(Out, "bandits", label + ".csv");
+        if (File.Exists(f)) return LoadBandit(f);
+        var b = new BanditPolicy(0.3);
+        var shuf = new Random(1234 + mixSeed);
+        for (int it = 0; it < 4; it++)
+        {
+            var seeds = Enumerable.Range(0, 100).Select(i => 8_000_000 + mixSeed * 10_000 + it * 100 + i).ToArray();
+            IPolicy pol = it == 0 ? new RandomPolicy() : b;
+            if (blocked is not null) pol = new MaskPolicy(pol, blocked, false);
+            var logs = Pool.Games(seeds, () => pol, draft, (ulong)(900 + it));
+            var rounds = logs.SelectMany(g => g.Rounds).ToList();
+            var scores = rounds.Select(r => r.Score).ToList();
+            if (shuffle) scores = scores.OrderBy(_ => shuf.Next()).ToList();
+            for (int i = 0; i < rounds.Count; i++) b.Update(rounds[i], scores[i]);
+        }
+        b.Eps = 0;
+        SaveBandit(b, f);
+        return b;
+    }
+
+    static (double lo, double hi) BootDiff(double[] a, double[] b)
+    {
+        var d = a.Zip(b, (x, y) => x - y).ToArray();
+        return Stat.Boot(d);
+    }
+
+    static void Main(string[] args)
+    {
+        Out = args[1]; string label = args.Length > 2 ? args[2] : "run";
+        Directory.CreateDirectory(Path.Combine(Out, "cells")); Directory.CreateDirectory(Path.Combine(Out, "bandits"));
+        try { var p = Process.GetCurrentProcess(); p.PriorityClass = ProcessPriorityClass.BelowNormal; p.ProcessorAffinity = (IntPtr)0x3F00; } catch { }
+        Pool.Workers = 6;
+        Say($"== {label}  {DateTime.Now:s}");
+        var seeds = EvalSeeds;
+
+        if (args[0] == "smoke")
+        {
+            var sw = Stopwatch.StartNew();
+            var l = Pool.Games(seeds.Take(12).ToArray(), () => new RandomPolicy(), 0, 777);
+            Say($"smoke 12 games {sw.Elapsed.TotalSeconds:F1} s, mean {l.Average(g => g.Mean):F3}, short games {WorkerGame.ShortGames}, retries {WorkerGame.Retries}");
+            return;
+        }
+
+        if (args[0] == "styles") { Say(Styles.Run(label, true)); return; }
+        if (args[0] == "matches") { Say(Matches.Run(label)); return; }
+        if (args[0] == "n3")
+        {
+            // instrument calibration: how much does the REAL bandit (draft 0) move between training runs? 6 runs of 400 games, scored on the same 120 games
+            var runs = new List<double>();
+            for (int r = 0; r < 6; r++) { var bs = Train($"N3-{r}", 0, 300 + r, false, null); runs.Add(Cell($"N3-{r}", () => Score(Pool.Games(seeds, () => bs, 0, 4242))).Average()); }
+            var rnd = Cell("R-0", () => Score(Pool.Games(seeds, () => new RandomPolicy(), 0, 777))).Average();
+            double mean = runs.Average(), sd = Math.Sqrt(runs.Sum(x => (x - mean) * (x - mean)) / (runs.Count - 1));
+            Say($"N3 real bandit, draft 0, 6 training runs: {string.Join(" ", runs.Select(x => x.ToString("F3")))}; mean {mean:F3}, sd {sd:F3}, min {runs.Min():F3}, max {runs.Max():F3}; random d0 {rnd:F3}");
+            return;
+        }
+        // ---- S1: random-legal under each draft rule
+        var R = new double[Drafts.Count][];
+        for (int d = 0; d < Drafts.Count; d++) R[d] = Cell($"R-{d}", () => Score(Pool.Games(seeds, () => new RandomPolicy(), d, 777)));
+        // ---- S2: bandit per draft rule
+        var B = new double[Drafts.Count][];
+        BanditPolicy? b0 = null;
+        for (int d = 0; d < Drafts.Count; d++)
+        {
+            var bd = Train($"B-{d}", d, d, false, null); if (d == 0) b0 = bd;
+            B[d] = Cell($"B-{d}", () => Score(Pool.Games(seeds, () => bd, d, 4242)));
+        }
+        // ---- S3: fixed list search under draft 0
+        double[] F;
+        {
+            var f = Path.Combine(Out, "fixed.txt");
+            int[] best;
+            if (File.Exists(f)) best = File.ReadAllText(f).Split(',').Select(int.Parse).ToArray();
+            else
+            {
+                var all = new List<int[]>();
+                for (int a = 0; a < 7; a++) for (int b = 0; b < 7; b++) for (int c = 0; c < 7; c++) all.Add([a, b, c]);
+                var rng = new Random(11);
+                var cands = all.OrderBy(_ => rng.Next()).Take(120).ToList();
+                int[] ToTokens(int[] t) { var l = new List<int>(); for (int g = 0; g < 3; g++) if (t[g] > 0) l.Add(DoctrineVocabulary.Field((FieldOrderKind)(t[g] - 1), g)); return l.ToArray(); }
+                var s1 = Enumerable.Range(0, 15).Select(i => 9_000_000 + i).ToArray();
+                var m1 = new double[cands.Count];
+                for (int i = 0; i < cands.Count; i++) { var tk = ToTokens(cands[i]); m1[i] = Pool.Games(s1, () => new FixedPolicy(tk), 0, 5).Average(g => g.Mean); }
+                var top = Enumerable.Range(0, cands.Count).OrderByDescending(i => m1[i]).Take(5).ToArray();
+                var s2 = Enumerable.Range(0, 80).Select(i => 9_100_000 + i).ToArray();
+                var m2 = top.Select(i => { var tk = ToTokens(cands[i]); return Pool.Games(s2, () => new FixedPolicy(tk), 0, 5).Average(g => g.Mean); }).ToArray();
+                int w = top[Array.IndexOf(m2, m2.Max())];
+                best = ToTokens(cands[w]);
+                File.WriteAllText(f, string.Join(",", best));
+                Say($"fixed search: stage1 best {m1.Max():F3} grand mean {m1.Average():F3}; stage2 best {m2.Max():F3}; winner {string.Join(" ", best.Select(DoctrineVocabulary.Name))}");
+            }
+            F = Cell("F", () => Score(Pool.Games(seeds, () => new FixedPolicy(best), 0, 5)));
+            Say("fixed list: " + string.Join(" ", best.Select(DoctrineVocabulary.Name)));
+        }
+        // ---- N1: shuffled-outcome bandit (2 runs), draft 0
+        var N1 = new double[6][];
+        for (int r = 0; r < 6; r++) { var bs = Train($"N1-{r}", 0, 100 + r, true, null); N1[r] = Cell($"N1-{r}", () => Score(Pool.Games(seeds, () => bs, 0, 4242))); }
+        // ---- Flip tests (draft 0)
+        var nf = Train("NF", 0, 200, false, FlipTokens);
+        var NF = Cell("NF", () => Score(Pool.Games(seeds, () => new MaskPolicy(nf, FlipTokens, false), 0, 4242)));
+        var B0same = Train("B-0", 0, 0, false, null);
+        var STRIP = Cell("STRIP", () => Score(Pool.Games(seeds, () => new MaskPolicy(B0same, FlipTokens, true), 0, 4242)));
+        var FL6 = Cell("FLIP6", () => Score(Pool.Games(seeds, () => new FixedPolicy(Flip6), 0, 5)));
+        var FLS = Cell("FLIPSET", () => Score(Pool.Games(seeds, () => new FixedPolicy(FlipSet), 0, 5)));
+        var NONE = Cell("NONE", () => Score(Pool.Games(seeds, () => new FixedPolicy([]), 0, 5)));
+        // ---- N2a replay (20 games, random + bandit)
+        {
+            var s20 = seeds.Take(20).ToArray();
+            var a = Score(Pool.Games(s20, () => new RandomPolicy(), 0, 777)); var c = Score(Pool.Games(s20, () => B0same, 0, 4242));
+            bool same = a.SequenceEqual(R[0].Take(20)) && c.SequenceEqual(B[0].Take(20));
+            Say($"N2a replay of 20 games (random d0, bandit d0): {(same ? "identical" : "DIFFERENT")}");
+        }
+
+        // ---- report
+        Say($"retries {WorkerGame.Retries}, short games {WorkerGame.ShortGames}, wall {Clock.Elapsed.TotalMinutes:F1} min");
+        Say("draft rule            random   bandit");
+        for (int d = 0; d < Drafts.Count; d++) Say($"{d} {Drafts.Name(d),-14} {R[d].Average(),7:F3} {B[d].Average(),7:F3}");
+        double[] rm = R.Select(x => x.Average()).ToArray(), bm = B.Select(x => x.Average()).ToArray();
+        double Gap(double[] m) { var s = m.OrderByDescending(x => x).ToArray(); return s[0] - s[1]; }
+        int bestDraft = Array.IndexOf(bm, bm.Max());
+        Say($"dominance gap (best - second): random {Gap(rm):F3}, bandit {Gap(bm):F3}; best bandit draft {bestDraft} = {bm.Max():F3}, random there {rm[bestDraft]:F3}, bandit - random there {bm[bestDraft] - rm[bestDraft]:F3}");
+        double n1mean = N1.Average(x => x.Average());
+        Say($"fixed list (draft 0) {F.Average():F3}");
+        Say($"N1 shuffled-outcome bandit runs (draft 0): {string.Join(" ", N1.Select(x => x.Average().ToString("F3")))}; as registered (runs 0-1 each within 0.05 of random d0 {rm[0]:F3}): {(N1.Take(2).All(x => Math.Abs(x.Average() - rm[0]) <= 0.05) ? "OK" : "TRIPPED")}; amended (mean of 6 within 0.05 of random AND real bandit d0 {bm[0]:F3} above the best shuffled run): mean {n1mean:F3} {(Math.Abs(n1mean - rm[0]) <= 0.05 && bm[0] > N1.Max(x => x.Average()) ? "OK" : "TRIPPED")}");
+        var (lo1, hi1) = BootDiff(B[0], NF); var (lo2, hi2) = BootDiff(B[0], STRIP); var (lo3, hi3) = BootDiff(FL6, NONE); var (lo4, hi4) = BootDiff(FLS, NONE);
+        Say($"E1 bandit d0 {bm[0]:F3} vs no-Flip-retrained {NF.Average():F3}: diff {bm[0] - NF.Average():+0.000;-0.000} [{lo1:F3}, {hi1:F3}]");
+        Say($"E2 bandit d0 with Flip tokens deleted {STRIP.Average():F3}: drop {bm[0] - STRIP.Average():+0.000;-0.000} [{lo2:F3}, {hi2:F3}]");
+        Say($"E3 fixed [Flip Machine] {FL6.Average():F3} vs fixed [] {NONE.Average():F3}: diff {FL6.Average() - NONE.Average():+0.000;-0.000} [{lo3:F3}, {hi3:F3}];  fixed [Flip3 6 5 7] {FLS.Average():F3}: diff {FLS.Average() - NONE.Average():+0.000;-0.000} [{lo4:F3}, {hi4:F3}]");
+        bool t1 = bm.Max() <= 0.90 && bm[bestDraft] - rm[bestDraft] >= 0.10;
+        bool t2 = Gap(rm) <= 0.20 && Gap(bm) <= 0.20;
+        bool t3 = new[] { rm[bestDraft], bm[bestDraft], F.Average() }.All(x => x > 0.05 && x < 0.95);
+        Say($"TARGET  T1 {(t1 ? "met" : "FAIL")}  T2 {(t2 ? "met" : "FAIL")}  T3 {(t3 ? "met" : "FAIL")}  =>  {(t1 && t2 && t3 ? "A PASS" : "C PARTIAL / FAIL")}");
+    }
+}

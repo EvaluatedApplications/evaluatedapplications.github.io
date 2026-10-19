@@ -105,6 +105,14 @@ internal sealed class PleromaArmy : IArmy
         return (list, mask, max);
     }
 
+    /// <summary>Gold a Flip of <paramref name="bit"/> costs: the sum over the cohorts of soldiers x <see cref="Roster.RelabelCost"/> (read from the cohorts' live traits).</summary>
+    static long FlipCost(IReadOnlyList<(HologramItem Item, long Count)> items, int bit)
+    {
+        long cost = 0;
+        for (int i = 0; i < items.Count; i++) cost += items[i].Count * Roster.RelabelCost((Trait)(byte)items[i].Item.Flags, bit);
+        return cost;
+    }
+
     int Round() => (int)Math.Clamp(_clock.Total(), 0, int.MaxValue);
     int Gold() => (int)Math.Clamp(_purse.Total(), 0, int.MaxValue);
 
@@ -115,7 +123,9 @@ internal sealed class PleromaArmy : IArmy
         if (!TryCohorts(out var items)) return m;              // unreadable: End only
         if (_army.Total() == 0) return m;                      // no soldiers: nothing to order
         m = m.With(DoctrineVocabulary.Army(ArmyOrderKind.Rotate, 1)).With(DoctrineVocabulary.Army(ArmyOrderKind.Rotate, 2));
-        for (int b = 0; b < DoctrineVocabulary.Traits; b++) m = m.With(DoctrineVocabulary.Army(ArmyOrderKind.Flip, b));
+        long gold = Gold();
+        for (int b = 0; b < DoctrineVocabulary.Traits; b++)
+            if (FlipCost(items, b) <= gold) m = m.With(DoctrineVocabulary.Army(ArmyOrderKind.Flip, b));   // a flip is legal while the army can pay for it
         m = m.With(DoctrineVocabulary.Army(ArmyOrderKind.Age));
         for (int k = 0; k < DoctrineVocabulary.Kinds; k++)
             if (Find(items, k, out _) && Find(items, (k + 1) % DoctrineVocabulary.Kinds, out _))
@@ -243,6 +253,7 @@ internal sealed class PleromaArmy : IArmy
                 _army.RelabelArrangements(PleromaArmyLayout.RotationFactor(o.A), 0);
                 break;
             case ArmyOrderKind.Flip:
+                if (TryCohorts(out var flipItems)) _purse.Add(0UL, -FlipCost(flipItems, o.A));   // the legal mask already checked the army can pay
                 _army.RelabelFlags(null, 1u << o.A);
                 _flips.Add(new HologramItem(0, 1u << o.A), 1);
                 break;

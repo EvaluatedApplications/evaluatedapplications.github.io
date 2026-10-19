@@ -472,7 +472,8 @@ public class TracerBattleTests
         foreach (var r in a.Rounds) foreach (var c in ReplayContract.Cases) Assert.Null(await c.RunAsync(r.Replay));
         // Both sides can win a game's rounds. After the fairness fix of 2026-10-19 (balance harness: the defender's formation was not mirrored) seed 1234
         // alone happens to hold no attacker win, so the property is asserted over two games; seed 1236 is one the player wins rounds of.
-        var (other, _) = await Play(1236);
+        // Since a Flip costs gold (2026-10-19) the random scripted player wins fewer rounds; seed 1236 holds none now, seed 1232 holds one (seeds 1230..1239 were played).
+        var (other, _) = await Play(1232);
         var all = a.Rounds.Concat(other.Rounds).ToList();
         Assert.Contains(all, r => r.Result.AttackerWon);
         Assert.Contains(all, r => !r.Result.AttackerWon);

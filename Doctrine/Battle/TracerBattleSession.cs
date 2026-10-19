@@ -51,8 +51,7 @@ public sealed class TracerBattleSession : IBattleSession
         public Side Side; public Trait Traits; public float Speed, Range; public int DamagePct, TakenPct;
         public List<Unit> Units = new(); public List<(FieldOrderKind Kind, int Weight)> Orders = new();
         public Vector2 Anchor, Centroid; public int Alive;
-        public bool FlankSet, FlankDone; public Vector2 FlankPoint;
-        public Vector2? Retreat;
+        public bool FlankSet, FlankDone; public Vector2 FlankPoint;        public Vector2? Retreat;
         public PatrolBehavior? Patrol;
         public bool Engaged => Units.Any(u => u.Alive && u.Fired);
     }

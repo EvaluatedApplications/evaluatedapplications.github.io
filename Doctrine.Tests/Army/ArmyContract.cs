@@ -235,7 +235,8 @@ public static class ArmyContract
             bool found = false;
             for (int seed = 1; seed <= 40 && !found; seed++)
             {
-                var b = Fresh(s, seed); var read = b.Read();
+                // A Flip is paid for (case "flip-is-paid-for..."), and relabelling a whole levy to a trait nobody holds is dear: the army is given the gold.
+                var b = Fresh(s, seed); await b.ApplySpoilsAsync(new Spoils(2000, 0), default); var read = b.Read();
                 int held = read.Cohorts.Aggregate(0, (m, c) => m | (int)c.Traits);
                 int x = Enumerable.Range(0, DoctrineVocabulary.Traits).FirstOrDefault(t => (held >> t & 1) == 0, -1);
                 if (x < 0) continue;
@@ -247,6 +248,42 @@ public static class ArmyContract
                 found = true;
             }
             Expect.True(found, "setup: no army in seeds 1..40 had a trait nobody holds (the case needs one)");
+        }),
+        new("flip-is-paid-for-and-legal-only-when-affordable", async s =>
+        {
+            // A Flip relabels every soldier. Each soldier whose new trait set is worth more (Roster.TraitPrice) costs the difference
+            // (Roster.RelabelCost); a soldier made worse is free. The army pays the sum, and the legal list offers the flip only while it can.
+            int free = 0, dear = 0, paid = 0;
+            for (int bit = 0; bit < DoctrineVocabulary.Traits; bit++)
+            {
+                var token = DoctrineVocabulary.Army(ArmyOrderKind.Flip, bit);
+                // (a) a poor army (a fresh levy and 12 gold): legal exactly when affordable, and a refused flip changes nothing.
+                var poor = Fresh(s, 5); var r = poor.Read();
+                long cost = r.Cohorts.Sum(c => (long)c.Count * Roster.RelabelCost(c.Traits, bit));
+                Expect.Equal(cost <= r.Gold, r.Legal.Allows(token), $"flip {bit} costs {cost} against {r.Gold} gold: legal exactly when affordable");
+                var before = r.Digest();
+                var rep = await poor.ApplyArmyOrdersAsync(DoctrineSet.Of(token), default);
+                if (cost <= r.Gold)
+                {
+                    Expect.Equal(1, rep.Applied, $"an affordable flip {bit} applies");
+                    Expect.Equal(r.Gold - cost, poor.Read().Gold, $"flip {bit} takes exactly its cost ({cost}) in gold");
+                }
+                else
+                {
+                    Expect.Equal(1, rep.Skipped, $"an unaffordable flip {bit} is skipped");
+                    Expect.Equal(before, poor.Read().Digest(), $"a refused flip {bit} changed the army");
+                    dear++;
+                }
+                // (b) a rich army pays the same price whatever it holds, and the traits flip.
+                var rich = Fresh(s, 5); await rich.ApplySpoilsAsync(new Spoils(5000, 0), default); var rr = rich.Read();
+                long richCost = rr.Cohorts.Sum(c => (long)c.Count * Roster.RelabelCost(c.Traits, bit));
+                rep = await rich.ApplyArmyOrdersAsync(DoctrineSet.Of(token), default);
+                Expect.Equal(1, rep.Applied, $"a rich army flips {bit}");
+                Expect.Equal(rr.Gold - richCost, rich.Read().Gold, $"flip {bit} of a rich army takes exactly its cost");
+                if (richCost == 0) free++; else paid++;
+                Expect.True(rr.Cohorts.All(c => rich.Read().Cohorts.First(x => x.Key == c.Key).Traits == (Trait)((byte)c.Traits ^ (1 << bit))), $"flip {bit} flips every cohort's trait");
+            }
+            Expect.True(free > 0 && paid > 0 && dear > 0, $"setup: the case needs free ({free}), paid ({paid}) and unaffordable ({dear}) flips on one army to mean anything");
         }),
         new("loss-names-its-cohort-by-kind-not-slot", async s =>
         {

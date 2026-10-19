@@ -136,8 +136,7 @@ sealed class RunBattleStage() : RoundStage(Stages.BattleRun)
     protected override async ValueTask<RoundState> StepAsync(RoundState s, DoctrineContext g, DoctrineDomain d, CancellationToken ct)
     {
         var run = await g.BattleRun.RunAsync(new BattleState(s.Setup!), ct);   // ct flows down
-        if (run is PipelineResult<BattleState>.Failure f) throw f.Exception;
-        var b = run.GetData();
+        var b = PipelineFailure.DataOrThrow(run, $"the battle of round {s.Round} (seed {s.Seed}, arena {s.Setup!.ArenaId})");
         return s with { Result = b.Result, Replay = b.Replay };
     }
 }

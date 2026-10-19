@@ -12,7 +12,7 @@ public class SectionMutationProofs
     // ---- ARMY: the new cases, over the stub and over the Pleroma army ----
     const string Timing = "orders-see-the-state-earlier-orders-left", SlotCase = "loss-names-its-cohort-by-kind-not-slot",
                  Reason = "refused-draft-changes-nothing", Picks = "draft-is-decided-by-the-picks-alone",
-                 Ring = "veterancy-lives-on-a-ring", Score = "score-follows-soldiers-and-gold";
+                 Ring = "veterancy-lives-on-a-ring", Score = "score-follows-soldiers-and-gold", FlipPaid = "flip-is-paid-for-and-legal-only-when-affordable";
 
     [Theory]
     [InlineData(ArmyMut.LegalityOnce, Timing)]
@@ -21,6 +21,8 @@ public class SectionMutationProofs
     [InlineData(ArmyMut.DraftUsesSeed, Picks)]
     [InlineData(ArmyMut.VeterancyGrows, Ring)]
     [InlineData(ArmyMut.ScoreFallsWithGold, Score)]
+    [InlineData(ArmyMut.FlipAlwaysLegal, FlipPaid)]
+    [InlineData(ArmyMut.FlipIsFree, FlipPaid)]
     public async Task Army_mutants_over_the_stub_are_caught(ArmyMut m, string expected)
         => Caught(await ContractRunner.RunAllAsync(ArmyContract.Cases, () => new MutantArmyService(new StubArmyService(), m)), expected);
 
@@ -31,6 +33,8 @@ public class SectionMutationProofs
     [InlineData(ArmyMut.DraftUsesSeed, Picks)]
     [InlineData(ArmyMut.VeterancyGrows, Ring)]
     [InlineData(ArmyMut.ScoreFallsWithGold, Score)]
+    [InlineData(ArmyMut.FlipAlwaysLegal, FlipPaid)]
+    [InlineData(ArmyMut.FlipIsFree, FlipPaid)]
     [InlineData(ArmyMut.ClaimsEverythingLegal, "legal-list-matches-behaviour")]
     [InlineData(ArmyMut.StaleCode, "code-round-trips-everything")]
     [InlineData(ArmyMut.LossesAppliedTwice, "losses-apply-once")]

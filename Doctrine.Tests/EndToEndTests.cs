@@ -17,8 +17,12 @@ public class EndToEndTests
         Assert.Equal(Enumerable.Range(0, 8), r.Rounds.Select(x => x.Round));
         Assert.All(r.Rounds, x => Assert.NotEqual(BattleStatus.Running, x.Result.Outcome));
         Assert.All(r.Rounds, x => Assert.Equal(x.Result.Ticks + 1, x.Replay.Frames.Count));
-        Assert.Contains(r.Rounds, x => x.Result.AttackerWon);        // the scripted opponent is beatable and not trivial
         Assert.Contains(r.Rounds, x => !x.Result.AttackerWon);
+        // The scripted opponent is beatable and not trivial. Since a Flip costs gold (2026-10-19) the random scripted player wins a round rarely (about 1 game
+        // in 4 holds one), so 'beatable' is asserted over seeds known to hold a win, not over seed 1234 alone.
+        var wins = 0;
+        foreach (var seed in new[] { 1230, 1236, 1238 }) wins += (await Game().PlayAsync(seed)).Rounds.Count(x => x.Result.AttackerWon);
+        Assert.True(wins > 0, "the scripted opponent can be beaten");
     }
 
     [Fact]

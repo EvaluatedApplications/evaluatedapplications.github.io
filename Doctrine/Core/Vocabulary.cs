@@ -157,4 +157,25 @@ public static class Roster
     public static string NameOf(int kind) => Kinds[kind].Name;
     public static Trait TraitsOf(int kind) => Kinds[kind].Traits;
     public static int PriceOf(int kind) => Kinds[kind].Price;
+
+    /// <summary>
+    /// What a soldier with these traits is WORTH in gold: ceil(2 x damage percent / taken percent), read from the battle's own stat tables
+    /// (<see cref="Battle.UnitRules"/>). It prices a RELABEL (<see cref="RelabelCost"/>), not a draft: drafting still costs <see cref="PriceOf"/>
+    /// (the two scales differ on purpose, the draft prices are the game's feel and are the user's to change; see
+    /// todo\difficulty-2026-10-19.md, where deriving the draft price from this made a plain soldier 2 gold). Spearmen 2, Shieldwall 3, Riders 2,
+    /// Archers 2, Priests 2, Wights 3, Wolves 3, Catapults 4; a Spearman flipped to Machine is worth 5.
+    /// </summary>
+    public static int TraitPrice(Trait t)
+    {
+        int dmg = Battle.UnitRules.DamagePct(t), taken = Math.Max(1, Battle.UnitRules.TakenPct(t));
+        return (2 * dmg + taken - 1) / taken;
+    }
+
+    /// <summary>
+    /// What it costs to flip trait bit <paramref name="bit"/> on ONE soldier whose traits are <paramref name="traits"/>: the price difference when
+    /// the new trait set is worth more (a better soldier is paid for), nothing when it is worth the same or less. An army-wide Flip costs the sum
+    /// over its soldiers, so turning a levy into Machines is as dear as drafting Catapults.
+    /// </summary>
+    public static int RelabelCost(Trait traits, int bit)
+        => Math.Max(0, TraitPrice((Trait)((byte)traits ^ (1 << bit))) - TraitPrice(traits));
 }

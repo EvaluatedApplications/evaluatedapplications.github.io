@@ -71,6 +71,14 @@ public sealed class StubArmy(Side side) : IArmy
 
     Trait TraitsOf(int k) => (Trait)((byte)Roster.TraitsOf(k) ^ FlipMask);
 
+    /// <summary>Gold a Flip of <paramref name="bit"/> costs: soldiers x <see cref="Roster.RelabelCost"/> summed over the cohorts.</summary>
+    long FlipCost(int bit)
+    {
+        long cost = 0;
+        for (int k = 0; k < Roster.Size; k++) if (Count[k] > 0) cost += (long)Count[k] * Roster.RelabelCost(TraitsOf(k), bit);
+        return cost;
+    }
+
     int Power(int k)
     {
         int p = 100 + Vet[k] * 5;
@@ -92,7 +100,7 @@ public sealed class StubArmy(Side side) : IArmy
         int soldiers = Count.Sum();
         if (soldiers == 0) return m;
         for (int s = 1; s <= 2; s++) m = m.With(DoctrineVocabulary.Army(ArmyOrderKind.Rotate, s));
-        for (int b = 0; b < 8; b++) m = m.With(DoctrineVocabulary.Army(ArmyOrderKind.Flip, b));
+        for (int b = 0; b < 8; b++) if (FlipCost(b) <= Gold) m = m.With(DoctrineVocabulary.Army(ArmyOrderKind.Flip, b));   // legal while the army can pay
         m = m.With(DoctrineVocabulary.Army(ArmyOrderKind.Age));
         for (int k = 0; k < Roster.Size; k++)
             if (Count[k] > 0 && Count[(k + 1) % Roster.Size] > 0 && (k + 1) % Roster.Size != k)
@@ -148,7 +156,7 @@ public sealed class StubArmy(Side side) : IArmy
             switch ((ArmyOrderKind)o.Kind)
             {
                 case ArmyOrderKind.Rotate: for (int k = 0; k < Roster.Size; k++) Slot[k] = (Slot[k] + o.A) % DoctrineVocabulary.Groups; break;
-                case ArmyOrderKind.Flip: FlipMask ^= (byte)(1 << o.A); break;
+                case ArmyOrderKind.Flip: Gold -= (int)FlipCost(o.A); FlipMask ^= (byte)(1 << o.A); break;
                 case ArmyOrderKind.Age: for (int k = 0; k < Roster.Size; k++) if (Count[k] > 0) Vet[k] = (Vet[k] + 1) % VeterancyPeriod; break;
                 case ArmyOrderKind.Merge:
                     { int k = o.A, j = (k + 1) % Roster.Size; Count[k] += Count[j]; Count[j] = 0; break; }

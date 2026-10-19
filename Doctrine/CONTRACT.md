@@ -43,6 +43,11 @@ Invariants (each is a named case in `ArmyContract`):
   the list once before the doctrine fails `orders-see-the-state-earlier-orders-left`. This is a property of the ARMY, and the pipeline lets
   it show: the player's army orders reach the army whole (see "Who judges a token" below, proved end to end).
 - Orders keep the army valid (counts > 0, slots 0..2, gold >= 0).
+- A FLIP IS PAID FOR (2026-10-19, `flip-is-paid-for-and-legal-only-when-affordable`). A Flip relabels one trait bit on every cohort; each soldier whose
+  new trait set is worth more costs the difference in gold (`Roster.RelabelCost`, worth = `Roster.TraitPrice` = ceil(2 x damage percent / taken
+  percent) from the battle's stat tables), a soldier made worse is free. The legal list offers the flip only while the army can pay the sum, and
+  the order takes exactly that gold. Before this a Flip cost nothing: one "Flip Machine" token took a Spearmen levy from 0.53 to 0.91 wins
+  (todo\difficulty-2026-10-19.md). The worth scale is not the draft price scale on purpose (`PriceOf` is the game's feel).
 - Draft spends exactly price x count; a refused pick (unknown kind, count <= 0, too little gold) is reported with a non-empty reason and
   changes nothing. There is no separate "command span" refusal: the span IS the roster (`Roster.Size` = 8 = the Pleroma's key capacity), so a
   ninth kind cannot exist. (A section may keep a guard for it; the contract cannot exercise it.)

@@ -1,0 +1,229 @@
+using System.Text;
+using Doctrine;
+using Doctrine.Army;
+
+namespace Autopilot;
+
+/// <summary>One-round duels between playstyles on the real sections (see the 2026-10-19 late-night addendum of difficulty-2026-10-19.md).</summary>
+public static class Styles
+{
+    public static readonly string[] Names = ["AGGRESSOR", "TURTLE", "COMPOSER", "MICRO", "VETERAN", "MASS"];
+    const int Gold = 24, Seeds = 40;
+
+    internal static List<DraftPick> Picks(int style, ArmyReadModel a)
+    {
+        int g = a.Gold;
+        List<DraftPick> Two(int k1, int k2)
+        {
+            var l = new List<DraftPick>();
+            int n1 = g / 2 / Roster.PriceOf(k1); if (n1 > 0) l.Add(new(k1, n1));
+            int left = g - n1 * Roster.PriceOf(k1); int n2 = left / Roster.PriceOf(k2); if (n2 > 0) l.Add(new(k2, n2));
+            return l;
+        }
+        return style switch
+        {
+            0 => Two(6, 2),
+            1 => [new(1, g / Roster.PriceOf(1))],
+            2 => Drafts.Picks(8, a),
+            3 => Two(3, 4),
+            _ => [new(0, g / Roster.PriceOf(0))],
+        };
+    }
+
+    internal static DoctrineSet Doctrine(int style, ArmyReadModel a)
+    {
+        int F(FieldOrderKind k, int grp) => DoctrineVocabulary.Field(k, grp);
+        switch (style)
+        {
+            case 0: case 5: return DoctrineSet.Of(F(FieldOrderKind.Advance, 0), F(FieldOrderKind.Advance, 1), F(FieldOrderKind.Advance, 2));
+            case 1: return DoctrineSet.Of(F(FieldOrderKind.Hold, 0), F(FieldOrderKind.Hold, 1), F(FieldOrderKind.Guard, 2));
+            case 2: return DoctrineSet.Of(F(FieldOrderKind.Advance, 0), F(FieldOrderKind.Hold, 1), F(FieldOrderKind.Flank, 2));
+            case 3: return DoctrineSet.Of(F(FieldOrderKind.Flank, 0), F(FieldOrderKind.Hunt, 1), F(FieldOrderKind.FallBack, 2));
+            default:
+                {
+                    var bits = new int[8];
+                    foreach (var c in a.Cohorts) for (int b = 0; b < 8; b++) if ((((int)c.Traits >> b) & 1) != 0) bits[b] += c.Count;
+                    int top = Array.IndexOf(bits, bits.Max());
+                    return DoctrineSet.Of(DoctrineVocabulary.Army(ArmyOrderKind.Age), DoctrineVocabulary.Army(ArmyOrderKind.Age), DoctrineVocabulary.Army(ArmyOrderKind.Aura, top), F(FieldOrderKind.Advance, 0));
+                }
+        }
+    }
+
+    static async Task<(BattleSide Side, int Id)> Build(PleromaArmyService svc, int style, int seed, bool boost, Side side)
+    {
+        var army = svc.Create(Side.Player, seed);                       // the same levy for both sides
+        await army.ApplySpoilsAsync(new Spoils(Gold, 0), default);
+        await army.DraftAsync(new DraftRequest(0, seed, Picks(style, army.Read())), default);
+        var d = Doctrine(style, army.Read());
+        await army.ApplyArmyOrdersAsync(d, default);
+        var cohorts = army.Read().Cohorts.ToList();
+        if (boost) cohorts = cohorts.Select(c => c with { PowerPct = c.PowerPct * 115 / 100 }).ToList();
+        return (new BattleSide(side, cohorts, DoctrineVocabulary.FieldOrders(d)), style);
+    }
+
+    /// <summary>Returns the pooled and per-arena score matrices, row style over column style (attacker = row in orientation 0, defender in orientation 1).</summary>
+    public static string Run(string label, bool withBoostNull)
+    {
+        int n = Names.Length + (withBoostNull ? 1 : 0);
+        var arenas = new[] { "open-field", "chokepoint", "ridge", "falling-gate" };
+        var units = new List<(int a, int b, int arena, int seed, int orient)>();
+        for (int a = 0; a < n; a++) for (int b = 0; b < n; b++)
+                for (int ar = 0; ar < 4; ar++) for (int s = 0; s < Seeds; s++) units.Add((a, b, ar, 9_500_000 + s, 0));
+        var svc = new PleromaArmyService();
+        var res = Pool.Run(units.Count, (i, wg) =>
+        {
+            var u = units[i];
+            for (int attempt = 0; ; attempt++)
+            {
+                try
+                {
+                    // row style u.a attacks column style u.b ; styles >= Names.Length are AGGRESSOR with +15 percent power
+                    int sa = u.a >= Names.Length ? 0 : u.a, sb = u.b >= Names.Length ? 0 : u.b;
+                    var A = Build(svc, sa, u.seed, u.a >= Names.Length, Side.Player).GetAwaiter().GetResult().Side;
+                    var B = Build(svc, sb, u.seed, u.b >= Names.Length, Side.Enemy).GetAwaiter().GetResult().Side;
+                    var setup = new BattleSetup(arenas[u.arena], u.seed * 7 + 3, 120, A, B);
+                    var run = wg.Game.Context.BattleRun.RunAsync(new BattleState(setup)).AsTask().GetAwaiter().GetResult();
+                    if (run is EvalApp.PipelineResult<BattleState>.Failure f) throw f.Exception ?? new InvalidOperationException("no exception");
+                    var o = run.GetData().Result!.Outcome;
+                    return o == BattleStatus.AttackerWon ? 1.0 : o == BattleStatus.Draw ? 0.5 : 0.0;
+                }
+                catch (Exception) when (attempt < 8) { Interlocked.Increment(ref WorkerGame.Retries); }
+            }
+        });
+        var pooled = new double[n, n]; var cnt = new int[n, n]; var per = new double[4, n, n]; var pc = new int[4, n, n];
+        for (int i = 0; i < units.Count; i++)
+        {
+            var u = units[i];
+            pooled[u.a, u.b] += res[i]; cnt[u.a, u.b]++; per[u.arena, u.a, u.b] += res[i]; pc[u.arena, u.a, u.b]++;
+        }
+        // score of row over column = mean of (row attacking col) and (1 - col attacking row): both orientations
+        double M(double[,] s, int[,] c, int a, int b) => a == b ? s[a, a] / Math.Max(1, c[a, a]) : (s[a, b] / c[a, b] + 1 - s[b, a] / c[b, a]) / 2;
+        var sb2 = new StringBuilder();
+        string Row(Func<int, int, double> m, string title)
+        {
+            var t = new StringBuilder(title + "\n" + "row over col      " + string.Join(" ", Enumerable.Range(0, n).Select(j => (j < Names.Length ? Names[j] : "AGG+15").PadLeft(9))) + "   mean(others)\n");
+            for (int a = 0; a < n; a++)
+            {
+                t.Append((a < Names.Length ? Names[a] : "AGG+15").PadRight(16) + "  " + string.Join(" ", Enumerable.Range(0, n).Select(j => m(a, j).ToString("F3").PadLeft(9))));
+                t.Append("   " + Enumerable.Range(0, n).Where(j => j != a && (j < Names.Length || a >= Names.Length)).Average(j => m(a, j)).ToString("F3") + "\n");
+            }
+            return t.ToString();
+        }
+        sb2.AppendLine($"== styles {label}  retries {WorkerGame.Retries}");
+        sb2.Append(Row((a, b) => M(pooled, cnt, a, b), "POOLED over 4 arenas x 2 orientations x 40 seeds (320 battles per pair; mirror cells = attacker score, expect .5 - attacker bias)"));
+        for (int ar = 0; ar < 4; ar++)
+        {
+            int ar2 = ar;
+            sb2.Append(Row((a, b) => { var s = new double[n, n]; var c = new int[n, n]; for (int x = 0; x < n; x++) for (int y = 0; y < n; y++) { s[x, y] = per[ar2, x, y]; c[x, y] = pc[ar2, x, y]; } return M(s, c, a, b); }, $"ARENA {arenas[ar]} (80 battles per pair)"));
+        }
+        // T4
+        var m6 = new double[Names.Length, Names.Length];
+        for (int a = 0; a < Names.Length; a++) for (int b = 0; b < Names.Length; b++) m6[a, b] = M(pooled, cnt, a, b);
+        bool band = true, bw = true, nodom = true;
+        for (int a = 0; a < Names.Length; a++)
+        {
+            double mean = Enumerable.Range(0, Names.Length).Where(j => j != a).Average(j => m6[a, j]);
+            if (mean < 0.35 || mean > 0.65) band = false;
+            var others = Enumerable.Range(0, Names.Length).Where(j => j != a).ToArray();
+            if (!(others.Any(j => m6[a, j] > 0.55) && others.Any(j => m6[a, j] < 0.45))) bw = false;
+            if (others.All(j => m6[a, j] > 0.55)) nodom = false;
+        }
+        double mirror = Enumerable.Range(0, Names.Length).Average(a => m6[a, a]);
+        sb2.AppendLine($"T4 (a) all means within .35-.65: {band}; (b) each beats one and loses to one: {bw}; (c) none beats all: {nodom}  => {(band && bw && nodom ? "PASS" : "FAIL")}");
+        sb2.AppendLine($"Null 1 mirror cells (attacker score, pooled mean {mirror:F3}; need .5 +- .09): {string.Join(" ", Enumerable.Range(0, Names.Length).Select(a => m6[a, a].ToString("F3")))}");
+        if (withBoostNull) sb2.AppendLine($"Null 2 AGGRESSOR +15% power beats every other style: {Enumerable.Range(0, Names.Length).Where(j => j != 0).All(j => M(pooled, cnt, Names.Length, j) > 0.5)} (scores vs others: {string.Join(" ", Enumerable.Range(1, Names.Length - 1).Select(j => M(pooled, cnt, Names.Length, j).ToString("F2")))})");
+        return sb2.ToString();
+    }
+}
+
+public static class Matches
+{
+    const int Rounds = 6, MatchSeeds = 20;
+
+    static (List<DraftPick> Picks, DoctrineSet Doc) Plan(int style, ArmyReadModel a, int round, GameRng rng, double eps)
+    {
+        int spend = style == 1 && round < 3 ? a.Gold / 2 : a.Gold;                       // BANKER keeps half of its gold for the first three rounds
+        var one = new ArmyReadModel(a.Side, a.Round, spend, a.Cohorts, a.Legal);
+        var picks = Styles.Picks(style, one);
+        var doc = Styles.Doctrine(style, a);
+        if (eps > 0)
+        {
+            picks = picks.Select(p => rng.Next(1000) < eps * 1000 ? p with { Kind = rng.Next(Roster.Size) } : p).ToList();
+            var legal = Enumerable.Range(1, DoctrineVocabulary.Size - 1).Where(a.Legal.Allows).ToArray();
+            var tk = doc.Tokens.Select(t => t != 0 && legal.Length > 0 && rng.Next(1000) < eps * 1000 ? legal[rng.Next(legal.Length)] : t).ToArray();
+            doc = DoctrineSet.Of(tk);
+        }
+        return (picks, doc);
+    }
+
+    /// <summary>Match score of style a over style b (1 = a won every round): 6 rounds, persistent armies, spoils as the real game, roles swap each round.</summary>
+    static double Play(WorkerGame wg, PleromaArmyService svc, int sa, int sb, double ea, double eb, int seed)
+    {
+        var A = svc.Create(Side.Player, seed); var B = svc.Create(Side.Player, seed);
+        var arenas = wg.Game.Context.Battle.Arenas;
+        var rng = new GameRng(GameRng.Mix(seed, 77));
+        double score = 0;
+        for (int r = 0; r < Rounds; r++)
+        {
+            var pa = Plan(sa, A.Read(), r, rng, ea); A.DraftAsync(new DraftRequest(r, seed, pa.Picks), default).AsTask().GetAwaiter().GetResult();
+            var pb = Plan(sb, B.Read(), r, rng, eb); B.DraftAsync(new DraftRequest(r, seed, pb.Picks), default).AsTask().GetAwaiter().GetResult();
+            A.ApplyArmyOrdersAsync(pa.Doc, default).AsTask().GetAwaiter().GetResult(); B.ApplyArmyOrdersAsync(pb.Doc, default).AsTask().GetAwaiter().GetResult();
+            bool aAtt = r % 2 == 0;
+            var ra = A.Read(); var rb = B.Read();
+            if (ra.Soldiers == 0 && rb.Soldiers == 0) { score += 0.5; continue; }
+            var att = aAtt ? new BattleSide(Side.Player, ra.Cohorts, DoctrineVocabulary.FieldOrders(pa.Doc)) : new BattleSide(Side.Player, rb.Cohorts, DoctrineVocabulary.FieldOrders(pb.Doc));
+            var def = aAtt ? new BattleSide(Side.Enemy, rb.Cohorts, DoctrineVocabulary.FieldOrders(pb.Doc)) : new BattleSide(Side.Enemy, ra.Cohorts, DoctrineVocabulary.FieldOrders(pa.Doc));
+            var setup = new BattleSetup(arenas[(int)(GameRng.Mix(seed, 3000 + r) % (ulong)arenas.Count)].Id, (int)GameRng.Mix(seed, 4000 + r), 120, att, def);
+            var run = wg.Game.Context.BattleRun.RunAsync(new BattleState(setup)).AsTask().GetAwaiter().GetResult();
+            if (run is EvalApp.PipelineResult<BattleState>.Failure f) throw f.Exception ?? new InvalidOperationException("no exception");
+            var res = run.GetData().Result!;
+            bool attWon = res.Outcome == BattleStatus.AttackerWon, draw = res.Outcome == BattleStatus.Draw;
+            double aGot = draw ? 0.5 : (attWon == aAtt ? 1 : 0); score += aGot;
+            var attArmy = aAtt ? A : B; var defArmy = aAtt ? B : A;
+            attArmy.ApplyLossesAsync(res.AttackerLosses, default).AsTask().GetAwaiter().GetResult(); defArmy.ApplyLossesAsync(res.DefenderLosses, default).AsTask().GetAwaiter().GetResult();
+            int killedByAtt = res.DefenderLosses.Sum(l => l.Lost), killedByDef = res.AttackerLosses.Sum(l => l.Lost);
+            attArmy.ApplySpoilsAsync(new Spoils(killedByAtt / 2 + (attWon ? 6 : 2), attWon ? 1 : 0), default).AsTask().GetAwaiter().GetResult();
+            defArmy.ApplySpoilsAsync(new Spoils(killedByDef / 2 + (!attWon && !draw ? 6 : 2), !attWon && !draw ? 1 : 0), default).AsTask().GetAwaiter().GetResult();
+            A.EndRoundAsync(default).AsTask().GetAwaiter().GetResult(); B.EndRoundAsync(default).AsTask().GetAwaiter().GetResult();
+        }
+        return score / Rounds;
+    }
+
+    public static string Run(string label)
+    {
+        int n = Styles.Names.Length;
+        var levels = new (string Name, double Eps)[] { ("NOVICE", 0.5), ("EXPERT", 0.0) };
+        var sb = new StringBuilder($"== matches {label}: {Rounds} rounds, persistent armies, start gold 12, spoils as the real game, roles swap each round\n");
+        var svc = new PleromaArmyService();
+        foreach (var lv in levels)
+        {
+            var units = new List<(int a, int b, int seed)>();
+            for (int a = 0; a < n; a++) for (int b = 0; b < n; b++) for (int s = 0; s < MatchSeeds; s++) units.Add((a, b, 9_600_000 + s));
+            var res = Pool.Run(units.Count, (i, wg) =>
+            {
+                var u = units[i];
+                for (int attempt = 0; ; attempt++)
+                    try { return Play(wg, svc, u.a, u.b, lv.Eps, lv.Eps, u.seed); }
+                    catch (Exception) when (attempt < 8) { Interlocked.Increment(ref WorkerGame.Retries); }
+            });
+            var m = new double[n, n]; var c = new int[n, n];
+            for (int i = 0; i < units.Count; i++) { m[units[i].a, units[i].b] += res[i]; c[units[i].a, units[i].b]++; }
+            double V(int a, int b) => a == b ? m[a, a] / c[a, a] : (m[a, b] / c[a, b] + 1 - m[b, a] / c[b, a]) / 2;
+            sb.AppendLine($"-- {lv.Name} (error rate {lv.Eps}); score of row over column, {2 * MatchSeeds} matches per pair; mirror cell = side-A score");
+            sb.AppendLine("row over col      " + string.Join(" ", Styles.Names.Select(x => x.PadLeft(9))) + "   mean(others)");
+            for (int a = 0; a < n; a++)
+                sb.AppendLine(Styles.Names[a].PadRight(16) + "  " + string.Join(" ", Enumerable.Range(0, n).Select(j => V(a, j).ToString("F3").PadLeft(9))) + "   " + Enumerable.Range(0, n).Where(j => j != a).Average(j => V(a, j)).ToString("F3"));
+            bool band = true, bw = true, nodom = true;
+            for (int a = 0; a < n; a++)
+            {
+                var o = Enumerable.Range(0, n).Where(j => j != a).ToArray();
+                double mean = o.Average(j => V(a, j));
+                if (mean < .35 || mean > .65) band = false;
+                if (!(o.Any(j => V(a, j) > .55) && o.Any(j => V(a, j) < .45))) bw = false;
+                if (o.All(j => V(a, j) > .55)) nodom = false;
+            }
+            sb.AppendLine($"T4 {lv.Name}: band {band}, each beats one and loses to one {bw}, none beats all {nodom} => {(band && bw && nodom ? "PASS" : "FAIL")}");
+        }
+        return sb.ToString();
+    }
+}

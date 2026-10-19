@@ -26,6 +26,10 @@ public enum ArmyMut
     ScoreFallsWithGold,
     /// <summary>Veterancy grows without limit instead of living on a ring.</summary>
     VeterancyGrows,
+    /// <summary>The legal list offers every Flip whatever the army can pay.</summary>
+    FlipAlwaysLegal,
+    /// <summary>A Flip costs nothing: the gold it took is handed back.</summary>
+    FlipIsFree,
 }
 
 public sealed class MutantArmyService(IArmyService inner, ArmyMut m) : IArmyService
@@ -51,6 +55,7 @@ sealed class MutantArmy(IArmy inner, ArmyMut m) : IArmy
         return m switch
         {
             ArmyMut.ClaimsEverythingLegal => r with { Legal = LegalMask.All },
+            ArmyMut.FlipAlwaysLegal => r with { Legal = Enumerable.Range(0, DoctrineVocabulary.Traits).Aggregate(r.Legal, (l, b) => l.With(DoctrineVocabulary.Army(ArmyOrderKind.Flip, b))) },
             ArmyMut.VeterancyGrows => r with { Cohorts = r.Cohorts.Select(c => c with { Veterancy = c.Veterancy + 10 * _ordersApplied }).ToList() },
             _ => r,
         };
@@ -77,6 +82,13 @@ sealed class MutantArmy(IArmy inner, ArmyMut m) : IArmy
                 applied += one.Applied; skipped += one.Skipped;
             }
             rep = new ArmyOrdersReport(applied, skipped);
+        }
+        else if (m == ArmyMut.FlipIsFree)
+        {
+            int before = inner.Read().Gold;
+            rep = await inner.ApplyArmyOrdersAsync(doctrine, ct);
+            int taken = before - inner.Read().Gold;
+            if (taken > 0) await inner.ApplySpoilsAsync(new Spoils(taken, 0), ct);   // orders spend gold only on a Flip: hand it back
         }
         else rep = await inner.ApplyArmyOrdersAsync(doctrine, ct);
         _ordersApplied += rep.Applied;

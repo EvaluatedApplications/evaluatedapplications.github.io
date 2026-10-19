@@ -215,6 +215,18 @@ public class WhoJudgesATokenTests
     public static TheoryData<string> Armies => new("stub", "pleroma");
     static IArmyService Army(string which) => which == "stub" ? new StubArmyService() : new PleromaArmyService();
 
+    /// <summary>A section whose PLAYER army starts with plenty of gold: a Flip is paid for, and relabelling a whole levy is dear.</summary>
+    sealed class RichPlayerArmy(IArmyService inner) : IArmyService
+    {
+        public IArmy Create(Side side, int seed)
+        {
+            var a = inner.Create(side, seed);
+            if (side == Side.Player) a.ApplySpoilsAsync(new Spoils(2000, 0), default).AsTask().GetAwaiter().GetResult();
+            return a;
+        }
+        public bool TryParse(string code, out IArmy? army, out string error) => inner.TryParse(code, out army, out error);
+    }
+
     /// <summary>Plays one round with a doctrine built from the army the player sees when it chooses; null from <paramref name="make"/> = setup not met.</summary>
     sealed class DoctrinePlayer(Func<ArmyReadModel, DoctrineSet?> make) : IPlayerInput
     {
@@ -256,7 +268,7 @@ public class WhoJudgesATokenTests
     [Theory, MemberData(nameof(Armies))]
     public async Task A_token_illegal_at_the_start_but_legal_after_an_earlier_one_applies_reaches_the_army_and_applies(string which)
     {
-        var rec = await OneRound(Army(which), FlipThenAura);
+        var rec = await OneRound(new RichPlayerArmy(Army(which)), FlipThenAura);
         Assert.NotNull(rec);
         Assert.Equal(new ArmyOrdersReport(2, 0), rec!.Orders);           // both applied: the aura was judged AFTER the flip
         Assert.Equal(0, rec.IllegalDropped);                             // the pipeline dropped nothing
@@ -310,7 +322,7 @@ public class WhoJudgesATokenTests
     public async Task An_army_that_judges_legality_once_instead_of_per_token_is_caught_end_to_end(string which)
     {
         // the mutant: the army evaluates the list before the doctrine (ArmyMut.LegalityOnce); the pipeline-level case goes red on it
-        var rec = await OneRound(new MutantArmyService(Army(which), ArmyMut.LegalityOnce), FlipThenAura);
+        var rec = await OneRound(new MutantArmyService(new RichPlayerArmy(Army(which)), ArmyMut.LegalityOnce), FlipThenAura);
         Assert.NotNull(rec);
         Assert.NotEqual(new ArmyOrdersReport(2, 0), rec!.Orders);
     }

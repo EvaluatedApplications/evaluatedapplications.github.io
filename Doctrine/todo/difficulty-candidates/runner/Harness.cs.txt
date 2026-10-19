@@ -1,0 +1,231 @@
+using System.Collections.Concurrent;
+using System.Diagnostics;
+using Doctrine;
+using Doctrine.Army;
+using Doctrine.Battle;
+
+namespace Autopilot;
+
+public sealed class RoundLog
+{
+    public int Round;
+    public int[] Summary = [];
+    public ulong LegalBits;
+    public int[] Tokens = new int[4];        // the doctrine as the policy chose it (after normalisation), padded with End
+    public double Score;                     // 1 win, .5 draw, 0 loss (the player is the attacker)
+    public int EnemyLost, PlayerLost;        // soldiers
+    public double Margin => EnemyLost - PlayerLost;
+    public string Arena = "";
+    public int Ticks;
+}
+
+public sealed class GameLog
+{
+    public int Seed;
+    public List<RoundLog> Rounds = [];
+    public double Mean => Rounds.Count == 0 ? 0 : Rounds.Average(r => r.Score);
+    public double MeanMargin => Rounds.Count == 0 ? 0 : Rounds.Average(r => r.Margin);
+}
+
+/// <summary>A policy sets the doctrine each round from the 14-token summary + legal mask. Tokens are returned padded with End (up to 4).</summary>
+public interface IPolicy
+{
+    void Choose(int[] summary, LegalMask legal, int round, GameRng rng, int[] tokens);
+}
+
+/// <summary>Fixed draft rules (the draft is NOT learned in this experiment; one rule is chosen on training seeds and shared by every arm).</summary>
+public static class Drafts
+{
+    public const int Count = 10;
+    public static string Name(int r) => r < 8 ? $"all-in-kind{r}" : r == 8 ? "cycle-kinds" : "fill-smallest";
+
+    public static List<DraftPick> Picks(int rule, ArmyReadModel army)
+    {
+        var picks = new List<DraftPick>();
+        int gold = army.Gold;
+        if (rule < 8)
+        {
+            int n = gold / Roster.PriceOf(rule);
+            if (n > 0) picks.Add(new(rule, n));
+        }
+        else if (rule == 8)
+        {
+            var cnt = new int[Roster.Size];
+            bool any = true;
+            while (any) { any = false; for (int k = 0; k < Roster.Size; k++) if (Roster.PriceOf(k) <= gold) { cnt[k]++; gold -= Roster.PriceOf(k); any = true; } }
+            for (int k = 0; k < Roster.Size; k++) if (cnt[k] > 0) picks.Add(new(k, cnt[k]));
+        }
+        else
+        {
+            var have = new int[Roster.Size];
+            foreach (var c in army.Cohorts) have[c.Key] = c.Count;
+            var add = new int[Roster.Size];
+            while (true)
+            {
+                int best = -1;
+                for (int k = 0; k < Roster.Size; k++)
+                    if (Roster.PriceOf(k) <= gold && (best < 0 || have[k] + add[k] < have[best] + add[best])) best = k;
+                if (best < 0) break;
+                add[best]++; gold -= Roster.PriceOf(best);
+            }
+            for (int k = 0; k < Roster.Size; k++) if (add[k] > 0) picks.Add(new(k, add[k]));
+        }
+        return picks;
+    }
+}
+
+sealed class RecordingGeneral : IGeneral
+{
+    public GeneralInput? Last;
+    public int ExamplesSeen => 0;
+    public ValueTask<GeneralOutput> SuggestAsync(GeneralInput input, CancellationToken ct) { Last = input; return ValueTask.FromResult(new GeneralOutput(DoctrineSet.Empty, 0)); }
+    public ValueTask LearnAsync(GeneralExample example, CancellationToken ct) => ValueTask.CompletedTask;
+    public ValueTask LearnOutcomeAsync(GeneralOutcome outcome, CancellationToken ct) => ValueTask.CompletedTask;
+}
+
+sealed class SwitchPlayer(RecordingGeneral gen) : IPlayerInput
+{
+    public IPolicy Policy = null!;
+    public int DraftRule;
+    public GameRng Rng = new(1);
+    public GameLog Log = new();
+    RoundLog? _cur;
+
+    public ValueTask<IReadOnlyList<DraftPick>> DraftAsync(ArmyReadModel army, int round, CancellationToken ct)
+        => ValueTask.FromResult<IReadOnlyList<DraftPick>>(Drafts.Picks(DraftRule, army));
+
+    public ValueTask<PlayerChoice> ChooseAsync(ArmyReadModel army, GeneralOutput ghost, int round, CancellationToken ct)
+    {
+        var input = gen.Last!;
+        var toks = new int[4];
+        Policy.Choose(input.Summary.ToArray(), input.Legal, round, Rng, toks);
+        // one normaliser for every arm: legal at the START mask, no repeats, End = skip (a fixed list may carry End-free gaps), at most 4
+        var kept = new List<int>();
+        foreach (var t in toks) if (t != 0 && input.Legal.Allows(t) && !kept.Contains(t) && kept.Count < 4) kept.Add(t);
+        var d = DoctrineSet.Of(kept.ToArray());
+        _cur = new RoundLog { Round = round, Summary = input.Summary.ToArray(), LegalBits = input.Legal.Bits, Tokens = d.Tokens };
+        return ValueTask.FromResult(new PlayerChoice(d, true));
+    }
+
+    public ValueTask RoundClosedAsync(RoundRecord record, ArmyReadModel after, CancellationToken ct)
+    {
+        var c = _cur!;
+        c.Score = record.Result.Outcome switch { BattleStatus.AttackerWon => 1.0, BattleStatus.Draw => 0.5, _ => 0.0 };
+        c.PlayerLost = record.Result.AttackerLosses.Sum(l => l.Lost);
+        c.EnemyLost = record.Result.DefenderLosses.Sum(l => l.Lost);
+        c.Arena = record.ArenaId; c.Ticks = record.Result.Ticks;
+        Log.Rounds.Add(c);
+        return ValueTask.CompletedTask;
+    }
+}
+
+/// <summary>One thread's private game: its own Tracer world, army service and compiled pipelines, single-thread pinned. Reused across games.</summary>
+public sealed class WorkerGame
+{
+    readonly RecordingGeneral _gen = new();
+    readonly SwitchPlayer _player;
+    public DoctrineGame Game { get; }
+    public int Rounds { get; }
+
+    public WorkerGame(string scratch, int rounds = 8, int enemyScale = 1)
+    {
+        Rounds = rounds;
+        _player = new SwitchPlayer(_gen);
+        Directory.CreateDirectory(scratch);
+        var world = new Tracer.PathfindingWorld(tunerStatePath: Path.Combine(scratch, Guid.NewGuid().ToString("N")));
+        Game = DoctrineBuilder.New()
+            .WithDefaults(r => r.WithArmy(new PleromaArmyService()).WithTracer(world).WithBattle(ctx => new TracerBattleEngine(ctx.Tracer!)).WithGeneral(_gen))
+            .WithPlayer(_player).WithRules(new DoctrineDomain { MaxRounds = rounds, EnemyBaseGold = 14 * enemyScale, EnemyGoldPerRound = 4 * enemyScale }).WithSingleThread(true).Build();
+    }
+
+    public static int ShortGames;
+    public static int Retries;   // pipeline failures with no exception (a race between concurrent in-process EvalApp runs, seen as NRE); a game is deterministic, so a retry replays it exactly
+
+    public GameLog Play(int seed, IPolicy policy, int draftRule, ulong policySeed)
+    {
+        for (int attempt = 0; ; attempt++)
+        {
+            _player.Policy = policy; _player.DraftRule = draftRule;
+            _player.Rng = new GameRng(GameRng.Mix((int)(policySeed & 0x7fffffff), seed));
+            _player.Log = new GameLog { Seed = seed };
+            _gen.Last = null;
+            try
+            {
+                var run = Game.Context.Round.RunAsync(Game.NewGame(seed)).AsTask().GetAwaiter().GetResult();
+                if (run is EvalApp.PipelineResult<RoundState>.Failure f)
+                {
+                    if ((f.Exception is null || f.Exception is NullReferenceException || (f.Exception is InvalidOperationException ioe && ioe.Message.Contains("no exception"))) && attempt < 8) { Interlocked.Increment(ref Retries); continue; }
+                    throw new InvalidOperationException("pipeline failure: " + (f.Exception?.ToString() ?? f.Message ?? "no detail"));
+                }
+                if (_player.Log.Rounds.Count < Rounds)   // an army wiped out and broke: the unplayed rounds count as lost (declared)
+                {
+                    Interlocked.Increment(ref ShortGames);
+                    while (_player.Log.Rounds.Count < Rounds) _player.Log.Rounds.Add(new RoundLog { Round = _player.Log.Rounds.Count, Summary = new int[14], Arena = "none" });
+                }
+                _player.Log.Seed = seed;
+                return _player.Log;
+            }
+            catch (NullReferenceException) when (attempt < 8) { Interlocked.Increment(ref Retries); }
+        }
+    }
+}
+public static class Pool
+{
+    public static int Workers = 6;
+    static readonly string Scratch = Path.Combine(Path.GetTempPath(), "autopilot-tuner", Guid.NewGuid().ToString("N"));
+    static readonly ConcurrentBag<WorkerGame> Idle = [];
+    static readonly ConcurrentDictionary<int, WorkerGame> Owned = [];
+
+    static WorkerGame Get(int worker) => Owned.GetOrAdd(worker, w => new WorkerGame(Path.Combine(Scratch, w.ToString())));
+
+    /// <summary>Runs <paramref name="n"/> independent units on up to Workers dedicated threads; results land by index, so order never matters.</summary>
+    public static T[] Run<T>(int n, Func<int, WorkerGame, T> unit, Action<int, int>? progress = null)
+    {
+        var res = new T[n]; int next = -1, done = 0;
+        var threads = new List<Thread>();
+        Exception? fail = null;
+        for (int w = 0; w < Math.Min(Workers, n); w++)
+        {
+            int wi = w;
+            var th = new Thread(() =>
+            {
+                try
+                {
+                    var g = Get(wi);
+                    while (true)
+                    {
+                        int i = Interlocked.Increment(ref next);
+                        if (i >= n) break;
+                        res[i] = unit(i, g);
+                        int d = Interlocked.Increment(ref done);
+                        progress?.Invoke(d, n);
+                    }
+                }
+                catch (Exception e) { fail = e; Interlocked.Exchange(ref next, n); }
+            }, 16 * 1024 * 1024) { IsBackground = true };
+            th.Start(); threads.Add(th);
+        }
+        foreach (var t in threads) t.Join();
+        if (fail is not null) throw new AggregateException(fail);
+        return res;
+    }
+
+    /// <summary>Play a set of games with one policy per game (the factory is called with the worker so a model can be cloned per thread).</summary>
+    public static GameLog[] Games(int[] seeds, Func<IPolicy> policyFactory, int draft, ulong policySeed, Action<int, int>? progress = null)
+    {
+        // policies may hold a model: build one per worker lazily
+        var perWorker = new ConcurrentDictionary<WorkerGame, IPolicy>();
+        return Run(seeds.Length, (i, g) => g.Play(seeds[i], perWorker.GetOrAdd(g, _ => policyFactory()), draft, policySeed), progress);
+    }
+}
+
+public static class Stat
+{
+    public static (double lo, double hi) Boot(double[] x, int seed = 5, double lowQ = 0.025, double hiQ = 0.975, int reps = 2000)
+    {
+        var rng = new Random(seed); var m = new double[reps];
+        for (int b = 0; b < reps; b++) { double s = 0; for (int i = 0; i < x.Length; i++) s += x[rng.Next(x.Length)]; m[b] = s / x.Length; }
+        Array.Sort(m); return (m[(int)(lowQ * reps)], m[(int)(hiQ * reps)]);
+    }
+    public static double Sd(double[] x) { double m = x.Average(); return Math.Sqrt(x.Sum(v => (v - m) * (v - m)) / Math.Max(1, x.Length - 1)); }
+}

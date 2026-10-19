@@ -5,7 +5,8 @@ namespace Doctrine.Tests;
 // The BRUTE-FORCE MODEL of one army: plain arrays and the rules written out again, with no Pleroma anywhere. The Pleroma army
 // must equal a store REBUILT from this model's cohorts, cell for cell, after every operation (as the Plenum proofs do).
 // Only the design decisions are repeated here: Cull is never legal on this shape (Phasor CG1), a new cohort enters at slot kind mod 3
-// with veterancy 0, an aura is legal once while it is not active, Score is the sum of count x price x power plus 100 per gold.
+// with veterancy 0, an aura is legal once while it is not active, Score is the sum of count x price x power plus 100 per gold,
+// a Flip costs the army the sum over its soldiers of Roster.RelabelCost and is legal only while the army can pay it.
 internal sealed class ArmyModel(Side side)
 {
     public Side Side { get; } = side;
@@ -35,7 +36,7 @@ internal sealed class ArmyModel(Side side)
         var m = LegalMask.None;
         if (Total == 0) return m;
         m = m.With(DoctrineVocabulary.Army(ArmyOrderKind.Rotate, 1)).With(DoctrineVocabulary.Army(ArmyOrderKind.Rotate, 2));
-        for (int b = 0; b < DoctrineVocabulary.Traits; b++) m = m.With(DoctrineVocabulary.Army(ArmyOrderKind.Flip, b));
+        for (int b = 0; b < DoctrineVocabulary.Traits; b++) if (FlipCost(b) <= Gold) m = m.With(DoctrineVocabulary.Army(ArmyOrderKind.Flip, b));
         m = m.With(DoctrineVocabulary.Army(ArmyOrderKind.Age));
         for (int k = 0; k < Roster.Size; k++)
             if (Present(k) && Present((k + 1) % Roster.Size)) m = m.With(DoctrineVocabulary.Army(ArmyOrderKind.Merge, k));
@@ -65,7 +66,14 @@ internal sealed class ArmyModel(Side side)
         Gold -= Roster.PriceOf(kind) * count;
     }
     public void Rotate(int shift) { for (int k = 0; k < Roster.Size; k++) Slot[k] = (Slot[k] + shift) % DoctrineVocabulary.Groups; }
-    public void Flip(int bit) => FlipMask ^= 1 << bit;
+    /// <summary>A flip is paid for: every soldier whose relabelled traits are worth more costs the difference (Roster.RelabelCost), the rest are free.</summary>
+    public long FlipCost(int bit)
+    {
+        long cost = 0;
+        for (int k = 0; k < Roster.Size; k++) if (Present(k)) cost += (long)Soldiers[k] * Roster.RelabelCost((Trait)Traits(k), bit);
+        return cost;
+    }
+    public void Flip(int bit) { Gold -= (int)FlipCost(bit); FlipMask ^= 1 << bit; }
     public void Age() { for (int k = 0; k < Roster.Size; k++) if (Present(k)) Vet[k] = (Vet[k] + 1) % PleromaArmyLayout.Period; }
     public void Merge(int k)
     {

@@ -20,18 +20,21 @@ public class DigestPinTests
     [Fact]
     public async Task The_eight_round_stub_game_digest_is_pinned()
     {
-        Assert.Equal(14219199923527622001UL, await Play(false, 1234));
+        // Re-pinned 2026-10-19 (was 14219199923527622001): a Flip now costs gold (Roster.RelabelCost; Doctrine\todo\difficulty-2026-10-19.md). The scripted
+        // player and the scripted enemy both order random legal tokens, and the legal list no longer offers a Flip the army cannot pay for.
+        Assert.Equal(1796544520915972963UL, await Play(false, 1234));
     }
 
     [Fact]
     public async Task The_eight_round_real_section_game_digest_is_pinned()
     {
+        // Re-pinned a third time 2026-10-19 (was 2333107022278238892): a Flip now costs gold, so the random doctrines of both sides change (see the stub pin above).
         // Re-pinned again 2026-10-19 (was 9094490212791655651): the arena meshes are now baked as their own mirror image (the right half of every arena
         // is split along the reflection of the left half's diagonal). With one diagonal everywhere, mirrored armies leaned to the attacker 43 to 8 on
         // the ridge (large-N sweep, same note). Every Tracer battle changes; the stub digest is untouched.
         // Earlier re-pin 2026-10-19 (was 1827372264668017971): the Tracer battle changed on purpose. The defender's formation block is now mirrored
         // (the attacker's partial last row was its front, the defender's its rear) and agent ids interleave the two sides in conflict priority.
         // Found by the balance harness (Doctrine\todo\balance-harness-2026-10-19.md). The stub digest above is untouched.
-        Assert.Equal(2333107022278238892UL, await Play(true, 1234));
+        Assert.Equal(12988139016327917885UL, await Play(true, 1234));
     }
 }

@@ -64,8 +64,7 @@ public sealed class DoctrineGame
     public async ValueTask<GameResult> PlayAsync(int seed, CancellationToken ct = default)
     {
         var run = await Context.Round.RunAsync(NewGame(seed), ct);
-        if (run is PipelineResult<RoundState>.Failure f) throw f.Exception;
-        var s = run.GetData();
+        var s = PipelineFailure.DataOrThrow(run, $"the game of seed {seed}");
         return new GameResult(seed, s.Records, s.Player.ToCode());
     }
 }

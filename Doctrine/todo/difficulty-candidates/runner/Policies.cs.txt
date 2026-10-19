@@ -1,0 +1,111 @@
+using Doctrine;
+
+namespace Autopilot;
+
+static class Util
+{
+    public static int Allowed(LegalMask legal, bool[] used, Span<int> buf)
+    {
+        int n = 0; buf[n++] = 0;
+        for (int t = 1; t < DoctrineVocabulary.Size; t++) if (legal.Allows(t) && !used[t]) buf[n++] = t;
+        return n;
+    }
+}
+
+public sealed class RandomPolicy : IPolicy
+{
+    public void Choose(int[] summary, LegalMask legal, int round, GameRng rng, int[] tokens)
+    {
+        Array.Clear(tokens); var used = new bool[64]; Span<int> buf = stackalloc int[64];
+        for (int k = 0; k < 4; k++)
+        {
+            int n = Util.Allowed(legal, used, buf);
+            int t = buf[rng.Next(n)];
+            if (t == 0) return;
+            tokens[k] = t; used[t] = true;
+        }
+    }
+}
+
+public sealed class FixedPolicy(int[] want) : IPolicy
+{
+    public int[] Want => want;
+    public void Choose(int[] summary, LegalMask legal, int round, GameRng rng, int[] tokens)
+    {
+        Array.Clear(tokens);
+        for (int i = 0; i < want.Length && i < 4; i++) tokens[i] = want[i];
+    }
+}
+
+/// <summary>Wraps a policy: tokens in <paramref name="blocked"/> are made illegal before it chooses (retrained arm) or deleted from its output (strip arm).</summary>
+public sealed class MaskPolicy(IPolicy inner, HashSet<int> blocked, bool strip) : IPolicy
+{
+    public void Choose(int[] summary, LegalMask legal, int round, GameRng rng, int[] tokens)
+    {
+        if (!strip)
+        {
+            var l = legal; foreach (var b in blocked) l = l.Without(b);
+            inner.Choose(summary, l, round, rng, tokens);
+            return;
+        }
+        inner.Choose(summary, legal, round, rng, tokens);
+        var kept = tokens.Where(t => t != 0 && !blocked.Contains(t)).ToArray();
+        Array.Clear(tokens); for (int i = 0; i < kept.Length; i++) tokens[i] = kept[i];
+    }
+}
+
+/// <summary>Per-slot tabular bandit keyed on the round only (AP-1 key k1). Read-only while games run; updated between iterations.</summary>
+public sealed class BanditPolicy : IPolicy
+{
+    public const double Prior = 0.5, PriorWeight = 1.0;
+    public double Eps;
+    public readonly Dictionary<long, (double[] Sum, int[] N)> Table = [];
+    public BanditPolicy(double eps) { Eps = eps; }
+
+    static long Id(int slot, int key) => slot * 1000L + key;
+    (double[] Sum, int[] N) Row(int slot, int key)
+    {
+        var id = Id(slot, key);
+        if (!Table.TryGetValue(id, out var r)) Table[id] = r = (new double[DoctrineVocabulary.Size], new int[DoctrineVocabulary.Size]);
+        return r;
+    }
+    static readonly (double[] Sum, int[] N) Empty = (new double[DoctrineVocabulary.Size], new int[DoctrineVocabulary.Size]);
+    (double[] Sum, int[] N) Peek(int slot, int key) => Table.TryGetValue(Id(slot, key), out var r) ? r : Empty;
+
+    public void Choose(int[] summary, LegalMask legal, int round, GameRng rng, int[] tokens)
+    {
+        Array.Clear(tokens); var used = new bool[64]; Span<int> buf = stackalloc int[64];
+        int key = Math.Min(round, 7);
+        for (int k = 0; k < 4; k++)
+        {
+            int n = Util.Allowed(legal, used, buf);
+            int pick;
+            if (Eps > 0 && rng.NextU64() % 1000000UL < (ulong)(Eps * 1000000)) pick = buf[rng.Next(n)];
+            else
+            {
+                var row = Peek(k, key);
+                double best = double.NegativeInfinity; int ties = 0; pick = 0;
+                for (int i = 0; i < n; i++)
+                {
+                    int t = buf[i];
+                    double v = (row.Sum[t] + Prior * PriorWeight) / (row.N[t] + PriorWeight);
+                    if (v > best + 1e-12) { best = v; pick = t; ties = 1; }
+                    else if (Math.Abs(v - best) <= 1e-12) { ties++; if (rng.Next(ties) == 0) pick = t; }
+                }
+            }
+            if (pick == 0) return;
+            tokens[k] = pick; used[pick] = true;
+        }
+    }
+
+    public void Update(RoundLog r, double score)
+    {
+        int key = Math.Min(r.Round, 7);
+        for (int k = 0; k < 4; k++)
+        {
+            int t = r.Tokens[k];
+            var row = Row(k, key); row.Sum[t] += score; row.N[t]++;
+            if (t == 0) break;
+        }
+    }
+}
