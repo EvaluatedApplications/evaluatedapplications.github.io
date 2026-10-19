@@ -1,0 +1,287 @@
+using System.Diagnostics;
+using System.Globalization;
+using System.Text;
+using Doctrine;
+using Doctrine.Army;
+using Doctrine.Battle;
+using Offers4;
+
+// dgo: the fourth-round instrument. CPU only, BelowNormal, 6 workers.
+//   dgo styles <out.tsv> [games]   arms FREE / OFFERS / NOGUAR x styles + clones; one TSV row per game
+//   dgo report <out.tsv>           the tables from the raw file
+//   dgo rot <out.tsv> [seeds]      the three rotations of one army (and the seed-perturbation null)
+//   dgo smoke                      a few games of each arm, timing only
+static class P
+{
+    static readonly Stopwatch Clock = Stopwatch.StartNew();
+    static void Log(string s) => Console.WriteLine($"[{Clock.Elapsed.TotalMinutes:F1} min] {s}");
+    public const int BaseSeed = 9_900_000;
+    public static int EnemyPct = 25;   // the scripted enemy's gold, in percent of the game's (14 + 4 per round); chosen by the calibration scan, declared in the pre-registration
+    public static bool OldPlacement;
+
+    public static readonly (string Arm, OfferRules Rules)[] Arms =
+    [
+        ("FREE", OfferRules.Off),
+        ("OFFERS", OfferRules.Default),
+        ("NOGUAR", OfferRules.Default with { Guarantees = false }),
+        ("OFFSPEND", OfferRules.Default),          // DIAGNOSTIC, added after the scored run: OFFERS, styles spend the leftover gold on the dearest packs they can pay
+    ];
+
+    sealed class RecGeneral : IGeneral
+    {
+        public int ExamplesSeen => 0;
+        public ValueTask<GeneralOutput> SuggestAsync(GeneralInput input, CancellationToken ct) => ValueTask.FromResult(new GeneralOutput(DoctrineSet.Empty, 0));
+        public ValueTask LearnAsync(GeneralExample example, CancellationToken ct) => ValueTask.CompletedTask;
+        public ValueTask LearnOutcomeAsync(GeneralOutcome outcome, CancellationToken ct) => ValueTask.CompletedTask;
+    }
+
+    sealed class Worker(string scratch)
+    {
+        readonly Dictionary<string, (DoctrineGame Game, SwitchPlayer Sw)> _games = [];
+        public int Retries;
+        public (DoctrineGame Game, SwitchPlayer Sw) Get(string arm, OfferRules rules)
+        {
+            if (_games.TryGetValue(arm, out var g)) return g;
+            Directory.CreateDirectory(scratch);
+            var world = new Tracer.PathfindingWorld(tunerStatePath: Path.Combine(scratch, Guid.NewGuid().ToString("N")));
+            var sw = new SwitchPlayer();
+            var game = DoctrineBuilder.New()
+                .WithDefaults(r => r.WithArmy(new PleromaArmyService(OldPlacement ? new ArmyRules { BalancedPlacement = false } : null)).WithTracer(world).WithBattle(ctx => new TracerBattleEngine(ctx.Tracer!)).WithGeneral(new RecGeneral()))
+                .WithPlayer(sw).WithRules(new DoctrineDomain { MaxRounds = 8, Offers = rules, EnemyBaseGold = 14 * EnemyPct / 100, EnemyGoldPerRound = 4 * EnemyPct / 100 }).WithSingleThread(true).Build();
+            return _games[arm] = (game, sw);
+        }
+    }
+
+    static T[] Run<T>(int n, Func<int, Worker, T> unit, string what)
+    {
+        var res = new T[n]; int next = -1, done = 0, last = -1;
+        var threads = new List<Thread>(); Exception? fail = null;
+        string root = Path.Combine(Path.GetTempPath(), "dgo-tuner", Guid.NewGuid().ToString("N"));
+        for (int w = 0; w < Math.Min(6, n); w++)
+        {
+            int wi = w;
+            var th = new Thread(() =>
+            {
+                try
+                {
+                    var wk = new Worker(Path.Combine(root, wi.ToString()));
+                    while (true)
+                    {
+                        int i = Interlocked.Increment(ref next);
+                        if (i >= n) break;
+                        res[i] = unit(i, wk);
+                        int d = Interlocked.Increment(ref done), pct = d * 10 / n;
+                        if (pct != last) { last = pct; Log($"{what} {d}/{n}"); }
+                    }
+                }
+                catch (Exception e) { fail = e; Interlocked.Exchange(ref next, n); }
+            }, 16 * 1024 * 1024) { IsBackground = true };
+            th.Start(); threads.Add(th);
+        }
+        foreach (var t in threads) t.Join();
+        if (fail is not null) throw new AggregateException(fail);
+        return res;
+    }
+
+    // ---- the styles matrix ----
+    public const int Clones = 6;     // RANDOM0..RANDOM5: six chance players with their own streams (the empirical null of the spread)
+
+    static List<(string Arm, string Policy)> Cells()
+    {
+        var l = new List<(string, string)>();
+        foreach (var (arm, _) in Arms)
+        {
+            if (arm == "OFFSPEND" && Environment.GetEnvironmentVariable("DGO_ARMS") != "all") continue;   // the scored sweep is FREE/OFFERS/NOGUAR, unchanged
+            foreach (var s in Styles.Six) l.Add((arm, s.Name));
+            for (int c = 0; c < (arm is "NOGUAR" or "OFFSPEND" ? 1 : Clones); c++) l.Add((arm, "RANDOM" + c));
+        }
+        return l;
+    }
+
+    static GameLog PlayGame(Worker wk, string arm, string policy, int seed)
+    {
+        var rules = Arms.First(a => a.Arm == arm).Rules;
+        var (game, sw) = wk.Get(arm, rules);
+        for (int attempt = 0; ; attempt++)
+        {
+            IPlayerInput inner; Func<GameLog> log;
+            if (policy.StartsWith("RANDOM")) { var rp = new RandomPlayer(int.Parse(policy[6..]) + 1, seed); inner = rp; log = () => rp.Log; }
+            else { var sp = new StylePlayer(Styles.Six.First(s => s.Name == policy), 17, seed, arm == "OFFSPEND"); inner = sp; log = () => sp.Log; }
+            sw.Inner = inner;
+            try
+            {
+                var run = game.Context.Round.RunAsync(game.NewGame(seed)).AsTask().GetAwaiter().GetResult();
+                if (run is EvalApp.PipelineResult<RoundState>.Failure f)
+                {
+                    if ((f.Exception is null || f.Exception is NullReferenceException || (f.Exception is InvalidOperationException ioe && ioe.Message.Contains("no exception"))) && attempt < 8) { wk.Retries++; continue; }
+                    throw new InvalidOperationException("pipeline failure: " + (f.Exception?.ToString() ?? f.Message ?? "no detail"));
+                }
+                return log();
+            }
+            catch (NullReferenceException) when (attempt < 8) { wk.Retries++; }
+        }
+    }
+
+    static void SpendOnly(string path, int games)
+    {
+        var units = new List<(string Arm, string Policy, int Seed)>();
+        foreach (var (arm, pol) in Cells().Where(c => c.Arm == "OFFSPEND")) for (int g = 0; g < games; g++) units.Add((arm, pol, BaseSeed + g));
+        WriteRows(path, Run(units.Count, (i, wk) => (units[i], PlayGame(wk, units[i].Arm, units[i].Policy, units[i].Seed)), "spend"));
+    }
+
+    static void WriteRows(string path, ((string Arm, string Policy, int Seed) U, GameLog L)[] rows)
+    {
+        var sb = new StringBuilder("arm\tpolicy\tseed\tscores\tscriptRounds\tscriptHits\trefused\tillegal\trounds\n");
+        foreach (var (u, l) in rows)
+            sb.Append($"{u.Arm}\t{u.Policy}\t{u.Seed}\t{string.Join(",", l.Scores.Select(x => x.ToString("0.0", CultureInfo.InvariantCulture)))}\t{l.ScriptRounds}\t{l.ScriptHits}\t{l.Refused}\t{l.Illegal}\t{l.Rounds}\n");
+        File.WriteAllText(path, sb.ToString());
+    }
+
+    static void Styles_(string path, int games)
+    {
+        var cells = Cells();
+        var units = new List<(string Arm, string Policy, int Seed)>();
+        foreach (var (arm, pol) in cells) for (int g = 0; g < games; g++) units.Add((arm, pol, BaseSeed + g));
+        var rows = Run(units.Count, (i, wk) => (units[i], PlayGame(wk, units[i].Arm, units[i].Policy, units[i].Seed)), "styles");
+        var sb = new StringBuilder("arm\tpolicy\tseed\tscores\tscriptRounds\tscriptHits\trefused\tillegal\trounds\n");
+        foreach (var (u, l) in rows)
+            sb.Append($"{u.Arm}\t{u.Policy}\t{u.Seed}\t{string.Join(",", l.Scores.Select(x => x.ToString("0.0", CultureInfo.InvariantCulture)))}\t{l.ScriptRounds}\t{l.ScriptHits}\t{l.Refused}\t{l.Illegal}\t{l.Rounds}\n");
+        File.WriteAllText(path, sb.ToString());
+    }
+
+    sealed record Row(string Arm, string Policy, int Seed, double[] Scores, int ScriptRounds, int ScriptHits, int Refused, int Illegal, int Rounds)
+    {
+        public double Mean => Scores.Average();
+        public int Wins => Scores.Count(x => x >= 1.0);
+    }
+
+    static List<Row> Load(string path) => File.ReadLines(path).Skip(1).Select(l => l.Split('\t')).Select(f => new Row(f[0], f[1], int.Parse(f[2]),
+        f[3].Split(',').Select(x => double.Parse(x, CultureInfo.InvariantCulture)).ToArray(), int.Parse(f[4]), int.Parse(f[5]), int.Parse(f[6]), int.Parse(f[7]), int.Parse(f[8]))).ToList();
+
+    static double Sd(IEnumerable<double> x) { var a = x.ToArray(); double m = a.Average(); return Math.Sqrt(a.Sum(v => (v - m) * (v - m)) / Math.Max(1, a.Length - 1)); }
+
+    static void Report(string path)
+    {
+        var rows = Load(path);
+        var sb = new StringBuilder();
+        void W(string s) { sb.AppendLine(s); Console.WriteLine(s); }
+        W("mean = mean round score (win 1, draw .5, loss 0; unplayed rounds of a dead army count 0) over 8 rounds; SE over games; sd = sd of the game mean; solved = share of games with 6+ round wins; script = share of rounds in which the style's WHOLE script was available");
+        double spreadFree = 0, spreadOffers = 0, sdMean = 0, nullSpreadA = 0, nullSpreadB = 0;
+        foreach (var arm in Arms.Select(a => a.Arm).Where(a => rows.Any(r => r.Arm == a)))
+        {
+            W($"\n== {arm}");
+            W($"{"policy",-10} {"games",5} {"mean",6} {"SE",6} {"sd",6} {"solved",6} {"script",6} {"refused",7} {"illegal",7}");
+            var means = new Dictionary<string, double>(); var ses = new Dictionary<string, double>();
+            foreach (var g in rows.Where(r => r.Arm == arm).GroupBy(r => r.Policy))
+            {
+                var m = g.Select(r => r.Mean).ToArray(); double mean = m.Average(), sd = Sd(m), se = sd / Math.Sqrt(m.Length);
+                double solved = g.Average(r => r.Wins >= 6 ? 1.0 : 0.0), script = g.Sum(r => r.ScriptRounds) == 0 ? double.NaN : g.Sum(r => (double)r.ScriptHits) / g.Sum(r => r.ScriptRounds);
+                W($"{g.Key,-10} {m.Length,5} {mean,6:F3} {se,6:F3} {sd,6:F3} {solved,6:F3} {script,6:F2} {g.Sum(r => r.Refused),7} {g.Sum(r => r.Illegal),7}");
+                means[g.Key] = mean; ses[g.Key] = se;
+            }
+            var st = Styles.Six.Select(s => s.Name).Where(means.ContainsKey).ToList();
+            double spread = st.Max(s => means[s]) - st.Min(s => means[s]);
+            var sorted = st.OrderByDescending(s => means[s]).ToList();
+            var clones = means.Keys.Where(k => k.StartsWith("RANDOM")).ToList();
+            double nullSpread = clones.Count > 1 ? clones.Max(k => means[k]) - clones.Min(k => means[k]) : double.NaN;
+            double meanSe = st.Average(s => ses[s]);
+            W($"styles: spread (max-min of 6 means) {spread:F3}; best {sorted[0]} {means[sorted[0]]:F3}, second {sorted[1]} {means[sorted[1]]:F3}; best minus median {means[sorted[0]] - (st.Select(s => means[s]).OrderBy(x => x).ElementAt(2) + st.Select(s => means[s]).OrderBy(x => x).ElementAt(3)) / 2:F3}");
+            W($"empirical null (spread of {clones.Count} RANDOM clones): {nullSpread:F3}; analytic null (expected range of 6 equal means = 2.53 SE, SE {meanSe:F3}): {2.53 * meanSe:F3}");
+            if (arm == "FREE") { spreadFree = spread; nullSpreadA = nullSpread; }
+            if (arm == "OFFERS") { spreadOffers = spread; nullSpreadB = nullSpread; sdMean = Sd(rows.Where(r => r.Arm == arm && r.Policy == sorted[0]).Select(r => r.Mean)); }
+        }
+        if (spreadFree > 0) W($"\nOBSERVABLE R = spread(OFFERS) / spread(FREE) = {spreadOffers:F3} / {spreadFree:F3} = {spreadOffers / spreadFree:F2}");
+        File.WriteAllText(Path.ChangeExtension(path, ".report.txt"), sb.ToString());
+    }
+
+    // ---- the three rotations ----
+    static void Rot(string path, int seeds)
+    {
+        var docs = new (string Name, int[] Tokens)[]
+        {
+            ("ADV/HOLD/FLANK", [DoctrineVocabulary.Field(FieldOrderKind.Advance, 0), DoctrineVocabulary.Field(FieldOrderKind.Hold, 1), DoctrineVocabulary.Field(FieldOrderKind.Flank, 2)]),
+            ("HOLD/ADV/FALLBACK", [DoctrineVocabulary.Field(FieldOrderKind.Hold, 0), DoctrineVocabulary.Field(FieldOrderKind.Advance, 1), DoctrineVocabulary.Field(FieldOrderKind.FallBack, 2)]),
+        };
+        var units = new List<(int Doc, int Seed, int Variant)>();      // Variant 0..2 = rotation, 3..5 = seed perturbation (the null)
+        for (int d = 0; d < docs.Length; d++) for (int s = 0; s < seeds; s++) for (int v = 0; v < 6; v++) units.Add((d, 9_950_000 + s, v));
+        var svc = new PleromaArmyService();
+        string[] arenas = ["open-field", "chokepoint", "ridge", "falling-gate"];
+        var res = Run(units.Count, (i, wk) =>
+        {
+            var u = units[i];
+            var (game, _) = wk.Get("FREE", OfferRules.Off);
+            for (int attempt = 0; ; attempt++)
+                try
+                {
+                    IArmy Raise(Side side, int seed, int salt)
+                    {
+                        var a = svc.Create(side, seed);
+                        a.ApplySpoilsAsync(new Spoils(24, 0), default).AsTask().GetAwaiter().GetResult();
+                        var offer = SeededOffers.Instance.Units(seed, salt, a.Read().Gold, OfferRules.Default);
+                        var rng = new GameRng(GameRng.Mix(seed, 31 + salt)); var left = offer.Packs.ToList(); int gold = a.Read().Gold; var picks = new List<DraftPick>();
+                        for (int k = 0; k < 3; k++) { var can = left.Where(p => p.Cost <= gold).ToList(); if (can.Count == 0) break; var p = can[rng.Next(can.Count)]; picks.Add(UnitOffer.Pick(p)); gold -= p.Cost; left.Remove(p); }
+                        a.DraftAsync(new DraftRequest(0, seed, picks), default).AsTask().GetAwaiter().GetResult();
+                        return a;
+                    }
+                    var player = Raise(Side.Player, u.Seed, 0); var enemy = Raise(Side.Enemy, u.Seed, 1);
+                    int rot = u.Variant < 3 ? u.Variant : 0;
+                    if (rot > 0) player.ApplyArmyOrdersAsync(DoctrineSet.Of(DoctrineVocabulary.Army(ArmyOrderKind.Rotate, rot)), default).AsTask().GetAwaiter().GetResult();
+                    var doc = DoctrineSet.Of(docs[u.Doc].Tokens); var edoc = DoctrineSet.Of(DoctrineVocabulary.Field(FieldOrderKind.Advance, 0), DoctrineVocabulary.Field(FieldOrderKind.Advance, 1), DoctrineVocabulary.Field(FieldOrderKind.Advance, 2));
+                    int battleSeed = u.Seed * 7 + 3 + (u.Variant >= 3 ? u.Variant - 2 : 0);
+                    var setup = new BattleSetup(arenas[u.Seed % 4], battleSeed, 120,
+                        new BattleSide(Side.Player, player.Read().Cohorts, DoctrineVocabulary.FieldOrders(doc), DoctrineVocabulary.Trigger(doc)),
+                        new BattleSide(Side.Enemy, enemy.Read().Cohorts, DoctrineVocabulary.FieldOrders(edoc), DoctrineVocabulary.Trigger(edoc)));
+                    var run = game.Context.BattleRun.RunAsync(new BattleState(setup)).AsTask().GetAwaiter().GetResult();
+                    if (run is EvalApp.PipelineResult<BattleState>.Failure f) throw f.Exception ?? new InvalidOperationException("no exception");
+                    var o = run.GetData().Result!.Outcome;
+                    return o == BattleStatus.AttackerWon ? 1.0 : o == BattleStatus.Draw ? 0.5 : 0.0;
+                }
+                catch (Exception) when (attempt < 8) { wk.Retries++; }
+        }, "rot");
+        var sb = new StringBuilder();
+        void W(string s) { sb.AppendLine(s); Console.WriteLine(s); }
+        for (int d = 0; d < docs.Length; d++)
+        {
+            double[,] sc = new double[seeds, 6];
+            for (int i = 0; i < units.Count; i++) if (units[i].Doc == d) sc[units[i].Seed - 9_950_000, units[i].Variant] = res[i];
+            double[] mean = new double[6];
+            for (int v = 0; v < 6; v++) { double s = 0; for (int k = 0; k < seeds; k++) s += sc[k, v]; mean[v] = s / seeds; }
+            double Oracle(int a) { double g = 0; for (int k = 0; k < seeds; k++) g += Math.Max(sc[k, a], Math.Max(sc[k, a + 1], sc[k, a + 2])) - (sc[k, a] + sc[k, a + 1] + sc[k, a + 2]) / 3; return g / seeds; }
+            double Disagree(int a) { int n = 0; for (int k = 0; k < seeds; k++) if (sc[k, a] != sc[k, a + 1] || sc[k, a] != sc[k, a + 2]) n++; return n / (double)seeds; }
+            double se = Math.Sqrt(0.25 / seeds) * 1.0;
+            W($"{docs[d].Name}: rotation 0/1/2 mean win {mean[0]:F3} {mean[1]:F3} {mean[2]:F3} (spread {mean[0..3].Max() - mean[0..3].Min():F3}); null (same army, battle seed +0/+1/+2) {mean[3]:F3} {mean[4]:F3} {mean[5]:F3} (spread {mean[3..6].Max() - mean[3..6].Min():F3}); SE per mean about {se:F3}");
+            W($"{docs[d].Name}: oracle gain (best of three per seed over the mean of three): rotations {Oracle(0):F3}, null {Oracle(3):F3}; outcomes differing across the three: rotations {Disagree(0):F2}, null {Disagree(3):F2}");
+        }
+        File.WriteAllText(path, sb.ToString());
+    }
+
+    static void Main(string[] args)
+    {
+        try { Process.GetCurrentProcess().PriorityClass = ProcessPriorityClass.BelowNormal; } catch { }
+        if (Environment.GetEnvironmentVariable("DGO_ENEMY") is string ep) EnemyPct = int.Parse(ep);
+        OldPlacement = Environment.GetEnvironmentVariable("DGO_OLDPLACE") == "1";
+        switch (args[0])
+        {
+            case "spend": Environment.SetEnvironmentVariable("DGO_ARMS", "all"); SpendOnly(args[1], args.Length > 2 ? int.Parse(args[2]) : 200); break;
+            case "styles": Styles_(args[1], args.Length > 2 ? int.Parse(args[2]) : 120); Log($"done"); break;
+            case "calib":
+                foreach (int pct in args.Skip(1).Select(int.Parse))
+                {
+                    EnemyPct = pct;
+                    var r = Run(90, (i, wk) => PlayGame(wk, "FREE", "RANDOM" + (i % 3), 9_000_000 + i / 3), $"calib {pct}");
+                    var m = r.Select(x => x.Scores.Average()).ToArray();
+                    Log($"CALIB enemy {pct} percent: FREE random mean round score {m.Average():F3} (90 games)");
+                }
+                break;
+            case "report": Report(args[1]); break;
+            case "rot": Rot(args[1], args.Length > 2 ? int.Parse(args[2]) : 240); break;
+            case "smoke":
+                {
+                    var sw = Stopwatch.StartNew();
+                    var r = Run(12, (i, wk) => PlayGame(wk, Arms[i % 3].Arm, i % 2 == 0 ? "MASS" : "RANDOM0", 1 + i), "smoke");
+                    Log($"smoke 12 games {sw.Elapsed.TotalSeconds:F1} s; mean {r.Average(x => x.Scores.Average()):F2}; refused {r.Sum(x => x.Refused)} illegal {r.Sum(x => x.Illegal)}");
+                    break;
+                }
+        }
+    }
+}

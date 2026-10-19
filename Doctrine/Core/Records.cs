@@ -33,7 +33,7 @@ public sealed record ArmyReadModel(
     }
 }
 
-/// <summary>Buy <see cref="Count"/> soldiers of kind <see cref="Kind"/>.</summary>
+/// <summary>Buy <see cref="Count"/> soldiers of kind <see cref="Kind"/>. A NEW cohort joins the rank the balance rule picks (<see cref="Roster.BalancedLine"/>); a kind already standing keeps its rank.</summary>
 public readonly record struct DraftPick(int Kind, int Count);
 
 /// <summary>
@@ -152,12 +152,15 @@ public sealed record GeneralOutcome(GeneralInput Input, DoctrineSet Chosen, Batt
 /// What one round left behind: the part of the game the UI shows and the ladder would share. <see cref="IllegalDropped"/> counts tokens the
 /// PIPELINE removed (see CONTRACT.md, "Who judges a token"); <see cref="Orders"/> is the ARMY's own count of the player's army orders applied
 /// and skipped (null only in a record built by hand); <see cref="Final"/> is true when this round ended the game. Neither of the last two is
-/// in <c>GameResult.Digest</c>.
+/// in <c>GameResult.Digest</c>. <see cref="UnitOffer"/> and <see cref="OrderOffer"/> are what the round offered (the order offer as it stood when the
+/// player chose, after <see cref="Rerolls"/> paid rerolls); <see cref="OfferRefused"/> counts the draft picks and doctrine tokens the pipeline refused
+/// because they were not on offer (or a token picked twice, or a reroll the purse could not pay). With offers off all four are empty/zero.
 /// </summary>
 public sealed record RoundRecord(
     int Round, DoctrineSet PlayerDoctrine, DoctrineSet Ghost, int GhostConfidence, bool Overrode, int IllegalDropped,
     string ArenaId, BattleResult Result, BattleReplay Replay, Spoils Spoils, ulong PlayerDigest, ulong EnemyDigest,
-    ArmyOrdersReport? Orders = null, bool Final = false);
+    ArmyOrdersReport? Orders = null, bool Final = false,
+    UnitOffer? UnitOffer = null, OrderOffer? OrderOffer = null, int Rerolls = 0, int OfferRefused = 0);
 
 // ---- helpers -------------------------------------------------------------------------------------------------------
 

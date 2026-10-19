@@ -45,17 +45,72 @@ static class ScriptedOpponent
     }
 }
 
-sealed class DraftStage() : RoundStage(Stages.ArmyDraft)
+/// <summary>The round's pack offer, scaled to the purse as the round opens (CONTRACT.md, "The offers"). With the offers off it is the open market.</summary>
+sealed class OfferUnitsStage() : RoundStage(Stages.OfferUnits)
+{
+    protected override ValueTask<RoundState> StepAsync(RoundState s, DoctrineContext g, DoctrineDomain d, CancellationToken ct)
+    {
+        int gold = s.Player.Read().Gold;
+        var offer = d.Offers.Enabled ? g.Offers.Units(s.Seed, s.Round, gold, d.Offers) : UnitOffer.Open(gold);
+        return ValueTask.FromResult(s with { Units = offer });
+    }
+}
+
+/// <summary>
+/// The order offer, drawn from the legal list AS THE DRAFT LEFT IT (the draft changes gold, lines and kinds, so it changes what is legal). The player may
+/// pay for a reroll while rerolls are left: the fee goes to the army (<see cref="IArmy.PayAsync"/>), the new offer is drawn from the reroll's own
+/// stream and from the legal list as the payment left it. A reroll the purse cannot pay is refused, counted, and ends the asking.
+/// </summary>
+sealed class OfferOrdersStage() : RoundStage(Stages.OfferOrders)
 {
     protected override async ValueTask<RoundState> StepAsync(RoundState s, DoctrineContext g, DoctrineDomain d, CancellationToken ct)
     {
-        var picks = await g.Player.DraftAsync(s.Player.Read(), s.Round, ct);
+        var rules = d.Offers;
+        if (!rules.Enabled) return s with { OrderOffer = OrderOffer.Open() };
+        var army = s.Player.Read();
+        var offer = g.Offers.Orders(s.Seed, s.Round, 0, army.Legal, rules);
+        int rerolls = 0, refused = s.OfferRefused;
+        while (rerolls < rules.MaxRerolls && await g.Player.RerollAsync(army, offer, s.Round, ct))
+        {
+            if (rules.RerollCost > 0 && !await s.Player.PayAsync(rules.RerollCost, ct)) { refused++; break; }
+            rerolls++;
+            army = s.Player.Read();
+            offer = g.Offers.Orders(s.Seed, s.Round, rerolls, army.Legal, rules);
+        }
+        return s with { OrderOffer = offer, Rerolls = rerolls, OfferRefused = refused };
+    }
+}
+
+sealed class DraftStage() : RoundStage(Stages.ArmyDraft)
+{
+    /// <summary>The reason an army-less refusal carries: the pick is not one of the offered packs (or the pack was already bought this round).</summary>
+    public const string NotOffered = "not on offer";
+
+    protected override async ValueTask<RoundState> StepAsync(RoundState s, DoctrineContext g, DoctrineDomain d, CancellationToken ct)
+    {
+        var offer = s.Units ?? UnitOffer.Open(s.Player.Read().Gold);
+        IReadOnlyList<DraftPick> picks = await g.Player.DraftAsync(s.Player.Read(), offer, s.Round, ct);
+        // THE OFFER BINDS THE PLAYER: a pick that is not exactly an offered pack (kind and count), or a pack bought twice, never reaches the army; it comes
+        // back in the report with its reason and is counted in the record. The army still judges the gold of what is left.
+        var notOffered = new List<(DraftPick Pick, string Reason)>();
+        if (offer.Active && d.Offers.Enforce)
+        {
+            var left = offer.Packs.ToList();
+            var ok = new List<DraftPick>();
+            foreach (var p in picks)
+            {
+                int i = left.FindIndex(k => k.Kind == p.Kind && k.Count == p.Count);
+                if (i < 0) notOffered.Add((p, NotOffered)); else { left.RemoveAt(i); ok.Add(p); }
+            }
+            picks = ok;
+        }
         var report = await s.Player.DraftAsync(new DraftRequest(s.Round, s.Seed, picks), ct);
+        if (notOffered.Count > 0) report = report with { Refused = report.Refused.Concat(notOffered).ToList() };
         await g.Player.DraftedAsync(report, ct);                       // the army's own verdict goes back to the player's hands
         var enemy = g.Armies.Create(Side.Enemy, (int)GameRng.Mix(s.Seed, s.Round));
         int gold = d.EnemyBaseGold + d.EnemyGoldPerRound * s.Round;
         await enemy.DraftAsync(new DraftRequest(s.Round, s.Seed, ScriptedOpponent.Picks(s.Round, s.Seed, gold)), ct);
-        return s with { Enemy = enemy };
+        return s with { Enemy = enemy, OfferRefused = s.OfferRefused + notOffered.Count };
     }
 }
 
@@ -64,6 +119,8 @@ sealed class SuggestStage() : RoundStage(Stages.GeneralSuggest)
     protected override async ValueTask<RoundState> StepAsync(RoundState s, DoctrineContext g, DoctrineDomain d, CancellationToken ct)
     {
         var input = GeneralSummary.Build(s.Player.Read(), s.Enemy!.Read(), s.LastOutcome, s.LastPlayerWon);
+        // THE GENERAL'S ACTION SPACE IS "PICK UP TO FOUR OF THE OFFER": its mask is the offer AND the legal list. Only the mask changes; the net's input does not.
+        if (s.OrderOffer is { Active: true } offer) input = input with { Legal = new LegalMask(input.Legal.Bits & offer.Mask.Bits) };
         var ghost = await g.General.SuggestAsync(input, ct);
         // THE GENERAL IS BOUND BY THE START MASK (CONTRACT.md, "Who judges a token"): a token it offers that the army does not allow at the
         // start of the round is removed here and counted, so the player never sees it and a broken general is visible, never silent.
@@ -79,7 +136,8 @@ sealed class ChooseStage() : RoundStage(Stages.PlayerChoose)
 {
     protected override async ValueTask<RoundState> StepAsync(RoundState s, DoctrineContext g, DoctrineDomain d, CancellationToken ct)
     {
-        var choice = await g.Player.ChooseAsync(s.Player.Read(), s.Ghost!, s.Round, ct);
+        var offer = s.OrderOffer ?? OrderOffer.Open();
+        var choice = await g.Player.ChooseAsync(s.Player.Read(), s.Ghost!, offer, s.Round, ct);
         // WHO JUDGES A TOKEN (CONTRACT.md): the start mask binds the GENERAL (SuggestStage), not the player. Here a token is removed and
         // counted only when it is not in the vocabulary at all, or is a FIELD or TRIGGER order the start mask does not allow (the army never judges
         // field orders, and a group with no cohort has nobody to order). An ARMY order goes to the army whole: it judges each one, in slot
@@ -87,15 +145,20 @@ sealed class ChooseStage() : RoundStage(Stages.PlayerChoose)
         // skips is counted in RoundRecord.Orders, and the player's doctrine keeps it (the record shows what was asked).
         var legal = s.Input!.Legal;
         int dropped = s.IllegalDropped;                                  // the general's, from the suggest stage
+        // THE OFFER BINDS THE PLAYER: a token that is not on offer, or one picked twice, is removed and counted apart (OfferRefused); the pick is "up to four of the eight, each once".
+        int refused = s.OfferRefused;
+        var picked = new HashSet<int>();
+        bool binding = offer.Active && d.Offers.Enforce;
         int Keep(int t)
         {
             if (t == 0) return 0;
-            if (!DoctrineVocabulary.IsValid(t) || (DoctrineVocabulary.Decode(t).Family is OrderFamily.Field or OrderFamily.Trigger && !legal.Allows(t))) { dropped++; return 0; }
+            if (DoctrineVocabulary.IsValid(t) && binding && (!offer.Allows(t) || !picked.Add(t))) { refused++; return 0; }
+            if (!DoctrineVocabulary.IsValid(t) ||(DoctrineVocabulary.Decode(t).Family is OrderFamily.Field or OrderFamily.Trigger && !legal.Allows(t))) { dropped++; return 0; }
             return t;
         }
         var c = choice.Doctrine;
         var clean = new DoctrineSet(Keep(c.S0), Keep(c.S1), Keep(c.S2), Keep(c.S3));
-        return s with { Choice = choice with { Doctrine = clean }, IllegalDropped = dropped };
+        return s with { Choice = choice with { Doctrine = clean }, IllegalDropped = dropped, OfferRefused = refused };
     }
 }
 
@@ -182,7 +245,8 @@ sealed class CloseStage() : RoundStage(Stages.RoundClose)
         var after = s.Player.Read();
         bool done = s.Round + 1 >= d.MaxRounds || (after.Soldiers == 0 && after.Gold < 1);   // an army with no soldiers and no gold cannot go on
         var record = new RoundRecord(s.Round, s.Choice!.Doctrine, s.Ghost!.Doctrine, s.Ghost.ConfidencePermille, s.Choice.Overrode,
-            s.IllegalDropped, s.Setup!.ArenaId, s.Result!, s.Replay!, s.Spoils!, playerDigest, enemyDigest, s.Orders, done);
+            s.IllegalDropped, s.Setup!.ArenaId, s.Result!, s.Replay!, s.Spoils!, playerDigest, enemyDigest, s.Orders, done,
+            s.Units, s.OrderOffer, s.Rerolls, s.OfferRefused);
         var history = new List<RoundRecord>(s.Records) { record };
         await g.Player.RoundClosedAsync(record, after, ct);          // the host sees the closed round, whole, before the next one starts
         return s with { History = history, Done = done };

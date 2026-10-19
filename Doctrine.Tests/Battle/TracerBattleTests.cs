@@ -473,7 +473,9 @@ public class TracerBattleTests
         // Both sides can win a game's rounds. After the fairness fix of 2026-10-19 (balance harness: the defender's formation was not mirrored) seed 1234
         // alone happens to hold no attacker win, so the property is asserted over two games; seed 1236 is one the player wins rounds of.
         // Since a Flip costs gold (2026-10-19) the random scripted player wins fewer rounds; seed 1236 holds none now, seed 1232 holds one (seeds 1230..1239 were played).
-        var (other, _) = await Play(1232);
+        // 2026-10-19 fourth round (offers and balanced ranks): the game is different again, so the second game is the first seed from 1230 on that holds a player win.
+        GameResult other = null!;
+        for (int seed = 1230; seed < 1300; seed++) { other = (await Play(seed)).R; if (other.Rounds.Any(r => r.Result.AttackerWon)) break; }
         var all = a.Rounds.Concat(other.Rounds).ToList();
         Assert.Contains(all, r => r.Result.AttackerWon);
         Assert.Contains(all, r => !r.Result.AttackerWon);

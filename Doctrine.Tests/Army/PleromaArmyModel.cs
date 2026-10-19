@@ -69,7 +69,11 @@ internal sealed class ArmyModel(Side side, ArmyRules? rules = null)
     // ---- the rules, one line each ----
     public void Draft(int kind, int count)
     {
-        if (!Present(kind)) { Slot[kind] = kind % DoctrineVocabulary.Groups; Vet[kind] = 0; }
+        if (!Present(kind))
+        {
+            var standing = Enumerable.Range(0, Roster.Size).Where(j => j != kind && Present(j)).Select(j => ((Trait)Traits(j), Soldiers[j], Slot[j])).ToList();
+            Slot[kind] = _rules.LineFor(kind, (Trait)Traits(kind), standing); Vet[kind] = 0;     // the balance rule, over the cohorts the model holds
+        }
         Soldiers[kind] += count;
         Gold -= _rules.DraftPrice(kind) * count;
     }

@@ -47,6 +47,25 @@ public class SectionMutationProofs
         => Caught(await ContractRunner.RunAllAsync(ArmyContract.Cases, () => new MutantArmyService(new PleromaArmyService(), m)), expected);
 
 
+    // The fee of a reroll (fourth round).
+    [Theory]
+    [InlineData(ArmyMut.PayIsFree)]
+    [InlineData(ArmyMut.PayAlwaysYes)]
+    public async Task Fee_mutants_are_caught_on_both_armies(ArmyMut m)
+    {
+        const string c = "a-fee-is-paid-from-the-purse-or-refused-and-changes-nothing";
+        Caught(await ContractRunner.RunAllAsync(ArmyContract.Cases, () => new MutantArmyService(new StubArmyService(), m)), c);
+        Caught(await ContractRunner.RunAllAsync(ArmyContract.Cases, () => new MutantArmyService(new PleromaArmyService(), m)), c);
+    }
+
+    // The balance rule of placement (fourth round): the old kind-mod-3 seeding is a rule switch, and it is the mutant.
+    [Fact]
+    public async Task The_old_seeding_switched_back_on_is_caught_by_the_balance_case_on_both_armies()
+    {
+        var old = new ArmyRules { BalancedPlacement = false };
+        Caught(await ContractRunner.RunAllAsync(ArmyContract.Cases, () => new StubArmyService(old)), "a-new-cohort-joins-the-rank-with-the-least-of-its-class");
+        Caught(await ContractRunner.RunAllAsync(ArmyContract.Cases, () => new PleromaArmyService(old)), "a-new-cohort-joins-the-rank-with-the-least-of-its-class");
+    }
     // Age and Aura are free in the game (third round), so their two cases run on services built with the rules ON; each mutant breaks one rule and the case must go red.
     [Theory]
     [InlineData(ArmyMut.AgeIsFree, AgePaid)]

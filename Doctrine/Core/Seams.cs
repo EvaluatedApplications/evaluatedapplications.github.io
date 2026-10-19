@@ -36,6 +36,11 @@ public interface IArmy
     /// <summary>Subtract battle losses. Counts never go below zero; returns the soldiers actually removed.</summary>
     ValueTask<int> ApplyLossesAsync(IReadOnlyList<CohortLoss> losses, CancellationToken ct);
     ValueTask ApplySpoilsAsync(Spoils spoils, CancellationToken ct);
+    /// <summary>
+    /// Pay a fee out of the purse (the price of a reroll). True and the gold gone when the purse holds <paramref name="gold"/> (at least 1); false and
+    /// NOTHING changed when it does not, or when the amount is not positive.
+    /// </summary>
+    ValueTask<bool> PayAsync(int gold, CancellationToken ct);
     /// <summary>Close the round: advance the army's own clock (auras wear off). Round number increases by one.</summary>
     ValueTask EndRoundAsync(CancellationToken ct);
     /// <summary>The army as a short code (a few hundred bytes, URL-safe text). Parse(ToCode()) reads back identically.</summary>
@@ -112,6 +117,25 @@ public interface IPlayerInput
     /// so a host can show a round as it happens inside ONE run of the game. Optional: the default does nothing.
     /// </summary>
     ValueTask RoundClosedAsync(RoundRecord record, ArmyReadModel after, CancellationToken ct) => ValueTask.CompletedTask;
+
+    // ---- the offers (roguelike round, CONTRACT.md "The offers"). The pipeline calls THESE; the defaults fall back to the free-choice methods above, so a
+    // ---- player written before the offers still compiles, and plays the old game when the offers are off (a pick outside an active offer is refused).
+
+    /// <summary>
+    /// The packs to buy this round: a pick is <c>UnitOffer.Pick(pack)</c> of an offered pack, any subset the purse can pay (the army judges gold).
+    /// With <see cref="UnitOffer.Active"/> false this is the old free draft.
+    /// </summary>
+    ValueTask<IReadOnlyList<DraftPick>> DraftAsync(ArmyReadModel army, UnitOffer offer, int round, CancellationToken ct) => DraftAsync(army, round, ct);
+    /// <summary>
+    /// Whether to pay for another order offer (<see cref="OrderOffer.RerollsLeft"/> and <see cref="OrderOffer.RerollCost"/> say what is left and what it
+    /// costs). Asked with each new offer until it answers false, the rerolls run out or the purse cannot pay. Default: never.
+    /// </summary>
+    ValueTask<bool> RerollAsync(ArmyReadModel army, OrderOffer offer, int round, CancellationToken ct) => ValueTask.FromResult(false);
+    /// <summary>
+    /// Choose the doctrine from <paramref name="offer"/>: up to four of the offered tokens, each once. The ghost is already masked to the offer. With
+    /// <see cref="OrderOffer.Active"/> false this is the old free choice.
+    /// </summary>
+    ValueTask<PlayerChoice> ChooseAsync(ArmyReadModel army, GeneralOutput ghost, OrderOffer offer, int round, CancellationToken ct) => ChooseAsync(army, ghost, round, ct);
 }
 
 // ---- (g) OPTIONAL CAPABILITIES AND HOST HOOKS ------------------------------------------------------------------------

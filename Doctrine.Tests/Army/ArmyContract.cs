@@ -431,6 +431,59 @@ public static class ArmyContract
             }
             Expect.True(wrapped, "veterancy never wrapped in 200 steps: it is a ring, not a counter or a ceiling");
         }),
+        new("a-fee-is-paid-from-the-purse-or-refused-and-changes-nothing", async s =>
+        {
+            // PayAsync is the price of a reroll: gold leaves the purse exactly when the purse holds it; anything else is refused and nothing moves.
+            var a = Fresh(s, 5); await a.ApplySpoilsAsync(new Spoils(10, 0), default);
+            int g = a.Read().Gold;
+            Expect.True(await a.PayAsync(1, default), "a purse that holds the fee pays it");
+            Expect.Equal(g - 1, a.Read().Gold, "the fee left the purse");
+            Expect.True(await a.PayAsync(g - 1, default), "the whole purse can be paid out");
+            Expect.Equal(0, a.Read().Gold, "an emptied purse is empty");
+            var before = a.Read().Digest();
+            Expect.True(!await a.PayAsync(1, default), "an empty purse cannot pay");
+            Expect.Equal(before, a.Read().Digest(), "a refused fee changed the army");
+            var b = Fresh(s, 5); var b0 = b.Read().Digest();
+            Expect.True(!await b.PayAsync(b.Read().Gold + 1, default), "a fee above the purse is refused");
+            Expect.True(!await b.PayAsync(0, default) && !await b.PayAsync(-3, default), "a fee of nothing or less is refused");
+            Expect.Equal(b0, b.Read().Digest(), "a refused fee changed the army");
+            var c = Clone(s, a);
+            Expect.Equal(0, c.Read().Gold, "the paid purse survives the army code");
+        }),
+        new("a-new-cohort-joins-the-rank-with-the-least-of-its-class", async s =>
+        {
+            // THE BALANCE RULE, restated here from its words and not read from Roster.BalancedLine: a NEW cohort joins the rank holding the fewest soldiers of its class
+            // (class from the battle's stat tables), ties to the rank with fewest soldiers in all, then to the lowest rank. Ranks end up mixed.
+            var a = Fresh(s, 5); await a.ApplySpoilsAsync(new Spoils(5000, 0), default);
+            await a.ApplyLossesAsync(a.Read().Cohorts.Select(c => new CohortLoss(c.Key, c.Slot, c.Count)).ToList(), default);
+            Expect.Equal(0, a.Read().Soldiers, "setup: an emptied army");
+            foreach (int k in new[] { 0, 3, 2, 1, 4, 6, 5, 7 })
+            {
+                var before = a.Read().Cohorts;
+                var cls = Doctrine.Battle.UnitRules.ClassOf(Roster.TraitsOf(k));
+                var same = new int[3]; var all = new int[3];
+                foreach (var c in before) { all[c.Slot] += c.Count; if (Doctrine.Battle.UnitRules.ClassOf(c.Traits) == cls) same[c.Slot] += c.Count; }
+                int want = 0;
+                for (int g = 1; g < 3; g++) if (same[g] < same[want] || (same[g] == same[want] && all[g] < all[want])) want = g;
+                var rep = await a.DraftAsync(new DraftRequest(0, 1, [new DraftPick(k, 3 + k)]), default);
+                Expect.Equal(1, rep.Accepted.Count, $"kind {k}: bought");
+                Expect.Equal(want, a.Read().Cohorts.Single(c => c.Key == k).Slot, $"kind {k} ({cls}) joins rank {want} (same-class soldiers per rank {string.Join("/", same)}, all {string.Join("/", all)})");
+            }
+            var r = a.Read();
+            for (int g = 0; g < 3; g++) Expect.True(r.Cohorts.Count(c => c.Slot == g) >= 2, $"rank {g} holds a spread of kinds after a draft of every kind");
+        }),
+        new("a-kind-keeps-its-rank-when-more-of-it-is-bought", async s =>
+        {
+            var a = Fresh(s, 5); await a.ApplySpoilsAsync(new Spoils(5000, 0), default);
+            var before = a.Read().Cohorts.ToDictionary(c => c.Key, c => c.Slot);
+            await a.DraftAsync(new DraftRequest(0, 1, Enumerable.Range(0, Roster.Size).Select(k => new DraftPick(k, 7)).ToList()), default);
+            foreach (var c in a.Read().Cohorts) if (before.TryGetValue(c.Key, out int slot)) Expect.Equal(slot, c.Slot, $"kind {c.Key} stood in rank {slot} and must stay there when more of it is bought");
+            Expect.Equal(Roster.Size, a.Read().Cohorts.Count, "every kind stands once, as one cohort");
+            await a.ApplyArmyOrdersAsync(DoctrineSet.Of(DoctrineVocabulary.Army(ArmyOrderKind.Rotate, 1)), default);
+            var rotated = a.Read().Cohorts.ToDictionary(c => c.Key, c => c.Slot);
+            await a.DraftAsync(new DraftRequest(0, 1, [new DraftPick(2, 1)]), default);
+            Expect.Equal(rotated[2], a.Read().Cohorts.Single(c => c.Key == 2).Slot, "a rotated cohort keeps the rank the rotation gave it");
+        }),
         new("score-follows-soldiers-and-gold", async s =>
         {
             // The scale and the formula are the section's own. What must hold of ANY scale: gold counts, soldiers count, and nothing a battle

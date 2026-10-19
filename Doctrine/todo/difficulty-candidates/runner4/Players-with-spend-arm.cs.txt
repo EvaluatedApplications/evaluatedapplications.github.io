@@ -1,0 +1,140 @@
+using Doctrine;
+using Doctrine.Player;
+
+namespace Offers4;
+
+// Fourth-round instrument (Doctrine\todo\difficulty-2026-10-19.md, "FOURTH ROUND"). A STYLE is a preference: a script of doctrine tokens in priority order and a
+// priority list of kinds. The SAME style plays the free market (everything legal, any draft) and the offers (the best of what is offered), so the arms differ in
+// the market and in nothing else.
+
+public sealed record Style(string Name, Func<ArmyReadModel, int[]> Script, int[] Kinds, int Slots, bool Bank = false, bool Cycle = false);
+
+public static class Styles
+{
+    static int F(FieldOrderKind k, int g) => DoctrineVocabulary.Field(k, g);
+    static int TopTrait(ArmyReadModel a)
+    {
+        var bits = new int[8];
+        foreach (var c in a.Cohorts) for (int b = 0; b < 8; b++) if ((((int)c.Traits >> b) & 1) != 0) bits[b] += c.Count;
+        return Array.IndexOf(bits, bits.Max());
+    }
+    public static readonly Style[] Six =
+    [
+        new("AGGRESSOR", _ => [F(FieldOrderKind.Advance, 0), F(FieldOrderKind.Advance, 1), F(FieldOrderKind.Advance, 2)], [6, 2], 3),
+        new("BANKER", _ => [F(FieldOrderKind.Hold, 0), F(FieldOrderKind.Hold, 1), F(FieldOrderKind.Guard, 2)], [1], 3, Bank: true),
+        new("COMPOSER", _ => [F(FieldOrderKind.Advance, 0), F(FieldOrderKind.Hold, 1), F(FieldOrderKind.Flank, 2)], [], 3, Cycle: true),
+        new("MICRO", _ => [F(FieldOrderKind.Hold, 0), F(FieldOrderKind.Hold, 1), F(FieldOrderKind.Hold, 2), DoctrineVocabulary.WhenLost(1)], [3, 4], 4),
+        new("VETERAN", a => [DoctrineVocabulary.Army(ArmyOrderKind.Age), DoctrineVocabulary.Army(ArmyOrderKind.Aura, TopTrait(a)), F(FieldOrderKind.Advance, 0)], [0], 3),
+        new("MASS", _ => [F(FieldOrderKind.Advance, 0), F(FieldOrderKind.Advance, 1), F(FieldOrderKind.Advance, 2)], [0], 3),
+    ];
+}
+
+/// <summary>Forwards every hand to a player that can be swapped between games (one compiled game per worker and arm).</summary>
+public sealed class SwitchPlayer : IPlayerInput
+{
+    public IPlayerInput Inner = null!;
+    public ValueTask<IReadOnlyList<DraftPick>> DraftAsync(ArmyReadModel a, int r, CancellationToken ct) => Inner.DraftAsync(a, r, ct);
+    public ValueTask<IReadOnlyList<DraftPick>> DraftAsync(ArmyReadModel a, UnitOffer o, int r, CancellationToken ct) => Inner.DraftAsync(a, o, r, ct);
+    public ValueTask DraftedAsync(DraftReport rep, CancellationToken ct) => Inner.DraftedAsync(rep, ct);
+    public ValueTask<bool> RerollAsync(ArmyReadModel a, OrderOffer o, int r, CancellationToken ct) => Inner.RerollAsync(a, o, r, ct);
+    public ValueTask<PlayerChoice> ChooseAsync(ArmyReadModel a, GeneralOutput g, int r, CancellationToken ct) => Inner.ChooseAsync(a, g, r, ct);
+    public ValueTask<PlayerChoice> ChooseAsync(ArmyReadModel a, GeneralOutput g, OrderOffer o, int r, CancellationToken ct) => Inner.ChooseAsync(a, g, o, r, ct);
+    public ValueTask RoundClosedAsync(RoundRecord rec, ArmyReadModel after, CancellationToken ct) => Inner.RoundClosedAsync(rec, after, ct);
+}
+
+public sealed class GameLog
+{
+    public double[] Scores = new double[8];
+    public int ScriptRounds, ScriptHits, Refused, Illegal, Rounds;
+}
+
+/// <summary>A style playing the game: the script and kinds are the style's, the market is whatever the round gives.</summary>
+public sealed class StylePlayer(Style st, ulong salt, int seed, bool spend = false) : IPlayerInput
+{
+    readonly GameRng _rng = new(GameRng.Mix((int)(salt & 0x7fffffff), seed));
+    public GameLog Log = new();
+
+    public ValueTask<IReadOnlyList<DraftPick>> DraftAsync(ArmyReadModel a, int r, CancellationToken ct) => DraftAsync(a, UnitOffer.Open(a.Gold), r, ct);
+
+    public ValueTask<IReadOnlyList<DraftPick>> DraftAsync(ArmyReadModel a, UnitOffer offer, int round, CancellationToken ct)
+    {
+        int budget = st.Bank && round < 3 ? a.Gold / 2 : a.Gold;
+        var picks = new List<DraftPick>();
+        if (!offer.Active)
+        {
+            if (st.Cycle)
+            {
+                var cnt = new int[Roster.Size]; bool any = true;
+                while (any) { any = false; for (int k = 0; k < Roster.Size; k++) if (Roster.PriceOf(k) <= budget) { cnt[k]++; budget -= Roster.PriceOf(k); any = true; } }
+                for (int k = 0; k < Roster.Size; k++) if (cnt[k] > 0) picks.Add(new(k, cnt[k]));
+            }
+            else
+            {
+                for (int i = 0; i < st.Kinds.Length; i++)
+                {
+                    int k = st.Kinds[i], n = (i == 0 && st.Kinds.Length > 1 ? budget / 2 : budget) / Roster.PriceOf(k);
+                    if (n > 0) { picks.Add(new(k, n)); budget -= n * Roster.PriceOf(k); }
+                }
+            }
+            return ValueTask.FromResult<IReadOnlyList<DraftPick>>(picks);
+        }
+        var left = offer.Packs.ToList();
+        void Buy(UnitPack p) { picks.Add(UnitOffer.Pick(p)); budget -= p.Cost; left.Remove(p); }
+        if (st.Cycle)
+        {
+            foreach (var p in offer.Packs.OrderBy(p => p.Cost).ThenBy(p => p.Kind)) if (p.Cost <= budget) Buy(p);
+        }
+        else
+        {
+            foreach (int k in st.Kinds)
+                foreach (var p in left.Where(p => p.Kind == k).OrderByDescending(p => p.Count).ToList()) if (p.Cost <= budget) { Buy(p); break; }
+            if (picks.Count == 0)                                   // none of its kinds is on offer (or none fits): the best of what is
+                foreach (var p in left.OrderByDescending(p => p.Cost).ToList()) if (p.Cost <= budget) { Buy(p); break; }
+            if (spend)                                              // DIAGNOSTIC arm only (added after the scored run): spend what is left on the dearest packs it can pay
+                foreach (var p in left.OrderByDescending(p => p.Cost).ToList()) if (p.Cost <= budget) Buy(p);
+        }
+        return ValueTask.FromResult<IReadOnlyList<DraftPick>>(picks);
+    }
+
+    public ValueTask<PlayerChoice> ChooseAsync(ArmyReadModel a, GeneralOutput ghost, int round, CancellationToken ct) => ChooseAsync(a, ghost, OrderOffer.Open(), round, ct);
+
+    public ValueTask<PlayerChoice> ChooseAsync(ArmyReadModel a, GeneralOutput ghost, OrderOffer offer, int round, CancellationToken ct)
+    {
+        var script = st.Script(a);
+        bool Allowed(int t) => a.Legal.Allows(t) && offer.Allows(t);
+        var chosen = script.Where(Allowed).Distinct().Take(4).ToList();
+        Log.ScriptRounds++; if (script.All(Allowed)) Log.ScriptHits++;
+        while (chosen.Count < st.Slots)
+        {
+            var cand = (offer.Active ? offer.Tokens.AsEnumerable() : Enumerable.Range(1, DoctrineVocabulary.Size - 1))
+                .Where(t => Allowed(t) && DoctrineVocabulary.Decode(t).Family == OrderFamily.Field && !chosen.Contains(t)).ToList();
+            if (cand.Count == 0) break;
+            chosen.Add(cand[_rng.Next(cand.Count)]);
+        }
+        return ValueTask.FromResult(new PlayerChoice(DoctrineSet.Of(chosen.ToArray()), true));
+    }
+
+    public ValueTask RoundClosedAsync(RoundRecord rec, ArmyReadModel after, CancellationToken ct)
+    {
+        if (rec.Round < Log.Scores.Length) Log.Scores[rec.Round] = rec.Result.Outcome switch { BattleStatus.AttackerWon => 1.0, BattleStatus.Draw => 0.5, _ => 0.0 };
+        Log.Refused += rec.OfferRefused; Log.Illegal += rec.IllegalDropped; Log.Rounds++;
+        return ValueTask.CompletedTask;
+    }
+}
+
+/// <summary>The chance baseline: the scripted player (random packs, random tokens), with its own stream per clone.</summary>
+public sealed class RandomPlayer(int salt, int seed) : IPlayerInput
+{
+    readonly ScriptedPlayer _p = new(salt * 100003 + seed, 0);
+    public GameLog Log = new();
+    public ValueTask<IReadOnlyList<DraftPick>> DraftAsync(ArmyReadModel a, int r, CancellationToken ct) => _p.DraftAsync(a, r, ct);
+    public ValueTask<IReadOnlyList<DraftPick>> DraftAsync(ArmyReadModel a, UnitOffer o, int r, CancellationToken ct) => _p.DraftAsync(a, o, r, ct);
+    public ValueTask<PlayerChoice> ChooseAsync(ArmyReadModel a, GeneralOutput g, int r, CancellationToken ct) => _p.ChooseAsync(a, g, r, ct);
+    public ValueTask<PlayerChoice> ChooseAsync(ArmyReadModel a, GeneralOutput g, OrderOffer o, int r, CancellationToken ct) => _p.ChooseAsync(a, g, o, r, ct);
+    public ValueTask RoundClosedAsync(RoundRecord rec, ArmyReadModel after, CancellationToken ct)
+    {
+        if (rec.Round < Log.Scores.Length) Log.Scores[rec.Round] = rec.Result.Outcome switch { BattleStatus.AttackerWon => 1.0, BattleStatus.Draw => 0.5, _ => 0.0 };
+        Log.Refused += rec.OfferRefused; Log.Illegal += rec.IllegalDropped; Log.Rounds++;
+        return ValueTask.CompletedTask;
+    }
+}

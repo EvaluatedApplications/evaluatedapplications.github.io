@@ -69,10 +69,20 @@ public sealed class StubArmy(Side side, ArmyRules? rules = null) : IArmy
     internal void Seed(GameRng rng)
     {
         for (int k = 0; k < Roster.Size; k++) Slot[k] = k % DoctrineVocabulary.Groups;
-        Count[0] = 18 + rng.Next(5); Count[3] = 8 + rng.Next(5); Gold = 12;
+        Count[0] = 18 + rng.Next(5); Slot[0] = LineForNew(0);
+        Count[3] = 8 + rng.Next(5); Slot[3] = LineForNew(3);
+        Gold = 12;
     }
 
     Trait TraitsOf(int k) => (Trait)((byte)Roster.TraitsOf(k) ^ FlipMask);
+
+    /// <summary>The rank a NEW cohort of kind <paramref name="k"/> joins: the rules' placement over the cohorts standing now (the kind itself is not yet standing).</summary>
+    int LineForNew(int k)
+    {
+        var standing = new List<(Trait, int, int)>();
+        for (int j = 0; j < Roster.Size; j++) if (j != k && Count[j] > 0) standing.Add((TraitsOf(j), Count[j], Slot[j]));
+        return _rules.LineFor(k, TraitsOf(k), standing);
+    }
 
     /// <summary>Gold a Flip of <paramref name="bit"/> costs: soldiers x <see cref="Roster.RelabelCost"/> summed over the cohorts.</summary>
     long FlipCost(int bit)
@@ -165,10 +175,13 @@ public sealed class StubArmy(Side side, ArmyRules? rules = null) : IArmy
         foreach (var p in request.Picks)
         {
             if ((uint)p.Kind >= Roster.Size || p.Count <= 0) { no.Add((p, "bad pick")); continue; }
-            if (Count[p.Kind] == 0 && Count.Count(c => c > 0) >= Roster.Size) { no.Add((p, "command span")); continue; }
+            bool present = Count[p.Kind] > 0;
+            if (!present && Count.Count(c => c > 0) >= Roster.Size) { no.Add((p, "command span")); continue; }
             int cost = _rules.DraftPrice(p.Kind) * p.Count;
             if (cost > Gold) { no.Add((p, "gold")); continue; }
-            Gold -= cost; spent += cost; Count[p.Kind] += p.Count; ok.Add(p);
+            Gold -= cost; spent += cost;
+            if (!present && _rules.BalancedPlacement) Slot[p.Kind] = LineForNew(p.Kind);      // a new cohort joins the rank the balance rule picks; an existing one keeps its rank
+            Count[p.Kind] += p.Count; ok.Add(p);
         }
         return ValueTask.FromResult(new DraftReport(ok, no, spent));
     }
@@ -216,6 +229,13 @@ public sealed class StubArmy(Side side, ArmyRules? rules = null) : IArmy
         Gold += Math.Max(0, spoils.Gold);
         for (int k = 0; k < Roster.Size; k++) if (Count[k] > 0) Vet[k] = (int)((Vet[k] + (long)Math.Max(0, spoils.Experience)) % VeterancyPeriod);
         return ValueTask.CompletedTask;
+    }
+
+    public ValueTask<bool> PayAsync(int gold, CancellationToken ct)
+    {
+        if (gold <= 0 || gold > Gold) return ValueTask.FromResult(false);
+        Gold -= gold;
+        return ValueTask.FromResult(true);
     }
 
     public ValueTask EndRoundAsync(CancellationToken ct)

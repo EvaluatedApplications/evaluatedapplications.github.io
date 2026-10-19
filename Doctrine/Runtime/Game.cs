@@ -39,7 +39,9 @@ public sealed class DoctrineGame
                     .AddStep<FinishStage>(Stages.BattleFinish)
                 .Run(ctx.BattleRun)
                 .DefineTask<RoundState>("Round")
+                    .AddStep<OfferUnitsStage>(Stages.OfferUnits)
                     .AddStep<DraftStage>(Stages.ArmyDraft)
+                    .AddStep<OfferOrdersStage>(Stages.OfferOrders)
                     .AddStep<SuggestStage>(Stages.GeneralSuggest)
                     .AddStep<ChooseStage>(Stages.PlayerChoose)
                     .AddStep<ImitateStage>(Stages.GeneralImitate)
@@ -76,6 +78,7 @@ public sealed class DoctrineBuilder
     internal Func<DoctrineContext, IBattleEngine>? BattleFactory;
     internal TracerContext? Tracer;
     internal IRoundObserver? Observer;
+    internal IOfferSource? Offers;
     internal DoctrineDomain Rules = new();
     internal bool? SingleThread;
     internal Action<DoctrineBuilder>? Defaults;
@@ -105,6 +108,7 @@ public sealed class DoctrineBuilder
         // A battle engine can need the finished context (it reads the Tracer context out of it), so a factory is resolved last.
         if (factory is not null) ctx.Battle = factory(ctx);
         ctx.Observer = Observer;
+        if (Offers is not null) ctx.Offers = Offers;
         return new DoctrineGame(ctx, Rules, SingleThread);
     }
 }
@@ -128,6 +132,8 @@ public static class DoctrineBuilderExtensions
     public static DoctrineBuilder WithPlayer(this DoctrineBuilder b, IPlayerInput player) { b.Player = player; return b; }
     /// <summary>Watch stages and battle progress without wrapping any section (see <see cref="IRoundObserver"/>). Optional; the caller's own, never taken from the root.</summary>
     public static DoctrineBuilder WithObserver(this DoctrineBuilder b, IRoundObserver observer) { b.Observer = observer; return b; }
+    /// <summary>Stand in another source of offers (tests, a host with its own deck). The caller's own, never taken from the composition root. Rules: <see cref="DoctrineDomain.Offers"/>.</summary>
+    public static DoctrineBuilder WithOffers(this DoctrineBuilder b, IOfferSource offers) { b.Offers = offers; return b; }
     /// <summary>Rules for the game. MaxRounds is limited to 200: each round runs the next, and EvalApp stops a pipeline nested 256 deep.</summary>
     public static DoctrineBuilder WithRules(this DoctrineBuilder b, DoctrineDomain rules)
     {

@@ -22,6 +22,9 @@ public sealed class DoctrineContext : GlobalContext
     /// <summary>The Tracer extension's own context object, if one was supplied (it is a GlobalContext of its own, so it is HELD here, not installed).</summary>
     public TracerContext? Tracer { get; }
 
+    /// <summary>Where the round's offers come from (default <see cref="SeededOffers"/>; a test may stand in another). Set before a run, not during one.</summary>
+    public IOfferSource Offers { get; set; } = SeededOffers.Instance;
+
     /// <summary>An optional watcher of stages and battle progress (see <see cref="IRoundObserver"/>). Null means nobody is watching. A host may set it at any time between runs.</summary>
     public IRoundObserver? Observer { get; set; }
 
@@ -43,7 +46,9 @@ public sealed class DoctrineContext : GlobalContext
 public static class Stages
 {
     // Round pipeline
-    public const string ArmyDraft = "Army.Draft";           // army:    draft cohorts, create the enemy
+    public const string OfferUnits = "Offer.Units";         // core:    the round's pack offer, scaled to the purse
+    public const string ArmyDraft = "Army.Draft";           // army:    draft cohorts (offered packs only), create the enemy
+    public const string OfferOrders = "Offer.Orders";       // core:    the order offer from the legal list the draft left, paid rerolls
     public const string GeneralSuggest = "General.Suggest"; // general: ghost doctrine from the token summary
     public const string PlayerChoose = "Player.Choose";     // player:  accept or override, mask enforced
     public const string GeneralImitate = "General.Imitate"; // general: learn the player's choice

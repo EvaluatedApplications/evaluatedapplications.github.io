@@ -13,10 +13,16 @@ sealed class RecordingPlayer(IPlayerInput inner) : IPlayerInput
     public List<ArmyReadModel> ChooseArmies { get; } = [];
     public Func<RoundRecord, CancellationToken, ValueTask>? OnClosed { get; set; }
 
+    public List<UnitOffer> UnitOffers { get; } = [];
+    public List<OrderOffer> OrderOffers { get; } = [];
     public ValueTask<IReadOnlyList<DraftPick>> DraftAsync(ArmyReadModel army, int round, CancellationToken ct) { Log.Add($"draft {round}"); return inner.DraftAsync(army, round, ct); }
+    public ValueTask<IReadOnlyList<DraftPick>> DraftAsync(ArmyReadModel army, UnitOffer offer, int round, CancellationToken ct) { Log.Add($"draft {round}"); UnitOffers.Add(offer); return inner.DraftAsync(army, offer, round, ct); }
     public ValueTask DraftedAsync(DraftReport report, CancellationToken ct) { Log.Add("drafted"); Reports.Add(report); return ValueTask.CompletedTask; }
+    public ValueTask<bool> RerollAsync(ArmyReadModel army, OrderOffer offer, int round, CancellationToken ct) => inner.RerollAsync(army, offer, round, ct);
     public ValueTask<PlayerChoice> ChooseAsync(ArmyReadModel army, GeneralOutput ghost, int round, CancellationToken ct)
     { Log.Add($"choose {round}"); Ghosts.Add(ghost); ChooseArmies.Add(army); return inner.ChooseAsync(army, ghost, round, ct); }
+    public ValueTask<PlayerChoice> ChooseAsync(ArmyReadModel army, GeneralOutput ghost, OrderOffer offer, int round, CancellationToken ct)
+    { Log.Add($"choose {round}"); Ghosts.Add(ghost); ChooseArmies.Add(army); OrderOffers.Add(offer); return inner.ChooseAsync(army, ghost, offer, round, ct); }
     public async ValueTask RoundClosedAsync(RoundRecord record, ArmyReadModel after, CancellationToken ct)
     {
         Log.Add($"closed {record.Round}"); Closed.Add((record, after));
@@ -78,7 +84,7 @@ public class ClosedRoundAndDraftTests
 
         // a refused pick comes back WITH its reason: a player that asks for an impossible kind is told so by the army
         var greedy = new RecordingPlayer(new GreedyPlayer());
-        await Builder(greedy, 1).Build().PlayAsync(9);
+        await DoctrineBuilder.New().WithPlayer(greedy).WithRules(new DoctrineDomain { MaxRounds = 1, Offers = OfferRules.Off }).Build().PlayAsync(9);   // the open market: the army refuses, not the offer
         var report = Assert.Single(greedy.Reports);
         Assert.Contains(report.Refused, x => x.Pick.Kind == 99 && x.Reason.Length > 0);
         Assert.Contains(report.Refused, x => x.Pick.Kind == 0 && x.Pick.Count == 1_000_000 && x.Reason.Length > 0);
@@ -122,7 +128,7 @@ public class ProgressObserverTests
         var rules = new DoctrineDomain { MaxRounds = 3, TickLimit = 7 };
         var game = DoctrineBuilder.New().WithObserver(obs).WithRules(rules).Build();
         var r = await game.PlayAsync(12);
-        string[] oneRound = [Stages.ArmyDraft, Stages.GeneralSuggest, Stages.PlayerChoose, Stages.GeneralImitate, Stages.ArmyOrders, Stages.BattleSetup,
+        string[] oneRound = [Stages.OfferUnits, Stages.ArmyDraft, Stages.OfferOrders, Stages.GeneralSuggest, Stages.PlayerChoose, Stages.GeneralImitate, Stages.ArmyOrders, Stages.BattleSetup,
             Stages.BattleRun, Stages.ArmyLosses, Stages.ArmySpoils, Stages.GeneralOutcome, Stages.RoundClose];
         var expected = new List<string>();
         for (int i = 0; i < 3; i++)
@@ -228,11 +234,11 @@ public class WhoJudgesATokenTests
     }
 
     /// <summary>Plays one round with a doctrine built from the army the player sees when it chooses; null from <paramref name="make"/> = setup not met.</summary>
-    sealed class DoctrinePlayer(Func<ArmyReadModel, DoctrineSet?> make) : IPlayerInput
+    sealed class DoctrinePlayer(Func<ArmyReadModel, DoctrineSet?> make, bool draft = true) : IPlayerInput
     {
         public bool SetupMet;
         public ValueTask<IReadOnlyList<DraftPick>> DraftAsync(ArmyReadModel army, int round, CancellationToken ct)
-            => ValueTask.FromResult<IReadOnlyList<DraftPick>>(army.Gold >= 3 ? [new DraftPick(0, 1), new DraftPick(1, 1)] : []);
+            => ValueTask.FromResult<IReadOnlyList<DraftPick>>(draft && army.Gold >= 3 ? [new DraftPick(0, 1), new DraftPick(1, 1)] : []);
         public ValueTask<PlayerChoice> ChooseAsync(ArmyReadModel army, GeneralOutput ghost, int round, CancellationToken ct)
         {
             var d = make(army); SetupMet = d is not null;
@@ -240,12 +246,12 @@ public class WhoJudgesATokenTests
         }
     }
 
-    static async Task<RoundRecord?> OneRound(IArmyService army, Func<ArmyReadModel, DoctrineSet?> make)
+    static async Task<RoundRecord?> OneRound(IArmyService army, Func<ArmyReadModel, DoctrineSet?> make, bool draft = true)
     {
         for (int seed = 1; seed <= 60; seed++)
         {
-            var p = new DoctrinePlayer(make);
-            var r = await DoctrineBuilder.New().WithArmy(army).WithPlayer(p).WithRules(new DoctrineDomain { MaxRounds = 1 }).Build().PlayAsync(seed);
+            var p = new DoctrinePlayer(make, draft);
+            var r = await DoctrineBuilder.New().WithArmy(army).WithPlayer(p).WithRules(new DoctrineDomain { MaxRounds = 1, Offers = OfferRules.Off }).Build().PlayAsync(seed);   // the free market: these cases are about who judges a token, not about the offer
             if (p.SetupMet) return r.Rounds[0];
         }
         return null;
@@ -313,7 +319,7 @@ public class WhoJudgesATokenTests
         {
             int g = Enumerable.Range(0, DoctrineVocabulary.Groups).FirstOrDefault(x => !a.Legal.Allows(DoctrineVocabulary.Field(FieldOrderKind.Hold, x)), -1);
             return g < 0 ? null : DoctrineSet.Of(DoctrineVocabulary.Field(FieldOrderKind.Hold, g), DoctrineVocabulary.Army(ArmyOrderKind.Age));
-        });
+        }, draft: false);   // no draft: the balance rule mixes the ranks as soon as Shieldwall is bought, and this case needs an empty rank
         Assert.NotNull(rec);
         Assert.Equal(1, rec!.IllegalDropped);
         Assert.Equal(DoctrineSet.Of(0, DoctrineVocabulary.Army(ArmyOrderKind.Age)), rec.PlayerDoctrine);

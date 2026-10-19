@@ -32,6 +32,16 @@ public sealed record ArmyRules
     /// </summary>
     public bool DerivedDraftPrices { get; init; } = true;
 
+    /// <summary>
+    /// ON in the game: a new cohort joins the rank the balance rule picks (<see cref="Roster.BalancedLine"/>: the rank with the least of its class), so ranks are
+    /// mixed on purpose. OFF is the old seeding, kind mod 3 (an accident of kind numbers: Spearmen, Archers and Wolves all in front), kept so old digests reproduce.
+    /// </summary>
+    public bool BalancedPlacement { get; init; } = true;
+
+    /// <summary>The rank a new cohort of <paramref name="kind"/> with the live <paramref name="traits"/> joins, given the cohorts already standing.</summary>
+    public int LineFor(int kind, Trait traits, IEnumerable<(Trait Traits, int Count, int Slot)> standing)
+        => BalancedPlacement ? Roster.BalancedLine(traits, standing) : kind % DoctrineVocabulary.Groups;
+
     /// <summary>What one soldier of <paramref name="kind"/> costs to draft under these rules.</summary>
     public int DraftPrice(int kind) => DerivedDraftPrices ? Roster.TraitPrice(Roster.TraitsOf(kind), PriceReach) : Roster.TypedPrice(kind);
 }

@@ -190,6 +190,28 @@ public static class Roster
         ("Wolves", Trait.Beast | Trait.Swift, 2),
         ("Catapults", Trait.Machine | Trait.Ranged | Trait.Heavy, 4),
     ];
+    /// <summary>
+    /// THE BALANCE RULE: the rank a NEW cohort joins, so that every rank is a mix of classes (each rank holds a spread of kinds and every kind works in any rank;
+    /// shuffling the formation is Rotate, three configurations). The rank holding the FEWEST soldiers of the cohort's class (<see cref="Battle.UnitRules.ClassOf"/>
+    /// of the live traits, read from the stat tables, never typed per kind); a tie goes to the rank with the fewest soldiers in all; a tie after that to the lowest
+    /// rank index. A pure function of the cohorts already standing, so it is the same in every army section.
+    /// </summary>
+    public static int BalancedLine(Trait traits, IEnumerable<(Trait Traits, int Count, int Slot)> standing)
+    {
+        var cls = Battle.UnitRules.ClassOf(traits);
+        var sameClass = new long[DoctrineVocabulary.Groups]; var all = new long[DoctrineVocabulary.Groups];
+        foreach (var (t, n, slot) in standing)
+        {
+            if ((uint)slot >= DoctrineVocabulary.Groups || n <= 0) continue;
+            all[slot] += n;
+            if (Battle.UnitRules.ClassOf(t) == cls) sameClass[slot] += n;
+        }
+        int best = 0;
+        for (int g = 1; g < DoctrineVocabulary.Groups; g++)
+            if (sameClass[g] < sameClass[best] || (sameClass[g] == sameClass[best] && all[g] < all[best])) best = g;
+        return best;
+    }
+
     public static string NameOf(int kind) => Kinds[kind].Name;
     public static Trait TraitsOf(int kind) => Kinds[kind].Traits;
     /// <summary>The typed draft price of the old game (Spearmen 1, Shieldwall 2, Riders 2, Archers 2, Priests 3, Wights 2, Wolves 2, Catapults 4). Kept for the rules that switch <see cref="Army.ArmyRules.DerivedDraftPrices"/> off.</summary>

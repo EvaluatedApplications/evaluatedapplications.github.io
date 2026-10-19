@@ -10,6 +10,8 @@ public sealed class DoctrineDomain : DomainContext
     public int TickLimit { get; init; } = BattleSetup.DefaultTickLimit;
     public int EnemyBaseGold { get; init; } = 14;
     public int EnemyGoldPerRound { get; init; } = 4;
+    /// <summary>The roguelike offers (default ON: the game). <see cref="OfferRules.Off"/> is the old free choice.</summary>
+    public OfferRules Offers { get; init; } = OfferRules.Default;
 }
 
 /// <summary>
@@ -22,7 +24,8 @@ public sealed record RoundState(
     GeneralInput? Input = null, GeneralOutput? Ghost = null, PlayerChoice? Choice = null, int IllegalDropped = 0,
     DoctrineSet EnemyDoctrine = default, BattleSetup? Setup = null, BattleResult? Result = null, BattleReplay? Replay = null,
     Spoils? Spoils = null, BattleStatus? LastOutcome = null, bool LastPlayerWon = false,
-    IReadOnlyList<RoundRecord>? History = null, bool Done = false, ArmyOrdersReport? Orders = null)
+    IReadOnlyList<RoundRecord>? History = null, bool Done = false, ArmyOrdersReport? Orders = null,
+    UnitOffer? Units = null, OrderOffer? OrderOffer = null, int Rerolls = 0, int OfferRefused = 0)
 {
     public IReadOnlyList<RoundRecord> Records => History ?? Array.Empty<RoundRecord>();
 

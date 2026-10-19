@@ -48,7 +48,8 @@ internal sealed class PleromaArmy : IArmy
         for (int i = 0; i < PleromaArmyLayout.StartSoldiers; i++)
         {
             int kind = (int)levy.SampleKey(rng);
-            army._army.Add(army.ItemForNewCohort(kind), 1);
+            // a kind already standing keeps its rank; a new one joins by the balance rule
+            army._army.Add(army.TryCohorts(out var have) && Find(have, kind, out var f) ? f.Item : army.ItemForNewCohort(kind), 1);
         }
         army._purse.Add(0UL, PleromaArmyLayout.StartGold);
         return army;
@@ -239,7 +240,15 @@ internal sealed class PleromaArmy : IArmy
 
     /// <summary>A cohort item for a kind not yet in the army: its traits under the current flip mask, slot = kind mod 3 (the stub's seeding), veterancy 0.</summary>
     HologramItem ItemForNewCohort(int kind)
-        => new((ulong)kind, (uint)Roster.TraitsOf(kind) ^ (uint)FlipMask(), PleromaArmyLayout.SlotArrangement[kind % DoctrineVocabulary.Groups], 0);
+    {
+        uint traits = (uint)Roster.TraitsOf(kind) ^ (uint)FlipMask();
+        var standing = new List<(Trait, int, int)>();
+        if (TryCohorts(out var items))
+            for (int i = 0; i < items.Count; i++)
+                if (items[i].Item.Key != (ulong)kind) standing.Add(((Trait)(byte)items[i].Item.Flags, (int)items[i].Count, PleromaArmyLayout.SlotOf(items[i].Item.Arrangement)));
+        int line = _rules.LineFor(kind, (Trait)(byte)traits, standing);
+        return new((ulong)kind, traits, PleromaArmyLayout.SlotArrangement[line], 0);   // the rank is the Arrangement face of the Add: a host choice of an argument, not an operation of its own
+    }
 
     public ValueTask<DraftReport> DraftAsync(DraftRequest request, CancellationToken ct)
     {
@@ -340,6 +349,13 @@ internal sealed class PleromaArmy : IArmy
         if (spoils.Gold > 0) _purse.Add(0UL, spoils.Gold);
         if (spoils.Experience > 0) _army.Tick(spoils.Experience);
         return ValueTask.CompletedTask;
+    }
+
+    public ValueTask<bool> PayAsync(int gold, CancellationToken ct)
+    {
+        if (gold <= 0 || gold > Gold()) return ValueTask.FromResult(false);
+        _purse.Add(0UL, -(long)gold);                                  // the fee leaves the purse by the same Pleroma Add a draft uses
+        return ValueTask.FromResult(true);
     }
 
     public ValueTask EndRoundAsync(CancellationToken ct)

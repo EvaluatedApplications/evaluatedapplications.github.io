@@ -40,6 +40,10 @@ public enum ArmyMut
     AuraAlwaysLegal,
     /// <summary>The close of a round pays the interest twice.</summary>
     InterestDoubled,
+    /// <summary>A fee is taken and handed back: Pay says yes and the purse is whole (a reroll would cost nothing).</summary>
+    PayIsFree,
+    /// <summary>Pay says yes whatever the purse holds, and takes nothing.</summary>
+    PayAlwaysYes,
 }
 
 public sealed class MutantArmyService(IArmyService inner, ArmyMut m) : IArmyService
@@ -131,6 +135,13 @@ sealed class MutantArmy(IArmy inner, ArmyMut m) : IArmy
         _goldWon += Math.Max(0, spoils.Gold);
         return inner.ApplySpoilsAsync(spoils, ct);
     }
+    public async ValueTask<bool> PayAsync(int gold, CancellationToken ct)
+    {
+        if (m == ArmyMut.PayAlwaysYes) return true;
+        bool ok = await inner.PayAsync(gold, ct);
+        if (ok && m == ArmyMut.PayIsFree) await inner.ApplySpoilsAsync(new Spoils(gold, 0), ct);
+        return ok;
+    }
     public async ValueTask EndRoundAsync(CancellationToken ct)
     {
         long gold = inner.Read().Gold;
@@ -159,6 +170,7 @@ public sealed class ReadMutantArmyService(IArmyService inner, Func<ArmyReadModel
         public ValueTask<ArmyOrdersReport> ApplyArmyOrdersAsync(DoctrineSet doctrine, CancellationToken ct) => i.ApplyArmyOrdersAsync(doctrine, ct);
         public ValueTask<int> ApplyLossesAsync(IReadOnlyList<CohortLoss> losses, CancellationToken ct) => i.ApplyLossesAsync(losses, ct);
         public ValueTask ApplySpoilsAsync(Spoils spoils, CancellationToken ct) => i.ApplySpoilsAsync(spoils, ct);
+        public ValueTask<bool> PayAsync(int gold, CancellationToken ct) => i.PayAsync(gold, ct);
         public ValueTask EndRoundAsync(CancellationToken ct) => i.EndRoundAsync(ct);
         public string ToCode() => i.ToCode();
     }
