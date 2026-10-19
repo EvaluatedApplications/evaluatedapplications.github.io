@@ -13,10 +13,8 @@
     <header class="room-head">
         <nav class="crumb"><a href="/tools/">Tools</a> <span>/</span> Doctrine</nav>
         <h1>Doctrine</h1>
-        <p class="lede">Draft an army, give it up to four orders, and watch the battle. Your general learns how you set a doctrine from your own
-            choices, in your browser, with nothing pre-trained, and suggests the next one. The army is a set of Pleroma stores from the Phasor
-            package, the battle runs on a Tracer navigation mesh, the rounds run as EvalApp pipelines, and the general is a habit table with a tiny
-            HoloFormer from the AlgFormer package. Nothing is uploaded.</p>
+        <p class="lede">Draft an army, give it up to four orders, and watch the battle run on a navigation mesh. Your general learns how you set
+            orders from your own choices, in your browser, with nothing pre-trained, and suggests the next one. Nothing is uploaded.</p>
     </header>
 
     @if (Build.IsPrerender)
@@ -75,6 +73,8 @@
 
     <section class="outro">
         <h2>How it works</h2>
+        <p>The army is a set of Pleroma stores from the Phasor package, the battle runs on a Tracer navigation mesh, the rounds run as EvalApp
+            pipelines, and the general is a habit table with a tiny HoloFormer from the AlgFormer package.</p>
         <p>Each cohort of soldiers is an item in a Pleroma store: its kind is the key, its traits are the flags, its place in the line is the
             arrangement, and its veterancy is a position on a ring of nine. An order is one operation on that store. Flip relabels a trait, Rotate
             relabels the line, Age ticks the ring, Aura counts the soldiers who carry a trait, and the list of orders you may give is read from
@@ -89,7 +89,7 @@
                 battle result.</p>
             <p>Inside it are a small habit table and a tiny HoloFormer from the AlgFormer package. For each of the four slots the table speaks, unless
                 the HoloFormer has been right on that slot at least two more times than the table over your recent choices, in which case it takes the
-                slot. The match record shown is how often its whole suggestion matched what you then chose, over your recent choices, out of 1000.
+                slot. The match record shown is a score out of 1000 for how well its whole suggestion has matched what you then chose, over your recent choices. It starts low and climbs as the matches keep coming.
                 Nothing is saved: refresh the page and the general is gone.</p>
         </details>
     </section>
@@ -345,7 +345,7 @@
                             }
                         }
                     </ol>
-                    <p class="dc-conf">Match record <b>@ghost.ConfidencePermille</b> of 1000: how often its whole suggestion matched what you then chose, over your recent choices.</p>
+                    <p class="dc-conf">Match record <b>@ghost.ConfidencePermille</b> of 1000: a score for how well its whole suggestion has matched what you then chose, over your recent choices. It starts low and climbs as the matches keep coming.</p>
                     <div class="dc-ghostbtns">
                         <button type="button" class="dc-btn strong" id="dc-accept" @onclick="() => Accept(ghost)">Accept</button>
                         <button type="button" class="dc-btn" id="dc-edit" @onclick="() => EditGhost(ghost)">Edit</button>
@@ -397,7 +397,7 @@
                     @Palette("Merge a kind into the one before it", Tokens(ArmyOrderKind.Merge), legal)
                     @Palette("Aura on a trait", Tokens(ArmyOrderKind.Aura), legal)
                     @if (Tokens(ArmyOrderKind.Cull).Any(legal.Allows)) { @Palette("Cull a trait", Tokens(ArmyOrderKind.Cull), legal) }
-                    else { <p class="hint dc-cullnote">Cull is not available in this version of the army.</p> }
+                    else { <p class="hint dc-cullnote">Cull is not offered on this army.</p> }
                 }
                 else
                 {

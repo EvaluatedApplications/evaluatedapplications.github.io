@@ -32,7 +32,7 @@ navmesh and unit id order, so battles differ from the earlier run. Re-run result
 ```json
     {
       "id": "doctrine", "name": "Doctrine", "slug": "/tools/doctrine/", "cat": "foundation", "poweredBy": ["phasor", "tracer", "algformer", "evalapp"],
-      "line": "Draft an army, give it up to four orders, and watch the battle on a navigation mesh. Your general learns how you set orders from your own choices, in your browser, with nothing pre-trained."
+      "line": "Raise a general that learns how you command. Draft an army, give it up to four orders, and watch the battle run on a navigation mesh, with nothing pre-trained and nothing uploaded."
     },
 ```
 
@@ -93,7 +93,7 @@ inline markup the plenum file already uses. Code spans below are the names on th
         { "term": "Rotate the line", "text": "Moves every cohort to the next place in the line." },
         { "term": "Flip a trait", "text": "Cohorts that had the trait lose it and the others gain it, all at once. Twice undoes it." },
         { "term": "Age", "text": "Ticks the veterancy ring of every cohort one place." },
-        { "term": "Merge", "text": "Moves one kind of cohort into another." },
+        { "term": "Merge", "text": "Moves one kind of cohort into the kind before it." },
         { "term": "Aura", "text": "Counts the soldiers who carry a trait." },
         { "term": "Field orders", "text": "Advance, Hold, Flank, Fall back, Guard and Hunt. A line with no order advances." }
       ]
@@ -112,7 +112,7 @@ inline markup the plenum file already uses. Code spans below are the names on th
       "paragraphs": [
         "Your general starts empty. It learns how you set a doctrine from your own choices, in your browser, with nothing pre-trained, so different players end up with different generals. It suggests and you decide.",
         "Every doctrine you set is an example for it, and so is each battle result. Inside it are a small habit table and a tiny HoloFormer from the [AlgFormer](/algformer/) package. For each of the four slots the table speaks, unless the HoloFormer has been right on that slot at least two more times than the table over your recent choices, in which case it takes the slot.",
-        "The **match record** beside a suggestion is how often its whole suggestion matched what you then chose, over your recent choices, out of 1000. Nothing is saved: refresh the page and the general is gone, though it carries what it has seen into your next game on the same page."
+        "The **match record** beside a suggestion is a score out of 1000 for how well its whole suggestion has matched what you then chose, over your recent choices. It starts low and climbs as the matches keep coming. Nothing is saved: refresh the page and the general is gone, though it carries what it has seen into your next game on the same page."
       ]
     },
     {
@@ -139,7 +139,7 @@ inline markup the plenum file already uses. Code spans below are the names on th
 ```
 
 Copy checks done by me: no em dashes, no licence wording, no verdict/chance/"plays well", no "universal" or "complete",
-no version or timing figure, no phone-tested claim, Cull not mentioned (the page hides it while no army allows it).
+no version or timing figure, no phone-tested claim, Cull is not in this copy (the page shows only the sentence "Cull is not offered on this army." while no army allows it).
 The `/tracer/` and `/evalapp/` links assume those product slugs exist (they do in `products.json` per
 website-owner's CLAUDE.md; `check-site` will confirm).
 

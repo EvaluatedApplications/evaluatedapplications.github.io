@@ -52,7 +52,7 @@ void Scan(IRenderedComponent<DoctrinePage> p) { allText.Add(Regex.Replace(p.Find
 using (var sctx = NewCtx(true))
 {
     var shell = sctx.Render<DoctrinePage>();
-    Check("shell: the heading and lede are real text", shell.Markup.Contains("Doctrine") && Regex.Replace(shell.Find(".lede").TextContent, @"\s+", " ").Contains("Your general learns how you set a doctrine from your own choices, in your browser, with nothing pre-trained"));
+    Check("shell: the heading and lede are real text", shell.Markup.Contains("Doctrine") && Regex.Replace(shell.Find(".lede").TextContent, @"\s+", " ").Contains("Your general learns how you set orders from your own choices, in your browser, with nothing pre-trained") && shell.Find(".lede").TextContent.Contains("Nothing is uploaded") && !shell.Find(".lede").TextContent.Contains("Pleroma"));
     Check("shell: the start button is there and the game is not", shell.FindAll("[data-blazier-go]").Count == 1 && shell.FindAll("#dc-start").Count == 0 && shell.FindAll("#dc-new").Count == 0);
 }
 
@@ -185,7 +185,7 @@ Scan(page);
     Check("doctrine: the palette holds every order but Cull (hidden: the army allows none) and each is enabled exactly when the army's legal list allows it", cullCount > 0 && seen.Count == DoctrineVocabulary.Size - 1 - cullCount && match, $"{enabled} enabled, {disabled} disabled, {cullCount} Cull tokens not shown");
     Check("doctrine: the list really restricts (some enabled, some disabled) and no Cull chip exists at all", enabled > 0 && disabled > 0 && page.Markup.IndexOf("Cull a trait", StringComparison.Ordinal) < 0);
     await Tap(page, ".dc-tab", 0);
-    Check("doctrine: Cull is one plain sentence and the internal operation is never named", Has(page, ".dc-cullnote") && Text(page, ".dc-cullnote") == "Cull is not available in this version of the army." && !page.Markup.Contains("Restrict"), Text(page, ".dc-cullnote"));
+    Check("doctrine: Cull is one plain sentence and the internal operation is never named", Has(page, ".dc-cullnote") && Text(page, ".dc-cullnote") == "Cull is not offered on this army." && !page.Markup.Contains("Restrict"), Text(page, ".dc-cullnote"));
     int illegal = Enumerable.Range(1, DoctrineVocabulary.Size - 1).First(t => !legal.Allows(t));
     await Tap(page, ".dc-tab", DoctrineVocabulary.Decode(illegal).Family == OrderFamily.Field ? 1 : 0);
     await Tap(page, $"[data-token='{illegal}']");
@@ -434,7 +434,7 @@ foreach (var withSlots in new[] { true, false })
     Scan(pageS);
     var gs = SS.Ghost!;
     var li = pageS.FindAll(".dc-ghostslot");
-    Check($"match record ({tag}): the ghost shows one line per order it suggests, and the whole figure under it", li.Count == gs.Doctrine.Used && li.Count >= 2 && Text(pageS, ".dc-conf").StartsWith($"Match record {gs.ConfidencePermille} of 1000: how often its whole suggestion matched what you then chose, over your recent choices."), Text(pageS, ".dc-conf"));
+    Check($"match record ({tag}): the ghost shows one line per order it suggests, and the whole figure under it", li.Count == gs.Doctrine.Used && li.Count >= 2 && Text(pageS, ".dc-conf").StartsWith($"Match record {gs.ConfidencePermille} of 1000: a score for how well its whole suggestion has matched what you then chose, over your recent choices."), Text(pageS, ".dc-conf"));
     if (withSlots)
     {
         bool each = true;
@@ -485,17 +485,17 @@ string page_style(IRenderedComponent<DoctrinePage> p) => p.Find(".dc-ghost").Get
     Check("wording: battles are said to be simulated once on this device and the replay to be a recording", all.Contains("simulated once, on your device") && all.Contains("The replay is a recording"));
     Check("wording: no persistence is claimed or invented (a refresh forgets the general)", all.Contains("Nothing is saved: refresh the page and the general is gone") && !all.Contains("saved in your browser"));
     // the editorial fixes: each new phrase is there, each old one is gone
-    Check("wording A: the lede names the general as a habit table with a tiny HoloFormer from the AlgFormer package; no tiny AlgFormer model", all.Contains("and the general is a habit table with a tiny HoloFormer from the AlgFormer package.") && !all.Contains("tiny AlgFormer model"));
+    Check("wording A: the top of How it works names the general as a habit table with a tiny HoloFormer from the AlgFormer package; no tiny AlgFormer model", all.Contains("and the general is a habit table with a tiny HoloFormer from the AlgFormer package.") && !all.Contains("tiny AlgFormer model"));
     Check("wording A: About states the rule the code has (table speaks; the HoloFormer takes a slot at two more right answers than the table, on recent choices)",
         all.Contains("Inside it are a small habit table and a tiny HoloFormer from the AlgFormer package. For each of the four slots the table speaks, unless the HoloFormer has been right on that slot at least two more times than the table over your recent choices, in which case it takes the slot.")
         && !all.Contains("whichever of the two") && !all.Contains("guessed your choices better"));
     Check("wording B: it is a match record, said as what it is; the word confidence is gone from every screen",
-        all.Contains("Match record") && all.Contains("how often its whole suggestion matched what you then chose, over your recent choices") && !Regex.IsMatch(all, "confiden", RegexOptions.IgnoreCase));
+        all.Contains("Match record") && all.Contains("a score out of 1000 for how well its whole suggestion has matched what you then chose, over your recent choices. It starts low and climbs as the matches keep coming.") && all.Contains("of 1000: a score for how well its whole suggestion has matched what you then chose, over your recent choices.") && !all.Contains("how often") && !Regex.IsMatch(all, "confiden", RegexOptions.IgnoreCase));
     Check("wording C: the working screen says it runs on the device in small steps", all.Contains("This runs on your device, in small steps.") && !all.Contains("so the page stays usable") && !all.Contains("one small step at a time"));
     Check("wording D: the examples count says what it counts, in the chip and on the start and end screens",
         Regex.Matches(all, Regex.Escape("(each doctrine you set and each battle result)")).Count >= 3 && all.Contains("examples seen (each doctrine you set and each battle result)") && all.Contains("since you opened this page"));
     Check("wording E: the empty-army sentence tells what to do and why", all.Contains("Spend your gold on cohorts: a battle needs soldiers.") && !all.Contains("starts lost"));
-    Check("wording F: Cull is one plain sentence and nothing else; no greyed Cull chip, no operation name", all.Contains("Cull is not available in this version of the army.") && !all.Contains("greyed out for every army") && !allMarkup.Any(m => m.Contains("Cull a trait")));
+    Check("wording F: Cull is one plain sentence and nothing else; no greyed Cull chip, no operation name", all.Contains("Cull is not offered on this army.") && !all.Contains("this version") && !all.Contains("greyed out for every army") && !allMarkup.Any(m => m.Contains("Cull a trait")));
 }
 
 // -------------------------------------------------------------------------------- layout rules (no browser needed)
