@@ -1,12 +1,12 @@
 namespace Doctrine.Tests;
 
-/// <summary>The replay format's version 2 (world flags, version 1 still read) and the Tracer section's use of it.</summary>
+/// <summary>The replay format's versions: 2 (world flags, version 1 still read) and 3 (a besieger byte and the clock-fell flag, version 2 still read), and the Tracer section's use of them.</summary>
 public class ReplayVersionTests
 {
-    static BattleReplay Tiny(int version, int flags1) => new(version, "open-field", 7, 5,
+    static BattleReplay Tiny(int version, int flags1, Side? besieger = null) => new(version, "open-field", 7, 5,
         [new ReplayFrame(0, [new ReplayBlob(0, Side.Player, 0, 0, 32, 64, 9), new ReplayBlob(1, Side.Enemy, 1, 0, 900, 64, 9)], []),
          new ReplayFrame(1, [new ReplayBlob(0, Side.Player, 0, 0, 40, 64, 9), new ReplayBlob(1, Side.Enemy, 1, 0, 890, 64, 8)], [new ReplayEvent(0, 1, 1)], flags1)],
-        new BattleResult(BattleStatus.AttackerWon, 1, [], [new CohortLoss(1, 0, 1)]));
+        new BattleResult(BattleStatus.AttackerWon, 1, [], [new CohortLoss(1, 0, 1)]), besieger);
 
     /// <summary>The version-1 layout written independently of ReplayCodec (the fixture a stored recording would be): no world flags.</summary>
     static byte[] HandWrittenVersion1()
@@ -27,9 +27,11 @@ public class ReplayVersionTests
     }
 
     [Fact]
-    public void The_current_version_is_two_and_carries_world_flags_bit_for_bit()
+    public void Version_two_carries_world_flags_bit_for_bit_and_is_still_what_a_battle_without_a_besieger_is_written_in()
     {
-        Assert.Equal(2, BattleReplay.CurrentVersion);
+        Assert.Equal(3, BattleReplay.CurrentVersion);
+        Assert.Equal(2, BattleReplay.VersionFor(null));   // the lowest version that can carry it: an open-field battle is byte for byte what it was
+        Assert.Equal(3, BattleReplay.VersionFor(Side.Player)); Assert.Equal(3, BattleReplay.VersionFor(Side.Enemy));
         var r = Tiny(2, WorldFlag.GateFallen);
         var bytes = ReplayCodec.Encode(r);
         Assert.True(ReplayCodec.TryDecode(bytes, out var back, out var err), err);
@@ -56,7 +58,7 @@ public class ReplayVersionTests
     public void The_digest_sees_world_flags_and_unknown_versions_are_refused()
     {
         Assert.NotEqual(ReplayCodec.Digest(Tiny(2, 0)), ReplayCodec.Digest(Tiny(2, WorldFlag.GateFallen)));
-        foreach (var bad in new[] { 0, 3, 99, -1 })
+        foreach (var bad in new[] { 0, 4, 99, -1 })
         {
             var bytes = ReplayCodec.Encode(Tiny(2, 0) with { Version = bad });
             Assert.False(ReplayCodec.TryDecode(bytes, out var r, out var why));

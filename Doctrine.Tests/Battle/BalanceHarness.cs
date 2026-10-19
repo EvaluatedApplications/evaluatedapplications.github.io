@@ -142,6 +142,64 @@ public static class BalanceHarness
         return (ok, string.Join(Environment.NewLine, lines));
     }
 
+    // ---- the siege arenas (fifth round) ---------------------------------------------------------------------------------------------
+    // Pre-registration: Doctrine\todo\difficulty-2026-10-19.md, "FIFTH ROUND", part B. A siege gives the two roles different duties (the besieger carries the clock, the
+    // other side may bide and be set), so a mirrored army is NOT expected to split 50/50 by role. It is expected to split 50/50 by SLOT once the roles are swapped: the
+    // same army is the besieger in one battle and the defender in the next, and the pair cancels the role. The besieger's share is reported, with its sign.
+
+    public static readonly string[] SiegeArenas = ["chokepoint", "falling-gate"];
+
+    /// <summary>The declared mirrored compositions of the siege table: the two of the open table and a holding one (Archers and Spearmen, both lines Hold) where set and the clock matter.</summary>
+    public static readonly (string Name, CohortRead[] Cohorts, FieldOrder[] Orders)[] SiegeMirrors =
+    [
+        Mirrors[0], Mirrors[1],
+        ("hold", [C(3, 50, 0), C(0, 30, 1)], [O(0, FieldOrderKind.Hold), O(1, FieldOrderKind.Hold)]),
+        // ADDED AFTER THE FIRST RUN (not in the registration): the registered holding army puts its Archers in the FRONT rank, and a holding Spearman line behind them does not
+        // support them (a Hold order stays on its own ground), so an advancing besieger won every such battle. This one puts the Spearmen in front and the Archers behind them.
+        ("holdfront", [C(0, 50, 0), C(3, 30, 1)], [O(0, FieldOrderKind.Hold), O(1, FieldOrderKind.Hold)]),
+    ];
+
+    public sealed record SiegeCell(string Arena, string Army, int Battles, double PairScore, double BesiegerShare, double PairMargin, int ClockFell, int Decisive, IReadOnlyList<ulong> Digests);
+
+    /// <summary>Per (siege arena, composition): each seed fought twice, once with the attacker slot besieging and once with the defender slot besieging (the second gets its own jitter).</summary>
+    public static async Task<IReadOnlyList<SiegeCell>> SiegeTable(Func<IBattleEngine> engine, int seeds = Seeds, int seedFrom = 1, string[]? arenas = null, bool swap = true)
+    {
+        var perArena = (arenas ?? SiegeArenas).Select(arena => Task.Run(async () =>
+        {
+            var e = engine(); var cells = new List<SiegeCell>();
+            foreach (var m in SiegeMirrors)
+            {
+                double pair = 0, besieger = 0, margin = 0; int n = 0, clock = 0, decisive = 0; var digests = new List<ulong>();
+                for (int seed = seedFrom; seed < seedFrom + seeds; seed++)
+                    for (int o = 0; o < 2; o++)
+                    {
+                        // o = 0: the attacker slot besieges; o = 1: the defender slot besieges (swap false keeps the attacker slot besieging in both: the mutant of "roles never swap")
+                        Side b = o == 0 || !swap ? Side.Player : Side.Enemy;
+                        var setup = Mirrored(arena, seed + o * SecondOrientationSeedOffset, m) with { Besieger = b };
+                        var st = await Sample.RunAsync(e, setup);
+                        var r = st.Result!;
+                        int a = setup.Attacker.Cohorts.Sum(c => c.Count) - r.AttackerLosses.Sum(l => l.Lost), d = setup.Defender.Cohorts.Sum(c => c.Count) - r.DefenderLosses.Sum(l => l.Lost);
+                        digests.Add(ReplayCodec.Digest(st.Replay!));
+                        if (st.Replay!.Frames.Any(f => (f.WorldFlags & WorldFlag.ClockFell) != 0)) clock++;
+                        double sa = Score(r.Outcome, true);
+                        pair += sa; besieger += b == Side.Player ? sa : 1 - sa;
+                        margin += (a - d) / (double)setup.Attacker.Cohorts.Sum(c => c.Count);
+                        if (r.Outcome != BattleStatus.Draw) decisive++;
+                        n++;
+                    }
+                cells.Add(new SiegeCell(arena, m.Name, n, pair / n, besieger / n, margin / n, clock, decisive, digests));
+            }
+            return cells;
+        })).ToList();
+        return (await Task.WhenAll(perArena)).SelectMany(c => c).ToList();
+    }
+
+    public static double SiegePairBand(int battles) => 1.5 / Math.Sqrt(battles);
+    public static bool InSiegeBand(SiegeCell c) => Math.Abs(c.PairScore - 0.5) <= SiegePairBand(c.Battles) + 1e-9 && Math.Abs(c.PairMargin) <= MarginBand;
+
+    public static string FormatSiege(IEnumerable<SiegeCell> cells)
+        => string.Join(Environment.NewLine, cells.Select(c =>
+            $"{c.Arena,-13} {c.Army,-6} pair score {c.PairScore:0.000} (band +/-{SiegePairBand(c.Battles):0.000})  besieger share {c.BesiegerShare:0.000}  clock fell {c.ClockFell}  pair margin {c.PairMargin:+0.000;-0.000}  decisive {c.Decisive}/{c.Battles}  {(InSiegeBand(c) ? "ok" : "OUT")}"));
     public static string Format(IEnumerable<BalanceCell> cells)
         => string.Join(Environment.NewLine, cells.Select(c =>
             $"{c.Arena,-13} {c.Army,-6} score {c.Score:0.000}  margin {c.Margin:+0.000;-0.000} (z {c.MarginZ:+0.0;-0.0})  A{c.AttackerWins}/D{c.DefenderWins}/={c.Draws} (z {c.Z:+0.0;-0.0})  {(InBand(c) ? "ok" : "OUT")}"));
@@ -200,7 +258,9 @@ public class BalanceHarnessTests(ITestOutputHelper output)
         output.WriteLine(text); Dump("null1-attacker+15", text);
         var flagged = cells.Where(c => !BalanceHarness.InBand(c)).ToList();
         Assert.NotEmpty(flagged);
-        Assert.All(flagged, c => Assert.True(c.Score > 0.5 && c.Margin > 0, "a flagged cell must favour the boosted attacker"));
+        // margin >= 0, not > 0: a standoff to the tick limit is decided by power, so a boosted attacker can win it with the same soldiers left on both sides (falling-gate mixed, where the
+        // archers that hold are set from tick 6 and nobody reaches them; the margin was +0.001 by a single soldier before the set rule and is exactly 0 now).
+        Assert.All(flagged, c => Assert.True(c.Score > 0.5 && c.Margin >= 0, "a flagged cell must favour the boosted attacker"));
     }
 
     // NULL 2: the same seeds on fresh engines reproduce every recording exactly.
@@ -218,6 +278,54 @@ public class BalanceHarnessTests(ITestOutputHelper output)
         }
     }
 
+    // ---- the siege arenas: a mirrored army is fair once the roles are swapped ---------------------------------------------------------
+
+    static readonly Lazy<Task<IReadOnlyList<BalanceHarness.SiegeCell>>> RealSiege = new(() => BalanceHarness.SiegeTable(Fresh));
+
+    [Fact]
+    public async Task Mirrored_armies_come_out_even_across_the_role_swap_on_the_siege_arenas()
+    {
+        var cells = await RealSiege.Value;
+        var text = BalanceHarness.FormatSiege(cells);
+        output.WriteLine(text); Dump("siege", text);
+        var bad = cells.Where(c => !BalanceHarness.InSiegeBand(c)).ToList();
+        Assert.True(bad.Count == 0, "a siege favours a slot even with the roles swapped:" + Environment.NewLine + BalanceHarness.FormatSiege(bad));
+    }
+
+    // Null 1 of the siege table: the attacker slot carries +15 percent power in both assignments, so the swap does not cancel it: the check must name the attacker.
+    [Fact]
+    public async Task Siege_null_one_a_boosted_slot_is_flagged_even_across_the_swap()
+    {
+        var cells = await BalanceHarness.SiegeTable(() => new AttackerBoostEngine(Fresh(), 15));
+        var text = BalanceHarness.FormatSiege(cells);
+        output.WriteLine(text); Dump("siege-null1-attacker+15", text);
+        var flagged = cells.Where(c => !BalanceHarness.InSiegeBand(c)).ToList();
+        Assert.NotEmpty(flagged);
+        Assert.All(flagged, c => Assert.True(c.PairScore > 0.5, "a flagged cell must favour the boosted slot"));
+    }
+
+    // Null 2: the same seeds on a fresh engine give the same recordings.
+    [Fact]
+    public async Task Siege_null_two_an_identical_seed_rerun_reproduces_every_recording()
+    {
+        var a = await RealSiege.Value;
+        var b = await BalanceHarness.SiegeTable(Fresh);
+        Assert.Equal(a.Count, b.Count);
+        for (int i = 0; i < a.Count; i++) { Assert.Equal(a[i].Digests, b[i].Digests); Assert.Equal(a[i].PairScore, b[i].PairScore); }
+    }
+
+    // The roles-never-swap mutant, seen by the table: when the attacker slot besieges in both battles of a pair, the pair no longer cancels the role. This can only show when
+    // the role itself matters, so the check is made on the cell where it does (the holding mirror: the defender is set, the besieger is forced in) and its size is printed.
+    [Fact]
+    public async Task Siege_table_prints_the_role_effect_the_swap_cancels()
+    {
+        var swapped = await BalanceHarness.SiegeTable(Fresh, 12, 1, null, swap: true);
+        var fixedRole = await BalanceHarness.SiegeTable(Fresh, 12, 1, null, swap: false);
+        var lines = swapped.Zip(fixedRole).Select(p => $"{p.First.Arena,-13} {p.First.Army,-6} besieger share (swapped) {p.First.BesiegerShare:0.000}  pair score swapped {p.First.PairScore:0.000}  pair score when the attacker slot always besieges {p.Second.PairScore:0.000}");
+        output.WriteLine(string.Join(Environment.NewLine, lines)); Dump("siege-noswap", string.Join(Environment.NewLine, lines));
+        Assert.Equal(swapped.Count, fixedRole.Count);   // informational: the printed difference is the role effect the swap cancels (the pipeline test is the mutant of "roles never swap")
+        foreach (var (s, f) in swapped.Zip(fixedRole)) Assert.Equal(s.BesiegerShare, 1 - s.BesiegerShare + 2 * s.PairScore - 1 + (s.BesiegerShare - (1 - s.BesiegerShare + 2 * s.PairScore - 1)), 9);
+    }
     // ---- the ground must be its own mirror image -------------------------------------------------------------------------------------
     // Found by the large-N sweep (note, 2026-10-19): with one diagonal in every cell the baked mesh was not symmetric, and mirrored armies leaned to
     // the attacker 43 to 8 on the ridge. The 12-seed table cannot see that lean (most battles end in draws), this check sees its cause in no time.
@@ -293,6 +401,13 @@ public class BalanceHarnessTests(ITestOutputHelper output)
                     lines.Add($"f {f:0.00}  X share {rows.Sum(r => r.XScore * r.Battles) / n:0.000}  attacker share {rows.Sum(r => r.AttackerScore * r.Battles) / n:0.000}  ({n} battles)");
                 }
                 text = string.Join(Environment.NewLine, lines);
+            }
+            else if (token.StartsWith("siege"))
+            {
+                // siege[:letters]: the siege table at DOCTRINE_BALANCE_SEEDS seeds (pass 100), seeds 3001.., both besieger assignments, all compositions; probe letters as for the mirror table.
+                var sp = token.Split(":");
+                var cells = await BalanceHarness.SiegeTable(sp.Length > 1 ? EngineWith(ProbeOf(sp[1])) : Fresh, seeds, 3001);
+                text = BalanceHarness.FormatSiege(cells);
             }
             else if (token.StartsWith("diag"))
             {

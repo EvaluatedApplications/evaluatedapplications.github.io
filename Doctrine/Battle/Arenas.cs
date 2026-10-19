@@ -9,6 +9,7 @@ namespace Doctrine.Battle;
 //
 // Legend: '.' open ground, '#' wall (no triangles are emitted, so the baked mesh has a hole there), ',' cover (walkable, hits taken
 // are reduced), 'G' gate cell (walkable until the gate falls).
+// SIEGE ARENAS (ArenaSpec.Siege): the two with a wall between the armies (chokepoint, falling gate). The open field and the ridge are open.
 
 /// <summary>One arena's source layout and rules. Cells are <see cref="Cell"/> arena units wide.</summary>
 internal sealed class ArenaSpec
@@ -20,6 +21,8 @@ internal sealed class ArenaSpec
     public int Cell { get; init; } = 2;
     /// <summary>The tick at which the gate falls (0 = this arena has no gate). It waits until nobody stands in it.</summary>
     public int GateFallsAtTick { get; init; }
+    /// <summary>A siege arena: a wall stands between the armies and the besieger carries the siege clock (<see cref="Arena.SiegeClockTicks"/>). Open fields have none.</summary>
+    public bool Siege { get; init; }
 }
 
 /// <summary>A parsed arena: the cell grid, the geometry Tracer bakes, and the position rules.</summary>
@@ -38,6 +41,25 @@ internal sealed class Arena
 
     readonly bool _legacyMesh;
 
+    /// <summary>Where the front deployment line stands, in percent of the width from the arena's own edge (the back lines stand 10 percent deeper each).</summary>
+    public const int FrontDepthPct = 30;
+
+    /// <summary>
+    /// The siege clock in ticks (0 for an open field), DERIVED from the arena: the time the slowest walking kind (Heavy) needs to cross the ground between the two front
+    /// lines, ceil(gap / pace) with gap = width x (100 - 2 x <see cref="FrontDepthPct"/>) percent. In tenths of a unit so the figure is exact on every device:
+    /// chokepoint (48 wide) 14 ticks, falling gate (56 wide) 16.
+    /// </summary>
+    public int SiegeClockTicks
+    {
+        get
+        {
+            if (!Spec.Siege) return 0;
+            long gapTenths = (long)Width * (100 - 2 * FrontDepthPct) / 10;
+            long paceTenths = (long)MathF.Round(UnitRules.Speed(Trait.Heavy) * 10f);
+            return (int)((gapTenths + paceTenths - 1) / paceTenths);
+        }
+    }
+
     public Arena(ArenaSpec spec, bool legacyMesh = false)
     {
         Spec = spec; _legacyMesh = legacyMesh;
@@ -49,7 +71,7 @@ internal sealed class Arena
             if (spec.Half[r].Length != half) throw new InvalidOperationException($"arena {spec.Id}: row {r} is {spec.Half[r].Length} wide, expected {half}");
             for (int c = 0; c < half; c++) { _cells[c, r] = spec.Half[r][c]; _cells[Cols - 1 - c, r] = spec.Half[r][c]; }
         }
-        Info = new ArenaInfo(spec.Id, spec.Name, Cols * Cell, Rows * Cell);
+        Info = new ArenaInfo(spec.Id, spec.Name, Cols * Cell, Rows * Cell, SiegeClockTicks);
 
         // The gate zone: a circle that covers every G cell (and a little of the ground next to them).
         int minC = int.MaxValue, maxC = -1, minR = int.MaxValue, maxR = -1;
@@ -162,7 +184,7 @@ internal static class ArenaCatalogue
     // 24 x 20 cells = 48 x 40. A wall across the middle with ONE gap, eight units wide; cover on both approaches.
     static readonly ArenaSpec Chokepoint = new()
     {
-        Id = "chokepoint", Name = "The Chokepoint",
+        Id = "chokepoint", Name = "The Chokepoint", Siege = true,
         Half =
         [
             "...........#",
@@ -217,7 +239,7 @@ internal static class ArenaCatalogue
     static readonly ArenaSpec FallingGate = new()
     {
         Id = "falling-gate", Name = "The Falling Gate",
-        GateFallsAtTick = 14,
+        GateFallsAtTick = 14, Siege = true,
         Half =
         [
             ".............#",

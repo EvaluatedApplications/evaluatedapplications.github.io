@@ -116,6 +116,12 @@ Invariants (`BattleContract`, through the game's own battle pipeline):
   reach and armour edges over the plain soldier; none = Plain): Spearmen, Wights Plain; Riders, Wolves Swift; Archers, Priests, Catapults Ranged; Shieldwall Armoured. Each class hits the next class half again as hard
   (the holy-against-cursed factor, `UnitRules.CounterNum/CounterDen`): Plain over Swift, Swift over Ranged, Ranged over Armoured, Armoured over Plain. It stacks with cover and the holy rule and changes no price. Proved in
   `CounterAndLimitTests` (the class table, the ring, the factor, every edge of the ring clearer than with the option off) with the cycle off and the cycle read backwards watched red.
+- SET AND SIEGE (Tracer section, fifth round; `TracerBattleOptions.Set`, `.SiegeClock`, `DoctrineDomain.Siege`, `.SwapSiegeRoles`; the stub has neither). SET: a cohort is still on a tick when it took no damage the tick before and its centroid is within one melee reach of where its stillness began;
+  after `UnitRules.SetTicks` (= Fp / BaseDamage = 6, the time one soldier needs to kill another) still ticks it is SET and strikes with its damage raised by `UnitRules.SetBonusPct` = (the best reach edge in the tables, a Machine's 32) minus its own reach edge, in percent (a pike line 32, Archers 12, Catapults 0); it stops being set when it is hit
+  or moves (the engage of the tick it is hit in still carries the bonus: the opening volley). Only a cohort that Holds (or otherwise stands) can be set. SIEGE ARENAS (`ArenaInfo.SiegeClock` > 0: chokepoint 14, falling gate 16; open field and ridge are open): `BattleSetup.Besieger` names the side that besieges (null = open field); the BESIEGER that has not been in an exchange (a hit dealt or taken by any of its cohorts) when the arena's clock
+  runs out LOSES ITS STANCE (every cohort advances for good, its loss trigger is dropped); the other side may bide. The clock is the walk of the slowest kind (Heavy) across the ground between the two front lines. The pipeline names the besieger by the round (`SiegeRules.BesiegerOf`: the player in even rounds, the enemy in odd ones), so roles swap every round.
+  Proved in `SetAndSiegeTests` (every behaviour has a check and a broken engine watched red: set bonus ignored, set never expires, set off, clock off, clock switched off, roles never swap) and the siege fairness table in `BalanceHarness`.
+- CANONICAL ORDER (fifth round): the army reads its cohorts by kind key, a draft buys its picks in kind order (so a new cohort's rank does not depend on the order picks were listed), and the battle takes cohorts by kind, then rank, whatever order it is handed: the same army reached by different pick orders fights the same battle and leaves the same recording (`CanonicalOrderTests`, broken engine watched red).
 - The same setup gives the same recording on the same device (`ReplayCodec.Digest` equal). Overwhelming force wins.
 - A battle is simulated ONCE by one authority and played back everywhere else. Cross-device equality is NOT required (floats); it is
   measured, not promised.
@@ -174,8 +180,8 @@ unchanged (it records cohorts, and the switch is seen as the movement it causes)
 ## (e) REPLAY: record format, `Core\Replay.cs`, owned by the skeleton; produced by Battle, played by the page
 
 `BattleReplay` = version, arena, seed, tick limit, frames (blobs with quantised integer x/y at 1/16 unit, strengths, events, WORLD FLAGS),
-result. `ReplayCodec` is a hand-written varint binary format (magic `DRP`, `CurrentVersion` 2); `TryDecode` never throws and reads
-versions 1 and 2 (a version-1 recording has flags 0 and is written back bit for bit in the version-1 layout); `ReplayPlayer` hands out
+result. `ReplayCodec` is a hand-written varint binary format (magic `DRP`, `CurrentVersion` 3); `TryDecode` never throws and reads
+versions 1, 2 and 3 (a version-1 recording has flags 0 and is written back bit for bit in the version-1 layout; VERSION 3 adds one header byte after the tick limit naming the besieger, 0 none, 1 player, 2 enemy, and the world flag `ClockFell`; a recording is written in the LOWEST version that can carry it, so a battle without a besieger is still version 2, byte for byte what it was); `ReplayPlayer` hands out
 the recorded frames, nothing is recomputed. `ReplayContract` checks: version and header, ticks from 0 and consecutive, bounded positions,
 world flags (below), final strengths agree with the result, codec round trip is bit for bit and deterministic, a recording is at most
 64 KB, damaged data is refused with a reason, the player yields the recorded frames themselves. Breaking changes to the format bump
@@ -183,7 +189,7 @@ world flags (below), final strengths agree with the result, codec round trip is 
 
 WORLD FLAGS (`ReplayFrame.WorldFlags`, an int bitset, `WorldFlag` holds the names): the part of the arena that CHANGES during a battle,
 which the cohorts cannot show. Bit 0 `GateFallen`: the arena's gate has fallen (set from the first frame recorded after it fell, so the page
-swaps the gate's picture on that frame). Rules: only defined bits (`WorldFlag.Defined`) are used; the start frame is 0; a bit never clears
+swaps the gate's picture on that frame). Bit 1 `ClockFell` (version 3): the siege clock ran out and the besieger lost its stance (set from the first frame recorded after). Rules: only defined bits (`WorldFlag.Defined`) are used; the start frame is 0; a bit never clears
 once set; the digest and the codec carry the flags. Terrain itself is NOT in the recording: it is static per arena and the page draws it from
 the arena layout (the Tracer section's `LayoutOf(arenaId)`); the flags say which state of that layout each frame is in. Per-agent positions
 are not in the format (proposal and byte budget in SECTIONS.md, "Replay: per-agent sample").

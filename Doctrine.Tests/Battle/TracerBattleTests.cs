@@ -169,7 +169,7 @@ public class TracerBattleTests
             [C(1, 40, 0), C(4, 40, 1)], [O(0, FieldOrderKind.Hunt), O(1, FieldOrderKind.Advance)]);
         var s = await Step(TracerWorlds.Engine(), setup, 4);
         Assert.Equal("Seek", s.BehaviorOf(0));
-        Assert.Equal("Patrol", s.BehaviorOf(1));
+        Assert.Equal("Patrol", s.BehaviorOf(2));   // blobs run in kind order since the fifth round (Spearmen 0, Riders 1, Archers 2): the holding cohort is the Archers
         Assert.Equal("Seek", s.BehaviorOf(3));    // Hunt
         // The fall-back cohort starts beyond the enemy's reach (24), so it just holds; bring the enemy to it and it retreats.
         var near = Fight("open-field", 8, 30, [C(0, 40, 0)], [O(0, FieldOrderKind.Advance)], [C(1, 40, 0)], [O(0, FieldOrderKind.Advance)]);
@@ -280,7 +280,10 @@ public class TracerBattleTests
             through += DamageByTick(open.State.Replay!, 6); sighted += DamageByTick(real.State.Replay!, 6); checks += real.S.Stats.LineOfSightChecks;
         }
         if (checks == 0) return "no line-of-sight check was ever made";
-        // NOT "sighted < through": over eight seeds sight RAISES the early damage (about 8 percent, with or without the mirrored mesh), because an agent that can fire\n        // through a wall stands still to do it, while a walled-off one keeps walking toward the fight. The old single seed (12) happened to show the other way round.\n        if (sighted == through) return $"line of sight did not change the opening exchange (damage by tick 6 over 8 seeds: with sight {sighted}, through walls {through})";
+        // NOT "sighted < through": over eight seeds sight RAISES the early damage (about 8 percent, with or without the mirrored mesh), because an agent that can fire
+        // through a wall stands still to do it, while a walled-off one keeps walking toward the fight. The old single seed (12) happened to show the other way round.
+        // (This line and the next had been one comment line since the rename, joined by a literal backslash-n: the check was never made. Found 2026-10-19, fifth round.)
+        if (sighted == through) return $"line of sight did not change the opening exchange (damage by tick 6 over 8 seeds: with sight {sighted}, through walls {through})";
         return null;
     }
 

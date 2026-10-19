@@ -26,6 +26,16 @@ public sealed record TracerBattleOptions
     public bool Counters { get; init; } = true;
     /// <summary>When the tick limit stops a running battle the side with the greater <see cref="UnitRules.Rating"/> wins (power left), not the side with more soldiers.</summary>
     public bool LimitByPower { get; init; } = true;
+    /// <summary>
+    /// A cohort that has held its ground unhit for <see cref="UnitRules.SetTicks"/> ticks is SET and strikes harder (<see cref="UnitRules.SetBonusPct"/>) until it is
+    /// hit or moves (CONTRACT.md b, "Set and siege"). Off only as a measurement null and as a mutant.
+    /// </summary>
+    public bool Set { get; init; } = true;
+    /// <summary>
+    /// In a siege arena (<see cref="BattleSetup.Besieger"/> named) the besieger that has not been in an exchange by the arena's siege clock loses its stance:
+    /// every cohort of it advances for good. Off only as a measurement null and as a mutant.
+    /// </summary>
+    public bool SiegeClock { get; init; } = true;
     /// <summary>Test hook of the balance harness: flips ONE ordering of the battle to see whether it carries a side lean. None = the game.</summary>
     internal OrderProbe Probe { get; init; }
 }
@@ -55,6 +65,14 @@ internal enum OrderProbe
     CounterReversed = 256,
     /// <summary>Mutant of the tick-limit rule: it counts soldiers even when LimitByPower is on.</summary>
     LimitCountsBodies = 512,
+    /// <summary>Mutant of Set: a set cohort gets no bonus (the state is tracked, the strike ignores it).</summary>
+    SetBonusIgnored = 1024,
+    /// <summary>Mutant of Set: once set a cohort stays set, however many hits it takes and however far it moves.</summary>
+    SetNeverExpires = 2048,
+    /// <summary>Mutant of the siege clock: it never falls (the besieger may bide as long as the defender).</summary>
+    SiegeClockOff = 4096,
+    /// <summary>Mutant of the canonical cohort order: the battle takes the cohorts in the order the army listed them (add order).</summary>
+    CohortsInGivenOrder = 8192,
 }
 
 /// <summary>An agent of the battle: Tracer's <see cref="GameAgent"/> plus the integer facts the deterministic resolver needs.</summary>
@@ -102,6 +120,19 @@ public static class UnitRules
         long closing = (long)MathF.Round(2f * BaseSpeed * 10f);          // tenths of a unit per tick, both sides advancing
         return (int)(tenths * BaseDamage * 100 / (closing * Fp));
     }
+
+    /// <summary>
+    /// Ticks a cohort must hold its ground unhit to be SET: <see cref="Fp"/> / <see cref="BaseDamage"/> = 6, the time one soldier needs to kill another (a line that has
+    /// stood unhit that long has had time to dig in). Read from the damage table, not typed.
+    /// </summary>
+    public const int SetTicks = Fp / BaseDamage;
+
+    /// <summary>
+    /// The bonus to a SET cohort's damage, in percent: the distance from its own reach edge (<see cref="ReachPct"/>) to the best reach edge in the tables (a Machine's, 32):
+    /// a set line is at least as well placed as the longest weapon on the field. A pike line gets the full 32, Archers and Priests 12, a Catapult none (it already has it).
+    /// Never below 0. No per-kind number is typed: the table's best minus the cohort's own.
+    /// </summary>
+    public static int SetBonusPct(Trait t) => Math.Max(0, ReachPct(Trait.Machine) - ReachPct(t));
 
     /// <summary>Percent of base damage this kind deals per soldier.</summary>
     public static int DamagePct(Trait t)

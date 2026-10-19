@@ -5,9 +5,10 @@ namespace Doctrine;
 /// <summary>
 /// The replay record format (seam e). A battle is simulated ONCE by one authority; every other device PLAYS BACK this
 /// recording and never recomputes it. Hand-written binary (varints), so no reflection serialisation and no float on the wire.
-/// Layout: "DRP" + version, arena, seed, tick limit, frames (tick, blobs, events, world flags from version 2), result.
-/// Version 2 added the per-frame world flags; version 1 is still read (flags 0) and a version-1 replay is written back in the version-1
-/// layout, so a stored recording round-trips bit for bit in the version it was made in.
+/// Layout: "DRP" + version, arena, seed, tick limit, [besieger byte from version 3], frames (tick, blobs, events, world flags from version 2), result.
+/// Version 2 added the per-frame world flags; version 3 added the besieger byte (and the clock-fell flag) for siege battles. Older versions are still read
+/// (version 1 flags 0, versions 1 and 2 no besieger) and a recording is written back in the layout of its own version, so a stored recording round-trips
+/// bit for bit in the version it was made in.
 /// </summary>
 public static class ReplayCodec
 {
@@ -18,6 +19,7 @@ public static class ReplayCodec
         var w = new Writer();
         foreach (var b in Magic) w.Byte(b);
         w.Var(r.Version); w.Str(r.ArenaId); w.Var(r.Seed); w.Var(r.TickLimit);
+        if (r.Version >= 3) w.Byte(BesiegerByte(r.Besieger));   // version 3: who besieged (0 = nobody); versions 1 and 2 have no such byte
         w.Var(r.Frames.Count);
         foreach (var f in r.Frames)
         {
@@ -32,6 +34,8 @@ public static class ReplayCodec
         Losses(w, r.Result.AttackerLosses); Losses(w, r.Result.DefenderLosses);
         return w.ToArray();
     }
+
+    static byte BesiegerByte(Side? s) => s is null ? (byte)0 : (byte)(1 + (int)s.Value);
 
     static void Losses(Writer w, IReadOnlyList<CohortLoss> l)
     {
@@ -50,6 +54,13 @@ public static class ReplayCodec
             int version = rd.Var();
             if (version is < 1 or > BattleReplay.CurrentVersion) { error = $"unknown replay version {version}"; return false; }
             string arena = rd.Str(); int seed = rd.Var(); int limit = rd.Var();
+            Side? besieger = null;
+            if (version >= 3)
+            {
+                byte b = rd.Byte();
+                if (b > 2) { error = $"unknown besieger {b}"; return false; }
+                if (b != 0) besieger = (Side)(b - 1);
+            }
             int n = rd.Count();
             var frames = new List<ReplayFrame>(n);
             for (int i = 0; i < n; i++)
@@ -67,7 +78,7 @@ public static class ReplayCodec
             var outcome = (BattleStatus)rd.Byte(); int ticks = rd.Var();
             var al = ReadLosses(rd); var dl = ReadLosses(rd);
             if (!rd.AtEnd) { error = "trailing bytes"; return false; }
-            replay = new(version, arena, seed, limit, frames, new(outcome, ticks, al, dl));
+            replay = new(version, arena, seed, limit, frames, new(outcome, ticks, al, dl), besieger);
             return true;
         }
         catch (Exception e) when (e is FormatException or IndexOutOfRangeException or ArgumentException or OverflowException)
@@ -89,6 +100,7 @@ public static class ReplayCodec
         var h = new Fnv();
         h.Add(r.Version); h.Add(r.Seed); h.Add(r.TickLimit);
         foreach (var c in r.ArenaId) h.Add(c);
+        if (r.Version >= 3) h.Add(BesiegerByte(r.Besieger));   // a version-2 digest is what it was before sieges
         foreach (var f in r.Frames)
         {
             h.Add(f.Tick);

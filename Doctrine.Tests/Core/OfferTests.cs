@@ -304,12 +304,14 @@ public class OfferPipelineTests
 
     // ---- the whole game ----
 
-    static DoctrineGame Game(OfferRules rules, int rounds = 8, bool real = false, IOfferSource? offers = null, bool oldPlacement = false)
+    static DoctrineGame Game(OfferRules rules, int rounds = 8, bool real = false, IOfferSource? offers = null, bool oldPlacement = false, bool fifthRound = true)
     {
-        var b = DoctrineBuilder.New().WithPlayer(new ScriptedPlayer(1)).WithRules(new DoctrineDomain { MaxRounds = rounds, Offers = rules });
+        // fifthRound false = the game before sets and sieges (no besieger named, no set bonus, no siege clock), to reproduce the earlier pins
+        var b = DoctrineBuilder.New().WithPlayer(new ScriptedPlayer(1)).WithRules(new DoctrineDomain { MaxRounds = rounds, Offers = rules, Siege = fifthRound });
+        var battle = fifthRound ? new TracerBattleOptions() : new TracerBattleOptions { Set = false, SiegeClock = false };
         var armyRules = oldPlacement ? new ArmyRules { BalancedPlacement = false } : null;
         if (offers is not null) b.WithOffers(offers);
-        if (real) b.WithDefaults(r => r.WithArmy(new PleromaArmyService(armyRules)).WithTracer(TracerWorlds.Scratch()).WithBattle(ctx => new TracerBattleEngine(ctx.Tracer!)).WithGeneral(new TinyHoloGeneral()));
+        if (real) b.WithDefaults(r => r.WithArmy(new PleromaArmyService(armyRules)).WithTracer(TracerWorlds.Scratch()).WithBattle(ctx => new TracerBattleEngine(ctx.Tracer!, battle)).WithGeneral(new TinyHoloGeneral()));
         else b.WithArmy(new StubArmyService(armyRules));
         return b.Build();
     }
@@ -354,8 +356,9 @@ public class OfferPipelineTests
     {
         // 2026-10-19 third-round pins, set before the offers: the old free choice must come back exactly when the offers are switched off.
         // (the placement is switched back to the old kind-mod-3 seeding too: the balance rule of placement is the fourth round's other change)
-        Assert.Equal(15698248093412764465UL, (await Game(OfferRules.Off, real: false, oldPlacement: true).PlayAsync(1234)).Digest());
-        Assert.Equal(771457392613517103UL, (await Game(OfferRules.Off, real: true, oldPlacement: true).PlayAsync(1234)).Digest());
+        // (fifth round: the third-round values 15698248093412764465 / 771457392613517103 are no longer reproducible; a draft now buys in kind order, so these are the same game with canonical picks)
+        Assert.Equal(13508779435671945360UL, (await Game(OfferRules.Off, real: false, oldPlacement: true).PlayAsync(1234)).Digest());
+        Assert.Equal(17505358676471193907UL, (await Game(OfferRules.Off, real: true, oldPlacement: true, fifthRound: false).PlayAsync(1234)).Digest());
     }
 
     [Fact]

@@ -23,6 +23,12 @@ public sealed class TracerBattleStats
     public int Agents { get; internal set; }
     /// <summary>The tick at whose start each side's loss trigger fired (-1 = never fired, or the side has none). Index 0 the attacker, 1 the defender.</summary>
     public int[] TriggerFiredAtTick { get; } = [-1, -1];
+    /// <summary>Cohort-ticks spent SET, by role (index 0 the attacker, 1 the defender): a cohort that is set on a tick counts once.</summary>
+    public int[] SetCohortTicks { get; } = [0, 0];
+    /// <summary>The first tick at whose start a cohort of the role was set (-1 = never).</summary>
+    public int[] SetFirstTick { get; } = [-1, -1];
+    /// <summary>The tick at whose start the siege clock fell and the besieger lost its stance (-1 = it did not: no siege, the besieger was in an exchange in time, or the clock is off).</summary>
+    public int ClockFiredAtTick { get; internal set; } = -1;
 }
 
 /// <summary>
@@ -55,6 +61,7 @@ public sealed class TracerBattleSession : IBattleSession
         public List<(FieldOrderKind Kind, int Weight)>? Then;   // the orders that replace Orders when the side's loss trigger fires (null = the side has no trigger)
         public Vector2 Anchor, Centroid; public int Alive;
         public bool FlankSet, FlankDone; public Vector2 FlankPoint;        public Vector2? Retreat;
+        public int StillTicks; public Vector2 StillRef; public bool IsSet, HitLast;   // SET: unhit and unmoved for UnitRules.SetTicks ticks
         public PatrolBehavior? Patrol;
         public bool Engaged => Units.Any(u => u.Alive && u.Fired);
     }
@@ -84,6 +91,8 @@ public sealed class TracerBattleSession : IBattleSession
     Vector2 _gateCentre; float _gateRadius;
     readonly LossTrigger?[] _trigger = new LossTrigger?[2];   // by role: the side's contingency
     readonly bool[] _fired = new bool[2];
+    readonly int _besieger = -1;       // role of the besieger in a siege arena, else -1
+    bool _besiegerEngaged, _clockFell; // the besieger has been in an exchange / its stance is lost
 
     public TracerBattleStats Stats { get; } = new();
     public int Tick { get; private set; }
@@ -92,6 +101,7 @@ public sealed class TracerBattleSession : IBattleSession
                                  IEngagementService engagement, IInfluenceMapService influence)
     {
         _setup = setup; _arena = arena; _opt = options; _world = tracer.World; _baseMesh = mesh; _mesh = mesh;
+        if (setup.Besieger is { } bs && arena.SiegeClockTicks > 0) _besieger = setup.Attacker.Side == bs ? 0 : 1;
         _engagement = engagement; _influence = influence;
         _los = _world.CreateLineOfSightService();
         _fog = _world.CreateFogOfWarService();
@@ -137,7 +147,14 @@ public sealed class TracerBattleSession : IBattleSession
     {
         var sides = new[] { _setup.Attacker, _setup.Defender };
         var raw = new List<(int Role, CohortRead Read, BattleSide Side)>();
-        for (int r = 0; r < 2; r++) foreach (var c in sides[r].Cohorts.Where(c => c.Count > 0)) raw.Add((r, c, sides[r]));
+        // CANONICAL ORDER (fifth round): cohort ids, lanes, unit ids and jitter streams all derive from this order, so it must not depend on the order an army listed
+        // its cohorts in (an army reached by different pick orders is the same army and fights the same battle). By kind, then rank.
+        for (int r = 0; r < 2; r++)
+        {
+            var cs = sides[r].Cohorts.Where(c => c.Count > 0);
+            if (!_opt.Probe.HasFlag(OrderProbe.CohortsInGivenOrder)) cs = cs.OrderBy(c => c.Key).ThenBy(c => c.Slot);
+            foreach (var c in cs) raw.Add((r, c, sides[r]));
+        }
         var ordinal = Enumerable.Range(0, raw.Count).ToArray();
         if (_opt.Probe.HasFlag(OrderProbe.SpawnReversed))
         {
@@ -200,7 +217,7 @@ public sealed class TracerBattleSession : IBattleSession
                 c.Units.Add(u);
             }
             c.Alive = n;
-            c.Centroid = Centroid(c);
+            c.Centroid = Centroid(c); c.StillRef = c.Centroid;
             if (c.Orders.Concat(c.Then ?? []).Any(o => o.Kind == FieldOrderKind.Hold))   // a ring to walk, in the opening orders or after the trigger
             {
                 var ring = new List<Vector2>();
@@ -285,10 +302,51 @@ public sealed class TracerBattleSession : IBattleSession
         }
     }
 
+    /// <summary>
+    /// The siege clock. In a siege arena the besieger that has not been in an exchange (a hit dealt or taken by any of its cohorts) when the arena's clock runs out
+    /// loses its stance: every cohort of it takes Advance for good, and its loss trigger is dropped (it cannot bide again). The defender is not touched: it may bide.
+    /// </summary>
+    void CheckSiegeClock()
+    {
+        if (_besieger < 0 || _clockFell || !_opt.SiegeClock || _opt.Probe.HasFlag(OrderProbe.SiegeClockOff)) return;
+        if (Tick < _arena.SiegeClockTicks || _besiegerEngaged) return;
+        _clockFell = true; Stats.ClockFiredAtTick = Tick;
+        _trigger[_besieger] = null; _fired[_besieger] = true;
+        foreach (var c in _cohorts)
+        {
+            if (c.Role != _besieger) continue;
+            c.Orders = new() { (FieldOrderKind.Advance, 1) }; c.Then = null; c.FlankSet = false; c.FlankDone = false;
+            foreach (var u in c.Units) u.Order = FieldOrderKind.Advance;
+        }
+    }
+
+    /// <summary>
+    /// SET. At the start of a tick each living cohort counts the ticks it has stood still: unhit on the previous tick and within one melee reach of where its stillness
+    /// began. A hit, or a move farther than that, restarts the count from where it stands. After <see cref="UnitRules.SetTicks"/> still ticks it is set until the next
+    /// hit or move. (The mutant SetNeverExpires keeps a set cohort set for good.)
+    /// </summary>
+    void UpdateSet()
+    {
+        if (!_opt.Set) return;
+        foreach (var c in _cohorts)
+        {
+            if (c.Strength == 0) { c.IsSet = false; continue; }
+            if (Tick == 0) { c.StillRef = c.Centroid; continue; }
+            bool moved = Vector2.Distance(c.Centroid, c.StillRef) > UnitRules.MeleeRange;
+            if (c.IsSet && _opt.Probe.HasFlag(OrderProbe.SetNeverExpires)) { }
+            else if (c.HitLast || moved) { c.StillTicks = 0; c.IsSet = false; c.StillRef = c.Centroid; }
+            else { c.StillTicks++; if (c.StillTicks >= UnitRules.SetTicks) c.IsSet = true; }
+            c.HitLast = false;
+            if (c.IsSet && Stats.SetFirstTick[c.Role] < 0) Stats.SetFirstTick[c.Role] = Tick;
+        }
+    }
+
     public async ValueTask FieldOrdersAsync(CancellationToken ct)
     {
         CheckTriggers();
+        CheckSiegeClock();
         foreach (var c in _cohorts) c.Centroid = Centroid(c);
+        UpdateSet();
         await MaybeDropGateAsync(ct);
         Perceive();
         await UpdateInfluenceAsync(ct);
@@ -514,6 +572,11 @@ public sealed class TracerBattleSession : IBattleSession
             int alive = c.Units.Count(u => u.Alive);
             int w = (c.Strength + alive - 1) / alive;   // soldiers each agent stands for
             int dfp = (int)Math.Min((long)w * c.PowerPct * c.DamagePct / 100, UnitRules.MaxHit);
+            if (c.IsSet)
+            {
+                Stats.SetCohortTicks[c.Role]++;
+                if (!_opt.Probe.HasFlag(OrderProbe.SetBonusIgnored)) dfp = (int)Math.Min((long)dfp * (100 + UnitRules.SetBonusPct(c.Traits)) / 100, UnitRules.MaxHit);   // a set line strikes harder
+            }
             radius = Math.Max(radius, c.Range);
             foreach (var u in c.Units) if (u.Alive) sides[c.Role].Add(new UnitAgent(u.Id, u.P, c.Range, c.Id, dfp, c.TakenPct, c.Traits));
         }
@@ -529,6 +592,7 @@ public sealed class TracerBattleSession : IBattleSession
             int fp = (int)MathF.Floor(o.Damage);   // the integer hit; the fraction only ranked targets for the per-agent attack budget
             var src = UnitOf(o.SourceId); var tgt = UnitOf(o.TargetId);
             src.Fired = true; tgt.Taken += fp; tgt.C.PendingFp += fp;
+            if (_besieger >= 0 && (src.C.Role == _besieger || tgt.C.Role == _besieger)) _besiegerEngaged = true;
             _pairFp[(src.C.Id, tgt.C.Id)] = _pairFp.GetValueOrDefault((src.C.Id, tgt.C.Id)) + fp;
         }
         foreach (var kv in _pairFp.OrderBy(k => k.Key.Item1).ThenBy(k => k.Key.Item2))
@@ -565,6 +629,7 @@ public sealed class TracerBattleSession : IBattleSession
     {
         foreach (var c in _cohorts)
         {
+            c.HitLast = c.PendingFp > 0;
             if (c.Strength > 0 && c.PendingFp > 0)
             {
                 long total = c.CarryFp + c.PendingFp;
@@ -602,7 +667,7 @@ public sealed class TracerBattleSession : IBattleSession
     }
 
     /// <summary>The arena's changing state for the recording: the gate bit is set from the frame after the gate fell.</summary>
-    int WorldFlags() => _gateFallen ? WorldFlag.GateFallen : 0;
+    int WorldFlags() => (_gateFallen ? WorldFlag.GateFallen : 0) | (_clockFell ? WorldFlag.ClockFell : 0);
 
     public ReplayFrame Snapshot() => new(Tick, Blobs(), Array.Empty<ReplayEvent>(), WorldFlags());
 

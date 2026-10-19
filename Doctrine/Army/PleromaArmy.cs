@@ -187,7 +187,11 @@ internal sealed class PleromaArmy : IArmy
     {
         var auras = Auras();
         var cohorts = new List<CohortRead>();
-        if (TryCohorts(out var items))
+        if (TryCohorts(out var found))
+        {
+            // CANONICAL ORDER: by kind key. The store enumerates in the order cohorts were added, and a battle derives ids, lanes and spawn order from the
+            // order of this list, so the same army reached by different pick orders must read identically (fifth round).
+            var items = found.OrderBy(x => x.Item.Key).ToList();
             for (int i = 0; i < items.Count; i++)
             {
                 var it = items[i].Item;
@@ -195,6 +199,7 @@ internal sealed class PleromaArmy : IArmy
                 cohorts.Add(new CohortRead((int)it.Key, (int)items[i].Count, (Trait)(byte)it.Flags, slot, vet,
                     PleromaArmyLayout.Power(vet, it.Flags, auras.Mask, auras.MaxPercent)));
             }
+        }
         return new ArmyReadModel(Side, Round(), Gold(), cohorts, Legal());
     }
 
@@ -255,7 +260,7 @@ internal sealed class PleromaArmy : IArmy
         var ok = new List<DraftPick>();
         var no = new List<(DraftPick Pick, string Reason)>();
         long spent = 0;
-        foreach (var p in request.Picks)
+        foreach (var p in request.Picks.OrderBy(p => p.Kind))   // CANONICAL: one request buys in kind order, so new cohorts are placed (and gold refuses) the same whatever order the picks were listed in
         {
             if ((uint)p.Kind >= Roster.Size || p.Count <= 0) { no.Add((p, "bad pick")); continue; }
             if (!TryCohorts(out var items)) { no.Add((p, "army unreadable")); continue; }

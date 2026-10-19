@@ -10,7 +10,7 @@ public static class ReplayContract
     [
         new("version-and-header", r =>
         {
-            Expect.Equal(BattleReplay.CurrentVersion, r.Version, "replay version");
+            Expect.Equal(BattleReplay.VersionFor(r.Besieger), r.Version, "replay version (the lowest version that carries the recording: 3 only with a besieger)");
             Expect.True(r.ArenaId.Length > 0 && r.TickLimit > 0, "arena id and tick limit are recorded");
             return Task.CompletedTask;
         }),
@@ -41,6 +41,14 @@ public static class ReplayContract
                 seen |= f.WorldFlags;
             }
             Expect.Equal(0, r.Frames[0].WorldFlags, "the start frame shows the arena as it began");
+            return Task.CompletedTask;
+        }),
+        new("the-clock-falls-only-in-a-recording-with-a-besieger", r =>
+        {
+            // WorldFlag.ClockFell is a version-3 flag: only a siege battle (a named besieger) may set it, and the besieger is a side that fought.
+            bool fell = r.Frames.Any(f => (f.WorldFlags & WorldFlag.ClockFell) != 0);
+            Expect.True(!fell || r.Besieger is not null, "a clock fell in a battle with no besieger");
+            Expect.True(r.Besieger is null || r.Version >= 3, "a besieger needs version 3");
             return Task.CompletedTask;
         }),
         new("final-strengths-agree-with-the-result", r =>

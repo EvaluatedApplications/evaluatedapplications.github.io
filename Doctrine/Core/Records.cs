@@ -54,11 +54,22 @@ public sealed record ArmyOrdersReport(int Applied, int Skipped);
 /// </summary>
 public readonly record struct CohortLoss(int Key, int Slot, int Lost);
 
-public sealed record Spoils(int Gold, int Experience);
+/// <summary>
+/// What a round pays the player. <see cref="Gold"/> is the whole payment; <see cref="Muster"/> is the part of it that is the comeback muster
+/// (<see cref="Roster.Muster"/>, 0 when the rule is off or the army is not behind), carried for display and never added on top of Gold.
+/// </summary>
+public sealed record Spoils(int Gold, int Experience, int Muster = 0);
 
 // ---- Battle --------------------------------------------------------------------------------------------------------
 
-public sealed record ArenaInfo(string Id, string Name, int Width, int Height);
+/// <summary>
+/// One arena of the catalogue. <see cref="SiegeClock"/> is 0 for an open field; above 0 the arena is a SIEGE ARENA and the number is its siege clock in ticks
+/// (the besieger that has not been in an exchange by that tick loses its stance and must advance; see CONTRACT.md b, "Set and siege").
+/// </summary>
+public sealed record ArenaInfo(string Id, string Name, int Width, int Height, int SiegeClock = 0)
+{
+    public bool IsSiege => SiegeClock > 0;
+}
 
 /// <summary>
 /// A side's contingency (CONTRACT.md b): once the side has lost <see cref="Quarters"/> quarters or more of the soldiers it brought, the field orders
@@ -70,7 +81,11 @@ public sealed record LossTrigger(int Quarters, IReadOnlyList<FieldOrder> Then);
 public sealed record BattleSide(Side Side, IReadOnlyList<CohortRead> Cohorts, IReadOnlyList<FieldOrder> Orders, LossTrigger? Trigger = null);
 
 /// <summary>Everything a battle needs; built by the pipeline from two army reads and two doctrines. Same setup, same result.</summary>
-public sealed record BattleSetup(string ArenaId, int Seed, int TickLimit, BattleSide Attacker, BattleSide Defender)
+/// <param name="Besieger">
+/// Which side besieges in a SIEGE arena (the side that carries the siege clock; the other side may bide). Null = an open field, no clock. The pipeline names it
+/// by the round (<see cref="SiegeRules.BesiegerOf"/>, roles swap each round); an engine that does not know sieges ignores it.
+/// </param>
+public sealed record BattleSetup(string ArenaId, int Seed, int TickLimit, BattleSide Attacker, BattleSide Defender, Side? Besieger = null)
 {
     public const int DefaultTickLimit = 120;
 }
@@ -105,16 +120,32 @@ public static class WorldFlag
 {
     /// <summary>Bit 0: the arena's gate has fallen (the ground it blocked is open or closed from this frame on, per the arena).</summary>
     public const int GateFallen = 1 << 0;
+    /// <summary>Bit 1 (version 3): the siege clock has run out and the besieger has lost its stance (its cohorts advance from this frame on). Only a siege battle sets it.</summary>
+    public const int ClockFell = 1 << 1;
     /// <summary>Every defined bit. A recording that sets any other bit is refused by the replay contract (reserved for later versions).</summary>
-    public const int Defined = GateFallen;
+    public const int Defined = GateFallen | ClockFell;
 }
 
+/// <param name="Besieger">The side that besieged (version 3 only; null for a battle on an open field, and for every recording of version 1 and 2).</param>
 public sealed record BattleReplay(
-    int Version, string ArenaId, int Seed, int TickLimit, IReadOnlyList<ReplayFrame> Frames, BattleResult Result)
+    int Version, string ArenaId, int Seed, int TickLimit, IReadOnlyList<ReplayFrame> Frames, BattleResult Result, Side? Besieger = null)
 {
-    /// <summary>2 = frames carry <see cref="ReplayFrame.WorldFlags"/>. Version 1 is still read (every frame's flags are 0).</summary>
-    public const int CurrentVersion = 2;
+    /// <summary>
+    /// The highest version the codec reads. 2 = frames carry <see cref="ReplayFrame.WorldFlags"/> (version 1 is still read, every frame's flags are 0).
+    /// 3 = a header byte names the besieger and <see cref="WorldFlag.ClockFell"/> exists. A recording is written in the LOWEST version that can carry it:
+    /// a battle without a besieger is still version 2, byte for byte what it was before sieges.
+    /// </summary>
+    public const int CurrentVersion = 3;
+    /// <summary>The version a recording of a battle with this besieger is written in.</summary>
+    public static int VersionFor(Side? besieger) => besieger is null ? 2 : 3;
     public const int Quantum = 16;   // positions are stored as (arena unit * 16)
+}
+
+/// <summary>Who besieges when. The pipeline asks here; the roles swap every round so a siege stays fair across a game.</summary>
+public static class SiegeRules
+{
+    /// <summary>The besieger of a round in a siege arena: the player in even rounds, the enemy in odd ones (<paramref name="swap"/> false: always the player; a mutant and a measurement null).</summary>
+    public static Side BesiegerOf(int round, bool swap = true) => swap && (round & 1) == 1 ? Side.Enemy : Side.Player;
 }
 
 // ---- General (seam c) ----------------------------------------------------------------------------------------------

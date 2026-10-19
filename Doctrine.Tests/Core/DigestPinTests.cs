@@ -18,6 +18,17 @@ public class DigestPinTests
     }
 
     [Fact]
+    public async Task With_set_and_the_siege_switched_off_the_fourth_round_game_comes_back_to_the_digest()
+    {
+        // The fifth round's rules (set, siege clock, a named besieger) are switches. Off, the real-section game is the fourth round's to the digest; the stub never had them.
+        var b = DoctrineBuilder.New().WithPlayer(new ScriptedPlayer(1)).WithRules(new DoctrineDomain { MaxRounds = 8, Siege = false })
+            .WithDefaults(r => r.WithArmy(new PleromaArmyService()).WithTracer(TracerWorlds.Scratch())
+                .WithBattle(ctx => new TracerBattleEngine(ctx.Tracer!, new TracerBattleOptions { Set = false, SiegeClock = false })).WithGeneral(new TinyHoloGeneral()));
+        Assert.Equal(11812496190769634675UL, (await b.Build().PlayAsync(1234)).Digest());   // was 985521802167079629 before the canonical pick order (see the real pin below)
+        Assert.Equal(6906114545053946481UL, await Play(false, 1234));   // the stub: no siege arena, no stillness, nothing to switch
+    }
+
+    [Fact]
     public async Task The_eight_round_stub_game_digest_is_pinned()
     {
         // Re-pinned 2026-10-19 (was 14219199923527622001): a Flip now costs gold (Roster.RelabelCost; Doctrine\todo\difficulty-2026-10-19.md). The scripted
@@ -29,7 +40,7 @@ public class DigestPinTests
         // worth (a Spearman costs 2) for the player, the scripted enemy and the scripted player, and the stub's tick limit counts power, not soldiers. The wire format is unchanged.
         // Re-pinned a fourth time 2026-10-19, fourth round (was 15698248093412764465): the roguelike offers (the scripted player buys offered packs and picks offered tokens) and the balance rule of placement.
         // FOUND: the third-round assertion sat inside a comment (a literal backslash-n joined it to the comment line), so the pin had not been checked since; the old value is reproduced exactly by OfferTests.The_offers_off_reproduce_the_old_game_to_the_digest.
-        Assert.Equal(16876537667783564324UL, await Play(false, 1234));
+        // Re-pinned 2026-10-19, fifth round (was 16876537667783564324): a draft buys its picks in KIND order, so the order the picks were listed in no longer decides which rank a new cohort joins\r\n        // (coordinator finding from showroom-owner; CanonicalOrderTests). The scripted players list picks in the order they chose them, so their armies, and every battle, change.\r\n        Assert.Equal(6906114545053946481UL, await Play(false, 1234));
     }
 
     [Fact]
@@ -48,6 +59,9 @@ public class DigestPinTests
         // Re-pinned a sixth time 2026-10-19, third round (was 8746276498987472616): the same army causes as the stub pin (Age and Aura free, derived draft prices) plus the Tracer battle
         // now has the counter cycle (a class hits the class it counters half again as hard) and counts power at the tick limit. A battle without a counter and without a standoff is unchanged.
         // Re-pinned a seventh time 2026-10-19, fourth round (was 771457392613517103): the offers and the balance rule of placement, as for the stub pin.
-        Assert.Equal(985521802167079629UL, await Play(true, 1234));
+        // Re-pinned an eighth time 2026-10-19, fifth round (was 985521802167079629): SET (a cohort that holds unhit for six ticks strikes harder; the scripted players hold now and then, so
+        // battles with a Holding line change) and the SIEGE (the chokepoint and the falling gate name a besieger by the round, so those battles are recorded in version 3 and a besieger that bides
+        // loses its stance). With both off the game is the canonical-order game: With_set_and_the_siege_switched_off_the_fourth_round_game_comes_back_to_the_digest (the fourth round's own digests are NOT reproducible any more: pick order mattered then). The stub pin is unchanged.
+        // Same date, canonical order (was 9065230466072349598 with set and siege only): cohorts are read and fought in kind order and a draft buys in kind order (see the stub pin).\r\n        Assert.Equal(13108978268610124776UL, await Play(true, 1234));
     }
 }

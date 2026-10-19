@@ -38,7 +38,8 @@ sealed class FinishStage : BattleStage_
     {
         var result = s.Session!.Finish(s.TickLimitReached);
         g.Observer?.BattleFinished(result);
-        var replay = new BattleReplay(BattleReplay.CurrentVersion, s.Setup.ArenaId, s.Setup.Seed, s.Setup.TickLimit, s.Frames!, result);
+        // Written in the lowest version that can carry it: a battle with a besieger is version 3, every other battle is still version 2.
+        var replay = new BattleReplay(BattleReplay.VersionFor(s.Setup.Besieger), s.Setup.ArenaId, s.Setup.Seed, s.Setup.TickLimit, s.Frames!, result, s.Setup.Besieger);
         return ValueTask.FromResult(s with { Result = result, Replay = replay });
     }
 }

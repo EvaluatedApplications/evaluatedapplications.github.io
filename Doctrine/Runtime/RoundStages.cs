@@ -188,9 +188,11 @@ sealed class SetupStage() : RoundStage(Stages.BattleSetup)
     {
         var arenas = g.Battle.Arenas;
         var arena = arenas[(int)(GameRng.Mix(s.Seed, 3000 + s.Round) % (ulong)arenas.Count)];
+        // A siege arena names a besieger, who carries the siege clock; the roles swap every round, so the player besieges in even rounds and the enemy in odd ones.
+        Side? besieger = d.Siege && arena.IsSiege ? SiegeRules.BesiegerOf(s.Round, d.SwapSiegeRoles) : null;
         var setup = new BattleSetup(arena.Id, (int)GameRng.Mix(s.Seed, 4000 + s.Round), d.TickLimit,
             new BattleSide(Side.Player, s.Player.Read().Cohorts, DoctrineVocabulary.FieldOrders(s.Choice!.Doctrine), DoctrineVocabulary.Trigger(s.Choice.Doctrine)),
-            new BattleSide(Side.Enemy, s.Enemy!.Read().Cohorts, DoctrineVocabulary.FieldOrders(s.EnemyDoctrine), DoctrineVocabulary.Trigger(s.EnemyDoctrine)));
+            new BattleSide(Side.Enemy, s.Enemy!.Read().Cohorts, DoctrineVocabulary.FieldOrders(s.EnemyDoctrine), DoctrineVocabulary.Trigger(s.EnemyDoctrine)), besieger);
         return ValueTask.FromResult(s with { Setup = setup });
     }
 }
@@ -221,7 +223,15 @@ sealed class SpoilsStage() : RoundStage(Stages.ArmySpoils)
     {
         bool won = s.Result!.AttackerWon;
         int killed = s.Result.DefenderLosses.Sum(l => l.Lost);
-        var spoils = new Spoils(killed / 2 + (won ? 6 : 2), won ? 1 : 0);
+        var spoils = d.FlatSpoils ? new Spoils(killed / 2 + 4, 0) : new Spoils(killed / 2 + (won ? 6 : 2), won ? 1 : 0);
+        if (d.Comeback && s.Round + 1 < d.MaxRounds)
+        {
+            // THE MUSTER: half of what the army lacks against the strength the next enemy is raised at, paid in gold (it cannot lift an army above parity).
+            var read = s.Player.Read();
+            long wealth = read.Gold + spoils.Gold + read.Cohorts.Sum(c => (long)c.Count * Roster.PriceOf(c.Key));
+            int muster = Roster.Muster(wealth, d.EnemyBaseGold + d.EnemyGoldPerRound * (s.Round + 1));
+            if (muster > 0) spoils = spoils with { Gold = spoils.Gold + muster, Muster = muster };
+        }
         await s.Player.ApplySpoilsAsync(spoils, ct);
         return s with { Spoils = spoils };
     }

@@ -270,6 +270,27 @@ public static class Roster
         return (int)Math.Min(int.MaxValue, (weightedSum + d - 1) / d);
     }
 
+    /// <summary>
+    /// What the next enemy is worth, in gold, in expectation: the levy it is raised with (<c>StartSoldiers</c> draws of the levy weights, each worth its draft price) plus the gold the
+    /// domain gives it for its draft. All read from the tables: no typed number besides the ones the army and the domain already hold.
+    /// </summary>
+    public static long ExpectedEnemyWealth(int enemyGold)
+    {
+        long w = 0, pw = 0;
+        for (int k = 0; k < Size; k++) { w += Army.PleromaArmyLayout.LevyWeight[k]; pw += Army.PleromaArmyLayout.LevyWeight[k] * PriceOf(k); }
+        return (Army.PleromaArmyLayout.StartSoldiers * pw + w / 2) / Math.Max(1, w) + enemyGold;
+    }
+
+    /// <summary>
+    /// THE COMEBACK MUSTER: half of the army's shortfall against the next enemy, in gold: ceil(max(0, <see cref="ExpectedEnemyWealth"/> - <paramref name="armyWealth"/>) / 2). An army at or above parity
+    /// gets nothing, and no army can be lifted above parity, so the muster cannot inflate a game. Half is the meet-in-the-middle split (the other half is the player's to earn).
+    /// </summary>
+    public static int Muster(long armyWealth, int nextEnemyGold)
+    {
+        long deficit = ExpectedEnemyWealth(nextEnemyGold) - armyWealth;
+        return deficit <= 0 ? 0 : (int)Math.Min(int.MaxValue, (deficit + 1) / 2);
+    }
+
     /// <summary>Interest a purse pays at the close of a round: gold / (campaign - 1), the rate at which banking one round at the start of a campaign breaks even in soldier-rounds.</summary>
     public static long Interest(long gold) => gold <= 0 ? 0 : gold / (CampaignRounds - 1);
 }

@@ -12,7 +12,9 @@ public class EconomyRulesTests
         var d = ArmyRules.Default;
         // Third round 2026-10-19 (coordinator): priced Age and Aura made a mass of one-gold Spearmen unbeatable, so they are OFF; the rules stay as switches.
         Assert.False(d.PriceAge); Assert.False(d.PriceAura); Assert.True(d.PriceReach); Assert.True(d.BankInterest);
-        // and the draft prices are derived from worth (third round): a plain soldier costs 2, not the typed 1\n        Assert.True(d.DerivedDraftPrices); Assert.Equal(2, d.DraftPrice(0)); Assert.Equal(1, Roster.TypedPrice(0)); Assert.Equal(2, Roster.PriceOf(0));   // PriceOf is the game's price
+        // and the draft prices are derived from worth (third round): a plain soldier costs 2, not the typed 1
+        // (these asserts were swallowed by the comment through a literal backslash-n until the fifth round; they now run)
+        Assert.True(d.DerivedDraftPrices); Assert.Equal(2, d.DraftPrice(0)); Assert.Equal(1, Roster.TypedPrice(0)); Assert.Equal(2, Roster.PriceOf(0));   // PriceOf is the game's price
     }
 
     [Fact]

@@ -12,6 +12,20 @@ public sealed class DoctrineDomain : DomainContext
     public int EnemyGoldPerRound { get; init; } = 4;
     /// <summary>The roguelike offers (default ON: the game). <see cref="OfferRules.Off"/> is the old free choice.</summary>
     public OfferRules Offers { get; init; } = OfferRules.Default;
+    /// <summary>
+    /// Sieges (fifth round): in a siege arena (<see cref="ArenaInfo.IsSiege"/>) the setup names a besieger, which carries the siege clock. Off = every battle is on an open field (the
+    /// fourth round's game, to the digest).
+    /// </summary>
+    public bool Siege { get; init; } = true;
+    /// <summary>The roles in a siege swap every round (<see cref="SiegeRules.BesiegerOf"/>). Off only as a measurement null and as a mutant: the player always besieges.</summary>
+    public bool SwapSiegeRoles { get; init; } = true;
+    /// <summary>
+    /// The comeback muster (<see cref="Roster.Muster"/>): when spoils are paid, half of the army's shortfall against the strength of the next enemy is added as gold. Measured in the fifth
+    /// round (Doctrine\todo\difficulty-2026-10-19.md); the default is what that measurement decided.
+    /// </summary>
+    public bool Comeback { get; init; }
+    /// <summary>MEASUREMENT NULL only: the spoils of a round are the same for a win and a loss (kills / 2 + 4 gold, no veterancy), so a snowball cannot come from the spoils.</summary>
+    public bool FlatSpoils { get; init; }
 }
 
 /// <summary>

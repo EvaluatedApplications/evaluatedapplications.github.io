@@ -172,7 +172,7 @@ public sealed class StubArmy(Side side, ArmyRules? rules = null) : IArmy
         var ok = new List<DraftPick>();
         var no = new List<(DraftPick, string)>();
         int spent = 0;
-        foreach (var p in request.Picks)
+        foreach (var p in request.Picks.OrderBy(p => p.Kind))   // CANONICAL: one request buys in kind order, so new cohorts are placed (and gold refuses) the same whatever order the picks were listed in
         {
             if ((uint)p.Kind >= Roster.Size || p.Count <= 0) { no.Add((p, "bad pick")); continue; }
             bool present = Count[p.Kind] > 0;
