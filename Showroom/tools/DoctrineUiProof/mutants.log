@@ -1,51 +1,31 @@
-﻿Doctrine UI mutation proof, 2026-10-19T03:48:22
-M1 [CAUGHT] an illegal order is enabled in the palette: 4 failing check(s)
-    FAIL  doctrine: the palette holds every order but Cull (hidden: the army allows none) and each is enabled exactly when the army's legal list allows it  [45 enabled, 0 disabled, 8 Cull tokens not shown]
-    FAIL  doctrine: the list really restricts (some enabled, some disabled) and no Cull chip exists at all
-    FAIL  cancel: playing the round again completes it
-    FAIL  tap target missing: #dc-next #0
-M2 [CAUGHT] the general is wired so that it never records an example: 12 failing check(s)
-    FAIL  round 0: the general has learned twice (the doctrine, then the result)  [0]
-    FAIL  round 0: the status strip follows (2 examples seen)
-    FAIL  ghost: the general had something to suggest after seeing the visitor's first doctrine
-    FAIL  round 1: the general has now learned 4 times  [0]
-    FAIL  ghost: after 4 examples a suggestion is offered, its confidence within 0..1000, every token legal  [confidence 0]
-    FAIL  accept: the accepted ghost is the doctrine that fought, recorded as NOT overridden
-M3 [CAUGHT] the scrubber ignores the frames' WorldFlags (the gate never falls): 2 failing check(s)
-    FAIL  watch: on the frame the flag is set the gate's picture swaps to fallen
-    FAIL  watch: the gate stays fallen to the end (a bit never clears)
-M4 [CAUGHT] Accept reports the suggestion as overridden: 3 failing check(s)
-    FAIL  accept: the accepted ghost is the doctrine that fought, recorded as NOT overridden
-    FAIL  accept: the spoils screen says the suggestion was taken as it stood
-    FAIL  determinism: the page game and the headless game with the same hands have the SAME digest  [41d12413db82da84 vs 5211e90ca2fcfc1d]
-M5 [CAUGHT] a cancelled round does not put the army back: 1 failing check(s)
-    FAIL  cancel: the army is back exactly as it stood at the start of the round (same read)
-M6 [CAUGHT] the end screen hands back the army from before the last round: 5 failing check(s)
-    FAIL  code: it parses back to an army with the same read, score and code
-    FAIL  determinism: the page game and the headless game with the same hands have the SAME digest  [c9d4c2f3e1d4171c vs 5211e90ca2fcfc1d]
-    FAIL  determinism: the final army code is the same
-    FAIL  reload: pasting the code starts a game on that very army (same read, round and gold)  [04133b59df11f832 vs 5cbc2c786ed2f906]
-    FAIL  leave: from the watch screen the end screen carries the army AFTER the closed round and the round played
-M7 [CAUGHT] the scrubber shows the frame after the one asked for: 1 failing check(s)
-    FAIL  watch: the tick before the fall shows the gate standing (no fallen block)
-M8 [CAUGHT] RoundClosedAsync is ignored (the page never parks on a closed round): 1 failing check(s)
-    FAIL  watch: the closed round arrives through RoundClosedAsync and the page parks on its result
-M9 [CAUGHT] RoundRecord.Final is ignored (the last round does not know it is the last): 2 failing check(s)
-    FAIL  last round: the next button says it is the end
-    FAIL  final: the pipeline marks only the last round Final, and the page takes its end from that (the button says so)
-M10 [CAUGHT] the per-slot glow ignores GeneralOutput.SlotConfidence: 1 failing check(s)
-    FAIL  match record (per-slot): each order's glow and its figure come from the general's own value for THAT slot  [--glow:0.64 Rotate 1 Match record 900 of 1000 on this slot | --glow:0.64 Rotate 2 Match record 300 of 1000 on this slot | --glow:0.64 Flip Heavy Match record 650 of 1000 on this slot]
-M11 [CAUGHT] RoundRecord.Orders is never shown (skipped orders go unsaid): 4 failing check(s)
-    FAIL  leave: from the result screen the visitor can leave; the end screen then carries the two rounds played
-    FAIL  tap target missing: #dc-leave #0
-    FAIL  leave: two rounds listed and the code is the army after round 2
-    FAIL  orders: the watch screen says it in plain words  [missing]
-M12 [CAUGHT] the arena layout from DoctrineContext.LayoutOf is not used: 4 failing check(s)
-    FAIL  watch: the arena is drawn from the layout: an SVG with wall, cover and gate blocks
-    FAIL  watch: the tick before the fall shows the gate standing (no fallen block)
-    FAIL  watch: on the frame the flag is set the gate's picture swaps to fallen
-    FAIL  watch: the gate stays fallen to the end (a bit never clears)
-M13 [CAUGHT] DraftedAsync drops the army's verdict: 1 failing check(s)
-    FAIL  draft: what the army would not take, as it told the pipeline (DraftedAsync), is said in plain words after the confirmation  [no notice]
-M14 [CAUGHT] the Cull chip comes back (greyed) in the palette: 1 failing check(s)
-    FAIL  doctrine: the palette holds every order but Cull (hidden: the army allows none) and each is enabled exactly when the army's legal list allows it  [43 enabled, 10 disabled, 8 Cull tokens not shown]
+﻿Doctrine UI mutation proof, 2026-10-19T13:24:05
+M25 [CAUGHT] the chronicle writes a break for a cohort that still stands (strength 1): 4 failing check(s)
+    FAIL  chronicle: the page's log is the chronicle function applied to the recording (same lines, same why)  [[Break at tick 1] that cohort did not break at this tick | [Break at tick 1] that cohort did not break at this tick | [Break at tick 1] that cohort did not break at this tick]
+    FAIL  chronicle (recorded battles): every line of 16 real battles (1275 lines) is backed by a real frame event, break, flag, run, span or stand, as the independent checker finds  [seed 1 round 0: [Break at tick 6] that cohort did not break at this tick | seed 1 round 0: [Break at tick 7] 'the first to fall' is wrong | seed 1 round 0 why: first break differs from the frames]
+    FAIL  chronicle (recorded battles): the Why numbers (turning point, first break, first line gone) equal the record in every battle  [seed 1 round 0 why: first break differs from the frames | seed 1 round 1 why: first break differs from the frames | seed 2 round 0 why: first break differs from the frames]
+    FAIL  mutant (recorded battle): the checker is clean on the real log and finds a swapped side, a wrong tick and a fabricated break in it
+M26 [CAUGHT] the chronicle says your where it means the enemy (sides swapped): 9 failing check(s)
+    FAIL  chronicle: the page's log is the chronicle function applied to the recording (same lines, same why)  [[Contact at tick 5] the text does not name your Priests and the enemy Wolves | [Contact at tick 5] says the enemy has not struck but the frame shows it did, or names the wrong striker | [Break at tick 7] names the wrong cohort or side]
+    FAIL  chronicle (synthetic frames): the log is exactly the hand-written account: first contact, the gate, a run, the first break and the first line gone, a flank, holy against cursed, the heaviest blow, a lull, the final stand, the end  [4 Contact First contact. The enemy Riders strike your Spearmen, and the enemy has not struck yet. | 7 Run Your Spearmen have been struck 4 ticks running, 10 in all. | 7 Break Your Spearmen break. The first to fall. The enemy Front line is gone, the first line to fall.]
+    FAIL  chronicle (synthetic frames): a line reads as the Count says it ('Tick 12. ...')
+    FAIL  chronicle (synthetic frames): the Why is hand-written too: the turning point (largest swing in soldiers), the first line to fall, and one hint tied to the Flank order given  [Turning point: tick 8, when the enemy lost 6 soldiers and you lost 1. | The first line to fall: the enemy Front line, at tick 7. | Your Flank order on the Middle line reached the enemy: the enemy Priests struck from the side at tick 8.]
+    FAIL  chronicle (synthetic frames): the independent checker finds every line backed by a real frame event, break, flag, run, span or stand  [[Contact at tick 4] the text does not name your Riders and the enemy Spearmen | [Contact at tick 4] says the enemy has not struck but the frame shows it did, or names the wrong striker | [Run at tick 7] the run is not in the frames (from tick 4, 4 ticks, 10 damage)]
+    FAIL  chronicle (opening): when only the enemy has struck, it says so and names the enemy's strike  [X. 24 of your soldiers face the enemy's 24. | First contact. Your Archers strike the enemy Archers, and you have not struck yet. | The battle did not finish. You have 24; the enemy has 24. The battle stopped at its tick limit.]
+M27 [CAUGHT] the chronicle puts the gate line one tick early: 5 failing check(s)
+    FAIL  chronicle: the page's log is the chronicle function applied to the recording (same lines, same why)  [[Gate at tick 14] the recording's gate flag is not first set in this frame]
+    FAIL  chronicle: the gate line appears on the very tick the recording's flag is set, and not before  [gate at 14, flag at 15]
+    FAIL  chronicle (synthetic frames): the log is exactly the hand-written account: first contact, the gate, a run, the first break and the first line gone, a flank, holy against cursed, the heaviest blow, a lull, the final stand, the end  [5 Gate The gate has fallen.]
+    FAIL  chronicle (synthetic frames): the independent checker finds every line backed by a real frame event, break, flag, run, span or stand  [[Gate at tick 5] the recording's gate flag is not first set in this frame]
+    FAIL  chronicle (recorded battles): every line of 16 real battles (280 lines) is backed by a real frame event, break, flag, run, span or stand, as the independent checker finds  [seed 2 round 0: [Gate at tick 14] the recording's gate flag is not first set in this frame | seed 5 round 1: [Gate at tick 14] the recording's gate flag is not first set in this frame]
+M28 [CAUGHT] the Why turns the swing the wrong way (who gained the turning point): 4 failing check(s)
+    FAIL  chronicle: the page's log is the chronicle function applied to the recording (same lines, same why)  [the Why lines are not the record's: 'Turning point: tick 16, when you lost 1 soldier and the enemy lost 3.' / 'The first line to fall: the enemy Back line, at tick 17.']
+    FAIL  chronicle (synthetic frames): the Why is hand-written too: the turning point (largest swing in soldiers), the first line to fall, and one hint tied to the Flank order given  [Turning point: tick 8, when you lost 1 soldier and the enemy lost 6. | The first line to fall: the enemy Front line, at tick 7. | Your Flank order on the Middle line reached the enemy: your Priests struck from the side at tick 8.]
+    FAIL  chronicle (synthetic frames): the independent checker finds the Why numbers equal to the record  [the Why lines are not the record's: 'Turning point: tick 8, when you lost 1 soldier and the enemy lost 6.' / 'The first line to fall: the enemy Front line, at tick 7.']
+    FAIL  chronicle (recorded battles): the Why numbers (turning point, first break, first line gone) equal the record in every battle  [seed 1 round 0 why: the Why lines are not the record's: 'Turning point: tick 9, when the enemy lost 0 soldiers and you lost 4.' / 'The first line to fall: the enemy Front line, at tick 14.' | seed 1 round 1 why: the Why lines are not the record's: 'Turning point: tick 7, when the enemy lost 0 soldiers and you lost 1.' / 'The first line to fall: your Middle line, at tick 7.' | seed 2 round 0 why: the Why lines are not the record's: 'Turning point: tick 13, when you lost 0 soldiers and the enemy lost 2.' / 'The first line to fall: your Back line, at tick 20.']
+M29 [CAUGHT] first contact names the wrong side as not having struck: 6 failing check(s)
+    FAIL  chronicle: the page's log is the chronicle function applied to the recording (same lines, same why)  [[Contact at tick 5] says you have not struck but the frame shows you did, or names the wrong striker]
+    FAIL  chronicle (synthetic frames): the log is exactly the hand-written account: first contact, the gate, a run, the first break and the first line gone, a flank, holy against cursed, the heaviest blow, a lull, the final stand, the end  [4 Contact First contact. Your Riders strike the enemy Spearmen, and you have not struck yet.]
+    FAIL  chronicle (synthetic frames): a line reads as the Count says it ('Tick 12. ...')
+    FAIL  chronicle (synthetic frames): the independent checker finds every line backed by a real frame event, break, flag, run, span or stand  [[Contact at tick 4] says you have not struck but the frame shows you did, or names the wrong striker]
+    FAIL  chronicle (opening): when only the enemy has struck, it says so and names the enemy's strike  [X. 24 of your soldiers face the enemy's 24. | First contact. The enemy Archers strike your Archers, and the enemy has not struck yet. | The battle did not finish. You have 24; the enemy has 24. The battle stopped at its tick limit.]
+    FAIL  chronicle (recorded battles): every line of 16 real battles (280 lines) is backed by a real frame event, break, flag, run, span or stand, as the independent checker finds  [seed 1 round 1: [Contact at tick 6] says you have not struck but the frame shows you did, or names the wrong striker | seed 2 round 0: [Contact at tick 5] says you have not struck but the frame shows you did, or names the wrong striker | seed 2 round 1: [Contact at tick 3] says the enemy has not struck but the frame shows it did, or names the wrong striker]

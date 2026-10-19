@@ -57,36 +57,44 @@
         </div>
         <input class="dc-range" type="range" min="0" max="@_v.Last" step="1" value="@_tick" @oninput="OnScrub" aria-label="Scrub through the battle" />
 
-        <div class="dc-sides">
-            @foreach (var side in new[] { Side.Player, Side.Enemy })
-            {
-                <div class="dc-side @(side == Side.Player ? "mine" : "theirs")">
-                    <h3>@(side == Side.Player ? "Your cohorts" : "Enemy cohorts")</h3>
-                    <ul class="dc-cohorts">
-                        @foreach (var b in f.Blobs.Where(b => b.Side == side))
-                        {
-                            int start = Math.Max(1, _v.StartStrength(b.Id));
-                            <li @key="b.Id">
-                                <span class="nm">@DoctrineWords.KindName(b.Key) <span class="sl">@DoctrineWords.Slot(b.Slot)</span></span>
-                                <span class="ct">@b.Strength of @start</span>
-                                <span class="bar" aria-hidden="true"><span class="fill" style="--w:@(b.Strength * 100 / start)"></span></span>
-                            </li>
-                        }
-                    </ul>
-                </div>
-            }
-        </div>
-        <p class="hint dc-legend">Dark blocks are walls. Green is cover.@(_v.HasGate ? " The amber block is the gate: open until it falls, then shut." : "") This is a recording of one battle, simulated once on your device; playing it back does not run the battle again.</p>
+        <p class="hint dc-legend">This is a recording of one battle, simulated once on your device; playing it back does not run the battle again.</p>
+        <details class="dc-more">
+            <summary>Cohorts and key</summary>
+            <div class="dc-sides">
+                @foreach (var side in new[] { Side.Player, Side.Enemy })
+                {
+                    <div class="dc-side @(side == Side.Player ? "mine" : "theirs")">
+                        <h3>@(side == Side.Player ? "Your cohorts" : "Enemy cohorts")</h3>
+                        <ul class="dc-cohorts">
+                            @foreach (var b in f.Blobs.Where(b => b.Side == side))
+                            {
+                                int start = Math.Max(1, _v.StartStrength(b.Id));
+                                <li @key="b.Id">
+                                    <span class="nm">@DoctrineWords.KindName(b.Key) <span class="sl">@DoctrineWords.Slot(b.Slot)</span></span>
+                                    <span class="ct">@b.Strength of @start</span>
+                                    <span class="bar" aria-hidden="true"><span class="fill" style="--w:@(b.Strength * 100 / start)"></span></span>
+                                </li>
+                            }
+                        </ul>
+                    </div>
+                }
+            </div>
+            <p class="hint">Dark blocks are walls. Green is cover.@(_v.HasGate ? " The amber block is the gate: open until it falls, then shut." : "")</p>
+        </details>
     </section>
 }
 
 @code {
     [Parameter, EditorRequired] public BattleReplay Replay { get; set; } = default!;
     [Parameter] public global::Doctrine.Battle.ArenaLayout? Layout { get; set; }
+    /// <summary>Optional: shared with the chronicle beside the field. The replay reports every tick it shows; the chronicle can ask it to jump.</summary>
+    [Parameter] public ReplayCursor? Cursor { get; set; }
 
     private ReplayView? _v;
     private BattleReplay? _shown;
-    private int _tick, _speed = 1, _gen;
+    private ReplayCursor? _wired;
+    private int _t, _speed = 1, _gen;
+    private int _tick { get => _t; set { if (_t == value) return; _t = value; Cursor?.Report(value); } }
     private bool _playing;
     private int _tickMs = 140;
 
@@ -96,6 +104,12 @@
 
     protected override void OnParametersSet()
     {
+        if (!ReferenceEquals(_wired, Cursor))
+        {
+            if (_wired is not null) _wired.SeekRequested -= OnSeekRequested;
+            _wired = Cursor;
+            if (_wired is not null) _wired.SeekRequested += OnSeekRequested;
+        }
         if (ReferenceEquals(_shown, Replay)) return;
         _shown = Replay;
         _v = new ReplayView(Replay, Layout);
@@ -158,5 +172,11 @@
     private string Alt(ReplayFrame f, bool fallen)
         => $"Arena at tick {f.Tick}: {f.Blobs.Count(b => b.Side == Side.Player && b.Strength > 0)} of your cohorts and {f.Blobs.Count(b => b.Side == Side.Enemy && b.Strength > 0)} enemy cohorts standing." + (_v!.HasGate ? (fallen ? " The gate has fallen." : " The gate is standing.") : "");
 
-    public void Dispose() { _playing = false; _gen++; }
+    private void OnSeekRequested(int tick) => _ = InvokeAsync(() => Seek(tick));
+
+    public void Dispose()
+    {
+        _playing = false; _gen++;
+        if (_wired is not null) _wired.SeekRequested -= OnSeekRequested;
+    }
 }

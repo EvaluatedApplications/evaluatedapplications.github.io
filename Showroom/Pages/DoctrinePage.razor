@@ -9,13 +9,16 @@
 
 <PageTitle>Doctrine: an army game with a general that learns from you</PageTitle>
 
-<div class="room dc">
-    <header class="room-head">
-        <nav class="crumb"><a href="/tools/">Tools</a> <span>/</span> Doctrine</nav>
-        <h1>Doctrine</h1>
-        <p class="lede">Draft an army, give it up to four orders, and watch the battle run on a navigation mesh. Your general learns how you set
-            orders from your own choices, in your browser, with nothing pre-trained, and suggests the next one. Nothing is uploaded.</p>
-    </header>
+<div class="room dc @(_s is { InGame: true } ? "dc-ingame" : "")">
+    @if (_s is not { InGame: true })
+    {
+        <header class="room-head">
+            <nav class="crumb"><a href="/tools/">Tools</a> <span>/</span> Doctrine</nav>
+            <h1>Doctrine</h1>
+            <p class="lede">Draft an army, give it up to four orders, and watch the battle run on a navigation mesh. Your general learns how you set
+                orders from your own choices, in your browser, with nothing pre-trained, and suggests the next one. Nothing is uploaded.</p>
+        </header>
+    }
 
     @if (Build.IsPrerender)
     {
@@ -23,51 +26,23 @@
     }
     else if (_s is not null)
     {
-        @if (_s.InGame)
+        @if (!_s.InGame)
         {
-            <section class="dc-panel dc-status" aria-label="Where the game stands">
-                <ul class="dc-chips">
-                    <li>Round @(_s.RoundIndex + 1) of @_s.TotalRounds</li>
-                    @if (_s.Army is { } a)
-                    {
-                        <li>Gold @a.Gold</li>
-                        <li>Soldiers @a.Soldiers</li>
-                        <li>@a.Kinds of @Roster.Size kinds</li>
-                    }
-                    <li>General: @_s.Sections.General.ExamplesSeen @(_s.Sections.General.ExamplesSeen == 1 ? "example" : "examples") seen (each doctrine you set and each battle result)</li>
-                </ul>
-            </section>
+            @if (_s.Notice.Length > 0) { <p class="dc-notice" role="status">@_s.Notice</p> }
+            @if (_s.Error.Length > 0) { <p class="err" role="alert">@_s.Error</p> }
         }
-        @if (_s.Notice.Length > 0) { <p class="dc-notice" role="status">@_s.Notice</p> }
-        @if (_s.Error.Length > 0) { <p class="err" role="alert">@_s.Error</p> }
 
         @switch (_s.Stage)
         {
             case DoctrineStage.Start:
                 @StartView
                 break;
-            case DoctrineStage.Draft:
-                @DraftView
-                break;
-            case DoctrineStage.Doctrine:
-                @DoctrineView
-                break;
-            case DoctrineStage.Working:
-                @WorkingView
-                break;
-            case DoctrineStage.Watch:
-                @WatchView
-                break;
             case DoctrineStage.Over:
                 @OverView
                 break;
-        }
-
-        @if (_s.InGame && _s.Stage is DoctrineStage.Draft or DoctrineStage.Doctrine or DoctrineStage.Watch)
-        {
-            <div class="dc-foot">
-                <button type="button" class="dc-btn" id="dc-leave" @onclick="_s.Leave">Leave this game</button>
-            </div>
+            default:
+                @Hud
+                break;
         }
     }
 
@@ -96,7 +71,14 @@
 </div>
 
 @code {
+    private enum Sheet { None, Army, General, Draft, Chronicle }
+
+    private ReplayCursor? _cursor;          // the tick on screen, shared by the replay and the chronicle
+    private Chronicle? _chron;              // the account of the battle on screen
+    private RoundView? _chronFor;           // the round the account was built for
+
     private DoctrineSession? _s;
+    private DoctrineProgress _p = new();
     private DoctrineStage _seen = DoctrineStage.Start;
 
     // start screen
@@ -105,24 +87,41 @@
     private string _codeText = "";
     private string _loadError = "";
 
-    // draft screen
+    // the scene
+    private Sheet _sheet = Sheet.None;      // which panel is pulled up (phone); on a wide screen the panels are always there
+    private bool _tray;                     // the order tray is open
+    private UnlockNews? _news;              // what opened at the start of this round, until the player confirms it
+    private string _advice = "";            // the game's advice line, while the draft or slots still hold exactly what it filled
+    private int _lastAdded;                 // the order last put in a slot (its effect is previewed under the slots)
+
+    // draft
     private readonly int[] _buy = new int[Roster.Size];
     private DraftPreview? _preview;
     private int _previewSeq;
 
-    // doctrine screen
+    // doctrine
     private readonly int[] _slots = new int[DoctrineVocabulary.MaxSlots];
-    private bool _fieldTab;
     private bool _ghostHidden;
 
     private string _copied = "";
 
+    // dragging a panel by its handle
+    private double _dragFrom;
+    private bool _dragged;
+
     /// <summary>The session behind the page (the proofs drive and read it).</summary>
     public DoctrineSession? Session => _s;
+    /// <summary>What this visitor has unlocked (the proofs read it).</summary>
+    public DoctrineProgress Progress => _p;
+
+    private int Level => _p.Step;
+    private int SlotCount => DoctrineUnlocks.Slots(Level);
+    private bool InDoctrine => _s?.Stage == DoctrineStage.Doctrine;
 
     protected override void OnInitialized()
     {
         if (Build.IsPrerender) return;
+        _p = Services.GetService(typeof(DoctrineProgress)) as DoctrineProgress ?? new DoctrineProgress();
         _s = new DoctrineSession(null, Services.GetService(typeof(DoctrineSectionsSource)) is DoctrineSectionsSource src ? src.Make : null);
         _s.Changed += OnChanged;
     }
@@ -137,8 +136,23 @@
     private void EnterStage(DoctrineStage st)
     {
         _copied = "";
-        if (st == DoctrineStage.Draft) { Array.Clear(_buy); _preview = null; _ = RefreshPreview(); }
-        if (st == DoctrineStage.Doctrine) { Array.Clear(_slots); _fieldTab = false; _ghostHidden = false; }
+        _sheet = Sheet.None; _tray = false;
+        if (st == DoctrineStage.Draft)
+        {
+            Array.Clear(_buy); Array.Clear(_slots); _preview = null; _advice = ""; _lastAdded = 0;
+            var news = _p.Reach(_s!.RoundIndex, _s.TotalRounds);
+            if (news is not null) _news = news;
+            _sheet = Sheet.Draft;
+            _ = RefreshPreview();
+        }
+        if (st == DoctrineStage.Doctrine)
+        {
+            Array.Clear(_slots); _ghostHidden = false; _advice = ""; _lastAdded = 0;
+            bool ghost = _s!.Ghost is { } g && !g.Doctrine.IsEmpty;
+            _sheet = ghost ? Sheet.General : Sheet.None;
+            _tray = !ghost;
+        }
+        if (st is DoctrineStage.Start or DoctrineStage.Over) _news = null;
     }
 
     public void Dispose()
@@ -153,7 +167,7 @@
         <section class="dc-panel dc-start" id="dc-start" aria-label="Start a game">
             <h2>Start a game</h2>
             <p class="hint">Every game starts with an army levied for you, some gold to spend, and a run of rounds against armies the game raises. Each round you
-                draft, set a doctrine, and watch one battle.</p>
+                draft, set a doctrine, and watch one battle. Round one gives you two kinds of soldier and two orders; more open as the rounds go on.</p>
             <p class="dc-h3" id="dc-rounds-label">Rounds</p>
             <div class="dc-opts" role="radiogroup" aria-labelledby="dc-rounds-label">
                 @foreach (var n in new[] { 3, 5, 8 })
@@ -167,6 +181,10 @@
                    placeholder="A whole number" value="@_seedText" @oninput="e => _seedText = e.Value?.ToString() ?? string.Empty" />
             <p class="hint">The same seed raises the same enemies on the same ground, so you can replay a game. Leave it empty for a new one.</p>
             <button type="button" class="dc-btn strong" id="dc-new" @onclick="StartNew">Start a new game</button>
+            @if (Locked)
+            {
+                <button type="button" class="dc-btn dc-showall" id="dc-showall" @onclick="ShowEverything">Show everything</button>
+            }
         </section>
 
         <section class="dc-panel dc-load" aria-label="Load an army code">
@@ -189,6 +207,9 @@
         }
     </div>;
 
+    private bool Locked => !_p.ShowAll && _p.Step < DoctrineUnlocks.LastStep;
+    private void ShowEverything() { _p.ShowEverything(); _news = null; }
+
     private void StartNew()
     {
         _loadError = "";
@@ -196,6 +217,7 @@
         if (_seedText.Trim().Length == 0) seed = (int)(Environment.TickCount64 & 0x7fffffff);
         else if (!int.TryParse(_seedText.Trim(), System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out seed))
         { _loadError = "A seed is a whole number, digits only."; return; }
+        _news = null;
         _s!.NewGame(seed, _rounds, null, out var why);
         if (why.Length > 0) _loadError = why;
     }
@@ -206,33 +228,276 @@
         if (_codeText.Trim().Length == 0) { _loadError = "Paste an army code first."; return; }
         int seed = _seedText.Trim().Length > 0 && int.TryParse(_seedText.Trim(), System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var sd)
             ? sd : (int)(Environment.TickCount64 & 0x7fffffff);
+        _news = null;
         if (!_s!.NewGame(seed, _rounds, _codeText, out var why)) _loadError = why;
     }
 
     private void ResetGeneral() => _s!.ResetGeneral();
 
-    // ------------------------------------------------------------------------------------------------------- army
-    private RenderFragment ArmyPanel(ArmyReadModel a, string title) => @<section class="dc-panel dc-army" aria-label="@title">
-        <h2>@title <span class="dc-sub">@a.Soldiers soldiers, @a.Gold gold</span></h2>
-        @if (a.Cohorts.Count == 0) { <p class="hint">No cohorts.</p> }
-        else
+    // ------------------------------------------------------------------------------------------------------- the scene
+    private string Goal => $"Goal: win as many of the {_s!.TotalRounds} {(_s.TotalRounds == 1 ? "field" : "fields")} as you can.";
+
+    private string Todo()
+    {
+        var s = _s!;
+        switch (s.Stage)
         {
-            <ul class="dc-cohortlist">
-                @foreach (var c in a.Cohorts)
-                {
-                    <li>
-                        <span class="nm">@DoctrineWords.KindName(c.Key)</span>
-                        <span class="ct">@c.Count</span>
-                        <span class="meta">@DoctrineWords.Slot(c.Slot) line, @DoctrineWords.TraitList(c.Traits), veterancy @c.Veterancy, power @(c.PowerPct)%</span>
-                    </li>
-                }
-            </ul>
+            case DoctrineStage.Draft:
+                return s.RoundIndex == 0 && Level == 0
+                    ? "Gold buys soldiers. Tap + on a kind, then press Confirm."
+                    : "Spend your gold on soldiers, then press Confirm.";
+            case DoctrineStage.Doctrine:
+                return $"Put up to {SlotCount} {(SlotCount == 1 ? "order" : "orders")} in the slots, then press GO."
+                    + (s.Ghost is { } g && !g.Doctrine.IsEmpty ? " Your general has a suggestion in the General panel." : "");
+            case DoctrineStage.Working:
+                return s.Status.Length > 0 ? s.Status + "." : "Working.";
+            case DoctrineStage.Watch:
+                return "Watch, read the recap, then press Next round.";
+            default:
+                return "";
         }
+    }
+
+    /// <summary>The account of the battle on the watch screen: built once per closed round, from its recording, and shared with the replay by one cursor.</summary>
+    private void EnsureWatch()
+    {
+        if (_s is not { Stage: DoctrineStage.Watch, Last: { } v } || ReferenceEquals(_chronFor, v)) return;
+        _chronFor = v;
+        _cursor = new ReplayCursor();
+        _chron = BattleChronicle.Build(v.Record.Replay, v.Record.PlayerDoctrine, _s.ArenaName(v.Record.ArenaId), DoctrineWords.KindName, v.TraitsOf);
+    }
+
+    private RenderFragment Hud => @<div class="dc-hud" data-stage="@_s!.Stage.ToString().ToLowerInvariant()" data-step="@Level">
+        @{ EnsureWatch(); }
+        <header class="dc-top" aria-label="Where the game stands">
+            <ul class="dc-status dc-chips">
+                <li>Round @(_s.RoundIndex + 1) of @_s.TotalRounds</li>
+                @if (_s.Army is { } a) { <li>Gold @a.Gold</li> }
+            </ul>
+            <div class="dc-sheetbtns">
+                <button type="button" id="dc-open-army" class="dc-btn dc-sheetbtn" aria-expanded="@(_sheet == Sheet.Army ? "true" : "false")" aria-controls="dc-army"
+                        @onpointerdown="DragStart" @onpointerup="e => DragOpen(e, Sheet.Army)" @onclick="() => ToggleSheet(Sheet.Army)">Army</button>
+                @if (_s.Stage != DoctrineStage.Watch)
+                {
+                    <button type="button" id="dc-open-general" class="dc-btn dc-sheetbtn" aria-expanded="@(_sheet == Sheet.General ? "true" : "false")" aria-controls="dc-general"
+                            @onpointerdown="DragStart" @onpointerup="e => DragOpen(e, Sheet.General)" @onclick="() => ToggleSheet(Sheet.General)">General</button>
+                }
+                @if (_s.Stage == DoctrineStage.Watch && _chron is not null)
+                {
+                    <button type="button" id="dc-open-chronicle" class="dc-btn dc-sheetbtn" aria-expanded="@(_sheet == Sheet.Chronicle ? "true" : "false")" aria-controls="dc-chronicle"
+                            @onpointerdown="DragStart" @onpointerup="e => DragOpen(e, Sheet.Chronicle)" @onclick="() => ToggleSheet(Sheet.Chronicle)">Chronicle</button>
+                }
+            </div>
+            <p class="dc-goal">@Goal</p>
+            <p class="dc-todo" role="status">@Todo()</p>
+            @if (_s.Notice.Length > 0) { <p class="dc-notice" role="status">@_s.Notice</p> }
+            @if (_s.Error.Length > 0) { <p class="err" role="alert">@_s.Error</p> }
+        </header>
+
+        <div class="dc-stage">
+            @ArmySheet
+            <section class="dc-field" aria-label="The field">
+                @FieldView
+            </section>
+            @GeneralSheet
+            @if (_s.Stage == DoctrineStage.Watch && _chron is not null) { @ChronicleSheet }
+            @if (_s.Stage == DoctrineStage.Draft) { @DraftDrawer }
+            @if (InDoctrine && _tray) { @Tray }
+            @if (_news is { } news) { @UnlockCard(news) }
+        </div>
+
+        @Dock
+    </div>;
+
+    // ---- the army panel (left) ----
+    private RenderFragment ArmySheet => @<aside id="dc-army" class="dc-sheet dc-armypanel @(_sheet == Sheet.Army ? "open" : "")" aria-label="Your army">
+        @Grip("Army", CloseSheet)
+        @if (_s!.Army is { } a)
+        {
+            <h2>Your army <span class="dc-sub">@a.Soldiers soldiers, @a.Gold gold</span></h2>
+            @if (a.Cohorts.Count == 0) { <p class="hint">No cohorts.</p> }
+            else
+            {
+                // Only the kinds that are open at this step are named; the rest wait under one collapsed line.
+                var openRows = a.Cohorts.Where(c => DoctrineUnlocks.KindOpen(c.Key, Level)).ToList();
+                var otherRows = a.Cohorts.Where(c => !DoctrineUnlocks.KindOpen(c.Key, Level)).ToList();
+                if (openRows.Count > 0)
+                {
+                    <ul class="dc-cohortlist dc-army">
+                        @foreach (var c in openRows) { @CohortRow(c) }
+                    </ul>
+                }
+                if (otherRows.Count > 0)
+                {
+                    <details class="dc-other">
+                        <summary>Other soldiers: @otherRows.Sum(c => c.Count)</summary>
+                        <ul class="dc-cohortlist dc-army">
+                            @foreach (var c in otherRows) { @CohortRow(c) }
+                        </ul>
+                    </details>
+                }
+            }
+        }
+        else { <h2>Your army</h2><p class="hint">The army is being raised.</p> }
+        @if (_s.Stage == DoctrineStage.Watch && _s.Last is { } v) { @Spoils(v) }
+        @if (_s.Stage is DoctrineStage.Draft or DoctrineStage.Doctrine or DoctrineStage.Watch)
+        {
+            <button type="button" class="dc-btn dc-leave" id="dc-leave" @onclick="_s.Leave">Leave this game</button>
+        }
+    </aside>;
+
+    /// <summary>One cohort in plain words; the traits, veterancy and power are one tap away under Details.</summary>
+    private RenderFragment CohortRow(CohortRead c) => @<li>
+        <span class="plain"><span class="nm">@DoctrineWords.KindName(c.Key)</span>, <span class="ct">@c.Count</span>: @DoctrineWords.KindBlurb(c.Key) in the @(DoctrineWords.Slot(c.Slot).ToLowerInvariant()) line.</span>
+        <details class="dc-det">
+            <summary>Details</summary>
+            <span class="meta">Traits: @DoctrineWords.TraitList(c.Traits). Veterancy @c.Veterancy. Power @(c.PowerPct)%.</span>
+        </details>
+    </li>;
+
+    private RenderFragment Spoils(RoundView v) => @<section class="dc-spoils" aria-label="Losses and spoils">
+        @{
+            var rec = v.Record;
+            var lost = rec.Result.AttackerLosses.Sum(l => l.Lost);
+            var theirLost = rec.Result.DefenderLosses.Sum(l => l.Lost);
+        }
+        <h3 class="dc-h3">Losses and spoils</h3>
+        <ul class="dc-list">
+            <li>You brought @v.YourSoldiers soldiers and lost @lost. The enemy brought @v.EnemySoldiers and lost @theirLost.</li>
+            <li>Spoils: @rec.Spoils.Gold gold@(rec.Spoils.Experience > 0 ? $" and {rec.Spoils.Experience} veterancy step{(rec.Spoils.Experience == 1 ? "" : "s")}" : "").</li>
+            <li>Your doctrine: @DoctrineWords.Orders(rec.PlayerDoctrine).</li>
+            @if (rec.Orders is { Skipped: > 0 } ord)
+            {
+                <li class="dc-applied">@ord.Applied of your @(ord.Applied + ord.Skipped) army orders @(ord.Applied == 1 ? "was" : "were") applied. The army skipped @ord.Skipped that @(ord.Skipped == 1 ? "was" : "were") not legal when @(ord.Skipped == 1 ? "its" : "their") turn came.</li>
+            }
+            @if (!rec.Ghost.IsEmpty)
+            {
+                <li>Your general suggested: @DoctrineWords.Orders(rec.Ghost) (match record @rec.GhostConfidence of 1000). @(rec.Overrode ? "You set something different." : "You took it as it stood.")</li>
+            }
+            @if (rec.IllegalDropped > 0) { <li>@rec.IllegalDropped order@(rec.IllegalDropped == 1 ? "" : "s") were not legal and were dropped.</li> }
+        </ul>
     </section>;
 
-    // ------------------------------------------------------------------------------------------------------- draft
-    private IReadOnlyList<DraftPick> Picks() => Enumerable.Range(0, Roster.Size).Where(k => _buy[k] > 0).Select(k => new DraftPick(k, _buy[k])).ToList();
+    // ---- the general panel (right) ----
+    private RenderFragment GeneralSheet => @<aside id="dc-general" class="dc-sheet dc-generalpanel @(_sheet == Sheet.General ? "open" : "")" aria-label="Your general">
+        @Grip("General", CloseSheet)
+        <h2>Your general</h2>
+        @if (InDoctrine && _s!.Ghost is { } ghost && !ghost.Doctrine.IsEmpty && !_ghostHidden)
+        {
+            var slotRec = ghost.SlotConfidence;
+            bool fits = DoctrineUnlocks.AllowsAll(ghost.Doctrine, Level);
+            <section class="dc-ghost" style="--glow:@Glow(PanelGlow(ghost))" aria-label="Your general's suggestion">
+                <h3 class="dc-h3">Your general suggests</h3>
+                <ol class="dc-ghostchips">
+                    @for (int sl = 0; sl < DoctrineVocabulary.MaxSlots; sl++)
+                    {
+                        int t = ghost.Doctrine[sl];
+                        if (t == 0) continue;
+                        if (slotRec is { } sr)
+                        {
+                            <li class="dc-ghostslot" data-slot="@sl" style="--glow:@Glow(sr[sl])">@DoctrineWords.Label(t) <span class="dc-slotrec">Match record <b>@sr[sl]</b> of 1000 on this slot</span></li>
+                        }
+                        else
+                        {
+                            <li class="dc-ghostslot" data-slot="@sl">@DoctrineWords.Label(t)</li>
+                        }
+                    }
+                </ol>
+                <p class="dc-conf">Match record <b>@ghost.ConfidencePermille</b> of 1000: a score for how well its whole suggestion has matched what you then chose, over your recent choices. It starts low and climbs as the matches keep coming.</p>
+                @if (!fits) { <p class="hint dc-ghostlock">Part of this suggestion uses orders or slots that are not open yet, so it cannot be used as it stands. Edit it to keep the open ones.</p> }
+                <div class="dc-ghostbtns">
+                    <button type="button" class="dc-btn strong" id="dc-accept" disabled="@(!fits)" @onclick="() => Accept(ghost)">Use it</button>
+                    <button type="button" class="dc-btn" id="dc-edit" @onclick="() => EditGhost(ghost)">Edit</button>
+                    <button type="button" class="dc-btn" id="dc-ignore" @onclick="IgnoreGhost">Mine</button>
+                </div>
+            </section>
+        }
+        else if (InDoctrine && _s!.Ghost is { } g0 && g0.Doctrine.IsEmpty)
+        {
+            <p class="hint dc-noghost">@(_s.Sections.General.ExamplesSeen == 0
+                ? "Your general starts empty, so it has no suggestion yet. Set a doctrine; it learns from every one you set."
+                : "Your general has no suggestion for this army yet. Set a doctrine; it learns from every one you set.")</p>
+        }
+        else if (!InDoctrine)
+        {
+            <p class="hint">Its suggestion arrives when you set a doctrine.</p>
+        }
+        <p class="dc-examples">General: @_s!.Sections.General.ExamplesSeen @(_s.Sections.General.ExamplesSeen == 1 ? "example" : "examples") seen (each doctrine you set and each battle result)</p>
+    </aside>;
+
+    // ---- the chronicle (right of the field on a wide screen, a sheet on a phone) ----
+    private RenderFragment ChronicleSheet => @<aside id="dc-chronicle" class="dc-sheet dc-chroniclepanel @(_sheet == Sheet.Chronicle ? "open" : "")" aria-label="Battle chronicle">
+        @Grip("Chronicle", CloseSheet)
+        <DoctrineChronicle Chronicle="_chron" Cursor="_cursor" LastTick="@Math.Max(0, _s!.Last!.Record.Replay.Frames.Count - 1)" />
+    </aside>;
+
+    private RenderFragment Grip(string title, Action close) => @<button type="button" class="dc-grip" aria-label="Close the @title panel"
+            @onpointerdown="DragStart" @onpointerup="e => DragClose(e, close)" @onclick="() => ClickClose(close)">
+        <span class="bar" aria-hidden="true"></span><span class="lab">@title</span><span class="x" aria-hidden="true">Close</span>
+    </button>;
+
+    // ---- the field (centre) ----
+    private RenderFragment FieldView => @<div class="dc-fieldin">
+        @if (_s!.Stage == DoctrineStage.Watch && _s.Last is { } v)
+        {
+            <DoctrineArena Replay="v.Record.Replay" Layout="v.Layout" Cursor="_cursor" />
+        }
+        else if (_s.Stage == DoctrineStage.Working)
+        {
+            <div class="dc-working" id="dc-working" role="status" aria-live="polite" aria-label="Working">
+                <h2>@(_s.Status.Length > 0 ? _s.Status : "Working")</h2>
+                @if (_s.BattleTick > 0)
+                {
+                    <progress class="dc-progress" max="@_s.BattleTickLimit" value="@_s.BattleTick">Tick @_s.BattleTick</progress>
+                    <p class="hint">Tick @_s.BattleTick of up to @_s.BattleTickLimit. The battle ends sooner if one side falls.</p>
+                }
+                <p class="hint">This runs on your device, in small steps.</p>
+            </div>
+        }
+        else if (_s.Army is { } army)
+        {
+            <div class="dc-line" aria-label="Your three lines">
+                <p class="hint">Your three lines, back to front, with the enemy facing your front line. A field order goes to a whole line; a line with no order advances.</p>
+                <div class="dc-lines">
+                    @* back to front, left to right: your side starts on the left and the enemy on the right *@
+                    @for (int sl = DoctrineVocabulary.Groups - 1; sl >= 0; sl--)
+                    {
+                        int slot = sl;
+                        var inLane = army.Cohorts.Where(c => c.Slot == slot).ToList();
+                        int biggest = Math.Max(1, army.Cohorts.Select(c => c.Count).DefaultIfEmpty(1).Max());
+                        <div class="dc-lane" data-slot="@slot">
+                            <b>@DoctrineWords.Slot(slot) line</b>
+                            @if (inLane.Count == 0) { <span class="hint">empty</span> }
+                            @foreach (var c in inLane)
+                            {
+                                bool named = DoctrineUnlocks.KindOpen(c.Key, Level);
+                                <span class="dc-disc" style="--w:@(c.Count * 100 / biggest)"><i>@(named ? DoctrineWords.KindName(c.Key) : "Other")</i> <b>@c.Count</b></span>
+                            }
+                        </div>
+                    }
+                    <div class="dc-foe" aria-label="The enemy">The enemy stands here</div>
+                </div>
+            </div>
+        }
+    </div>;
+
+    // ---- the unlock announcement ----
+    private RenderFragment UnlockCard(UnlockNews n) => @<section class="dc-unlock" role="dialog" aria-label="New this round">
+        @if (n.Orders.Count > 0) { <p class="dc-unlock-line">@((n.Orders.Count == 1 ? "New order: " : "New orders: ") + string.Join(", ", n.Orders) + ".")</p> }
+        @if (n.Orders.Count > 0)
+        {
+            <ul class="dc-unlock-fx">
+                @foreach (var o in n.Orders) { <li><b>@o</b>: @DoctrineUnlocks.Effect(o)</li> }
+            </ul>
+        }
+        @if (n.NewSlotCount is { } sc) { <p class="dc-unlock-line">@("New slot: " + sc + ".")</p> }
+        @if (n.Kinds.Count > 0) { <p class="dc-unlock-line">@("New soldiers: " + string.Join(", ", n.Kinds) + ".")</p> }
+        <button type="button" class="dc-btn strong" id="dc-unlock-ok" @onclick="() => _news = null">Got it</button>
+    </section>;
+
+    // ---- the draft drawer (opens over the army panel) ----
     private int Cost() => Enumerable.Range(0, Roster.Size).Sum(k => _buy[k] * Roster.PriceOf(k));
+    private IReadOnlyList<DraftPick> Picks() => Enumerable.Range(0, Roster.Size).Where(k => _buy[k] > 0).Select(k => new DraftPick(k, _buy[k])).ToList();
 
     private async Task RefreshPreview()
     {
@@ -246,174 +511,69 @@
     private void Step(int kind, int delta)
     {
         _buy[kind] = Math.Clamp(_buy[kind] + delta, 0, 99);
+        _advice = "";
         _ = RefreshPreview();
     }
 
-    private RenderFragment DraftView => @<div>
-        @if (_s!.Draft is { } d)
-        {
-            @ArmyPanel(d.Army, "Your army")
-            <section class="dc-panel dc-draft" aria-label="Draft">
-                <h2>Draft <span class="dc-sub">you have @d.Army.Gold gold</span></h2>
-                <p class="hint">Buy soldiers for the coming battle. A kind you already hold joins its cohort; a new kind starts one. The army itself decides what it will accept.</p>
-                @if (d.Army.Soldiers == 0) { <p class="dc-notice" role="status">Your army has no soldiers left. Spend your gold on cohorts: a battle needs soldiers.</p> }
-                <ul class="dc-roster">
-                    @for (int k = 0; k < Roster.Size; k++)
-                    {
-                        int kind = k;
-                        <li class="dc-kind">
-                            <span class="nm">@Roster.NameOf(kind)</span>
-                            <span class="meta">@DoctrineWords.TraitList(Roster.TraitsOf(kind)), @Roster.PriceOf(kind) gold each</span>
-                            <span class="dc-step">
-                                <button type="button" class="dc-btn dc-minus" aria-label="One fewer @Roster.NameOf(kind)" disabled="@(_buy[kind] == 0)" @onclick="() => Step(kind, -1)">-</button>
-                                <span class="dc-n" aria-live="polite">@_buy[kind]</span>
-                                <button type="button" class="dc-btn dc-plus" aria-label="One more @Roster.NameOf(kind)" @onclick="() => Step(kind, 1)">+</button>
-                            </span>
-                        </li>
-                    }
-                </ul>
-                <p class="dc-sum">This draft costs @Cost() of @d.Army.Gold gold.</p>
-                @if (_preview is { } pv)
-                {
-                    @if (pv.Report.Refused.Count > 0)
-                    {
-                        <ul class="dc-refused" role="alert">
-                            @foreach (var (pick, why) in pv.Report.Refused)
-                            {
-                                <li>@DoctrineWords.KindName(pick.Kind) x@(pick.Count): @DoctrineWords.Refusal(why)</li>
-                            }
-                        </ul>
-                    }
-                    <p class="hint dc-after">After the picks the army would hold @pv.After.Soldiers soldiers in @pv.After.Kinds of @Roster.Size kinds (the command span), with @(pv.After.Legal.Count - 1) orders legal.</p>
-                }
-                <button type="button" class="dc-btn strong" id="dc-confirm" @onclick="ConfirmDraft">@(Cost() == 0 ? "Keep the army as it is" : "Confirm the draft")</button>
-            </section>
-        }
-    </div>;
-
-    private void ConfirmDraft() => _s!.SubmitDraft(Picks());
-
-    // ------------------------------------------------------------------------------------------------------- doctrine
-    private DoctrineSet Slots() => new(_slots[0], _slots[1], _slots[2], _slots[3]);
-
-    private void AddToken(int token)
+    private void UseDraftAdvice()
     {
-        // A greyed chip is disabled in the browser; this guard keeps the rule even where a tap reaches a disabled button.
-        if (_s?.Army is not { } a || !a.Legal.Allows(token)) return;
-        for (int i = 0; i < _slots.Length; i++) if (_slots[i] == 0) { _slots[i] = token; return; }
+        if (_s?.Army is not { } a) return;
+        var adv = DoctrineGuide.Draft(a, Level);
+        Array.Clear(_buy);
+        if (adv is null) { _advice = DoctrineGuide.AdvicePrefix + " nothing to buy with this gold."; _ = RefreshPreview(); return; }
+        foreach (var p in adv.Picks) _buy[p.Kind] = p.Count;
+        _advice = adv.Reason;
+        _ = RefreshPreview();
     }
 
-    private RenderFragment DoctrineView => @<div>
-        @if (_s!.Army is { } army && _s.Ghost is { } ghost)
+    private RenderFragment DraftDrawer => @<section class="dc-sheet dc-draft @(_sheet == Sheet.Draft ? "open" : "")" aria-label="Draft">
+        @Grip("Draft", CloseSheet)
+        @if (_s!.Draft is { } d)
         {
-            var legal = army.Legal;
-            @ArmyPanel(army, "Your army")
-            <section class="dc-panel dc-line" aria-label="Your line">
-                <h2>Your line</h2>
-                <p class="hint">A field order goes to a whole line. A line with no order advances.</p>
-                <div class="dc-formation">
-                    @for (int sl = 0; sl < DoctrineVocabulary.Groups; sl++)
-                    {
-                        int slot = sl;
-                        <div class="dc-lane">
-                            <b>@DoctrineWords.Slot(slot)</b>
-                            @{ var inLane = army.Cohorts.Where(c => c.Slot == slot).ToList(); }
-                            @if (inLane.Count == 0) { <span class="hint">empty</span> }
-                            @foreach (var c in inLane) { <span>@DoctrineWords.KindName(c.Key) @c.Count</span> }
-                        </div>
-                    }
-                </div>
-            </section>
-
-            @if (!ghost.Doctrine.IsEmpty && !_ghostHidden)
-            {
-                var slotRec = ghost.SlotConfidence;
-                <section class="dc-panel dc-ghost" style="--glow:@Glow(PanelGlow(ghost))" aria-label="Your general's suggestion">
-                    <h2>Your general suggests</h2>
-                    <ol class="dc-ghostchips">
-                        @for (int sl = 0; sl < DoctrineVocabulary.MaxSlots; sl++)
-                        {
-                            int t = ghost.Doctrine[sl];
-                            if (t == 0) continue;
-                            if (slotRec is { } sr)
-                            {
-                                <li class="dc-ghostslot" data-slot="@sl" style="--glow:@Glow(sr[sl])">@DoctrineWords.Label(t) <span class="dc-slotrec">Match record <b>@sr[sl]</b> of 1000 on this slot</span></li>
-                            }
-                            else
-                            {
-                                <li class="dc-ghostslot" data-slot="@sl">@DoctrineWords.Label(t)</li>
-                            }
-                        }
-                    </ol>
-                    <p class="dc-conf">Match record <b>@ghost.ConfidencePermille</b> of 1000: a score for how well its whole suggestion has matched what you then chose, over your recent choices. It starts low and climbs as the matches keep coming.</p>
-                    <div class="dc-ghostbtns">
-                        <button type="button" class="dc-btn strong" id="dc-accept" @onclick="() => Accept(ghost)">Accept</button>
-                        <button type="button" class="dc-btn" id="dc-edit" @onclick="() => EditGhost(ghost)">Edit</button>
-                        <button type="button" class="dc-btn" id="dc-ignore" @onclick="IgnoreGhost">Ignore</button>
-                    </div>
-                </section>
-            }
-            else if (ghost.Doctrine.IsEmpty)
-            {
-                <p class="hint dc-noghost">@(_s.Sections.General.ExamplesSeen == 0
-                    ? "Your general starts empty, so it has no suggestion yet. Set a doctrine; it learns from every one you set."
-                    : "Your general has no suggestion for this army yet. Set a doctrine; it learns from every one you set.")</p>
-            }
-
-            <section class="dc-panel dc-editor" aria-label="Doctrine">
-                <h2>Doctrine <span class="dc-sub">up to four orders, in this order</span></h2>
-                <ol class="dc-slots">
-                    @for (int i = 0; i < _slots.Length; i++)
-                    {
-                        int slot = i;
-                        string slotText = DoctrineWords.Label(_slots[slot]);
-                        string slotAria = $"Slot {slot + 1}: {slotText}" + (_slots[slot] == 0 ? "" : ". Tap to clear.");
-                        string slotCls = _slots[slot] == 0 ? "dc-slot empty" : "dc-slot";
-                        <li>
-                            <button type="button" class="@slotCls" aria-label="@slotAria" @onclick="() => _slots[slot] = 0">
-                                <span class="n">@(slot + 1)</span><span class="t">@slotText</span>
-                            </button>
-                        </li>
-                    }
-                </ol>
-                @if (!Slots().IsEmpty)
+            <h2>Draft <span class="dc-sub">you have @d.Army.Gold gold</span></h2>
+            <p class="hint">Buy soldiers for the coming battle. A kind you already hold joins its cohort; a new kind starts one. The army itself decides what it will accept.</p>
+            <button type="button" class="dc-btn dc-advicebtn" id="dc-advice-btn" @onclick="UseDraftAdvice">Use starter advice</button>
+            @if (_advice.Length > 0) { <p class="dc-advice">@_advice</p> }
+            @if (d.Army.Soldiers == 0) { <p class="dc-notice" role="status">Your army has no soldiers left. Spend your gold on cohorts: a battle needs soldiers.</p> }
+            <ul class="dc-roster">
+                @for (int k = 0; k < Roster.Size; k++)
                 {
-                    <ul class="dc-says">
-                        @foreach (var t in _slots.Where(t => t != 0)) { <li>@DoctrineWords.Sentence(t)</li> }
+                    int kind = k;
+                    if (!DoctrineUnlocks.KindOpen(kind, Level)) continue;
+                    <li class="dc-kind">
+                        <span class="nm">@Roster.NameOf(kind)</span>
+                        <span class="meta">@DoctrineWords.KindBlurbCap(kind), @Roster.PriceOf(kind) gold each</span>
+                        <span class="dc-step">
+                            <button type="button" class="dc-btn dc-minus" aria-label="One fewer @Roster.NameOf(kind)" disabled="@(_buy[kind] == 0)" @onclick="() => Step(kind, -1)">-</button>
+                            <span class="dc-n" aria-live="polite">@_buy[kind]</span>
+                            <button type="button" class="dc-btn dc-plus" aria-label="One more @Roster.NameOf(kind)" @onclick="() => Step(kind, 1)">+</button>
+                        </span>
+                    </li>
+                }
+            </ul>
+            @if (Enumerable.Range(0, Roster.Size).Any(k => !DoctrineUnlocks.KindOpen(k, Level)))
+            {
+                <p class="hint dc-lockedhint">More kinds of soldier arrive in later rounds.</p>
+                <button type="button" class="dc-btn dc-showall" id="dc-showall" @onclick="ShowEverything">Show everything</button>
+            }
+            <p class="dc-sum">This draft costs @Cost() of @d.Army.Gold gold.</p>
+            @if (_preview is { } pv)
+            {
+                @if (pv.Report.Refused.Count > 0)
+                {
+                    <ul class="dc-refused" role="alert">
+                        @foreach (var (pick, why) in pv.Report.Refused)
+                        {
+                            <li>@DoctrineWords.KindName(pick.Kind) x@(pick.Count): @DoctrineWords.Refusal(why)</li>
+                        }
                     </ul>
                 }
-                else { <p class="hint">Tap an order below to put it in the first empty slot. No orders is allowed: every line then advances.</p> }
-
-                <div class="dc-tabs" role="group" aria-label="Kind of order">
-                    <button type="button" class="dc-btn dc-tab @(_fieldTab ? "" : "on")" aria-pressed="@(_fieldTab ? "false" : "true")" @onclick="() => _fieldTab = false">Army orders</button>
-                    <button type="button" class="dc-btn dc-tab @(_fieldTab ? "on" : "")" aria-pressed="@(_fieldTab ? "true" : "false")" @onclick="() => _fieldTab = true">Field orders</button>
-                </div>
-                <p class="hint">Greyed out means the army says that order is not legal right now.@(legal.Count <= 1 ? " With no soldiers in the army, no order is legal." : "")</p>
-                @if (!_fieldTab)
-                {
-                    @Palette("Rotate the line", Tokens(ArmyOrderKind.Rotate), legal)
-                    @Palette("Flip a trait", Tokens(ArmyOrderKind.Flip), legal)
-                    @Palette("Age the veterans", Tokens(ArmyOrderKind.Age), legal)
-                    @Palette("Merge a kind into the one before it", Tokens(ArmyOrderKind.Merge), legal)
-                    @Palette("Aura on a trait", Tokens(ArmyOrderKind.Aura), legal)
-                    @if (Tokens(ArmyOrderKind.Cull).Any(legal.Allows)) { @Palette("Cull a trait", Tokens(ArmyOrderKind.Cull), legal) }
-                    else { <p class="hint dc-cullnote">Cull is not offered on this army.</p> }
-                }
-                else
-                {
-                    @for (int g = 0; g < DoctrineVocabulary.Groups; g++)
-                    {
-                        @Palette(DoctrineWords.Slot(g) + " line", Enumerable.Range(0, 6).Select(f => DoctrineVocabulary.Field((FieldOrderKind)f, g)).ToList(), legal)
-                    }
-                }
-                <div class="dc-fight">
-                    <button type="button" class="dc-btn" id="dc-clear" @onclick="() => Array.Clear(_slots)">Clear the slots</button>
-                    <button type="button" class="dc-btn strong" id="dc-fight" @onclick="() => Fight(ghost)">Fight with this doctrine</button>
-                </div>
-            </section>
+                <p class="hint dc-after">After the picks the army would hold @pv.After.Soldiers soldiers in @pv.After.Kinds of @Roster.Size kinds (the command span), with @(pv.After.Legal.Count - 1) orders legal.</p>
+            }
         }
-    </div>;
+    </section>;
 
+    // ---- the order tray ----
     private static IReadOnlyList<int> Tokens(ArmyOrderKind k)
     {
         var l = new List<int>();
@@ -425,18 +585,99 @@
         return l;
     }
 
-    private RenderFragment Palette(string title, IReadOnlyList<int> tokens, LegalMask legal) => @<div class="dc-palette">
-        <p class="dc-h3">@title</p>
-        <div class="dc-chipgrid">
-            @foreach (var tk in tokens)
+    private void UseOrderAdvice()
+    {
+        if (_s?.Army is not { } a || !InDoctrine) return;
+        var adv = DoctrineGuide.Orders(a, Level);
+        Array.Clear(_slots);
+        if (adv is null) { _advice = DoctrineGuide.AdvicePrefix + " no order to suggest for this army."; return; }
+        int i = 0;
+        foreach (var t in adv.Doctrine.Tokens) if (t != 0 && i < _slots.Length) _slots[i++] = t;
+        _lastAdded = adv.Doctrine.Tokens.Last(t => t != 0);
+        _advice = adv.Reason;
+    }
+
+    private RenderFragment Tray => @<section class="dc-tray" id="dc-tray" aria-label="Orders">
+        @{ var legal = _s!.Army!.Legal; }
+        <div class="dc-trayhead" @onpointerdown="DragStart" @onpointerup="e => DragClose(e, CloseTray)">
+            <h2>Orders <span class="dc-sub">up to @SlotCount, in this order</span></h2>
+            <button type="button" class="dc-btn dc-advicebtn" id="dc-advice-btn" @onclick="UseOrderAdvice">Use starter advice</button>
+            <button type="button" class="dc-btn" id="dc-tray-close" aria-label="Close the orders" @onclick="CloseTray">Close</button>
+        </div>
+        <div class="dc-trayscroll">
+            @if (_advice.Length > 0) { <p class="dc-advice">@_advice</p> }
+            <p class="hint">Tap an order to put it in the first empty slot.</p>
+            @if (_slots.Any(t => t != 0))
             {
-                int token = tk;
-                bool ok = legal.Allows(token);
-                <button type="button" class="dc-chip @(ok ? "" : "off")" data-token="@token" disabled="@(!ok)" @onclick="() => AddToken(token)">@DoctrineWords.Label(token)</button>
+                <ul class="dc-says">
+                    @foreach (var t in _slots.Where(t => t != 0)) { <li>@DoctrineWords.Sentence(t)</li> }
+                </ul>
+            }
+            <h3 class="dc-h3">Field orders</h3>
+            @for (int g = 0; g < DoctrineVocabulary.Groups; g++)
+            {
+                @Palette(DoctrineWords.Slot(g) + " line", Enumerable.Range(0, 6).Select(f => DoctrineVocabulary.Field((FieldOrderKind)f, g)).ToList(), legal)
+            }
+            @if (Level >= 3)
+            {
+                <h3 class="dc-h3">Army orders</h3>
+                @Palette("Rotate the line", Tokens(ArmyOrderKind.Rotate), legal, DoctrineUnlocks.Effect("Rotate"))
+                @Palette("Flip a trait", Tokens(ArmyOrderKind.Flip), legal, DoctrineUnlocks.Effect("Flip"))
+                @Palette("Age the veterans", Tokens(ArmyOrderKind.Age), legal, DoctrineUnlocks.Effect("Age"))
+                @Palette("Merge a kind into the one before it", Tokens(ArmyOrderKind.Merge), legal, DoctrineUnlocks.Effect("Merge"))
+                @Palette("Aura on a trait", Tokens(ArmyOrderKind.Aura), legal, DoctrineUnlocks.Effect("Aura"))
+                @if (Level >= DoctrineUnlocks.LastStep)
+                {
+                    @if (Tokens(ArmyOrderKind.Cull).Any(legal.Allows)) { @Palette("Cull a trait", Tokens(ArmyOrderKind.Cull), legal) }
+                    else { <p class="hint dc-cullnote">Cull is not offered on this army.</p> }
+                }
+            }
+            <p class="hint">Greyed out means the army says that order is not legal right now.@(legal.Count <= 1 ? " With no soldiers in the army, no order is legal." : "") No orders is allowed: every line then advances.</p>
+            @if (Locked)
+            {
+                <p class="hint dc-lockedhint">More orders arrive in later rounds.</p>
+                <button type="button" class="dc-btn dc-showall" id="dc-showall" @onclick="ShowEverything">Show everything</button>
             }
         </div>
+    </section>;
+
+    private RenderFragment Palette(string title, IReadOnlyList<int> tokens, LegalMask legal, string? hint = null) => @<div class="dc-palette">
+        @{ var open = tokens.Where(t => DoctrineUnlocks.Allows(t, Level)).ToList(); }
+        @if (open.Count > 0)
+        {
+            <p class="dc-h3">@title</p>
+            @if (!string.IsNullOrEmpty(hint)) { <p class="hint dc-palhint">@hint</p> }
+            <div class="dc-chipgrid">
+                @foreach (var tk in open)
+                {
+                    int token = tk;
+                    bool ok = legal.Allows(token);
+                    var ord = DoctrineVocabulary.Decode(token);
+                    <button type="button" class="dc-chip @(ok ? "" : "off")" data-token="@token" disabled="@(!ok)" @onclick="() => AddToken(token)">
+                        <span class="lb">@DoctrineWords.Label(token)</span>
+                        @if (ord.Family == OrderFamily.Field) { <span class="fx">@DoctrineWords.FieldSentences[ord.Kind]</span> }
+                    </button>
+                }
+            </div>
+        }
     </div>;
 
+    private void AddToken(int token)
+    {
+        // A greyed chip is disabled in the browser; this guard keeps both rules (the army's legal list, and what is open yet) even where a tap reaches a disabled button.
+        if (_s?.Army is not { } a || !InDoctrine || !a.Legal.Allows(token) || !DoctrineUnlocks.Allows(token, Level)) return;
+        for (int i = 0; i < SlotCount; i++) if (_slots[i] == 0) { _slots[i] = token; _lastAdded = token; _advice = ""; return; }
+    }
+
+    private void ClearSlot(int slot)
+    {
+        if (!InDoctrine) return;
+        _slots[slot] = 0; _advice = "";
+    }
+
+    private void ClearAll() { if (!InDoctrine) return; Array.Clear(_slots); _advice = ""; _lastAdded = 0; }
+
+    // ---- the ghost ----
     /// <summary>The glow of the whole panel: the general's per-slot match record averaged over the orders it shows, or the whole-suggestion figure when it gives no per-slot one.</summary>
     private static int PanelGlow(GeneralOutput g)
     {
@@ -447,63 +688,101 @@
 
     private static string Glow(int permille) => (Math.Clamp(permille, 0, 1000) / 1000.0).ToString("0.###", System.Globalization.CultureInfo.InvariantCulture);
 
-    private void Accept(GeneralOutput ghost) => _s!.SubmitChoice(ghost.Doctrine, false);
+    private void Accept(GeneralOutput ghost)
+    {
+        if (!InDoctrine || !DoctrineUnlocks.AllowsAll(ghost.Doctrine, Level)) return;
+        _s!.SubmitChoice(ghost.Doctrine, false);
+    }
+
     private void EditGhost(GeneralOutput ghost)
     {
         Array.Clear(_slots);
         int i = 0;
-        foreach (var t in ghost.Doctrine.Tokens) if (t != 0 && i < _slots.Length) _slots[i++] = t;
-        _ghostHidden = true;
+        foreach (var t in ghost.Doctrine.Tokens) if (t != 0 && i < SlotCount && DoctrineUnlocks.Allows(t, Level)) _slots[i++] = t;
+        _ghostHidden = true; _advice = ""; _lastAdded = 0;
+        _sheet = Sheet.None; _tray = true;
     }
-    private void IgnoreGhost() { _ghostHidden = true; Array.Clear(_slots); }
-    private void Fight(GeneralOutput ghost) { var d = Slots(); _s!.SubmitChoice(d, d != ghost.Doctrine); }
 
-    // ------------------------------------------------------------------------------------------------------- working
-    private RenderFragment WorkingView => @<section class="dc-panel dc-working" id="dc-working" role="status" aria-live="polite" aria-label="Working">
-        <h2>@(_s!.Status.Length > 0 ? _s.Status : "Working")</h2>
-        @if (_s.BattleTick > 0)
-        {
-            <progress class="dc-progress" max="@_s.BattleTickLimit" value="@_s.BattleTick">Tick @_s.BattleTick</progress>
-            <p class="hint">Tick @_s.BattleTick of up to @_s.BattleTickLimit. The battle ends sooner if one side falls.</p>
-        }
-        <p class="hint">This runs on your device, in small steps.</p>
-        <button type="button" class="dc-btn" id="dc-cancel" @onclick="_s.CancelBattle">Cancel</button>
-    </section>;
+    private void IgnoreGhost() { _ghostHidden = true; Array.Clear(_slots); _advice = ""; _lastAdded = 0; _sheet = Sheet.None; _tray = true; }
 
-    // ------------------------------------------------------------------------------------------------------- watch
-    private RenderFragment WatchView => @<div>
-        @if (_s!.Last is { } v)
+    private void Fight(GeneralOutput ghost)
+    {
+        if (!InDoctrine) return;
+        var d = new DoctrineSet(_slots[0], _slots[1], _slots[2], _slots[3]);
+        _s!.SubmitChoice(d, d != ghost.Doctrine);
+    }
+
+    // ---- sheets: tap, or drag by the handle; never hover ----
+    private void DragStart(PointerEventArgs e) { _dragFrom = e.ClientY; _dragged = false; }
+    private void DragClose(PointerEventArgs e, Action close) { if (e.ClientY - _dragFrom >= 40) { _dragged = true; close(); } }
+    private void DragOpen(PointerEventArgs e, Sheet which) { if (_dragFrom - e.ClientY >= 40) { _dragged = true; _sheet = which; _tray = false; } }
+    private void ClickClose(Action close) { if (_dragged) { _dragged = false; return; } close(); }
+    private void ToggleSheet(Sheet which)
+    {
+        if (_dragged) { _dragged = false; return; }
+        _sheet = _sheet == which ? Sheet.None : which;
+        if (_sheet != Sheet.None) _tray = false;
+    }
+    private void CloseSheet() => _sheet = Sheet.None;
+    private void CloseTray() => _tray = false;
+    private void OpenTray() { _tray = !_tray; if (_tray) _sheet = Sheet.None; }
+    private void ToggleDraft() => _sheet = _sheet == Sheet.Draft ? Sheet.None : Sheet.Draft;
+
+    // ---- the dock (bottom): the slots, then the one action of this stage ----
+    private RenderFragment Dock => @<footer class="dc-dock @(InDoctrine ? "dc-editor" : "")" aria-label="Your orders">
+        @if (_s!.Stage == DoctrineStage.Watch && _s.Last is { } v)
         {
             var rec = v.Record;
-            var lost = rec.Result.AttackerLosses.Sum(l => l.Lost);
-            var theirLost = rec.Result.DefenderLosses.Sum(l => l.Lost);
-            var arena = _s.ArenaName(rec.ArenaId);
-            <section class="dc-panel dc-result" aria-label="Round result">
-                <h2>Round @(rec.Round + 1): @DoctrineWords.OutcomeShort(rec.Result.Outcome) <span class="dc-sub">@arena, @rec.Result.Ticks ticks</span></h2>
-                <p class="dc-says">@DoctrineWords.Outcome(rec.Result.Outcome)</p>
-            </section>
-            <DoctrineArena Replay="rec.Replay" Layout="v.Layout" />
-            <section class="dc-panel dc-spoils" aria-label="Losses and spoils">
-                <h2>Losses and spoils</h2>
-                <ul class="dc-list">
-                    <li>You brought @v.YourSoldiers soldiers and lost @lost. The enemy brought @v.EnemySoldiers and lost @theirLost.</li>
-                    <li>Spoils: @rec.Spoils.Gold gold@(rec.Spoils.Experience > 0 ? $" and {rec.Spoils.Experience} veterancy step{(rec.Spoils.Experience == 1 ? "" : "s")}" : "").</li>
-                    <li>Your doctrine: @DoctrineWords.Orders(rec.PlayerDoctrine).</li>
-                    @if (rec.Orders is { Skipped: > 0 } ord)
-                    {
-                        <li class="dc-applied">@ord.Applied of your @(ord.Applied + ord.Skipped) army orders @(ord.Applied == 1 ? "was" : "were") applied. The army skipped @ord.Skipped that @(ord.Skipped == 1 ? "was" : "were") not legal when @(ord.Skipped == 1 ? "its" : "their") turn came.</li>
-                    }
-                    @if (!rec.Ghost.IsEmpty)
-                    {
-                        <li>Your general suggested: @DoctrineWords.Orders(rec.Ghost) (match record @rec.GhostConfidence of 1000). @(rec.Overrode ? "You set something different." : "You took it as it stood.")</li>
-                    }
-                    @if (rec.IllegalDropped > 0) { <li>@rec.IllegalDropped order@(rec.IllegalDropped == 1 ? "" : "s") were not legal and were dropped.</li> }
+            var recap = DoctrineGuide.Of(v, _s.ArenaName(rec.ArenaId));
+            <section class="dc-result" aria-label="Round result">
+                <h2>Round @(rec.Round + 1): @DoctrineWords.OutcomeShort(rec.Result.Outcome) <span class="dc-sub">@_s.ArenaName(rec.ArenaId), @rec.Result.Ticks ticks</span></h2>
+                <ul class="dc-recap">
+                    @foreach (var line in recap.What) { <li class="dc-recap-what">@line</li> }
+                    @if (recap.TryNext is { } tn) { <li class="dc-recap-try">@tn</li> }
                 </ul>
             </section>
-            @ArmyPanel(v.ArmyAfter, "Your army now")
-            <button type="button" class="dc-btn strong dc-next" id="dc-next" @onclick="_s.NextRound">@(v.Last ? "See the end of the game" : "Next round")</button>
+            <div class="dc-dockbtns">
+                <button type="button" class="dc-btn strong dc-next" id="dc-next" @onclick="_s.NextRound">@(v.Last ? "See the end of the game" : "Next round")</button>
+            </div>
         }
-    </div>;
+        else
+        {
+            @if (InDoctrine && !_tray && _lastAdded != 0 && _slots.Contains(_lastAdded)) { <p class="dc-lastsays">@DoctrineWords.Sentence(_lastAdded)</p> }
+            <ol class="dc-slots">
+                @for (int i = 0; i < SlotCount; i++)
+                {
+                    int slot = i;
+                    string slotText = DoctrineWords.Label(_slots[slot]);
+                    string slotAria = $"Slot {slot + 1}: {slotText}" + (_slots[slot] == 0 || !InDoctrine ? "" : ". Tap to clear.");
+                    string slotCls = _slots[slot] == 0 ? "dc-slot empty" : "dc-slot";
+                    <li>
+                        <button type="button" class="@slotCls" aria-label="@slotAria" disabled="@(!InDoctrine)" @onclick="() => ClearSlot(slot)">
+                            <span class="n">@(slot + 1)</span><span class="t">@slotText</span>
+                        </button>
+                    </li>
+                }
+            </ol>
+            <div class="dc-dockbtns">
+                @switch (_s.Stage)
+                {
+                    case DoctrineStage.Draft:
+                        <button type="button" class="dc-btn" id="dc-draftbtn" aria-expanded="@(_sheet == Sheet.Draft ? "true" : "false")" @onclick="ToggleDraft">Draft</button>
+                        <button type="button" class="dc-btn strong" id="dc-confirm" @onclick="ConfirmDraft">@(Cost() == 0 ? "Keep the army as it is" : "Confirm the draft")</button>
+                        break;
+                    case DoctrineStage.Doctrine:
+                        <button type="button" class="dc-btn" id="dc-orders" aria-expanded="@(_tray ? "true" : "false")" @onclick="OpenTray">Orders</button>
+                        <button type="button" class="dc-btn" id="dc-clear" @onclick="ClearAll">Clear</button>
+                        <button type="button" class="dc-btn strong dc-go" id="dc-fight" @onclick="() => Fight(_s.Ghost!)">GO</button>
+                        break;
+                    case DoctrineStage.Working:
+                        <button type="button" class="dc-btn" id="dc-cancel" @onclick="_s.CancelBattle">Cancel</button>
+                        break;
+                }
+            </div>
+        }
+    </footer>;
+
+    private void ConfirmDraft() => _s!.SubmitDraft(Picks());
 
     // ------------------------------------------------------------------------------------------------------- over
     private RenderFragment OverView => @<div>
@@ -542,6 +821,7 @@
     {
         _s!.BackToStart();
         _loadError = "";
+        _news = null;
         if (!_s.NewGame((int)(Environment.TickCount64 & 0x7fffffff), _s.TotalRounds, r.PlayerArmyCode, out var why)) _loadError = why;
     }
 

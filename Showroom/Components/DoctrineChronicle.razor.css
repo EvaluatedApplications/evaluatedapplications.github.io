@@ -1,0 +1,27 @@
+/* The chronicle: lines tied to ticks. PHONE FIRST like the page: every tap target at least 44px, nothing that needs hover.
+   The box is column-reverse while it follows the replay, so the newest line is at the bottom and the box stays pinned there as lines arrive.
+   tools/DoctrineUiProof reads this file together with Pages/DoctrinePage.razor.css. */
+h2 { font-size: 1.1rem; font-weight: 650; margin: 0 0 0.6rem; letter-spacing: -0.01em; }
+.dc-sub { font-size: 0.85rem; font-weight: 500; color: var(--ink-faint); margin-left: 0.4rem; }
+.dc-h3 { font-size: 0.95rem; font-weight: 650; margin: 0.3rem 0; }
+.hint { color: var(--ink-faint); font-size: 0.9rem; line-height: 1.45; margin: 0.4rem 0; }
+
+.dc-log { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.2rem; overflow: auto; overscroll-behavior: contain; min-height: 6rem; max-height: 50dvh; }
+.dc-log.live { flex-direction: column-reverse; }
+.dc-logline { margin: 0; }
+.dc-logbtn, .dc-logtoggle { min-height: 44px; min-width: 44px; touch-action: manipulation; font: inherit; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.dc-logbtn { display: block; width: 100%; text-align: left; background: none; color: var(--ink); border: 1px solid transparent; border-radius: 8px; padding: 0.3rem 0.5rem; font-size: 0.88rem; line-height: 1.4; }
+.dc-logbtn .t { font-family: var(--mono); font-size: 0.78rem; color: var(--accent-ink); margin-right: 0.3rem; }
+.dc-logline.now .dc-logbtn { border-color: var(--accent); background: var(--bg-2); }
+.dc-logline.later .dc-logbtn { color: var(--ink-faint); }
+.dc-logline.k-break .x { font-weight: 650; }
+.dc-logline.k-gate .x { color: var(--warn); }
+.dc-logtoggle { margin-top: 0.4rem; width: 100%; background: var(--bg-2); color: var(--ink); border: 1px solid var(--border-2); border-radius: 10px; padding: 0.4rem 0.6rem; font-weight: 600; font-size: 0.85rem; }
+.dc-logtoggle:active, .dc-logbtn:active { filter: brightness(1.2); }
+.dc-why { margin: 0.5rem 0 0; border-top: 1px solid var(--border-2); padding-top: 0.3rem; }
+.dc-why-list { margin: 0.2rem 0 0; padding-left: 1.1rem; line-height: 1.45; font-size: 0.9rem; }
+
+@media (min-width: 900px) {
+    /* docked beside the field: the log fills the panel instead of a capped box */
+    .dc-log { flex: 1 1 auto; max-height: none; min-height: 0; }
+}

@@ -1,10 +1,13 @@
 /* The Doctrine replay. PHONE FIRST like the page: one column, every tap target at least 44px, nothing that needs hover.
    tools/DoctrineUiProof reads this file together with Pages/DoctrinePage.razor.css. */
-.dc-replay { min-width: 0; }
+.dc-replay { min-width: 0; display: flex; flex-direction: column; min-height: 0; height: 100%; }
+.dc-replay .dc-arena { flex: 0 1 auto; min-height: 6rem; }
+.dc-more > summary { display: flex; align-items: center; color: var(--ink-soft); }
+.dc-legend { display: none; margin: 0.2rem 0; }
 .dc-replay button, .dc-replay input[type=range] { min-height: 44px; min-width: 44px; touch-action: manipulation; font: inherit; }
 .dc-replay button { cursor: pointer; -webkit-tap-highlight-color: transparent; }
 
-.dc-arena { display: block; width: 100%; height: auto; max-height: 60vh; background: var(--bg-2); border: 1px solid var(--border); border-radius: 10px; }
+.dc-arena { display: block; width: 100%; height: auto; max-height: 60vh; flex: 0 1 auto; background: var(--bg-2); border: 1px solid var(--border); border-radius: 10px; }
 .dc-floor { fill: color-mix(in srgb, var(--surface) 70%, var(--bg-2)); }
 .dc-ground.wall { fill: color-mix(in srgb, var(--ink-faint) 55%, var(--bg)); }
 .dc-ground.cover { fill: color-mix(in srgb, var(--ok) 38%, transparent); }
@@ -45,6 +48,15 @@
 .dc-side.theirs .fill { background: var(--bad); }
 .hint { color: var(--ink-faint); font-size: 0.9rem; line-height: 1.45; margin: 0.4rem 0; }
 
+@media (min-width: 900px) {
+    .dc-legend { display: block; }
+}
+@media (max-width: 899px) {
+    .dc-chips { margin: 0.3rem 0; gap: 0.3rem; }
+    .dc-chips li { font-size: 0.75rem; padding: 0.2rem 0.5rem; }
+    .dc-controls { margin: 0.2rem 0; }
+    .dc-range { margin: 0 0 0.4rem; }
+}
 @media (min-width: 700px) {
     .dc-sides { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
 }

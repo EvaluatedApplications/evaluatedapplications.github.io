@@ -44,7 +44,37 @@ $mutants = @(
     @{ Id = 'M13'; Name = 'DraftedAsync drops the army''s verdict'; File = 'Services\Doctrine\DoctrineSession.cs';
        Old = 'if (report.Refused.Count > 0)'; New = 'if (report.Refused.Count > 99)'; Append = ''; Expect = 'draft: what the army would not take' },
     @{ Id = 'M14'; Name = 'the Cull chip comes back (greyed) in the palette'; File = 'Pages\DoctrinePage.razor';
-       Old = '@if (Tokens(ArmyOrderKind.Cull).Any(legal.Allows))'; New = '@if (true)'; Append = ''; Expect = 'the palette holds every order but Cull' }
+       Old = '@if (Tokens(ArmyOrderKind.Cull).Any(legal.Allows))'; New = '@if (true)'; Append = ''; Expect = 'the palette holds every order but Cull' },
+    @{ Id = 'M15'; Name = 'the unlock schedule is ignored (every step opens in round one)'; File = 'Services\Doctrine\DoctrineProgress.cs';
+       Old = 'return round >= last ? LastStep : Math.Min(round, LastStep - 1);'; New = 'return LastStep;'; Append = ''; Expect = 'unlock schedule: 8 rounds open a step a round' },
+    @{ Id = 'M16'; Name = 'every kind of soldier is open in the draft'; File = 'Services\Doctrine\DoctrineProgress.cs';
+       Old = 'public static bool KindOpen(int kind, int step) => (uint)kind < (uint)KindStep.Length && KindStep[kind] <= step;'; New = 'public static bool KindOpen(int kind, int step) => (uint)kind < (uint)KindStep.Length;'; Append = ''; Expect = 'the draft lists exactly the open kinds' },
+    @{ Id = 'M17'; Name = 'the starter advice is labelled as the general'; File = 'Services\Doctrine\DoctrineGuide.cs';
+       Old = 'public const string AdvicePrefix = "Game advice:";'; New = 'public const string AdvicePrefix = "Your general suggests:";'; Append = ''; Expect = 'starter advice is labelled as the game' },
+    @{ Id = 'M18'; Name = 'a locked order is still in the tray and tappable'; File = 'Pages\DoctrinePage.razor';
+       Old = 'var open = tokens.Where(t => DoctrineUnlocks.Allows(t, Level)).ToList();'; New = 'var open = tokens.ToList();'; Append = ''; Expect = 'the tray shows exactly the orders open at step' },
+    @{ Id = 'M19'; Name = 'a suggestion with a locked order can be used'; File = 'Pages\DoctrinePage.razor';
+       Old = 'if (!InDoctrine || !DoctrineUnlocks.AllowsAll(ghost.Doctrine, Level)) return;'; New = 'if (!InDoctrine) return;'; Append = ''; Expect = 'tapping the disabled Use button submits nothing' },
+    @{ Id = 'M20'; Name = 'the recap quotes the wrong losses'; File = 'Services\Doctrine\DoctrineGuide.cs';
+       Old = '$"You lost {lost} of {v.YourSoldiers} soldiers;'; New = '$"You lost {theirLost} of {v.YourSoldiers} soldiers;'; Append = ''; Expect = 'the recap''s numbers are the record' },
+    @{ Id = 'M21'; Name = 'starting a game forgets what was unlocked'; File = 'Pages\DoctrinePage.razor';
+       Old = '_s!.NewGame(seed, _rounds, null, out var why);'; New = '_p = new DoctrineProgress(); _s!.NewGame(seed, _rounds, null, out var why);'; Append = ''; Expect = 'draft: all eight kinds are listed' },
+    @{ Id = 'M22'; Name = 'the dock loses the bottom safe-area inset'; File = 'Pages\DoctrinePage.razor.css';
+       Old = 'padding: 0.5rem 0 max(0.5rem, env(safe-area-inset-bottom, 0px));'; New = 'padding: 0.5rem 0;'; Append = ''; Expect = 'the dock keeps the bottom safe-area inset' },
+    @{ Id = 'M23'; Name = 'the sheet handle no longer takes a drag'; File = 'Pages\DoctrinePage.razor.css';
+       Old = 'background: none; border: 0; color: var(--ink-soft); padding: 0; touch-action: none; }'; New = 'background: none; border: 0; color: var(--ink-soft); padding: 0; }'; Append = ''; Expect = 'the handles take a drag' },
+    @{ Id = 'M24'; Name = 'the field becomes a tab'; File = 'Pages\DoctrinePage.razor';
+       Old = '<section class="dc-field" aria-label="The field">'; New = '<section class="dc-field dc-tab" aria-label="The field">'; Append = ''; Expect = 'no tabs, no tab roles' },
+    @{ Id = 'M25'; Name = 'the chronicle writes a break for a cohort that still stands (strength 1)'; File = 'Services\Doctrine\BattleChronicle.cs';
+       Old = 'if (Find(prev, b.Id) is not { } p || p.Strength <= 0 || b.Strength > 0) continue;'; New = 'if (Find(prev, b.Id) is not { } p || p.Strength <= 0 || b.Strength > 1) continue;'; Append = ''; Expect = 'chronicle (recorded battles): every line' },
+    @{ Id = 'M26'; Name = 'the chronicle says your where it means the enemy (sides swapped)'; File = 'Services\Doctrine\BattleChronicle.cs';
+       Old = 'string Lab(ReplayBlob b) => (b.Side == Side.Player ? "your " : "the enemy ") + kindName(b.Key);'; New = 'string Lab(ReplayBlob b) => (b.Side == Side.Player ? "the enemy " : "your ") + kindName(b.Key);'; Append = ''; Expect = 'chronicle (synthetic frames): the log is exactly' },
+    @{ Id = 'M27'; Name = 'the chronicle puts the gate line one tick early'; File = 'Services\Doctrine\BattleChronicle.cs';
+       Old = 'Add(cur.Tick, ChronicleKind.Gate, "The gate has fallen.", new ChronicleCite(CiteKind.Gate, cur.Tick));'; New = 'Add(prev.Tick, ChronicleKind.Gate, "The gate has fallen.", new ChronicleCite(CiteKind.Gate, prev.Tick));'; Append = ''; Expect = 'chronicle (synthetic frames): the log is exactly' },
+    @{ Id = 'M28'; Name = 'the Why turns the swing the wrong way (who gained the turning point)'; File = 'Services\Doctrine\BattleChronicle.cs';
+       Old = 'int swing = enemyLost - youLost;'; New = 'int swing = youLost - enemyLost;'; Append = ''; Expect = 'chronicle (synthetic frames): the Why is hand-written too' },
+    @{ Id = 'M29'; Name = 'first contact names the wrong side as not having struck'; File = 'Services\Doctrine\BattleChronicle.cs';
+       Old = '{(youStruck ? "the enemy has" : "you have")} not struck yet'; New = '{(youStruck ? "you have" : "the enemy has")} not struck yet'; Append = ''; Expect = 'chronicle (synthetic frames): the log is exactly' }
 )
 
 $log = Join-Path $PSScriptRoot 'mutants.log'

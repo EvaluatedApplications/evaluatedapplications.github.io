@@ -1,6 +1,8 @@
-/* Doctrine. PHONE FIRST: the base rules are the portrait phone layout (360 to 430 px wide, 16px gutters, one column, every tap target at
-   least 44px, nothing that needs hover). Wider screens add rules inside the media queries at the end. tools/DoctrineUiProof reads this file
-   (and Components/DoctrineArena.razor.css) and fails if a fixed width above 360px appears, the 44px rule goes, or the media queries go. */
+/* Doctrine. A game HUD: one scene with a top bar, an ARMY panel (left), THE FIELD (centre), a GENERAL panel (right) and a dock of slots and one action
+   at the bottom. DESKTOP is the design; below 900px it collapses to a phone layout: the field fills the screen, the army and the general (and the draft)
+   are sheets pulled up from the bottom edge by a button or a drag, the dock stays pinned at the bottom. Every tap target is at least 44px, nothing needs
+   hover, nothing scrolls sideways, inputs are 16px. tools/DoctrineUiProof reads this file (and Components/DoctrineArena.razor.css) and fails if a fixed
+   width above 360px appears, the 44px rule goes, or the media queries go. */
 .room { max-width: 1100px; margin: 0 auto; padding: 1.5rem max(16px, env(safe-area-inset-left)) calc(3rem + env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-right)); box-sizing: border-box; overflow-x: clip; }
 .crumb { font-family: var(--mono); font-size: 0.82rem; color: var(--ink-faint); margin-bottom: 0.75rem; }
 .crumb a { color: var(--ink-soft); display: inline-block; padding: 0.7rem 0; }
@@ -18,35 +20,83 @@ code { font-family: var(--mono); font-size: 0.82rem; overflow-wrap: anywhere; }
 .dc button { -webkit-tap-highlight-color: transparent; }
 .dc button:disabled { opacity: 0.45; cursor: default; }
 
-/* panels */
+/* panels (start and end screens) */
 .dc-panel { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1rem; margin: 0 0 0.9rem; min-width: 0; }
 .dc-notice { border-left: 3px solid var(--warn); background: var(--surface); padding: 0.6rem 0.9rem; border-radius: 8px; margin: 0 0 0.9rem; line-height: 1.45; }
 .err { color: var(--bad); line-height: 1.45; margin: 0.5rem 0; }
 .dc-says { margin: 0 0 0.4rem; line-height: 1.5; color: var(--ink); }
 
 .dc-chips { list-style: none; display: flex; flex-wrap: wrap; gap: 0.4rem; padding: 0; margin: 0; }
-.dc-chips li { font-family: var(--mono); font-size: 0.8rem; color: var(--ink-soft); border: 1px solid var(--border-2); border-radius: 999px; padding: 0.3rem 0.7rem; background: var(--bg-2); }
+.dc-chips li { font-family: var(--mono); font-size: 0.85rem; color: var(--ink-soft); border: 1px solid var(--border-2); border-radius: 999px; padding: 0.3rem 0.7rem; background: var(--bg-2); }
 
 /* buttons */
 .dc-btn { background: var(--bg-2); color: var(--ink); border: 1px solid var(--border-2); border-radius: 10px; padding: 0.5rem 0.9rem; font-weight: 600; }
 .dc-btn.strong { background: var(--accent); color: #fff; border-color: transparent; }
 .dc-btn:active, .dc-chip:active, .dc-slot:active { filter: brightness(1.2); }
 .dc-btn.on { background: var(--accent); color: #fff; border-color: transparent; }
-.dc-foot { margin: 0 0 1rem; }
-.dc-next, #dc-confirm, #dc-new { width: 100%; }
 
 /* start */
 .dc-opts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.4rem; margin: 0.3rem 0 0.8rem; }
 .dc-label { display: block; font-size: 0.85rem; color: var(--ink-soft); margin: 0.7rem 0 0.3rem; }
 .dc-input { display: block; width: 100%; box-sizing: border-box; min-height: 48px; font-size: 16px; padding: 0.5rem 0.8rem; background: var(--bg-2); color: var(--ink); border: 1px solid var(--border-2); border-radius: 10px; font-family: inherit; }
 .dc-codebox { font-family: var(--mono); resize: vertical; margin-bottom: 0.6rem; }
+#dc-new, .dc-showall { width: 100%; }
+.dc-showall { margin-top: 0.5rem; font-weight: 500; color: var(--ink-soft); }
 
-/* army and roster */
+/* ===================================================== THE HUD: phone-collapsed base, desktop below ===================================================== */
+.dc-ingame { padding-top: 0.5rem; padding-bottom: 0; }
+.dc-hud { display: flex; flex-direction: column; gap: 0.4rem; height: 100vh; height: max(calc(100dvh - 5rem), 20rem); min-height: 0; box-sizing: border-box; }
+
+/* top bar: round and gold, the sheet buttons, the goal, what to do now */
+.dc-top { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "chips btns" "goal goal" "todo todo" "note note"; gap: 0.15rem 0.5rem; align-items: center; flex: none; }
+.dc-top .dc-notice, .dc-top .err { grid-area: note; margin: 0.2rem 0 0; padding: 0.4rem 0.7rem; font-size: 0.9rem; }
+.dc-top .dc-status { grid-area: chips; flex-wrap: nowrap; }
+.dc-top .dc-status li { white-space: nowrap; padding: 0.25rem 0.5rem; font-size: 0.8rem; }
+.dc-sheetbtns { grid-area: btns; display: flex; gap: 0.4rem; }
+.dc-sheetbtn { padding: 0.3rem 0.6rem; touch-action: none; }
+.dc-sheetbtn[aria-expanded=true] { background: var(--accent); color: #fff; border-color: transparent; }
+.dc-goal { grid-area: goal; margin: 0; font-size: 0.85rem; color: var(--ink-faint); line-height: 1.35; }
+.dc-todo { grid-area: todo; margin: 0; font-size: 1rem; font-weight: 600; line-height: 1.35; color: var(--ink); }
+
+/* the stage holds the field and everything that rises over it */
+.dc-stage { position: relative; flex: 1 1 auto; min-height: 0; display: block; }
+.dc-field { height: 100%; min-height: 0; box-sizing: border-box; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 0.5rem; overflow: auto; overscroll-behavior: contain; }
+.dc-fieldin { height: 100%; min-height: 0; display: flex; flex-direction: column; }
+.dc-working { text-align: center; margin: auto 0; }
+.dc-progress { display: block; width: 100%; height: 12px; margin: 0.5rem 0; accent-color: var(--accent); }
+.dc-line .hint { margin-top: 0; }
+/* your three lines, drawn back to front from the left; the enemy waits on the right (a row of its own on a phone) */
+.dc-lines { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.4rem; }
+.dc-line { margin: auto 0; }
+.dc-lane { display: flex; flex-wrap: wrap; align-content: center; align-items: center; justify-content: center; gap: 0.3rem; min-height: 6rem; border: 1px solid var(--border-2); border-radius: 8px; padding: 0.4rem; background: var(--bg-2); font-size: 0.85rem; overflow-wrap: anywhere; text-align: center; }
+.dc-lane > b { flex: 0 0 100%; color: var(--ink-soft); font-size: 0.8rem; font-weight: 650; }
+.dc-disc { display: inline-flex; flex-direction: column; align-items: center; justify-content: center; box-sizing: border-box; width: calc(2.9rem + var(--w) * 0.02rem); aspect-ratio: 1; padding: 0.15rem; border-radius: 50%; background: color-mix(in srgb, var(--accent) 80%, transparent); border: 2px solid #fff; color: #fff; line-height: 1.1; overflow: hidden; }
+.dc-disc i { font-style: normal; font-size: 0.68rem; max-width: 100%; overflow-wrap: anywhere; }
+.dc-disc b { font-family: var(--mono); font-size: 0.95rem; }
+.dc-foe { grid-column: 1 / -1; display: flex; align-items: center; justify-content: center; min-height: 3rem; border: 2px dashed color-mix(in srgb, var(--bad) 70%, transparent); border-radius: 8px; color: var(--bad); font-size: 0.85rem; text-align: center; padding: 0.4rem; }
+
+/* sheets: the army and general panels, the draft drawer. Phone: pulled up from the bottom edge of the stage. */
+.dc-sheet, .dc-tray { position: absolute; left: 0; right: 0; bottom: 0; z-index: 5; box-sizing: border-box; max-height: 85%; overflow: auto; overscroll-behavior: contain; background: var(--surface); border: 1px solid var(--border-2); border-radius: 14px 14px 0 0; padding: 0 1rem 0.8rem; box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.45); }
+.dc-sheet { transform: translateY(105%); visibility: hidden; transition: transform 0.2s ease, visibility 0s linear 0.2s; }
+.dc-sheet.open { transform: none; visibility: visible; transition: transform 0.2s ease, visibility 0s; }
+.dc-grip { display: flex; align-items: center; justify-content: center; gap: 0.6rem; width: 100%; background: none; border: 0; color: var(--ink-soft); padding: 0; touch-action: none; }
+.dc-grip .bar { display: block; width: 2.5rem; height: 4px; border-radius: 2px; background: var(--border-2); }
+.dc-grip .x { font-size: 0.85rem; }
+.dc-grip .lab { font-size: 0.85rem; font-weight: 650; color: var(--ink); }
+
 .dc-cohortlist, .dc-roster { list-style: none; padding: 0; margin: 0.3rem 0; }
 .dc-cohortlist li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0.1rem 0.6rem; padding: 0.4rem 0; border-bottom: 1px solid var(--border); }
 .dc-cohortlist .nm, .dc-kind .nm { font-weight: 700; }
 .dc-cohortlist .ct { font-family: var(--mono); color: var(--accent-ink); }
-.dc-cohortlist .meta, .dc-kind .meta { grid-column: 1 / -1; font-size: 0.8rem; color: var(--ink-faint); line-height: 1.35; }
+.dc-cohortlist .plain { grid-column: 1 / -1; line-height: 1.4; }
+.dc-cohortlist .meta, .dc-kind .meta { grid-column: 1 / -1; font-size: 0.85rem; color: var(--ink-faint); line-height: 1.35; }
+.dc-det, .dc-other { grid-column: 1 / -1; }
+.dc-det summary, .dc-other summary { display: flex; align-items: center; color: var(--ink-soft); font-size: 0.85rem; }
+.dc-other summary { font-weight: 650; font-size: 0.9rem; }
+.dc-leave { width: 100%; margin-top: 0.8rem; }
+.dc-spoils .dc-list { margin: 0.3rem 0; padding-left: 1.1rem; line-height: 1.5; font-size: 0.9rem; }
+
+/* draft rows */
 .dc-kind { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0.1rem 0.6rem; align-items: center; padding: 0.4rem 0; border-bottom: 1px solid var(--border); }
 .dc-kind .meta { grid-column: 1; grid-row: 2; }
 .dc-step { grid-column: 2; grid-row: 1 / span 2; display: grid; grid-template-columns: 44px 2rem 44px; align-items: center; text-align: center; }
@@ -54,31 +104,60 @@ code { font-family: var(--mono); font-size: 0.82rem; overflow-wrap: anywhere; }
 .dc-step .dc-btn { padding: 0; }
 .dc-sum { font-weight: 650; margin: 0.8rem 0 0.3rem; }
 .dc-refused { margin: 0.4rem 0; padding-left: 1.2rem; color: var(--warn); line-height: 1.5; }
+.dc-advicebtn { font-weight: 600; }
+.dc-advice { margin: 0.4rem 0; padding: 0.4rem 0.7rem; border-left: 3px solid var(--accent); background: var(--bg-2); border-radius: 6px; line-height: 1.4; font-size: 0.9rem; }
 
-/* doctrine editor */
-.dc-formation { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.4rem; }
-.dc-lane { display: flex; flex-direction: column; gap: 0.15rem; border: 1px solid var(--border-2); border-radius: 8px; padding: 0.4rem 0.5rem; background: var(--bg-2); font-size: 0.82rem; overflow-wrap: anywhere; }
-.dc-ghost { border-color: var(--accent); box-shadow: 0 0 calc(4px + var(--glow) * 24px) color-mix(in srgb, var(--accent) calc(var(--glow) * 100%), transparent); }
+/* the general */
+.dc-generalpanel h2, .dc-armypanel h2 { margin-top: 0.4rem; }
+.dc-ghost { border: 1px solid var(--accent); border-radius: 10px; padding: 0.5rem 0.7rem; box-shadow: 0 0 calc(4px + var(--glow) * 24px) color-mix(in srgb, var(--accent) calc(var(--glow) * 100%), transparent); }
+.dc-ghost .dc-h3 { margin-top: 0.2rem; }
 .dc-ghostchips { list-style: decimal inside; padding: 0; margin: 0.3rem 0; line-height: 1.7; }
 .dc-ghostslot[style] { border-radius: 8px; box-shadow: 0 0 calc(2px + var(--glow) * 14px) color-mix(in srgb, var(--accent) calc(var(--glow) * 100%), transparent); padding: 0.1rem 0.4rem; margin: 0.25rem 0; }
-.dc-slotrec { display: block; font-size: 0.8rem; color: var(--ink-faint); line-height: 1.35; }
-.dc-conf { margin: 0.4rem 0 0.6rem; color: var(--ink-soft); line-height: 1.45; }
+.dc-slotrec { display: block; font-size: 0.85rem; color: var(--ink-faint); line-height: 1.35; }
+.dc-conf { margin: 0.4rem 0 0.6rem; color: var(--ink-soft); line-height: 1.45; font-size: 0.9rem; }
 .dc-ghostbtns { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.4rem; }
-.dc-slots { list-style: none; padding: 0; margin: 0.3rem 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.4rem; }
-.dc-slot { display: flex; gap: 0.5rem; align-items: center; width: 100%; text-align: left; min-height: 56px; background: var(--bg-2); color: var(--ink); border: 1px solid var(--border-2); border-radius: 10px; padding: 0.4rem 0.6rem; }
-.dc-slot.empty { border-style: dashed; color: var(--ink-faint); }
-.dc-slot .n { font-family: var(--mono); color: var(--accent-ink); }
-.dc-slot .t { overflow-wrap: anywhere; line-height: 1.25; }
-.dc-says li { margin: 0.2rem 0; line-height: 1.45; font-size: 0.9rem; color: var(--ink-soft); }
-.dc-tabs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.4rem; margin: 0.8rem 0 0.2rem; }
-.dc-chipgrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.4rem; }
-.dc-chip { background: var(--bg-2); color: var(--ink); border: 1px solid var(--border-2); border-radius: 10px; padding: 0.4rem 0.6rem; text-align: left; font-size: 0.88rem; line-height: 1.25; overflow-wrap: anywhere; }
-.dc-chip.off { color: var(--ink-faint); border-style: dashed; }
-.dc-fight { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.5rem; margin-top: 1rem; }
+.dc-examples { margin: 0.8rem 0 0; font-size: 0.85rem; color: var(--ink-faint); line-height: 1.4; }
 
-/* working, result, end */
-.dc-progress { display: block; width: 100%; height: 12px; margin: 0.5rem 0; accent-color: var(--accent); }
-.dc-result { border-left: 3px solid var(--ok); }
+/* the order tray: rises over the bottom of the field */
+.dc-tray { display: flex; flex-direction: column; padding-top: 0.4rem; max-height: 100%; }
+.dc-trayhead { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; touch-action: none; }
+.dc-trayhead h2 { margin: 0; flex: 1 1 auto; display: none; }
+.dc-trayhead .dc-advicebtn { flex: 1 1 auto; }
+.dc-trayhead .dc-sub { display: none; }
+.dc-trayscroll { overflow: auto; min-height: 0; overscroll-behavior: contain; }
+.dc-says { padding-left: 1.1rem; }
+.dc-says li { margin: 0.2rem 0; line-height: 1.45; font-size: 0.9rem; color: var(--ink-soft); }
+.dc-chipgrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.4rem; }
+.dc-chip { background: var(--bg-2); color: var(--ink); border: 1px solid var(--border-2); border-radius: 10px; padding: 0.4rem 0.6rem; text-align: left; font-size: 0.9rem; line-height: 1.25; overflow-wrap: anywhere; }
+.dc-chip.off { color: var(--ink-faint); border-style: dashed; }
+.dc-chip .lb { display: block; font-weight: 650; }
+.dc-chip .fx { display: block; margin-top: 0.15rem; font-size: 0.78rem; color: var(--ink-faint); line-height: 1.3; }
+.dc-palhint { margin: 0 0 0.3rem; }
+.dc-chroniclepanel { display: flex; flex-direction: column; }
+.dc-chroniclepanel h2 { margin-top: 0.4rem; }
+
+/* the unlock announcement */
+.dc-unlock { position: absolute; left: 0.5rem; right: 0.5rem; top: 0.5rem; z-index: 6; box-sizing: border-box; max-height: 70%; overflow: auto; background: var(--surface-2, var(--surface)); border: 1px solid var(--accent); border-radius: 12px; padding: 0.7rem 1rem; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5); }
+.dc-unlock-line { margin: 0 0 0.3rem; font-weight: 700; line-height: 1.35; }
+.dc-unlock-fx { margin: 0 0 0.6rem; padding-left: 1.1rem; font-size: 0.9rem; line-height: 1.45; color: var(--ink-soft); }
+
+/* the dock: the slots, then the one action of this stage */
+.dc-dock { flex: none; display: flex; flex-direction: column; gap: 0.4rem; padding: 0.5rem 0 max(0.5rem, env(safe-area-inset-bottom, 0px)); }
+.dc-lastsays { margin: 0; font-size: 0.85rem; color: var(--ink-soft); line-height: 1.35; }
+.dc-slots { list-style: none; padding: 0; margin: 0; display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 0.4rem; }
+.dc-slot { display: flex; flex-direction: column; gap: 0.1rem; align-items: flex-start; justify-content: center; width: 100%; text-align: left; min-height: 56px; background: var(--bg-2); color: var(--ink); border: 1px solid var(--border-2); border-radius: 10px; padding: 0.3rem 0.5rem; }
+.dc-slot.empty { border-style: dashed; color: var(--ink-faint); }
+.dc-slot .n { font-family: var(--mono); font-size: 0.8rem; color: var(--accent-ink); }
+.dc-slot .t { overflow-wrap: anywhere; line-height: 1.2; font-size: 0.85rem; }
+.dc-dockbtns { display: flex; gap: 0.4rem; }
+.dc-dockbtns .dc-btn { flex: 1 1 0; min-height: 48px; }
+.dc-dockbtns .strong { flex: 2 1 0; }
+.dc-result { margin: 0; border-left: 3px solid var(--ok); padding-left: 0.7rem; }
+.dc-result h2 { margin: 0 0 0.2rem; }
+.dc-recap { margin: 0; padding-left: 1rem; font-size: 0.9rem; line-height: 1.4; }
+.dc-recap-try { color: var(--accent-ink); }
+
+/* end screen */
 .dc-list { margin: 0.3rem 0; padding-left: 1.2rem; line-height: 1.55; }
 .dc-rounds-list { margin: 0.3rem 0; padding-left: 1.4rem; line-height: 1.6; }
 .dc-armycode { display: block; background: var(--bg-2); border: 1px solid var(--border); border-radius: 8px; padding: 0.6rem; overflow-wrap: anywhere; user-select: all; }
@@ -87,24 +166,72 @@ code { font-family: var(--mono); font-size: 0.82rem; overflow-wrap: anywhere; }
 .dc-about summary { display: flex; align-items: center; color: var(--ink-soft); }
 
 .outro { margin-top: 1.5rem; max-width: 70ch; line-height: 1.55; color: var(--ink-soft); }
+.dc-ingame .outro { margin-top: 1rem; }
 
-/* wider screens: more room per row */
+/* wider screens */
 @media (min-width: 700px) {
     .room { padding-top: 2.5rem; }
+    .dc-ingame { padding-top: 0.5rem; }
     .dc-chipgrid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-    .dc-slots { grid-template-columns: repeat(4, minmax(0, 1fr)); }
     .dc-next, #dc-confirm, #dc-new { width: auto; min-width: 14rem; }
+    #dc-new, .dc-showall { width: auto; }
+    .dc-unlock { left: 50%; right: auto; transform: translateX(-50%); max-width: 32rem; width: calc(100% - 1rem); }
 }
-@media (min-width: 960px) {
+
+/* DESKTOP: the HUD proper. Army left, field centre, general right, the dock across the bottom. */
+@media (min-width: 900px) {
+    .dc-ingame { max-width: 1400px; }
+    .dc-hud { gap: 0.5rem; }
+    .dc-top { grid-template-columns: auto minmax(0, 1fr); grid-template-areas: "chips goal" "chips todo" "note note"; gap: 0 1rem; }
+    .dc-sheetbtns { display: none; }
+    .dc-goal { align-self: end; }
+    .dc-todo { align-self: start; font-size: 1.05rem; }
+    /* two rows: the field on top and, when the order tray is open, the tray under it (the tray is a drawer that shares the column, so it never hides the lines) */
+    .dc-stage { display: grid; grid-template-columns: minmax(220px, 280px) minmax(0, 1fr) minmax(220px, 300px); grid-template-rows: minmax(0, 1fr) auto; column-gap: 0.6rem; row-gap: 0; }
+    .dc-sheet, .dc-tray, .dc-unlock { position: static; transform: none; max-height: none; box-shadow: none; border-radius: 12px; z-index: auto; }
+    .dc-sheet { visibility: visible; transition: none; padding: 0.4rem 1rem 0.8rem; overflow: auto; min-height: 0; }
+    .dc-armypanel { grid-column: 1; grid-row: 1 / -1; }
+    .dc-field { grid-column: 2; grid-row: 1; }
+    .dc-generalpanel, .dc-chroniclepanel { grid-column: 3; grid-row: 1 / -1; }
+    /* on the watch screen the chronicle takes the general's column (the general has nothing to say until the next doctrine) */
+    .dc-hud[data-stage=watch] .dc-generalpanel { display: none; }
+    .dc-grip { display: none; }
+    /* the draft drawer opens over the army panel */
+    .dc-draft { grid-column: 1; grid-row: 1 / -1; z-index: 4; visibility: hidden; border-color: var(--accent); }
+    .dc-draft.open { visibility: visible; }
+    /* the tray sits under the field; the announcement rises over the head of the field */
+    .dc-tray { grid-column: 2; grid-row: 2; margin-top: 0.6rem; max-height: min(36dvh, 22rem); padding: 0.5rem 1rem 0.8rem; }
+    .dc-unlock { grid-column: 2; grid-row: 1; align-self: start; justify-self: center; z-index: 6; margin-top: 0.5rem; width: auto; max-width: 32rem; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5); }
+    .dc-lines { grid-template-columns: repeat(3, minmax(0, 1fr)) minmax(4.5rem, 0.6fr); }
+    .dc-foe { grid-column: auto; }
+    .dc-lane { min-height: 7rem; }
+    .dc-trayhead .dc-sub { display: inline; }
+    .dc-trayhead h2 { display: block; }
+    .dc-trayhead .dc-advicebtn { flex: 0 0 auto; }
+    .dc-chipgrid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .dc-dock { flex-direction: row; align-items: center; gap: 1rem; }
+    .dc-dock .dc-lastsays { display: none; }
+    .dc-slots { flex: 1 1 auto; }
+    .dc-dockbtns { flex: 0 0 auto; min-width: 22rem; }
+    .dc-result { flex: 1 1 auto; }
+    .dc-dock:has(.dc-result) .dc-dockbtns { min-width: 12rem; }
+}
+@media (min-width: 1200px) {
     .dc-chipgrid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 }
+
 @media (max-width: 359px) {
-    .dc-chipgrid, .dc-slots { grid-template-columns: minmax(0, 1fr); }
+    .dc-chipgrid { grid-template-columns: minmax(0, 1fr); }
     .dc-ghostbtns { grid-template-columns: minmax(0, 1fr); }
-    .dc-formation { grid-template-columns: minmax(0, 1fr); }
+    .dc-lines { grid-template-columns: minmax(0, 1fr); }
 }
-@media (orientation: landscape) and (max-height: 500px) {
+/* a short wide screen (a phone on its side): the dock and the top bar share a column beside the field */
+@media (orientation: landscape) and (max-height: 500px) and (max-width: 899px) {
     .room { padding-top: 0.75rem; }
+    .dc-hud { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 40%); grid-template-rows: auto minmax(0, 1fr); column-gap: 0.5rem; height: max(calc(100dvh - 4.5rem), 15rem); }
+    .dc-top { grid-column: 2; grid-row: 1; }
+    .dc-stage { grid-column: 1; grid-row: 1 / span 2; }
+    .dc-dock { grid-column: 2; grid-row: 2; overflow: auto; min-height: 0; }
 }
 @media (prefers-reduced-motion: reduce) {
     .dc * { transition: none !important; animation: none !important; }

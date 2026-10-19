@@ -1,0 +1,62 @@
+@* The battle chronicle: the account of the recorded battle beside the field. Lines are tied to ticks. It follows the replay's cursor (play, scrub and step
+   all move it), a tapped line jumps the replay to that tick, and at the last tick it is the full account with the Why under it. Nothing is computed here:
+   the lines come from BattleChronicle, a pure function of the recording. *@
+@using ShowroomDoctrine
+@implements IDisposable
+
+@if (Chronicle is not null && Cursor is not null)
+{
+    int now = Cursor.Tick;
+    var shown = _all ? Chronicle.Lines : Chronicle.Lines.Where(l => l.Tick <= now).ToList();
+    bool atEnd = now >= LastTick;
+    bool showWhy = atEnd || _all;
+    <h2>Chronicle <span class="dc-sub">@shown.Count of @Chronicle.Lines.Count lines</span></h2>
+    @if (shown.Count <= 1 && !_all) { <p class="hint dc-logempty">The account fills in as the battle plays.</p> }
+    <ol class="dc-log @(_all ? "all" : "live")" aria-label="Battle chronicle">
+        @if (_all)
+        {
+            @foreach (var l in shown) { @Line(l, now) }
+            @if (showWhy) { @Why }
+        }
+        else
+        {
+            @* newest first in the markup: the box is column-reverse, so the newest line sits at the bottom and the box stays pinned there as lines arrive *@
+            @if (showWhy) { @Why }
+            @foreach (var l in shown.AsEnumerable().Reverse()) { @Line(l, now) }
+        }
+    </ol>
+    <button type="button" class="dc-btn dc-logtoggle" id="dc-log-all" aria-pressed="@(_all ? "true" : "false")" @onclick="() => _all = !_all">@(_all ? "Show only what has happened" : "Show the whole account")</button>
+}
+
+@code {
+    [Parameter, EditorRequired] public Chronicle? Chronicle { get; set; }
+    [Parameter, EditorRequired] public ReplayCursor? Cursor { get; set; }
+    /// <summary>The last tick of the recording.</summary>
+    [Parameter] public int LastTick { get; set; }
+
+    private bool _all;
+    private ReplayCursor? _wired;
+
+    protected override void OnParametersSet()
+    {
+        if (ReferenceEquals(_wired, Cursor)) return;
+        if (_wired is not null) _wired.Moved -= OnMoved;
+        _wired = Cursor;
+        if (_wired is not null) _wired.Moved += OnMoved;
+    }
+
+    private void OnMoved() => _ = InvokeAsync(StateHasChanged);
+
+    public void Dispose() { if (_wired is not null) _wired.Moved -= OnMoved; }
+
+    private RenderFragment Line(ChronicleLine l, int now) => @<li class="dc-logline @("k-" + l.Kind.ToString().ToLowerInvariant()) @(l.Tick == now ? "now" : "") @(l.Tick > now ? "later" : "")" data-tick="@l.Tick">
+        <button type="button" class="dc-logbtn" aria-label="Jump to tick @l.Tick" @onclick="() => Cursor!.RequestSeek(l.Tick)"><span class="t">Tick @(l.Tick).</span> <span class="x">@l.Text</span></button>
+    </li>;
+
+    private RenderFragment Why => @<li class="dc-why" aria-label="Why">
+        <h3 class="dc-h3">Why</h3>
+        <ul class="dc-why-list">
+            @foreach (var w in Chronicle!.Why.Lines) { <li>@w</li> }
+        </ul>
+    </li>;
+}

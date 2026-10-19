@@ -2,7 +2,7 @@
 
 Data that answers in microseconds and language models that run in a browser tab. .NET libraries you add with one command, and tools to try now.
 
-Updated: 2026-10-18
+Updated: 2026-10-19
 
 ## Licence
 
@@ -23,7 +23,7 @@ Build stores that answer exactly, replicas that sync by their differences and ta
 Page: https://evaluatedapplications.github.io/phasor/
 - Package EvaluatedApplications.Phasor, release 2.19.1: `dotnet add package EvaluatedApplications.Phasor`
 - Used by: HoloDb, AlgFormer, HoloGenome, HoloVoxel
-- Tools: The Plenum
+- Tools: Doctrine
 
 Do a thousand things in one pass.
 
@@ -824,6 +824,7 @@ Page: https://evaluatedapplications.github.io/evalapp/
 - Package EvaluatedApplications.EvalApp, release 4.4.1: `dotnet add package EvaluatedApplications.EvalApp`
 - Package EvaluatedApplications.EvalApp.Neural, release 2.0.3: `dotnet add package EvaluatedApplications.EvalApp.Neural`
 - Used by: HoloDb, AlgFormer, Prose, Tracer
+- Tools: Doctrine
 
 Run it all at once without overloading anything.
 
@@ -2223,7 +2224,7 @@ Page: https://evaluatedapplications.github.io/algformer/
 - Package EvaluatedApplications.AlgFormer.Gpu, release 1.12.0: `dotnet add package EvaluatedApplications.AlgFormer.Gpu`
 - Builds on: EvalApp, Phasor
 - Used by: Prism, Prose
-- Tools: Prism, Prose
+- Tools: Doctrine, Prism, Prose
 
 Train a language model in plain C#. Nothing else to install.
 
@@ -2668,7 +2669,7 @@ Send a whole crowd to one exit with a single search. Navmesh pathfinding with dy
 Page: https://evaluatedapplications.github.io/tracer/
 - Package EvaluatedApplications.Tracer, release 2.0.2: `dotnet add package EvaluatedApplications.Tracer`
 - Builds on: EvalApp
-- Tools: Prism
+- Tools: Doctrine, Prism
 
 Send a whole crowd to one exit with a single search.
 
@@ -2846,7 +2847,7 @@ Blazor pages that read at once and download .NET only when a visitor presses Sta
 
 Page: https://evaluatedapplications.github.io/blazier/
 - Package EvaluatedApplications.Blazier, release 1.1.0: `dotnet add package EvaluatedApplications.Blazier`
-- Tools: Umbrarium, preset demo, The Plenum, The Helix, The Analyst, Prism, Prose, Council Spending Scanner
+- Tools: Umbrarium, preset demo, Doctrine, The Helix, The Analyst, Prism, Prose, Council Spending Scanner
 
 Show the page now. Download .NET when they press Start.
 
@@ -3020,12 +3021,12 @@ The real Umbrarium dashboard computing exact answers over up to three million ge
 Page: https://evaluatedapplications.github.io/umbrarium/
 Powered by HoloDb.
 
-### The Plenum
+### Doctrine
 
-A card game played on one array of exact numbers: every card is one operation on the array, and you see which cells it changed. Play solo or in a two-player duel.
+Raise a general that learns how you command. Draft an army, give it up to four orders, and watch the battle run on a navigation mesh, with nothing pre-trained and nothing uploaded.
 
-Page: https://evaluatedapplications.github.io/tools/plenum/
-Powered by Phasor.
+Page: https://evaluatedapplications.github.io/tools/doctrine/
+Powered by Phasor, Tracer, AlgFormer and EvalApp.
 
 ### The Helix
 
@@ -3064,61 +3065,60 @@ Page: https://evaluatedapplications.github.io/tools/council-spending/
 
 ## Games
 
-### The Plenum
+### Doctrine
 
-Play a card and watch the numbers it changed.
+Raise a general that learns how you command.
 
-A card game where the whole game is one array of exact numbers. Every card you play is one operation on that array, and the cells it changed light up beside your hand.
+An army game where you set the orders and a small general watches how you do it. Draft your cohorts, give up to four orders, and watch the battle run on a navigation mesh. The general suggests your next doctrine from your own choices.
 
-Each card shows the exact call it makes, so you can see what an operation does: count a tag, flip it across the whole Board, bind two cards into one.
+Each order is one operation on the army's store, and the list of orders you may give is read from that store, so you see why an order is greyed out.
 
-Page: https://evaluatedapplications.github.io/games/plenum/
-Play: https://evaluatedapplications.github.io/tools/plenum/
-Modes: Solo and Duel.
-Powered by Phasor.
+Page: https://evaluatedapplications.github.io/games/doctrine/
+Play: https://evaluatedapplications.github.io/tools/doctrine/
+Modes: Solo.
+Powered by Phasor, Tracer, AlgFormer and EvalApp.
 Laid out for a phone screen: one column, 44 px tap targets.
 
-#### The goal
+#### How a game goes
 
-Get 8 Fire cards on the Board, then play Tally on Fire.
+A game is 3, 5 or 8 rounds. You start with an army levied for you and some gold. Each round you draft, set a doctrine, and watch one battle against an army the game raises.
 
-Each turn you play up to 3 cards. Drawing is free. When you end your turn, the Flipper takes its turn: it uses Flip on your Board, on Fire, so it undoes what you built.
+The same seed raises the same enemies on the same ground, so you can replay a game. Leave the seed empty for a new one.
 
-#### The cards
+#### Orders
 
-Your hand holds unit cards, each with tags such as Fire. Tap one to put it on the Board. Three operation cards act on the cards you have played. Each costs one play, and the ? beside each shows the exact call it makes.
+A doctrine is up to four orders, and no orders is allowed: every line then advances. There are two kinds. Army orders change the army itself before the battle. Field orders go to a whole line during it. An order the army says is not legal right now is greyed out.
 
-- Tally: Counts the cards on the Board that carry a tag you choose. This is how you score. `Board.CountWhere(...)`
-- Flip: Turns a tag on or off for every card on the Board at once. Flip a tag twice and everything is back as it was, so Flip undoes itself. `Board.RelabelFlags(null, mask)`
-- Fuse: Tap two cards in your hand and bind them into one new card: their keys add and their tags XOR. `a.Bind(b)`
+- Rotate the line: Moves every cohort to the next place in the line.
+- Flip a trait: Cohorts that had the trait lose it and the others gain it, all at once. It costs gold for the soldiers who gain power. Twice undoes the traits, not the gold.
+- Age: Ticks the veterancy ring of every cohort one place.
+- Merge: Moves one kind of cohort into the kind before it.
+- Aura: Counts the soldiers who carry a trait.
+- Field orders: Advance, Hold, Flank, Fall back, Guard and Hunt. A line with no order advances.
 
-#### The array
+#### The battle
 
-Beside your hand is the array itself, drawn as a grid of cells. Pick the Board, Hand, Deck, Discard or Engine (Engine in solo play) store to see its cells. Tap a cell to read its exact number. After each card, a What that did panel names the call and says what happened, and the cells that changed are outlined.
+The ground is a baked Tracer navigation mesh. Each cohort is a group of agents that path, take cover and strike on it, and you watch the arena as it runs.
 
-Draw odds are shown exactly: a draw is one whole number below the Deck total, and each card's share is its copies over that total.
+A battle is simulated once, on your device, and recorded. The replay is a recording of that one battle: playing it back does not run it again, and you can scrub through it.
 
-#### The hand limit
+#### The general
 
-You can hold any number of copies of a card, but a hand can only be read while it holds 8 kinds of card or fewer. Add a ninth kind and the hand turns face down: the store refuses to list it rather than guess. The total and the tag counts stay exact, and you can put the hand back in the Deck to read it again. Variety costs you; duplicates are free.
+Your general starts empty. It learns how you set a doctrine from your own choices, in your browser, with nothing pre-trained, so different players end up with different generals. It suggests and you decide.
 
-#### The Engine
+Every doctrine you set is an example for it, and so is each battle result. Inside it are a small habit table and a tiny HoloFormer from the AlgFormer package. For each of the four slots the table speaks, unless the HoloFormer has been right on that slot at least two more times than the table over your recent choices, in which case it takes the slot.
 
-In solo play an idle Engine strip runs beside the game. It is a ring of six positions, and cards at the front are ready. What is ready is a read of the store, not a counter that was incremented. The Engine ticks every couple of seconds while the tab is showing. If you leave and come back, the time you were away is applied in one call, `Engine.Tick(n)`.
+The match record beside a suggestion is a score out of 1000 for how well its whole suggestion has matched what you then chose, over your recent choices. It starts low and climbs as the matches keep coming. Nothing is saved: refresh the page and the general is gone, though it carries what it has seen into your next game on the same page.
 
-#### The Duel
+#### Army codes
 
-Switch to Duel for two players. A lobby lists open rooms; create one (listed, or private with a code), join one, or watch as a spectator. The first to cash the Goal with Tally wins, and both in the same round is a draw.
-
-Each round you build up to 3 plays, see their effect on your own Board, and send them as one order. When both orders are in they are applied together, seat 1 first. Then the Flipper acts on each Board and each player draws. Flip can aim at either Board; Tally and Fuse use yours. A turn clock of 90 seconds sends an empty order if you run out of time, and you can claim the match if the other player leaves.
-
-Each order carries a fingerprint of both players' stores as its sender saw them. If the two devices disagree, the match stops with a message instead of carrying on.
-
-Orders and your nickname travel through a public message relay. A listed room can be seen by anyone in the lobby, and a private room is only unlisted: anyone who has its code can watch it. A duel is a casual game.
+At the end of a game you can copy an army code, a short piece of text that holds your army. Paste it on the start screen to play on with that army. It holds the army only: your general is not in it.
 
 #### What powers it
 
-The Deck, Hand, Board, Discard and Engine are each one Pleroma store from the Phasor package. Moving a card is a Subtract from one store and an Add to another, a draw is one exact integer draw, and every score is a read. There is no other game state; a duel's lobby, clocks and messages are ordinary program state. The stores hold whole numbers only, so both players' stores can be compared number for number. Read more on the Pleroma page.
+Each cohort is an item in a Pleroma store from the Phasor package: its kind is the key, its traits are the flags, its place in the line is the arrangement, and its veterancy is a position on a ring of nine. An order is one operation on that store, and the list of orders you may give is read from the store.
+
+The battle runs on Tracer, the rounds run as EvalApp pipelines, and the general uses AlgFormer. Nothing is uploaded: the whole game runs in your browser tab. Read more on the Pleroma page.
 
 ## Evidence
 
