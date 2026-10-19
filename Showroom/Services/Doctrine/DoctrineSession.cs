@@ -15,8 +15,14 @@ namespace ShowroomDoctrine;
 
 public enum DoctrineStage { Start, Draft, Doctrine, Working, Watch, Over }
 
-/// <summary>The draft screen's question: the army as it stands and the round.</summary>
-public sealed record DraftView(ArmyReadModel Army, int Round);
+/// <summary>The draft screen's question: the army as it stands, the round and the companies the muster offers.</summary>
+public sealed record DraftView(ArmyReadModel Army, int Round, UnitOffer Offer);
+
+/// <summary>The council is on the table and the game asks whether to pay for another: the host as it stands (after the draft and any earlier reroll) and the orders offered.</summary>
+public sealed record RerollAsk(ArmyReadModel Army, OrderOffer Offer, int Round);
+
+/// <summary>One of the three formations of the host: how it stands after <see cref="Turns"/> turns of Reform the ranks (0 = as it stands). <see cref="Host"/> is null when the army would not take the order.</summary>
+public sealed record Formation(int Turns, int Token, ArmyReadModel? Host);
 
 /// <summary>What the army itself says to a set of picks (its own report), and the army it would have after them.</summary>
 public sealed record DraftPreview(DraftReport Report, ArmyReadModel After);
@@ -42,18 +48,30 @@ public sealed class DoctrineSession : IDisposable
     public const int DefaultRounds = 5;
 
     /// <summary>
-    /// The rules of a game on this page. THE OFFERS ARE OFF: the game's default (<see cref="OfferRules.Default"/>) offers six packs and eight orders and REFUSES
-    /// any other pick, but this page's draft and tray are still the free-choice screens and show no offer, so with the offers on every draft pick and order
-    /// the visitor made would be refused unseen. When the draft screen is rebuilt to show the offers, this line goes. A proof builds its headless games with
-    /// the same rules, so a page game and a headless game are compared on equal terms.
+    /// The rules of a game on this page: the game's own (<see cref="OfferRules.Default"/>: six companies, eight orders, up to four of them), with the unlock
+    /// ladder as the host's POOLS. <paramref name="stepOf"/> gives the step a round is on; with it, a round offers only the kinds and the orders that step has
+    /// opened (<see cref="DoctrineUnlocks"/>), so the ladder widens what can be offered instead of hiding cards. Without it the pools are the game's whole
+    /// roster and vocabulary. A proof builds its headless games with the same rules, so a page game and a headless game are compared on equal terms.
     /// </summary>
-    public static DoctrineDomain GameRules(int rounds) => new() { MaxRounds = rounds, Offers = OfferRules.Off };
+    public static DoctrineDomain GameRules(int rounds, Func<int, int>? stepOf = null)
+    {
+        var offers = OfferRules.Default;
+        if (stepOf is not null)
+            offers = offers with
+            {
+                KindPool = (round, kind) => DoctrineUnlocks.KindOpen(kind, stepOf(round)),
+                OrderPool = (round, token) => DoctrineUnlocks.Allows(token, stepOf(round)),
+            };
+        return new DoctrineDomain { MaxRounds = rounds, Offers = offers };
+    }
 
     DoctrineGame? _game;
     DoctrineDomain _rules = new();
+    readonly DoctrineProgress? _progress;
     CancellationTokenSource? _life, _round;
     TaskCompletionSource<IReadOnlyList<DraftPick>>? _draftTcs;
     TaskCompletionSource<PlayerChoice>? _chooseTcs;
+    TaskCompletionSource<bool>? _rerollTcs;
     TaskCompletionSource<bool>? _next;
     readonly List<RoundRecord> _records = new();
     IArmy? _army;                    // the visitor's army, the one object the whole run carries
@@ -65,9 +83,10 @@ public sealed class DoctrineSession : IDisposable
     long _lastNotify;
     readonly Watcher _watcher;
 
-    public DoctrineSession(DoctrineSections? sections = null, Func<DoctrineSections>? makeSections = null)
+    public DoctrineSession(DoctrineSections? sections = null, Func<DoctrineSections>? makeSections = null, DoctrineProgress? progress = null)
     {
         _makeSections = makeSections;
+        _progress = progress;
         Sections = sections ?? makeSections?.Invoke() ?? new DoctrineSections();
         _watcher = new Watcher(this);
     }
@@ -91,6 +110,14 @@ public sealed class DoctrineSession : IDisposable
     /// <summary>Round number now being played, from 0.</summary>
     public int RoundIndex { get; private set; }
     public DraftView? Draft { get; private set; }
+    /// <summary>The companies the muster offered this round (as the draft screen was handed them), or null outside a draft.</summary>
+    public UnitOffer? UnitsOffered => Draft?.Offer;
+    /// <summary>The orders on the council's table (the offer the game drew, and the one it will bind the choice to), or null before it is drawn.</summary>
+    public OrderOffer? OrdersOffered { get; private set; }
+    /// <summary>Set while the game asks whether to pay for another council; null otherwise. The general has not seen the council yet then.</summary>
+    public RerollAsk? Reroll { get; private set; }
+    /// <summary>Counts every screen the hands park on (a draft, a reroll question, a doctrine), so the page can tell a new question from the same one.</summary>
+    public int Turn { get; private set; }
     public ArmyReadModel? Army { get; private set; }
     public GeneralOutput? Ghost { get; private set; }
     public RoundView? Last { get; private set; }
@@ -118,8 +145,10 @@ public sealed class DoctrineSession : IDisposable
         error = "";
         if (InGame) { error = "A game is already in progress. Leave it first."; return false; }
         Notice = ""; Error = ""; Result = null; Last = null; Ghost = null; Draft = null; Army = null; BattleTick = 0; ChoicesMade = 0;
+        OrdersOffered = null; Reroll = null;
         rounds = Math.Clamp(rounds, 1, 20);
-        _rules = GameRules(rounds);
+        // The step a round is on: the ladder's own schedule, never below what this visitor has already opened (a restarted game keeps it, Show everything opens all).
+        _rules = GameRules(rounds, round => Math.Max(_progress?.Step ?? 0, DoctrineUnlocks.StepForRound(round, rounds)));
         BattleTickLimit = _rules.TickLimit;
         _game = Sections.Build(new Hands(this), _rules, _watcher);
         IArmy army;
@@ -168,6 +197,56 @@ public sealed class DoctrineSession : IDisposable
     }
 
     readonly Dictionary<int, OrderTrial?> _trials = new();
+    readonly Dictionary<int, Formation> _forms = new();
+
+    /// <summary>
+    /// The three formations of the host as it stands now, each read from the army itself: as it stands, and after one and after two turns of Reform the
+    /// ranks, tried on COPIES read from the host's own code (the real army is untouched). Only while the council is on the table.
+    /// </summary>
+    public IReadOnlyList<Formation> Formations()
+    {
+        var list = new List<Formation>();
+        for (int turns = 0; turns < DoctrineVocabulary.Groups; turns++)
+        {
+            if (_forms.TryGetValue(turns, out var have)) { list.Add(have); continue; }
+            int token = turns == 0 ? 0 : DoctrineVocabulary.Army(ArmyOrderKind.Rotate, turns);
+            ArmyReadModel? host = null;
+            if (Stage == DoctrineStage.Doctrine && _army is not null && Armies is not null)
+            {
+                try
+                {
+                    if (Armies.TryParse(_army.ToCode(), out var copy, out _) && copy is not null)
+                    {
+                        if (turns == 0) host = copy.Read();
+                        else
+                        {
+                            var run = copy.ApplyArmyOrdersAsync(DoctrineSet.Of(token), CancellationToken.None);
+                            if (run.IsCompletedSuccessfully && run.Result.Applied == 1) host = copy.Read();
+                        }
+                    }
+                }
+                catch (Exception e) when (e is not OutOfMemoryException) { host = null; }
+            }
+            var f = new Formation(turns, token, host);
+            if (host is not null) _forms[turns] = f;
+            list.Add(f);
+        }
+        return list;
+    }
+
+    /// <summary>Pay for another council (the question the game is asking). The game takes the fee and draws again.</summary>
+    public void RerollCouncil()
+    {
+        if (Stage != DoctrineStage.Doctrine || _rerollTcs is null) return;
+        _rerollTcs.TrySetResult(true);
+    }
+
+    /// <summary>Keep the council as it is (the answer to the same question). The general then reads it.</summary>
+    public void KeepCouncil()
+    {
+        if (Stage != DoctrineStage.Doctrine || _rerollTcs is null) return;
+        _rerollTcs.TrySetResult(false);
+    }
 
     /// <summary>
     /// What an order for the whole host would do, tried ALONE on a copy of the host as it stands now (the copy is read from the host's own code, so the real
@@ -310,10 +389,13 @@ public sealed class DoctrineSession : IDisposable
 
     sealed class Hands(DoctrineSession s) : IPlayerInput
     {
-        public async ValueTask<IReadOnlyList<DraftPick>> DraftAsync(ArmyReadModel army, int round, CancellationToken ct)
+        // The free draft of the old game: the muster is the open market. The pipeline of this page always calls the overload with the offer.
+        public ValueTask<IReadOnlyList<DraftPick>> DraftAsync(ArmyReadModel army, int round, CancellationToken ct) => DraftAsync(army, UnitOffer.Open(army.Gold), round, ct);
+
+        public async ValueTask<IReadOnlyList<DraftPick>> DraftAsync(ArmyReadModel army, UnitOffer offer, int round, CancellationToken ct)
         {
-            s.RoundIndex = round; s.BattleTick = 0; s.Ghost = null;
-            s.Army = army; s.Draft = new DraftView(army, round); s.Stage = DoctrineStage.Draft; s.Status = "";
+            s.RoundIndex = round; s.BattleTick = 0; s.Ghost = null; s.OrdersOffered = null; s.Reroll = null;
+            s.Army = army; s.Draft = new DraftView(army, round, offer); s.Stage = DoctrineStage.Draft; s.Status = ""; s.Turn++;
             var tcs = s._draftTcs = new TaskCompletionSource<IReadOnlyList<DraftPick>>(TaskCreationOptions.RunContinuationsAsynchronously);
             s.Notify();
             using var reg = ct.Register(() => tcs.TrySetCanceled(ct));
@@ -330,10 +412,34 @@ public sealed class DoctrineSession : IDisposable
             return ValueTask.CompletedTask;
         }
 
-        public async ValueTask<PlayerChoice> ChooseAsync(ArmyReadModel army, GeneralOutput ghost, int round, CancellationToken ct)
+        /// <summary>
+        /// The game asks whether to pay for another council. When the purse cannot pay (or no reroll is left) the answer is no without a question. Otherwise
+        /// the hands park on the council with the question; the general has not read the council yet.
+        /// </summary>
+        public async ValueTask<bool> RerollAsync(ArmyReadModel army, OrderOffer offer, int round, CancellationToken ct)
         {
-            s._trials.Clear();
-            s.Army = army; s.Ghost = ghost; s.Stage = DoctrineStage.Doctrine; s.Status = "";
+            s.Army = army; s.OrdersOffered = offer;
+            if (!offer.Active || offer.RerollsLeft <= 0 || army.Gold < offer.RerollCost) return false;
+            s._trials.Clear(); s._forms.Clear();
+            s.Ghost = null; s.Reroll = new RerollAsk(army, offer, round); s.Stage = DoctrineStage.Doctrine; s.Status = ""; s.Turn++;
+            var tcs = s._rerollTcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            s.Notify();
+            using var reg = ct.Register(() => tcs.TrySetCanceled(ct));
+            bool again;
+            try { again = await tcs.Task; }
+            finally { s._rerollTcs = null; s.Reroll = null; }
+            s.Stage = DoctrineStage.Working; s.Status = again ? "Drawing a new council" : "Your general is reading the council"; s.Notify();
+            return again;
+        }
+
+        public ValueTask<PlayerChoice> ChooseAsync(ArmyReadModel army, GeneralOutput ghost, int round, CancellationToken ct)
+            => ChooseAsync(army, ghost, s.OrdersOffered ?? OrderOffer.Open(), round, ct);
+
+        public async ValueTask<PlayerChoice> ChooseAsync(ArmyReadModel army, GeneralOutput ghost, OrderOffer offer, int round, CancellationToken ct)
+        {
+            s._trials.Clear(); s._forms.Clear();
+            s.OrdersOffered = offer; s.Reroll = null;
+            s.Army = army; s.Ghost = ghost; s.Stage = DoctrineStage.Doctrine; s.Status = ""; s.Turn++;
             var tcs = s._chooseTcs = new TaskCompletionSource<PlayerChoice>(TaskCreationOptions.RunContinuationsAsynchronously);
             s.Notify();
             using var reg = ct.Register(() => tcs.TrySetCanceled(ct));

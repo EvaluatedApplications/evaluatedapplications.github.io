@@ -94,29 +94,52 @@ bool Has(IRenderedComponent<DoctrinePage> p, string sel) => p.FindAll(sel).Count
 string Text(IRenderedComponent<DoctrinePage> p, string sel) => p.Find(sel).TextContent.Trim();
 async Task Tap(IRenderedComponent<DoctrinePage> p, string sel, int skip = 0)
 {
-    var all = p.FindAll(sel);
-    if (skip >= all.Count) { Check($"tap target missing: {sel} #{skip}", false); return; }   // a missing control is a red check, not a crash
-    var el = all[skip];
-    await p.InvokeAsync(() => el.Click());
+    for (int attempt = 0; attempt < 3; attempt++)
+    {
+        var all = p.FindAll(sel);
+        if (skip >= all.Count) { Check($"tap target missing: {sel} #{skip}", false); return; }   // a missing control is a red check, not a crash
+        var el = all[skip];
+        try { await p.InvokeAsync(() => el.Click()); return; }
+        catch (Bunit.Rendering.UnknownEventHandlerIdException) { p.Render(); }              // the known bUnit stale-DOM race: look again and tap again
+    }
 }
 async Task TapChip(IRenderedComponent<DoctrinePage> p, int token)
 {
-    if (!Has(p, $"[data-token='{token}']") && !Has(p, ".dc-tray")) await Tap(p, "#dc-orders");   // the order tray opens from the dock
-    await Tap(p, $"[data-token='{token}']");
+    await Tap(p, $"[data-token='{token}']");        // the council's cards are all in the page while the council is on the table
 }
-async Task DoDraft(IRenderedComponent<DoctrinePage> p, int round)
+// The game asks whether to pay for another council whenever the purse could: the scripted visitor keeps the council it was dealt.
+async Task PassAsk(IRenderedComponent<DoctrinePage> p, int ms = 30000)
+{
+    await Until(() => Has(p, ".dc-editor") || Has(p, "#dc-keep"), ms, "the council (a question or the choice)");
+    if (Has(p, "#dc-keep") && !Has(p, ".dc-editor"))
+    {
+        await Tap(p, "#dc-keep");
+        await Until(() => Has(p, ".dc-editor"), ms, "the council after keeping it");
+    }
+}
+async Task TapPack(IRenderedComponent<DoctrinePage> p, int index)
+{
+    for (int attempt = 0; attempt < 3; attempt++)
+    {
+        try { await p.InvokeAsync(() => p.FindAll(".dc-pack")[index].Click()); return; }
+        catch (Bunit.Rendering.UnknownEventHandlerIdException) { p.Render(); }
+    }
+}
+async Task DoDraft(IRenderedComponent<DoctrinePage> p, int round, bool pass = true)
 {
     await Until(() => Has(p, ".dc-draft"), 20000, "draft screen");
-    foreach (var (kind, n) in ScriptHands.Picks(round, p.Instance.Session!.Draft!.Army.Gold))
-        for (int i = 0; i < n; i++) await p.InvokeAsync(() => p.FindAll(".dc-kind")[kind].QuerySelector(".dc-plus")!.Click());
+    var sess = p.Instance.Session!;
+    foreach (int i in ScriptHands.PackIndices(sess.Draft!.Offer, sess.Draft.Army.Gold)) await TapPack(p, i);   // a visitor taps the companies the script wants
     Scan(p);
     await Tap(p, "#dc-confirm");
+    if (pass) await PassAsk(p, 40000);
 }
 var roundTimes = new List<double>();
 async Task DoChoose(IRenderedComponent<DoctrinePage> p, ScriptHands sh, int round)
 {
+    await PassAsk(p, 40000);
     await Until(() => Has(p, ".dc-editor"), 20000, "doctrine screen");
-    var st = sh.Decide(round, p.Instance.Session!.Army!, p.Instance.Session!.Ghost!);
+    var st = sh.Decide(round, p.Instance.Session!.Army!, p.Instance.Session!.Ghost!, p.Instance.Session!.OrdersOffered!);
     Console.WriteLine($"  (hands, round {round}: {st.How} {string.Join(" ", st.Tokens.Select(DoctrineVocabulary.Name))}; army {p.Instance.Session!.Army!.Soldiers} soldiers, {p.Instance.Session!.Army!.Gold} gold)");
     Scan(p);
     switch (st.How)
@@ -163,70 +186,124 @@ var swGame = System.Diagnostics.Stopwatch.StartNew();
 await Tap(page, "#dc-new");
 Check("start: the game starts with that seed and 3 rounds", S.InGame && S.Seed == gateSeed && S.TotalRounds == 3);
 
-// ---- round 0: draft with a refusal, legal-only doctrine, no ghost yet
+// ---- round 0: the muster (the offered companies), a subset bought, the budget, the question about a reroll, the council, no ghost yet
 await Until(() => Has(page, ".dc-draft"), 20000, "round 0 draft");
 Check("draft: the top bar says Round 1 of 3 and the gold; the general panel counts its examples", Text(page, ".dc-status").Contains("Round 1 of 3") && Text(page, ".dc-status").Contains("Gold ") && Text(page, ".dc-examples").Contains("General: 0 examples seen"), Text(page, ".dc-status") + " | " + Text(page, ".dc-examples"));
-Check("draft: all eight kinds are listed with traits and a price, each with 44px plus and minus buttons", page.FindAll(".dc-kind").Count == 8 && page.FindAll(".dc-kind .dc-plus").Count == 8 && page.FindAll(".dc-kind .dc-minus").Count == 8 && page.FindAll(".dc-kind")[7].TextContent.Contains("Catapults") && page.FindAll(".dc-kind")[7].TextContent.Contains($"{Roster.PriceOf(7)} gold each")
-    && Enumerable.Range(0, 8).All(k => page.FindAll(".dc-kind")[k].TextContent.Contains($"{Roster.PriceOf(k)} gold each")));
 ulong digestBeforeRound0 = S.Draft!.Army.Digest();
 int gold0 = S.Draft!.Army.Gold;
-int catapultPack = gold0 / Roster.PriceOf(7) + 1;                       // one more than the purse can pay
-for (int i = 0; i < catapultPack; i++) await page.InvokeAsync(() => page.FindAll(".dc-kind")[7].QuerySelector(".dc-plus")!.Click());
-Check("draft: the ARMY's own refusal is shown in plain words when the gold is not there", await Until(() => Has(page, ".dc-refused"), 3000, "refusal") && Text(page, ".dc-refused").Contains("Too little gold for this pick."), Text(page, ".dc-refused"));
-Check("draft: the cost line is shown", Text(page, ".dc-sum").Contains($"costs {catapultPack * Roster.PriceOf(7)} of {gold0} gold"), Text(page, ".dc-sum"));
-for (int i = 0; i < catapultPack; i++) await page.InvokeAsync(() => page.FindAll(".dc-kind")[7].QuerySelector(".dc-minus")!.Click());
-Check("draft: taking the picks back clears the refusal; the minus button is disabled at zero", await Until(() => !Has(page, ".dc-refused"), 3000, "refusal gone") && page.FindAll(".dc-kind")[7].QuerySelector(".dc-minus")!.HasAttribute("disabled"));
+var offer0 = S.Draft!.Offer;
+string[] lineHandP = ["Front", "Middle", "Back"];
+var poolRulesA = OfferRules.Default;       // the game's own defaults, NOT the page's rules (so a rule the page changes is seen): Show everything was pressed, so the page's pools let everything through
+{
+    var cardsP = page.FindAll(".dc-pack");
+    Check("muster: the cards are exactly the session's offer, in its order: the kind, the count and the price the game drew (nothing added, nothing missing)",
+        offer0.Active && offer0.Packs.Count > 0 && cardsP.Count == offer0.Packs.Count
+        && cardsP.Select((c, i) => c.GetAttribute("data-kind") == offer0.Packs[i].Kind.ToString() && c.GetAttribute("data-count") == offer0.Packs[i].Count.ToString()
+            && c.QuerySelector(".nm")!.TextContent.Trim() == $"{offer0.Packs[i].Count} {Roster.NameOf(offer0.Packs[i].Kind)}").All(x => x),
+        string.Join(", ", offer0.Packs.Select(p => $"{p.Count} {Roster.NameOf(p.Kind)} for {p.Cost}")));
+    Check("muster: the offer is the game's own for this seed, round and purse (the offer source asked again here): at most the pack count, each a distinct kind, priced count x price, none dearer than the purse",
+        offer0.Packs.SequenceEqual(SeededOffers.Instance.Units(gateSeed, 0, gold0, poolRulesA).Packs) && offer0.Packs.Count <= OfferRules.Default.PackCount
+        && offer0.Packs.Select(p => p.Kind).Distinct().Count() == offer0.Packs.Count && offer0.Packs.All(p => p.Cost == p.Count * Roster.PriceOf(p.Kind) && p.Cost <= gold0));
+    Check("muster: each card says what the soldiers are and what the company costs ('Costs N gold.')",
+        cardsP.Select((c, i) => c.QuerySelector(".fx")!.TextContent.Trim() == DoctrineWords.KindBlurbCap(offer0.Packs[i].Kind) && c.QuerySelector(".cost")!.TextContent.Trim() == $"Costs {offer0.Packs[i].Cost} gold.").All(x => x));
+}
+// buy a subset: the dearest companies first, as many as the purse pays
+var byCost = Enumerable.Range(0, offer0.Packs.Count).OrderByDescending(i => offer0.Packs[i].Cost).ThenBy(i => i).ToList();
+var bought = new List<int>(); int left0 = gold0;
+foreach (int i in byCost) if (offer0.Packs[i].Cost <= left0) { await TapPack(page, i); bought.Add(i); left0 -= offer0.Packs[i].Cost; }
+int total0 = gold0 - left0;
+Check("muster: tapping buys a company whole: the cards bought are pressed, the others are not, and the total is the sum of the prices of those bought",
+    bought.Count >= 1 && bought.Count < offer0.Packs.Count && Enumerable.Range(0, offer0.Packs.Count).All(i => (page.FindAll(".dc-pack")[i].GetAttribute("aria-pressed") == "true") == bought.Contains(i) && page.FindAll(".dc-pack")[i].ClassList.Contains("on") == bought.Contains(i))
+    && Text(page, ".dc-sum") == $"This draft costs {total0} of {gold0} gold.", Text(page, ".dc-sum"));
+var unaff = Enumerable.Range(0, offer0.Packs.Count).Where(i => !bought.Contains(i) && offer0.Packs[i].Cost > left0).ToList();
+Check("muster: a company the purse can no longer pay for is greyed, disabled, and says 'Costs N gold; you have G.' (G is what is left)",
+    unaff.Count > 0 && unaff.All(i => page.FindAll(".dc-pack")[i].HasAttribute("disabled") && page.FindAll(".dc-pack")[i].ClassList.Contains("off") && page.FindAll(".dc-pack")[i].QuerySelector(".cost")!.TextContent.Trim() == $"Costs {offer0.Packs[i].Cost} gold; you have {left0}."),
+    string.Join(" | ", unaff.Select(i => page.FindAll(".dc-pack")[i].QuerySelector(".cost")!.TextContent.Trim())));
+if (unaff.Count > 0) await TapPack(page, unaff[0]);              // bUnit fires a click on a disabled button; the page guards it
+Check("muster: tapping a company that cannot be paid buys nothing (the total and the cards bought stay as they were)", Text(page, ".dc-sum") == $"This draft costs {total0} of {gold0} gold." && page.FindAll(".dc-pack.on").Count == bought.Count);
+// the line each company would join is the army's own balance rule, asked here of an independent army of the same seed
+{
+    var svcI = new global::Doctrine.Army.PleromaArmyService();
+    async Task<int> RankWith(IEnumerable<int> idx, int kind)
+    {
+        var a = svcI.Create(Side.Player, gateSeed);
+        await a.DraftAsync(new DraftRequest(0, gateSeed, idx.OrderBy(i => i).Select(i => UnitOffer.Pick(offer0.Packs[i])).ToList()), CancellationToken.None);
+        return a.Read().Cohorts.FirstOrDefault(c => c.Key == kind)?.Slot ?? -1;
+    }
+    await Until(() => Enumerable.Range(0, offer0.Packs.Count).Where(i => !unaff.Contains(i)).All(i => page.FindAll(".dc-pack")[i].QuerySelector(".rk, .why") is not null), 5000, "the lines the companies would join");
+    var wrong = new List<string>(); int checkedRanks = 0;
+    for (int i = 0; i < offer0.Packs.Count; i++)
+    {
+        if (unaff.Contains(i)) { if (page.FindAll(".dc-pack")[i].QuerySelector(".rk") is not null) wrong.Add($"pack {i} cannot be bought but names a line"); continue; }
+        bool on = bought.Contains(i);
+        int want = await RankWith(on ? bought : bought.Append(i), offer0.Packs[i].Kind);
+        string? text = page.FindAll(".dc-pack")[i].QuerySelector(".rk")?.TextContent.Trim();
+        if (want < 0) continue;
+        checkedRanks++;
+        if (text != $"{(on ? "Joins" : "Would join")} the {lineHandP[want].ToLowerInvariant()} line.") wrong.Add($"pack {i} ({Roster.NameOf(offer0.Packs[i].Kind)}, {(on ? "bought" : "not bought")}): page says '{text}', the army puts it in the {lineHandP[want]} line");
+    }
+    Check("muster: every company names the line it would join (or 'Joins' once bought), equal to what the army itself does when the same companies are drafted on an independent army", checkedRanks >= 2 && wrong.Count == 0, string.Join(" | ", wrong.Take(3)) + $" ({checkedRanks} checked)");
+}
+Shot("m1-muster-bought", page);
+// taking a company back
+await TapPack(page, bought[0]);
+Check("muster: tapping a bought company takes it back, and the total drops by its price", Text(page, ".dc-sum") == $"This draft costs {total0 - offer0.Packs[bought[0]].Cost} of {gold0} gold." && page.FindAll(".dc-pack")[bought[0]].GetAttribute("aria-pressed") == "false");
 Check("draft: the real army was untouched by the preview", S.Draft!.Army.Digest() == digestBeforeRound0 && S.Draft.Army.Gold == gold0);
-await DoDraft(page, 0);
+while (page.FindAll(".dc-pack.on").Count > 0) await page.InvokeAsync(() => page.FindAll(".dc-pack.on")[0].Click());
+Check("muster: a draft of nothing costs nothing and the button then says the army is kept as it is", Text(page, ".dc-sum") == $"This draft costs 0 of {gold0} gold." && Text(page, "#dc-confirm") == "Keep the army as it is");
+await DoDraft(page, 0, pass: false);
+// the question about a reroll
+{
+    bool asked = await Until(() => S.Reroll is not null && Has(page, "#dc-keep"), 20000, "the question about a reroll");
+    var ask0 = S.Reroll;
+    Check("ask: after the draft the game asks whether to pay for another council: the dock offers 'Reroll for N gold (K left)' and 'Keep these', N and K the offer's own, and the general has not read the council yet",
+        asked && ask0 is not null && Text(page, "#dc-reroll") == $"Reroll for {ask0.Offer.RerollCost} gold ({ask0.Offer.RerollsLeft} left)" && ask0.Offer.RerollCost == OfferRules.Default.RerollCost && ask0.Offer.RerollsLeft == OfferRules.Default.MaxRerolls
+        && S.Ghost is null && Has(page, ".dc-asking") && !Has(page, ".dc-editor") && Text(page, ".dc-rerollnote").Contains($"{ask0.Offer.RerollCost} gold"), asked ? Text(page, ".dc-rerollnote") : "no question");
+    Check("ask: the cards wait for the answer (every card is disabled while the question stands, and the dock shows no slots, only the question's buttons)", page.FindAll(".dc-chip").Count > 0 && page.FindAll(".dc-chip").All(c => c.HasAttribute("disabled")) && page.FindAll(".dc-dock .dc-slot").Count == 0 && page.FindAll(".dc-dock .dc-dockbtns .dc-btn").Count == 3);
+    Scan(page);
+    Shot("r0-ask", page);
+    await Tap(page, "#dc-keep");
+}
 await Until(() => Has(page, ".dc-editor"), 20000, "round 0 doctrine screen");
-Check("doctrine: round 0, the general has seen nothing: no ghost, a plain sentence instead, confidence 0", !Has(page, ".dc-ghost") && Has(page, ".dc-noghost") && S.Ghost!.ConfidencePermille == 0 && S.Ghost.Doctrine.IsEmpty && S.Sections.General.ExamplesSeen == 0, Text(page, ".dc-noghost"));
+Check("doctrine: round 0, the general has seen nothing: no ghost, a plain sentence instead, confidence 0", !Has(page, ".dc-ghost") && Has(page, ".dc-noghost") && S.Ghost!.ConfidencePermille == 0 && S.Ghost.Doctrine.IsEmpty && S.Sections.General.ExamplesSeen == 0, Has(page, ".dc-noghost") ? Text(page, ".dc-noghost") : "no sentence");
 Scan(page);
 
-// legal-only gating: every chip of both tabs is disabled exactly when the army's mask does not allow the token
+// the council: the cards are exactly the offer, and only an offered, legal order can be put in a slot
 {
     var legal = S.Army!.Legal;
-    var seen = new HashSet<int>(); bool match = true; int disabled = 0, enabled = 0;
-    foreach (var tab in new[] { 0 })
-    {
-        foreach (var chip in page.FindAll(".dc-chip"))
-        {
-            int token = int.Parse(chip.GetAttribute("data-token")!);
-            seen.Add(token);
-            bool off = chip.HasAttribute("disabled");
-            if (off == legal.Allows(token)) match = false;
-            if (off) disabled++; else enabled++;
-        }
-    }
-    int cullCount = Enumerable.Range(1, DoctrineVocabulary.Size - 1).Count(tk => DoctrineVocabulary.Decode(tk).Family == OrderFamily.Army && (ArmyOrderKind)DoctrineVocabulary.Decode(tk).Kind == ArmyOrderKind.Cull);
-    Check("doctrine: the palette holds every order but Cull (hidden: the army allows none) and each is enabled exactly when the army's legal list allows it", cullCount > 0 && seen.Count == DoctrineVocabulary.Size - 1 - cullCount && match, $"{enabled} enabled, {disabled} disabled, {cullCount} Cull tokens not shown");
-    Check("doctrine: the list really restricts (some enabled, some disabled) and no Cull chip exists at all", enabled > 0 && disabled > 0 && page.Markup.IndexOf("Cull a trait", StringComparison.Ordinal) < 0);
-    Check("doctrine: Cull is one plain sentence in the lord's voice and the internal operation is never named", Has(page, ".dc-cullnote") && Text(page, ".dc-cullnote") == "No order to dismiss soldiers is offered to this host." && !page.Markup.Contains("Restrict"), Text(page, ".dc-cullnote"));
-    // the tray in the lord's words, its figures the rules' own
-    {
-        string tray = Regex.Replace(Text(page, ".dc-tray"), @"\s+", " ");
-        string[] ordHand = ["zeroth", "first", "second", "third", "fourth", "fifth", "sixth", "seventh", "eighth", "ninth", "tenth", "eleventh", "twelfth"];
-        int? capSeen = null;
-        if (new global::Doctrine.Army.PleromaArmyService().TryParse("DA2.0.0.5000.0..4:300:2:0", out var bigHost, out _)) { bigHost!.ApplyArmyOrdersAsync(DoctrineSet.Of(DoctrineVocabulary.Army(ArmyOrderKind.Aura, 3)), CancellationToken.None).AsTask().Wait(); capSeen = bigHost.Read().Cohorts[0].PowerPct - 100; }
-        Check("tray (words): the three groups are 'Orders for a line', 'Should the host fall' and 'Orders for the whole host', with the five kinds of host order under their lord's names",
-            new[] { "Orders for a line", "Should the host fall", "Orders for the whole host", "Reform the ranks", "Reforge", "Drill the host", "Swear into a kind", "Raise a banner" }.All(tray.Contains) && !tray.Contains("Field orders") && !tray.Contains("Army orders"), tray.Length > 300 ? tray[..300] : tray);
-        Check("tray (words): the rules above the cards carry the game's own figures (a year adds the power per year, the ring's length, the banner's cap, the trigger's shares)",
-            tray.Contains($"each year adds {Roster.VetStepPct}% power") && tray.Contains($"The {ordHand[Roster.VetPeriod]} drill sends a cohort back to its first year") && capSeen is > 0 && tray.Contains($"up to {capSeen}%")
-            && tray.Contains("Orders before it open the battle; orders after it take over once your host has lost a quarter, half or three quarters of its soldiers"));
-        var cards = page.FindAll(".dc-chip");
-        Check("tray (cards): every card has its label and its one-line effect; the three triggers are cards of the 'Should the host fall' group; a card with a cost or a preview says so",
-            cards.All(c => c.QuerySelector(".lb") is not null && c.QuerySelector(".fx")!.TextContent.Trim().Length > 8)
-            && new[] { "Should a quarter fall", "Should half fall", "Should three quarters fall" }.All(l => cards.Any(c => c.QuerySelector(".lb")!.TextContent.Trim() == l))
-            && cards.Where(c => c.QuerySelector(".lb")!.TextContent.Trim().StartsWith("Reform the ranks")).All(c => c.HasAttribute("disabled") || c.QuerySelector(".pv")!.TextContent.StartsWith("Your front line "))
-            && cards.Where(c => c.QuerySelector(".lb")!.TextContent.Trim().StartsWith("Reforge:")).All(c => (c.QuerySelector(".cost") is null) == (S.Army!.Cohorts.All(k => Roster.RelabelCost(k.Traits, Array.IndexOf(DoctrineWords.Traits, c.QuerySelector(".lb")!.TextContent.Trim()[9..]), true) == 0))));
-    }
+    var offerO = S.OrdersOffered!;
+    var cards = page.FindAll(".dc-chip");
+    var tokens = cards.Select(c => int.Parse(c.GetAttribute("data-token")!)).ToList();
+    int legalCount = Enumerable.Range(1, DoctrineVocabulary.Size - 1).Count(legal.Allows);
+    Check("council: the cards are exactly the offer the game drew: its tokens, sorted by id, none twice, End never, as many as the offer size allows",
+        offerO.Active && tokens.SequenceEqual(offerO.Tokens) && tokens.SequenceEqual(tokens.OrderBy(t => t)) && tokens.Distinct().Count() == tokens.Count && !tokens.Contains(0) && tokens.Count == Math.Min(poolRulesA.OrderOfferSize, legalCount),
+        $"{tokens.Count} cards, offer {offerO.Tokens.Count}, {legalCount} legal");
+    Check("council: the offer is the game's own for this seed, round, reroll and legal list (the offer source asked again here)", offerO.Tokens.SequenceEqual(SeededOffers.Instance.Orders(gateSeed, 0, 0, legal, poolRulesA).Tokens) && offerO.Rerolls == 0);
+    int FieldN(IEnumerable<int> ts) => ts.Count(t => DoctrineVocabulary.Decode(t).Family == OrderFamily.Field);
+    int LinesN(IEnumerable<int> ts) => ts.Where(t => DoctrineVocabulary.Decode(t).Family == OrderFamily.Field).Select(t => DoctrineVocabulary.Decode(t).A).Distinct().Count();
+    var legalTokens = Enumerable.Range(1, DoctrineVocabulary.Size - 1).Where(legal.Allows).ToList();
+    Check("council: the game's guarantees show on the table: at least three orders for a line touching at least two lines, and at least one order for the whole host (as far as the legal list allows)",
+        FieldN(tokens) >= Math.Min(poolRulesA.MinFieldOrders, FieldN(legalTokens)) && LinesN(tokens) >= Math.Min(poolRulesA.MinFieldLines, LinesN(legalTokens))
+        && tokens.Count(t => DoctrineVocabulary.Decode(t).Family == OrderFamily.Army) >= Math.Min(poolRulesA.MinArmyOrders, legalTokens.Count(t => DoctrineVocabulary.Decode(t).Family == OrderFamily.Army)));
+    Check("council: every card is an order the army allows now, and is enabled", cards.All(c => !c.HasAttribute("disabled") && legal.Allows(int.Parse(c.GetAttribute("data-token")!))));
+    var cardsOf = page.FindAll(".dc-chip");
+    Check("council (cards): every card has its label and its one-line effect; a card for Reform the ranks shows what the front line becomes; a card with a cost says it",
+        cardsOf.All(c => c.QuerySelector(".lb") is not null && c.QuerySelector(".lb")!.TextContent.Trim() == DoctrineWords.Label(int.Parse(c.GetAttribute("data-token")!)) && c.QuerySelector(".fx")!.TextContent.Trim() == DoctrineWords.Effect(int.Parse(c.GetAttribute("data-token")!)))
+        && cardsOf.Where(c => c.QuerySelector(".lb")!.TextContent.Trim().StartsWith("Reform the ranks")).All(c => c.QuerySelector(".pv")!.TextContent.StartsWith("Your front line "))
+        && cardsOf.Where(c => c.QuerySelector(".lb")!.TextContent.Trim().StartsWith("Reforge:")).All(c => (c.QuerySelector(".cost") is null) == (S.Army!.Cohorts.All(k => Roster.RelabelCost(k.Traits, Array.IndexOf(DoctrineWords.Traits, c.QuerySelector(".lb")!.TextContent.Trim()[9..]), true) == 0))));
+    int outside = Enumerable.Range(1, DoctrineVocabulary.Size - 1).First(t => legal.Allows(t) && !offerO.Tokens.Contains(t));
+    bool noCard = !Has(page, $"[data-token='{outside}']");
+    await page.InvokeAsync(() => page.Instance.PlaceOrder(outside)); page.Render();
+    Check("council: a legal order that is NOT on the table has no card, and asking the page to place it puts nothing in a slot (it cannot be chosen)", noCard && page.FindAll(".dc-slot.empty").Count == 4, $"token {outside} ({DoctrineVocabulary.Name(outside)})");
     int illegal = Enumerable.Range(1, DoctrineVocabulary.Size - 1).First(t => !legal.Allows(t));
-    await Tap(page, $"[data-token='{illegal}']");
-    Check("doctrine: tapping an order the army says is illegal puts nothing in a slot", page.FindAll(".dc-slot.empty").Count == 4);
-    int firstLegal = Enumerable.Range(1, DoctrineVocabulary.Size - 1).First(legal.Allows);
-    await TapChip(page, firstLegal);
-    Check("doctrine: a legal order lands in the first slot, with its sentence under the slots", page.FindAll(".dc-slot.empty").Count == 3 && Has(page, ".dc-says li"));
+    await page.InvokeAsync(() => page.Instance.PlaceOrder(illegal)); page.Render();
+    Check("council: an order the army says is illegal cannot be placed either", page.FindAll(".dc-slot.empty").Count == 4);
+    await TapChip(page, tokens[0]);
+    Check("council: tapping a card puts its order in the first empty slot, the card is marked with its slot, and its sentence is listed", page.FindAll(".dc-slot.empty").Count == 3 && Has(page, ".dc-says li") && page.Find($"[data-token='{tokens[0]}']").ClassList.Contains("on") && page.Find($"[data-token='{tokens[0]}'] .mk").TextContent.Trim() == "In slot 1");
     await Tap(page, ".dc-slot", 0);
-    Check("doctrine: tapping a filled slot clears it", page.FindAll(".dc-slot.empty").Count == 4);
+    Check("council: tapping a filled slot clears it, and the card is free again", page.FindAll(".dc-slot.empty").Count == 4 && !page.Find($"[data-token='{tokens[0]}']").ClassList.Contains("on"));
+    await TapChip(page, tokens[0]); await TapChip(page, tokens[0]);
+    Check("council: tapping a placed card again takes it out (each order once)", page.FindAll(".dc-slot.empty").Count == 4);
 }
 await DoChoose(page, script, 0);
 Check("battle: while the round works the page says so, with a Cancel button (44px)", await Until(() => Has(page, "#dc-working") || Has(page, ".dc-result"), 20000, "working or result"));
@@ -370,14 +447,17 @@ await DoDraft(page, 2);
 await Until(() => Has(page, ".dc-editor"), 30000, "round 2 doctrine screen");
 var ghost2 = S.Ghost!;
 Console.WriteLine($"  (round 2 ghost: {(ghost2.Doctrine.IsEmpty ? "none" : ghost2.Doctrine.ToString())}, confidence {ghost2.ConfidencePermille}, examples {S.Sections.General.ExamplesSeen})");
-Check("ghost: after 4 examples a suggestion is offered, its confidence within 0..1000, every token legal", !ghost2.Doctrine.IsEmpty && ghost2.ConfidencePermille is >= 0 and <= 1000 && S.Army!.Legal.AllowsAll(ghost2.Doctrine), $"confidence {ghost2.ConfidencePermille}");
+// Under the offers the general is bound to the council: a habit it learned on orders that are not on this round's table is removed, so it may have nothing to suggest.
+Check("ghost: after 4 examples the general's pick, if it has one, is within the council and the army's legal list, its confidence within 0..1000; if not, the page says it has no pick from this council",
+    ghost2.ConfidencePermille is >= 0 and <= 1000 && (ghost2.Doctrine.IsEmpty ? Has(page, ".dc-noghost") : S.Army!.Legal.AllowsAll(ghost2.Doctrine) && ghost2.Doctrine.Tokens.All(S.OrdersOffered!.Allows)), $"confidence {ghost2.ConfidencePermille}");
 int examplesBeforeAccept = S.Sections.General.ExamplesSeen;
 await DoChoose(page, script, 2);
 await Until(() => Has(page, ".dc-result") || S.Stage == DoctrineStage.Over, 60000, "round 2 result");
 Scan(page);
-Check("accept: the accepted ghost is the doctrine that fought, recorded as NOT overridden", S.Records.Count == 3 && S.Records[2].PlayerDoctrine == ghost2.Doctrine && !S.Records[2].Overrode && S.Records[2].GhostConfidence == ghost2.ConfidencePermille);
+Check("accept (round 3, when the general had a pick): the accepted pick is the doctrine that fought, recorded as NOT overridden",
+    S.Records.Count == 3 && (ghost2.Doctrine.IsEmpty || (S.Records[2].PlayerDoctrine == ghost2.Doctrine && !S.Records[2].Overrode && S.Records[2].GhostConfidence == ghost2.ConfidencePermille)));
 Check("accept: accepting is a training example too (the general learned from this round twice more)", S.Sections.General.ExamplesSeen == examplesBeforeAccept + 2, $"{examplesBeforeAccept} -> {S.Sections.General.ExamplesSeen}");
-Check("accept: the spoils screen says the suggestion was taken as it stood", Text(page, ".dc-spoils").Contains("You took it as it stood."));
+Check("accept (round 3, when the general had a pick): the spoils screen says the suggestion was taken as it stood", ghost2.Doctrine.IsEmpty || Text(page, ".dc-spoils").Contains("You took it as it stood."));
 Check("last round: the next button says it is the end", Text(page, "#dc-next") == "See the end of the game");
 Check("final: the pipeline marks only the last round Final, and the page takes its end from that (the button says so)", S.Records.Count == 3 && !S.Records[0].Final && !S.Records[1].Final && S.Records[2].Final && S.Last!.Last);
 var lastArmyAfter = S.Last!.ArmyAfter;
@@ -485,7 +565,7 @@ Console.WriteLine($"  (B round 1 ghost: {(ghostB ? SB.Ghost.Doctrine.ToString() 
 var ghostBDoctrine = SB.Ghost.Doctrine;
 await DoChoose(pageB, scriptB, 1);
 await Until(() => Has(pageB, ".dc-result") || SB.Stage == DoctrineStage.Over, 60000, "B round 1 result");
-Check("edit: Edit loads the suggestion into the slots; changing one order records an override", ghostB && SB.Records.Count == 2 && SB.Records[1].Overrode && SB.Records[1].PlayerDoctrine != ghostBDoctrine && SB.Records[1].Ghost == ghostBDoctrine);
+Check("edit (round 2 of game B, when the general had a pick): Edit loads the pick into the slots; changing one order records an override", SB.Records.Count == 2 && (!ghostB || (SB.Records[1].Overrode && SB.Records[1].PlayerDoctrine != ghostBDoctrine && SB.Records[1].Ghost == ghostBDoctrine)));
 Scan(pageB);
 Check("leave: from the result screen the visitor can leave; the end screen then carries the two rounds played", Has(pageB, "#dc-leave"));
 await Tap(pageB, "#dc-leave");
@@ -505,41 +585,93 @@ Check("leave: two rounds listed and the code is the army after round 2", pageB.F
     Check("autoplay: a jump to tick 0 shows tick 0", arenaP.Find(".dc-tick").TextContent.Trim() == "0");
 }
 
-// ---------------------------------------------------------------------------------------------- game O: refusals, skipped orders (the hooks' facts)
+// ---------------------------------------------------------------------------------------------- game O: skipped orders, and what the game refuses outside the offer (the hooks' facts)
 {
+    // A seed whose round-0 council holds two orders for the whole host of which the second is skipped when it follows the first (found headless, with the
+    // script's own draft, on the same sections and the same offer source).
+    (int Seed, int A, int B)? skipPair = null;
+    for (int sd = 1; sd < 800 && skipPair is null; sd++)
+    {
+        var svc0 = new global::Doctrine.Army.PleromaArmyService();
+        var army0 = svc0.Create(Side.Player, sd);
+        int g = army0.Read().Gold;
+        await army0.DraftAsync(new DraftRequest(0, sd, ScriptHands.PickList(SeededOffers.Instance.Units(sd, 0, g, poolRulesA), g)), CancellationToken.None);
+        var rd = army0.Read();
+        var oo = SeededOffers.Instance.Orders(sd, 0, 0, rd.Legal, poolRulesA);
+        var armyOrders = oo.Tokens.Where(t => DoctrineVocabulary.Decode(t).Family == OrderFamily.Army).ToList();
+        foreach (int a in armyOrders)
+            foreach (int b in armyOrders)
+            {
+                if (a == b || skipPair is not null) continue;
+                svc0.TryParse(army0.ToCode(), out var cl, out _);
+                var r = cl!.ApplyArmyOrdersAsync(DoctrineSet.Of(a, b), CancellationToken.None).AsTask().Result;
+                if (r.Applied == 1 && r.Skipped == 1) skipPair = (sd, a, b);
+            }
+    }
+    Check("setup: a seed was found whose round-0 council holds two orders for the whole host of which the second is skipped after the first", skipPair is not null, skipPair is { } sp ? $"seed {sp.Seed}: {DoctrineVocabulary.Name(sp.A)} then {DoctrineVocabulary.Name(sp.B)}" : "none");
+    int skipSeed = skipPair?.Seed ?? 11;
     using var ctxO = NewCtx(false);
     var pageO = ctxO.Render<DoctrinePage>();
     livePages.Add(pageO);
     DoctrineSession SO = pageO.Instance.Session!;
-    await pageO.InvokeAsync(() => pageO.Find("#dc-seed").Input("11"));
+    await pageO.InvokeAsync(() => pageO.Find("#dc-seed").Input(skipSeed.ToString()));
     await Tap(pageO, "#dc-showall");
     await Tap(pageO, ".dc-opt", 0);
     await Tap(pageO, "#dc-new");
-    await Until(() => Has(pageO, ".dc-draft"), 20000, "O draft");
-    int goldO = SO.Draft!.Army.Gold, catO = goldO / Roster.PriceOf(7) + 1;
-    foreach (var (kind, n) in new[] { (0, 2), (1, 1), (3, 2), (7, catO) })   // the first three are paid from the purse; a pack of catapults one bigger than the purse can pay is not
-        for (int i = 0; i < n; i++) await pageO.InvokeAsync(() => pageO.FindAll(".dc-kind")[kind].QuerySelector(".dc-plus")!.Click());
-    await Tap(pageO, "#dc-confirm");
-    await Until(() => Has(pageO, ".dc-editor"), 20000, "O doctrine");
-    Check("draft: what the army would not take, as it told the pipeline (DraftedAsync), is said in plain words after the confirmation",
-        Has(pageO, ".dc-notice") && Text(pageO, ".dc-notice").StartsWith("The army did not take part of your draft.") && Text(pageO, ".dc-notice").Contains($"Catapults x{catO}: Too little gold for this pick."),Has(pageO, ".dc-notice") ? Text(pageO, ".dc-notice") : "no notice");
-    Scan(pageO);
-    int merge0 = DoctrineVocabulary.Army(ArmyOrderKind.Merge, 0);
-    Check("setup: merging kind 1 into kind 0 is legal while both are held", SO.Army!.Legal.Allows(merge0));
-    await TapChip(pageO, merge0);
-    await TapChip(pageO, merge0);
-    await Tap(pageO, "#dc-fight");
-    await Until(() => Has(pageO, ".dc-result") || SO.Stage == DoctrineStage.Over, 60000, "O result");
-    Scan(pageO);
-    var recO = SO.Records.FirstOrDefault();
-    Check("orders: the record carries the army's own count (one applied, one skipped: the second merge finds nothing to merge)", recO?.Orders is { Applied: 1, Skipped: 1 }, recO?.Orders?.ToString() ?? "none");
-    Check("orders: the watch screen says it in plain words", Has(pageO, ".dc-applied") && Text(pageO, ".dc-applied") == "1 of your 2 orders for the whole host was applied. The host skipped 1 that was not allowed when its turn came.",Has(pageO, ".dc-applied") ? Text(pageO, ".dc-applied") : "missing");
-    await Tap(pageO, "#dc-leave");
-    await Until(() => Has(pageO, ".dc-end"), 20000, "O end");
-    var codeO = SO.Result!.PlayerArmyCode;
-    Check("leave: from the watch screen the end screen carries the army AFTER the closed round and the round played", SO.Result.Rounds.Count == 1 && new global::Doctrine.Army.PleromaArmyService().TryParse(codeO, out var armyO, out _) && armyO!.Read().Digest() == SO.Last!.ArmyAfter.Digest());
+    await DoDraft(pageO, 0);
+    if (skipPair is { } pair)
+    {
+        await TapChip(pageO, pair.A);
+        await TapChip(pageO, pair.B);
+        await Tap(pageO, "#dc-fight");
+        await Until(() => Has(pageO, ".dc-result") || SO.Stage == DoctrineStage.Over, 60000, "O result");
+        Scan(pageO);
+        var recO = SO.Records.FirstOrDefault();
+        Check("orders: the record carries the army's own count (one applied, one skipped: the first order leaves the host unable to take the second)", recO?.Orders is { Applied: 1, Skipped: 1 } && recO.OfferRefused == 0, recO?.Orders?.ToString() ?? "none");
+        Check("orders: the watch screen says it in plain words", Has(pageO, ".dc-applied") && Text(pageO, ".dc-applied") == "1 of your 2 orders for the whole host was applied. The host skipped 1 that was not allowed when its turn came.", Has(pageO, ".dc-applied") ? Text(pageO, ".dc-applied") : "missing");
+        Check("offers: a round that went by the book says nothing about refusals", !Has(pageO, ".dc-offerrefused") && !Has(pageO, ".dc-rerolled"));
+        await Tap(pageO, "#dc-leave");
+        await Until(() => Has(pageO, ".dc-end"), 20000, "O end");
+        var codeO = SO.Result!.PlayerArmyCode;
+        Check("leave: from the watch screen the end screen carries the army AFTER the closed round and the round played", SO.Result.Rounds.Count == 1 && new global::Doctrine.Army.PleromaArmyService().TryParse(codeO, out var armyO, out _) && armyO!.Read().Digest() == SO.Last!.ArmyAfter.Digest());
+    }
 }
 
+// ---------------------------------------------------------------------------------------------- game X: what the game refuses when a pick is outside the offer (the page cannot make one, so the session is handed one)
+{
+    using var ctxX = NewCtx(false);
+    var pageX = ctxX.Render<DoctrinePage>();
+    livePages.Add(pageX);
+    DoctrineSession SX = pageX.Instance.Session!;
+    await pageX.InvokeAsync(() => pageX.Find("#dc-seed").Input("11"));
+    await Tap(pageX, "#dc-showall");
+    await Tap(pageX, ".dc-opt", 0);
+    await Tap(pageX, "#dc-new");
+    await Until(() => Has(pageX, ".dc-draft"), 20000, "X draft");
+    var offerX = SX.Draft!.Offer;
+    int goldX = SX.Draft.Army.Gold;
+    var bogus = new DraftPick(offerX.Packs.Count > 0 ? (offerX.Packs[0].Kind + 1) % Roster.Size : 0, 1);      // a pick that is no pack of the offer (a different count of a kind, or a kind not offered)
+    while (offerX.PackFor(bogus) is not null) bogus = bogus with { Count = bogus.Count + 1 };
+    var okPack = offerX.Packs.First(p => p.Cost <= goldX);
+    await pageX.InvokeAsync(() => SX.SubmitDraft([bogus, UnitOffer.Pick(okPack), UnitOffer.Pick(okPack)]));      // not offered, then the pack once, then the same pack again
+    await Until(() => SX.Stage == DoctrineStage.Doctrine || Has(pageX, "#dc-keep"), 20000, "X ask");
+    string note = Has(pageX, ".dc-notice") ? Text(pageX, ".dc-notice") : "no notice";
+    Check("refusals (draft): a pick that is no offered pack, and an offered pack bought twice, are refused by the game and said in plain words after the confirmation",
+        note.StartsWith("The army did not take part of your draft.") && note.Contains($"{DoctrineWords.KindName(bogus.Kind)} x{bogus.Count}: That company is not on offer, or it was already bought this round.") && note.Split("That company is not on offer").Length == 3, note);
+    await PassAsk(pageX);
+    var legalX = SX.Army!.Legal; var offerOX = SX.OrdersOffered!;
+    int outsideX = Enumerable.Range(1, DoctrineVocabulary.Size - 1).First(t => legalX.Allows(t) && !offerOX.Tokens.Contains(t));
+    var field = offerOX.Tokens.Where(t => DoctrineVocabulary.Decode(t).Family == OrderFamily.Field).Take(2).ToList();
+    await pageX.InvokeAsync(() => SX.SubmitChoice(new DoctrineSet(outsideX, field[0], field[0], field[1]), true));      // not on the table, a card, the same card again, another card (two refused here, two in the draft)
+    await Until(() => Has(pageX, ".dc-result") || SX.Stage == DoctrineStage.Over, 60000, "X result");
+    var recX = SX.Records[0];
+    Check("refusals (orders): a token that is not on the table and one given twice are removed by the game and counted: the doctrine that fought is the two real ones, in their slots",
+        recX.PlayerDoctrine == new DoctrineSet(0, field[0], 0, field[1]) && recX.OfferRefused == 4 && recX.IllegalDropped == 0, $"{recX.PlayerDoctrine} refused {recX.OfferRefused} dropped {recX.IllegalDropped}");
+    Scan(pageX);
+    Check("refusals: the watch screen says plainly how many requests outside the offer were refused, the record's own count", Has(pageX, ".dc-offerrefused") && Text(pageX, ".dc-offerrefused") == DoctrineWords.OfferRefused(recX.OfferRefused) && recX.OfferRefused == 4, Has(pageX, ".dc-offerrefused") ? Text(pageX, ".dc-offerrefused") : "missing");
+    await Tap(pageX, "#dc-leave");
+    await Until(() => Has(pageX, ".dc-end"), 20000, "X end");
+}
 // ---------------------------------------------------------------------------------------------- the per-slot match record, and its fallback
 foreach (var withSlots in new[] { true, false })
 {
@@ -591,8 +723,9 @@ string page_style(IRenderedComponent<DoctrinePage> p) => p.Find(".dc-ghost").Get
     Check("no soldiers: the draft screen says the army has none and to spend the gold", Text(pageN, ".dc-draft").Contains("no soldiers left") && Text(pageN, ".dc-draft").Contains("Spend your gold on cohorts: a battle needs soldiers."));
     Scan(pageN);
     await Tap(pageN, "#dc-confirm");
+    await PassAsk(pageN);
     await Until(() => Has(pageN, ".dc-editor"), 20000, "N doctrine");
-    Check("no soldiers: nothing is legal, every order is greyed out and the page says why", pageN.FindAll(".dc-chip").All(c => c.HasAttribute("disabled")) && Text(pageN, ".dc-tray").Contains("no order can be given"));
+    Check("no soldiers: nothing is legal, so the council holds no card and the page says why", pageN.FindAll(".dc-chip").Count == 0 && pageN.FindAll(".dc-form:not([disabled])").Count == 1 && Text(pageN, ".dc-tray").Contains("no order can be given"));
     Scan(pageN);
     await Tap(pageN, "#dc-leave");
     Check("no soldiers: leaving still hands back a valid army code", await Until(() => Has(pageN, ".dc-end"), 20000, "N end") && Text(pageN, "#dc-armycode").StartsWith("DA2."));
@@ -621,6 +754,33 @@ HashSet<int> ExpectedChips(int step)
 }
 bool IsCull(int t) => DoctrineVocabulary.Decode(t) is { Family: OrderFamily.Army } o && (ArmyOrderKind)o.Kind == ArmyOrderKind.Cull;
 string GeneralFree(string s) => Regex.IsMatch(s, "general", RegexOptions.IgnoreCase) ? "mentions the general" : "";
+
+// THE LADDER IS THE HOST'S POOL (hand-written expectations: orders by ExpectedChips, kinds by roster key)
+{
+    var rules5 = DoctrineSession.GameRules(5, rr => DoctrineUnlocks.StepForRound(rr, 5)).Offers;
+    int[] kindStepH = [0, 1, 1, 0, 2, 2, 3, 4], stepsH = [0, 1, 2, 4, 4];
+    bool orderPool = rules5.OrderPool is not null && rules5.KindPool is not null, kindPool = orderPool, widening = true;
+    int prevO = 0, prevK = 0;
+    for (int rr = 0; rr < 5 && orderPool; rr++)
+    {
+        var open = ExpectedChips(stepsH[rr]);
+        for (int t = 1; t < DoctrineVocabulary.Size; t++) if (!IsCull(t)) orderPool &= rules5.OrderPool!(rr, t) == open.Contains(t);
+        for (int k = 0; k < Roster.Size; k++) kindPool &= rules5.KindPool!(rr, k) == (kindStepH[k] <= stepsH[rr]);
+        int po = Enumerable.Range(1, DoctrineVocabulary.Size - 1).Count(t => rules5.OrderPool!(rr, t)), pk = Enumerable.Range(0, Roster.Size).Count(k => rules5.KindPool!(rr, k));
+        widening &= po >= prevO && pk >= prevK; prevO = po; prevK = pk;
+    }
+    Check("pools: a round's order pool is exactly the orders its step opens and its kind pool the kinds it opens (the unlock ladder as the host's pools)", orderPool && kindPool);
+    Check("pools: the pools only widen from round to round", widening);
+    Check("pools: without a ladder the pools are unset (the game's whole roster and vocabulary)", DoctrineSession.GameRules(3).Offers.OrderPool is null && DoctrineSession.GameRules(3).Offers.KindPool is null && DoctrineSession.GameRules(3).Offers.Enabled && DoctrineSession.GameRules(3).Offers.Enforce);
+    // an offer drawn under the pool holds nothing the step has not opened (round one: 2 kinds, only Press on and Hold the line)
+    bool narrowOrders = true, narrowKinds = true;
+    for (int sd = 1; sd <= 60; sd++)
+    {
+        narrowOrders &= SeededOffers.Instance.Orders(sd, 0, 0, LegalMask.All, rules5).Tokens.All(t => ExpectedChips(0).Contains(t));
+        narrowKinds &= SeededOffers.Instance.Units(sd, 0, 40, rules5).Packs.All(p => p.Kind is 0 or 3);
+    }
+    Check("pools: an offer drawn in round one holds only the orders and kinds round one has opened (sixty seeds)", narrowOrders && narrowKinds);
+}
 
 {
     using var ctxU = NewCtx(false);
@@ -703,12 +863,19 @@ string GeneralFree(string s) => Regex.IsMatch(s, "general", RegexOptions.IgnoreC
             await Tap(pageU, "#dc-unlock-ok");
             Check($"{tag}: confirming the announcement removes it", !Has(pageU, ".dc-unlock"));
         }
-        var kindRows = pageU.FindAll(".dc-kind").Select(e => e.QuerySelector(".nm")!.TextContent.Trim()).ToList();
-        Check($"{tag}: the draft lists exactly the open kinds ({kindsOpen[r]})", kindRows.Count == kindsOpen[r], string.Join(",", kindRows));
+        // THE LADDER WIDENS THE POOL: a round offers only the kinds its step has opened (the table is written out here by hand: kinds by roster key)
+        int[] kindStepHand = [0, 1, 1, 0, 2, 2, 3, 4];
+        var offerKinds = SU.Draft!.Offer.Packs.Select(p => p.Kind).ToList();
+        var kindRows = offerKinds.Select(k => Roster.NameOf(k)).ToList();
+        Check($"{tag}: the muster offers only kinds the step has opened (a pool of {kindsOpen[r]} kinds), each once, and never more than the pool or the pack count",
+            offerKinds.Count > 0 && offerKinds.All(k => kindStepHand[k] <= step) && offerKinds.Distinct().Count() == offerKinds.Count && offerKinds.Count <= Math.Min(kindsOpen[r], OfferRules.Default.PackCount), string.Join(",", kindRows));
+        Check($"{tag}: the cards on the page are the session's offer, and the offer is the game's own for this seed, round and purse under the ladder's pool",
+            pageU.FindAll(".dc-pack").Select(e => (int.Parse(e.GetAttribute("data-kind")!), int.Parse(e.GetAttribute("data-count")!))).SequenceEqual(SU.Draft!.Offer.Packs.Select(p => (p.Kind, p.Count)))
+            && SU.Draft.Offer.Packs.SequenceEqual(SeededOffers.Instance.Units(3, r, SU.Army!.Gold, DoctrineSession.GameRules(5, rr => DoctrineUnlocks.StepForRound(rr, 5)).Offers).Packs));
         Check($"{tag}: the dock shows exactly the open slots ({slotsOpen[r]})", pageU.FindAll(".dc-dock .dc-slot").Count == slotsOpen[r]);
         if (r == 0)
         {
-            Check("round 1: the first draft is two kinds of soldier, Spearmen and Archers", kindRows.OrderBy(x => x).SequenceEqual(kindNames0.OrderBy(x => x)));
+            Check("round 1: the first muster offers only two kinds of soldier, Spearmen and Archers (never more than one company of each)", offerKinds.All(k => k is 0 or 3) && offerKinds.Count <= kindNames0.Length);
             Check("round 1: the locked kinds are said to arrive later, with a Show everything control", Has(pageU, ".dc-lockedhint") && Has(pageU, "#dc-showall"));
             Shot("u1-draft", pageU);
             // sheets: tap and drag, never hover
@@ -730,55 +897,58 @@ string GeneralFree(string s) => Regex.IsMatch(s, "general", RegexOptions.IgnoreC
         {
             string adv = Text(pageU, ".dc-advice");
             int gold = SU.Army!.Gold;
-            var bought = pageU.FindAll(".dc-kind").Select(e => int.Parse(e.QuerySelector(".dc-n")!.TextContent.Trim())).ToList();
-            var names = pageU.FindAll(".dc-kind").Select(e => e.QuerySelector(".nm")!.TextContent.Trim()).ToList();
-            int spent = Enumerable.Range(0, names.Count).Sum(i => bought[i] * Enumerable.Range(0, 8).Where(k => Roster.NameOf(k) == names[i]).Select(Roster.PriceOf).First());
-            Check($"{tag}: starter advice is labelled as the game's advice, never as the general, and fills the draft within the gold", adv.StartsWith("Game advice:") && GeneralFree(adv) == "" && spent <= gold && (gold < 2 || spent > 0), $"{adv} (spent {spent} of {gold})");
+            var boughtU = pageU.FindAll(".dc-pack.on").Select(e => (Kind: int.Parse(e.GetAttribute("data-kind")!), Count: int.Parse(e.GetAttribute("data-count")!))).ToList();
+            int spent = boughtU.Sum(b => b.Count * Roster.PriceOf(b.Kind));
+            Check($"{tag}: starter advice is labelled as the game's advice, never as the general, and buys only offered companies within the gold", adv.StartsWith("Game advice:") && GeneralFree(adv) == "" && spent <= gold && (gold < 2 || spent > 0)
+                && boughtU.All(b => SU.Draft!.Offer.Packs.Any(p => p.Kind == b.Kind && p.Count == b.Count)), $"{adv} (spent {spent} of {gold})");
             Check($"{tag}: the advice line states what it did: the gold it spends is the gold it fills", adv.Contains($"{spent} of your {gold} gold") || (spent == 0 && adv.Contains("nothing to buy")));
         }
         await Tap(pageU, "#dc-confirm");
-        // doctrine
+        // the council
+        await PassAsk(pageU, 40000);
         await Until(() => SU.Stage == DoctrineStage.Doctrine && Has(pageU, ".dc-editor"), 40000, tag + " doctrine");
-        if (!Has(pageU, ".dc-tray")) await Tap(pageU, "#dc-orders");
         Scan(pageU);
         stagesSeen.Add(pageU.Find(".dc-hud").GetAttribute("data-stage")!);
         {
             var legal = SU.Army!.Legal;
-            var chips = pageU.FindAll(".dc-chip").Select(c => int.Parse(c.GetAttribute("data-token")!)).Where(t => !IsCull(t)).ToHashSet();
+            var chips = pageU.FindAll(".dc-chip").Select(c => int.Parse(c.GetAttribute("data-token")!)).ToList();
             var exp = ExpectedChips(step);
-            Check($"{tag}: the tray shows exactly the orders open at step {step} ({exp.Count} of them), no more", chips.SetEquals(exp), $"{chips.Count} shown, {exp.Count} expected; extra {string.Join(",", chips.Except(exp).Take(5))}; missing {string.Join(",", exp.Except(chips).Take(5))}");
-            bool lawful = pageU.FindAll(".dc-chip").All(c => c.HasAttribute("disabled") != legal.Allows(int.Parse(c.GetAttribute("data-token")!)));
-            Check($"{tag}: an open order is enabled exactly when the army's legal list allows it (unlocking never makes an illegal order legal)", lawful);
-            Check($"{tag}: no locked order is offered to tap", pageU.FindAll(".dc-chip").All(c => ExpectedChips(step).Contains(int.Parse(c.GetAttribute("data-token")!)) || IsCull(int.Parse(c.GetAttribute("data-token")!))));
+            var poolHere = exp.Where(legal.Allows).ToList();
+            Check($"{tag}: the council offers only orders step {step} has opened ({exp.Count} in the pool), as many as the pool and the offer size allow, none twice",
+                chips.Count > 0 && chips.All(t => exp.Contains(t)) && chips.Distinct().Count() == chips.Count && chips.Count == Math.Min(OfferRules.Default.OrderOfferSize, poolHere.Count), $"{chips.Count} cards of a pool of {poolHere.Count}; outside the pool: {string.Join(",", chips.Where(t => !exp.Contains(t)).Take(5))}");
+            Check($"{tag}: the cards on the page are the session's offer, and the offer is the game's own for this seed, round and legal list under the ladder's pool",
+                chips.SequenceEqual(SU.OrdersOffered!.Tokens) && chips.SequenceEqual(SeededOffers.Instance.Orders(3, r, 0, legal, DoctrineSession.GameRules(5, rr => DoctrineUnlocks.StepForRound(rr, 5)).Offers).Tokens));
+            bool lawful = pageU.FindAll(".dc-chip").All(c => !c.HasAttribute("disabled") && legal.Allows(int.Parse(c.GetAttribute("data-token")!)));
+            Check($"{tag}: every card is an order the army allows now (the pool never makes an illegal order legal)", lawful);
             Check($"{tag}: the dock shows {slotsOpen[r]} slots in the doctrine step", pageU.FindAll(".dc-dock .dc-slot").Count == slotsOpen[r]);
             if (r == 0)
             {
                 Shot("u1-doctrine", pageU);
-                Check("field (order tray open): the tray is open and the three lines are still in the field", Has(pageU, ".dc-tray") && pageU.FindAll(".dc-field .dc-lines .dc-lane").Count == 3 && pageU.FindAll(".dc-field .dc-disc").Count == SU.Army!.Cohorts.Count);
+                Check("field (council on the table): the three lines are still in the field's markup and the formations picker shows them", Has(pageU, ".dc-tray") && pageU.FindAll(".dc-field .dc-lines .dc-lane").Count == 3 && pageU.FindAll(".dc-field .dc-disc").Count == SU.Army!.Cohorts.Count && pageU.FindAll(".dc-form").Count == 3);
                 var fieldChips = pageU.FindAll(".dc-chip").Where(c => DoctrineVocabulary.Decode(int.Parse(c.GetAttribute("data-token")!)).Family == OrderFamily.Field).ToList();
-                string[] sayFirst = ["Marches on the nearest enemy cohort.", "Stands its ground and keeps watch."];
-                Check("orders (round 1): each order for a line says its plain effect under its label (Press on, Hold the line)", fieldChips.Count == 6 && fieldChips.All(c => c.QuerySelector(".fx")!.TextContent.Trim() == DoctrineWords.FieldSentences[DoctrineVocabulary.Decode(int.Parse(c.GetAttribute("data-token")!)).Kind] && c.QuerySelector(".lb")!.TextContent.Trim() == DoctrineWords.Label(int.Parse(c.GetAttribute("data-token")!)))
-                    && fieldChips.Any(c => c.QuerySelector(".lb")!.TextContent.Trim() == "Front line: Press on" && c.QuerySelector(".fx")!.TextContent.Trim() == sayFirst[0])
-                    && fieldChips.Any(c => c.QuerySelector(".lb")!.TextContent.Trim() == "Middle line: Hold the line" && c.QuerySelector(".fx")!.TextContent.Trim() == sayFirst[1]), $"{fieldChips.Count} chips");
+                Check("orders (round 1): only orders for a line are on the table (Press on, Hold the line), each with its plain effect under its label", fieldChips.Count == chips.Count && fieldChips.Count >= 3 && fieldChips.All(c => c.QuerySelector(".fx")!.TextContent.Trim() == DoctrineWords.FieldSentences[DoctrineVocabulary.Decode(int.Parse(c.GetAttribute("data-token")!)).Kind] && c.QuerySelector(".lb")!.TextContent.Trim() == DoctrineWords.Label(int.Parse(c.GetAttribute("data-token")!)))
+                    && fieldChips.All(c => DoctrineVocabulary.Decode(int.Parse(c.GetAttribute("data-token")!)).Kind is (int)FieldOrderKind.Advance or (int)FieldOrderKind.Hold), $"{fieldChips.Count} cards");
             }
             // more orders than slots are refused: fill every slot, then try one more
-            var openLegal = exp.Where(legal.Allows).Where(t => !IsCull(t)).Take(slotsOpen[r] + 1).ToList();
+            var openLegal = chips.Take(slotsOpen[r] + 1).ToList();
             if (openLegal.Count > slotsOpen[r])
             {
                 foreach (var t in openLegal) await TapChip(pageU, t);
-                Check($"{tag}: a doctrine never holds more orders than the slots that are open", pageU.FindAll(".dc-dock .dc-slot:not(.empty)").Count == slotsOpen[r], $"{pageU.FindAll(".dc-dock .dc-slot:not(.empty)").Count} filled");
+                Check($"{tag}: a doctrine never holds more orders than the slots that are open", pageU.FindAll(".dc-dock .dc-slot:not(.empty)").Count == slotsOpen[r] && !pageU.Find($"[data-token='{openLegal[^1]}']").ClassList.Contains("on"), $"{pageU.FindAll(".dc-dock .dc-slot:not(.empty)").Count} filled");
                 await Tap(pageU, "#dc-clear");
                 Check($"{tag}: Clear empties the slots", pageU.FindAll(".dc-dock .dc-slot.empty").Count == slotsOpen[r]);
             }
         }
         // starter advice, doctrine
-        Check($"{tag}: the tray's advice button is the same 'Use starter advice'", Text(pageU, ".dc-tray #dc-advice-btn") == "Use starter advice");
+        Check($"{tag}: the council's advice button is the same 'Use starter advice'", Text(pageU, ".dc-tray #dc-advice-btn") == "Use starter advice");
         await Tap(pageU, ".dc-tray #dc-advice-btn");
         {
             string adv = Text(pageU, ".dc-advice");
             var legal = SU.Army!.Legal;
+            var tableU = SU.OrdersOffered!.Tokens;
             int[] want = [DoctrineVocabulary.Field(FieldOrderKind.Advance, 0), DoctrineVocabulary.Field(FieldOrderKind.Hold, 2), DoctrineVocabulary.Field(FieldOrderKind.Flank, 1), DoctrineVocabulary.Army(ArmyOrderKind.Age)];
-            var expect = want.Where(t => ExpectedChips(step).Contains(t) && legal.Allows(t)).Take(slotsOpen[r]).Select(DoctrineWords.Label).ToList();
+            var rest = tableU.Where(t => DoctrineVocabulary.Decode(t).Family == OrderFamily.Field && !want.Contains(t));
+            var expect = want.Concat(rest).Where(t => tableU.Contains(t) && ExpectedChips(step).Contains(t) && legal.Allows(t)).Take(slotsOpen[r]).Select(DoctrineWords.Label).ToList();
             var filled = pageU.FindAll(".dc-dock .dc-slot:not(.empty) .t").Select(e => e.TextContent.Trim()).ToList();
             Check($"{tag}: starter advice is labelled as the game's advice, never as the general, and fills only open, legal orders", adv.StartsWith("Game advice:") && GeneralFree(adv) == "" && filled.SequenceEqual(expect) && expect.Count >= 1, $"{adv} | {string.Join(",", filled)} vs {string.Join(",", expect)}");
             if (r == 0) Shot("u1-doctrine-advice", pageU);
@@ -818,39 +988,279 @@ string GeneralFree(string s) => Regex.IsMatch(s, "general", RegexOptions.IgnoreC
     await Tap(pageU, ".dc-opt", 0);
     await Tap(pageU, "#dc-new");
     await Until(() => SU.Stage == DoctrineStage.Draft && Has(pageU, ".dc-draft"), 30000, "U2 draft");
-    Check("unlock: a restarted game keeps what was unlocked (8 kinds, 4 slots, no announcement in round 1)", pageU.FindAll(".dc-kind").Count == 8 && pageU.FindAll(".dc-dock .dc-slot").Count == 4 && !Has(pageU, ".dc-unlock") && !Has(pageU, "#dc-showall"));
+    Check("unlock: a restarted game keeps what was unlocked (the whole pool, 4 slots, no announcement in round 1)", SU.Draft!.Offer.Packs.SequenceEqual(SeededOffers.Instance.Units(SU.Seed, 0, SU.Army!.Gold, DoctrineSession.GameRules(3, _ => DoctrineUnlocks.LastStep).Offers).Packs)
+        && pageU.FindAll(".dc-dock .dc-slot").Count == 4 && !Has(pageU, ".dc-unlock") && !Has(pageU, "#dc-showall"));
     await Tap(pageU, "#dc-leave");
     await Until(() => Has(pageU, ".dc-end"), 20000, "U2 end");
 }
 
-// a suggestion that uses an order which is not open yet cannot be used as it stands
+// ---------------------------------------------------------------------------------------------- the offers: the reroll (cost, limit, the purse), the picks, the slot order, the three formations, the general's pick of the council
+int rot1 = DoctrineVocabulary.Army(ArmyOrderKind.Rotate, 1), rot2 = DoctrineVocabulary.Army(ArmyOrderKind.Rotate, 2);
+// Seeds found headless, on the same offer source and with the script's own draft: one whose round-0 council holds BOTH turns of Reform the ranks, one that holds neither.
+int rotSeed = -1, noRotSeed = -1;
+for (int sd = 1; sd < 4000 && (rotSeed < 0 || noRotSeed < 0); sd++)
 {
-    using var ctxL = NewCtx(false);
-    ctxL.Services.AddSingleton(new DoctrineSectionsSource(() => new DoctrineSections(new LockedLens(new global::Doctrine.General.TinyHoloGeneral()))));
-    var pageL = ctxL.Render<DoctrinePage>();
-    livePages.Add(pageL);
-    DoctrineSession SL = pageL.Instance.Session!;
-    await pageL.InvokeAsync(() => pageL.Find("#dc-seed").Input("5"));
-    await Tap(pageL, ".dc-opt", 0);
-    await Tap(pageL, "#dc-new");
-    await DoAdviceDraft(pageL);
-    await Until(() => SL.Stage == DoctrineStage.Doctrine && Has(pageL, ".dc-ghost"), 30000, "L doctrine");
-    Scan(pageL);
-    Check("locked suggestion: the general's suggestion is shown, its Use button is disabled and says why", Has(pageL, ".dc-ghostlock") && pageL.Find("#dc-accept").HasAttribute("disabled") && Text(pageL, ".dc-ghostlock").Contains("not open yet"));
-    Check("locked suggestion: the general panel is the sheet that opens by itself", pageL.Find("#dc-general").ClassList.Contains("open"));
-    await Tap(pageL, "#dc-accept");
-    await Task.Delay(400);   // a submitted doctrine would have left the doctrine step by now
-    Check("locked suggestion: tapping the disabled Use button submits nothing", SL.Stage == DoctrineStage.Doctrine && SL.Records.Count == 0);
-    await Tap(pageL, "#dc-edit");
-    Check("locked suggestion: Edit keeps only the open orders (none here), so the slots are empty", pageL.FindAll(".dc-dock .dc-slot.empty").Count == 2 && Has(pageL, ".dc-tray"));
-    await Tap(pageL, "#dc-leave");
-    await Until(() => Has(pageL, ".dc-end"), 20000, "L end");
+    var svcS = new global::Doctrine.Army.PleromaArmyService();
+    var armyS = svcS.Create(Side.Player, sd);
+    int gS = armyS.Read().Gold;
+    await armyS.DraftAsync(new DraftRequest(0, sd, ScriptHands.PickList(SeededOffers.Instance.Units(sd, 0, gS, poolRulesA), gS)), CancellationToken.None);
+    var tk = SeededOffers.Instance.Orders(sd, 0, 0, armyS.Read().Legal, poolRulesA).Tokens;
+    if (rotSeed < 0 && tk.Contains(rot1) && tk.Contains(rot2) && tk.Count(t => DoctrineVocabulary.Decode(t).Family == OrderFamily.Field) >= 3) rotSeed = sd;
+    if (noRotSeed < 0 && !tk.Contains(rot1) && !tk.Contains(rot2)) noRotSeed = sd;
 }
-async Task DoAdviceDraft(IRenderedComponent<DoctrinePage> p)
+Check("setup: a seed was found whose round-0 council holds both turns of Reform the ranks, and one that holds neither", rotSeed > 0 && noRotSeed > 0, $"seeds {rotSeed} and {noRotSeed}");
+
+// ---- game R1: the reroll costs gold, draws again from its own stream, stops at the limit, and is not asked when the purse cannot pay
 {
-    await Until(() => Has(p, ".dc-draft"), 20000, "advice draft");
-    await Tap(p, ".dc-draft #dc-advice-btn");
-    await Tap(p, "#dc-confirm");
+    using var ctxR = NewCtx(false);
+    var pageR = ctxR.Render<DoctrinePage>();
+    livePages.Add(pageR);
+    DoctrineSession SR = pageR.Instance.Session!;
+    await pageR.InvokeAsync(() => pageR.Find("#dc-seed").Input("21"));
+    await Tap(pageR, "#dc-showall");
+    await Tap(pageR, ".dc-opt", 0);
+    await Tap(pageR, "#dc-new");
+    await DoDraft(pageR, 0, pass: false);
+    bool ask1 = await Until(() => SR.Reroll is not null && Has(pageR, "#dc-reroll"), 20000, "R ask 1");
+    var rulesR = poolRulesA;
+    int gold1 = SR.Army!.Gold; var offA = SR.OrdersOffered!;
+    Check("reroll: the first question shows the price and the rerolls left, the offer's own (the game's rules: one gold, two rerolls)", ask1 && SR.Reroll!.Offer.RerollCost == rulesR.RerollCost && SR.Reroll.Offer.RerollsLeft == rulesR.MaxRerolls && Text(pageR, "#dc-reroll") == $"Reroll for {rulesR.RerollCost} gold ({rulesR.MaxRerolls} left)");
+    await Tap(pageR, "#dc-reroll");
+    bool ask2 = await Until(() => SR.Reroll is not null && SR.Reroll.Offer.Rerolls == 1 && Has(pageR, "#dc-reroll") && Text(pageR, "#dc-reroll").Contains("(1 left)"), 20000, "R ask 2");
+    var offB = SR.OrdersOffered!;
+    Check("reroll: paying draws the offer again: the purse is down by exactly the price, the council is the game's own for reroll 1 on the legal list the payment left, and the cards show it",
+        ask2 && SR.Army!.Gold == gold1 - rulesR.RerollCost && offB.Rerolls == 1 && offB.RerollsLeft == rulesR.MaxRerolls - 1
+        && offB.Tokens.SequenceEqual(SeededOffers.Instance.Orders(21, 0, 1, SR.Army.Legal, rulesR).Tokens) && pageR.FindAll(".dc-chip").Select(c => int.Parse(c.GetAttribute("data-token")!)).SequenceEqual(offB.Tokens),
+        $"gold {gold1} -> {SR.Army?.Gold}");
+    Check("reroll: the new council is a different draw (its own stream), not the old one again", !offB.Tokens.SequenceEqual(offA.Tokens));
+    Check("reroll: the status line shows the gold the fee left", Text(pageR, ".dc-status").Contains($"Gold {SR.Army!.Gold}"));
+    await Tap(pageR, "#dc-reroll");
+    bool through = await Until(() => Has(pageR, ".dc-editor"), 20000, "R choose");
+    var offC = SR.OrdersOffered!;
+    Check("reroll: the limit holds: after two rerolls there is no third question, the council is chosen from, and the purse is down by two prices",
+        through && !Has(pageR, "#dc-reroll") && !Has(pageR, "#dc-keep") && offC.Rerolls == rulesR.MaxRerolls && offC.RerollsLeft == 0 && SR.Army!.Gold == gold1 - 2 * rulesR.RerollCost
+        && offC.Tokens.SequenceEqual(SeededOffers.Instance.Orders(21, 0, 2, SR.Army.Legal, rulesR).Tokens), $"rerolls {offC.Rerolls}, gold {SR.Army?.Gold}");
+    await Tap(pageR, "#dc-fight");
+    await Until(() => Has(pageR, ".dc-result") || SR.Stage == DoctrineStage.Over, 60000, "R result");
+    Check("reroll: the record counts the rerolls and the watch screen says so; nothing was refused", SR.Records.Count == 1 && SR.Records[0].Rerolls == 2 && SR.Records[0].OfferRefused == 0 && Has(pageR, ".dc-rerolled") && Text(pageR, ".dc-rerolled") == "You paid for 2 rerolls of the council." && !Has(pageR, ".dc-offerrefused"), Has(pageR, ".dc-rerolled") ? Text(pageR, ".dc-rerolled") : "missing");
+    await Tap(pageR, "#dc-leave");
+    await Until(() => Has(pageR, ".dc-end"), 20000, "R end");
+}
+// ---- game P: a purse that cannot pay is never asked: no gold, then gold for exactly one reroll
+foreach (var (code, rerollsPaid) in new[] { ("DA2.0.0.0.0..0:5:0:0", 0), ("DA2.0.0.1.0..0:5:0:0", 1) })
+{
+    using var ctxP2 = NewCtx(false);
+    var pageP = ctxP2.Render<DoctrinePage>();
+    livePages.Add(pageP);
+    DoctrineSession SP = pageP.Instance.Session!;
+    await pageP.InvokeAsync(() => pageP.Find("#dc-code").Input(code));
+    await Tap(pageP, "#dc-load");
+    await Until(() => Has(pageP, ".dc-draft"), 20000, "P draft " + code);
+    if (rerollsPaid == 0) Check("muster: a purse of nothing is offered nothing, and the page says so in one plain sentence", SP.Draft!.Offer.Packs.Count == 0 && Has(pageP, ".dc-nopacks") && Text(pageP, ".dc-nopacks") == DoctrineWords.NoCompany && pageP.FindAll(".dc-pack").Count == 0);
+    await Tap(pageP, "#dc-confirm");
+    if (rerollsPaid == 1)
+    {
+        bool asked = await Until(() => SP.Reroll is not null && Has(pageP, "#dc-reroll"), 20000, "P ask");
+        await Tap(pageP, "#dc-reroll");
+        await Until(() => Has(pageP, ".dc-editor"), 20000, "P choose");
+        Check("reroll: with gold for exactly one reroll the question comes once; after the payment the purse is empty and the council is chosen from at once", asked && SP.OrdersOffered!.Rerolls == 1 && SP.Army!.Gold == 0 && !Has(pageP, "#dc-reroll") && !Has(pageP, "#dc-keep"));
+    }
+    else
+    {
+        bool straight = await Until(() => Has(pageP, ".dc-editor"), 20000, "P choose");
+        Check("reroll: a purse that cannot pay the price is never asked: straight to the council, no reroll, no refusal", straight && !Has(pageP, "#dc-reroll") && !Has(pageP, "#dc-keep") && SP.OrdersOffered!.Rerolls == 0 && SP.OrdersOffered.Tokens.Count > 0 && SP.Army!.Gold == 0);
+    }
+    await Tap(pageP, "#dc-fight");
+    await Until(() => Has(pageP, ".dc-result") || SP.Stage == DoctrineStage.Over, 60000, "P result");
+    Check($"reroll: the closed round's record agrees ({rerollsPaid} paid, none refused)", SP.Records.Count == 1 && SP.Records[0].Rerolls == rerollsPaid && SP.Records[0].OfferRefused == 0);
+    await Tap(pageP, "#dc-leave");
+    await Until(() => Has(pageP, ".dc-end"), 20000, "P end");
+}
+
+// ---- game R2: up to four orders and no more, the slot order, the three formations against the army's own rotations, the general's pick marked on the cards
+{
+    using var ctxR2 = NewCtx(false);
+    ctxR2.Services.AddSingleton(new DoctrineSectionsSource(() => new DoctrineSections(new OutsideLens(new global::Doctrine.General.TinyHoloGeneral()))));
+    var pageR2 = ctxR2.Render<DoctrinePage>();
+    livePages.Add(pageR2);
+    DoctrineSession S2 = pageR2.Instance.Session!;
+    await pageR2.InvokeAsync(() => pageR2.Find("#dc-seed").Input(rotSeed.ToString()));
+    await Tap(pageR2, "#dc-showall");
+    await Tap(pageR2, ".dc-opt", 0);
+    await Tap(pageR2, "#dc-new");
+    await DoDraft(pageR2, 0);
+    await Until(() => Has(pageR2, ".dc-editor"), 20000, "R2 council");
+    var offer2 = S2.OrdersOffered!;
+    Check("setup: the seed's council holds both turns of Reform the ranks, as found", offer2.Tokens.Contains(rot1) && offer2.Tokens.Contains(rot2) && offer2.Rerolls == 0);
+    // the general's pick of the council: marked on the cards it would take
+    {
+        var gh = S2.Ghost!.Doctrine;
+        var marked = pageR2.FindAll(".dc-chip.gen").Select(c => int.Parse(c.GetAttribute("data-token")!)).OrderBy(x => x).ToList();
+        Check("general: its pick is read from the council: every token it suggests is on the table (what it offered outside the offer was removed by the game and counted)", gh.Used >= 2 && gh.Tokens.Where(t => t != 0).All(t => offer2.Tokens.Contains(t)) && S2.Army!.Legal.AllowsAll(gh));
+        Check("general: the cards it would take are marked 'Your general's pick', exactly those and no other, and each is one of the cards on the table",
+            marked.SequenceEqual(gh.Tokens.Where(t => t != 0).OrderBy(x => x)) && marked.All(t => offer2.Tokens.Contains(t)) && pageR2.FindAll(".dc-chip.gen .gb").All(g => g.TextContent.Trim() == "Your general's pick") && marked.Count == pageR2.FindAll(".dc-chip.gen .gb").Count, string.Join(",", marked));
+        Check("general: the panel names it 'Your general's pick of the council' with Use it, Edit and Mine, and says the cards are marked", Text(pageR2, ".dc-ghost h3") == "Your general's pick of the council" && Has(pageR2, "#dc-accept") && Has(pageR2, "#dc-edit") && Has(pageR2, "#dc-ignore") && Has(pageR2, ".dc-ghostmark"));
+        Shot("r2-council-ghost", pageR2);
+        await Tap(pageR2, "#dc-ignore");
+        Check("general: Mine clears the marks and the slots (the choice is yours)", pageR2.FindAll(".dc-chip.gen").Count == 0 && pageR2.FindAll(".dc-dock .dc-slot.empty").Count == 4);
+    }
+    var fieldTokens = offer2.Tokens.Where(t => DoctrineVocabulary.Decode(t).Family == OrderFamily.Field).ToList();
+    var plain = offer2.Tokens.Where(t => t != rot1 && t != rot2).ToList();
+    // up to four and no more
+    await Tap(pageR2, "#dc-clear");
+    foreach (var t in plain.Take(5)) await TapChip(pageR2, t);
+    Check("picks: up to four orders go in the four slots, in the order tapped, and a fifth is not taken (its card stays unpressed, no slot changes)",
+        pageR2.FindAll(".dc-dock .dc-slot:not(.empty) .t").Select(e => e.TextContent.Trim()).SequenceEqual(plain.Take(4).Select(DoctrineWords.Label)) && !pageR2.Find($"[data-token='{plain[4]}']").ClassList.Contains("on"));
+    await pageR2.InvokeAsync(() => pageR2.Instance.PlaceOrder(plain[4])); pageR2.Render();
+    Check("picks: asking the page to place a fifth does nothing either (the slots are the guard, not the button)", pageR2.FindAll(".dc-dock .dc-slot:not(.empty)").Count == 4 && !pageR2.Find($"[data-token='{plain[4]}']").ClassList.Contains("on"));
+    // the slot order
+    string[] Slots() => pageR2.FindAll(".dc-dock .dc-slot .t").Select(e => e.TextContent.Trim()).ToArray();
+    string[] Lab(params int[] ts) => ts.Select(DoctrineWords.Label).ToArray();
+    int a0 = plain[0], a1 = plain[1], a2 = plain[2], a3 = plain[3];
+    Check("order: the first slot has no 'earlier' arrow and the last no 'later' arrow", pageR2.Find("li[data-slot='0'] .dc-left").HasAttribute("disabled") && pageR2.Find("li[data-slot='3'] .dc-right").HasAttribute("disabled") && !pageR2.Find("li[data-slot='1'] .dc-left").HasAttribute("disabled"));
+    await Tap(pageR2, "li[data-slot='0'] .dc-right");
+    Check("order: the 'later' arrow of slot 1 swaps it with slot 2", Slots().SequenceEqual(Lab(a1, a0, a2, a3)), string.Join(" | ", Slots()));
+    await Tap(pageR2, "li[data-slot='3'] .dc-left");
+    Check("order: the 'earlier' arrow of slot 4 swaps it with slot 3", Slots().SequenceEqual(Lab(a1, a0, a3, a2)), string.Join(" | ", Slots()));
+    await pageR2.InvokeAsync(async () => { await pageR2.Find("li[data-slot='0']").TriggerEventAsync("ondragstart", new DragEventArgs()); await pageR2.Find("li[data-slot='3']").TriggerEventAsync("ondrop", new DragEventArgs()); });
+    Check("order: dragging slot 1 onto slot 4 moves it there and the slots between shift up one", Slots().SequenceEqual(Lab(a0, a3, a2, a1)), string.Join(" | ", Slots()));
+    await pageR2.InvokeAsync(() => pageR2.Instance.MoveSlot(0, 9)); pageR2.Render();
+    Check("order: a move to a slot that does not exist changes nothing", Slots().SequenceEqual(Lab(a0, a3, a2, a1)));
+    Check("order: the words under the slots follow the slot order", pageR2.FindAll(".dc-says li").Select(e => e.TextContent.Trim()).SequenceEqual(new[] { a0, a3, a2, a1 }.Select(DoctrineWords.Sentence)));
+    // the three formations
+    await Tap(pageR2, "#dc-clear");
+    var forms = pageR2.FindAll(".dc-form");
+    var svcF = new global::Doctrine.Army.PleromaArmyService();
+    var armyF = svcF.Create(Side.Player, rotSeed);
+    int gF = armyF.Read().Gold;
+    await armyF.DraftAsync(new DraftRequest(0, rotSeed, ScriptHands.PickList(SeededOffers.Instance.Units(rotSeed, 0, gF, poolRulesA), gF)), CancellationToken.None);
+    var hostF = armyF.Read();
+    Check("formations: the independent army (same seed, same draft) is the page's army", hostF.Digest() == S2.Army!.Digest());
+    string Say(IEnumerable<(int Key, int Count)> items)
+    {
+        var l = items.OrderBy(i => i.Key).Select(i => $"{i.Count} {Roster.NameOf(i.Key)}").ToList();
+        return l.Count == 0 ? "nobody" : l.Count == 1 ? l[0] : string.Join(", ", l.Take(l.Count - 1)) + " and " + l[^1];
+    }
+    bool armyRotates = true; var formWrong = new List<string>();
+    for (int turns = 0; turns < 3; turns++)
+    {
+        // by hand: a turn moves every cohort one place along the line; and the army's own order agrees
+        var byHand = hostF.Cohorts.Where(c => c.Count > 0).Select(c => (c.Key, c.Count, Slot: (c.Slot + turns) % 3)).ToList();
+        svcF.TryParse(armyF.ToCode(), out var cl, out _);
+        if (turns > 0) await cl!.ApplyArmyOrdersAsync(DoctrineSet.Of(DoctrineVocabulary.Army(ArmyOrderKind.Rotate, turns)), CancellationToken.None);
+        var real = cl!.Read().Cohorts.Where(c => c.Count > 0).Select(c => (c.Key, c.Count, c.Slot)).ToList();
+        armyRotates &= real.OrderBy(x => x.Key).SequenceEqual(byHand.OrderBy(x => x.Key));
+        var card = forms.FirstOrDefault(f => f.GetAttribute("data-turns") == turns.ToString());
+        if (card is null) { formWrong.Add($"no card for {turns} turns"); continue; }
+        for (int slot = 0; slot < 3; slot++)
+        {
+            string want = Say(byHand.Where(c => c.Slot == slot).Select(c => (c.Key, c.Count)));
+            string got = card.QuerySelector($".fl[data-slot='{slot}'] .who")?.TextContent.Trim() ?? "(missing)";
+            if (got != want) formWrong.Add($"{turns} turns, {lineHandP[slot]} line: page '{got}', army '{want}'");
+        }
+    }
+    Check("formations: the army's own Reform the ranks moves every cohort one place along the line per turn (by hand), so the three formations are the real ones", armyRotates);
+    Check("formations: the three formation cards (as they stand, one turn, two turns) show who would stand in the front, middle and back line, equal to the army's real rotations", forms.Count == 3 && formWrong.Count == 0, string.Join(" | ", formWrong.Take(3)));
+    Check("formations: the cards are named as they stand and by the order that brings them about (Reform the ranks: 1 place / 2 places)", forms.Select(f => f.QuerySelector(".ft")!.TextContent.Trim()).SequenceEqual(["As they stand", DoctrineWords.Label(rot1), DoctrineWords.Label(rot2)]));
+    Check("formations: with no order for any line, every line says it presses on", forms.All(f => f.QuerySelectorAll(".fl .by").All(b => b.TextContent.Trim() == "No order for this line: it presses on.")));
+    // which order each line's order would reach
+    var fo = fieldTokens.First(); var foo = DoctrineVocabulary.Decode(fo);
+    await TapChip(pageR2, fo);
+    {
+        var all = pageR2.FindAll(".dc-form");
+        bool reach = true;
+        foreach (var f in all)
+            for (int slot = 0; slot < 3; slot++)
+                reach &= f.QuerySelector($".fl[data-slot='{slot}'] .by")!.TextContent.Trim() == (slot == foo.A ? $"Your order reaches them: {ChronicleCheck.HandNames[foo.Kind]}." : "No order for this line: it presses on.");
+        Check("formations: an order for a line placed in a slot shows in every formation on that line only ('Your order reaches them: ...'), the other lines still press on", reach, DoctrineWords.Label(fo));
+    }
+    // choosing a formation puts its order in a slot
+    Check("formations: as they stand is the one chosen while no turn of the ranks is in a slot", pageR2.Find(".dc-form[data-turns='0']").GetAttribute("aria-checked") == "true" && pageR2.Find(".dc-form[data-turns='1']").GetAttribute("aria-checked") == "false");
+    await Tap(pageR2, ".dc-form[data-turns='1']");
+    Check("formations: choosing one turn puts Reform the ranks (1 place) in the first empty slot, and that formation is the one chosen", Slots().SequenceEqual(Lab(fo, rot1, 0, 0)) && pageR2.Find(".dc-form[data-turns='1']").GetAttribute("aria-checked") == "true" && pageR2.Find(".dc-form[data-turns='0']").GetAttribute("aria-checked") == "false", string.Join(" | ", Slots()));
+    await Tap(pageR2, ".dc-form[data-turns='2']");
+    Check("formations: choosing two turns replaces the one turn already there (one turn of the ranks at a time)", Slots().SequenceEqual(Lab(fo, rot2, 0, 0)) && pageR2.Find(".dc-form[data-turns='2']").GetAttribute("aria-checked") == "true", string.Join(" | ", Slots()));
+    await Tap(pageR2, ".dc-form[data-turns='0']");
+    Check("formations: choosing as they stand takes the turn out again", Slots().SequenceEqual(Lab(fo, 0, 0, 0)) && pageR2.Find(".dc-form[data-turns='0']").GetAttribute("aria-checked") == "true", string.Join(" | ", Slots()));
+    foreach (var t in plain.Where(t => t != fo).Take(3)) await TapChip(pageR2, t);
+    await Tap(pageR2, ".dc-form[data-turns='1']");
+    Check("formations: with every slot full a formation is not put anywhere, and the page says to take an order out", pageR2.FindAll(".dc-dock .dc-slot:not(.empty)").Count == 4 && !Slots().Contains(DoctrineWords.Label(rot1)) && Has(pageR2, ".dc-formnote") && Text(pageR2, ".dc-formnote").StartsWith("Every slot is full."));
+    Shot("r2-formations", pageR2);
+    // the end to end: the formation previewed is the formation the battle is set up with
+    await Tap(pageR2, "#dc-clear");
+    await TapChip(pageR2, fo);
+    await Tap(pageR2, ".dc-form[data-turns='1']");
+    var preview1 = S2.Formations()[1].Host!;
+    await Tap(pageR2, "#dc-fight");
+    await Until(() => Has(pageR2, ".dc-result") || S2.Stage == DoctrineStage.Over, 60000, "R2 result");
+    var rec2 = S2.Records[0];
+    var setup2 = S2.Last!.Setup!;
+    Check("formations: the doctrine that fought is exactly the slots (the order for the line, then one turn of the ranks), none refused", rec2.PlayerDoctrine == DoctrineSet.Of(fo, rot1) && rec2.OfferRefused == 0 && rec2.Orders is { Applied: 1, Skipped: 0 }, $"{rec2.PlayerDoctrine} {rec2.Orders}");
+    Check("formations: the battle was set up with the host in the formation the picker previewed (each cohort in the line the preview gave it)",
+        setup2.Attacker.Cohorts.Where(c => c.Count > 0).Select(c => (c.Key, c.Slot)).OrderBy(x => x.Key).SequenceEqual(preview1.Cohorts.Where(c => c.Count > 0).Select(c => (c.Key, c.Slot)).OrderBy(x => x.Key)));
+    Check("general: the game removed what its suggestion offered outside the council and counted it (the general is bound to the table)", rec2.IllegalDropped >= 1, rec2.IllegalDropped.ToString());
+    await Tap(pageR2, "#dc-leave");
+    await Until(() => Has(pageR2, ".dc-end"), 20000, "R2 end");
+}
+// ---- game A2: Use it and Edit on the general's pick of the council (a general that always has a pick, within the table)
+{
+    using var ctxA2 = NewCtx(false);
+    ctxA2.Services.AddSingleton(new DoctrineSectionsSource(() => new DoctrineSections(new OutsideLens(new global::Doctrine.General.TinyHoloGeneral()))));
+    var pageA2 = ctxA2.Render<DoctrinePage>();
+    livePages.Add(pageA2);
+    DoctrineSession SA = pageA2.Instance.Session!;
+    await pageA2.InvokeAsync(() => pageA2.Find("#dc-seed").Input("4"));
+    await Tap(pageA2, "#dc-showall");
+    await Tap(pageA2, ".dc-opt", 0);
+    await Tap(pageA2, "#dc-new");
+    await DoDraft(pageA2, 0);
+    await Until(() => Has(pageA2, ".dc-editor") && SA.Ghost is not null, 20000, "A2 council");
+    var gA = SA.Ghost!.Doctrine;
+    Check("accept: Use it is enabled when every order of the general's pick is on the table", gA.Used >= 2 && !pageA2.Find("#dc-accept").HasAttribute("disabled") && gA.Tokens.All(SA.OrdersOffered!.Allows));
+    await Tap(pageA2, "#dc-accept");
+    await Until(() => Has(pageA2, ".dc-result") || SA.Stage == DoctrineStage.Over, 60000, "A2 result");
+    Check("accept: Use it fights the general's pick as it stands, recorded as NOT overridden, with the general's own match record; both the doctrine and the result teach it",
+        SA.Records.Count == 1 && SA.Records[0].PlayerDoctrine == gA && !SA.Records[0].Overrode && SA.Records[0].GhostConfidence == 640 && SA.Sections.General.ExamplesSeen == 2);
+    Check("accept: the spoils screen says the pick was taken as it stood", Text(pageA2, ".dc-spoils").Contains("You took it as it stood."));
+    await Tap(pageA2, "#dc-next");
+    await DoDraft(pageA2, 1);
+    await Until(() => Has(pageA2, ".dc-editor") && SA.Ghost is not null, 30000, "A2 council 2");
+    var gB = SA.Ghost!.Doctrine;
+    var gTokens = gB.Tokens.Where(t => t != 0).ToList();
+    int repl = SA.OrdersOffered!.Tokens.First(t => !gTokens.Contains(t) && SA.Army!.Legal.Allows(t));
+    await Tap(pageA2, "#dc-edit");
+    Check("edit: Edit loads the pick into the slots, in its order, and hides the pick's panel", pageA2.FindAll(".dc-dock .dc-slot:not(.empty) .t").Select(e => e.TextContent.Trim()).SequenceEqual(gTokens.Select(DoctrineWords.Label)) && !Has(pageA2, "#dc-accept"));
+    await Tap(pageA2, ".dc-slot", gTokens.Count - 1);
+    await TapChip(pageA2, repl);
+    await Tap(pageA2, "#dc-fight");
+    await Until(() => Has(pageA2, ".dc-result") || SA.Stage == DoctrineStage.Over, 60000, "A2 result 2");
+    var recA = SA.Records[1];
+    Check("edit: changing one order of the pick fights the changed doctrine and records an override against the general's pick", recA.Overrode && recA.Ghost == gB && recA.PlayerDoctrine == DoctrineSet.Of([.. gTokens.Take(gTokens.Count - 1), repl]) && recA.OfferRefused == 0, $"{recA.PlayerDoctrine} vs {gB}");
+    await Tap(pageA2, "#dc-leave");
+    await Until(() => Has(pageA2, ".dc-end"), 20000, "A2 end");
+}
+// ---- game F: a council with no turn of the ranks: the formations that need it are shown, greyed, and cannot be chosen
+{
+    using var ctxF = NewCtx(false);
+    var pageF = ctxF.Render<DoctrinePage>();
+    livePages.Add(pageF);
+    DoctrineSession SF = pageF.Instance.Session!;
+    await pageF.InvokeAsync(() => pageF.Find("#dc-seed").Input(noRotSeed.ToString()));
+    await Tap(pageF, "#dc-showall");
+    await Tap(pageF, ".dc-opt", 0);
+    await Tap(pageF, "#dc-new");
+    await DoDraft(pageF, 0);
+    await Until(() => Has(pageF, ".dc-editor"), 20000, "F council");
+    var tokF = SF.OrdersOffered!.Tokens;
+    Check("formations: when the council holds no turn of the ranks the cards for one and two turns are greyed and say so; as they stand is still there",
+        !tokF.Contains(rot1) && !tokF.Contains(rot2) && pageF.FindAll(".dc-form").Count == 3
+        && pageF.Find(".dc-form[data-turns='1']").HasAttribute("disabled") && pageF.Find(".dc-form[data-turns='2']").HasAttribute("disabled") && !pageF.Find(".dc-form[data-turns='0']").HasAttribute("disabled")
+        && pageF.Find(".dc-form[data-turns='1'] .fn").TextContent.Trim() == "Not on the council this round.");
+    await Tap(pageF, ".dc-form[data-turns='1']");
+    await pageF.InvokeAsync(() => pageF.Instance.PickFormation(2)); pageF.Render();
+    Check("formations: a turn of the ranks that is not on the table cannot be put in a slot, by the card or by the page", pageF.FindAll(".dc-dock .dc-slot.empty").Count == 4);
+    await Tap(pageF, "#dc-leave");
+    await Until(() => Has(pageF, ".dc-end"), 20000, "F end");
 }
 
 // ---------------------------------------------------------------------------------------------- the chronicle (no page: the function against recordings)
@@ -990,7 +1400,7 @@ async Task DoAdviceDraft(IRenderedComponent<DoctrinePage> p)
     for (int seed = 1; seed <= 8; seed++)
     {
         var tap = new SetupTap();
-        var game = await new DoctrineSections().Build(new VarietyHands(seed), DoctrineSession.GameRules(2), tap).PlayAsync(seed);
+        var game = await new DoctrineSections().Build(new VarietyHands(seed), new DoctrineDomain { MaxRounds = 2, Offers = OfferRules.Off }, tap).PlayAsync(seed);
         for (int rd = 0; rd < game.Rounds.Count; rd++)
         {
             var rec = game.Rounds[rd];
@@ -1024,7 +1434,7 @@ async Task DoAdviceDraft(IRenderedComponent<DoctrinePage> p)
     // the log of the gate battle is checked in the page block above; here, the mutants against a recorded battle
     {
         var tap = new SetupTap();
-        var game = await new DoctrineSections().Build(new VarietyHands(3), DoctrineSession.GameRules(1), tap).PlayAsync(3);
+        var game = await new DoctrineSections().Build(new VarietyHands(3), new DoctrineDomain { MaxRounds = 1, Offers = OfferRules.Off }, tap).PlayAsync(3);
         var rec = game.Rounds[0]; var setup = tap.Setups[0];
         Func<Side, int, Trait?> traitsOf = (s, k) => (s == Side.Player ? setup.Attacker : setup.Defender).Cohorts.Where(c => c.Key == k).Select(c => (Trait?)c.Traits).FirstOrDefault();
         var c = BattleChronicle.Build(rec.Replay, rec.PlayerDoctrine, "Arena", kn, traitsOf);
@@ -1061,7 +1471,9 @@ async Task DoAdviceDraft(IRenderedComponent<DoctrinePage> p)
     Check("wording D: the examples count says what it counts, in the chip and on the start and end screens",
         Regex.Matches(all, Regex.Escape("(each doctrine you set and each battle result)")).Count >= 3 && all.Contains("examples seen (each doctrine you set and each battle result)") && all.Contains("since you opened this page"));
     Check("wording E: the empty-army sentence tells what to do and why", all.Contains("Spend your gold on cohorts: a battle needs soldiers.") && !all.Contains("starts lost"));
-    Check("wording F: Cull is one plain sentence and nothing else; no greyed Cull chip, no operation name", all.Contains("No order to dismiss soldiers is offered to this host.") && !all.Contains("Cull is not offered") && !all.Contains("this version") && !all.Contains("greyed out for every army") && !allMarkup.Any(m => m.Contains("Cull a trait") || m.Contains("Dismiss a trait")));
+    Check("wording F: Cull never appears (the army allows none, so the council never holds one): no card, no sentence, no operation name", !all.Contains("Cull") && !all.Contains("No order to dismiss soldiers") && !all.Contains("this version") && !allMarkup.Any(m => m.Contains("Cull a trait") || m.Contains("Dismiss a trait") || m.Contains("Dismiss ")));
+    Check("wording G: the offers are said in the lord's voice: the muster of companies and the council of orders, a pick is a whole company, a reroll has a price and a limit", all.Contains("The muster") && all.Contains("The council") && all.Contains("each whole or not at all") && all.Contains("The three formations") && Regex.IsMatch(all, @"Reroll for \d+ gold \(\d+ left\)") && all.Contains("Keep these") && all.Contains("Your general's pick of the council"));
+    Check("wording G: no word of the offers says draw as luck: the offers are the game's own draw from the game seed, never 'random', 'lucky' or 'roguelike'", !Regex.IsMatch(all, @"\b(random|randomly|roguelike|loot|gacha)\b", RegexOptions.IgnoreCase));
 }
 
 // ---------------------------------------------------------------------------------------------- the orders in a lord's words, against the rules
@@ -1215,13 +1627,16 @@ async Task DoAdviceDraft(IRenderedComponent<DoctrinePage> p)
         Check("wording (numbers): no figure is typed inside a sentence of the words, the unlock announcement or the guide (every number is read from the rules)", typed.Count == 0, string.Join(" | ", typed.Take(3)));
     }
 
-    // ---- the offers: why the page plays with them off
+    // ---- the offers are ON on this page (the draft and the council show them, so nothing the visitor does is refused unseen)
     {
-        var on = await new DoctrineSections().Build(new ScriptHands([ScriptHands.How.Manual]), new DoctrineDomain { MaxRounds = 1 }).PlayAsync(gateSeed);
-        var off = await new DoctrineSections().Build(new ScriptHands([ScriptHands.How.Manual]), DoctrineSession.GameRules(1)).PlayAsync(gateSeed);
-        Console.WriteLine($"  (free-choice hands, round 1, seed {gateSeed}: offers ON: {on.Rounds[0].OfferRefused} picks/tokens refused, doctrine '{on.Rounds[0].PlayerDoctrine}'; offers OFF: {off.Rounds[0].OfferRefused} refused, doctrine '{off.Rounds[0].PlayerDoctrine}')");
-        Check("offers: with the game's offers ON the page's free-choice hands are refused (a draft pick that is no offered pack, an order not on offer), which is why the page's rules switch them off until the draft screen shows them; with them OFF nothing is refused",
-            on.Rounds[0].OfferRefused > 0 && off.Rounds[0].OfferRefused == 0 && !DoctrineSession.GameRules(3).Offers.Enabled && DoctrineSession.GameRules(3).MaxRounds == 3);
+        var rulesOn = DoctrineSession.GameRules(3);
+        string sessionSrc = File.ReadAllText(Path.Combine(showroom, "Services", "Doctrine", "DoctrineSession.cs"));
+        // free-choice hands (what the page used to be) are refused by the game under these rules: the page cannot be one
+        var free = await new DoctrineSections().Build(new FreeHands(), DoctrineSession.GameRules(1)).PlayAsync(gateSeed);
+        var scripted = await new DoctrineSections().Build(new ScriptHands([ScriptHands.How.Manual]), DoctrineSession.GameRules(1)).PlayAsync(gateSeed);
+        Console.WriteLine($"  (offers ON, seed {gateSeed}: free-choice hands: {free.Rounds[0].OfferRefused} refused; the offer-bound hands the page is: {scripted.Rounds[0].OfferRefused} refused)");
+        Check("offers: the page's rules are the game's own with the offers ON and enforced (no Off), the pools only when the ladder gives them; hands that ignore the offer are refused by the game, hands bound to it are not",
+            rulesOn.Offers.Enabled && rulesOn.Offers.Enforce && rulesOn.MaxRounds == 3 && !sessionSrc.Contains("OfferRules.Off") && free.Rounds[0].OfferRefused > 0 && scripted.Rounds[0].OfferRefused == 0);
     }
 
     // ---- the words a player plays by carry no builder's term; the technical paragraph is behind an expander
@@ -1256,8 +1671,13 @@ async Task DoAdviceDraft(IRenderedComponent<DoctrinePage> p)
         Regex.IsMatch(ccss, @"\.dc-logbtn, \.dc-logtoggle \{[^}]*min-height: 44px;[^}]*min-width: 44px;") && Regex.IsMatch(ccss, @"\.dc-log\.live \{[^}]*flex-direction: column-reverse") && Regex.IsMatch(ccss, @"min-width: 900px\) \{[\s\S]*\.dc-log \{[^}]*flex: 1 1 auto"));
     Check("chronicle layout: on a wide screen it takes the general's column on the watch screen (the general panel steps aside), and on a phone it is a sheet like the others",
         Regex.IsMatch(css, @"\.dc-generalpanel, \.dc-chroniclepanel \{[^}]*grid-column: 3;[^}]*grid-row: 1 / -1") && Regex.IsMatch(css, @"\.dc-hud\[data-stage=watch\] \.dc-generalpanel \{ display: none; \}") && Regex.IsMatch(css, @"\.dc-sheet, \.dc-tray \{ position: absolute;"));
-    Check("tray layout: on a wide screen the tray is a drawer under the field in its own row (it never overlays the three lines)",
-        Regex.IsMatch(css, @"min-width: 900px\) \{[\s\S]*\.dc-stage \{[^}]*grid-template-rows: minmax\(0, 1fr\) auto") && Regex.IsMatch(css, @"min-width: 900px\) \{[\s\S]*\.dc-tray \{[^}]*grid-row: 2;[^}]*max-height: min\(36dvh") && !Regex.IsMatch(css, @"min-width: 900px\) \{[\s\S]*\.dc-tray \{[^}]*align-self: end"));
+    Check("council layout: on a wide screen the muster takes the field's column in full (both rows, the army list stays beside it) and the council takes the army's and the field's columns (the formations list who stands where), scrolling inside; the council is always there on a wide screen and a sheet that can be put away on a phone; the formations are three columns",
+        Regex.IsMatch(css, @"min-width: 900px\) \{[\s\S]*\.dc-draft \{[^}]*grid-column: 2;[^}]*grid-row: 1 / -1") && Regex.IsMatch(css, @"min-width: 900px\) \{[\s\S]*\.dc-tray, \.dc-council:not\(\.open\) \{[^}]*display: flex;[^}]*grid-column: 1 / 3;[^}]*grid-row: 1 / -1")
+        && Regex.IsMatch(css, @"\.dc-council:not\(\.open\) \{ display: none; \}") && Regex.IsMatch(css, @"min-width: 900px\) \{[\s\S]*\.dc-formgrid \{[^}]*repeat\(3, minmax\(0, 1fr\)\)") && !Regex.IsMatch(css, @"min-width: 900px\) \{[\s\S]*\.dc-tray \{[^}]*align-self: end"));
+    Check("offers layout: the packs and the formations are one column on a phone and two and three on a wide screen; the slots with their arrows take two columns in portrait on a phone",
+        Regex.IsMatch(css, @"\.dc-packs \{[^}]*grid-template-columns: minmax\(0, 1fr\)") && Regex.IsMatch(css, @"min-width: 900px\) \{[\s\S]*\.dc-packs \{ grid-template-columns: repeat\(2, minmax\(0, 1fr\)\)") && Regex.IsMatch(css, @"\.dc-formgrid \{[^}]*grid-template-columns: minmax\(0, 1fr\)")
+        && Regex.IsMatch(css, @"max-width: 699px\) \{\s*\.dc-slots \{[^}]*repeat\(2, minmax\(0, 1fr\)\)"));
+    Check("offers layout: the arrows and the formation and pack cards keep the 44px rule (the page rule covers every button) and the cards wrap long words instead of widening", Regex.IsMatch(css, @"\.dc-pack \{[^}]*overflow-wrap: anywhere") && Regex.IsMatch(css, @"\.dc-form \{[^}]*overflow-wrap: anywhere") && Regex.IsMatch(css, @"\.dc-mv \.dc-btn \{[^}]*padding: 0"));
     string index = File.ReadAllText(Path.Combine(showroom, "wwwroot", "index.html"));
     Check("viewport meta: width=device-width, initial-scale=1", Regex.IsMatch(index, "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1(\\.0)?\""));
     Check("one rule gives every page button and summary a 44px minimum", Regex.IsMatch(css, @"\.dc button, \.dc summary \{[^}]*min-height: 44px;[^}]*min-width: 44px;"));
@@ -1614,24 +2034,40 @@ sealed class SlotLens(IGeneral inner, SlotPermille? slots) : IGeneral
     public ValueTask LearnOutcomeAsync(GeneralOutcome o, CancellationToken ct) => inner.LearnOutcomeAsync(o, ct);
 }
 
-/// <summary>A general whose suggestion always uses an order that is not open in round one (the first legal order of a later step). Drives the locked-suggestion rule.</summary>
-sealed class LockedLens(IGeneral inner) : IGeneral
+/// <summary>
+/// A general whose suggestion holds two orders it is allowed (the first two of its mask, which the game has already narrowed to the council) and one it is
+/// not (the first token the mask refuses). The game must remove the one it is not allowed and count it, so the suggestion the visitor sees is within the council.
+/// </summary>
+sealed class OutsideLens(IGeneral inner) : IGeneral
 {
     public int ExamplesSeen => inner.ExamplesSeen;
     public ValueTask<GeneralOutput> SuggestAsync(GeneralInput input, CancellationToken ct)
     {
-        int t = Enumerable.Range(1, DoctrineVocabulary.Size - 1).First(x => input.Legal.Allows(x) && DoctrineUnlocks.StepOf(x) > 0);
-        return ValueTask.FromResult(new GeneralOutput(DoctrineSet.Of(t), 500));
+        var allowed = Enumerable.Range(1, DoctrineVocabulary.Size - 1).Where(input.Legal.Allows).Take(2).ToList();
+        int outside = Enumerable.Range(1, DoctrineVocabulary.Size - 1).First(x => !input.Legal.Allows(x));
+        return ValueTask.FromResult(new GeneralOutput(DoctrineSet.Of([.. allowed, outside]), 640));
     }
     public ValueTask LearnAsync(GeneralExample e, CancellationToken ct) => inner.LearnAsync(e, ct);
     public ValueTask LearnOutcomeAsync(GeneralOutcome o, CancellationToken ct) => inner.LearnOutcomeAsync(o, ct);
+}
+
+/// <summary>Hands that ignore the offers (what the page was before the muster and the council): a free draft and a free choice. The game refuses them.</summary>
+sealed class FreeHands : IPlayerInput
+{
+    public ValueTask<IReadOnlyList<DraftPick>> DraftAsync(ArmyReadModel army, int round, CancellationToken ct) => ValueTask.FromResult<IReadOnlyList<DraftPick>>([new DraftPick(0, 997)]);
+    public ValueTask<IReadOnlyList<DraftPick>> DraftAsync(ArmyReadModel army, UnitOffer offer, int round, CancellationToken ct) => DraftAsync(army, round, ct);
+    public ValueTask<PlayerChoice> ChooseAsync(ArmyReadModel army, GeneralOutput ghost, int round, CancellationToken ct)
+        => ValueTask.FromResult(new PlayerChoice(DoctrineSet.Of(Enumerable.Range(1, DoctrineVocabulary.Size - 1).Where(army.Legal.Allows).Take(3).ToArray()), true));
+    public ValueTask<PlayerChoice> ChooseAsync(ArmyReadModel army, GeneralOutput ghost, OrderOffer offer, int round, CancellationToken ct) => ChooseAsync(army, ghost, round, ct);
 }
 
 /// <summary>The same hands, handing each draft's picks over in the opposite order (an information run, see the determinism block).</summary>
 sealed class ReversedPicks(IPlayerInput inner) : IPlayerInput
 {
     public async ValueTask<IReadOnlyList<DraftPick>> DraftAsync(ArmyReadModel army, int round, CancellationToken ct) => (await inner.DraftAsync(army, round, ct)).Reverse().ToList();
+    public async ValueTask<IReadOnlyList<DraftPick>> DraftAsync(ArmyReadModel army, UnitOffer offer, int round, CancellationToken ct) => (await inner.DraftAsync(army, offer, round, ct)).Reverse().ToList();
     public ValueTask<PlayerChoice> ChooseAsync(ArmyReadModel army, GeneralOutput ghost, int round, CancellationToken ct) => inner.ChooseAsync(army, ghost, round, ct);
+    public ValueTask<PlayerChoice> ChooseAsync(ArmyReadModel army, GeneralOutput ghost, OrderOffer offer, int round, CancellationToken ct) => inner.ChooseAsync(army, ghost, offer, round, ct);
 }
 
 /// <summary>A visitor's habits as a function of the situation: used both to know what to tap and as an IPlayerInput for the headless game.</summary>
@@ -1640,26 +2076,21 @@ sealed class ScriptHands(ScriptHands.How[] plan) : IPlayerInput
     public enum How { Manual, Ignore, Accept, Edit }
     public sealed record Step(How How, DoctrineSet Doctrine, bool Overrode, int[] Tokens, int ClearSlot);
 
-    public static (int Kind, int N)[] Picks(int round, int gold)
+    /// <summary>
+    /// Which companies of the muster this visitor buys: the first two, in the order the muster lists them, that the purse pays for while keeping a small
+    /// reserve (a visitor who wants to be able to pay for a reroll). THE PICKS GO IN THE MUSTER'S ORDER, as the page hands them over: the army places a new
+    /// kind by the balance rule and by pick order (the same draft in another order has the same army digest and may fight a different battle; see the
+    /// information line in the determinism block and the finding in CLAUDE.md).
+    /// </summary>
+    public const int Reserve = 3;
+    public static List<int> PackIndices(UnitOffer offer, int gold)
     {
-        // Priced from the army's own price table (Roster.PriceOf), so the hands never ask for more than the purse holds: Spearmen, Archers and one Shieldwall
-        // in round one, then Spearmen and Shieldwall with what is left. THE PICKS COME IN KIND ORDER, as the page hands them over: the army lists its cohorts
-        // in the order they were added, so a kind drafted again after a wipe-out stands in the line by pick order (the same draft in another order has the same
-        // army digest and a different battle; see the information line in the determinism block and the finding in CLAUDE.md).
-        int pSpear = Roster.PriceOf(0), pShield = Roster.PriceOf(1), pArcher = Roster.PriceOf(3);
-        var l = new List<(int, int)>();
-        if (round == 0)
-        {
-            int spear = 2, archers = 2;
-            while (spear * pSpear + archers * pArcher + pShield > gold && (spear > 1 || archers > 1)) { if (archers >= spear) archers--; else spear--; }
-            l.Add((0, spear)); if (spear * pSpear + archers * pArcher + pShield <= gold) l.Add((1, 1)); l.Add((3, archers));
-            return l.ToArray();
-        }
-        int shield = gold / (2 * pShield), spears = (gold - shield * pShield) / pSpear;
-        if (spears > 0) l.Add((0, spears));
-        if (shield > 0) l.Add((1, shield));
-        return l.ToArray();
+        var l = new List<int>(); int left = gold;
+        for (int i = 0; i < offer.Packs.Count && l.Count < 2; i++)
+            if (offer.Packs[i].Affordable && offer.Packs[i].Cost <= left - Reserve) { l.Add(i); left -= offer.Packs[i].Cost; }
+        return l;
     }
+    public static List<DraftPick> PickList(UnitOffer offer, int gold) => PackIndices(offer, gold).Select(i => UnitOffer.Pick(offer.Packs[i])).ToList();
 
     static int[] Preferred(int round) => round switch
     {
@@ -1668,34 +2099,43 @@ sealed class ScriptHands(ScriptHands.How[] plan) : IPlayerInput
         _ => [DoctrineVocabulary.Field(FieldOrderKind.Guard, 1), DoctrineVocabulary.Army(ArmyOrderKind.Aura, 2), DoctrineVocabulary.Field(FieldOrderKind.Hold, 0), DoctrineVocabulary.Army(ArmyOrderKind.Age)],
     };
 
-    public Step Decide(int round, ArmyReadModel army, GeneralOutput ghost)
+    /// <summary>What the visitor does with the council: only orders on the table that the army allows, in the preferred order of the round.</summary>
+    public Step Decide(int round, ArmyReadModel army, GeneralOutput ghost, OrderOffer offer)
     {
         var how = round < plan.Length ? plan[round] : How.Manual;
         bool hasGhost = !ghost.Doctrine.IsEmpty;
         var legal = army.Legal;
+        var table = offer.Tokens.Where(legal.Allows).ToList();                                   // the council, as the army allows it
         if (how == How.Accept && hasGhost) return new(How.Accept, ghost.Doctrine, false, [], -1);
-        if (!Enumerable.Range(1, DoctrineVocabulary.Size - 1).Any(legal.Allows)) return new(How.Manual, DoctrineSet.Empty, !ghost.Doctrine.IsEmpty, [], -1);   // a host wiped out has nothing to order
+        if (table.Count == 0) return new(How.Manual, DoctrineSet.Empty, !ghost.Doctrine.IsEmpty, [], -1);   // a host wiped out has nothing to order
         if (how == How.Edit && hasGhost)
         {
             var g = ghost.Doctrine.Tokens.Where(t => t != 0).ToList();
             int n = g.Count;
             var keep = g.Take(n - 1).ToList();
-            int rep = Preferred(99).Concat(Enumerable.Range(1, DoctrineVocabulary.Size - 1)).First(t => legal.Allows(t) && !keep.Contains(t) && t != g[n - 1]);
+            var cand = Preferred(99).Where(table.Contains).Concat(table).Where(t => !keep.Contains(t) && t != g[n - 1]).ToList();
+            if (cand.Count == 0) return new(How.Accept, ghost.Doctrine, false, [], -1);
+            int rep = cand[0];
             var d = DoctrineSet.Of([.. keep, rep]);
             return new(How.Edit, d, d != ghost.Doctrine, [rep], n - 1);
         }
-        var toks = Preferred(round).Where(legal.Allows).Distinct().Take(3).ToList();
-        if (toks.Count == 0) toks.Add(Enumerable.Range(1, DoctrineVocabulary.Size - 1).First(legal.Allows));
+        var toks = Preferred(round).Where(table.Contains).Distinct().Take(3).ToList();
+        if (toks.Count == 0) toks.Add(table[0]);
         var dm = DoctrineSet.Of(toks.ToArray());
         return new(hasGhost && how == How.Ignore ? How.Ignore : How.Manual, dm, dm != ghost.Doctrine, toks.ToArray(), -1);
     }
 
+    // the old free-choice hands: nothing is on offer to them (the game under the offers refuses a free pick; this player makes none)
     public ValueTask<IReadOnlyList<DraftPick>> DraftAsync(ArmyReadModel army, int round, CancellationToken ct)
-        => ValueTask.FromResult<IReadOnlyList<DraftPick>>(Picks(round, army.Gold).Select(p => new DraftPick(p.Kind, p.N)).ToList());
+        => ValueTask.FromResult<IReadOnlyList<DraftPick>>(new List<DraftPick>());
+    public ValueTask<IReadOnlyList<DraftPick>> DraftAsync(ArmyReadModel army, UnitOffer offer, int round, CancellationToken ct)
+        => ValueTask.FromResult<IReadOnlyList<DraftPick>>(PickList(offer, army.Gold));
 
     public ValueTask<PlayerChoice> ChooseAsync(ArmyReadModel army, GeneralOutput ghost, int round, CancellationToken ct)
+        => ChooseAsync(army, ghost, OrderOffer.Open(), round, ct);
+    public ValueTask<PlayerChoice> ChooseAsync(ArmyReadModel army, GeneralOutput ghost, OrderOffer offer, int round, CancellationToken ct)
     {
-        var s = Decide(round, army, ghost);
+        var s = Decide(round, army, ghost, offer);
         return ValueTask.FromResult(new PlayerChoice(s.Doctrine, s.Overrode));
     }
 }

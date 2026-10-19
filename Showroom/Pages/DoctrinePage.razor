@@ -15,7 +15,7 @@
         <header class="room-head">
             <nav class="crumb"><a href="/tools/">Tools</a> <span>/</span> Doctrine</nav>
             <h1>Doctrine</h1>
-            <p class="lede">Draft an army, give it up to four orders, and watch the battle run on a navigation mesh. Your general learns how you set
+            <p class="lede">Draft an army from the companies the game offers, give it up to four orders from a council it lays out, and watch the battle run on a navigation mesh. Your general learns how you set
                 orders from your own choices, in your browser, with nothing pre-trained, and suggests the next one. Nothing is uploaded.</p>
         </header>
     }
@@ -48,7 +48,8 @@
 
     <section class="outro">
         <h2>How it works</h2>
-        <p>Each round you spend gold on soldiers, give up to four orders (to a line, or to the whole host) and watch one battle. A battle is
+        <p>Each round the game offers you a muster of companies of soldiers and, once you have drafted, a council of orders. You spend gold on the
+            companies you want, may pay gold to draw the council again, give up to four of its orders (to a line, or to the whole host) and watch one battle. A battle is
             simulated once, on your device, and recorded. The replay is a recording of that one battle: playing it back does not run it again.</p>
         <details class="dc-about dc-built">
             <summary>How it is built</summary>
@@ -83,6 +84,7 @@
     private DoctrineSession? _s;
     private DoctrineProgress _p = new();
     private DoctrineStage _seen = DoctrineStage.Start;
+    private int _seenTurn;
 
     // start screen
     private int _rounds = DoctrineSession.DefaultRounds;
@@ -97,14 +99,18 @@
     private string _advice = "";            // the game's advice line, while the draft or slots still hold exactly what it filled
     private int _lastAdded;                 // the order last put in a slot (its effect is previewed under the slots)
 
-    // draft
-    private readonly int[] _buy = new int[Roster.Size];
+    // the muster: which of the offered companies are bought (parallel to the offer's packs), the line each would join and what the army says of it
+    private bool[] _sel = [];
+    private int[] _rank = [];
+    private string?[] _packNote = [];
     private DraftPreview? _preview;
     private int _previewSeq;
 
-    // doctrine
+    // the council
     private readonly int[] _slots = new int[DoctrineVocabulary.MaxSlots];
     private bool _ghostHidden;
+    private int _dragFromSlot = -1;         // the slot being dragged to a new place in the order
+    private string _formNote = "";          // why a formation could not be put in a slot
 
     private string _copied = "";
 
@@ -120,19 +126,22 @@
     private int Level => _p.Step;
     private int SlotCount => DoctrineUnlocks.Slots(Level);
     private bool InDoctrine => _s?.Stage == DoctrineStage.Doctrine;
+    /// <summary>The council is on the table and the visitor may put orders in the slots (not while the game is asking about a reroll, and not before the general has read it).</summary>
+    private bool Choosing => _s is { Stage: DoctrineStage.Doctrine, Reroll: null };
+    private bool Asking => _s is { Stage: DoctrineStage.Doctrine, Reroll: not null };
 
     protected override void OnInitialized()
     {
         if (Build.IsPrerender) return;
         _p = Services.GetService(typeof(DoctrineProgress)) as DoctrineProgress ?? new DoctrineProgress();
-        _s = new DoctrineSession(null, Services.GetService(typeof(DoctrineSectionsSource)) is DoctrineSectionsSource src ? src.Make : null);
+        _s = new DoctrineSession(null, Services.GetService(typeof(DoctrineSectionsSource)) is DoctrineSectionsSource src ? src.Make : null, _p);
         _s.Changed += OnChanged;
     }
 
     private void OnChanged() => _ = InvokeAsync(() =>
     {
         if (_s is null) return;
-        if (_s.Stage != _seen) { _seen = _s.Stage; EnterStage(_seen); }
+        if (_s.Stage != _seen || (_s.Turn != _seenTurn && _s.Stage is DoctrineStage.Draft or DoctrineStage.Doctrine)) { _seen = _s.Stage; _seenTurn = _s.Turn; EnterStage(_seen); }
         StateHasChanged();
     });
 
@@ -142,18 +151,24 @@
         _sheet = Sheet.None; _tray = false;
         if (st == DoctrineStage.Draft)
         {
-            Array.Clear(_buy); Array.Clear(_slots); _preview = null; _advice = ""; _lastAdded = 0;
-            var news = _p.Reach(_s!.RoundIndex, _s.TotalRounds);
+            Array.Clear(_slots); _preview = null; _advice = ""; _lastAdded = 0;
+            int packs = _s!.Draft?.Offer.Packs.Count ?? 0;
+            _sel = new bool[packs]; _rank = Enumerable.Repeat(-1, packs).ToArray(); _packNote = new string?[packs];
+            var news = _p.Reach(_s.RoundIndex, _s.TotalRounds);
             if (news is not null) _news = news;
             _sheet = Sheet.Draft;
             _ = RefreshPreview();
         }
         if (st == DoctrineStage.Doctrine)
         {
-            Array.Clear(_slots); _ghostHidden = false; _advice = ""; _lastAdded = 0;
-            bool ghost = _s!.Ghost is { } g && !g.Doctrine.IsEmpty;
-            _sheet = ghost ? Sheet.General : Sheet.None;
-            _tray = !ghost;
+            Array.Clear(_slots); _ghostHidden = false; _advice = ""; _lastAdded = 0; _formNote = "";
+            if (_s!.Reroll is not null) { _sheet = Sheet.None; _tray = true; }
+            else
+            {
+                bool ghost = _s.Ghost is { } g && !g.Doctrine.IsEmpty;
+                _sheet = ghost ? Sheet.General : Sheet.None;
+                _tray = !ghost;
+            }
         }
         if (st is DoctrineStage.Start or DoctrineStage.Over) _news = null;
     }
@@ -170,7 +185,7 @@
         <section class="dc-panel dc-start" id="dc-start" aria-label="Start a game">
             <h2>Start a game</h2>
             <p class="hint">Every game starts with an army levied for you, some gold to spend, and a run of rounds against armies the game raises. Each round you
-                draft, set a doctrine, and watch one battle. Round one gives you two kinds of soldier and two orders; more open as the rounds go on.</p>
+                draft, set a doctrine, and watch one battle. Each round the game offers a muster of companies to buy and a council of orders to choose from. Round one offers two kinds of soldier and a few orders; more can be offered as the rounds go on.</p>
             <p class="dc-h3" id="dc-rounds-label">Rounds</p>
             <div class="dc-opts" role="radiogroup" aria-labelledby="dc-rounds-label">
                 @foreach (var n in new[] { 3, 5, 8 })
@@ -247,11 +262,13 @@
         {
             case DoctrineStage.Draft:
                 return s.RoundIndex == 0 && Level == 0
-                    ? "Gold buys soldiers. Tap + on a kind, then press Confirm."
-                    : "Spend your gold on soldiers, then press Confirm.";
+                    ? "Gold buys soldiers. Tap a company in the muster to buy it, then press Confirm."
+                    : "Tap the companies you want from the muster, then press Confirm.";
+            case DoctrineStage.Doctrine when s.Reroll is { } ask:
+                return $"The council is drawn. Keep it, or pay {ask.Offer.RerollCost} gold to draw again.";
             case DoctrineStage.Doctrine:
-                return $"Put up to {SlotCount} {(SlotCount == 1 ? "order" : "orders")} in the slots, then press GO."
-                    + (s.Ghost is { } g && !g.Doctrine.IsEmpty ? " Your general has a suggestion in the General panel." : "");
+                return $"Tap up to {SlotCount} {(SlotCount == 1 ? "order" : "orders")} from the council into the slots, then press GO."
+                    + (s.Ghost is { } g && !g.Doctrine.IsEmpty ? " Your general has marked its pick of the council." : "");
             case DoctrineStage.Working:
                 return s.Status.Length > 0 ? s.Status + "." : "Working.";
             case DoctrineStage.Watch:
@@ -305,7 +322,7 @@
             @GeneralSheet
             @if (_s.Stage == DoctrineStage.Watch && _chron is not null) { @ChronicleSheet }
             @if (_s.Stage == DoctrineStage.Draft) { @DraftDrawer }
-            @if (InDoctrine && _tray) { @Tray }
+            @if (InDoctrine) { @Tray }
             @if (_news is { } news) { @UnlockCard(news) }
         </div>
 
@@ -378,6 +395,8 @@
                 <li>Your general suggested: @DoctrineWords.Orders(rec.Ghost) (match record @rec.GhostConfidence of 1000). @(rec.Overrode ? "You set something different." : "You took it as it stood.")</li>
             }
             @if (rec.IllegalDropped > 0) { <li>@rec.IllegalDropped @(rec.IllegalDropped == 1 ? "order was" : "orders were") not allowed and @(rec.IllegalDropped == 1 ? "was" : "were") dropped.</li> }
+            @if (rec.Rerolls > 0) { <li class="dc-rerolled">You paid for @rec.Rerolls @(rec.Rerolls == 1 ? "reroll" : "rerolls") of the council.</li> }
+            @if (rec.OfferRefused > 0) { <li class="dc-offerrefused">@DoctrineWords.OfferRefused(rec.OfferRefused)</li> }
         </ul>
     </section>;
 
@@ -385,12 +404,13 @@
     private RenderFragment GeneralSheet => @<aside id="dc-general" class="dc-sheet dc-generalpanel @(_sheet == Sheet.General ? "open" : "")" aria-label="Your general">
         @Grip("General", CloseSheet)
         <h2>Your general</h2>
-        @if (InDoctrine && _s!.Ghost is { } ghost && !ghost.Doctrine.IsEmpty && !_ghostHidden)
+        @if (Choosing && _s!.Ghost is { } ghost && !ghost.Doctrine.IsEmpty && !_ghostHidden)
         {
             var slotRec = ghost.SlotConfidence;
-            bool fits = DoctrineUnlocks.AllowsAll(ghost.Doctrine, Level);
+            var onTable = _s.OrdersOffered ?? OrderOffer.Open();
+            bool fits = DoctrineUnlocks.AllowsAll(ghost.Doctrine, Level) && ghost.Doctrine.Tokens.All(onTable.Allows);
             <section class="dc-ghost" style="--glow:@Glow(PanelGlow(ghost))" aria-label="Your general's suggestion">
-                <h3 class="dc-h3">Your general suggests</h3>
+                <h3 class="dc-h3">Your general's pick of the council</h3>
                 <ol class="dc-ghostchips">
                     @for (int sl = 0; sl < DoctrineVocabulary.MaxSlots; sl++)
                     {
@@ -407,7 +427,8 @@
                     }
                 </ol>
                 <p class="dc-conf">Match record <b>@ghost.ConfidencePermille</b> of 1000: a score for how well its whole suggestion has matched what you then chose, over your recent choices. It starts low and climbs as the matches keep coming.</p>
-                @if (!fits) { <p class="hint dc-ghostlock">Part of this suggestion uses orders or slots that are not open yet, so it cannot be used as it stands. Edit it to keep the open ones.</p> }
+                <p class="hint dc-ghostmark">The orders it would take are marked on the council's cards.</p>
+                @if (!fits) { <p class="hint dc-ghostlock">Part of this pick uses orders that are not on the table or slots that are not open yet, so it cannot be used as it stands. Edit it to keep the ones that are.</p> }
                 <div class="dc-ghostbtns">
                     <button type="button" class="dc-btn strong" id="dc-accept" disabled="@(!fits)" @onclick="() => Accept(ghost)">Use it</button>
                     <button type="button" class="dc-btn" id="dc-edit" @onclick="() => EditGhost(ghost)">Edit</button>
@@ -415,15 +436,15 @@
                 </div>
             </section>
         }
-        else if (InDoctrine && _s!.Ghost is { } g0 && g0.Doctrine.IsEmpty)
+        else if (Choosing && _s!.Ghost is { } g0 && g0.Doctrine.IsEmpty)
         {
             <p class="hint dc-noghost">@(_s.Sections.General.ExamplesSeen == 0
-                ? "Your general starts empty, so it has no suggestion yet. Set a doctrine; it learns from every one you set."
-                : "Your general has no suggestion for this army yet. Set a doctrine; it learns from every one you set.")</p>
+                ? "Your general starts empty, so it has no pick of the council yet. Set a doctrine; it learns from every one you set."
+                : "Your general has no pick from this council yet. Set a doctrine; it learns from every one you set.")</p>
         }
-        else if (!InDoctrine)
+        else if (!Choosing)
         {
-            <p class="hint">Its suggestion arrives when you set a doctrine.</p>
+            <p class="hint">Its pick of the council arrives once you keep the council and set a doctrine.</p>
         }
         <p class="dc-examples">General: @_s!.Sections.General.ExamplesSeen @(_s.Sections.General.ExamplesSeen == 1 ? "example" : "examples") seen (each doctrine you set and each battle result)</p>
     </aside>;
@@ -495,68 +516,103 @@
         }
         @if (n.NewSlotCount is { } sc) { <p class="dc-unlock-line">@("New slot: " + sc + ".")</p> }
         @if (n.Kinds.Count > 0) { <p class="dc-unlock-line">@("New soldiers: " + string.Join(", ", n.Kinds) + ".")</p> }
+        @if (n.Orders.Count > 0 || n.Kinds.Count > 0) { <p class="hint dc-unlock-hint">Each can now turn up in the offers: companies in the muster, orders in the council.</p> }
         <button type="button" class="dc-btn strong" id="dc-unlock-ok" @onclick="() => _news = null">Got it</button>
     </section>;
 
-    // ---- the draft drawer (opens over the army panel) ----
-    private int Cost() => Enumerable.Range(0, Roster.Size).Sum(k => _buy[k] * Roster.PriceOf(k));
-    private IReadOnlyList<DraftPick> Picks() => Enumerable.Range(0, Roster.Size).Where(k => _buy[k] > 0).Select(k => new DraftPick(k, _buy[k])).ToList();
+    // ---- the muster (the draft drawer; it opens over the army panel) ----
+    private IReadOnlyList<UnitPack> Packs => _s?.Draft?.Offer.Packs ?? [];
+    /// <summary>What the bought companies cost: the offered companies' own prices.</summary>
+    private int Cost() => Packs.Where((p, i) => i < _sel.Length && _sel[i]).Sum(p => p.Cost);
+    /// <summary>The bought companies as picks, in the order the muster lists them (the order the preview and the pipeline both judge them in).</summary>
+    private IReadOnlyList<DraftPick> Picks() => Packs.Where((p, i) => i < _sel.Length && _sel[i]).Select(UnitOffer.Pick).ToList();
 
+    /// <summary>Asks the army (on copies) what the bought companies would do, and for every other company the line it would join if bought as well.</summary>
     private async Task RefreshPreview()
     {
         int seq = ++_previewSeq;
-        var p = await _s!.PreviewDraftAsync(Picks());
+        var packs = Packs;
+        if (_s is null || packs.Count == 0 || _sel.Length != packs.Count) { _preview = null; await InvokeAsync(StateHasChanged); return; }
+        var sel = (bool[])_sel.Clone();
+        int left = _s.Draft!.Army.Gold - Cost();
+        IReadOnlyList<DraftPick> PicksWith(int extra) => packs.Where((p, i) => sel[i] || i == extra).Select(UnitOffer.Pick).ToList();
+        var p0 = await _s.PreviewDraftAsync(PicksWith(-1));
+        var rank = new int[packs.Count]; var note = new string?[packs.Count];
+        for (int i = 0; i < packs.Count; i++)
+        {
+            rank[i] = -1;
+            if (!sel[i] && (!packs[i].Affordable || packs[i].Cost > left)) continue;      // it cannot be bought now: nothing to ask
+            var pv = sel[i] ? p0 : await _s.PreviewDraftAsync(PicksWith(i));
+            if (pv is null) continue;
+            var pick = UnitOffer.Pick(packs[i]);
+            var refused = pv.Report.Refused.Where(r => r.Pick == pick).Select(r => r.Reason).FirstOrDefault();
+            if (refused is not null) note[i] = DoctrineWords.Refusal(refused);
+            else if (pv.After.Cohorts.FirstOrDefault(c => c.Key == packs[i].Kind) is { } c) rank[i] = c.Slot;
+        }
         if (seq != _previewSeq) return;
-        _preview = p;
+        _preview = p0; _rank = rank; _packNote = note;
         await InvokeAsync(StateHasChanged);
     }
 
-    private void Step(int kind, int delta)
+    /// <summary>Buy a company or take it back. Only a company the muster offers, whole, and only one the purse still pays for.</summary>
+    public void TogglePack(int index)
     {
-        _buy[kind] = Math.Clamp(_buy[kind] + delta, 0, 99);
+        if (_s is not { Stage: DoctrineStage.Draft, Draft.Offer: { } offer } || (uint)index >= (uint)offer.Packs.Count || _sel.Length != offer.Packs.Count) return;
+        var pack = offer.Packs[index];
+        if (!_sel[index])
+        {
+            if (!pack.Affordable || pack.Cost > _s.Draft.Army.Gold - Cost()) return;
+            _sel[index] = true;
+        }
+        else _sel[index] = false;
         _advice = "";
         _ = RefreshPreview();
     }
 
     private void UseDraftAdvice()
     {
-        if (_s?.Army is not { } a) return;
-        var adv = DoctrineGuide.Draft(a, Level);
-        Array.Clear(_buy);
+        if (_s?.Army is not { } a || _s.Draft?.Offer is not { } offer) return;
+        var adv = DoctrineGuide.Draft(a, offer);
+        Array.Clear(_sel);
         if (adv is null) { _advice = DoctrineGuide.AdvicePrefix + " nothing to buy with this gold."; _ = RefreshPreview(); return; }
-        foreach (var p in adv.Picks) _buy[p.Kind] = p.Count;
+        for (int i = 0; i < offer.Packs.Count; i++) _sel[i] = adv.Picks.Contains(UnitOffer.Pick(offer.Packs[i]));
         _advice = adv.Reason;
         _ = RefreshPreview();
     }
 
-    private RenderFragment DraftDrawer => @<section class="dc-sheet dc-draft @(_sheet == Sheet.Draft ? "open" : "")" aria-label="Draft">
-        @Grip("Draft", CloseSheet)
+    private RenderFragment DraftDrawer => @<section class="dc-sheet dc-draft dc-muster @(_sheet == Sheet.Draft ? "open" : "")" aria-label="The muster">
+        @Grip("Muster", CloseSheet)
         @if (_s!.Draft is { } d)
         {
-            <h2>Draft <span class="dc-sub">you have @d.Army.Gold gold</span></h2>
-            <p class="hint">Buy soldiers for the coming battle. A kind you already hold joins its cohort; a new kind starts one. The army itself decides what it will accept.</p>
+            <h2>The muster <span class="dc-sub">you have @d.Army.Gold gold</span></h2>
+            <p class="hint">These companies are offered this round. Buy any you can pay for, each whole or not at all; a kind you already hold joins its cohort, and a new kind joins the line the balance rule gives it. The army itself decides what it will accept.</p>
             <button type="button" class="dc-btn dc-advicebtn" id="dc-advice-btn" @onclick="UseDraftAdvice">Use starter advice</button>
             @if (_advice.Length > 0) { <p class="dc-advice">@_advice</p> }
             @if (d.Army.Soldiers == 0) { <p class="dc-notice" role="status">Your army has no soldiers left. Spend your gold on cohorts: a battle needs soldiers.</p> }
-            <ul class="dc-roster">
-                @for (int k = 0; k < Roster.Size; k++)
+            @if (d.Offer.Packs.Count == 0) { <p class="dc-nopacks" role="status">@DoctrineWords.NoCompany</p> }
+            <ul class="dc-packs">
+                @for (int i = 0; i < d.Offer.Packs.Count && i < _sel.Length; i++)
                 {
-                    int kind = k;
-                    if (!DoctrineUnlocks.KindOpen(kind, Level)) continue;
-                    <li class="dc-kind">
-                        <span class="nm">@Roster.NameOf(kind)</span>
-                        <span class="meta">@DoctrineWords.KindBlurbCap(kind), @Roster.PriceOf(kind) gold each</span>
-                        <span class="dc-step">
-                            <button type="button" class="dc-btn dc-minus" aria-label="One fewer @Roster.NameOf(kind)" disabled="@(_buy[kind] == 0)" @onclick="() => Step(kind, -1)">-</button>
-                            <span class="dc-n" aria-live="polite">@_buy[kind]</span>
-                            <button type="button" class="dc-btn dc-plus" aria-label="One more @Roster.NameOf(kind)" @onclick="() => Step(kind, 1)">+</button>
-                        </span>
+                    int idx = i;
+                    var pack = d.Offer.Packs[i];
+                    bool on = _sel[i];
+                    int left = d.Army.Gold - Cost();
+                    bool can = on || (pack.Affordable && pack.Cost <= left);
+                    <li>
+                        <button type="button" class="dc-pack @(on ? "on" : "") @(can ? "" : "off")" data-kind="@pack.Kind" data-count="@pack.Count" aria-pressed="@(on ? "true" : "false")" disabled="@(!can)" @onclick="() => TogglePack(idx)">
+                            <span class="nm">@DoctrineWords.PackName(pack)</span>
+                            <span class="fx">@DoctrineWords.KindBlurbCap(pack.Kind)</span>
+                            <span class="cost">@DoctrineWords.PackCost(pack, left, on)</span>
+                            @if (_rank.Length > i && _rank[i] >= 0) { <span class="rk">@DoctrineWords.JoinWords(_rank[i], on)</span> }
+                            else if (_packNote.Length > i && _packNote[i] is { } note) { <span class="rk why">@note</span> }
+                            @if (on) { <span class="mk">Bought</span> }
+                        </button>
                     </li>
                 }
             </ul>
             @if (Enumerable.Range(0, Roster.Size).Any(k => !DoctrineUnlocks.KindOpen(k, Level)))
             {
-                <p class="hint dc-lockedhint">More kinds of soldier arrive in later rounds.</p>
+                <p class="hint dc-lockedhint">More kinds of soldier may be offered in later rounds. Show everything opens every kind and order to the offers from the next draw.</p>
                 <button type="button" class="dc-btn dc-showall" id="dc-showall" @onclick="ShowEverything">Show everything</button>
             }
             <p class="dc-sum">This draft costs @Cost() of @d.Army.Gold gold.</p>
@@ -571,127 +627,185 @@
                         }
                     </ul>
                 }
-                <p class="hint dc-after">After the picks the army would hold @pv.After.Soldiers soldiers in @pv.After.Kinds of @Roster.Size kinds (a host musters @Roster.Size at most), with @(pv.After.Legal.Count - 1) orders you may give.</p>
+                <p class="hint dc-after">After the companies you have bought the army would hold @pv.After.Soldiers soldiers in @pv.After.Kinds of @Roster.Size kinds (a host musters @Roster.Size at most), with @(pv.After.Legal.Count - 1) orders you may give.</p>
             }
         }
     </section>;
 
     // ---- the order tray ----
-    private static IReadOnlyList<int> Tokens(ArmyOrderKind k)
-    {
-        var l = new List<int>();
-        for (int t = 1; t < DoctrineVocabulary.Size; t++)
-        {
-            var o = DoctrineVocabulary.Decode(t);
-            if (o.Family == OrderFamily.Army && (ArmyOrderKind)o.Kind == k) l.Add(t);
-        }
-        return l;
-    }
-
-    private static IReadOnlyList<int> TriggerTokens()
-        => Enumerable.Range(1, DoctrineVocabulary.TriggerLevels).Select(DoctrineVocabulary.WhenLost).ToList();
-
     /// <summary>A kind's name for a preview line, or "" when the kind is not open to this player yet (the line then says "more").</summary>
     private string OpenKindName(int kind) => DoctrineUnlocks.KindOpen(kind, Level) ? DoctrineWords.KindName(kind) : "";
 
     private void UseOrderAdvice()
     {
-        if (_s?.Army is not { } a || !InDoctrine) return;
-        var adv = DoctrineGuide.Orders(a, Level);
+        if (_s?.Army is not { } a || !Choosing || _s.OrdersOffered is not { } offer) return;
+        var adv = DoctrineGuide.Orders(a, offer, Level);
         Array.Clear(_slots);
-        if (adv is null) { _advice = DoctrineGuide.AdvicePrefix + " no order to suggest for this army."; return; }
+        if (adv is null) { _advice = DoctrineGuide.AdvicePrefix + " no order to suggest from this council."; return; }
         int i = 0;
-        foreach (var t in adv.Doctrine.Tokens) if (t != 0 && i < _slots.Length) _slots[i++] = t;
+        foreach (var t in adv.Doctrine.Tokens) if (t != 0 && i < SlotCount) _slots[i++] = t;
         _lastAdded = adv.Doctrine.Tokens.Last(t => t != 0);
         _advice = adv.Reason;
     }
 
-    private RenderFragment Tray => @<section class="dc-tray" id="dc-tray" aria-label="Orders">
-        @{ var legal = _s!.Army!.Legal; }
+    /// <summary>The field order each line would open the battle with, from the slots as they stand (a line named twice keeps the last word; the opening is the slots before a trigger).</summary>
+    private FieldOrder? LineOrder(int slot)
+    {
+        var set = new DoctrineSet(_slots[0], _slots[1], _slots[2], _slots[3]);
+        foreach (var f in DoctrineVocabulary.FieldOrders(set)) if (f.Group == slot) return f;
+        return null;
+    }
+
+    /// <summary>How many turns of Reform the ranks the slots hold in all (the orders for the whole host that turn the ranks, added up round the three lines).</summary>
+    private int NetTurns()
+    {
+        int turns = 0;
+        for (int i = 0; i < SlotCount; i++)
+        {
+            if (_slots[i] == 0) continue;
+            var o = DoctrineVocabulary.Decode(_slots[i]);
+            if (o.Family == OrderFamily.Army && (ArmyOrderKind)o.Kind == ArmyOrderKind.Rotate) turns += o.A;
+        }
+        return turns % DoctrineVocabulary.Groups;
+    }
+
+    private bool IsRotate(int token) => token != 0 && DoctrineVocabulary.Decode(token) is { Family: OrderFamily.Army } o && (ArmyOrderKind)o.Kind == ArmyOrderKind.Rotate;
+
+    // ---- the council: the orders the game put on the table, the three formations, and the slots in the dock ----
+    private RenderFragment Tray => @<section class="dc-tray dc-council @(_tray ? "open" : "") @(Asking ? "ask" : "")" id="dc-tray" aria-label="The council">
+        @{
+            var legal = _s!.Army!.Legal;
+            var offer = _s.OrdersOffered ?? OrderOffer.Open();
+            var picked = Choosing && !_ghostHidden && _s.Ghost is { } gh ? gh.Doctrine : DoctrineSet.Empty;
+        }
         <div class="dc-trayhead" @onpointerdown="DragStart" @onpointerup="e => DragClose(e, CloseTray)">
-            <h2>Orders <span class="dc-sub">up to @SlotCount, in this order</span></h2>
-            <button type="button" class="dc-btn dc-advicebtn" id="dc-advice-btn" @onclick="UseOrderAdvice">Use starter advice</button>
-            <button type="button" class="dc-btn" id="dc-tray-close" aria-label="Close the orders" @onclick="CloseTray">Close</button>
+            <h2>The council <span class="dc-sub">tap up to @SlotCount into the slots, in this order</span></h2>
+            @if (Choosing) { <button type="button" class="dc-btn dc-advicebtn" id="dc-advice-btn" @onclick="UseOrderAdvice">Use starter advice</button> }
+            <button type="button" class="dc-btn" id="dc-tray-close" aria-label="Close the council" @onclick="CloseTray">Close</button>
         </div>
         <div class="dc-trayscroll">
+            @if (_s.Reroll is { } ask) { <p class="dc-rerollnote" role="status">@DoctrineWords.RerollWords(ask.Offer, ask.Army.Gold) Look the council over: keep it, or pay for another.</p> }
             @if (_advice.Length > 0) { <p class="dc-advice">@_advice</p> }
-            <p class="hint">Tap an order to put it in the first empty slot. Each card says what the order does and, for an order to the whole host, what it would do to your host as it stands now.</p>
+            <p class="hint dc-councilhint">These orders are on the table this round. Tap one to put it in the first empty slot, tap it again to take it out.</p>
+            <div class="dc-chipgrid">
+                @foreach (var tk in offer.Tokens)
+                {
+                    int token = tk;
+                    bool ok = legal.Allows(token);
+                    int at = Array.IndexOf(_slots, token);
+                    bool placed = at >= 0 && at < SlotCount;
+                    bool gen = picked.Tokens.Contains(token);
+                    var trial = _s.Trial(token);
+                    int? cost = DoctrineWords.CostNow(token, _s.Army!, trial);
+                    string? seen = DoctrineWords.Preview(token, trial, OpenKindName);
+                    <button type="button" class="dc-chip @(placed ? "on" : "") @(gen ? "gen" : "") @(ok ? "" : "off")" data-token="@token" aria-pressed="@(placed ? "true" : "false")" disabled="@(!ok || !Choosing)" @onclick="() => PlaceOrder(token)">
+                        <span class="lb">@DoctrineWords.Label(token)</span>
+                        <span class="fx">@DoctrineWords.Effect(token)</span>
+                        @if (cost is { } gold) { <span class="cost">@DoctrineWords.CostWords(gold, _s.Army!.Gold)</span> }
+                        @if (seen is not null) { <span class="pv">@seen</span> }
+                        @if (placed) { <span class="mk">In slot @(at + 1)</span> }
+                        @if (gen) { <span class="gb">Your general's pick</span> }
+                    </button>
+                }
+            </div>
+            @if (offer.Tokens.Count == 0) { <p class="hint dc-nocards">No order is on the table.@(legal.Count <= 1 ? " With no soldiers in the army, no order can be given." : "")</p> }
+            @Forms(offer, legal)
             @if (_slots.Any(t => t != 0))
             {
+                <h3 class="dc-h3">What your orders say</h3>
                 <ul class="dc-says">
                     @foreach (var t in _slots.Where(t => t != 0)) { <li>@DoctrineWords.Sentence(t)</li> }
                 </ul>
             }
-            <h3 class="dc-h3">Orders for a line</h3>
-            @for (int g = 0; g < DoctrineVocabulary.Groups; g++)
-            {
-                @Palette(DoctrineWords.Slot(g) + " line", Enumerable.Range(0, 6).Select(f => DoctrineVocabulary.Field((FieldOrderKind)f, g)).ToList(), legal)
-            }
-            @if (Level >= DoctrineUnlocks.TriggerStep)
-            {
-                @Palette(DoctrineWords.TriggerTitle, TriggerTokens(), legal, DoctrineWords.TriggerRule())
-            }
-            @if (Level >= 3)
-            {
-                <h3 class="dc-h3">Orders for the whole host</h3>
-                @foreach (var kind in new[] { ArmyOrderKind.Rotate, ArmyOrderKind.Flip, ArmyOrderKind.Age, ArmyOrderKind.Merge, ArmyOrderKind.Aura })
-                {
-                    @Palette(DoctrineWords.ArmyTitle(kind), Tokens(kind), legal, DoctrineWords.Rule(kind))
-                }
-                @if (Level >= DoctrineUnlocks.LastStep)
-                {
-                    @if (Tokens(ArmyOrderKind.Cull).Any(legal.Allows)) { @Palette(DoctrineWords.ArmyTitle(ArmyOrderKind.Cull), Tokens(ArmyOrderKind.Cull), legal) }
-                    else { <p class="hint dc-cullnote">No order to dismiss soldiers is offered to this host.</p> }
-                }
-            }
-            <p class="hint">A greyed order cannot be given now: the host does not allow it.@(legal.Count <= 1 ? " With no soldiers in the army, no order can be given." : "") To give no orders is allowed: every line then presses on.</p>
+            <p class="hint">To give no orders is allowed: every line then presses on.</p>
             @if (Locked)
             {
-                <p class="hint dc-lockedhint">More orders arrive in later rounds.</p>
+                <p class="hint dc-lockedhint">More orders may be offered in later rounds. Show everything opens every kind and order to the offers from the next draw.</p>
                 <button type="button" class="dc-btn dc-showall" id="dc-showall" @onclick="ShowEverything">Show everything</button>
             }
         </div>
     </section>;
 
-    private RenderFragment Palette(string title, IReadOnlyList<int> tokens, LegalMask legal, string? hint = null) => @<div class="dc-palette">
-        @{ var open = tokens.Where(t => DoctrineUnlocks.Allows(t, Level)).ToList(); }
-        @if (open.Count > 0)
-        {
-            <p class="dc-h3">@title</p>
-            @if (!string.IsNullOrEmpty(hint)) { <p class="hint dc-palhint">@hint</p> }
-            <div class="dc-chipgrid">
-                @foreach (var tk in open)
-                {
-                    int token = tk;
-                    bool ok = legal.Allows(token);
-                    var trial = _s!.Trial(token);
-                    int? cost = DoctrineWords.CostNow(token, _s.Army!, trial);
-                    string? seen = DoctrineWords.Preview(token, trial, OpenKindName);
-                    <button type="button" class="dc-chip @(ok ? "" : "off")" data-token="@token" disabled="@(!ok)" @onclick="() => AddToken(token)">
-                        <span class="lb">@DoctrineWords.Label(token)</span>
-                        <span class="fx">@DoctrineWords.Effect(token)</span>
-                        @if (cost is { } gold) { <span class="cost">@DoctrineWords.CostWords(gold, _s.Army!.Gold)</span> }
-                        @if (seen is not null) { <span class="pv">@seen</span> }
-                    </button>
-                }
-            </div>
-        }
-    </div>;
+    private RenderFragment Forms(OrderOffer offer, LegalMask legal) => @<section class="dc-forms" aria-label="The three formations">
+        <h3 class="dc-h3">The three formations</h3>
+        <p class="hint">Reform the ranks turns the whole host along the line. Choosing a formation puts its order in a slot.</p>
+        @{ var forms = _s!.Formations(); int net = NetTurns(); }
+        <div class="dc-formgrid" role="radiogroup" aria-label="Formation of the host">
+            @foreach (var f in forms)
+            {
+                int turns = f.Turns;
+                bool offered = turns == 0 || (offer.Allows(f.Token) && legal.Allows(f.Token) && DoctrineUnlocks.Allows(f.Token, Level));
+                bool on = net == turns;
+                <button type="button" class="dc-form @(on ? "on" : "") @(offered ? "" : "off")" role="radio" aria-checked="@(on ? "true" : "false")" data-turns="@turns" disabled="@(!offered || !Choosing)" @onclick="() => PickFormation(turns)">
+                    <span class="ft">@DoctrineWords.FormationTitle(turns, f.Token)</span>
+                    @if (f.Host is { } host)
+                    {
+                        @for (int sl = 0; sl < DoctrineVocabulary.Groups; sl++)
+                        {
+                            int slot = sl;
+                            <span class="fl" data-slot="@slot"><b>@DoctrineWords.Slot(slot) line</b> <span class="who">@DoctrineWords.Standing(host, slot, OpenKindName)</span> <i class="by">@DoctrineWords.LineOrderWords(LineOrder(slot))</i></span>
+                        }
+                    }
+                    else { <span class="fn">The host cannot reform now.</span> }
+                    @if (!offered) { <span class="fn">Not on the council this round.</span> }
+                </button>
+            }
+        </div>
+        @if (_formNote.Length > 0) { <p class="hint dc-formnote" role="status">@_formNote</p> }
+    </section>;
 
-    private void AddToken(int token)
+    /// <summary>Put an order from the council in the first empty slot, or take it out again. Only an order the game put on the table, that the army allows and this step has opened, and never more than the open slots.</summary>
+    public void PlaceOrder(int token)
     {
-        // A greyed chip is disabled in the browser; this guard keeps both rules (the army's legal list, and what is open yet) even where a tap reaches a disabled button.
-        if (_s?.Army is not { } a || !InDoctrine || !a.Legal.Allows(token) || !DoctrineUnlocks.Allows(token, Level)) return;
-        for (int i = 0; i < SlotCount; i++) if (_slots[i] == 0) { _slots[i] = token; _lastAdded = token; _advice = ""; return; }
+        // A greyed card is disabled in the browser; this guard keeps every rule (on the table, the army's legal list, what is open yet, the slots) even where a tap reaches a disabled button.
+        if (_s?.Army is not { } a || !Choosing || token == 0 || _s.OrdersOffered is not { } offer) return;
+        if (!offer.Allows(token) || !a.Legal.Allows(token) || !DoctrineUnlocks.Allows(token, Level)) return;
+        int at = Array.IndexOf(_slots, token);
+        if (at >= 0 && at < SlotCount) { _slots[at] = 0; _advice = ""; _formNote = ""; return; }
+        for (int i = 0; i < SlotCount; i++) if (_slots[i] == 0) { _slots[i] = token; _lastAdded = token; _advice = ""; _formNote = ""; return; }
+    }
+
+    /// <summary>Choose a formation: the order that brings it about goes in a slot (replacing a turn of the ranks already there), or none for the host as it stands.</summary>
+    public void PickFormation(int turns)
+    {
+        if (_s?.Army is not { } a || !Choosing || _s.OrdersOffered is not { } offer || turns < 0 || turns >= DoctrineVocabulary.Groups) return;
+        _formNote = "";
+        int token = turns == 0 ? 0 : DoctrineVocabulary.Army(ArmyOrderKind.Rotate, turns);
+        if (token != 0 && (!offer.Allows(token) || !a.Legal.Allows(token) || !DoctrineUnlocks.Allows(token, Level))) return;
+        int where = -1;
+        for (int i = 0; i < SlotCount; i++)
+            if (IsRotate(_slots[i])) { if (where < 0) where = i; else _slots[i] = 0; }
+        if (where >= 0) _slots[where] = token;
+        else if (token != 0)
+        {
+            int free = Array.IndexOf(_slots, 0, 0, SlotCount);
+            if (free < 0) { _formNote = "Every slot is full. Take an order out to put this formation in."; return; }
+            _slots[free] = token;
+        }
+        _lastAdded = token; _advice = "";
     }
 
     private void ClearSlot(int slot)
     {
-        if (!InDoctrine) return;
+        if (!Choosing) return;
         _slots[slot] = 0; _advice = "";
     }
 
-    private void ClearAll() { if (!InDoctrine) return; Array.Clear(_slots); _advice = ""; _lastAdded = 0; }
+    /// <summary>Move the order in one slot to another place in the order (slot order is the order the orders are given in); the slots between shift by one.</summary>
+    public void MoveSlot(int from, int to)
+    {
+        if (!Choosing || (uint)from >= (uint)SlotCount || (uint)to >= (uint)SlotCount || from == to) return;
+        int moved = _slots[from];
+        if (from < to) for (int k = from; k < to; k++) _slots[k] = _slots[k + 1];
+        else for (int k = from; k > to; k--) _slots[k] = _slots[k - 1];
+        _slots[to] = moved;
+        _advice = "";
+    }
+
+    private void DragSlotStart(int slot) { if (Choosing && _slots[slot] != 0) _dragFromSlot = slot; }
+    private void DropOnSlot(int slot) { if (_dragFromSlot >= 0) MoveSlot(_dragFromSlot, slot); _dragFromSlot = -1; }
+
+    private void ClearAll() { if (!Choosing) return; Array.Clear(_slots); _advice = ""; _lastAdded = 0; }
 
     // ---- the ghost ----
     /// <summary>The glow of the whole panel: the general's per-slot match record averaged over the orders it shows, or the whole-suggestion figure when it gives no per-slot one.</summary>
@@ -706,24 +820,26 @@
 
     private void Accept(GeneralOutput ghost)
     {
-        if (!InDoctrine || !DoctrineUnlocks.AllowsAll(ghost.Doctrine, Level)) return;
+        if (!Choosing || !DoctrineUnlocks.AllowsAll(ghost.Doctrine, Level) || !ghost.Doctrine.Tokens.All((_s!.OrdersOffered ?? OrderOffer.Open()).Allows)) return;
         _s!.SubmitChoice(ghost.Doctrine, false);
     }
 
     private void EditGhost(GeneralOutput ghost)
     {
+        if (!Choosing) return;
+        var offer = _s!.OrdersOffered ?? OrderOffer.Open();
         Array.Clear(_slots);
         int i = 0;
-        foreach (var t in ghost.Doctrine.Tokens) if (t != 0 && i < SlotCount && DoctrineUnlocks.Allows(t, Level)) _slots[i++] = t;
+        foreach (var t in ghost.Doctrine.Tokens) if (t != 0 && i < SlotCount && DoctrineUnlocks.Allows(t, Level) && offer.Allows(t)) _slots[i++] = t;
         _ghostHidden = true; _advice = ""; _lastAdded = 0;
         _sheet = Sheet.None; _tray = true;
     }
 
-    private void IgnoreGhost() { _ghostHidden = true; Array.Clear(_slots); _advice = ""; _lastAdded = 0; _sheet = Sheet.None; _tray = true; }
+    private void IgnoreGhost() { if (!Choosing) return; _ghostHidden = true; Array.Clear(_slots); _advice = ""; _lastAdded = 0; _sheet = Sheet.None; _tray = true; }
 
     private void Fight(GeneralOutput ghost)
     {
-        if (!InDoctrine) return;
+        if (!Choosing) return;
         var d = new DoctrineSet(_slots[0], _slots[1], _slots[2], _slots[3]);
         _s!.SubmitChoice(d, d != ghost.Doctrine);
     }
@@ -745,7 +861,7 @@
     private void ToggleDraft() => _sheet = _sheet == Sheet.Draft ? Sheet.None : Sheet.Draft;
 
     // ---- the dock (bottom): the slots, then the one action of this stage ----
-    private RenderFragment Dock => @<footer class="dc-dock @(InDoctrine ? "dc-editor" : "")" aria-label="Your orders">
+    private RenderFragment Dock => @<footer class="dc-dock @(Choosing ? "dc-editor" : "") @(Asking ? "dc-asking" : "")" aria-label="Your orders">
         @if (_s!.Stage == DoctrineStage.Watch && _s.Last is { } v)
         {
             var rec = v.Record;
@@ -763,30 +879,45 @@
         }
         else
         {
-            @if (InDoctrine && !_tray && _lastAdded != 0 && _slots.Contains(_lastAdded)) { <p class="dc-lastsays">@DoctrineWords.Sentence(_lastAdded)</p> }
+            @if (Choosing && !_tray && _lastAdded != 0 && _slots.Contains(_lastAdded)) { <p class="dc-lastsays">@DoctrineWords.Sentence(_lastAdded)</p> }
+            @if (!Asking) {
             <ol class="dc-slots">
                 @for (int i = 0; i < SlotCount; i++)
                 {
                     int slot = i;
+                    bool filled = _slots[slot] != 0;
                     string slotText = DoctrineWords.Label(_slots[slot]);
-                    string slotAria = $"Slot {slot + 1}: {slotText}" + (_slots[slot] == 0 || !InDoctrine ? "" : ". Tap to clear.");
-                    string slotCls = _slots[slot] == 0 ? "dc-slot empty" : "dc-slot";
-                    <li>
-                        <button type="button" class="@slotCls" aria-label="@slotAria" disabled="@(!InDoctrine)" @onclick="() => ClearSlot(slot)">
+                    string slotAria = $"Slot {slot + 1}: {slotText}" + (!filled || !Choosing ? "" : ". Tap to clear.");
+                    string slotCls = filled ? "dc-slot" : "dc-slot empty";
+                    <li data-slot="@slot" draggable="@(Choosing && filled ? "true" : "false")" @ondragstart="() => DragSlotStart(slot)" @ondragover="() => { }" @ondragover:preventDefault @ondrop="() => DropOnSlot(slot)">
+                        <button type="button" class="@slotCls" aria-label="@slotAria" disabled="@(!Choosing)" @onclick="() => ClearSlot(slot)">
                             <span class="n">@(slot + 1)</span><span class="t">@slotText</span>
                         </button>
+                        @if (Choosing && filled)
+                        {
+                            <span class="dc-mv">
+                                <button type="button" class="dc-btn dc-left" aria-label="Move slot @(slot + 1) earlier" disabled="@(slot == 0)" @onclick="() => MoveSlot(slot, slot - 1)">&#9664;</button>
+                                <button type="button" class="dc-btn dc-right" aria-label="Move slot @(slot + 1) later" disabled="@(slot == SlotCount - 1)" @onclick="() => MoveSlot(slot, slot + 1)">&#9654;</button>
+                            </span>
+                        }
                     </li>
                 }
             </ol>
+            }
             <div class="dc-dockbtns">
                 @switch (_s.Stage)
                 {
                     case DoctrineStage.Draft:
-                        <button type="button" class="dc-btn" id="dc-draftbtn" aria-expanded="@(_sheet == Sheet.Draft ? "true" : "false")" @onclick="ToggleDraft">Draft</button>
+                        <button type="button" class="dc-btn" id="dc-draftbtn" aria-expanded="@(_sheet == Sheet.Draft ? "true" : "false")" @onclick="ToggleDraft">Muster</button>
                         <button type="button" class="dc-btn strong" id="dc-confirm" @onclick="ConfirmDraft">@(Cost() == 0 ? "Keep the army as it is" : "Confirm the draft")</button>
                         break;
+                    case DoctrineStage.Doctrine when _s.Reroll is { } ask:
+                        <button type="button" class="dc-btn" id="dc-orders" aria-expanded="@(_tray ? "true" : "false")" @onclick="OpenTray">Council</button>
+                        <button type="button" class="dc-btn" id="dc-reroll" @onclick="_s.RerollCouncil">Reroll for @ask.Offer.RerollCost gold (@ask.Offer.RerollsLeft left)</button>
+                        <button type="button" class="dc-btn strong" id="dc-keep" @onclick="_s.KeepCouncil">Keep these</button>
+                        break;
                     case DoctrineStage.Doctrine:
-                        <button type="button" class="dc-btn" id="dc-orders" aria-expanded="@(_tray ? "true" : "false")" @onclick="OpenTray">Orders</button>
+                        <button type="button" class="dc-btn" id="dc-orders" aria-expanded="@(_tray ? "true" : "false")" @onclick="OpenTray">Council</button>
                         <button type="button" class="dc-btn" id="dc-clear" @onclick="ClearAll">Clear</button>
                         <button type="button" class="dc-btn strong dc-go" id="dc-fight" @onclick="() => Fight(_s.Ghost!)">GO</button>
                         break;

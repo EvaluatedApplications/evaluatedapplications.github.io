@@ -21,36 +21,39 @@ public static class DoctrineGuide
     public const string AdvicePrefix = "Game advice:";
 
     /// <summary>
-    /// Spend the gold one soldier at a time, each on the smallest cohort among the kinds that are open (a kind the army does not hold counts as
-    /// zero), the cheaper kind first on a tie. Null when nothing can be bought.
+    /// Buy companies from the muster, one at a time, each time the company of the kind whose cohort is smallest so far (a kind the army does not hold
+    /// counts as zero; the dearer the company the later on a tie), while the purse can pay. The picks are the offered companies themselves, in the
+    /// order the muster lists them. Null when nothing can be bought.
     /// </summary>
-    public static DraftAdvice? Draft(ArmyReadModel army, int step)
+    public static DraftAdvice? Draft(ArmyReadModel army, UnitOffer offer)
     {
+        if (!offer.Active) return null;
         var have = new int[Roster.Size];
         foreach (var c in army.Cohorts) have[c.Key] += c.Count;
-        var bought = new int[Roster.Size];
+        var taken = new bool[offer.Packs.Count];
         int gold = army.Gold;
         while (true)
         {
             int best = -1;
-            for (int k = 0; k < Roster.Size; k++)
+            for (int i = 0; i < offer.Packs.Count; i++)
             {
-                if (!DoctrineUnlocks.KindOpen(k, step) || Roster.PriceOf(k) > gold) continue;
-                if (best < 0 || have[k] + bought[k] < have[best] + bought[best] || (have[k] + bought[k] == have[best] + bought[best] && Roster.PriceOf(k) < Roster.PriceOf(best))) best = k;
+                var p = offer.Packs[i];
+                if (taken[i] || !p.Affordable || p.Cost > gold) continue;
+                if (best < 0 || have[p.Kind] < have[offer.Packs[best].Kind] || (have[p.Kind] == have[offer.Packs[best].Kind] && p.Cost < offer.Packs[best].Cost)) best = i;
             }
             if (best < 0) break;
-            bought[best]++; gold -= Roster.PriceOf(best);
+            taken[best] = true; gold -= offer.Packs[best].Cost; have[offer.Packs[best].Kind] += offer.Packs[best].Count;
         }
-        var picks = Enumerable.Range(0, Roster.Size).Where(k => bought[k] > 0).Select(k => new DraftPick(k, bought[k])).ToList();
+        var picks = Enumerable.Range(0, offer.Packs.Count).Where(i => taken[i]).Select(i => UnitOffer.Pick(offer.Packs[i])).ToList();
         if (picks.Count == 0) return null;
-        return new DraftAdvice(picks, $"{AdvicePrefix} {army.Gold - gold} of your {army.Gold} gold, each soldier going to your smallest cohort so far.");
+        return new DraftAdvice(picks, $"{AdvicePrefix} {army.Gold - gold} of your {army.Gold} gold, each company going to the kind where your cohort is smallest.");
     }
 
     /// <summary>
-    /// A rule of thumb: Front advance, Back hold, Middle flank, then Age, taking each one only if it is open at this step AND on the army's legal
-    /// list, and only as many as there are slots. Null when none qualifies.
+    /// A rule of thumb over the council: Front advance, Back hold, Middle flank, then Age, then any other order for a line, taking each one only if it
+    /// is on offer, open at this step AND on the army's legal list, and only as many as there are slots. Null when none qualifies.
     /// </summary>
-    public static DoctrineAdvice? Orders(ArmyReadModel army, int step)
+    public static DoctrineAdvice? Orders(ArmyReadModel army, OrderOffer offer, int step)
     {
         int[] want =
         [
@@ -59,9 +62,10 @@ public static class DoctrineGuide
             DoctrineVocabulary.Field(FieldOrderKind.Flank, 1),
             DoctrineVocabulary.Army(ArmyOrderKind.Age),
         ];
-        var chosen = want.Where(t => DoctrineUnlocks.Allows(t, step) && army.Legal.Allows(t)).Take(DoctrineUnlocks.Slots(step)).ToArray();
+        var rest = offer.Tokens.Where(t => DoctrineVocabulary.Decode(t).Family == OrderFamily.Field).Where(t => !want.Contains(t));
+        var chosen = want.Concat(rest).Where(t => t != 0 && offer.Allows(t) && DoctrineUnlocks.Allows(t, step) && army.Legal.Allows(t)).Take(DoctrineUnlocks.Slots(step)).ToArray();
         if (chosen.Length == 0) return null;
-        return new DoctrineAdvice(DoctrineSet.Of(chosen), $"{AdvicePrefix} {string.Join(", ", chosen.Select(DoctrineWords.Label))}. A fixed rule of thumb over the orders you may give.");
+        return new DoctrineAdvice(DoctrineSet.Of(chosen), $"{AdvicePrefix} {string.Join(", ", chosen.Select(DoctrineWords.Label))}. A fixed rule of thumb over the orders on offer.");
     }
 
     static string Plural(int n, string one, string many) => n == 1 ? one : many;

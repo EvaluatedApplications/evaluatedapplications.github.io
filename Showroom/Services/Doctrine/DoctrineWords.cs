@@ -273,6 +273,39 @@ public static class DoctrineWords
         return parts.Count == 1 ? parts[0] : string.Join(", ", parts.Take(parts.Count - 1)) + " and " + parts[^1];
     }
 
+    /// <summary>Who stands in one line of a host, said as "12 Spearmen and 6 Archers", or "nobody". A kind <paramref name="nameOf"/> does not name counts under "more".</summary>
+    public static string Standing(ArmyReadModel host, int slot, Func<int, string>? nameOf = null) => Describe(host, slot, nameOf ?? KindName);
+
+    // ---- the offers (the muster of companies and the council of orders) ----
+
+    /// <summary>A company on offer: how many of which kind ("12 Spearmen").</summary>
+    public static string PackName(UnitPack p) => $"{p.Count} {KindName(p.Kind)}";
+
+    /// <summary>What a company costs, against what is left in the purse. A company already bought just says its price.</summary>
+    public static string PackCost(UnitPack p, int left, bool bought) => bought ? CostWords(p.Cost, p.Cost) : CostWords(p.Cost, left);
+
+    /// <summary>The line a company would stand in, as the army's own balance rule places it (read from a preview, never worked out here).</summary>
+    public static string JoinWords(int slot, bool bought)
+        => bought ? $"Joins the {Slot(slot).ToLowerInvariant()} line." : $"Would join the {Slot(slot).ToLowerInvariant()} line.";
+
+    /// <summary>The muster has nothing for this purse.</summary>
+    public const string NoCompany = "No company is offered: the purse cannot pay for even the smallest.";
+
+    /// <summary>What a reroll of the council is, said with its price, the rerolls left and the purse.</summary>
+    public static string RerollWords(OrderOffer o, int purse)
+        => $"A reroll draws a new council for {o.RerollCost} gold. You have {o.RerollsLeft} {(o.RerollsLeft == 1 ? "reroll" : "rerolls")} left and {purse} gold.";
+
+    /// <summary>The line a Reform the ranks configuration stands for, in the order of the picker.</summary>
+    public static string FormationTitle(int turns, int token) => turns == 0 ? "As they stand" : Label(token);
+
+    /// <summary>The order a line would get in the battle's opening: its field order, or the plain fact that a line with no order presses on.</summary>
+    public static string LineOrderWords(FieldOrder? o)
+        => o is { } f ? $"Your order reaches them: {FieldOrders[(int)f.Kind]}." : "No order for this line: it presses on.";
+
+    /// <summary>Requests the game refused because they were outside the offer, said plainly (a pack or an order not offered, an order twice, a reroll that could not be paid).</summary>
+    public static string OfferRefused(int n)
+        => $"{n} {(n == 1 ? "request" : "requests")} outside the offer {(n == 1 ? "was" : "were")} refused: a company or an order that was not offered, an order given twice, or a reroll you could not pay.";
+
     /// <summary>
     /// What an order for the whole host would do, tried alone on a copy of the host as it stands now: a line read from the host before and after, or null for
     /// an order the host cannot try (an order for a line, a trigger, or one the host would not take). <paramref name="nameOf"/> names a kind, or "" when the
@@ -346,6 +379,7 @@ public static class DoctrineWords
         "gold" => "Too little gold for this pick.",
         "command span" => $"A host musters {Roster.Size} kinds at most, and this would be one more.",
         "bad pick" => "Not a kind in the roster, or a count of zero.",
+        "not on offer" => "That company is not on offer, or it was already bought this round.",
         "army unreadable" => $"The host holds more kinds than the muster roll can list ({Roster.Size}), so it cannot be read.",
         _ => reason,
     };

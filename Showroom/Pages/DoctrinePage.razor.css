@@ -96,12 +96,17 @@ code { font-family: var(--mono); font-size: 0.82rem; overflow-wrap: anywhere; }
 .dc-leave { width: 100%; margin-top: 0.8rem; }
 .dc-spoils .dc-list { margin: 0.3rem 0; padding-left: 1.1rem; line-height: 1.5; font-size: 0.9rem; }
 
-/* draft rows */
-.dc-kind { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0.1rem 0.6rem; align-items: center; padding: 0.4rem 0; border-bottom: 1px solid var(--border); }
-.dc-kind .meta { grid-column: 1; grid-row: 2; }
-.dc-step { grid-column: 2; grid-row: 1 / span 2; display: grid; grid-template-columns: 44px 2rem 44px; align-items: center; text-align: center; }
-.dc-step .dc-n { font-family: var(--mono); font-weight: 700; }
-.dc-step .dc-btn { padding: 0; }
+/* the muster: the companies on offer, each a card that is bought whole or not at all */
+.dc-packs { list-style: none; padding: 0; margin: 0.4rem 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 0.4rem; }
+.dc-pack { position: relative; display: block; width: 100%; box-sizing: border-box; text-align: left; background: var(--bg-2); color: var(--ink); border: 1px solid var(--border-2); border-radius: 10px; padding: 0.5rem 4.5rem 0.5rem 0.7rem; line-height: 1.3; overflow-wrap: anywhere; }
+.dc-pack .nm { display: block; font-weight: 700; font-size: 1rem; }
+.dc-pack .fx, .dc-pack .cost, .dc-pack .rk { display: block; margin-top: 0.15rem; font-size: 0.8rem; color: var(--ink-faint); line-height: 1.3; }
+.dc-pack .rk { color: var(--ink-soft); }
+.dc-pack .rk.why { color: var(--warn); }
+.dc-pack .mk { position: absolute; top: 0.5rem; right: 0.7rem; font-size: 0.78rem; font-weight: 700; color: var(--accent-ink); }
+.dc-pack.on { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); background: color-mix(in srgb, var(--accent) 14%, var(--bg-2)); }
+.dc-pack.off { color: var(--ink-faint); border-style: dashed; }
+.dc-nopacks { margin: 0.4rem 0; color: var(--warn); line-height: 1.4; }
 .dc-sum { font-weight: 650; margin: 0.8rem 0 0.3rem; }
 .dc-refused { margin: 0.4rem 0; padding-left: 1.2rem; color: var(--warn); line-height: 1.5; }
 .dc-advicebtn { font-weight: 600; }
@@ -130,6 +135,28 @@ code { font-family: var(--mono); font-size: 0.82rem; overflow-wrap: anywhere; }
 .dc-chipgrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.4rem; }
 .dc-chip { background: var(--bg-2); color: var(--ink); border: 1px solid var(--border-2); border-radius: 10px; padding: 0.4rem 0.6rem; text-align: left; font-size: 0.9rem; line-height: 1.25; overflow-wrap: anywhere; }
 .dc-chip.off { color: var(--ink-faint); border-style: dashed; }
+.dc-chip { position: relative; }
+.dc-chip.on { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); background: color-mix(in srgb, var(--accent) 14%, var(--bg-2)); }
+.dc-chip.gen:not(.on) { border-color: color-mix(in srgb, var(--accent) 70%, transparent); box-shadow: 0 0 10px color-mix(in srgb, var(--accent) 45%, transparent); }
+.dc-chip .mk { display: block; margin-top: 0.15rem; font-size: 0.78rem; font-weight: 700; color: var(--accent-ink); }
+.dc-chip .gb { display: block; margin-top: 0.15rem; font-size: 0.78rem; font-weight: 650; color: var(--accent-ink); }
+.dc-rerollnote { margin: 0.2rem 0 0.5rem; padding: 0.4rem 0.7rem; border-left: 3px solid var(--warn); background: var(--bg-2); border-radius: 6px; line-height: 1.4; font-size: 0.9rem; }
+.dc-council:not(.open) { display: none; }
+.dc-council.ask .dc-chip:disabled, .dc-council.ask .dc-form:disabled:not(.off) { opacity: 1; }
+.dc-dock.dc-asking .dc-dockbtns { margin-left: auto; }
+/* the three formations of the host */
+.dc-forms { margin: 0.6rem 0 0.4rem; }
+.dc-forms .dc-h3 { margin-top: 0.4rem; }
+.dc-formgrid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0.4rem; }
+.dc-form { display: block; width: 100%; box-sizing: border-box; text-align: left; background: var(--bg-2); color: var(--ink); border: 1px solid var(--border-2); border-radius: 10px; padding: 0.45rem 0.6rem; line-height: 1.3; overflow-wrap: anywhere; }
+.dc-form.on { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); background: color-mix(in srgb, var(--accent) 14%, var(--bg-2)); }
+.dc-form.off { color: var(--ink-faint); border-style: dashed; }
+.dc-form .ft { display: block; font-weight: 700; margin-bottom: 0.2rem; }
+.dc-form .fl { display: block; font-size: 0.82rem; margin-top: 0.2rem; }
+.dc-form .fl b { color: var(--ink-soft); font-weight: 650; }
+.dc-form .fl .by { display: block; font-style: normal; color: var(--ink-faint); }
+.dc-form .fn { display: block; margin-top: 0.2rem; font-size: 0.8rem; color: var(--warn); }
+.dc-formnote { color: var(--warn); }
 .dc-chip .lb { display: block; font-weight: 650; }
 .dc-chip .fx { display: block; margin-top: 0.15rem; font-size: 0.78rem; color: var(--ink-faint); line-height: 1.3; }
 .dc-chip .cost { display: block; margin-top: 0.15rem; font-size: 0.78rem; color: var(--warn, var(--ink-soft)); line-height: 1.3; }
@@ -147,6 +174,10 @@ code { font-family: var(--mono); font-size: 0.82rem; overflow-wrap: anywhere; }
 .dc-dock { flex: none; display: flex; flex-direction: column; gap: 0.4rem; padding: 0.5rem 0 max(0.5rem, env(safe-area-inset-bottom, 0px)); }
 .dc-lastsays { margin: 0; font-size: 0.85rem; color: var(--ink-soft); line-height: 1.35; }
 .dc-slots { list-style: none; padding: 0; margin: 0; display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 0.4rem; }
+.dc-slots li { display: flex; flex-direction: column; gap: 0.25rem; min-width: 0; }
+.dc-slots li[draggable=true] { cursor: grab; }
+.dc-mv { display: flex; gap: 0.3rem; }
+.dc-mv .dc-btn { flex: 1 1 0; padding: 0; line-height: 1; }
 .dc-slot { display: flex; flex-direction: column; gap: 0.1rem; align-items: flex-start; justify-content: center; width: 100%; text-align: left; min-height: 56px; background: var(--bg-2); color: var(--ink); border: 1px solid var(--border-2); border-radius: 10px; padding: 0.3rem 0.5rem; }
 .dc-slot.empty { border-style: dashed; color: var(--ink-faint); }
 .dc-slot .n { font-family: var(--mono); font-size: 0.8rem; color: var(--accent-ink); }
@@ -199,10 +230,16 @@ code { font-family: var(--mono); font-size: 0.82rem; overflow-wrap: anywhere; }
     .dc-hud[data-stage=watch] .dc-generalpanel { display: none; }
     .dc-grip { display: none; }
     /* the draft drawer opens over the army panel */
-    .dc-draft { grid-column: 1; grid-row: 1 / -1; z-index: 4; visibility: hidden; border-color: var(--accent); }
+    /* the muster takes the field's place while you buy (the army list stays on the left, so you see what you hold); the council takes it while you choose */
+    .dc-draft { grid-column: 2; grid-row: 1 / -1; z-index: 4; visibility: hidden; border-color: var(--accent); }
     .dc-draft.open { visibility: visible; }
-    /* the tray sits under the field; the announcement rises over the head of the field */
-    .dc-tray { grid-column: 2; grid-row: 2; margin-top: 0.6rem; max-height: min(36dvh, 22rem); padding: 0.5rem 1rem 0.8rem; }
+    .dc-packs { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    /* the council sits over the field in its own two rows: the cards, then the three formations, scrolling inside; the lines are drawn again in the formations */
+    .dc-tray, .dc-council:not(.open) { display: flex; grid-column: 1 / 3; grid-row: 1 / -1; z-index: 4; max-height: none; min-height: 0; padding: 0.5rem 1rem 0.8rem; border-color: var(--accent); }
+    #dc-tray-close { display: none; }
+    .dc-chipgrid { grid-template-columns: repeat(auto-fill, minmax(12rem, 1fr)); }
+    .dc-formgrid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .dc-slots li { min-width: 0; }
     .dc-unlock { grid-column: 2; grid-row: 1; align-self: start; justify-self: center; z-index: 6; margin-top: 0.5rem; width: auto; max-width: 32rem; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5); }
     .dc-lines { grid-template-columns: repeat(3, minmax(0, 1fr)) minmax(4.5rem, 0.6fr); }
     .dc-foe { grid-column: auto; }
@@ -210,7 +247,6 @@ code { font-family: var(--mono); font-size: 0.82rem; overflow-wrap: anywhere; }
     .dc-trayhead .dc-sub { display: inline; }
     .dc-trayhead h2 { display: block; }
     .dc-trayhead .dc-advicebtn { flex: 0 0 auto; }
-    .dc-chipgrid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
     .dc-dock { flex-direction: row; align-items: center; gap: 1rem; }
     .dc-dock .dc-lastsays { display: none; }
     .dc-slots { flex: 1 1 auto; }
@@ -218,10 +254,11 @@ code { font-family: var(--mono); font-size: 0.82rem; overflow-wrap: anywhere; }
     .dc-result { flex: 1 1 auto; }
     .dc-dock:has(.dc-result) .dc-dockbtns { min-width: 12rem; }
 }
-@media (min-width: 1200px) {
-    .dc-chipgrid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-}
 
+/* a phone in portrait: four slots with their arrows would not fit one row, so they take two */
+@media (max-width: 699px) {
+    .dc-slots { grid-auto-flow: row; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-auto-columns: auto; }
+}
 @media (max-width: 359px) {
     .dc-chipgrid { grid-template-columns: minmax(0, 1fr); }
     .dc-ghostbtns { grid-template-columns: minmax(0, 1fr); }

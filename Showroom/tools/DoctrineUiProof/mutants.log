@@ -1,125 +1,22 @@
-﻿Doctrine UI mutation proof, 2026-10-19T14:37:23
-M1 [CAUGHT] an illegal order is enabled in the palette: 6 failing check(s)
-    FAIL  doctrine: the palette holds every order but Cull (hidden: the army allows none) and each is enabled exactly when the army's legal list allows it  [48 enabled, 0 disabled, 8 Cull tokens not shown]
-    FAIL  doctrine: the list really restricts (some enabled, some disabled) and no Cull chip exists at all
-    FAIL  no soldiers: nothing is legal, every order is greyed out and the page says why
-    FAIL  U round 3: an open order is enabled exactly when the army's legal list allows it (unlocking never makes an illegal order legal)
-    FAIL  U round 4: an open order is enabled exactly when the army's legal list allows it (unlocking never makes an illegal order legal)
-    FAIL  U round 5: an open order is enabled exactly when the army's legal list allows it (unlocking never makes an illegal order legal)
-M2 [CAUGHT] the general is wired so that it never records an example: 12 failing check(s)
-    FAIL  round 0: the general has learned twice (the doctrine, then the result)  [0]
-    FAIL  round 0: the general panel follows (2 examples seen)
-    FAIL  ghost: the general had something to suggest after seeing the visitor's first doctrine
-    FAIL  round 1: the general has now learned 4 times  [0]
-    FAIL  ghost: after 4 examples a suggestion is offered, its confidence within 0..1000, every token legal  [confidence 0]
-    FAIL  accept: the accepted ghost is the doctrine that fought, recorded as NOT overridden
+﻿Doctrine UI mutation proof, 2026-10-19T17:01:36
 M3 [CAUGHT] the scrubber ignores the frames' WorldFlags (the gate never falls): 2 failing check(s)
     FAIL  watch: on the frame the flag is set the gate's picture swaps to fallen
     FAIL  watch: the gate stays fallen to the end (a bit never clears)
-M4 [CAUGHT] Accept reports the suggestion as overridden: 3 failing check(s)
-    FAIL  accept: the accepted ghost is the doctrine that fought, recorded as NOT overridden
-    FAIL  accept: the spoils screen says the suggestion was taken as it stood
-    FAIL  determinism: the page game and the headless game with the same hands have the SAME digest  [7a7aa886d6a14802 vs aef21373c4206333]
 M5 [CAUGHT] a cancelled round does not put the army back: 1 failing check(s)
     FAIL  cancel: the army is back exactly as it stood at the start of the round (same read)
-M6 [CAUGHT] the end screen hands back the army from before the last round: 5 failing check(s)
-    FAIL  code: it parses back to an army with the same read, score and code
-    FAIL  determinism: the page game and the headless game with the same hands have the SAME digest  [46bb0d324b2352b5 vs aef21373c4206333]
-    FAIL  determinism: the final army code is the same
-    FAIL  reload: pasting the code starts a game on that very army (same read, round and gold)  [e0bbd1789bccb35e vs c530dce2ecf07da4]
-    FAIL  leave: from the watch screen the end screen carries the army AFTER the closed round and the round played
-M7 [CAUGHT] the scrubber shows the frame after the one asked for: 1 failing check(s)
-    FAIL  watch: the tick before the fall shows the gate standing (no fallen block)
-M8 [CAUGHT] RoundClosedAsync is ignored (the page never parks on a closed round): 1 failing check(s)
-    FAIL  watch: the closed round arrives through RoundClosedAsync and the page parks on its result
 M9 [CAUGHT] RoundRecord.Final is ignored (the last round does not know it is the last): 2 failing check(s)
     FAIL  last round: the next button says it is the end
     FAIL  final: the pipeline marks only the last round Final, and the page takes its end from that (the button says so)
-M10 [CAUGHT] the per-slot glow ignores GeneralOutput.SlotConfidence: 1 failing check(s)
-    FAIL  match record (per-slot): each order's glow and its figure come from the general's own value for THAT slot  [--glow:0.64 Reform the ranks: 1 place Match record 900 of 1000 on this slot | --glow:0.64 Reform the ranks: 2 places Match record 300 of 1000 on this slot | --glow:0.64 Reforge: fleet Match record 650 of 1000 on this slot]
-M11 [CAUGHT] RoundRecord.Orders is never shown (skipped orders go unsaid): 1 failing check(s)
-    FAIL  orders: the watch screen says it in plain words  [missing]
 M12 [CAUGHT] the arena layout from DoctrineContext.LayoutOf is not used: 4 failing check(s)
     FAIL  watch: the arena is drawn from the layout: an SVG with wall, cover and gate blocks
     FAIL  watch: the tick before the fall shows the gate standing (no fallen block)
     FAIL  watch: on the frame the flag is set the gate's picture swaps to fallen
     FAIL  watch: the gate stays fallen to the end (a bit never clears)
-M13 [CAUGHT] DraftedAsync drops the army's verdict: 1 failing check(s)
-    FAIL  draft: what the army would not take, as it told the pipeline (DraftedAsync), is said in plain words after the confirmation  [no notice]
-M14 [CAUGHT] the Cull chip comes back (greyed) in the palette: 1 failing check(s)
-    FAIL  doctrine: the palette holds every order but Cull (hidden: the army allows none) and each is enabled exactly when the army's legal list allows it  [40 enabled, 16 disabled, 8 Cull tokens not shown]
-M15 [CAUGHT] the unlock schedule is ignored (every step opens in round one): 30 failing check(s)
-    FAIL  unlock schedule: 8 rounds open a step a round, the last orders at round 5
-    FAIL  unlock schedule: 5 rounds fold the last two steps into the first round of the last third (round 4)
-    FAIL  unlock schedule: 3 rounds open everything in the last round
-    FAIL  army panel (round 1): one row for each open kind the army holds, and no other kind is named in the list  [Spearmen,Shieldwall,Riders,Archers,Priests,Wights,Wolves,Catapults]
-    FAIL  army panel (round 1): each row is one plain sentence in the form 'Spearmen, 10: basic fighters in the front line.'  [Spearmen, 6: basic fighters in the back line. | Shieldwall, 4: slow fighters that take 33% less damage in the front line. | Riders, 3: fast fighters in the front line. | Archers, 6: archers that hit at 70% strength in the middle line. | Priests, 1: holy archers that hit at 70% strength, hurt cursed soldiers half again as hard in the front line. | Wights, 1: cursed fighters that hit 15% harder in the front line. | Wolves, 2: fast beasts that hit 10% harder in the middle line. | Catapults, 1: slow siege engines that shoot from far away, hit 61% harder, take 10% less damage in the back line.]
-    FAIL  army panel (round 1): traits, veterancy and power sit in a Details expander of each cohort, closed
-M16 [CAUGHT] every kind of soldier is open in the draft: 8 failing check(s)
-    FAIL  unlock steps: slots 2, 3, 4, 4, 4 and the kinds open 2, 4, 6, 7, 8
-    FAIL  army panel (round 1): one row for each open kind the army holds, and no other kind is named in the list  [Spearmen,Shieldwall,Riders,Archers,Priests,Wights,Wolves,Catapults]
-    FAIL  field (before a battle): every cohort is a disc with its count (they add up to the army), open kinds named and the others called 'Other'
-    FAIL  U round 1: the draft lists exactly the open kinds (2)  [Spearmen,Shieldwall,Riders,Archers,Priests,Wights,Wolves,Catapults]
-    FAIL  round 1: the first draft is two kinds of soldier, Spearmen and Archers
-    FAIL  round 1: the locked kinds are said to arrive later, with a Show everything control
-M17 [CAUGHT] the starter advice is labelled as the general: 10 failing check(s)
-    FAIL  U round 1: starter advice is labelled as the game's advice, never as the general, and fills the draft within the gold  [Your general suggests: 12 of your 12 gold, each soldier going to your smallest cohort so far. (spent 12 of 12)]
-    FAIL  U round 1: starter advice is labelled as the game's advice, never as the general, and fills only open, legal orders  [Your general suggests: Front line: Press on, Back line: Hold the line. A fixed rule of thumb over the orders you may give. | Front line: Press on,Back line: Hold the line vs Front line: Press on,Back line: Hold the line]
-    FAIL  U round 2: starter advice is labelled as the game's advice, never as the general, and fills the draft within the gold  [Your general suggests: 13 of your 14 gold, each soldier going to your smallest cohort so far. (spent 13 of 14)]
-    FAIL  U round 2: starter advice is labelled as the game's advice, never as the general, and fills only open, legal orders  [Your general suggests: Front line: Press on, Back line: Hold the line, Middle line: Ride the flank. A fixed rule of thumb over the orders you may give. | Front line: Press on,Back line: Hold the line,Middle line: Ride the flank vs Front line: Press on,Back line: Hold the line,Middle line: Ride the flank]
-    FAIL  U round 3: starter advice is labelled as the game's advice, never as the general, and fills the draft within the gold  [Your general suggests: 4 of your 4 gold, each soldier going to your smallest cohort so far. (spent 4 of 4)]
-    FAIL  U round 3: starter advice is labelled as the game's advice, never as the general, and fills only open, legal orders  [Your general suggests: Front line: Press on, Middle line: Ride the flank. A fixed rule of thumb over the orders you may give. | Front line: Press on,Middle line: Ride the flank vs Front line: Press on,Middle line: Ride the flank]
-M18 [CAUGHT] a locked order is still in the tray and tappable: 5 failing check(s)
-    FAIL  U round 1: the tray shows exactly the orders open at step 0 (6 of them), no more  [18 shown, 6 expected; extra 38,39,40,41,44; missing ]
-    FAIL  U round 1: no locked order is offered to tap
-    FAIL  orders (round 1): each order for a line says its plain effect under its label (Press on, Hold the line)  [18 chips]
-    FAIL  U round 2: the tray shows exactly the orders open at step 1 (12 of them), no more  [18 shown, 12 expected; extra 40,41,46,47,52; missing ]
-    FAIL  U round 2: no locked order is offered to tap
-M19 [CAUGHT] a suggestion with a locked order can be used: 3 failing check(s)
-    FAIL  locked suggestion: tapping the disabled Use button submits nothing
-    FAIL  tap target missing: #dc-edit #0
-    FAIL  locked suggestion: Edit keeps only the open orders (none here), so the slots are empty
-M20 [CAUGHT] the recap quotes the wrong losses: 5 failing check(s)
-    FAIL  U round 1: the recap's numbers are the record's own (soldiers lost, brought)  [You lost 22 of 30 soldiers; the enemy lost 22 of 28.]
-    FAIL  U round 2: the recap's numbers are the record's own (soldiers lost, brought)  [You lost 2 of 6 soldiers; the enemy lost 2 of 27.]
-    FAIL  U round 3: the recap's numbers are the record's own (soldiers lost, brought)  [You lost 0 of 2 soldiers; the enemy lost 0 of 27.]
-    FAIL  U round 4: the recap's numbers are the record's own (soldiers lost, brought)  [You lost 0 of 1 soldiers; the enemy lost 0 of 26.]
-    FAIL  U round 5: the recap's numbers are the record's own (soldiers lost, brought)  [You lost 0 of 1 soldiers; the enemy lost 0 of 28.]
-M21 [CAUGHT] starting a game forgets what was unlocked: 1 failing check(s)
-    FAIL  draft: all eight kinds are listed with traits and a price, each with 44px plus and minus buttons
 M22 [CAUGHT] the dock loses the bottom safe-area inset: 1 failing check(s)
     FAIL  phone: the dock keeps the bottom safe-area inset
-M23 [CAUGHT] the sheet handle no longer takes a drag: 1 failing check(s)
-    FAIL  phone: the handles take a drag (touch-action: none on the grip and the sheet buttons)
 M24 [CAUGHT] the field becomes a tab: 1 failing check(s)
     FAIL  HUD: no tabs, no tab roles and no links inside the scene
-M25 [CAUGHT] the chronicle writes a break for a cohort that still stands (strength 1): 4 failing check(s)
-    FAIL  chronicle: the page's log is the chronicle function applied to the recording (same lines, same why)  [[Break at tick 1] that cohort did not break at this tick | [Break at tick 1] that cohort did not break at this tick | [Break at tick 1] that cohort did not break at this tick]
-    FAIL  chronicle (recorded battles): every line of 16 real battles (2778 lines) is backed by a real frame event, break, flag, run, span or stand, as the independent checker finds  [seed 1 round 0: [Break at tick 7] that cohort did not break at this tick | seed 1 round 0: [Break at tick 8] that cohort did not break at this tick | seed 1 round 0 why: first break differs from the frames]
-    FAIL  chronicle (recorded battles): the Why numbers (turning point, first break, first line gone) equal the record in every battle  [seed 1 round 0 why: first break differs from the frames | seed 1 round 1 why: first break differs from the frames | seed 2 round 0 why: first break differs from the frames]
-    FAIL  mutant (recorded battle): the checker is clean on the real log and finds a swapped side, a wrong tick and a fabricated break in it
-M26 [CAUGHT] the chronicle says your where it means the enemy (sides swapped): 9 failing check(s)
-    FAIL  chronicle: the page's log is the chronicle function applied to the recording (same lines, same why)  [[Contact at tick 5] the text does not name the enemy Catapults and your Wolves | [Contact at tick 5] says you have not struck but the frame shows you did, or names the wrong striker | [Break at tick 6] names the wrong cohort or side]
-    FAIL  chronicle (synthetic frames): the log is exactly the hand-written account: first contact, the gate, a run, the first break and the first line gone, a flank, holy against cursed, the heaviest blow, a lull, the final stand, the end  [4 Contact First contact. The enemy Riders strike your Spearmen, and the enemy has not struck yet. | 7 Run Your Spearmen have been struck 4 ticks running, 10 in all. | 7 Break Your Spearmen break. The first to fall. The enemy Front line is gone, the first line to fall.]
-    FAIL  chronicle (synthetic frames): a line reads as the Count says it ('Tick 12. ...')
-    FAIL  chronicle (synthetic frames): the Why is hand-written too: the turning point (largest swing in soldiers), the first line to fall, and one hint tied to the Flank order given  [Turning point: tick 8, when the enemy lost 6 soldiers and you lost 1. | The first line to fall: the enemy Front line, at tick 7. | Your order to ride the flank on the Middle line reached the enemy: the enemy Priests struck from the side at tick 8.]
-    FAIL  chronicle (synthetic frames): the independent checker finds every line backed by a real frame event, break, flag, run, span or stand  [[Contact at tick 4] the text does not name your Riders and the enemy Spearmen | [Contact at tick 4] says the enemy has not struck but the frame shows it did, or names the wrong striker | [Run at tick 7] the run is not in the frames (from tick 4, 4 ticks, 10 damage)]
-    FAIL  chronicle (opening): when only the enemy has struck, it says so and names the enemy's strike  [X. 24 of your soldiers face the enemy's 24. | First contact. Your Archers strike the enemy Archers, and you have not struck yet. | The battle did not finish. You have 24; the enemy has 24. The battle stopped at its tick limit.]
-M27 [CAUGHT] the chronicle puts the gate line one tick early: 5 failing check(s)
-    FAIL  chronicle: the page's log is the chronicle function applied to the recording (same lines, same why)  [[Gate at tick 14] the recording's gate flag is not first set in this frame]
-    FAIL  chronicle: the gate line appears on the very tick the recording's flag is set, and not before  [gate at 14, flag at 15]
-    FAIL  chronicle (synthetic frames): the log is exactly the hand-written account: first contact, the gate, a run, the first break and the first line gone, a flank, holy against cursed, the heaviest blow, a lull, the final stand, the end  [5 Gate The gate has fallen.]
-    FAIL  chronicle (synthetic frames): the independent checker finds every line backed by a real frame event, break, flag, run, span or stand  [[Gate at tick 5] the recording's gate flag is not first set in this frame]
-    FAIL  chronicle (recorded battles): every line of 16 real battles (264 lines) is backed by a real frame event, break, flag, run, span or stand, as the independent checker finds  [seed 2 round 0: [Gate at tick 14] the recording's gate flag is not first set in this frame | seed 4 round 1: [Gate at tick 14] the recording's gate flag is not first set in this frame | seed 5 round 1: [Gate at tick 14] the recording's gate flag is not first set in this frame]
-M28 [CAUGHT] the Why turns the swing the wrong way (who gained the turning point): 4 failing check(s)
-    FAIL  chronicle: the page's log is the chronicle function applied to the recording (same lines, same why)  [the Why lines are not the record's: 'Turning point: tick 16, when you lost 1 soldier and the enemy lost 6.' / 'The first line to fall: your Back line, at tick 14.']
-    FAIL  chronicle (synthetic frames): the Why is hand-written too: the turning point (largest swing in soldiers), the first line to fall, and one hint tied to the Flank order given  [Turning point: tick 8, when you lost 1 soldier and the enemy lost 6. | The first line to fall: the enemy Front line, at tick 7. | Your order to ride the flank on the Middle line reached the enemy: your Priests struck from the side at tick 8.]
-    FAIL  chronicle (synthetic frames): the independent checker finds the Why numbers equal to the record  [the Why lines are not the record's: 'Turning point: tick 8, when you lost 1 soldier and the enemy lost 6.' / 'The first line to fall: the enemy Front line, at tick 7.']
-    FAIL  chronicle (recorded battles): the Why numbers (turning point, first break, first line gone) equal the record in every battle  [seed 1 round 0 why: the Why lines are not the record's: 'Turning point: tick 14, when the enemy lost 0 soldiers and you lost 2.' / 'The first line to fall: your Front line, at tick 25.' | seed 1 round 1 why: the Why lines are not the record's: 'Turning point: tick 10, when the enemy lost 0 soldiers and you lost 1.' / 'The first line to fall: your Middle line, at tick 10.' | seed 2 round 0 why: the Why lines are not the record's: 'Turning point: tick 6, when the enemy lost 0 soldiers and you lost 3.' / 'The first line to fall: your Back line, at tick 14.']
-M29 [CAUGHT] first contact names the wrong side as not having struck: 6 failing check(s)
-    FAIL  chronicle: the page's log is the chronicle function applied to the recording (same lines, same why)  [[Contact at tick 5] says the enemy has not struck but the frame shows it did, or names the wrong striker]
-    FAIL  chronicle (synthetic frames): the log is exactly the hand-written account: first contact, the gate, a run, the first break and the first line gone, a flank, holy against cursed, the heaviest blow, a lull, the final stand, the end  [4 Contact First contact. Your Riders strike the enemy Spearmen, and you have not struck yet.]
-    FAIL  chronicle (synthetic frames): a line reads as the Count says it ('Tick 12. ...')
-    FAIL  chronicle (synthetic frames): the independent checker finds every line backed by a real frame event, break, flag, run, span or stand  [[Contact at tick 4] says you have not struck but the frame shows you did, or names the wrong striker]
-    FAIL  chronicle (opening): when only the enemy has struck, it says so and names the enemy's strike  [X. 24 of your soldiers face the enemy's 24. | First contact. The enemy Archers strike your Archers, and the enemy has not struck yet. | The battle did not finish. You have 24; the enemy has 24. The battle stopped at its tick limit.]
-    FAIL  chronicle (recorded battles): every line of 16 real battles (264 lines) is backed by a real frame event, break, flag, run, span or stand, as the independent checker finds  [seed 1 round 0: [Contact at tick 4] says the enemy has not struck but the frame shows it did, or names the wrong striker | seed 2 round 0: [Contact at tick 5] says the enemy has not struck but the frame shows it did, or names the wrong striker | seed 2 round 1: [Contact at tick 3] says you have not struck but the frame shows you did, or names the wrong striker]
+M37 [CAUGHT] the Reforge card shows the cost of one soldier, not of the host: 1 failing check(s)
+    FAIL  reforge: the cost the card shows is the gold the army really takes for the order (every order for the whole host, on a hand-built host)  [Flip0: shown 1, took 5 | Flip4: shown 2, took 8 | Flip5: shown 2, took 8]
+M38 [CAUGHT] the technical paragraph is left open on the page: 1 failing check(s)
+    FAIL  wording (play UI): the technical paragraph stays, behind a closed expander labelled 'How it is built' (Pleroma, stores, operations are named only there)
