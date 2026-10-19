@@ -67,6 +67,26 @@ $mutants = @(
        Old = '<section class="dc-field" aria-label="The field">'; New = '<section class="dc-field dc-tab" aria-label="The field">'; Append = ''; Expect = 'no tabs, no tab roles' },
     @{ Id = 'M25'; Name = 'the chronicle writes a break for a cohort that still stands (strength 1)'; File = 'Services\Doctrine\BattleChronicle.cs';
        Old = 'if (Find(prev, b.Id) is not { } p || p.Strength <= 0 || b.Strength > 0) continue;'; New = 'if (Find(prev, b.Id) is not { } p || p.Strength <= 0 || b.Strength > 1) continue;'; Append = ''; Expect = 'chronicle (recorded battles): every line' },
+    @{ Id = 'M30'; Name = 'a banner description with a TYPED number (the cap) in place of the rule''s'; File = 'Services\Doctrine\DoctrineWords.cs';
+       Old = '$"Cohorts with {TraitMark[o.A]} fight harder this round, up to {cap}%."'; New = '$"Cohorts with {TraitMark[o.A]} fight harder this round, up to 60%."'; Append = ''; Expect = 'wording (numbers): no figure is typed' },
+    @{ Id = 'M31'; Name = 'the drill sentence states a power per year that drifts from the rule'; File = 'Services\Doctrine\DoctrineWords.cs';
+       Old = '$"Drill the host: every cohort gains a year of seasoning, and each year adds {Roster.VetStepPct}% power.'; New = '$"Drill the host: every cohort gains a year of seasoning, and each year adds {Roster.VetStepPct + 1}% power.'; Append = ''; Expect = 'age: a year adds the power the sentence states' },
+    @{ Id = 'M32'; Name = 'an OLD order name is left in the chronicle hint'; File = 'Services\Doctrine\BattleChronicle.cs';
+       Old = 'order to {DoctrineWords.FieldOrders[(int)FieldOrderKind.Flank].ToLowerInvariant()} on the'; New = 'order to Flank on the'; Append = ''; Expect = 'chronicle (synthetic frames): the Why is hand-written too' },
+    @{ Id = 'M33'; Name = 'a technical term in the order tray (Reforge titled Relabel a trait)'; File = 'Services\Doctrine\DoctrineWords.cs';
+       Old = 'ArmyOrderKind.Flip => "Reforge",'; New = 'ArmyOrderKind.Flip => "Relabel a trait",'; Append = ''; Expect = 'wording (play UI): no ''relabel'' term' },
+    @{ Id = 'M34'; Name = 'the trigger rule loses the slot-order sentence'; File = 'Services\Doctrine\DoctrineWords.cs';
+       Old = '=> $"Orders before it open the battle; orders after it take over once your host'; New = '=> $"Orders after it take over once your host'; Append = ''; Expect = 'trigger: orders before the trigger open the battle' },
+    @{ Id = 'M35'; Name = 'the front-line preview reads the middle line after the order'; File = 'Services\Doctrine\DoctrineWords.cs';
+       Old = 'y = Describe(a, 0, nameOf);'; New = 'y = Describe(a, 1, nameOf);'; Append = ''; Expect = 'preview: ''Your front line goes from X to Y''' },
+    @{ Id = 'M36'; Name = 'the page switches the game''s offers back on (the free-choice screens would be refused unseen)'; File = 'Services\Doctrine\DoctrineSession.cs';
+       Old = 'Offers = OfferRules.Off };'; New = 'Offers = OfferRules.Default };'; Append = ''; Expect = 'offers: with the game''s offers ON' },
+    @{ Id = 'M37'; Name = 'the Reforge card shows the cost of one soldier, not of the host'; File = 'Services\Doctrine\DoctrineWords.cs';
+       Old = 'sum += (long)c.Count * Roster.RelabelCost('; New = 'sum += (long)1 * Roster.RelabelCost('; Append = ''; Expect = 'reforge: the cost the card shows' },
+    @{ Id = 'M38'; Name = 'the technical paragraph is left open on the page'; File = 'Pages\DoctrinePage.razor';
+       Old = '<details class="dc-about dc-built">'; New = '<details class="dc-about dc-built" open>'; Append = ''; Expect = 'wording (play UI): the technical paragraph stays' },
+    @{ Id = 'M39'; Name = 'the Pleroma store is named in the tray hint'; File = 'Pages\DoctrinePage.razor';
+       Old = 'A greyed order cannot be given now: the host does not allow it.'; New = 'A greyed order cannot be given now: the Pleroma store does not allow it.'; Append = ''; Expect = 'wording (play UI): no ''Pleroma'' term' },
     @{ Id = 'M26'; Name = 'the chronicle says your where it means the enemy (sides swapped)'; File = 'Services\Doctrine\BattleChronicle.cs';
        Old = 'string Lab(ReplayBlob b) => (b.Side == Side.Player ? "your " : "the enemy ") + kindName(b.Key);'; New = 'string Lab(ReplayBlob b) => (b.Side == Side.Player ? "the enemy " : "your ") + kindName(b.Key);'; Append = ''; Expect = 'chronicle (synthetic frames): the log is exactly' },
     @{ Id = 'M27'; Name = 'the chronicle puts the gate line one tick early'; File = 'Services\Doctrine\BattleChronicle.cs';

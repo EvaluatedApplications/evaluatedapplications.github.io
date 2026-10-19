@@ -61,7 +61,7 @@ public static class DoctrineGuide
         ];
         var chosen = want.Where(t => DoctrineUnlocks.Allows(t, step) && army.Legal.Allows(t)).Take(DoctrineUnlocks.Slots(step)).ToArray();
         if (chosen.Length == 0) return null;
-        return new DoctrineAdvice(DoctrineSet.Of(chosen), $"{AdvicePrefix} {string.Join(", ", chosen.Select(DoctrineWords.Label))}. A fixed rule of thumb over the legal list.");
+        return new DoctrineAdvice(DoctrineSet.Of(chosen), $"{AdvicePrefix} {string.Join(", ", chosen.Select(DoctrineWords.Label))}. A fixed rule of thumb over the orders you may give.");
     }
 
     static string Plural(int n, string one, string many) => n == 1 ? one : many;
@@ -89,11 +89,11 @@ public static class DoctrineGuide
         var worst = rec.Result.AttackerLosses.Where(l => l.Lost > 0).OrderByDescending(l => l.Lost).FirstOrDefault();
         if (rec.Final) next = null;
         else if (rec.PlayerDoctrine.IsEmpty)
-            next = "Try next: you gave no orders, so every line advanced. Give one line Hold and see what changes.";
+            next = $"Try next: you gave no orders, so every line pressed on. Tell one line to {DoctrineWords.FieldOrders[(int)FieldOrderKind.Hold].ToLowerInvariant()} and see what changes.";
         else if (rec.Orders is { Skipped: > 0 } o)
-            next = $"Try next: the army skipped {o.Skipped} of your army {Plural(o.Skipped, "order", "orders")} because {Plural(o.Skipped, "it was", "they were")} not legal when the turn came. Orders greyed out in the list are not legal.";
+            next = $"Try next: the host skipped {o.Skipped} of your orders for the whole host because {Plural(o.Skipped, "it was", "they were")} not allowed when the turn came. A greyed order in the list cannot be given.";
         else if (rec.Result.Outcome != BattleStatus.AttackerWon && worst.Lost > 0)
-            next = $"Try next: {DoctrineWords.KindName(worst.Key)} lost the most ({worst.Lost}). Give the {DoctrineWords.Slot(worst.Slot)} line a different field order, or draft more of them.";
+            next = $"Try next: {DoctrineWords.KindName(worst.Key)} lost the most ({worst.Lost}). Give the {DoctrineWords.Slot(worst.Slot)} line a different order, or draft more of them.";
         else if (v.ArmyAfter.Gold > 0)
             next = $"Try next: you have {v.ArmyAfter.Gold} gold. The draft turns gold into soldiers.";
         return new Recap(what, next);

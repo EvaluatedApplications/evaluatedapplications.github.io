@@ -10,3 +10,6 @@
 
 - **Redirect stubs**: `/tools/{creature,forecaster,stories,cartographer}/` (to Prism) and `/tools/dashboard/` (to `/umbrarium/`, the superseding demo) are written by `finish-shells.mjs` (`STUBS`; `publish-site.ps1` asserts them in dist) as `noindex` meta-refresh + script pages (Prism ones keep query and hash; no hash = that tab).
 
+
+## Doctrine wasm measurement (moved from CLAUDE.md, 2026-10-19)
+MEASURED (AOT wasm under Node, 2026-10-18, BEFORE the hook change): digest equal to desktop, ~105-130 ms/round, longest step 19 ms, probe bundle +10.8 MB raw / +3.0 MB gzip.

@@ -48,15 +48,18 @@
 
     <section class="outro">
         <h2>How it works</h2>
-        <p>The army is a set of Pleroma stores from the Phasor package, the battle runs on a Tracer navigation mesh, the rounds run as EvalApp
-            pipelines, and the general is a habit table with a tiny HoloFormer from the AlgFormer package.</p>
-        <p>Each cohort of soldiers is an item in a Pleroma store: its kind is the key, its traits are the flags, its place in the line is the
-            arrangement, and its veterancy is a position on a ring of nine. An order is one operation on that store. Flip relabels a trait, Rotate
-            relabels the line, Age ticks the ring, Aura counts the soldiers who carry a trait, and the list of orders you may give is read from
-            the store, which is why some are greyed out. Field orders go to the battle: the ground is a baked Tracer navigation mesh, and each
-            cohort is a group of agents that path, take cover and strike on it.</p>
-        <p>A battle is simulated once, on your device, and recorded. The replay is a recording of that one battle: playing it back does not
-            run it again.</p>
+        <p>Each round you spend gold on soldiers, give up to four orders (to a line, or to the whole host) and watch one battle. A battle is
+            simulated once, on your device, and recorded. The replay is a recording of that one battle: playing it back does not run it again.</p>
+        <details class="dc-about dc-built">
+            <summary>How it is built</summary>
+            <p>The army is a set of Pleroma stores from the Phasor package, the battle runs on a Tracer navigation mesh, the rounds run as EvalApp
+                pipelines, and the general is a habit table with a tiny HoloFormer from the AlgFormer package.</p>
+            <p>Each cohort of soldiers is an item in a Pleroma store: its kind is the key, its traits are the flags, its place in the line is the
+                arrangement, and its seasoning is a position on a ring of nine. An order is one operation on that store. Reforge relabels a trait,
+                Reform the ranks relabels the line, Drill the host ticks the ring, Raise a banner counts the soldiers who carry a trait, and the list
+                of orders you may give is read from the store, which is why some are greyed out. Orders for a line go to the battle: the ground is a
+                baked Tracer navigation mesh, and each cohort is a group of agents that path, take cover and strike on it.</p>
+        </details>
         <details class="dc-about">
             <summary>About the general</summary>
             <p>Your general starts empty. It learns how you set a doctrine from your own choices, in your browser, with nothing pre-trained, and
@@ -351,7 +354,7 @@
         <span class="plain"><span class="nm">@DoctrineWords.KindName(c.Key)</span>, <span class="ct">@c.Count</span>: @DoctrineWords.KindBlurb(c.Key) in the @(DoctrineWords.Slot(c.Slot).ToLowerInvariant()) line.</span>
         <details class="dc-det">
             <summary>Details</summary>
-            <span class="meta">Traits: @DoctrineWords.TraitList(c.Traits). Veterancy @c.Veterancy. Power @(c.PowerPct)%.</span>
+            <span class="meta">@DoctrineWords.CohortDetails(c)</span>
         </details>
     </li>;
 
@@ -364,17 +367,17 @@
         <h3 class="dc-h3">Losses and spoils</h3>
         <ul class="dc-list">
             <li>You brought @v.YourSoldiers soldiers and lost @lost. The enemy brought @v.EnemySoldiers and lost @theirLost.</li>
-            <li>Spoils: @rec.Spoils.Gold gold@(rec.Spoils.Experience > 0 ? $" and {rec.Spoils.Experience} veterancy step{(rec.Spoils.Experience == 1 ? "" : "s")}" : "").</li>
+            <li>Spoils: @rec.Spoils.Gold gold@(rec.Spoils.Experience > 0 ? $" and {rec.Spoils.Experience} {(rec.Spoils.Experience == 1 ? "year" : "years")} of seasoning for every cohort" : "").</li>
             <li>Your doctrine: @DoctrineWords.Orders(rec.PlayerDoctrine).</li>
             @if (rec.Orders is { Skipped: > 0 } ord)
             {
-                <li class="dc-applied">@ord.Applied of your @(ord.Applied + ord.Skipped) army orders @(ord.Applied == 1 ? "was" : "were") applied. The army skipped @ord.Skipped that @(ord.Skipped == 1 ? "was" : "were") not legal when @(ord.Skipped == 1 ? "its" : "their") turn came.</li>
+                <li class="dc-applied">@ord.Applied of your @(ord.Applied + ord.Skipped) orders for the whole host @(ord.Applied == 1 ? "was" : "were") applied. The host skipped @ord.Skipped that @(ord.Skipped == 1 ? "was" : "were") not allowed when @(ord.Skipped == 1 ? "its" : "their") turn came.</li>
             }
             @if (!rec.Ghost.IsEmpty)
             {
                 <li>Your general suggested: @DoctrineWords.Orders(rec.Ghost) (match record @rec.GhostConfidence of 1000). @(rec.Overrode ? "You set something different." : "You took it as it stood.")</li>
             }
-            @if (rec.IllegalDropped > 0) { <li>@rec.IllegalDropped order@(rec.IllegalDropped == 1 ? "" : "s") were not legal and were dropped.</li> }
+            @if (rec.IllegalDropped > 0) { <li>@rec.IllegalDropped @(rec.IllegalDropped == 1 ? "order was" : "orders were") not allowed and @(rec.IllegalDropped == 1 ? "was" : "were") dropped.</li> }
         </ul>
     </section>;
 
@@ -487,7 +490,7 @@
         @if (n.Orders.Count > 0)
         {
             <ul class="dc-unlock-fx">
-                @foreach (var o in n.Orders) { <li><b>@o</b>: @DoctrineUnlocks.Effect(o)</li> }
+                @for (int oi = 0; oi < n.Orders.Count; oi++) { <li><b>@n.Orders[oi]</b>: @(oi < n.Effects.Count ? n.Effects[oi] : "")</li> }
             </ul>
         }
         @if (n.NewSlotCount is { } sc) { <p class="dc-unlock-line">@("New slot: " + sc + ".")</p> }
@@ -568,7 +571,7 @@
                         }
                     </ul>
                 }
-                <p class="hint dc-after">After the picks the army would hold @pv.After.Soldiers soldiers in @pv.After.Kinds of @Roster.Size kinds (the command span), with @(pv.After.Legal.Count - 1) orders legal.</p>
+                <p class="hint dc-after">After the picks the army would hold @pv.After.Soldiers soldiers in @pv.After.Kinds of @Roster.Size kinds (a host musters @Roster.Size at most), with @(pv.After.Legal.Count - 1) orders you may give.</p>
             }
         }
     </section>;
@@ -584,6 +587,12 @@
         }
         return l;
     }
+
+    private static IReadOnlyList<int> TriggerTokens()
+        => Enumerable.Range(1, DoctrineVocabulary.TriggerLevels).Select(DoctrineVocabulary.WhenLost).ToList();
+
+    /// <summary>A kind's name for a preview line, or "" when the kind is not open to this player yet (the line then says "more").</summary>
+    private string OpenKindName(int kind) => DoctrineUnlocks.KindOpen(kind, Level) ? DoctrineWords.KindName(kind) : "";
 
     private void UseOrderAdvice()
     {
@@ -606,33 +615,36 @@
         </div>
         <div class="dc-trayscroll">
             @if (_advice.Length > 0) { <p class="dc-advice">@_advice</p> }
-            <p class="hint">Tap an order to put it in the first empty slot.</p>
+            <p class="hint">Tap an order to put it in the first empty slot. Each card says what the order does and, for an order to the whole host, what it would do to your host as it stands now.</p>
             @if (_slots.Any(t => t != 0))
             {
                 <ul class="dc-says">
                     @foreach (var t in _slots.Where(t => t != 0)) { <li>@DoctrineWords.Sentence(t)</li> }
                 </ul>
             }
-            <h3 class="dc-h3">Field orders</h3>
+            <h3 class="dc-h3">Orders for a line</h3>
             @for (int g = 0; g < DoctrineVocabulary.Groups; g++)
             {
                 @Palette(DoctrineWords.Slot(g) + " line", Enumerable.Range(0, 6).Select(f => DoctrineVocabulary.Field((FieldOrderKind)f, g)).ToList(), legal)
             }
+            @if (Level >= DoctrineUnlocks.TriggerStep)
+            {
+                @Palette(DoctrineWords.TriggerTitle, TriggerTokens(), legal, DoctrineWords.TriggerRule())
+            }
             @if (Level >= 3)
             {
-                <h3 class="dc-h3">Army orders</h3>
-                @Palette("Rotate the line", Tokens(ArmyOrderKind.Rotate), legal, DoctrineUnlocks.Effect("Rotate"))
-                @Palette("Flip a trait", Tokens(ArmyOrderKind.Flip), legal, DoctrineUnlocks.Effect("Flip"))
-                @Palette("Age the veterans", Tokens(ArmyOrderKind.Age), legal, DoctrineUnlocks.Effect("Age"))
-                @Palette("Merge a kind into the one before it", Tokens(ArmyOrderKind.Merge), legal, DoctrineUnlocks.Effect("Merge"))
-                @Palette("Aura on a trait", Tokens(ArmyOrderKind.Aura), legal, DoctrineUnlocks.Effect("Aura"))
+                <h3 class="dc-h3">Orders for the whole host</h3>
+                @foreach (var kind in new[] { ArmyOrderKind.Rotate, ArmyOrderKind.Flip, ArmyOrderKind.Age, ArmyOrderKind.Merge, ArmyOrderKind.Aura })
+                {
+                    @Palette(DoctrineWords.ArmyTitle(kind), Tokens(kind), legal, DoctrineWords.Rule(kind))
+                }
                 @if (Level >= DoctrineUnlocks.LastStep)
                 {
-                    @if (Tokens(ArmyOrderKind.Cull).Any(legal.Allows)) { @Palette("Cull a trait", Tokens(ArmyOrderKind.Cull), legal) }
-                    else { <p class="hint dc-cullnote">Cull is not offered on this army.</p> }
+                    @if (Tokens(ArmyOrderKind.Cull).Any(legal.Allows)) { @Palette(DoctrineWords.ArmyTitle(ArmyOrderKind.Cull), Tokens(ArmyOrderKind.Cull), legal) }
+                    else { <p class="hint dc-cullnote">No order to dismiss soldiers is offered to this host.</p> }
                 }
             }
-            <p class="hint">Greyed out means the army says that order is not legal right now.@(legal.Count <= 1 ? " With no soldiers in the army, no order is legal." : "") No orders is allowed: every line then advances.</p>
+            <p class="hint">A greyed order cannot be given now: the host does not allow it.@(legal.Count <= 1 ? " With no soldiers in the army, no order can be given." : "") To give no orders is allowed: every line then presses on.</p>
             @if (Locked)
             {
                 <p class="hint dc-lockedhint">More orders arrive in later rounds.</p>
@@ -652,10 +664,14 @@
                 {
                     int token = tk;
                     bool ok = legal.Allows(token);
-                    var ord = DoctrineVocabulary.Decode(token);
+                    var trial = _s!.Trial(token);
+                    int? cost = DoctrineWords.CostNow(token, _s.Army!, trial);
+                    string? seen = DoctrineWords.Preview(token, trial, OpenKindName);
                     <button type="button" class="dc-chip @(ok ? "" : "off")" data-token="@token" disabled="@(!ok)" @onclick="() => AddToken(token)">
                         <span class="lb">@DoctrineWords.Label(token)</span>
-                        @if (ord.Family == OrderFamily.Field) { <span class="fx">@DoctrineWords.FieldSentences[ord.Kind]</span> }
+                        <span class="fx">@DoctrineWords.Effect(token)</span>
+                        @if (cost is { } gold) { <span class="cost">@DoctrineWords.CostWords(gold, _s.Army!.Gold)</span> }
+                        @if (seen is not null) { <span class="pv">@seen</span> }
                     </button>
                 }
             </div>

@@ -278,14 +278,15 @@ public static class BattleChronicle
         else why.Add("No cohort broke.");
 
         string? hint = null;
-        var fieldOrders = DoctrineVocabulary.FieldOrders(doctrine);
+        // With a loss trigger the orders that stood at the moment of a break may be the ones after it, which the recording does not say; so no hint is made then.
+        var fieldOrders = DoctrineVocabulary.Trigger(doctrine) is null ? DoctrineVocabulary.FieldOrders(doctrine) : Array.Empty<FieldOrder>();
         if (firstBreakBlob is { } fbb && firstBreakTick is { } fbTick && Find(F.First(f => f.Tick == fbTick), fbb) is { Side: Side.Player } broke
             && replay.Result.Outcome != BattleStatus.AttackerWon && fieldOrders.FirstOrDefault(o => o.Group == broke.Slot) is { Weight: > 0 } given)
-            hint = $"Your {DoctrineWords.Slot(broke.Slot)} line broke first while ordered to {DoctrineWords.FieldOrders[(int)given.Kind]}. Try another order for it.";
+            hint = $"Your {DoctrineWords.Slot(broke.Slot)} line broke first while ordered to {DoctrineWords.FieldOrders[(int)given.Kind].ToLowerInvariant()}. Try another order for it.";
         else
             foreach (var o in fieldOrders)
                 if (o.Kind == FieldOrderKind.Flank && flankTickOfSlot.TryGetValue(o.Group, out var fx))
-                { hint = $"Your Flank order on the {DoctrineWords.Slot(o.Group)} line reached the enemy: {fx.Lab} struck from the side at tick {fx.Tick}."; break; }
+                { hint = $"Your order to {DoctrineWords.FieldOrders[(int)FieldOrderKind.Flank].ToLowerInvariant()} on the {DoctrineWords.Slot(o.Group)} line reached the enemy: {fx.Lab} struck from the side at tick {fx.Tick}."; break; }
         if (hint is not null) why.Add(hint);
 
         return new Chronicle(lines, new ChronicleWhy(turnTick >= 0 ? turnTick : null, turnYou, turnEnemy, firstBreakTick, firstBreakBlob, firstLineTick, firstLineSide, firstLineSlot, hint, why));

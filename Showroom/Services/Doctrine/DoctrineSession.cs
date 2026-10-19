@@ -41,6 +41,14 @@ public sealed class DoctrineSession : IDisposable
 {
     public const int DefaultRounds = 5;
 
+    /// <summary>
+    /// The rules of a game on this page. THE OFFERS ARE OFF: the game's default (<see cref="OfferRules.Default"/>) offers six packs and eight orders and REFUSES
+    /// any other pick, but this page's draft and tray are still the free-choice screens and show no offer, so with the offers on every draft pick and order
+    /// the visitor made would be refused unseen. When the draft screen is rebuilt to show the offers, this line goes. A proof builds its headless games with
+    /// the same rules, so a page game and a headless game are compared on equal terms.
+    /// </summary>
+    public static DoctrineDomain GameRules(int rounds) => new() { MaxRounds = rounds, Offers = OfferRules.Off };
+
     DoctrineGame? _game;
     DoctrineDomain _rules = new();
     CancellationTokenSource? _life, _round;
@@ -111,7 +119,7 @@ public sealed class DoctrineSession : IDisposable
         if (InGame) { error = "A game is already in progress. Leave it first."; return false; }
         Notice = ""; Error = ""; Result = null; Last = null; Ghost = null; Draft = null; Army = null; BattleTick = 0; ChoicesMade = 0;
         rounds = Math.Clamp(rounds, 1, 20);
-        _rules = new DoctrineDomain { MaxRounds = rounds };
+        _rules = GameRules(rounds);
         BattleTickLimit = _rules.TickLimit;
         _game = Sections.Build(new Hands(this), _rules, _watcher);
         IArmy army;
@@ -157,6 +165,33 @@ public sealed class DoctrineSession : IDisposable
         if (!Armies.TryParse(_roundCode, out var clone, out _) || clone is null) return null;
         var report = await clone.DraftAsync(new DraftRequest(RoundIndex, Seed, picks.Where(p => p.Count > 0).ToList()), CancellationToken.None);
         return new DraftPreview(report, clone.Read());
+    }
+
+    readonly Dictionary<int, OrderTrial?> _trials = new();
+
+    /// <summary>
+    /// What an order for the whole host would do, tried ALONE on a copy of the host as it stands now (the copy is read from the host's own code, so the real
+    /// army is untouched), asked of the army itself: the host before and after as it reads them. Null for an order the host would not take, or one that is
+    /// not an order for the whole host. Kept for the doctrine screen, so the tray asks each order once.
+    /// </summary>
+    public OrderTrial? Trial(int token)
+    {
+        if (Stage != DoctrineStage.Doctrine || _army is null || Armies is null || token == 0 || !DoctrineVocabulary.IsValid(token)) return null;
+        if (DoctrineVocabulary.Decode(token).Family != OrderFamily.Army) return null;
+        if (_trials.TryGetValue(token, out var have)) return have;
+        OrderTrial? trial = null;
+        try
+        {
+            if (Armies.TryParse(_army.ToCode(), out var copy, out _) && copy is not null)
+            {
+                var before = copy.Read();
+                var run = copy.ApplyArmyOrdersAsync(DoctrineSet.Of(token), CancellationToken.None);
+                if (run.IsCompletedSuccessfully && run.Result.Applied == 1) trial = new OrderTrial(before, copy.Read());
+            }
+        }
+        catch (Exception e) when (e is not OutOfMemoryException) { trial = null; }
+        _trials[token] = trial;
+        return trial;
     }
 
     /// <summary>Set the doctrine. <paramref name="overrode"/> is true when it differs from the general's ghost; it goes through to the general's learn call.</summary>
@@ -297,6 +332,7 @@ public sealed class DoctrineSession : IDisposable
 
         public async ValueTask<PlayerChoice> ChooseAsync(ArmyReadModel army, GeneralOutput ghost, int round, CancellationToken ct)
         {
+            s._trials.Clear();
             s.Army = army; s.Ghost = ghost; s.Stage = DoctrineStage.Doctrine; s.Status = "";
             var tcs = s._chooseTcs = new TaskCompletionSource<PlayerChoice>(TaskCreationOptions.RunContinuationsAsynchronously);
             s.Notify();

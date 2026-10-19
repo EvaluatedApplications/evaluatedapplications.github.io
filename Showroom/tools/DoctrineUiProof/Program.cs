@@ -48,7 +48,14 @@ BunitContext NewCtx(bool prerender)
 
 var allText = new List<string>();   // every screen's visible text, scanned for wording at the end
 var allMarkup = new List<string>();
-void Scan(IRenderedComponent<DoctrinePage> p) { allText.Add(Regex.Replace(p.Find(".dc").TextContent, @"\s+", " ")); allMarkup.Add(p.Markup); }
+var playText = new List<string>();   // the same screens WITHOUT the "How it is built" expander: the words a player plays by
+void Scan(IRenderedComponent<DoctrinePage> p)
+{
+    allText.Add(Regex.Replace(p.Find(".dc").TextContent, @"\s+", " ")); allMarkup.Add(p.Markup);
+    var clone = (AngleSharp.Dom.IElement)p.Find(".dc").Clone(true);
+    foreach (var d in clone.QuerySelectorAll("details.dc-built").ToList()) d.Remove();
+    playText.Add(Regex.Replace(clone.TextContent, @"\s+", " "));
+}
 // --shots <dir>: write the page markup of the named states (the screenshot script wraps them in the real stylesheets)
 string shotsDir = Array.IndexOf(args, "--shots") is var si and >= 0 && si + 1 < args.Length ? args[si + 1] : "";
 void Shot(string name, IRenderedComponent<DoctrinePage> p) { if (shotsDir.Length == 0) return; Directory.CreateDirectory(shotsDir); File.WriteAllText(Path.Combine(shotsDir, name + ".html"), p.Markup); }
@@ -70,10 +77,10 @@ var script = new ScriptHands([ScriptHands.How.Manual, ScriptHands.How.Ignore, Sc
 int gateSeed = -1;
 for (int sd = 1; sd < 400 && gateSeed < 0; sd++)
 {
-    var arenas = new DoctrineSections().Build(script, new DoctrineDomain { MaxRounds = 1 });
+    var arenas = new DoctrineSections().Build(script, DoctrineSession.GameRules(1));
     var arena = arenas.Context.Battle.Arenas[(int)(GameRng.Mix(sd, 3000) % (ulong)arenas.Context.Battle.Arenas.Count)];
     if (arena.Id != "falling-gate") continue;
-    var r = await new DoctrineSections().Build(script, new DoctrineDomain { MaxRounds = 1 }).PlayAsync(sd);
+    var r = await new DoctrineSections().Build(script, DoctrineSession.GameRules(1)).PlayAsync(sd);
     if (r.Rounds[0].Replay.Frames.Any(f => f.WorldFlags != 0)) gateSeed = sd;
 }
 Check("setup: a seed was found whose first battle is on the falling-gate arena and sees the gate fall", gateSeed > 0, "seed " + gateSeed);
@@ -110,6 +117,7 @@ async Task DoChoose(IRenderedComponent<DoctrinePage> p, ScriptHands sh, int roun
 {
     await Until(() => Has(p, ".dc-editor"), 20000, "doctrine screen");
     var st = sh.Decide(round, p.Instance.Session!.Army!, p.Instance.Session!.Ghost!);
+    Console.WriteLine($"  (hands, round {round}: {st.How} {string.Join(" ", st.Tokens.Select(DoctrineVocabulary.Name))}; army {p.Instance.Session!.Army!.Soldiers} soldiers, {p.Instance.Session!.Army!.Gold} gold)");
     Scan(p);
     switch (st.How)
     {
@@ -158,13 +166,15 @@ Check("start: the game starts with that seed and 3 rounds", S.InGame && S.Seed =
 // ---- round 0: draft with a refusal, legal-only doctrine, no ghost yet
 await Until(() => Has(page, ".dc-draft"), 20000, "round 0 draft");
 Check("draft: the top bar says Round 1 of 3 and the gold; the general panel counts its examples", Text(page, ".dc-status").Contains("Round 1 of 3") && Text(page, ".dc-status").Contains("Gold ") && Text(page, ".dc-examples").Contains("General: 0 examples seen"), Text(page, ".dc-status") + " | " + Text(page, ".dc-examples"));
-Check("draft: all eight kinds are listed with traits and a price, each with 44px plus and minus buttons", page.FindAll(".dc-kind").Count == 8 && page.FindAll(".dc-kind .dc-plus").Count == 8 && page.FindAll(".dc-kind .dc-minus").Count == 8 && page.FindAll(".dc-kind")[7].TextContent.Contains("Catapults") && page.FindAll(".dc-kind")[7].TextContent.Contains("4 gold each"));
+Check("draft: all eight kinds are listed with traits and a price, each with 44px plus and minus buttons", page.FindAll(".dc-kind").Count == 8 && page.FindAll(".dc-kind .dc-plus").Count == 8 && page.FindAll(".dc-kind .dc-minus").Count == 8 && page.FindAll(".dc-kind")[7].TextContent.Contains("Catapults") && page.FindAll(".dc-kind")[7].TextContent.Contains($"{Roster.PriceOf(7)} gold each")
+    && Enumerable.Range(0, 8).All(k => page.FindAll(".dc-kind")[k].TextContent.Contains($"{Roster.PriceOf(k)} gold each")));
 ulong digestBeforeRound0 = S.Draft!.Army.Digest();
 int gold0 = S.Draft!.Army.Gold;
-for (int i = 0; i < 4; i++) await page.InvokeAsync(() => page.FindAll(".dc-kind")[7].QuerySelector(".dc-plus")!.Click());   // 4 catapults = 16 gold
+int catapultPack = gold0 / Roster.PriceOf(7) + 1;                       // one more than the purse can pay
+for (int i = 0; i < catapultPack; i++) await page.InvokeAsync(() => page.FindAll(".dc-kind")[7].QuerySelector(".dc-plus")!.Click());
 Check("draft: the ARMY's own refusal is shown in plain words when the gold is not there", await Until(() => Has(page, ".dc-refused"), 3000, "refusal") && Text(page, ".dc-refused").Contains("Too little gold for this pick."), Text(page, ".dc-refused"));
-Check("draft: the cost line is shown", Text(page, ".dc-sum").Contains($"costs 16 of {gold0} gold"), Text(page, ".dc-sum"));
-for (int i = 0; i < 4; i++) await page.InvokeAsync(() => page.FindAll(".dc-kind")[7].QuerySelector(".dc-minus")!.Click());
+Check("draft: the cost line is shown", Text(page, ".dc-sum").Contains($"costs {catapultPack * Roster.PriceOf(7)} of {gold0} gold"), Text(page, ".dc-sum"));
+for (int i = 0; i < catapultPack; i++) await page.InvokeAsync(() => page.FindAll(".dc-kind")[7].QuerySelector(".dc-minus")!.Click());
 Check("draft: taking the picks back clears the refusal; the minus button is disabled at zero", await Until(() => !Has(page, ".dc-refused"), 3000, "refusal gone") && page.FindAll(".dc-kind")[7].QuerySelector(".dc-minus")!.HasAttribute("disabled"));
 Check("draft: the real army was untouched by the preview", S.Draft!.Army.Digest() == digestBeforeRound0 && S.Draft.Army.Gold == gold0);
 await DoDraft(page, 0);
@@ -190,7 +200,25 @@ Scan(page);
     int cullCount = Enumerable.Range(1, DoctrineVocabulary.Size - 1).Count(tk => DoctrineVocabulary.Decode(tk).Family == OrderFamily.Army && (ArmyOrderKind)DoctrineVocabulary.Decode(tk).Kind == ArmyOrderKind.Cull);
     Check("doctrine: the palette holds every order but Cull (hidden: the army allows none) and each is enabled exactly when the army's legal list allows it", cullCount > 0 && seen.Count == DoctrineVocabulary.Size - 1 - cullCount && match, $"{enabled} enabled, {disabled} disabled, {cullCount} Cull tokens not shown");
     Check("doctrine: the list really restricts (some enabled, some disabled) and no Cull chip exists at all", enabled > 0 && disabled > 0 && page.Markup.IndexOf("Cull a trait", StringComparison.Ordinal) < 0);
-    Check("doctrine: Cull is one plain sentence and the internal operation is never named", Has(page, ".dc-cullnote") && Text(page, ".dc-cullnote") == "Cull is not offered on this army." && !page.Markup.Contains("Restrict"), Text(page, ".dc-cullnote"));
+    Check("doctrine: Cull is one plain sentence in the lord's voice and the internal operation is never named", Has(page, ".dc-cullnote") && Text(page, ".dc-cullnote") == "No order to dismiss soldiers is offered to this host." && !page.Markup.Contains("Restrict"), Text(page, ".dc-cullnote"));
+    // the tray in the lord's words, its figures the rules' own
+    {
+        string tray = Regex.Replace(Text(page, ".dc-tray"), @"\s+", " ");
+        string[] ordHand = ["zeroth", "first", "second", "third", "fourth", "fifth", "sixth", "seventh", "eighth", "ninth", "tenth", "eleventh", "twelfth"];
+        int? capSeen = null;
+        if (new global::Doctrine.Army.PleromaArmyService().TryParse("DA2.0.0.5000.0..4:300:2:0", out var bigHost, out _)) { bigHost!.ApplyArmyOrdersAsync(DoctrineSet.Of(DoctrineVocabulary.Army(ArmyOrderKind.Aura, 3)), CancellationToken.None).AsTask().Wait(); capSeen = bigHost.Read().Cohorts[0].PowerPct - 100; }
+        Check("tray (words): the three groups are 'Orders for a line', 'Should the host fall' and 'Orders for the whole host', with the five kinds of host order under their lord's names",
+            new[] { "Orders for a line", "Should the host fall", "Orders for the whole host", "Reform the ranks", "Reforge", "Drill the host", "Swear into a kind", "Raise a banner" }.All(tray.Contains) && !tray.Contains("Field orders") && !tray.Contains("Army orders"), tray.Length > 300 ? tray[..300] : tray);
+        Check("tray (words): the rules above the cards carry the game's own figures (a year adds the power per year, the ring's length, the banner's cap, the trigger's shares)",
+            tray.Contains($"each year adds {Roster.VetStepPct}% power") && tray.Contains($"The {ordHand[Roster.VetPeriod]} drill sends a cohort back to its first year") && capSeen is > 0 && tray.Contains($"up to {capSeen}%")
+            && tray.Contains("Orders before it open the battle; orders after it take over once your host has lost a quarter, half or three quarters of its soldiers"));
+        var cards = page.FindAll(".dc-chip");
+        Check("tray (cards): every card has its label and its one-line effect; the three triggers are cards of the 'Should the host fall' group; a card with a cost or a preview says so",
+            cards.All(c => c.QuerySelector(".lb") is not null && c.QuerySelector(".fx")!.TextContent.Trim().Length > 8)
+            && new[] { "Should a quarter fall", "Should half fall", "Should three quarters fall" }.All(l => cards.Any(c => c.QuerySelector(".lb")!.TextContent.Trim() == l))
+            && cards.Where(c => c.QuerySelector(".lb")!.TextContent.Trim().StartsWith("Reform the ranks")).All(c => c.HasAttribute("disabled") || c.QuerySelector(".pv")!.TextContent.StartsWith("Your front line "))
+            && cards.Where(c => c.QuerySelector(".lb")!.TextContent.Trim().StartsWith("Reforge:")).All(c => (c.QuerySelector(".cost") is null) == (S.Army!.Cohorts.All(k => Roster.RelabelCost(k.Traits, Array.IndexOf(DoctrineWords.Traits, c.QuerySelector(".lb")!.TextContent.Trim()[9..]), true) == 0))));
+    }
     int illegal = Enumerable.Range(1, DoctrineVocabulary.Size - 1).First(t => !legal.Allows(t));
     await Tap(page, $"[data-token='{illegal}']");
     Check("doctrine: tapping an order the army says is illegal puts nothing in a slot", page.FindAll(".dc-slot.empty").Count == 4);
@@ -244,7 +272,8 @@ roundTimes.Add(swGame.Elapsed.TotalMilliseconds);
     await Task.Delay(500);
     Check("watch: Pause holds the tick", Text(page, ".dc-tick") == frozen, frozen);
     Check("watch: losses and spoils are listed, with the doctrine set and the general's (empty) suggestion left out", Text(page, ".dc-spoils").Contains("Spoils:") && Text(page, ".dc-spoils").Contains("You brought") && Text(page, ".dc-spoils").Contains("Your doctrine:"));
-    Check("watch: the army after the round is shown", Has(page, ".dc-army"));
+    // The panel names the army the round LEFT (a host wiped out has no list, only the header), read against the closed round's own army.
+    Check("watch: the army after the round is shown", Regex.Replace(Text(page, ".dc-armypanel h2"), @"\s+", " ").Contains($"{S.Last!.ArmyAfter.Soldiers} soldiers, {S.Last.ArmyAfter.Gold} gold") && (S.Last.ArmyAfter.Soldiers == 0 || Has(page, ".dc-army")), Text(page, ".dc-armypanel h2"));
 
     // ---- the chronicle beside the field (live with the replay, a tapped line jumps the replay, the full account at the end)
     {
@@ -372,9 +401,33 @@ Check("end: the end screen says plainly the code holds the army only and a refre
 
 // determinism: the page's game equals the headless game with the same hands
 {
-    var headless = await new DoctrineSections().Build(script, new DoctrineDomain { MaxRounds = 3 }).PlayAsync(gateSeed);
+    var headless = await new DoctrineSections().Build(script, DoctrineSession.GameRules(3)).PlayAsync(gateSeed);
+    if (headless.Digest() != result.Digest())
+        for (int i = 0; i < Math.Min(headless.Rounds.Count, result.Rounds.Count); i++)
+        {
+            var pr = result.Rounds[i]; var hr = headless.Rounds[i];
+            Console.WriteLine($"    round {i}: page doctrine '{pr.PlayerDoctrine}' ghost '{pr.Ghost}' conf {pr.GhostConfidence} overrode {pr.Overrode} dropped {pr.IllegalDropped} replay {ReplayCodec.Digest(pr.Replay):x} army {pr.PlayerDigest:x} enemy {pr.EnemyDigest:x} spoils {pr.Spoils.Gold}/{pr.Spoils.Experience}");
+            if (ReplayCodec.Digest(pr.Replay) != ReplayCodec.Digest(hr.Replay))
+            {
+                var pf = pr.Replay.Frames; var hf = hr.Replay.Frames;
+                Console.WriteLine($"    round {i}: arena page {pr.ArenaId} head {hr.ArenaId}; frames page {pf.Count} head {hf.Count}; ticks {pr.Result.Ticks} vs {hr.Result.Ticks}; outcome {pr.Result.Outcome} vs {hr.Result.Outcome}; losses {pr.Result.AttackerLosses.Sum(l => l.Lost)}/{pr.Result.DefenderLosses.Sum(l => l.Lost)} vs {hr.Result.AttackerLosses.Sum(l => l.Lost)}/{hr.Result.DefenderLosses.Sum(l => l.Lost)}");
+                for (int k = 0; k < Math.Min(pf.Count, hf.Count); k++)
+                {
+                    string a = string.Join(";", pf[k].Blobs.Select(b => $"{b.Id}:{b.X},{b.Y},{b.Strength}")) + "|" + string.Join(";", pf[k].Events.Select(e => $"{e.Source}>{e.Target}={e.Damage}")) + "|" + pf[k].WorldFlags;
+                    string h = string.Join(";", hf[k].Blobs.Select(b => $"{b.Id}:{b.X},{b.Y},{b.Strength}")) + "|" + string.Join(";", hf[k].Events.Select(e => $"{e.Source}>{e.Target}={e.Damage}")) + "|" + hf[k].WorldFlags;
+                    if (a != h) { Console.WriteLine($"    first difference at frame {k} (tick {pf[k].Tick}):\n      page {a}\n      head {h}"); break; }
+                }
+            }
+            Console.WriteLine($"    round {i}: head doctrine '{hr.PlayerDoctrine}' ghost '{hr.Ghost}' conf {hr.GhostConfidence} overrode {hr.Overrode} dropped {hr.IllegalDropped} replay {ReplayCodec.Digest(hr.Replay):x} army {hr.PlayerDigest:x} enemy {hr.EnemyDigest:x} spoils {hr.Spoils.Gold}/{hr.Spoils.Experience}");
+        }
     Check("determinism: the page game and the headless game with the same hands have the SAME digest", headless.Digest() == result.Digest(), $"{result.Digest():x16} vs {headless.Digest():x16}");
-    Check("determinism: every round's recording is byte-identical", headless.Rounds.Count == 3 && headless.Rounds.Zip(result.Rounds).All(p => ReplayCodec.Encode(p.First.Replay).AsSpan().SequenceEqual(ReplayCodec.Encode(p.Second.Replay))));
+    {
+        // INFORMATION, not a check: the same game with the picks of each draft handed over in the opposite order.
+        var reversed = await new DoctrineSections().Build(new ReversedPicks(script), DoctrineSession.GameRules(3)).PlayAsync(gateSeed);
+        var which = Enumerable.Range(0, Math.Min(reversed.Rounds.Count, headless.Rounds.Count)).Where(i => ReplayCodec.Digest(reversed.Rounds[i].Replay) != ReplayCodec.Digest(headless.Rounds[i].Replay)).ToList();
+        Console.WriteLine($"  (information: the same game with each draft's picks in the opposite order: digest {(reversed.Digest() == headless.Digest() ? "equal" : "DIFFERENT")}, recordings that differ: [{string.Join(",", which)}], army digests of those rounds equal: {which.All(i => reversed.Rounds[i].PlayerDigest == headless.Rounds[i].PlayerDigest)})");
+    }
+    Check("determinism: every round's recording is byte-identical",headless.Rounds.Count == 3 && headless.Rounds.Zip(result.Rounds).All(p => ReplayCodec.Encode(p.First.Replay).AsSpan().SequenceEqual(ReplayCodec.Encode(p.Second.Replay))));
     Check("determinism: the final army code is the same", headless.PlayerArmyCode == result.PlayerArmyCode);
 }
 
@@ -463,12 +516,13 @@ Check("leave: two rounds listed and the code is the army after round 2", pageB.F
     await Tap(pageO, ".dc-opt", 0);
     await Tap(pageO, "#dc-new");
     await Until(() => Has(pageO, ".dc-draft"), 20000, "O draft");
-    foreach (var (kind, n) in new[] { (0, 3), (1, 1), (3, 2), (7, 4) })   // 9 gold of 12 for the first three; four catapults (16 gold) cannot be paid
+    int goldO = SO.Draft!.Army.Gold, catO = goldO / Roster.PriceOf(7) + 1;
+    foreach (var (kind, n) in new[] { (0, 2), (1, 1), (3, 2), (7, catO) })   // the first three are paid from the purse; a pack of catapults one bigger than the purse can pay is not
         for (int i = 0; i < n; i++) await pageO.InvokeAsync(() => pageO.FindAll(".dc-kind")[kind].QuerySelector(".dc-plus")!.Click());
     await Tap(pageO, "#dc-confirm");
     await Until(() => Has(pageO, ".dc-editor"), 20000, "O doctrine");
     Check("draft: what the army would not take, as it told the pipeline (DraftedAsync), is said in plain words after the confirmation",
-        Has(pageO, ".dc-notice") && Text(pageO, ".dc-notice").StartsWith("The army did not take part of your draft.") && Text(pageO, ".dc-notice").Contains("Catapults x4: Too little gold for this pick."), Has(pageO, ".dc-notice") ? Text(pageO, ".dc-notice") : "no notice");
+        Has(pageO, ".dc-notice") && Text(pageO, ".dc-notice").StartsWith("The army did not take part of your draft.") && Text(pageO, ".dc-notice").Contains($"Catapults x{catO}: Too little gold for this pick."),Has(pageO, ".dc-notice") ? Text(pageO, ".dc-notice") : "no notice");
     Scan(pageO);
     int merge0 = DoctrineVocabulary.Army(ArmyOrderKind.Merge, 0);
     Check("setup: merging kind 1 into kind 0 is legal while both are held", SO.Army!.Legal.Allows(merge0));
@@ -479,7 +533,7 @@ Check("leave: two rounds listed and the code is the army after round 2", pageB.F
     Scan(pageO);
     var recO = SO.Records.FirstOrDefault();
     Check("orders: the record carries the army's own count (one applied, one skipped: the second merge finds nothing to merge)", recO?.Orders is { Applied: 1, Skipped: 1 }, recO?.Orders?.ToString() ?? "none");
-    Check("orders: the watch screen says it in plain words", Has(pageO, ".dc-applied") && Text(pageO, ".dc-applied") == "1 of your 2 army orders was applied. The army skipped 1 that was not legal when its turn came.", Has(pageO, ".dc-applied") ? Text(pageO, ".dc-applied") : "missing");
+    Check("orders: the watch screen says it in plain words", Has(pageO, ".dc-applied") && Text(pageO, ".dc-applied") == "1 of your 2 orders for the whole host was applied. The host skipped 1 that was not allowed when its turn came.",Has(pageO, ".dc-applied") ? Text(pageO, ".dc-applied") : "missing");
     await Tap(pageO, "#dc-leave");
     await Until(() => Has(pageO, ".dc-end"), 20000, "O end");
     var codeO = SO.Result!.PlayerArmyCode;
@@ -538,7 +592,7 @@ string page_style(IRenderedComponent<DoctrinePage> p) => p.Find(".dc-ghost").Get
     Scan(pageN);
     await Tap(pageN, "#dc-confirm");
     await Until(() => Has(pageN, ".dc-editor"), 20000, "N doctrine");
-    Check("no soldiers: nothing is legal, every order is greyed out and the page says why", pageN.FindAll(".dc-chip").All(c => c.HasAttribute("disabled")) && Text(pageN, ".dc-tray").Contains("no order is legal"));
+    Check("no soldiers: nothing is legal, every order is greyed out and the page says why", pageN.FindAll(".dc-chip").All(c => c.HasAttribute("disabled")) && Text(pageN, ".dc-tray").Contains("no order can be given"));
     Scan(pageN);
     await Tap(pageN, "#dc-leave");
     Check("no soldiers: leaving still hands back a valid army code", await Until(() => Has(pageN, ".dc-end"), 20000, "N end") && Text(pageN, "#dc-armycode").StartsWith("DA2."));
@@ -556,6 +610,7 @@ HashSet<int> ExpectedChips(int step)
     var set = new HashSet<int>();
     int fieldKinds = 2 * (Math.Min(step, 2) + 1);                      // Advance, Hold | + Flank, Fall back | + Guard, Hunt
     for (int g = 0; g < 3; g++) for (int f = 0; f < fieldKinds; f++) set.Add(DoctrineVocabulary.Field((FieldOrderKind)f, g));
+    if (step >= 2) for (int q = 1; q <= 3; q++) set.Add(DoctrineVocabulary.WhenLost(q));          // the three loss triggers open with Guard and Hunt (four slots)
     if (step >= 3) { set.Add(DoctrineVocabulary.Army(ArmyOrderKind.Rotate, 1)); set.Add(DoctrineVocabulary.Army(ArmyOrderKind.Rotate, 2)); set.Add(DoctrineVocabulary.Army(ArmyOrderKind.Age)); }
     if (step >= 4)
     {
@@ -581,9 +636,9 @@ string GeneralFree(string s) => Regex.IsMatch(s, "general", RegexOptions.IgnoreC
     string[][] newLines =
     [
         [],
-        ["New orders: Flank, Fall back.", "New slot: 3.", "New soldiers: Shieldwall, Riders."],
-        ["New orders: Guard, Hunt.", "New slot: 4.", "New soldiers: Priests, Wights."],
-        ["New orders: Rotate, Age, Flip, Merge, Aura.", "New soldiers: Wolves, Catapults."],
+        ["New orders: Ride the flank, Fall back.", "New slot: 3.", "New soldiers: Shieldwall, Riders."],
+        ["New orders: Guard the host, Run them down, Should the host fall.", "New slot: 4.", "New soldiers: Priests, Wights."],
+        ["New orders: Reform the ranks, Drill the host, Reforge, Swear into a kind, Raise a banner.", "New soldiers: Wolves, Catapults."],
         [],
     ];
     int[] kindsOpen = [2, 4, 6, 8, 8], slotsOpen = [2, 3, 4, 4, 4];
@@ -618,7 +673,7 @@ string GeneralFree(string s) => Regex.IsMatch(s, "general", RegexOptions.IgnoreC
                     string.Join(" | ", rows.Select(r => Regex.Replace(r.QuerySelector(".plain")!.TextContent, @"\s+", " ").Trim())));
                 Check("army panel (round 1): the sentences carry no trait name, no 'veterancy', no 'power' and no 'None'", rows.All(r => !Regex.IsMatch(r.QuerySelector(".plain")!.TextContent, @"Heavy|Swift|Ranged|Holy|Cursed|Beast|Machine|Shielded|[Vv]eterancy|[Pp]ower|None")));
                 Check("army panel (round 1): traits, veterancy and power sit in a Details expander of each cohort, closed", rows.Zip(openC).All(p => p.First.QuerySelector("details.dc-det") is { } d && !d.HasAttribute("open") && d.QuerySelector("summary")!.TextContent.Trim() == "Details"
-                    && Regex.Replace(d.QuerySelector(".meta")!.TextContent, @"\s+", " ").Trim() == $"Traits: {DoctrineWords.TraitList(p.Second.Traits)}. Veterancy {p.Second.Veterancy}. Power {p.Second.PowerPct}%."));
+                    && Regex.Replace(d.QuerySelector(".meta")!.TextContent, @"\s+", " ").Trim() == $"Traits: {DoctrineWords.TraitList(p.Second.Traits)}. Seasoned {p.Second.Veterancy} {(p.Second.Veterancy == 1 ? "year" : "years")}. Power {p.Second.PowerPct}%."));
                 var oth = pageU.FindAll(".dc-armypanel details.dc-other");
                 Check("army panel (round 1): the kinds not open yet wait under one collapsed 'Other soldiers: N' line (N is their soldiers), expandable to the same plain rows", otherC.Count == 0 ? oth.Count == 0
                     : oth.Count == 1 && !oth[0].HasAttribute("open") && oth[0].QuerySelector("summary")!.TextContent.Trim() == $"Other soldiers: {otherC.Sum(c => c.Count)}" && oth[0].QuerySelectorAll(".dc-cohortlist > li").Length == otherC.Count
@@ -701,7 +756,10 @@ string GeneralFree(string s) => Regex.IsMatch(s, "general", RegexOptions.IgnoreC
                 Shot("u1-doctrine", pageU);
                 Check("field (order tray open): the tray is open and the three lines are still in the field", Has(pageU, ".dc-tray") && pageU.FindAll(".dc-field .dc-lines .dc-lane").Count == 3 && pageU.FindAll(".dc-field .dc-disc").Count == SU.Army!.Cohorts.Count);
                 var fieldChips = pageU.FindAll(".dc-chip").Where(c => DoctrineVocabulary.Decode(int.Parse(c.GetAttribute("data-token")!)).Family == OrderFamily.Field).ToList();
-                Check("orders (round 1): each field order chip says its plain effect under its label", fieldChips.Count == 6 && fieldChips.All(c => c.QuerySelector(".fx")!.TextContent.Trim() == DoctrineWords.FieldSentences[DoctrineVocabulary.Decode(int.Parse(c.GetAttribute("data-token")!)).Kind] && c.QuerySelector(".lb")!.TextContent.Trim() == DoctrineWords.Label(int.Parse(c.GetAttribute("data-token")!))), $"{fieldChips.Count} chips");
+                string[] sayFirst = ["Marches on the nearest enemy cohort.", "Stands its ground and keeps watch."];
+                Check("orders (round 1): each order for a line says its plain effect under its label (Press on, Hold the line)", fieldChips.Count == 6 && fieldChips.All(c => c.QuerySelector(".fx")!.TextContent.Trim() == DoctrineWords.FieldSentences[DoctrineVocabulary.Decode(int.Parse(c.GetAttribute("data-token")!)).Kind] && c.QuerySelector(".lb")!.TextContent.Trim() == DoctrineWords.Label(int.Parse(c.GetAttribute("data-token")!)))
+                    && fieldChips.Any(c => c.QuerySelector(".lb")!.TextContent.Trim() == "Front line: Press on" && c.QuerySelector(".fx")!.TextContent.Trim() == sayFirst[0])
+                    && fieldChips.Any(c => c.QuerySelector(".lb")!.TextContent.Trim() == "Middle line: Hold the line" && c.QuerySelector(".fx")!.TextContent.Trim() == sayFirst[1]), $"{fieldChips.Count} chips");
             }
             // more orders than slots are refused: fill every slot, then try one more
             var openLegal = exp.Where(legal.Allows).Where(t => !IsCull(t)).Take(slotsOpen[r] + 1).ToList();
@@ -741,7 +799,7 @@ string GeneralFree(string s) => Regex.IsMatch(s, "general", RegexOptions.IgnoreC
             if (tries.Count == 1)
             {
                 var t0 = tries[0];
-                if (Regex.Match(t0, @"skipped (\d+) of your army") is { Success: true } m1) tryOk &= rec.Orders is { } o1 && o1.Skipped == int.Parse(m1.Groups[1].Value);
+                if (Regex.Match(t0, @"skipped (\d+) of your orders") is { Success: true } m1) tryOk &= rec.Orders is { } o1 && o1.Skipped == int.Parse(m1.Groups[1].Value);
                 if (Regex.Match(t0, @"lost the most \((\d+)\)") is { Success: true } m2) tryOk &= rec.Result.AttackerLosses.Max(l => l.Lost) == int.Parse(m2.Groups[1].Value);
                 if (Regex.Match(t0, @"you have (\d+) gold") is { Success: true } m3) tryOk &= SU.Last!.ArmyAfter.Gold == int.Parse(m3.Groups[1].Value);
                 if (t0.Contains("no orders")) tryOk &= rec.PlayerDoctrine.IsEmpty;
@@ -860,7 +918,7 @@ async Task DoAdviceDraft(IRenderedComponent<DoctrinePage> p)
         cs.Lines.Select(l => (l.Tick, l.Kind, l.Text)).SequenceEqual(want), string.Join(" | ", cs.Lines.Select(l => $"{l.Tick} {l.Kind} {l.Text}").Except(want.Select(w => $"{w.Tick} {w.Kind} {w.Text}")).Take(3)));
     Check("chronicle (synthetic frames): a line reads as the Count says it ('Tick 12. ...')", cs.Lines.Any(l => l.Full == "Tick 4. First contact. Your Riders strike the enemy Spearmen, and the enemy has not struck yet."));
     Check("chronicle (synthetic frames): the Why is hand-written too: the turning point (largest swing in soldiers), the first line to fall, and one hint tied to the Flank order given",
-        cs.Why.Lines.SequenceEqual(["Turning point: tick 8, when the enemy lost 6 soldiers and you lost 1.", "The first line to fall: the enemy Front line, at tick 7.", "Your Flank order on the Middle line reached the enemy: your Priests struck from the side at tick 8."])
+        cs.Why.Lines.SequenceEqual(["Turning point: tick 8, when the enemy lost 6 soldiers and you lost 1.", "The first line to fall: the enemy Front line, at tick 7.", "Your order to ride the flank on the Middle line reached the enemy: your Priests struck from the side at tick 8."])
         && cs.Why is { TurnTick: 8, TurnYouLost: 1, TurnEnemyLost: 6, FirstBreakTick: 7, FirstBreakBlob: 3, FirstLineTick: 7, FirstLineSide: Side.Enemy, FirstLineSlot: 0 }, string.Join(" | ", cs.Why.Lines));
     var problems = ChronicleCheck.Verify(cs, syn, kn, roster);
     Check("chronicle (synthetic frames): the independent checker finds every line backed by a real frame event, break, flag, run, span or stand", problems.Count == 0, string.Join(" | ", problems.Take(3)));
@@ -920,7 +978,7 @@ async Task DoAdviceDraft(IRenderedComponent<DoctrinePage> p)
         Check("mutant: a turning point at the wrong tick is found", ChronicleCheck.VerifyWhy(fakeWhy, syn, synDoctrine, kn).Count > 0);
         var fakeWhy2 = cs with { Why = cs.Why with { Lines = cs.Why.Lines.Select(w => w.Replace("lost 6 soldiers", "lost 7 soldiers")).ToList() } };
         Check("mutant: a Why line with the wrong number is found", ChronicleCheck.VerifyWhy(fakeWhy2, syn, synDoctrine, kn).Count > 0);
-        var fakeHint = cs with { Why = cs.Why with { Hint = "Your Back line broke first while ordered to Hold. Try another order for it.", Lines = [.. cs.Why.Lines.Take(2), "Your Back line broke first while ordered to Hold. Try another order for it."] } };
+        var fakeHint = cs with { Why = cs.Why with { Hint = "Your Back line broke first while ordered to hold the line. Try another order for it.", Lines = [.. cs.Why.Lines.Take(2), "Your Back line broke first while ordered to hold the line. Try another order for it."] } };
         Check("mutant: a hint about a line that did not break first is found", ChronicleCheck.VerifyWhy(fakeHint, syn, synDoctrine, kn).Count > 0);
     }
 
@@ -928,10 +986,11 @@ async Task DoAdviceDraft(IRenderedComponent<DoctrinePage> p)
     var tally = new Dictionary<ChronicleKind, int>();
     int battles = 0, linesTotal = 0, bad = 0, whyBad = 0, detBad = 0, lossBad = 0;
     var firstProblems = new List<string>();
+    var hintsSeen = new List<string>();
     for (int seed = 1; seed <= 8; seed++)
     {
         var tap = new SetupTap();
-        var game = await new DoctrineSections().Build(new VarietyHands(seed), new DoctrineDomain { MaxRounds = 2 }, tap).PlayAsync(seed);
+        var game = await new DoctrineSections().Build(new VarietyHands(seed), DoctrineSession.GameRules(2), tap).PlayAsync(seed);
         for (int rd = 0; rd < game.Rounds.Count; rd++)
         {
             var rec = game.Rounds[rd];
@@ -940,6 +999,7 @@ async Task DoAdviceDraft(IRenderedComponent<DoctrinePage> p)
             var c = BattleChronicle.Build(rec.Replay, rec.PlayerDoctrine, "Arena", kn, traitsOf);
             battles++; linesTotal += c.Lines.Count;
             foreach (var l in c.Lines) tally[l.Kind] = tally.GetValueOrDefault(l.Kind) + 1;
+            if (c.Why.Hint is not null) hintsSeen.Add(c.Why.Hint);
             var pr = ChronicleCheck.Verify(c, rec.Replay, kn, traitsOf); if (pr.Count > 0) { bad++; firstProblems.AddRange(pr.Take(2).Select(x => $"seed {seed} round {rd}: {x}")); }
             var wp = ChronicleCheck.VerifyWhy(c, rec.Replay, rec.PlayerDoctrine, kn); if (wp.Count > 0) { whyBad++; firstProblems.AddRange(wp.Take(2).Select(x => $"seed {seed} round {rd} why: {x}")); }
             if (Sig(c) != Sig(BattleChronicle.Build(rec.Replay, rec.PlayerDoctrine, "Arena", kn, traitsOf))
@@ -955,12 +1015,16 @@ async Task DoAdviceDraft(IRenderedComponent<DoctrinePage> p)
     Check("chronicle (recorded battles): the frames' totals equal the record's losses, so the Why is the record's own", lossBad == 0, $"{lossBad} differ");
     Check("chronicle (recorded battles): the same recording gives the same log twice and after an encode/decode, in every battle", detBad == 0, $"{detBad} differ");
     Check("chronicle (recorded battles): every battle has an opening, a first contact and an end", tally.GetValueOrDefault(ChronicleKind.Start) == battles && tally.GetValueOrDefault(ChronicleKind.End) == battles && tally.GetValueOrDefault(ChronicleKind.Contact) == battles, string.Join(", ", tally.Select(kv => kv.Key + " " + kv.Value)));
+    var handLower = ChronicleCheck.HandNames.Select(x => x.ToLowerInvariant()).ToArray();
+    Check("chronicle (order names): the hint uses the new names (a lowercase 'ordered to press on', 'your order to ride the flank'), never an old one (Advance, Hold, Flank, Hunt)",
+        cs.Why.Hint is { } sh && sh.Contains("order to ride the flank") && !Regex.IsMatch(string.Join(" ", hintsSeen.Append(sh)), @"\b(Advance|Hold|Flank|Hunt|Guard)\b") && hintsSeen.All(h => handLower.Any(n => h.Contains("ordered to " + n + ".") || h.Contains("order to " + n + " on the "))),
+        string.Join(" | ", hintsSeen.Take(3)));
     Console.WriteLine($"  (chronicle over {battles} recorded battles: {string.Join(", ", tally.OrderBy(kv => kv.Key).Select(kv => kv.Key + " " + kv.Value))})");
 
     // the log of the gate battle is checked in the page block above; here, the mutants against a recorded battle
     {
         var tap = new SetupTap();
-        var game = await new DoctrineSections().Build(new VarietyHands(3), new DoctrineDomain { MaxRounds = 1 }, tap).PlayAsync(3);
+        var game = await new DoctrineSections().Build(new VarietyHands(3), DoctrineSession.GameRules(1), tap).PlayAsync(3);
         var rec = game.Rounds[0]; var setup = tap.Setups[0];
         Func<Side, int, Trait?> traitsOf = (s, k) => (s == Side.Player ? setup.Attacker : setup.Defender).Cohorts.Where(c => c.Key == k).Select(c => (Trait?)c.Traits).FirstOrDefault();
         var c = BattleChronicle.Build(rec.Replay, rec.PlayerDoctrine, "Arena", kn, traitsOf);
@@ -997,7 +1061,189 @@ async Task DoAdviceDraft(IRenderedComponent<DoctrinePage> p)
     Check("wording D: the examples count says what it counts, in the chip and on the start and end screens",
         Regex.Matches(all, Regex.Escape("(each doctrine you set and each battle result)")).Count >= 3 && all.Contains("examples seen (each doctrine you set and each battle result)") && all.Contains("since you opened this page"));
     Check("wording E: the empty-army sentence tells what to do and why", all.Contains("Spend your gold on cohorts: a battle needs soldiers.") && !all.Contains("starts lost"));
-    Check("wording F: Cull is one plain sentence and nothing else; no greyed Cull chip, no operation name", all.Contains("Cull is not offered on this army.") && !all.Contains("this version") && !all.Contains("greyed out for every army") && !allMarkup.Any(m => m.Contains("Cull a trait")));
+    Check("wording F: Cull is one plain sentence and nothing else; no greyed Cull chip, no operation name", all.Contains("No order to dismiss soldiers is offered to this host.") && !all.Contains("Cull is not offered") && !all.Contains("this version") && !all.Contains("greyed out for every army") && !allMarkup.Any(m => m.Contains("Cull a trait") || m.Contains("Dismiss a trait")));
+}
+
+// ---------------------------------------------------------------------------------------------- the orders in a lord's words, against the rules
+{
+    var svc = new global::Doctrine.Army.PleromaArmyService();
+    // A host written out by hand: 5 Spearmen in front, 4 Archers in the middle, 3 Shieldwall at the back, gold to spare, no seasoning.
+    const string hostCode = "DA2.0.0.500.0..0:5:0:0;1:3:2:0;3:4:1:0";
+    OrderTrial? TryOn(int token, string code = hostCode)
+    {
+        svc.TryParse(code, out var a, out _);
+        var before = a!.Read();
+        var r = a.ApplyArmyOrdersAsync(DoctrineSet.Of(token), CancellationToken.None).Result;
+        return r.Applied == 1 ? new OrderTrial(before, a.Read()) : null;
+    }
+    int Tk(ArmyOrderKind k, int a = 0) => DoctrineVocabulary.Army(k, a);
+    string[] lineHand = ["Front", "Middle", "Back"];
+    string[] traitHand = ["heavily armoured", "fleet", "shoots from afar", "blessed", "cursed", "beast", "siege-built", "shielded"];
+    string[] folkHand = ["the heavily armoured", "the fleet", "the far-shooters", "the blessed", "the cursed", "the beasts", "the siege engines", "the shielded"];
+    string[] kindHand = ["Spearmen", "Shieldwall", "Riders", "Archers", "Priests", "Wights", "Wolves", "Catapults"];
+
+    // ---- the names
+    var wrongNames = new List<string>();
+    void Want(int token, string text) { if (DoctrineWords.Label(token) != text) wrongNames.Add($"{DoctrineVocabulary.Name(token)}: '{DoctrineWords.Label(token)}' not '{text}'"); }
+    for (int g = 0; g < 3; g++) for (int f = 0; f < 6; f++) Want(DoctrineVocabulary.Field((FieldOrderKind)f, g), $"{lineHand[g]} line: {ChronicleCheck.HandNames[f]}");
+    Want(Tk(ArmyOrderKind.Rotate, 1), "Reform the ranks: 1 place"); Want(Tk(ArmyOrderKind.Rotate, 2), "Reform the ranks: 2 places");
+    for (int b = 0; b < 8; b++) { Want(Tk(ArmyOrderKind.Flip, b), "Reforge: " + traitHand[b]); Want(Tk(ArmyOrderKind.Aura, b), "Raise the banner of " + folkHand[b]); Want(Tk(ArmyOrderKind.Merge, b), "Swear into the " + kindHand[b]); }
+    Want(Tk(ArmyOrderKind.Age), "Drill the host");
+    Want(DoctrineVocabulary.WhenLost(1), "Should a quarter fall"); Want(DoctrineVocabulary.WhenLost(2), "Should half fall"); Want(DoctrineVocabulary.WhenLost(3), "Should three quarters fall");
+    Check("wording (orders): every order has its lord's name: Press on, Hold the line, Ride the flank, Fall back, Guard the host, Run them down; Reform the ranks, Reforge, Drill the host, Swear into the, Raise the banner of, Should a quarter / half / three quarters fall",
+        wrongNames.Count == 0, string.Join(" | ", wrongNames.Take(3)));
+    Check("wording (orders): the kind names stay (Spearmen, Shieldwall, Riders, Archers, Priests, Wights, Wolves, Catapults)", Enumerable.Range(0, 8).All(k => Roster.NameOf(k) == kindHand[k] && DoctrineWords.KindName(k) == kindHand[k]));
+    Check("wording (orders): the traits are plain adjectives (heavily armoured, fleet, shoots from afar, blessed, cursed, beast, siege-built, shielded)", Enumerable.Range(0, 8).All(b => DoctrineWords.Traits[b] == traitHand[b]) && DoctrineWords.TraitList(Trait.Heavy | Trait.Shielded) == "heavily armoured, shielded");
+
+    // ---- Reform the ranks: the direction in the sentence is the army's
+    bool rotOk = true;
+    for (int n = 1; n <= 2; n++)
+    {
+        var t = TryOn(Tk(ArmyOrderKind.Rotate, n))!;
+        foreach (var c in t.Before.Cohorts) rotOk &= t.After.Cohorts.First(x => x.Key == c.Key).Slot == (c.Slot + n) % 3;
+    }
+    Check("rotate: the sentence says front to middle to back, then round to the front, and the army moves every cohort exactly so (by 1 and by 2 places)",
+        rotOk && DoctrineWords.Effect(Tk(ArmyOrderKind.Rotate, 1)) == "Every cohort steps 1 place along the line." && DoctrineWords.Effect(Tk(ArmyOrderKind.Rotate, 2)) == "Every cohort steps 2 places along the line."
+        && DoctrineWords.Sentence(Tk(ArmyOrderKind.Rotate, 1)).Contains("(front to middle to back, then round to the front)"));
+
+    // ---- previews: a hand-built host, each line written out by hand
+    string P(int token, string? note = null) => DoctrineWords.Preview(token, TryOn(token)) ?? "(none)";
+    var prevWant = new (int Token, string Text)[]
+    {
+        (Tk(ArmyOrderKind.Rotate, 1), "Your front line goes from 5 Spearmen to 3 Shieldwall."),
+        (Tk(ArmyOrderKind.Rotate, 2), "Your front line goes from 5 Spearmen to 4 Archers."),
+        (Tk(ArmyOrderKind.Flip, 2), "8 soldiers take it up and 4 shed it."),
+        (Tk(ArmyOrderKind.Age), $"3 cohorts grow {Roster.VetStepPct}% stronger."),
+        (Tk(ArmyOrderKind.Merge, 0), "3 Shieldwall swear in: the Spearmen go from 5 to 8."),
+        (Tk(ArmyOrderKind.Aura, 7), "The cohorts that carry it fight 3% harder this round."),
+    };
+    Check("preview: 'Your front line goes from X to Y' and the other lines are computed from the army's own before and after, equal to the hand-written lines on a hand-built host",
+        prevWant.All(w => P(w.Token) == w.Text), string.Join(" | ", prevWant.Where(w => P(w.Token) != w.Text).Select(w => P(w.Token))));
+    Check("preview: an order for a line, a trigger, or one the host would not take has no preview line (nothing is invented)",
+        DoctrineWords.Preview(DoctrineVocabulary.Field(FieldOrderKind.Hold, 0), TryOn(Tk(ArmyOrderKind.Age))) is null && DoctrineWords.Preview(DoctrineVocabulary.WhenLost(1), TryOn(Tk(ArmyOrderKind.Age))) is null
+        && DoctrineWords.Preview(Tk(ArmyOrderKind.Aura, 3), TryOn(Tk(ArmyOrderKind.Aura, 3))) is null && TryOn(Tk(ArmyOrderKind.Aura, 3)) is null);
+
+    // ---- Reforge: the cost is the army's, twice undoes the traits, not the gold
+    {
+        bool costOk = true; var bad = new List<string>();
+        for (int tk = 1; tk < DoctrineVocabulary.Size; tk++)
+        {
+            if (DoctrineVocabulary.Decode(tk).Family != OrderFamily.Army) continue;
+            var t = TryOn(tk); if (t is null) continue;
+            int spent = t.Before.Gold - t.After.Gold;
+            int? shown = DoctrineWords.CostNow(tk, t.Before, t);
+            if (shown != (spent > 0 ? spent : null)) { costOk = false; bad.Add($"{DoctrineVocabulary.Name(tk)}: shown {shown}, took {spent}"); }
+        }
+        Check("reforge: the cost the card shows is the gold the army really takes for the order (every order for the whole host, on a hand-built host)", costOk, string.Join(" | ", bad.Take(3)));
+        int costly = Enumerable.Range(0, 8).First(b => TryOn(Tk(ArmyOrderKind.Flip, b)) is { } o && o.Before.Gold > o.After.Gold);   // a trait that costs gold to take up on this host
+        svc.TryParse(hostCode, out var twice, out _);
+        var r0 = twice!.Read();
+        twice.ApplyArmyOrdersAsync(DoctrineSet.Of(Tk(ArmyOrderKind.Flip, costly), Tk(ArmyOrderKind.Flip, costly)), CancellationToken.None).AsTask().Wait();
+        var r2 = twice.Read();
+        var once = TryOn(Tk(ArmyOrderKind.Flip, costly))!;
+        Check("reforge: given twice the traits are back as they were and the gold is not (the sentence says so)",
+            r2.Cohorts.Select(c => (c.Key, c.Traits)).SequenceEqual(r0.Cohorts.Select(c => (c.Key, c.Traits))) && once.Before.Gold - once.After.Gold > 0 && r0.Gold - r2.Gold == once.Before.Gold - once.After.Gold
+            && DoctrineWords.Sentence(Tk(ArmyOrderKind.Flip, costly)).Contains("Giving it twice undoes the traits, not the gold."), $"flip bit {costly}: gold {r0.Gold} -> {r2.Gold}");
+        // the card of an order the purse cannot pay still says what it costs, and what is in the purse
+        Check("reforge: a card the purse cannot pay says the cost and the purse", DoctrineWords.CostWords(9, 6) == "Costs 9 gold; you have 6." && DoctrineWords.CostWords(4, 6) == "Costs 4 gold.");
+    }
+
+    // ---- Drill the host: the figures are the rule's
+    {
+        string[] ordHand = ["zeroth", "first", "second", "third", "fourth", "fifth", "sixth", "seventh", "eighth", "ninth", "tenth", "eleventh", "twelfth"];
+        string age = DoctrineWords.Sentence(Tk(ArmyOrderKind.Age)), ageFx = DoctrineWords.Effect(Tk(ArmyOrderKind.Age));
+        var t = TryOn(Tk(ArmyOrderKind.Age))!;
+        svc.TryParse(hostCode, out var ring, out _);
+        for (int i = 0; i < Roster.VetPeriod; i++) ring!.ApplyArmyOrdersAsync(DoctrineSet.Of(Tk(ArmyOrderKind.Age)), CancellationToken.None).AsTask().Wait();
+        var rr = ring!.Read();
+        var stated = Regex.Matches(age + " " + ageFx, @"\d+").Select(m => int.Parse(m.Value)).Distinct().ToList();
+        Check("age: a year adds the power the sentence states (read from the rule), every cohort moves by it, and after the ring's whole length the cohorts are back at their first year",
+            t.After.Cohorts.All(c => c.PowerPct - t.Before.Cohorts.First(x => x.Key == c.Key).PowerPct == Roster.VetStepPct) && rr.Cohorts.All(c => c.Veterancy == 0)
+            && age.Contains($"each year adds {Roster.VetStepPct}% power") && age.Contains($"The {ordHand[Roster.VetPeriod]} drill sends a cohort back to its first year.") && ageFx.Contains($"{Roster.VetStepPct}% power")
+            && stated.SequenceEqual([Roster.VetStepPct]), $"numbers in the text: {string.Join(",", stated)}");
+    }
+
+    // ---- Raise the banner: as many percent as carry it, up to the cap
+    {
+        int? capHand = null;
+        if (svc.TryParse("DA2.0.0.5000.0..4:300:2:0", out var big, out _)) { big!.ApplyArmyOrdersAsync(DoctrineSet.Of(Tk(ArmyOrderKind.Aura, 3)), CancellationToken.None).AsTask().Wait(); capHand = big.Read().Cohorts[0].PowerPct - 100; }
+        var small = TryOn(Tk(ArmyOrderKind.Aura, 3), "DA2.0.0.500.0..4:17:1:0");
+        string aura = DoctrineWords.Sentence(Tk(ArmyOrderKind.Aura, 3)), auraFx = DoctrineWords.Effect(Tk(ArmyOrderKind.Aura, 3));
+        var stated = Regex.Matches(aura + " " + auraFx, @"\d+").Select(m => int.Parse(m.Value)).Distinct().ToList();
+        Check("banner: the cap in the text is the army's own (a 300-soldier host's bonus), and a bonus under the cap is as many percent as soldiers carry it (17 carry it: 17 percent)",
+            capHand is > 0 && aura.Contains($"up to {capHand}%") && auraFx.Contains($"up to {capHand}%") && stated.SequenceEqual([capHand!.Value]) && DoctrineWords.AuraCap == capHand
+            && small is not null && small.After.Cohorts[0].PowerPct - small.Before.Cohorts[0].PowerPct == 17 && aura.Contains("by as many percent as you have soldiers with it") && aura.Contains("It ends with the round."), $"cap {capHand}, text numbers {string.Join(",", stated)}");
+    }
+
+    // ---- Swear into: what the sentence says the army does
+    {
+        var t = TryOn(Tk(ArmyOrderKind.Merge, 0))!;
+        var into = t.After.Cohorts.Single(c => c.Key == 0);
+        Check("swear: the soldiers of the next kind become the kind named, with its traits and place in the line, and their cohort is no more",
+            into.Count == 8 && into.Slot == 0 && into.Traits == Trait.None && t.After.Cohorts.All(c => c.Key != 1)
+            && DoctrineWords.Sentence(Tk(ArmyOrderKind.Merge, 0)) == "Swear into the Spearmen: all the Shieldwall become Spearmen, with the Spearmen's traits and place in the line."
+            && DoctrineWords.Effect(Tk(ArmyOrderKind.Merge, 0)) == "The Shieldwall swear into the Spearmen.");
+    }
+
+    // ---- Should a quarter fall: the slot-order rule is the vocabulary's
+    {
+        int advTk = DoctrineVocabulary.Field(FieldOrderKind.Advance, 0), holdTk = DoctrineVocabulary.Field(FieldOrderKind.Hold, 1);
+        var set = DoctrineSet.Of(advTk, DoctrineVocabulary.WhenLost(2), holdTk);
+        var opening = DoctrineVocabulary.FieldOrders(set); var trig = DoctrineVocabulary.Trigger(set);
+        string rule = DoctrineWords.TriggerRule(), sen = DoctrineWords.Sentence(DoctrineVocabulary.WhenLost(2));
+        Check("trigger: orders before the trigger open the battle and orders after it take over once the stated share of the host has fallen (the vocabulary's own split), and the rule is said in one plain sentence",
+            opening.Length == 1 && opening[0].Kind == FieldOrderKind.Advance && trig is { Quarters: 2 } && trig.Then.Count == 1 && trig.Then[0].Kind == FieldOrderKind.Hold && trig.Then[0].Group == 1
+            && Enumerable.Range(1, 3).All(q => DoctrineVocabulary.Trigger(DoctrineSet.Of(DoctrineVocabulary.WhenLost(q)))!.Quarters == q)
+            && rule == "Orders before it open the battle; orders after it take over once your host has lost a quarter, half or three quarters of its soldiers, as the card says (a line they do not name presses on)."
+            && sen == "Should half of the host fall, then the orders after this one take over: orders before it open the battle, orders after it take over once your host has lost half of its soldiers, and a line they do not name presses on."
+            && DoctrineWords.Effect(DoctrineVocabulary.WhenLost(1)) == "Should a quarter of the host fall, then:" && DoctrineWords.Effect(DoctrineVocabulary.WhenLost(3)) == "Should three quarters of the host fall, then:", sen);
+    }
+
+    // ---- no figure is typed inside a sentence
+    {
+        string src = Path.Combine(showroom, "Services", "Doctrine");
+        var typed = new List<string>();
+        foreach (var f in new[] { "DoctrineWords.cs", "DoctrineProgress.cs", "DoctrineGuide.cs" })
+        {
+            string code = Regex.Replace(File.ReadAllText(Path.Combine(src, f)), @"//[^\n]*", "");
+            foreach (var lit in Lex.StringTexts(code))
+            {
+                if (lit.StartsWith("DA2.")) continue;                                  // the throwaway host the banner's cap is read from
+                if (Regex.IsMatch(lit, @"\d")) typed.Add(f + ": " + lit);
+            }
+        }
+        Check("wording (numbers): no figure is typed inside a sentence of the words, the unlock announcement or the guide (every number is read from the rules)", typed.Count == 0, string.Join(" | ", typed.Take(3)));
+    }
+
+    // ---- the offers: why the page plays with them off
+    {
+        var on = await new DoctrineSections().Build(new ScriptHands([ScriptHands.How.Manual]), new DoctrineDomain { MaxRounds = 1 }).PlayAsync(gateSeed);
+        var off = await new DoctrineSections().Build(new ScriptHands([ScriptHands.How.Manual]), DoctrineSession.GameRules(1)).PlayAsync(gateSeed);
+        Console.WriteLine($"  (free-choice hands, round 1, seed {gateSeed}: offers ON: {on.Rounds[0].OfferRefused} picks/tokens refused, doctrine '{on.Rounds[0].PlayerDoctrine}'; offers OFF: {off.Rounds[0].OfferRefused} refused, doctrine '{off.Rounds[0].PlayerDoctrine}')");
+        Check("offers: with the game's offers ON the page's free-choice hands are refused (a draft pick that is no offered pack, an order not on offer), which is why the page's rules switch them off until the draft screen shows them; with them OFF nothing is refused",
+            on.Rounds[0].OfferRefused > 0 && off.Rounds[0].OfferRefused == 0 && !DoctrineSession.GameRules(3).Offers.Enabled && DoctrineSession.GameRules(3).MaxRounds == 3);
+    }
+
+    // ---- the words a player plays by carry no builder's term; the technical paragraph is behind an expander
+    {
+        string play = string.Join("\n", playText);
+        var banned = new (string Name, string Pattern)[]
+        {
+            ("Pleroma", @"Pleroma"), ("store", @"\bstores?\b"), ("operation", @"\boperations?\b"), ("relabel", @"[Rr]elabel"), ("arrangement", @"\barrangements?\b"), ("flag", @"\bflags?\b"),
+            ("veterancy", @"[Vv]eterancy"), ("legal", @"\blegal\b"), ("command span", @"command span"),
+            ("an old order name", @"\b(Rotate|Flip|Aura|Merge|Cull|Advance|Hunt|Flank)\b|\bHold\b(?! the line)|\bGuard\b(?! the host)"),
+        };
+        foreach (var (name, pattern) in banned)
+        {
+            var m = Regex.Match(play, pattern);
+            Check($"wording (play UI): no '{name}' term in the words a player plays by", !m.Success, m.Success ? "..." + play.Substring(Math.Max(0, m.Index - 50), Math.Min(play.Length - Math.Max(0, m.Index - 50), 110)) + "..." : "");
+        }
+        string all = string.Join("\n", allText);
+        var built = allMarkup.Select(mk => Regex.Match(mk, "<details class=\"dc-about dc-built\"[^>]*>(.*?)</details>", RegexOptions.Singleline)).FirstOrDefault(x => x.Success);
+        Check("wording (play UI): the technical paragraph stays, behind a closed expander labelled 'How it is built' (Pleroma, stores, operations are named only there)",
+            built is not null && Regex.IsMatch(built.Groups[1].Value, @"<summary[^>]*>How it is built</summary>") && Regex.IsMatch(built.Groups[1].Value, "Pleroma") && Regex.IsMatch(built.Groups[1].Value, "operation")
+            && !Regex.IsMatch(built.Value.Substring(0, built.Value.IndexOf('>')), @"\sopen\b") && all.Contains("How it is built"));
+    }
 }
 
 // -------------------------------------------------------------------------------- layout rules (no browser needed)
@@ -1053,6 +1299,54 @@ return failures == 0 ? 0 : 1;
 
 sealed class Time : IBuildTime { public Time(bool p) { IsPrerender = p; } public bool IsPrerender { get; } }
 
+/// <summary>The text of every string literal in some C# code (the parts outside the braces of an interpolated string; a literal inside an interpolation is its own entry).</summary>
+static class Lex
+{
+    public static List<string> StringTexts(string code)
+    {
+        var all = new List<string>();
+        int i = 0;
+        while (i < code.Length)
+        {
+            char c = code[i];
+            if (c == '\'') { i++; while (i < code.Length && code[i] != '\'') i += code[i] == '\\' ? 2 : 1; i++; }
+            else if (c == '"') { all.Add(Str(code, ref i, false, all)); }
+            else if (c == '$' && i + 1 < code.Length && code[i + 1] == '"') { i++; all.Add(Str(code, ref i, true, all)); }
+            else i++;
+        }
+        return all;
+    }
+
+    // i is on the opening quote; returns the text outside any braces and leaves i after the closing quote.
+    static string Str(string code, ref int i, bool interpolated, List<string> all)
+    {
+        i++;
+        var sb = new System.Text.StringBuilder();
+        while (i < code.Length && code[i] != '"')
+        {
+            if (code[i] == '\\') { sb.Append(code[i]); i += 2; continue; }
+            if (interpolated && code[i] == '{')
+            {
+                if (i + 1 < code.Length && code[i + 1] == '{') { sb.Append('{'); i += 2; continue; }
+                int depth = 1; i++;
+                while (i < code.Length && depth > 0)
+                {
+                    char e = code[i];
+                    if (e == '{') { depth++; i++; }
+                    else if (e == '}') { depth--; i++; }
+                    else if (e == '"') all.Add(Str(code, ref i, false, all));
+                    else if (e == '$' && i + 1 < code.Length && code[i + 1] == '"') { i++; all.Add(Str(code, ref i, true, all)); }
+                    else i++;
+                }
+                continue;
+            }
+            sb.Append(code[i]); i++;
+        }
+        i++;
+        return sb.ToString();
+    }
+}
+
 /// <summary>Keeps the set-up of every battle a game starts (the set-up carries both sides' cohorts with the traits they fought with).</summary>
 sealed class SetupTap : IRoundObserver
 {
@@ -1093,6 +1387,8 @@ static class ChronicleCheck
 {
     const int Q = BattleReplay.Quantum;
     static readonly string[] SlotNames = ["Front", "Middle", "Back"];
+    /// <summary>The names of the six orders for a line, written out here by hand (not read from the words under test).</summary>
+    public static readonly string[] HandNames = ["Press on", "Hold the line", "Ride the flank", "Fall back", "Guard the host", "Run them down"];
     static string Nm(Func<int, string> kn, ReplayBlob b) => (b.Side == Side.Player ? "your " : "the enemy ") + kn(b.Key);
     static string Cap(string s) => char.ToUpperInvariant(s[0]) + s[1..];
     static ReplayBlob? B(ReplayFrame f, int id) { foreach (var b in f.Blobs) if (b.Id == id) return b; return null; }
@@ -1287,9 +1583,9 @@ static class ChronicleCheck
             {
                 var fb = fbTick is null ? null : B(F.First(x => x.Tick == fbTick), fbBlob!.Value);
                 ok = fb is { Side: Side.Player } && r.Result.Outcome != BattleStatus.AttackerWon && orders.Any(o => o.Group == fb.Value.Slot)
-                    && y.Hint == $"Your {SlotNames[fb.Value.Slot]} line broke first while ordered to {DoctrineWords.FieldOrders[(int)orders.Last(o => o.Group == fb.Value.Slot).Kind]}. Try another order for it.";
+                    && y.Hint == $"Your {SlotNames[fb.Value.Slot]} line broke first while ordered to {HandNames[(int)orders.Last(o => o.Group == fb.Value.Slot).Kind].ToLowerInvariant()}. Try another order for it.";
             }
-            else if (y.Hint.StartsWith("Your Flank order on the "))
+            else if (y.Hint.StartsWith("Your order to ride the flank on the "))
             {
                 foreach (var o in orders.Where(o => o.Kind == FieldOrderKind.Flank))
                     foreach (var l in c.Lines.Where(l => l.Kind == ChronicleKind.Flank && B(F[idxOf(F, l.Tick)], l.Cite.A) is { Side: Side.Player } sb && sb.Slot == o.Group))
@@ -1331,6 +1627,13 @@ sealed class LockedLens(IGeneral inner) : IGeneral
     public ValueTask LearnOutcomeAsync(GeneralOutcome o, CancellationToken ct) => inner.LearnOutcomeAsync(o, ct);
 }
 
+/// <summary>The same hands, handing each draft's picks over in the opposite order (an information run, see the determinism block).</summary>
+sealed class ReversedPicks(IPlayerInput inner) : IPlayerInput
+{
+    public async ValueTask<IReadOnlyList<DraftPick>> DraftAsync(ArmyReadModel army, int round, CancellationToken ct) => (await inner.DraftAsync(army, round, ct)).Reverse().ToList();
+    public ValueTask<PlayerChoice> ChooseAsync(ArmyReadModel army, GeneralOutput ghost, int round, CancellationToken ct) => inner.ChooseAsync(army, ghost, round, ct);
+}
+
 /// <summary>A visitor's habits as a function of the situation: used both to know what to tap and as an IPlayerInput for the headless game.</summary>
 sealed class ScriptHands(ScriptHands.How[] plan) : IPlayerInput
 {
@@ -1339,11 +1642,22 @@ sealed class ScriptHands(ScriptHands.How[] plan) : IPlayerInput
 
     public static (int Kind, int N)[] Picks(int round, int gold)
     {
-        if (round == 0) return [(0, 3), (3, 2), (1, 1)];   // 9 of the 12 starting gold
-        int shield = gold / 4, spear = gold - shield * 2;
+        // Priced from the army's own price table (Roster.PriceOf), so the hands never ask for more than the purse holds: Spearmen, Archers and one Shieldwall
+        // in round one, then Spearmen and Shieldwall with what is left. THE PICKS COME IN KIND ORDER, as the page hands them over: the army lists its cohorts
+        // in the order they were added, so a kind drafted again after a wipe-out stands in the line by pick order (the same draft in another order has the same
+        // army digest and a different battle; see the information line in the determinism block and the finding in CLAUDE.md).
+        int pSpear = Roster.PriceOf(0), pShield = Roster.PriceOf(1), pArcher = Roster.PriceOf(3);
         var l = new List<(int, int)>();
+        if (round == 0)
+        {
+            int spear = 2, archers = 2;
+            while (spear * pSpear + archers * pArcher + pShield > gold && (spear > 1 || archers > 1)) { if (archers >= spear) archers--; else spear--; }
+            l.Add((0, spear)); if (spear * pSpear + archers * pArcher + pShield <= gold) l.Add((1, 1)); l.Add((3, archers));
+            return l.ToArray();
+        }
+        int shield = gold / (2 * pShield), spears = (gold - shield * pShield) / pSpear;
+        if (spears > 0) l.Add((0, spears));
         if (shield > 0) l.Add((1, shield));
-        if (spear > 0) l.Add((0, spear));
         return l.ToArray();
     }
 
@@ -1360,6 +1674,7 @@ sealed class ScriptHands(ScriptHands.How[] plan) : IPlayerInput
         bool hasGhost = !ghost.Doctrine.IsEmpty;
         var legal = army.Legal;
         if (how == How.Accept && hasGhost) return new(How.Accept, ghost.Doctrine, false, [], -1);
+        if (!Enumerable.Range(1, DoctrineVocabulary.Size - 1).Any(legal.Allows)) return new(How.Manual, DoctrineSet.Empty, !ghost.Doctrine.IsEmpty, [], -1);   // a host wiped out has nothing to order
         if (how == How.Edit && hasGhost)
         {
             var g = ghost.Doctrine.Tokens.Where(t => t != 0).ToList();

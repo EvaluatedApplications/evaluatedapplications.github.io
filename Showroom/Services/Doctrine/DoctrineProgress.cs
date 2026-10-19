@@ -7,15 +7,16 @@ namespace ShowroomDoctrine;
 // vocabulary, the schedule is a function of the round and the rounds option.
 //
 // Five steps. Step 0 is round one: two kinds of soldier, two slots, Advance and Hold. Each later step opens more.
-//   0  Advance, Hold            2 slots   Spearmen, Archers
-//   1  Flank, Fall back         3 slots   + Shieldwall, Riders
-//   2  Guard, Hunt              4 slots   + Priests, Wights
-//   3  Rotate, Age                        + Wolves
-//   4  Flip, Merge, Aura (Cull)           + Catapults
+//   0  Press on, Hold the line   2 slots   Spearmen, Archers
+//   1  Ride the flank, Fall back 3 slots   + Shieldwall, Riders
+//   2  Guard the host, Run them down, Should the host fall (the three loss triggers)   4 slots   + Priests, Wights
+//   3  Reform the ranks, Drill the host    + Wolves
+//   4  Reforge, Swear into a kind, Raise a banner (Cull)   + Catapults
 
-/// <summary>One line the unlock announcement says: a heading line and the plain effect of each thing it names.</summary>
+/// <summary>One line the unlock announcement says: a heading line and the plain effect of each thing it names (<see cref="Effects"/> runs beside <see cref="Orders"/>).</summary>
 public sealed record UnlockNews(IReadOnlyList<string> Orders, int? NewSlotCount, IReadOnlyList<string> Kinds)
 {
+    public IReadOnlyList<string> Effects { get; init; } = [];
     public bool Any => Orders.Count > 0 || NewSlotCount is not null || Kinds.Count > 0;
 }
 
@@ -28,6 +29,8 @@ public static class DoctrineUnlocks
     static readonly int[] FieldStep = [0, 0, 1, 1, 2, 2];                 // by FieldOrderKind: Advance, Hold, Flank, FallBack, Guard, Hunt
     static readonly int[] ArmyStep = [3, 4, 3, 4, 4, 4];                  // by ArmyOrderKind: Rotate, Flip, Age, Merge, Aura, Cull
     static readonly int[] KindStep = [0, 1, 1, 0, 2, 2, 3, 4];            // by roster key: Spearmen, Shieldwall, Riders, Archers, Priests, Wights, Wolves, Catapults
+    /// <summary>The step the loss triggers open: with the four slots (an opening order, the trigger, an order that takes over, and one more).</summary>
+    public const int TriggerStep = 2;
 
     /// <summary>The step a round is on. Rounds 1 to 4 open steps 0 to 3; step 4 (the last orders) opens at round 5, or at the first round of the last third of a shorter game.</summary>
     public static int StepForRound(int round, int totalRounds)
@@ -44,52 +47,43 @@ public static class DoctrineUnlocks
     {
         if (token == 0) return 0;
         var o = DoctrineVocabulary.Decode(token);
-        return o.Family == OrderFamily.Field ? FieldStep[o.Kind] : ArmyStep[o.Kind];
+        return o.Family switch
+        {
+            OrderFamily.Field => FieldStep[o.Kind],
+            OrderFamily.Trigger => TriggerStep,
+            _ => ArmyStep[o.Kind],
+        };
     }
 
     public static bool Allows(int token, int step) => StepOf(token) <= step;
     public static bool AllowsAll(DoctrineSet d, int step) => d.Tokens.All(t => Allows(t, step)) && d.Used <= Slots(step);
     public static bool KindOpen(int kind, int step) => (uint)kind < (uint)KindStep.Length && KindStep[kind] <= step;
 
-    static string[] OrderNamesAt(int step)
+    /// <summary>The orders that open at a step: each one's name and its one plain effect (Cull is never announced: no army offers it).</summary>
+    static List<(string Name, string Effect)> OrdersAt(int step)
     {
-        var l = new List<string>();
-        for (int f = 0; f < FieldStep.Length; f++) if (FieldStep[f] == step) l.Add(DoctrineWords.FieldOrders[f]);
-        foreach (var (k, name) in new[] { (ArmyOrderKind.Rotate, "Rotate"), (ArmyOrderKind.Age, "Age"), (ArmyOrderKind.Flip, "Flip"), (ArmyOrderKind.Merge, "Merge"), (ArmyOrderKind.Aura, "Aura") })
-            if (ArmyStep[(int)k] == step) l.Add(name);
-        return l.ToArray();
+        var l = new List<(string, string)>();
+        for (int f = 0; f < FieldStep.Length; f++) if (FieldStep[f] == step) l.Add((DoctrineWords.FieldOrders[f], DoctrineWords.FieldSentences[f]));
+        if (TriggerStep == step) l.Add((DoctrineWords.TriggerTitle, DoctrineWords.TriggerRule()));
+        foreach (var k in new[] { ArmyOrderKind.Rotate, ArmyOrderKind.Age, ArmyOrderKind.Flip, ArmyOrderKind.Merge, ArmyOrderKind.Aura })
+            if (ArmyStep[(int)k] == step) l.Add((DoctrineWords.ArmyTitle(k), DoctrineWords.Rule(k)));
+        return l;
     }
 
     /// <summary>What opens when the player moves from step <paramref name="from"/> (exclusive) to <paramref name="to"/> (inclusive).</summary>
     public static UnlockNews News(int from, int to)
     {
         var orders = new List<string>();
+        var effects = new List<string>();
         var kinds = new List<string>();
         for (int s = from + 1; s <= to; s++)
         {
-            orders.AddRange(OrderNamesAt(s));
+            foreach (var (name, effect) in OrdersAt(s)) { orders.Add(name); effects.Add(effect); }
             for (int k = 0; k < KindStep.Length; k++) if (KindStep[k] == s) kinds.Add(Roster.NameOf(k));
         }
         int? slots = to > from && Slots(to) > Slots(Math.Max(from, 0)) ? Slots(to) : null;
-        return new UnlockNews(orders, slots, kinds);
+        return new UnlockNews(orders, slots, kinds) { Effects = effects };
     }
-
-    /// <summary>One plain line of what a named order does (the same facts as <see cref="DoctrineWords.Sentence"/>, without a line or trait).</summary>
-    public static string Effect(string order) => order switch
-    {
-        "Advance" => DoctrineWords.FieldSentences[0],
-        "Hold" => DoctrineWords.FieldSentences[1],
-        "Flank" => DoctrineWords.FieldSentences[2],
-        "Fall back" => DoctrineWords.FieldSentences[3],
-        "Guard" => DoctrineWords.FieldSentences[4],
-        "Hunt" => DoctrineWords.FieldSentences[5],
-        "Rotate" => "Move every cohort one or two places along the line.",
-        "Age" => "Every cohort moves one step along the veterancy ring of 9; each step adds 5 power.",
-        "Flip" => "Relabel one trait on every cohort. It can cost gold.",
-        "Merge" => "Move the soldiers of one kind into the kind before it.",
-        "Aura" => "Cohorts carrying a trait get a bonus this round, up to 50 percent.",
-        _ => "",
-    };
 }
 
 /// <summary>

@@ -26,8 +26,8 @@ everyone in the Count at once. A general is the part of the army that remembers 
 |---|---|---|
 | The command span is 8 kinds; a ninth is refused (`DoctrineVocabulary.Kinds`, Army capacity) | To learn a new name you must forget one. | "A commander holds eight names. Dismiss one before you call a ninth." |
 | An army order is ONE pass over the whole army (Pleroma operation) | An order is spoken once and reaches everyone. | Order blurbs: "Spoken once. Heard by all." |
-| Veterancy is a ring of nine and wraps (`VeterancyPeriod = 9`, Age) | Nothing in the Count grows without end. | Age: "Veterans turn on a ring of nine. The ninth year returns them to the first." |
-| Cull is not offered; a name leaves the Count only by the field | No order strikes a name out. | Where the page now says Cull is not offered: "The Count loses a name only on the field." |
+| Veterancy is a ring of nine and wraps (`Roster.VetPeriod`, "Drill the host") | Nothing in the Count grows without end. | Drill the host: "The ninth drill sends a cohort back to its first year." (in the page, the ninth is read from the ring) |
+| Cull is not offered; a name leaves the Count only by the field | No order strikes a name out. | The page says "No order to dismiss soldiers is offered to this host."; candidate: "The Count loses a name only on the field." |
 | A battle is simulated once; the replay is a recording, not a second battle (determinism policy) | A battle is fought once; you watch the account of it. | Watch screen: "This is the account of the field. It is not fought again." |
 | A defeat costs the fallen and still pays 2 gold; a win pays 6 and 1 experience (`SpoilsStage`: killed/2 + 6 or 2) | The Count loses names, not the campaign. | Result: "The field takes its names. The Count marches on." |
 | A campaign is 3, 5 or 8 fields (rounds option) | A campaign has a fixed length. | "Three fields." "Five fields." "Eight fields." |
@@ -37,6 +37,28 @@ everyone in the Count at once. A general is the part of the army that remembers 
 | Arenas: open field, chokepoint, ridge, falling gate (a flag falls at a tick) | Places with one fact each. | "The Open Field", "The Neck", "The Ridge", "The Gate That Falls" (the gate falls at its appointed tick) |
 
 Not used until the code backs it: signed counts as debts or curses, the async ladder as "found accounts", seasons on the time ring.
+
+## The orders in a lord's words (showroom-owner, 2026-10-19; user: "you dont have to prioritise pleroma terminology, Lord based names are fine")
+
+The play UI names every order for what it does to the host. Pleroma, store, operation, relabel, arrangement and flag appear only in the "How it is built"
+expander. Every figure in a sentence is READ from the game's rules when the line is made (`DoctrineWords.cs`); the proof scans the source for a digit typed
+inside a sentence and checks each stated figure against its rule.
+
+| Old name | New name (label) | What it does, said in play | Rule it reads |
+|---|---|---|---|
+| Advance / Hold / Flank / Fall back / Guard / Hunt (on a line) | "Front line: Press on", "Hold the line", "Ride the flank", "Fall back", "Guard the host", "Run them down" | the line marches on the nearest enemy, stands and watches, rides round the side, pulls back, stays by a friend, goes for the weakest | `FieldOrderKind`; a line with no order presses on |
+| Rotate N | "Reform the ranks: N place(s)" | every cohort steps N places: front to middle to back, then round to the front | verified against the army (slot + N, mod 3) |
+| Flip trait X | "Reforge: heavily armoured / fleet / shoots from afar / blessed / cursed / beast / siege-built / shielded" | cohorts that had it shed it, the rest take it up; soldiers who gain power are paid for in gold; twice undoes the traits, not the gold | `Roster.RelabelCost` (card shows the host's cost and the purse) |
+| Age | "Drill the host" | every cohort gains a year of seasoning, each year adds P% power; the ninth drill sends a cohort back to its first year | `Roster.VetStepPct`, `Roster.VetPeriod`, `ArmyRules.PriceAge` |
+| Merge k | "Swear into the <kind>" | all the soldiers of the next kind become the kind named, with its traits and place in the line | `(k + 1) mod kinds` |
+| Aura trait | "Raise the banner of the blessed (the cursed, the beasts ...)" | cohorts with the trait fight harder this round, by as many percent as soldiers have it, up to C%; it ends with the round | C read by trying a banner on a probe host (the cap is internal to the army); `ArmyRules.PriceAura` |
+| Cull | not offered: "No order to dismiss soldiers is offered to this host." | | `LegalMask` never allows it |
+| WhenLost25 / 50 / 75 (tokens 54..56) | "Should a quarter / half / three quarters fall" | the orders after it take over once the host has lost that share; orders before it open the battle; a line they do not name presses on | `DoctrineVocabulary.Trigger` (`LossTrigger.Quarters`) |
+| Veterancy N | "Seasoned N years" | | `CohortRead.Veterancy` |
+
+Each order card shows its effect, its cost when it has one (Reforge: `Costs N gold; you have G`) and, for an order to the whole host, what it would do to the
+host as it stands now ("Your front line goes from 11 Spearmen to 5 Archers."), tried on a copy of the host by the army itself (`DoctrineSession.Trial`); an
+order the host would not take has no preview line.
 
 ## Playstyles as schools (waiting for the measured style matrix)
 
