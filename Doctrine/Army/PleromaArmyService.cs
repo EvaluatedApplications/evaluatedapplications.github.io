@@ -6,9 +6,11 @@ namespace Doctrine.Army;
 /// The army section (seam a) on Pleroma stores. Replaces <see cref="StubArmyService"/> in the builder: <c>DoctrineBuilder.New().WithArmy(new PleromaArmyService())</c>.
 /// All state is in the Pleroma stores of <see cref="PleromaArmy"/>. The army code is a short text (format "DA2"); it carries the whole state.
 /// </summary>
-public sealed class PleromaArmyService : IArmyService
+public sealed class PleromaArmyService(ArmyRules? rules = null) : IArmyService
 {
-    public IArmy Create(Side side, int seed) => PleromaArmy.Fresh(side, seed);
+    readonly ArmyRules _rules = rules ?? ArmyRules.Default;
+
+    public IArmy Create(Side side, int seed) => PleromaArmy.Fresh(side, seed, _rules);
 
     /// <summary>
     /// Army code, format <c>DA2.side.round.gold.flipMask.aura;aura.kind:soldiers:slot:veterancy;kind:...</c>, every field decimal.
@@ -53,7 +55,7 @@ public sealed class PleromaArmyService : IArmyService
                     cohorts.Add((kind, n, slot, vet));
                 }
 
-            army = PleromaArmy.Rebuild((Side)side, round, gold, flipMask, auras, cohorts);
+            army = PleromaArmy.Rebuild((Side)side, round, gold, flipMask, auras, cohorts, _rules);
             return true;
         }
         catch (Exception e)

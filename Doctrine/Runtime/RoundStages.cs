@@ -80,7 +80,7 @@ sealed class ChooseStage() : RoundStage(Stages.PlayerChoose)
     {
         var choice = await g.Player.ChooseAsync(s.Player.Read(), s.Ghost!, s.Round, ct);
         // WHO JUDGES A TOKEN (CONTRACT.md): the start mask binds the GENERAL (SuggestStage), not the player. Here a token is removed and
-        // counted only when it is not in the vocabulary at all, or is a FIELD order the start mask does not allow (the army never judges
+        // counted only when it is not in the vocabulary at all, or is a FIELD or TRIGGER order the start mask does not allow (the army never judges
         // field orders, and a group with no cohort has nobody to order). An ARMY order goes to the army whole: it judges each one, in slot
         // order, against the army as the earlier tokens left it, so a token illegal at the start may be legal by its turn. What the army
         // skips is counted in RoundRecord.Orders, and the player's doctrine keeps it (the record shows what was asked).
@@ -89,7 +89,7 @@ sealed class ChooseStage() : RoundStage(Stages.PlayerChoose)
         int Keep(int t)
         {
             if (t == 0) return 0;
-            if (!DoctrineVocabulary.IsValid(t) || (DoctrineVocabulary.Decode(t).Family == OrderFamily.Field && !legal.Allows(t))) { dropped++; return 0; }
+            if (!DoctrineVocabulary.IsValid(t) || (DoctrineVocabulary.Decode(t).Family is OrderFamily.Field or OrderFamily.Trigger && !legal.Allows(t))) { dropped++; return 0; }
             return t;
         }
         var c = choice.Doctrine;
@@ -125,8 +125,8 @@ sealed class SetupStage() : RoundStage(Stages.BattleSetup)
         var arenas = g.Battle.Arenas;
         var arena = arenas[(int)(GameRng.Mix(s.Seed, 3000 + s.Round) % (ulong)arenas.Count)];
         var setup = new BattleSetup(arena.Id, (int)GameRng.Mix(s.Seed, 4000 + s.Round), d.TickLimit,
-            new BattleSide(Side.Player, s.Player.Read().Cohorts, DoctrineVocabulary.FieldOrders(s.Choice!.Doctrine)),
-            new BattleSide(Side.Enemy, s.Enemy!.Read().Cohorts, DoctrineVocabulary.FieldOrders(s.EnemyDoctrine)));
+            new BattleSide(Side.Player, s.Player.Read().Cohorts, DoctrineVocabulary.FieldOrders(s.Choice!.Doctrine), DoctrineVocabulary.Trigger(s.Choice.Doctrine)),
+            new BattleSide(Side.Enemy, s.Enemy!.Read().Cohorts, DoctrineVocabulary.FieldOrders(s.EnemyDoctrine), DoctrineVocabulary.Trigger(s.EnemyDoctrine)));
         return ValueTask.FromResult(s with { Setup = setup });
     }
 }

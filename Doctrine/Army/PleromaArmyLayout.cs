@@ -9,7 +9,7 @@ namespace Doctrine.Army;
 
 internal static class PleromaArmyLayout
 {
-    public const int Period = 9;          // T, the veterancy ring. 9 divides 2^61 - 2.
+    public const int Period = Roster.VetPeriod;   // T, the veterancy ring. 9 divides 2^61 - 2.
     public const int KeyCycle = 31;       // the complete key band. CompleteKeys needs N >= 2K + 1 (K = 8) and N | 2^61 - 2.
     public const int AuraCap = 50;        // an aura is worth at most 50 percent (the stub's rule, kept)
     public const int StartGold = 12;
@@ -30,8 +30,7 @@ internal static class PleromaArmyLayout
     public static int SlotOf(int arrangement) => arrangement switch { 0 => 0, 3 => 1, 4 => 2, _ => -1 };
 
     /// <summary>Power in percent: 100, plus 5 per veteran tick, plus the aura bonus when the cohort carries an active aura's trait.</summary>
-    public static int Power(int veterancy, uint traits, int auraMask, int auraPct)
-        => 100 + 5 * veterancy + ((traits & (uint)auraMask) != 0 ? auraPct : 0);
+    public static int Power(int veterancy, uint traits, int auraMask, int auraPct) => Roster.PowerPct(veterancy, traits, auraMask, auraPct);
 
     // The shapes. Each store is built once per army; the Layout behind them is shared by Pleroma.
     public static HologramShape ArmyShape => new()
@@ -43,8 +42,8 @@ internal static class PleromaArmyLayout
     /// <summary>Keys and counts only: the projection that Score reads through InnerProduct.</summary>
     public static HologramShape KeysShape => new() { KeyCapacity = CommandSpan, CompleteKeys = true, KeyCycle = KeyCycle };
 
-    /// <summary>Gold: the count of the single key 0.</summary>
-    public static HologramShape PurseShape => new() { KeyCapacity = 1 };
+    /// <summary>Gold: the count of the single key 0. A complete one-key band (3 places: N >= 2K + 1, and 3 divides 2^61 - 2), so the purse can be mapped as a whole (interest).</summary>
+    public static HologramShape PurseShape => new() { KeyCapacity = 1, CompleteKeys = true, KeyCycle = 3 };
 
     /// <summary>The round number: the count of the single key 0.</summary>
     public static HologramShape ClockShape => new() { KeyCapacity = 1 };

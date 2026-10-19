@@ -285,6 +285,107 @@ public static class ArmyContract
             }
             Expect.True(free > 0 && paid > 0 && dear > 0, $"setup: the case needs free ({free}), paid ({paid}) and unaffordable ({dear}) flips on one army to mean anything");
         }),
+        new("age-is-paid-for-and-legal-only-when-affordable", async s =>
+        {
+            // An Age moves every cohort one veterancy step. Each soldier costs its worth (Roster.TraitPrice) times the power points the step gives
+            // (Roster.AgeWeight; a wrap back to 0 loses power and is free), the army pays the sum in gold rounded up, and the legal list offers the Age only
+            // while the army can pay. Before this an Age cost nothing: three free tokens were worth 15 percent power for nothing (todo\difficulty-2026-10-19.md).
+            var age = DoctrineVocabulary.Army(ArmyOrderKind.Age);
+            int CostOf(ArmyReadModel r) => Roster.GoldFor(r.Cohorts.Sum(c => (long)c.Count * Roster.AgeWeight(c.Traits, c.Veterancy, true)));
+            // (a) a rich army pays exactly the price and every cohort steps once round the ring
+            var rich = Fresh(s, 5); await rich.ApplySpoilsAsync(new Spoils(5000, 0), default); var rr = rich.Read();
+            int cost = CostOf(rr);
+            Expect.True(cost > 0, "setup: an Age of a fresh levy is not free");
+            Expect.True(rr.Legal.Allows(age), "a rich army may Age");
+            var rep = await rich.ApplyArmyOrdersAsync(DoctrineSet.Of(age), default);
+            Expect.Equal(1, rep.Applied, "a rich army ages");
+            Expect.Equal(rr.Gold - cost, rich.Read().Gold, $"an Age takes exactly its cost ({cost}) in gold");
+            Expect.True(rr.Cohorts.All(c => rich.Read().Cohorts.First(x => x.Key == c.Key).Veterancy == (c.Veterancy + 1) % Roster.VetPeriod), "every cohort steps once");
+            // (b) a broke army (its gold spent on Spearmen) may not: legal exactly when affordable, and a refused Age changes nothing
+            var broke = Fresh(s, 5); var b0 = broke.Read();
+            await broke.DraftAsync(new DraftRequest(0, 1, [new DraftPick(0, b0.Gold / Roster.PriceOf(0))]), default);
+            var br = broke.Read(); int bcost = CostOf(br);
+            Expect.True(bcost > br.Gold, $"setup: the broke army has {br.Gold} gold against an Age of {bcost}");
+            Expect.True(!br.Legal.Allows(age), "an Age the army cannot pay is not legal");
+            var before = br.Digest();
+            rep = await broke.ApplyArmyOrdersAsync(DoctrineSet.Of(age), default);
+            Expect.Equal(new ArmyOrdersReport(0, 1), rep, "an unaffordable Age is skipped");
+            Expect.Equal(before, broke.Read().Digest(), "a refused Age changed the army");
+            // (c) the step that wraps the ring back to 0 loses power, so it is free
+            var top = Fresh(s, 5); await top.ApplySpoilsAsync(new Spoils(5000, Roster.VetPeriod - 1), default);
+            var tr = top.Read();
+            Expect.True(tr.Cohorts.All(c => c.Veterancy == Roster.VetPeriod - 1), "setup: every cohort stands on the last place of the ring");
+            rep = await top.ApplyArmyOrdersAsync(DoctrineSet.Of(age), default);
+            Expect.Equal(1, rep.Applied, "the wrapping Age applies");
+            Expect.Equal(tr.Gold, top.Read().Gold, "an Age that wraps the ring loses power and costs nothing");
+        }),
+        new("aura-is-rented-and-legal-only-when-affordable", async s =>
+        {
+            // An Aura lasts the round, so it is RENTED: the army pays the sum over its soldiers of worth x the power the aura adds (Roster.AuraWeight, the
+            // bonus being the soldiers carrying the trait, capped at 50 and never below an aura already active), divided by the rounds a bought body would
+            // have served (Roster.AuraRentalDivisor), rounded up. It is legal only while the army can pay.
+            int paid = 0, refused = 0;
+            for (int bit = 0; bit < DoctrineVocabulary.Traits; bit++)
+            {
+                var token = DoctrineVocabulary.Army(ArmyOrderKind.Aura, bit);
+                var rich = Fresh(s, 5); await rich.ApplySpoilsAsync(new Spoils(5000, 0), default); var rr = rich.Read();
+                int carriers = rr.Cohorts.Where(c => ((int)c.Traits >> bit & 1) != 0).Sum(c => c.Count);
+                if (carriers == 0) { Expect.True(!rr.Legal.Allows(token), $"aura {bit}: no cohort carries the trait, so it is not legal"); continue; }
+                int pct = Math.Min(50, carriers);
+                int mask = 1 << bit;
+                int cost = Roster.GoldFor(rr.Cohorts.Sum(c => (long)c.Count * Roster.AuraWeight(c.Traits, 0, 0, mask, pct, true)), Roster.AuraRentalDivisor(rr.Round));
+                Expect.True(rr.Legal.Allows(token), $"aura {bit}: a rich army may rent it");
+                var rep = await rich.ApplyArmyOrdersAsync(DoctrineSet.Of(token), default);
+                Expect.Equal(1, rep.Applied, $"aura {bit} applies");
+                Expect.Equal(rr.Gold - cost, rich.Read().Gold, $"aura {bit} takes exactly its rent ({cost}) in gold");
+                if (cost > 0) paid++;
+                // a broke army (its gold spent on Spearmen): legal exactly when the rent is affordable; a refused aura changes nothing
+                var poor = Fresh(s, 5);
+                await poor.DraftAsync(new DraftRequest(0, 1, [new DraftPick(0, poor.Read().Gold / Roster.PriceOf(0))]), default);
+                var pr = poor.Read();
+                int pcost = Roster.GoldFor(pr.Cohorts.Sum(c => (long)c.Count * Roster.AuraWeight(c.Traits, 0, 0, mask, Math.Min(50, pr.Cohorts.Where(x => ((int)x.Traits >> bit & 1) != 0).Sum(x => x.Count)), true)), Roster.AuraRentalDivisor(pr.Round));
+                Expect.Equal(pcost <= pr.Gold, pr.Legal.Allows(token), $"aura {bit} rents for {pcost} against {pr.Gold} gold: legal exactly when affordable");
+                if (pcost > pr.Gold)
+                {
+                    var before = pr.Digest();
+                    rep = await poor.ApplyArmyOrdersAsync(DoctrineSet.Of(token), default);
+                    Expect.Equal(1, rep.Skipped, $"an unaffordable aura {bit} is skipped");
+                    Expect.Equal(before, poor.Read().Digest(), $"a refused aura {bit} changed the army");
+                    refused++;
+                }
+            }
+            Expect.True(paid > 0, "setup: at least one aura of a fresh levy has a price above zero");
+            // rented against the rounds left: the same aura costs no less later in the campaign
+            var early = Fresh(s, 5); await early.ApplySpoilsAsync(new Spoils(5000, 0), default);
+            var late = Fresh(s, 5); await late.ApplySpoilsAsync(new Spoils(5000, 0), default);
+            for (int i = 0; i < Roster.CampaignRounds - 1; i++) await late.EndRoundAsync(default);
+            int spearTrait = Enumerable.Range(0, DoctrineVocabulary.Traits).First(b => early.Read().Cohorts.Any(c => ((int)c.Traits >> b & 1) != 0));
+            var aura = DoctrineVocabulary.Army(ArmyOrderKind.Aura, spearTrait);
+            int g0 = early.Read().Gold, g1 = late.Read().Gold;
+            await early.ApplyArmyOrdersAsync(DoctrineSet.Of(aura), default); await late.ApplyArmyOrdersAsync(DoctrineSet.Of(aura), default);
+            Expect.True(g1 - late.Read().Gold >= g0 - early.Read().Gold, "an aura rented in the last round costs at least what it cost in the first");
+            Expect.True(refused > 0, $"setup: the case needs an unaffordable aura on a poor army to mean anything ({refused})");
+        }),
+        new("banked-gold-pays-interest-when-a-round-closes", async s =>
+        {
+            // The purse pays Roster.Interest (gold / (campaign - 1), floored) when a round closes: gold that is kept grows, so banking can pay.
+            foreach (var extra in new[] { 0, 2, 8, 30, 500 })
+            {
+                var a = Fresh(s, 5); await a.ApplySpoilsAsync(new Spoils(extra, 0), default);
+                long g = a.Read().Gold;
+                await a.EndRoundAsync(default);
+                Expect.Equal(g + Roster.Interest(g), a.Read().Gold, $"{g} gold banked through a round close");
+            }
+            var poor = Fresh(s, 5);
+            await poor.DraftAsync(new DraftRequest(0, 1, [new DraftPick(0, poor.Read().Gold)]), default);     // spend everything
+            Expect.Equal(0, poor.Read().Gold, "setup: nothing left");
+            await poor.EndRoundAsync(default);
+            Expect.Equal(0, poor.Read().Gold, "no gold, no interest");
+            var rich = Fresh(s, 5); await rich.ApplySpoilsAsync(new Spoils(100, 0), default);
+            long before = rich.Read().Gold;
+            await rich.EndRoundAsync(default);
+            Expect.True(rich.Read().Gold > before, "a large purse grows at the close of a round");
+        }),
         new("loss-names-its-cohort-by-kind-not-slot", async s =>
         {
             // An army has one cohort per kind, so the kind is the cohort's name; Slot on a loss is a record, never a condition.
@@ -312,7 +413,7 @@ public static class ArmyContract
         {
             // Veterancy is a position on a ring of at most RingBound places: ageing and experience move it round and it wraps to 0, so it
             // stays inside 0..RingBound-1 however long the war lasts, and power stays positive at every place.
-            var a = Fresh(s, 8);
+            var a = Fresh(s, 8); await a.ApplySpoilsAsync(new Spoils(5000, 0), default);   // an Age is paid for, so the army is rich
             Expect.True(a.Read().Legal.Allows(DoctrineVocabulary.Army(ArmyOrderKind.Age)), "setup: Age is legal for an army with soldiers");
             int top = 0; bool wrapped = false;
             for (int i = 0; i < 200; i++)

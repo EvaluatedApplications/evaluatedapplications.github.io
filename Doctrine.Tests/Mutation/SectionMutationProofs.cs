@@ -12,7 +12,9 @@ public class SectionMutationProofs
     // ---- ARMY: the new cases, over the stub and over the Pleroma army ----
     const string Timing = "orders-see-the-state-earlier-orders-left", SlotCase = "loss-names-its-cohort-by-kind-not-slot",
                  Reason = "refused-draft-changes-nothing", Picks = "draft-is-decided-by-the-picks-alone",
-                 Ring = "veterancy-lives-on-a-ring", Score = "score-follows-soldiers-and-gold", FlipPaid = "flip-is-paid-for-and-legal-only-when-affordable";
+                 Ring = "veterancy-lives-on-a-ring", Score = "score-follows-soldiers-and-gold", FlipPaid = "flip-is-paid-for-and-legal-only-when-affordable",
+                 AgePaid = "age-is-paid-for-and-legal-only-when-affordable", AuraRent = "aura-is-rented-and-legal-only-when-affordable",
+                 Interest = "banked-gold-pays-interest-when-a-round-closes";
 
     [Theory]
     [InlineData(ArmyMut.LegalityOnce, Timing)]
@@ -23,6 +25,11 @@ public class SectionMutationProofs
     [InlineData(ArmyMut.ScoreFallsWithGold, Score)]
     [InlineData(ArmyMut.FlipAlwaysLegal, FlipPaid)]
     [InlineData(ArmyMut.FlipIsFree, FlipPaid)]
+    [InlineData(ArmyMut.AgeIsFree, AgePaid)]
+    [InlineData(ArmyMut.AgeAlwaysLegal, AgePaid)]
+    [InlineData(ArmyMut.AuraIsFree, AuraRent)]
+    [InlineData(ArmyMut.AuraAlwaysLegal, AuraRent)]
+    [InlineData(ArmyMut.InterestDoubled, Interest)]
     public async Task Army_mutants_over_the_stub_are_caught(ArmyMut m, string expected)
         => Caught(await ContractRunner.RunAllAsync(ArmyContract.Cases, () => new MutantArmyService(new StubArmyService(), m)), expected);
 
@@ -35,12 +42,36 @@ public class SectionMutationProofs
     [InlineData(ArmyMut.ScoreFallsWithGold, Score)]
     [InlineData(ArmyMut.FlipAlwaysLegal, FlipPaid)]
     [InlineData(ArmyMut.FlipIsFree, FlipPaid)]
+    [InlineData(ArmyMut.AgeIsFree, AgePaid)]
+    [InlineData(ArmyMut.AgeAlwaysLegal, AgePaid)]
+    [InlineData(ArmyMut.AuraIsFree, AuraRent)]
+    [InlineData(ArmyMut.AuraAlwaysLegal, AuraRent)]
+    [InlineData(ArmyMut.InterestDoubled, Interest)]
     [InlineData(ArmyMut.ClaimsEverythingLegal, "legal-list-matches-behaviour")]
     [InlineData(ArmyMut.StaleCode, "code-round-trips-everything")]
     [InlineData(ArmyMut.LossesAppliedTwice, "losses-apply-once")]
     [InlineData(ArmyMut.NondeterministicCreate, "create-is-deterministic")]
     public async Task Army_mutants_over_the_pleroma_army_are_caught(ArmyMut m, string expected)
         => Caught(await ContractRunner.RunAllAsync(ArmyContract.Cases, () => new MutantArmyService(new PleromaArmyService(), m)), expected);
+
+    // The section's own rule switches are mutants too: turn ONE rule off and the case that states it must go red (stub and Pleroma army alike).
+    [Theory]
+    [InlineData("age", AgePaid)]
+    [InlineData("aura", AuraRent)]
+    [InlineData("interest", Interest)]
+    [InlineData("reach", FlipPaid)]
+    public async Task A_rule_switched_off_is_caught_on_both_armies(string rule, string expected)
+    {
+        var rules = rule switch
+        {
+            "age" => new ArmyRules { PriceAge = false },
+            "aura" => new ArmyRules { PriceAura = false },
+            "interest" => new ArmyRules { BankInterest = false },
+            _ => new ArmyRules { PriceReach = false },
+        };
+        Caught(await ContractRunner.RunAllAsync(ArmyContract.Cases, () => new StubArmyService(rules)), expected);
+        Caught(await ContractRunner.RunAllAsync(ArmyContract.Cases, () => new PleromaArmyService(rules)), expected);
+    }
 
     [Fact]
     public async Task The_free_form_army_rewriter_catches_a_read_that_breaks_the_well_formed_army()

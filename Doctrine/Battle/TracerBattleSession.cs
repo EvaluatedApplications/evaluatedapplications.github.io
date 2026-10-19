@@ -21,6 +21,8 @@ public sealed class TracerBattleStats
     public int ObstacleUpdates { get; internal set; }
     public int GateFellAtTick { get; internal set; } = -1;
     public int Agents { get; internal set; }
+    /// <summary>The tick at whose start each side's loss trigger fired (-1 = never fired, or the side has none). Index 0 the attacker, 1 the defender.</summary>
+    public int[] TriggerFiredAtTick { get; } = [-1, -1];
 }
 
 /// <summary>
@@ -50,6 +52,7 @@ public sealed class TracerBattleSession : IBattleSession
         public int Id, Ord, Role, Key, Slot, PowerPct, Start, Strength; public long PendingFp, CarryFp;   // Ord = place in the attackers-first order (seeds the jitter)
         public Side Side; public Trait Traits; public float Speed, Range; public int DamagePct, TakenPct;
         public List<Unit> Units = new(); public List<(FieldOrderKind Kind, int Weight)> Orders = new();
+        public List<(FieldOrderKind Kind, int Weight)>? Then;   // the orders that replace Orders when the side's loss trigger fires (null = the side has no trigger)
         public Vector2 Anchor, Centroid; public int Alive;
         public bool FlankSet, FlankDone; public Vector2 FlankPoint;        public Vector2? Retreat;
         public PatrolBehavior? Patrol;
@@ -71,7 +74,7 @@ public sealed class TracerBattleSession : IBattleSession
     readonly FogOfWarGrid?[] _grid = new FogOfWarGrid?[2];
     readonly Vector2[][] _known = new Vector2[2][];
     readonly float[]?[] _infl = new float[2][];
-    readonly bool _needsInfluence;
+    readonly bool _needsInfluence;   // some cohort may use Flank, Fall back or Guard, in its opening orders or after its trigger
     readonly SeekBehavior _seek = new();
     readonly RetreatBehavior _retreat;
     INavigatorService _navigator = null!;
@@ -79,6 +82,8 @@ public sealed class TracerBattleSession : IBattleSession
     readonly Dictionary<(int, int), long> _pairFp = new();
     bool _gateFallen;
     Vector2 _gateCentre; float _gateRadius;
+    readonly LossTrigger?[] _trigger = new LossTrigger?[2];   // by role: the side's contingency
+    readonly bool[] _fired = new bool[2];
 
     public TracerBattleStats Stats { get; } = new();
     public int Tick { get; private set; }
@@ -98,7 +103,7 @@ public sealed class TracerBattleSession : IBattleSession
         _retreat = new RetreatBehavior(id => CohortOfUnit(id).Retreat is { } r && UnitOf(id).Order == FieldOrderKind.FallBack ? r : null);
 
         BuildCohorts();
-        _needsInfluence = options.Influence && _cohorts.Any(c => c.Orders.Any(o => o.Kind is FieldOrderKind.Flank or FieldOrderKind.FallBack or FieldOrderKind.Guard));
+        _needsInfluence = options.Influence && _cohorts.Any(c => c.Orders.Concat(c.Then ?? []).Any(o => o.Kind is FieldOrderKind.Flank or FieldOrderKind.FallBack or FieldOrderKind.Guard));
         for (int r = 0; r < 2; r++)
         {
             _known[r] = new Vector2[_cohorts.Count];
@@ -157,6 +162,14 @@ public sealed class TracerBattleSession : IBattleSession
             // Orders: every order named for this group, weighted; none named means Advance.
             foreach (var o in side.Orders.Where(o => o.Group == read.Slot && o.Weight > 0)) c.Orders.Add((o.Kind, o.Weight));
             if (c.Orders.Count == 0) c.Orders.Add((FieldOrderKind.Advance, 1));
+            // The contingency: once the side's loss trigger fires these replace the opening orders (a group not named advances).
+            if (side.Trigger is { } trig)
+            {
+                _trigger[role] = trig;
+                c.Then = new();
+                foreach (var o in trig.Then.Where(o => o.Group == read.Slot && o.Weight > 0)) c.Then.Add((o.Kind, o.Weight));
+                if (c.Then.Count == 0) c.Then.Add((FieldOrderKind.Advance, 1));
+            }
             _cohorts.Add(c);
         }
 
@@ -188,7 +201,7 @@ public sealed class TracerBattleSession : IBattleSession
             }
             c.Alive = n;
             c.Centroid = Centroid(c);
-            if (c.Orders.Any(o => o.Kind == FieldOrderKind.Hold))
+            if (c.Orders.Concat(c.Then ?? []).Any(o => o.Kind == FieldOrderKind.Hold))   // a ring to walk, in the opening orders or after the trigger
             {
                 var ring = new List<Vector2>();
                 foreach (var d in new[] { new Vector2(-1.4f, -1.4f), new Vector2(1.4f, -1.4f), new Vector2(1.4f, 1.4f), new Vector2(-1.4f, 1.4f) }) ring.Add(_arena.Snap(c.Anchor + d));
@@ -244,8 +257,34 @@ public sealed class TracerBattleSession : IBattleSession
 
     // ---- stage: field orders ------------------------------------------------------------------------------------------------
 
+    /// <summary>
+    /// A side's loss trigger: at the start of a tick, when the side has lost <see cref="LossTrigger.Quarters"/> quarters or more of the soldiers it brought
+    /// (integers: lost x 4 against quarters x brought), its cohorts take their "then" orders for good. Latched; the check reads only the side's own losses.
+    /// </summary>
+    void CheckTriggers()
+    {
+        for (int r = 0; r < 2; r++)
+        {
+            if (_trigger[r] is not { } trig || _fired[r]) continue;
+            if (_opt.Probe.HasFlag(OrderProbe.TriggerNever)) continue;
+            int own = _opt.Probe.HasFlag(OrderProbe.TriggerReadsEnemy) ? 1 - r : r;
+            long brought = 0, lost = 0;
+            foreach (var c in _cohorts) if (c.Role == own) { brought += c.Start; lost += c.Start - c.Strength; }
+            bool crossed = _opt.Probe.HasFlag(OrderProbe.TriggerAtStart) || (brought > 0 && lost * 4 >= (long)trig.Quarters * brought);
+            if (!crossed) continue;
+            _fired[r] = true; Stats.TriggerFiredAtTick[r] = Tick;
+            foreach (var c in _cohorts)
+            {
+                if (c.Role != r || c.Then is null) continue;
+                c.Orders = c.Then; c.FlankSet = false; c.FlankDone = false;
+                foreach (var u in c.Units) u.Order = OrderOf(c, u.Index, c.Units.Count);
+            }
+        }
+    }
+
     public async ValueTask FieldOrdersAsync(CancellationToken ct)
     {
+        CheckTriggers();
         foreach (var c in _cohorts) c.Centroid = Centroid(c);
         await MaybeDropGateAsync(ct);
         Perceive();

@@ -256,3 +256,152 @@ C2 state: NOVICE AGGR .51, BANKER .16, COMP .32, MICRO .59, VET .78, MASS .64; E
   in TracerBattleSession (orders already re-evaluated each tick in `Decide`); it gives MICRO a skill axis that economy styles do not have.
 - PRICE FOR RANGE AND REACH: the derived price in C1 ignored range, which is why Catapults/Archers then dominate; range 7 / 10 should add to the price.
 None of these has been measured; each changes the feel and needs the user's yes.
+
+---
+# SECOND ROUND 2026-10-19 (tracer-owner, design decisions handed down by the coordinator): LONG-RUN LEVERS AND A BATTLE SKILL AXIS
+PRE-REGISTERED BEFORE any code of the four change sets and before any scored run of them. CPU only (BelowNormal, 6 workers), no GPU, no HoloFormer is named (the S = d rule is not touched), Pleroma operations only.
+Direction (coordinator, from the user): several VALID playstyles, each learnable; a style that looks weaker early may win with proficiency. Input finding (above): no long-run lever, Spearmen styles dominate, Age and Aura are free power, battle micro has no skill axis.
+
+## Change sets (cumulative, each measured ONCE; the order is the coordinator's list)
+Derivations come from the rules, never from a result. "Worth" is the existing Roster.TraitPrice (what a soldier is worth in gold on the battle's own stat tables).
+- A1 PRICE AGE AND AURA (same rule as the priced Flip: a better soldier is paid for, a worse one is free). Age: each cohort moves one veterancy step (+5 power points, `Roster.VetStepPct`; the ring wrap is a LOSS so it is free).
+  Cost = ceil( sum over cohorts of soldiers x worth x power gained / 100 ). Aura on trait b: power gained per cohort = (power with the aura) - (power now), new bonus = max(current, min(50, soldiers carrying b)).
+  An aura wears off at the end of the round, so it is RENTED, not bought: cost = ceil( sum soldiers x worth x gain / (100 x rounds left) ), rounds left = 8 - round (floor 1), 8 = the campaign length (DoctrineDomain default).
+  A body, and an Age, serve the rest of the campaign for their price; a one-round aura is that price spread over the rounds it could have served. Both are legal only while the army can pay (the legal mask reads gold), both take exactly the cost.
+  The sums are Pleroma reads (InnerProduct of the keys-only projection with a per-kind weight vector, as Score does), not host multiplications. Flip is moved onto the same read.
+  Consequence stated in advance: worth is on the TraitPrice scale (a Spearman 2) while a draft costs `PriceOf` (a Spearman 1), so for Spearmen Age costs MORE than recruiting the same power; only kinds with worth below draft price (Priests 2 against 3) get cheaper power from Age.
+- A2 REACH IN THE PRICE. worth = ceil( 2 x damage x (100 + reach) / (taken x 100) ). reach (percent) is the share of one soldier's kill-time a unit fires free while a melee unit closes on it:
+  free ticks = (Range - melee range 2.2) / (2 x base speed 2.0) (both sides advancing), one tick of fire is 100 of the 600 units that kill a soldier (`UnitRules.Fp`), so reach = 100 x free ticks x 100 / 600 = (range in tenths - 22) x 5 / 12:
+  Archers/Priests (range 7) 20 percent, Machines (range 10) 32 percent. Worth becomes Archers 2, Priests 2, Catapults 5, a Spearman flipped to Machine 7 (all else unchanged). Draft prices (`PriceOf`) are NOT touched by A2: reach only prices Flip, Age and Aura.
+- A3 A BATTLE SKILL AXIS: ONE trigger kind, "my side has lost N quarters of its soldiers", N = 1..3. Three new tokens (ids 54, 55, 56, appended; no id moves; vocabulary 57 of 64): family Trigger, `WhenLost25/50/75`.
+  A doctrine is read as two lists split at the FIRST trigger token: field orders before it are the opening orders (last word wins per group, as before), field orders after it replace them once the trigger fires (a group not named after it advances, the default).
+  No trigger token: the doctrine reads exactly as before (ids and meanings of tokens 0..53 are unchanged, so the wire contract only grows; digests are re-pinned for the new legal tokens, with that reason).
+  The check runs at the start of every tick in `TracerBattleSession.FieldOrdersAsync` on soldiers lost / soldiers brought, integers, latched. Replays carry cohorts, so a switch is seen as the movement it causes; nothing else in the format changes.
+- A4 A GOLD LEVER THAT PAYS LATER: interest on banked gold. Checked against Phasor first (superposition-gaps.md): `Pleroma.MapCounts(f)` (a pointwise map of the key counts, exact) does it on the purse (the purse shape becomes a complete one-key band), so NO new Pleroma operation is needed and it is built.
+  At the close of a round the purse pays gold / (campaign length - 1) = gold / 7 (floor). Derivation: banking from the start of the campaign for one round and spending the next costs one round of service for every body, so the rate that makes the first round of banking exactly break-even in soldier-rounds is 1/(8-1).
+  Fortify (gold into a lasting per-cohort stat) needs a per-key Tick (age ONE cohort); Phasor has only the whole-store Tick, so it is filed as a gap (below) and NOT built.
+- A5 (CONDITIONAL, decided now, measured only if A4 fails T4): draft prices derived from worth (PriceOf = TraitPrice with reach: Spearmen 2, Shieldwall 3, Riders 2, Archers 2, Priests 2, Wights 3, Wolves 3, Catapults 5). It is the user's call (halves the bodies per gold) so it ships OFF, as a switch (`ArmyRules.DerivedDraftPrices`), and the scripted enemy still sizes picks with the typed prices (stated, so A5 is a style-matrix measurement only).
+- C0 = the tree as it stood at the start of this round (Flip priced without reach; Age, Aura free; no interest; no trigger used). Measured again as the reference (all through switches of `ArmyRules`, default = the game as it ships).
+
+## Instrument (styles on the real sections, the declared kit of the late-night addendum, extended)
+Styles (kinds: 0 Spearmen 1 Shieldwall 2 Riders 3 Archers 4 Priests 5 Wights 6 Wolves 7 Catapults): AGGRESSOR (Wolves/Riders, Advance x3), BANKER (Shieldwall, Hold Hold Guard; banks half of each round's gold in rounds 0-2, spends all after),
+COMPOSER (cycle all kinds, Advance Hold Flank), MICRO (Archers/Priests; C0..A2: Flank Hunt FallBack; A3, A4: Hold@0 Hold@1 Hold@2 WhenLost25 = hold, then everyone closes once a quarter is lost), VETERAN (Age, Age, Aura(top trait), Advance@0; draft kind = Spearmen while Age is free, else the kind with the lowest worth/draft-price ratio, Priests;
+it keeps back the smallest gold that lets all its army orders apply, found by probing a copy of the army through its code, which is what a player does with the "would cost" hint), MASS = CONTROL (all gold Spearmen, Advance x3). In A3 and A4 a seventh row MICRO0 (the old MICRO plan) is printed for reference and is not part of the verdicts.
+Duels: one round, same levy by seed, 24 extra gold, the army orders through the army, then one battle, tick limit 120. Matches: 6 rounds, persistent armies from the same levy, start gold 12, the real spoils rule, roles swap each round, the arena FIXED per run (all four arenas are run), battle seed as the game's.
+Levels: NOVICE replaces each drafted kind and each doctrine token by a random legal one with probability 0.5; EXPERT never does; both players of a pairing have the same level.
+Size: duels 20 seeds x 4 arenas x both orientations = 160 battles per pair per level (SE .04); matches 10 seeds x 2 orders x 4 arenas = 80 matches per pair per level (SE .05, per arena 20 matches, SE .11, reported without verdict). Seeds 9,500,000+ (duels) and 9,600,000+ (matches), never used to design anything.
+Search width: 4 cumulative candidate sets + 1 conditional + the C0 reference; 6 (7) styles, 2 levels, 4 arenas. No other candidate is tried and no style plan is changed after a run.
+
+## Target T4 (restated, for the 5 styles + control at NOVICE and EXPERT, all four arenas)
+A style "beats" another when its pooled score is above max(.55, .5 + 1.64 x SE) and "loses" when below the mirror of that. Read on the pooled (4 arenas) matrices of the duels and of the matches, at each level:
+(a) every style's mean over the other five lies in .35 to .65; (b) every style beats at least one other and loses to at least one; (c) no style, the control included, beats all five others;
+(d) CROSSOVER (matches): some ordered pair is below .45 at NOVICE and above .55 at EXPERT; (e) SKILL GAIN (matches): MICRO and BANKER each gain at least +.05 (mean over the others, EXPERT minus NOVICE).
+(f) NO DRAFT RULE BEATS ALL: the ten autopilot draft rules (Advance x3, expert, duels, pooled) - none beats all nine others by the (b) test. PASS = (a)-(c) at both levels in both formats, and (d), (e), (f). Anything less names the failing clauses.
+## Nulls (written now)
+N1 mirror: a style against itself pooled (duels) reads .50 +- .09 (3 SE), else the instrument leans: D. N2 replay: 20 duels re-run in the same process give identical results, else D; and C0 must reproduce the recorded S/C0 style matrix of the late-night addendum
+(identical to the rounding of that table, same seeds are NOT used, so agreement within 2 SE per cell, row means within .05). N3 sensitivity: MASS with +15 percent power against MASS (expert duels, 160 battles) must score above .58, else the instrument cannot see a 15 percent edge: D.
+Analytic: with 36 cells at SE .04-.05, identical styles show a "beat" (above .5 + 1.64 SE) in about 5 percent of cells by chance, so a clause (b) pass inside that rate is reported as soft.
+## Predictions (written before any run, to be scored afterwards)
+P1 A1: VETERAN falls clearly below MASS (it pays 2x recruiting for its upgrade) and Aura is taken rarely; A1 alone does not stop MASS from beating most styles. P2 A2: no visible change in any style matrix (no style flips; Age on ranged kinds is the only reach-priced act in the kit). P3 A3: MICRO changes by more than 2 SE against at least two styles;
+and MICRO gains from EXPERT more than MASS does. P4 A4: BANKER improves by under .05 (the interest is a few gold): banking stays last or second last. P5 T4 fails at A4 on clause (c) through MASS (Spearmen at price 1 is the dominator, as in the late-night addendum), which is why A5 exists.
+## Fix rule
+Ship the earliest cumulative set that passes T4. If none does, the four sets A1..A4 stay in the tree because the coordinator ordered them (the design is his); each lever's own effect on the clauses is reported with the same numbers, a lever that makes a clause measurably worse (beyond 2 SE) is NAMED as such for his decision, and A5 stays off. Mutant and contract test per behavioural change; digests re-pinned with reasons.
+## Gap filed (for phasor-owner, Phasor\todo\superposition-gaps.md style; not edited from here)
+AG4 PER-KEY TICK (a lasting per-cohort stat): `Tick(n)` ages the whole store. An order that fortifies ONE cohort (gold in, +1 veterancy on one kind) needs an operation that moves one key's time tick (a keyed Tick, or MultiplyTimes restricted to a key set). Without it the host would have to read the cohort, Add(-n) at the old tick and Add(+n) at the new one, which is the host-side retag already open as AG1b. Not built.
+## Instrument notes (written after the code and before the first scored run; none of them is a result)
+- The library carries every lever behind a switch of `ArmyRules` (default = the shipped game) and the trigger is in the vocabulary, so C0, A1..A5 are the SAME binary with different rules; the runner is `todo\difficulty-candidates\runner2\` (sources as run: Harness.cs 8556E73D63B779D0EA94BA993285C5F4FF95CC4F0B74BBAB6DA6B9C380474D8B, Styles2.cs 961A6BE1E789ACDE4FF7059D952150648AF8A4361F2ADF69D3A4BC2F77E5E13C, Report2.cs C5970F7E08A6446FAA264E463CD8F9FD50E05CADA4AB623A4E6CEA065CEBA287, Program2.cs 0C0037F43EF839D84C600FBFC695F172C3DB15C6AA3E3D89DD3573FF4D1C70F7 at lock).
+- VETERAN reads its aura target (the trait most soldiers carry) AFTER its draft in both formats (the late-night matches read it before, its duels after); in C0 the numbers of VETERAN in the matches may differ from that table for this reason. BANKER spends its bank in a one-round duel (as before) and banks in matches.
+- Mechanism check, not a score (10 seeds x 4 arenas, expert): in A3 the MICRO plan (Hold x3, WhenLost25) fires its trigger in every battle against AGGRESSOR, MASS and VETERAN, in 29 of 40 against COMPOSER, and never against BANKER (both sides hold, so nobody loses a quarter and the tick limit decides by soldiers standing).
+  So MICRO's contingency does nothing against a side that also holds; that is a property of the declared plan, kept as declared. VETERAN's reserve probe applies all 3 of its army orders in every duel under A1 (Priests drafted; 33 soldiers against 60 for MASS).
+- Replays carry cohorts only, so the trigger leaves the recording format as it was (version 2).
+
+# RESULTS, SECOND ROUND (2026-10-19 night; runner2, raw data styles2-raw.zip, per-state reports styles2-report-<state>.txt, one summary styles2-summary.txt, all under todo\difficulty-candidates\)
+Every state ran the same binary with different ArmyRules; C0 reproduces the recorded S matrix of the late-night addendum (duels, expert, row means .44 .16 .08 .52 .97 .83 against the recorded .45 .16 .07 .52 .98 .82), so the plumbing did not move the baseline.
+Nulls, all states: N1 mirror OK (attacker score of a style against itself, mean .50 to .54, inside .50 +- .09; single cells reach .63 and .65 in A5); N2 replay identical in all six; N3 sensitivity OK (MASS +15 percent beats MASS .88; .96 in A5).
+EvalApp race (the known null-exception, Tracer 2.0.3): 1 to 21 battles per run replayed from their seeds, exact. The interest is paid out of MapCounts and the whole of Doctrine.Tests is green (409 of 409, was 364 of 365 with one flaky failure from that race).
+
+## Verdict: T4 FAILS in every state C0 to A5. No candidate passes; the earliest that would pass does not exist, so by the fix rule A1..A4 stay (ordered by the coordinator), A5 stays OFF.
+Mean score over the other five styles (pooled over 4 arenas; AGGR BANKER COMP MICRO VET MASS; clauses a = every mean in .35-.65, b = each style beats one and loses to one, c = none beats all; Y met, n failed):
+```
+state  format  level   AGGR BANKR  COMP MICRO   VET  MASS | (a) (b) (c)
+C0     duels   novice   0.52  0.38  0.37  0.55  0.59  0.59 |  Y   n   Y
+C0     duels   expert   0.44  0.16  0.08  0.52  0.97  0.83 |  n   n   n
+C0     matches novice   0.53  0.17  0.33  0.45  0.75  0.76 |  n   n   Y
+C0     matches expert   0.55  0.08  0.20  0.37  0.98  0.82 |  n   n   n
+A1     duels   novice   0.57  0.40  0.38  0.59  0.43  0.62 |  Y   n   n
+A1     duels   expert   0.54  0.16  0.08  0.67  0.56  1.00 |  n   n   n
+A1     matches novice   0.64  0.22  0.42  0.54  0.34  0.84 |  n   n   n
+A1     matches expert   0.73  0.08  0.25  0.47  0.47  1.00 |  n   n   n
+A2     duels   novice   0.57  0.40  0.38  0.59  0.43  0.62 |  Y   n   n
+A2     duels   expert   0.54  0.16  0.08  0.67  0.54  1.00 |  n   n   n
+A2     matches novice   0.60  0.22  0.45  0.50  0.40  0.83 |  n   n   n
+A2     matches expert   0.73  0.08  0.25  0.47  0.47  1.00 |  n   n   n
+A3     duels   novice   0.59  0.42  0.40  0.52  0.45  0.62 |  Y   n   n
+A3     duels   expert   0.54  0.36  0.08  0.48  0.55  1.00 |  n   n   n
+A3     matches novice   0.61  0.22  0.47  0.49  0.40  0.83 |  n   n   n
+A3     matches expert   0.68  0.08  0.21  0.60  0.43  1.00 |  n   n   n
+A4     duels   novice   0.59  0.42  0.40  0.52  0.45  0.62 |  Y   n   n
+A4     duels   expert   0.54  0.36  0.08  0.48  0.55  1.00 |  n   n   n
+A4     matches novice   0.60  0.22  0.46  0.48  0.40  0.84 |  n   n   n
+A4     matches expert   0.68  0.08  0.20  0.61  0.43  1.00 |  n   n   n
+A5     duels   novice   0.49  0.36  0.40  0.59  0.53  0.64 |  Y   n   Y
+A5     duels   expert   0.44  0.14  0.10  0.98  0.56  0.78 |  n   n   n
+A5     matches novice   0.55  0.16  0.47  0.54  0.52  0.76 |  n   n   n
+A5     matches expert   0.56  0.07  0.16  0.71  0.55  0.96 |  n   n   n
+```
+Per arena (20 matches or 80 battles a cell, no verdict), clause (c) none-beats-all: at EXPERT it holds in 0 of 4 arenas in every state, duels and matches. At NOVICE in the duels it holds in 4 of 4 arenas in every state (the noise hides the dominator); in the matches it holds in 4 of 4 in C0, 1 of 4 in A1, 0 of 4 in A2, A3, A4 and 3 of 4 in A5. The full per-arena matrices are in the reports.
+(d) CROSSOVER (matches): C0 none; A1..A4 exactly one pair, VETERAN over COMPOSER (.40 novice, .78 expert), real but trivial (COMPOSER is last everywhere); A5 none. In the duels A3 and A4 add MICRO over AGGRESSOR (.42 novice, .62 expert), the one crossover a battle-timing style earned.
+(e) SKILL GAIN (matches, expert minus novice, mean over the others): C0 MICRO -.08, BANKER -.09 (A1..A2 MICRO -.07, -.04); A3 MICRO +.11, A4 MICRO +.13, A5 MICRO +.18; BANKER stays -.14 in A1..A4 and -.09 in A5. MICRO meets its half of clause (e), BANKER never does.
+(f) NO DRAFT RULE BEATS ALL NINE (expert duels): fails in C0 and A4 (rule 0, all gold on Spearmen, beats all nine) and in A5 (rule 3, all gold on Archers, beats all nine).
+
+### Before and after, pooled matches, EXPERT (row over column)
+C0, before:
+row over col      AGGRESSOR    BANKER  COMPOSER     MICRO   VETERAN      MASS   mean(others of 6)
+AGGRESSOR              0.48      0.99      0.92      0.83      0.00      0.00   0.55
+BANKER                 0.01      0.50      0.35      0.02      0.00      0.00   0.08
+COMPOSER               0.08      0.65      0.51      0.28      0.00      0.00   0.20
+MICRO                  0.17      0.98      0.72      0.45      0.00      0.00   0.37
+VETERAN                1.00      1.00      1.00      1.00      0.55      0.89   0.98
+MASS                   1.00      1.00      1.00      1.00      0.11      0.48   0.82
+A4, after (the shipped set; MICRO0 is the old MICRO plan, reference only):
+row over col      AGGRESSOR    BANKER  COMPOSER     MICRO   VETERAN      MASS    MICRO0   mean(others of 6)
+AGGRESSOR              0.48      0.99      0.92      0.56      0.92      0.00      0.83   0.68
+BANKER                 0.01      0.49      0.37      0.00      0.03      0.00      0.02   0.08
+COMPOSER               0.08      0.63      0.49      0.07      0.23      0.00      0.29   0.20
+MICRO                  0.44      1.00      0.93      0.50      0.66      0.00      0.90   0.61
+VETERAN                0.08      0.97      0.77      0.34      0.56      0.00      0.52   0.43
+MASS                   1.00      1.00      1.00      1.00      1.00      0.48      1.00   1.00
+Pooled matches, NOVICE, C0 then A4: see styles2-report-C0.txt and styles2-report-A4.txt (A4 mean over others AGGR .60, BANKER .22, COMP .46, MICRO .48, VET .40, MASS .84).
+
+## Predictions scored (written before any run)
+P1 (A1 breaks VETERAN, MASS still beats most): YES, and more: VETERAN fell from .97 to .56 (duels, expert) and .98 to .47 (matches) while MASS rose to 1.00; it beats EVERY other style at .99 or better, VETERAN included (.00 for VETERAN in the A4 matches). The half "Aura is taken rarely" is not measured by this kit (VETERAN asks for its aura every round and its probe always affords it: 30 of 30 orders applied in the duels).
+P2 (A2 shows nothing): YES, every row mean within .06 of A1 (the largest move is AGGRESSOR matches novice .64 to .60 and VETERAN .34 to .40); no style uses a reach-priced act except Age on ranged kinds.
+P3 (A3 moves MICRO by more than 2 SE against two styles, and MICRO gains from skill more than MASS): HALF. MICRO moved against BANKER (.99 to .00 in the duels, a hold deadlock, see below), AGGRESSOR (matches expert .17 to .44) and VETERAN, and its skill slope went from -.04 to +.11; MASS still gains more (+.17).
+P4 (A4 moves BANKER by under .05): YES, by .00 (.08 expert, .22 novice before and after). Banking stays last or next to last.
+P5 (T4 fails at A4 on clause c through MASS): YES. A5 was therefore measured; it fails too.
+
+## What each lever did (one measurement each, cumulative)
+- A1 PRICE AGE AND AURA. The free power is gone: VETERAN (Age, Age, Aura) lost its edge and now keeps a quarter of its gold back for upkeep and fields 33 soldiers against MASS's 60, so MASS (all Spearmen, Advance) became the single dominator: 1.00 mean at expert in both formats, beating every style at .99 or better. Clause (c) at NOVICE, which C0 met in the duels and the matches, now fails too (MASS .62 and .84). Age is dominated by recruiting for Spearmen (worth 2, draft price 1); it pays only for kinds whose draft price is above their worth (Priests), which is what VETERAN now drafts. This lever made the game WORSE on T4 and is named for the coordinator's decision.
+- A2 REACH IN THE PRICE. No measurable effect on any style (it prices Flip, Age and Aura, and no style flips; a Machine Flip now costs 5 where it cost 3 per Spearman). Its real target, the Catapult problem, lives in the DRAFT price, which this round did not touch: that is the A5 switch.
+- A3 THE TRIGGER. A real skill axis for the style that uses it: MICRO's slope from skill went from -.08 (C0) to +.11 (A3) in the matches, and it earned the one duel crossover (MICRO over AGGRESSOR .42 to .62). It also exposed a deadlock rule: Hold against Hold is decided only by soldiers standing at the tick limit, so the trigger (which needs a loss to fire) never fires against a holder and MICRO loses to BANKER 0.00 (duels, expert) because BANKER brings 42 soldiers to MICRO's 39. In the mechanism check the trigger fired in every battle against AGGRESSOR, MASS and VETERAN, in 29 of 40 against COMPOSER and in none against BANKER.
+- A4 INTEREST. No effect, and the reason is plain: in the diagnostic BANKER against MASS (styles2-interest-diag.txt) BANKER's army is wiped every round (0 soldiers after each of 6 rounds) and the interest earned is 4 gold per match (gold/7, floored, on a purse of 3 to 16): there is nothing to compound when every round is lost. The lever is built and correct (contract case plus mutants) and too small, and too late, to change a style that loses the fights.
+- A5 DERIVED DRAFT PRICES (conditional, OFF). Spearmen cost 2; MASS still wins the matches (.96 expert) and the dominator moves to ranged plus Hold: MICRO .98 in the duels (rule 3, all Archers, beats all nine draft rules). Price moves the dominator, as the late-night addendum found; it does not remove it.
+
+## What still fails, and why (from the logic and the numbers, not tried)
+1. NO COUNTERS (D2 of the diagnosis): no kind beats another, so one composition with the right orders beats all, and pricing only chooses which. The C1 counter cycle was measured earlier only WITH a free Flip; with the present rules it has not been re-measured together with these levers.
+2. THE CHEAP BODY. A Spearman is one gold; "Advance with everything" needs no skill, no infrastructure, and scales with gold. A1 removed the only thing that could beat it (free veterancy).
+3. HOLD IS A DEADLOCK DECIDED BY BODY COUNT at the tick limit. Any Hold-heavy style then reduces to a draft count; this is a rule of the battle (Finish: more soldiers wins), not of the new trigger, and it needs a decision (a tie-break that counts power, or a siege rule).
+4. THE ECONOMY STYLE HAS NOTHING TO ECONOMISE: if the army is wiped each round (BANKER against MASS), gold is spent on bodies that die and interest is a rounding error. The fortify lever (a lasting per-cohort stat) needs a per-key Tick (gap AG4 above); until then the only long-run lever is Age, which A1 made dear.
+5. THE SKILL KIT: the harness models proficiency as execution error. The trigger gives MICRO a slope; BANKER and COMPOSER (the styles that invest) lose from expertise at every state (BANKER -.14, COMPOSER -.26 in A4) because a precisely executed plan that cannot beat the dominator loses more precisely.
+
+## Decisions for the user (the feel of the game changes)
+1. Keep A1? It is in the tree because it was ordered, but it removes the free veterancy that made VETERAN a style and leaves the Spearman mass unopposed. Reverting it (ArmyRules.PriceAge/PriceAura = false) restores C0.
+2. Price a Spearman at its worth (A5, DerivedDraftPrices, OFF): measured, moves the dominator to ranged-hold, does not fix. Needs counters or a hold rule with it.
+3. The hold deadlock: choose a rule (the side with more POWER standing wins at the limit, or an attacker who has not engaged by tick N loses, or a pressure rule). Not changed here.
+4. Raise the interest or add the fortify lever after AG4: only worth it once a banking style can survive a round.
+5. Vocabulary version 2 (three trigger tokens, ids 54..56): new family Trigger; the Showroom palette does not list them (the one failing check of 154 in DoctrineUiProof, below).
+
+## What ships (fix rule applied; nothing committed, no version touched)
+In the tree: Age and Aura priced (A1), reach in the worth (A2), the loss trigger (A3, vocabulary version 2), interest (A4), all through ArmyRules whose defaults are the game; A5 is a switch that ships OFF. Contract cases: ge-is-paid-for-and-legal-only-when-affordable, ura-is-rented-and-legal-only-when-affordable, anked-gold-pays-interest-when-a-round-closes; loss trigger: TracerTriggerTests.
+Mutants watched red: Age free, Aura free, Age always legal, Aura always legal, interest doubled (each over the stub and the Pleroma army); a rule switched off (age, aura, interest, reach) on both armies; the trigger never firing, firing at the first tick, reading the enemy's losses (3 probes, 5 checks). Digest pins re-pinned with reasons (stub 5025665426094534569, real 8746276498987472616).
+Doctrine.Tests: 409 of 409 green (was 365 with one flaky failure). The Showroom page builds (0 errors); its DoctrineUiProof passes 153 of 154: the one failure is the palette check (36 enabled, 9 disabled, 8 Cull not shown) which sees the three trigger tokens outside the palette.

@@ -1,0 +1,327 @@
+using System.Text;
+using Doctrine;
+using Doctrine.Army;
+
+namespace Autopilot;
+
+// Second round of the style instrument (Doctrine\todo\difficulty-2026-10-19.md, "SECOND ROUND"): the same kit as the late-night addendum
+// (duels and 6-round matches on the real sections), extended with the states A1..A5, the timed MICRO plan, the VETERAN reserve probe,
+// novice/expert in BOTH formats and the arena fixed per run, so every cell exists for each of the four arenas.
+
+public sealed record State(string Name, ArmyRules Rules, bool Timed)
+{
+    static readonly ArmyRules Off = new() { PriceAge = false, PriceAura = false, PriceReach = false, BankInterest = false, DerivedDraftPrices = false };
+    public static readonly State C0 = new("C0", Off, false);
+    public static readonly State A1 = new("A1", Off with { PriceAge = true, PriceAura = true }, false);
+    public static readonly State A2 = new("A2", Off with { PriceAge = true, PriceAura = true, PriceReach = true }, false);
+    public static readonly State A3 = new("A3", Off with { PriceAge = true, PriceAura = true, PriceReach = true }, true);
+    public static readonly State A4 = new("A4", Off with { PriceAge = true, PriceAura = true, PriceReach = true, BankInterest = true }, true);
+    public static readonly State A5 = new("A5", Off with { PriceAge = true, PriceAura = true, PriceReach = true, BankInterest = true, DerivedDraftPrices = true }, true);
+    public static State Get(string n) => n switch { "C0" => C0, "A1" => A1, "A2" => A2, "A3" => A3, "A4" => A4, "A5" => A5, _ => throw new ArgumentException(n) };
+    public int Price(int kind) => Rules.DraftPrice(kind);
+    public int Styles => Timed ? 7 : 6;
+    public PleromaArmyService Service() => new(Rules);
+}
+
+public static class Kit
+{
+    public static readonly string[] Names = ["AGGRESSOR", "BANKER", "COMPOSER", "MICRO", "VETERAN", "MASS", "MICRO0"];
+    public static readonly string[] Arenas = ["open-field", "chokepoint", "ridge", "falling-gate"];
+    static int F(FieldOrderKind k, int grp) => DoctrineVocabulary.Field(k, grp);
+
+    static List<DraftPick> Two(State st, int gold, int k1, int k2)
+    {
+        var l = new List<DraftPick>();
+        int n1 = gold / 2 / st.Price(k1); if (n1 > 0) l.Add(new(k1, n1));
+        int left = gold - n1 * st.Price(k1); int n2 = left / st.Price(k2); if (n2 > 0) l.Add(new(k2, n2));
+        return l;
+    }
+
+    /// <summary>All gold, one of each kind in turn while it is affordable (the autopilot's draft rule 8).</summary>
+    public static List<DraftPick> Cycle(State st, int gold)
+    {
+        var cnt = new int[Roster.Size]; bool any = true;
+        while (any) { any = false; for (int k = 0; k < Roster.Size; k++) if (st.Price(k) <= gold) { cnt[k]++; gold -= st.Price(k); any = true; } }
+        return Enumerable.Range(0, Roster.Size).Where(k => cnt[k] > 0).Select(k => new DraftPick(k, cnt[k])).ToList();
+    }
+
+    /// <summary>The autopilot's ten draft rules (all gold on kind 0..7, cycle, fill the smallest cohort).</summary>
+    public static List<DraftPick> DraftRule(State st, int rule, ArmyReadModel a, int gold)
+    {
+        var picks = new List<DraftPick>();
+        if (rule < 8) { int n = gold / st.Price(rule); if (n > 0) picks.Add(new(rule, n)); }
+        else if (rule == 8) return Cycle(st, gold);
+        else
+        {
+            var have = new int[Roster.Size]; foreach (var c in a.Cohorts) have[c.Key] = c.Count;
+            var add = new int[Roster.Size];
+            while (true)
+            {
+                int best = -1;
+                for (int k = 0; k < Roster.Size; k++) if (st.Price(k) <= gold && (best < 0 || have[k] + add[k] < have[best] + add[best])) best = k;
+                if (best < 0) break;
+                add[best]++; gold -= st.Price(best);
+            }
+            for (int k = 0; k < Roster.Size; k++) if (add[k] > 0) picks.Add(new(k, add[k]));
+        }
+        return picks;
+    }
+
+    /// <summary>The kind VETERAN invests in: Spearmen while Age is free, else the kind whose Age is cheapest against recruiting (lowest worth / draft price).</summary>
+    public static int VetKind(State st)
+    {
+        if (!st.Rules.PriceAge) return 0;
+        int best = 0;
+        for (int k = 1; k < Roster.Size; k++)
+        {
+            // worth/price compared by cross-multiplication (no division): k beats best when worth_k x price_best < worth_best x price_k
+            long wk = Roster.TraitPrice(Roster.TraitsOf(k), st.Rules.PriceReach), wb = Roster.TraitPrice(Roster.TraitsOf(best), st.Rules.PriceReach);
+            if (wk * st.Price(best) < wb * st.Price(k)) best = k;
+        }
+        return best;
+    }
+
+    public static List<DraftPick> Picks(State st, int style, ArmyReadModel a, int gold) => style switch
+    {
+        0 => Two(st, gold, 6, 2),
+        1 => [new(1, gold / st.Price(1))],
+        2 => Cycle(st, gold),
+        3 or 6 => Two(st, gold, 3, 4),
+        4 => [new(VetKind(st), gold / st.Price(VetKind(st)))],
+        _ => [new(0, gold / st.Price(0))],
+    };
+
+    public static DoctrineSet Doctrine(State st, int style, ArmyReadModel a)
+    {
+        switch (style)
+        {
+            case 0: case 5: return DoctrineSet.Of(F(FieldOrderKind.Advance, 0), F(FieldOrderKind.Advance, 1), F(FieldOrderKind.Advance, 2));
+            case 1: return DoctrineSet.Of(F(FieldOrderKind.Hold, 0), F(FieldOrderKind.Hold, 1), F(FieldOrderKind.Guard, 2));
+            case 2: return DoctrineSet.Of(F(FieldOrderKind.Advance, 0), F(FieldOrderKind.Hold, 1), F(FieldOrderKind.Flank, 2));
+            case 3 when st.Timed: return DoctrineSet.Of(F(FieldOrderKind.Hold, 0), F(FieldOrderKind.Hold, 1), F(FieldOrderKind.Hold, 2), DoctrineVocabulary.WhenLost(1));
+            case 3: case 6: return DoctrineSet.Of(F(FieldOrderKind.Flank, 0), F(FieldOrderKind.Hunt, 1), F(FieldOrderKind.FallBack, 2));
+            default:
+                {
+                    var bits = new int[8];
+                    foreach (var c in a.Cohorts) for (int b = 0; b < 8; b++) if ((((int)c.Traits >> b) & 1) != 0) bits[b] += c.Count;
+                    int top = Array.IndexOf(bits, bits.Max());
+                    return DoctrineSet.Of(DoctrineVocabulary.Army(ArmyOrderKind.Age), DoctrineVocabulary.Army(ArmyOrderKind.Age), DoctrineVocabulary.Army(ArmyOrderKind.Aura, top), F(FieldOrderKind.Advance, 0));
+                }
+        }
+    }
+
+    static int Applied(PleromaArmyService svc, IArmy army, List<DraftPick> picks, DoctrineSet d)
+    {
+        if (!svc.TryParse(army.ToCode(), out var copy, out _)) return 0;
+        if (picks.Count > 0) copy!.DraftAsync(new DraftRequest(0, 0, picks), default).AsTask().GetAwaiter().GetResult();
+        return copy!.ApplyArmyOrdersAsync(d, default).AsTask().GetAwaiter().GetResult().Applied;
+    }
+
+    /// <summary>
+    /// A style's plan for this round, before any execution error. VETERAN (when Age or Aura cost gold) keeps back the smallest gold that lets
+    /// all the army orders it can apply at all apply, found by trying a copy of the army (what a player does with the "would cost" hint).
+    /// </summary>
+    public static (List<DraftPick> Picks, DoctrineSet Doc) Plan(State st, PleromaArmyService svc, int style, IArmy army, int round)
+    {
+        var a = army.Read();
+        int spend = style == 1 && round < 3 ? a.Gold / 2 : a.Gold;                     // BANKER keeps half of its gold for the first three rounds
+        if (style != 4) return (Picks(st, style, a, spend), Doctrine(st, style, a));
+        // VETERAN reads its aura target (the trait most soldiers carry) AFTER its draft, so the doctrine is a function of the draft it goes with.
+        DoctrineSet DocAfter(List<DraftPick> picks) => Doctrine(st, style, ReadAfter(svc, army, picks) ?? a);
+        if (!(st.Rules.PriceAge || st.Rules.PriceAura)) { var p = Picks(st, style, a, spend); return (p, DocAfter(p)); }
+        int most = Applied(svc, army, [], DocAfter([]));
+        int lo = 0, hi = spend;                                                        // smallest reserve in [0, spend] that still lets `most` orders apply
+        if (most > 0)
+            while (lo < hi)
+            {
+                int mid = (lo + hi) / 2;
+                var trial = Picks(st, style, a, spend - mid);
+                if (Applied(svc, army, trial, DocAfter(trial)) >= most) hi = mid; else lo = mid + 1;
+            }
+        var final = Picks(st, style, a, spend - lo);
+        return (final, DocAfter(final));
+    }
+
+    static ArmyReadModel? ReadAfter(PleromaArmyService svc, IArmy army, List<DraftPick> picks)
+    {
+        if (!svc.TryParse(army.ToCode(), out var copy, out _)) return null;
+        if (picks.Count > 0) copy!.DraftAsync(new DraftRequest(0, 0, picks), default).AsTask().GetAwaiter().GetResult();
+        return copy!.Read();
+    }
+
+    /// <summary>Execution error: each drafted kind and each doctrine token is replaced by a random (legal) one with probability eps.</summary>
+    public static (List<DraftPick> Picks, DoctrineSet Doc) Noise(ArmyReadModel a, (List<DraftPick> Picks, DoctrineSet Doc) plan, GameRng rng, double eps)
+    {
+        if (eps <= 0) return plan;
+        var picks = plan.Picks.Select(p => rng.Next(1000) < eps * 1000 ? p with { Kind = rng.Next(Roster.Size) } : p).ToList();
+        var legal = Enumerable.Range(1, DoctrineVocabulary.Size - 1).Where(a.Legal.Allows).ToArray();
+        var tk = plan.Doc.Tokens.Select(t => t != 0 && legal.Length > 0 && rng.Next(1000) < eps * 1000 ? legal[rng.Next(legal.Length)] : t).ToArray();
+        return (picks, DoctrineSet.Of(tk));
+    }
+}
+
+/// <summary>Raw results of one run: one line per battle (or match). Reports are computed from these files, never from memory.</summary>
+public sealed record Row(int A, int B, int Arena, int Seed, double V);
+
+public static class Duels
+{
+    const int Gold = 24, Seeds = 20, Base = 9_500_000;
+
+    static BattleSide Build(State st, PleromaArmyService svc, int style, int seed, int arena, double eps, bool boost, Side side, bool draftRuleMode, int rule)
+    {
+        var army = svc.Create(Side.Player, seed);                                     // the same levy for both sides
+        army.ApplySpoilsAsync(new Spoils(Gold, 0), default).AsTask().GetAwaiter().GetResult();
+        var a = army.Read();
+        (List<DraftPick> Picks, DoctrineSet Doc) plan;
+        if (draftRuleMode)
+            plan = (Kit.DraftRule(st, rule, a, a.Gold), DoctrineSet.Of(DoctrineVocabulary.Field(FieldOrderKind.Advance, 0), DoctrineVocabulary.Field(FieldOrderKind.Advance, 1), DoctrineVocabulary.Field(FieldOrderKind.Advance, 2)));
+        else plan = Kit.Plan(st, svc, style, army, 99);       // round 99: a one-round duel has no later round, BANKER spends its bank
+        var rng = new GameRng(GameRng.Mix(seed * 131 + arena, 900 + (draftRuleMode ? rule : style) * 2 + (side == Side.Player ? 0 : 1)));
+        plan = Kit.Noise(a, plan, rng, eps);
+        army.DraftAsync(new DraftRequest(0, seed, plan.Picks), default).AsTask().GetAwaiter().GetResult();
+        army.ApplyArmyOrdersAsync(plan.Doc, default).AsTask().GetAwaiter().GetResult();
+        var cohorts = army.Read().Cohorts.ToList();
+        if (boost) cohorts = cohorts.Select(c => c with { PowerPct = c.PowerPct * 115 / 100 }).ToList();
+        return new BattleSide(side, cohorts, DoctrineVocabulary.FieldOrders(plan.Doc), DoctrineVocabulary.Trigger(plan.Doc));
+    }
+
+    static double Fight(WorkerGame wg, BattleSetup setup)
+    {
+        var run = wg.Game.Context.BattleRun.RunAsync(new BattleState(setup)).AsTask().GetAwaiter().GetResult();
+        if (run is EvalApp.PipelineResult<BattleState>.Failure f) throw f.Exception ?? new InvalidOperationException("no exception");
+        var o = run.GetData().Result!.Outcome;
+        return o == BattleStatus.AttackerWon ? 1.0 : o == BattleStatus.Draw ? 0.5 : 0.0;
+    }
+
+    /// <summary>Every ordered pair (a attacks b) x 4 arenas x 20 seeds, at one error rate. Rows are the attacker's score.</summary>
+    public static List<Row> Run(State st, double eps, int n, bool draftRules, Action<int, int>? progress = null, int take = int.MaxValue)
+    {
+        var units = new List<(int a, int b, int arena, int seed)>();
+        for (int a = 0; a < n; a++) for (int b = 0; b < n; b++) for (int ar = 0; ar < 4; ar++) for (int s = 0; s < Seeds; s++) units.Add((a, b, ar, Base + s));
+        if (take < units.Count) units = units.Take(take).ToList();
+        var svc = st.Service();
+        var res = Pool.Run(units.Count, (i, wg) =>
+        {
+            var u = units[i];
+            for (int attempt = 0; ; attempt++)
+            {
+                try
+                {
+                    var A = Build(st, svc, u.a, u.seed, u.arena, eps, false, Side.Player, draftRules, u.a);
+                    var B = Build(st, svc, u.b, u.seed, u.arena, eps, false, Side.Enemy, draftRules, u.b);
+                    return Fight(wg, new BattleSetup(Kit.Arenas[u.arena], u.seed * 7 + 3, 120, A, B));
+                }
+                catch (Exception) when (attempt < 8) { Interlocked.Increment(ref WorkerGame.Retries); }
+            }
+        }, progress);
+        return units.Select((u, i) => new Row(u.a, u.b, u.arena, u.seed, res[i])).ToList();
+    }
+
+    /// <summary>Diagnostics only (no score): how often does the attacker's trigger fire when style a attacks style b, and what do a's army orders cost?</summary>
+    public static string Diag(State st, int a, int b, int seeds)
+    {
+        var svc = st.Service(); int fired = 0, total = 0; double ticks = 0; int ordersApplied = 0, ordersAsked = 0; double goldLeft = 0, soldiers = 0;
+        var res = Pool.Run(seeds * 4, (i, wg) =>
+        {
+            int ar = i % 4, seed = Base + i / 4;
+            for (int attempt = 0; ; attempt++)
+                try
+                {
+                    var A = Build(st, svc, a, seed, ar, 0, false, Side.Player, false, a);
+                    var B = Build(st, svc, b, seed, ar, 0, false, Side.Enemy, false, b);
+                    var setup = new BattleSetup(Kit.Arenas[ar], seed * 7 + 3, 120, A, B);
+                    var run = wg.Game.Context.BattleRun.RunAsync(new BattleState(setup)).AsTask().GetAwaiter().GetResult();
+                    var s = (Doctrine.Battle.TracerBattleSession)run.GetData().Session!;
+                    return (s.Stats.TriggerFiredAtTick[0], run.GetData().Result!.Ticks);
+                }
+                catch (Exception) when (attempt < 8) { Interlocked.Increment(ref WorkerGame.Retries); }
+        });
+        foreach (var r in res) { total++; if (r.Item1 >= 0) fired++; ticks += r.Item2; }
+        // what the style's own army orders do on a fresh duel army
+        for (int s = 0; s < seeds; s++)
+        {
+            var army = svc.Create(Side.Player, Base + s); army.ApplySpoilsAsync(new Spoils(Gold, 0), default).AsTask().GetAwaiter().GetResult();
+            var plan = Kit.Plan(st, svc, a, army, 99);
+            army.DraftAsync(new DraftRequest(0, 0, plan.Picks), default).AsTask().GetAwaiter().GetResult();
+            var rep = army.ApplyArmyOrdersAsync(plan.Doc, default).AsTask().GetAwaiter().GetResult();
+            ordersApplied += rep.Applied; ordersAsked += DoctrineVocabulary.ArmyOrders(plan.Doc).Length; goldLeft += army.Read().Gold; soldiers += army.Read().Soldiers;
+        }
+        return $"{Kit.Names[a]} attacks {Kit.Names[b]} in {st.Name}: trigger fired in {fired}/{total} battles, mean ticks {ticks / total:F1}; army orders applied {ordersApplied}/{ordersAsked}; mean gold left {goldLeft / seeds:F1}, mean soldiers {soldiers / seeds:F1}";
+    }
+
+    /// <summary>Null N3: MASS against MASS with +15 percent power (expert, both orientations, 4 arenas x 20 seeds). Returns the boosted side's mean score.</summary>
+    public static double Sensitivity(State st)
+    {
+        var units = new List<(int arena, int seed, bool boostAttacker)>();
+        for (int ar = 0; ar < 4; ar++) for (int s = 0; s < Seeds; s++) { units.Add((ar, Base + s, true)); units.Add((ar, Base + s, false)); }
+        var svc = st.Service();
+        var res = Pool.Run(units.Count, (i, wg) =>
+        {
+            var u = units[i];
+            for (int attempt = 0; ; attempt++)
+                try
+                {
+                    var A = Build(st, svc, 5, u.seed, u.arena, 0, u.boostAttacker, Side.Player, false, 0);
+                    var B = Build(st, svc, 5, u.seed, u.arena, 0, !u.boostAttacker, Side.Enemy, false, 0);
+                    double att = Fight(wg, new BattleSetup(Kit.Arenas[u.arena], u.seed * 7 + 3, 120, A, B));
+                    return u.boostAttacker ? att : 1 - att;
+                }
+                catch (Exception) when (attempt < 8) { Interlocked.Increment(ref WorkerGame.Retries); }
+        });
+        return res.Average();
+    }
+}
+
+public static class Matches
+{
+    const int Rounds = 6, MatchSeeds = 10, Base = 9_600_000;
+
+    /// <summary>Score of style a over style b (1 = a won every round) in one match on a FIXED arena: 6 rounds, persistent armies from one levy, spoils as the real game, roles swap each round.</summary>
+    static double Play(WorkerGame wg, State st, PleromaArmyService svc, int sa, int sb, double eps, int seed, int arena)
+    {
+        var A = svc.Create(Side.Player, seed); var B = svc.Create(Side.Player, seed);
+        var rng = new GameRng(GameRng.Mix(seed, 77 + arena));
+        double score = 0;
+        for (int r = 0; r < Rounds; r++)
+        {
+            var pa = Kit.Noise(A.Read(), Kit.Plan(st, svc, sa, A, r), rng, eps); A.DraftAsync(new DraftRequest(r, seed, pa.Picks), default).AsTask().GetAwaiter().GetResult();
+            var pb = Kit.Noise(B.Read(), Kit.Plan(st, svc, sb, B, r), rng, eps); B.DraftAsync(new DraftRequest(r, seed, pb.Picks), default).AsTask().GetAwaiter().GetResult();
+            A.ApplyArmyOrdersAsync(pa.Doc, default).AsTask().GetAwaiter().GetResult(); B.ApplyArmyOrdersAsync(pb.Doc, default).AsTask().GetAwaiter().GetResult();
+            bool aAtt = r % 2 == 0;
+            var ra = A.Read(); var rb = B.Read();
+            if (ra.Soldiers == 0 && rb.Soldiers == 0) { score += 0.5; A.EndRoundAsync(default).AsTask().GetAwaiter().GetResult(); B.EndRoundAsync(default).AsTask().GetAwaiter().GetResult(); continue; }
+            BattleSide Side_(ArmyReadModel x, DoctrineSet d, Side s) => new(s, x.Cohorts, DoctrineVocabulary.FieldOrders(d), DoctrineVocabulary.Trigger(d));
+            var att = aAtt ? Side_(ra, pa.Doc, Side.Player) : Side_(rb, pb.Doc, Side.Player);
+            var def = aAtt ? Side_(rb, pb.Doc, Side.Enemy) : Side_(ra, pa.Doc, Side.Enemy);
+            var setup = new BattleSetup(Kit.Arenas[arena], (int)GameRng.Mix(seed, 4000 + r), 120, att, def);
+            var run = wg.Game.Context.BattleRun.RunAsync(new BattleState(setup)).AsTask().GetAwaiter().GetResult();
+            if (run is EvalApp.PipelineResult<BattleState>.Failure f) throw f.Exception ?? new InvalidOperationException("no exception");
+            var res = run.GetData().Result!;
+            bool attWon = res.Outcome == BattleStatus.AttackerWon, draw = res.Outcome == BattleStatus.Draw;
+            score += draw ? 0.5 : (attWon == aAtt ? 1 : 0);
+            var attArmy = aAtt ? A : B; var defArmy = aAtt ? B : A;
+            attArmy.ApplyLossesAsync(res.AttackerLosses, default).AsTask().GetAwaiter().GetResult(); defArmy.ApplyLossesAsync(res.DefenderLosses, default).AsTask().GetAwaiter().GetResult();
+            int killedByAtt = res.DefenderLosses.Sum(l => l.Lost), killedByDef = res.AttackerLosses.Sum(l => l.Lost);
+            attArmy.ApplySpoilsAsync(new Spoils(killedByAtt / 2 + (attWon ? 6 : 2), attWon ? 1 : 0), default).AsTask().GetAwaiter().GetResult();
+            defArmy.ApplySpoilsAsync(new Spoils(killedByDef / 2 + (!attWon && !draw ? 6 : 2), !attWon && !draw ? 1 : 0), default).AsTask().GetAwaiter().GetResult();
+            A.EndRoundAsync(default).AsTask().GetAwaiter().GetResult(); B.EndRoundAsync(default).AsTask().GetAwaiter().GetResult();
+        }
+        return score / Rounds;
+    }
+
+    public static List<Row> Run(State st, double eps, int n, Action<int, int>? progress = null, int take = int.MaxValue)
+    {
+        var units = new List<(int a, int b, int arena, int seed)>();
+        for (int a = 0; a < n; a++) for (int b = 0; b < n; b++) for (int ar = 0; ar < 4; ar++) for (int s = 0; s < MatchSeeds; s++) units.Add((a, b, ar, Base + s));
+        if (take < units.Count) units = units.Take(take).ToList();
+        var svc = st.Service();
+        var res = Pool.Run(units.Count, (i, wg) =>
+        {
+            var u = units[i];
+            for (int attempt = 0; ; attempt++)
+                try { return Play(wg, st, svc, u.a, u.b, eps, u.seed, u.arena); }
+                catch (Exception) when (attempt < 8) { Interlocked.Increment(ref WorkerGame.Retries); }
+        }, progress);
+        return units.Select((u, i) => new Row(u.a, u.b, u.arena, u.seed, res[i])).ToList();
+    }
+}

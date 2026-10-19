@@ -5,21 +5,25 @@ namespace Doctrine.Army;
 
 // ONE ARMY as Pleroma stores. Nothing is held in a host field except the Side and the store handles.
 //   _army   the cohorts: one item per kind (Key), traits (Flags), slot (Arrangement), veterancy (Time), soldiers (count).
-//   _purse  gold: the count of key 0.
+//   _purse  gold: the count of key 0 (a complete one-key band: interest is Pleroma's MapCounts on the whole purse).
 //   _clock  the round: the count of key 0.
 //   _flips  the flip record: one flag word per flip; BitCounts parity is the army's flip mask.
 //   _auras  active auras: key = trait bit, count = percent.
-// Every change is a Pleroma operation: Add (a negative count is a removal), Tick, RelabelFlags, RelabelArrangements, Clear.
+// Every change is a Pleroma operation: Add (a negative count is a removal), Tick, RelabelFlags, RelabelArrangements, Clear, MapCounts.
 // Every read is a Pleroma read: TryItems, TryKeys, Total, BitCounts, CountWhere, InnerProduct over a keys-only projection.
+// What an Age, an Aura or a Flip costs is such a read: InnerProduct of the army's keys-only projection with a weight per kind (Roster says what a
+// soldier of that kind adds), so the sum of soldiers x weight is Pleroma's, not a host multiplication.
 // The host decides WHICH operation to run and reads the numbers it needs; it never adds or multiplies a count itself.
 
 internal sealed class PleromaArmy : IArmy
 {
-    readonly Pleroma _army, _purse, _clock, _flips, _auras;
+    readonly Pleroma _army, _clock, _flips, _auras;
+    Pleroma _purse;          // replaced as a whole when interest is paid (MapCounts returns a new store)
+    readonly ArmyRules _rules;
 
-    PleromaArmy(Side side)
+    PleromaArmy(Side side, ArmyRules rules)
     {
-        Side = side;
+        Side = side; _rules = rules;
         _army = new Pleroma(PleromaArmyLayout.ArmyShape);
         _purse = new Pleroma(PleromaArmyLayout.PurseShape);
         _clock = new Pleroma(PleromaArmyLayout.ClockShape);
@@ -35,9 +39,9 @@ internal sealed class PleromaArmy : IArmy
     // ---- construction ----
 
     /// <summary>A fresh army: the starting levy is <see cref="PleromaArmyLayout.StartSoldiers"/> draws of the Pleroma's own SampleKey on the game's SplitMix64.</summary>
-    internal static PleromaArmy Fresh(Side side, int seed)
+    internal static PleromaArmy Fresh(Side side, int seed, ArmyRules rules)
     {
-        var army = new PleromaArmy(side);
+        var army = new PleromaArmy(side, rules);
         var levy = new Pleroma(PleromaArmyLayout.KeysShape);
         for (int k = 0; k < DoctrineVocabulary.Kinds; k++) levy.Add((ulong)k, PleromaArmyLayout.LevyWeight[k]);
         var rng = new GameRandom(new GameRng(GameRng.Mix(seed, (int)side)));
@@ -52,9 +56,9 @@ internal sealed class PleromaArmy : IArmy
 
     /// <summary>Rebuilds an army from the values an army code carries. Every store is filled by Add, so it equals the original cell for cell.</summary>
     internal static PleromaArmy Rebuild(Side side, int round, int gold, int flipMask, IReadOnlyList<(int Bit, int Percent)> auras,
-        IReadOnlyList<(int Kind, int Soldiers, int Slot, int Veterancy)> cohorts)
+        IReadOnlyList<(int Kind, int Soldiers, int Slot, int Veterancy)> cohorts, ArmyRules rules)
     {
-        var a = new PleromaArmy(side);
+        var a = new PleromaArmy(side, rules);
         if (gold > 0) a._purse.Add(0UL, gold);
         if (round > 0) a._clock.Add(0UL, round);
         for (int j = 0; j < DoctrineVocabulary.Traits; j++)
@@ -105,12 +109,37 @@ internal sealed class PleromaArmy : IArmy
         return (list, mask, max);
     }
 
-    /// <summary>Gold a Flip of <paramref name="bit"/> costs: the sum over the cohorts of soldiers x <see cref="Roster.RelabelCost"/> (read from the cohorts' live traits).</summary>
-    static long FlipCost(IReadOnlyList<(HologramItem Item, long Count)> items, int bit)
+    /// <summary>
+    /// The sum over the cohorts of soldiers x <paramref name="weight"/>(cohort), as a Pleroma read: the army's keys-only projection against a store holding
+    /// the weight of each kind (the same InnerProduct recipe as <see cref="Score"/>). The host chooses a weight per kind from the cohort's live tags; the
+    /// multiplication by the soldier count is the Pleroma's.
+    /// </summary>
+    static long Weighted(Pleroma keysOnly, IReadOnlyList<(HologramItem Item, long Count)> items, Func<HologramItem, long> weight)
     {
-        long cost = 0;
-        for (int i = 0; i < items.Count; i++) cost += items[i].Count * Roster.RelabelCost((Trait)(byte)items[i].Item.Flags, bit);
-        return cost;
+        var w = new long[PleromaArmyLayout.KeyCycle];
+        for (int i = 0; i < items.Count; i++) w[(int)items[i].Item.Key] = weight(items[i].Item);
+        return Pleroma.InnerProduct(keysOnly, Pleroma.FromCounts(PleromaArmyLayout.KeysShape, w));
+    }
+
+    /// <summary>Gold a Flip of <paramref name="bit"/> costs: the sum over the cohorts of soldiers x <see cref="Roster.RelabelCost"/> (read from the cohorts' live traits).</summary>
+    long FlipCost(Pleroma keysOnly, IReadOnlyList<(HologramItem Item, long Count)> items, int bit)
+        => Weighted(keysOnly, items, it => Roster.RelabelCost((Trait)(byte)it.Flags, bit, _rules.PriceReach));
+
+    /// <summary>Gold an Age costs now (0 when the rule is off): soldiers x worth x the power one more veterancy step gives, in gold, rounded up.</summary>
+    int AgeCost(Pleroma keysOnly, IReadOnlyList<(HologramItem Item, long Count)> items)
+        => !_rules.PriceAge ? 0 : Roster.GoldFor(Weighted(keysOnly, items, it => Roster.AgeWeight((Trait)(byte)it.Flags, it.Time, _rules.PriceReach)));
+
+    /// <summary>The bonus an Aura on <paramref name="bit"/> would give: the stronger of the strongest active aura and (soldiers carrying the trait, capped).</summary>
+    int AuraPercent(int bit, int strongestNow)
+        => Math.Max(strongestNow, (int)Math.Min(PleromaArmyLayout.AuraCap, _army.CountWhere(PleromaArmyLayout.HasTrait[bit])));
+
+    /// <summary>Gold an Aura on <paramref name="bit"/> costs this round (0 when the rule is off): rented, so spread over the rounds a body would have served.</summary>
+    int AuraCost(Pleroma keysOnly, IReadOnlyList<(HologramItem Item, long Count)> items, int bit, (IReadOnlyList<(int Bit, int Percent)> List, int Mask, int MaxPercent) now)
+    {
+        if (!_rules.PriceAura) return 0;
+        int after = AuraPercent(bit, now.MaxPercent), maskAfter = now.Mask | (1 << bit);
+        return Roster.GoldFor(Weighted(keysOnly, items, it => Roster.AuraWeight((Trait)(byte)it.Flags, now.Mask, now.MaxPercent, maskAfter, after, _rules.PriceReach)),
+                              Roster.AuraRentalDivisor(Round()));
     }
 
     int Round() => (int)Math.Clamp(_clock.Total(), 0, int.MaxValue);
@@ -124,15 +153,16 @@ internal sealed class PleromaArmy : IArmy
         if (_army.Total() == 0) return m;                      // no soldiers: nothing to order
         m = m.With(DoctrineVocabulary.Army(ArmyOrderKind.Rotate, 1)).With(DoctrineVocabulary.Army(ArmyOrderKind.Rotate, 2));
         long gold = Gold();
+        var keysOnly = _army.Project(HologramFaces.None);
         for (int b = 0; b < DoctrineVocabulary.Traits; b++)
-            if (FlipCost(items, b) <= gold) m = m.With(DoctrineVocabulary.Army(ArmyOrderKind.Flip, b));   // a flip is legal while the army can pay for it
-        m = m.With(DoctrineVocabulary.Army(ArmyOrderKind.Age));
+            if (FlipCost(keysOnly, items, b) <= gold) m = m.With(DoctrineVocabulary.Army(ArmyOrderKind.Flip, b));   // a flip is legal while the army can pay for it
+        if (AgeCost(keysOnly, items) <= gold) m = m.With(DoctrineVocabulary.Army(ArmyOrderKind.Age));              // so is an age, and an aura below
         for (int k = 0; k < DoctrineVocabulary.Kinds; k++)
             if (Find(items, k, out _) && Find(items, (k + 1) % DoctrineVocabulary.Kinds, out _))
                 m = m.With(DoctrineVocabulary.Army(ArmyOrderKind.Merge, k));
         var auras = Auras();
         for (int b = 0; b < DoctrineVocabulary.Traits; b++)
-            if (((auras.Mask >> b) & 1) == 0 && _army.CountWhere(PleromaArmyLayout.HasTrait[b]) > 0)
+            if (((auras.Mask >> b) & 1) == 0 && _army.CountWhere(PleromaArmyLayout.HasTrait[b]) > 0 && AuraCost(keysOnly, items, b, auras) <= gold)
                 m = m.With(DoctrineVocabulary.Army(ArmyOrderKind.Aura, b));
         // Cull is never legal on this shape: Restrict refuses on a store with item lines and order and time faces (Phasor CG1).
         var occupied = new bool[DoctrineVocabulary.Groups];
@@ -141,9 +171,14 @@ internal sealed class PleromaArmy : IArmy
             int slot = PleromaArmyLayout.SlotOf(items[i].Item.Arrangement);
             if (slot >= 0) occupied[slot] = true;
         }
+        bool any = false;
         for (int g = 0; g < DoctrineVocabulary.Groups; g++)
             if (occupied[g])
+            {
+                any = true;
                 for (int f = 0; f <= (int)FieldOrderKind.Hunt; f++) m = m.With(DoctrineVocabulary.Field((FieldOrderKind)f, g));
+            }
+        if (any) for (int q = 1; q <= DoctrineVocabulary.TriggerLevels; q++) m = m.With(DoctrineVocabulary.WhenLost(q));   // a contingency needs a line to order
         return m;
     }
 
@@ -172,7 +207,7 @@ internal sealed class PleromaArmy : IArmy
             for (int i = 0; i < items.Count; i++)
             {
                 var it = items[i].Item;
-                weights[(int)it.Key] = Roster.PriceOf((int)it.Key) * PleromaArmyLayout.Power(it.Time, it.Flags, auras.Mask, auras.MaxPercent);
+                weights[(int)it.Key] = _rules.DraftPrice((int)it.Key) * PleromaArmyLayout.Power(it.Time, it.Flags, auras.Mask, auras.MaxPercent);
             }
         long units = Pleroma.InnerProduct(_army.Project(HologramFaces.None), Pleroma.FromCounts(PleromaArmyLayout.KeysShape, weights));
         return (int)Math.Clamp(units + 100L * Gold(), 0, int.MaxValue);
@@ -217,7 +252,7 @@ internal sealed class PleromaArmy : IArmy
             if (!TryCohorts(out var items)) { no.Add((p, "army unreadable")); continue; }
             bool present = Find(items, p.Kind, out var have);
             if (!present && items.Count >= PleromaArmyLayout.CommandSpan) { no.Add((p, "command span")); continue; }
-            long cost = (long)Roster.PriceOf(p.Kind) * p.Count;
+            long cost = (long)_rules.DraftPrice(p.Kind) * p.Count;
             if (cost > Gold()) { no.Add((p, "gold")); continue; }
             _purse.Add(0UL, -cost);
             _army.Add(present ? have.Item : ItemForNewCohort(p.Kind), p.Count);
@@ -253,18 +288,20 @@ internal sealed class PleromaArmy : IArmy
                 _army.RelabelArrangements(PleromaArmyLayout.RotationFactor(o.A), 0);
                 break;
             case ArmyOrderKind.Flip:
-                if (TryCohorts(out var flipItems)) _purse.Add(0UL, -FlipCost(flipItems, o.A));   // the legal mask already checked the army can pay
+                if (TryCohorts(out var flipItems)) _purse.Add(0UL, -FlipCost(_army.Project(HologramFaces.None), flipItems, o.A));   // the legal mask already checked the army can pay
                 _army.RelabelFlags(null, 1u << o.A);
                 _flips.Add(new HologramItem(0, 1u << o.A), 1);
                 break;
             case ArmyOrderKind.Age:
+                if (TryCohorts(out var ageItems)) _purse.Add(0UL, -AgeCost(_army.Project(HologramFaces.None), ageItems));   // the legal mask already checked the army can pay
                 _army.Tick(1);
                 break;
             case ArmyOrderKind.Merge:
                 MergeInto(o.A);
                 break;
             case ArmyOrderKind.Aura:
-                // An aura is worth the soldiers carrying its trait, capped. Legal only while it is not already active.
+                // An aura is worth the soldiers carrying its trait, capped. Legal only while it is not already active, and while the army can pay its rent.
+                if (TryCohorts(out var auraItems)) _purse.Add(0UL, -AuraCost(_army.Project(HologramFaces.None), auraItems, o.A, Auras()));
                 _auras.Add(new HologramItem((ulong)o.A), Math.Min(PleromaArmyLayout.AuraCap, _army.CountWhere(PleromaArmyLayout.HasTrait[o.A])));
                 break;
         }
@@ -309,6 +346,8 @@ internal sealed class PleromaArmy : IArmy
     {
         _clock.Add(0UL, 1);
         _auras.Clear();
+        // Banked gold pays interest: the purse mapped as a whole, count -> count + Roster.Interest(count) (Pleroma's MapCounts, exact; no host-side add).
+        if (_rules.BankInterest) _purse = _purse.MapCounts(c => c + Roster.Interest(c));
         return ValueTask.CompletedTask;
     }
 }

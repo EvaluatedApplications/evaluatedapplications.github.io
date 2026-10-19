@@ -60,7 +60,14 @@ public sealed record Spoils(int Gold, int Experience);
 
 public sealed record ArenaInfo(string Id, string Name, int Width, int Height);
 
-public sealed record BattleSide(Side Side, IReadOnlyList<CohortRead> Cohorts, IReadOnlyList<FieldOrder> Orders);
+/// <summary>
+/// A side's contingency (CONTRACT.md b): once the side has lost <see cref="Quarters"/> quarters or more of the soldiers it brought, the field orders
+/// <see cref="Then"/> replace its opening orders for good (a group not named in <see cref="Then"/> advances). Checked at the start of each tick on integers.
+/// </summary>
+public sealed record LossTrigger(int Quarters, IReadOnlyList<FieldOrder> Then);
+
+/// <summary>A side of a battle: its cohorts, its opening field orders, and optionally the contingency that replaces them (null = the orders hold all battle).</summary>
+public sealed record BattleSide(Side Side, IReadOnlyList<CohortRead> Cohorts, IReadOnlyList<FieldOrder> Orders, LossTrigger? Trigger = null);
 
 /// <summary>Everything a battle needs; built by the pipeline from two army reads and two doctrines. Same setup, same result.</summary>
 public sealed record BattleSetup(string ArenaId, int Seed, int TickLimit, BattleSide Attacker, BattleSide Defender)

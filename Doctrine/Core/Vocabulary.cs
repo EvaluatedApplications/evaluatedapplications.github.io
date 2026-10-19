@@ -11,7 +11,11 @@ public enum Trait : byte
 
 public enum Side : byte { Player = 0, Enemy = 1 }
 
-public enum OrderFamily : byte { End = 0, Army = 1, Field = 2 }
+/// <summary>
+/// End pads. Army orders reach the whole army (Pleroma). Field orders steer one formation group. A Trigger token is not an order itself: it splits
+/// the field orders of a doctrine into "opening" (before it) and "then" (after it), and says when "then" takes over (see <see cref="LossTrigger"/>).
+/// </summary>
+public enum OrderFamily : byte { End = 0, Army = 1, Field = 2, Trigger = 3 }
 
 /// <summary>Army-wide orders: one pass over the whole army (Pleroma operations).</summary>
 public enum ArmyOrderKind : byte
@@ -44,7 +48,11 @@ public static class DoctrineVocabulary
     public const int Traits = 8;
     public const int Kinds = 8;            // the command span (KeyCapacity 8)
     public const int MaxSlots = 4;         // a doctrine is up to 4 slots per round
+    public const int TriggerLevels = 3;    // WhenLost25, WhenLost50, WhenLost75: a quarter of the side's soldiers per step
+    /// <summary>The <see cref="DoctrineOrder.Kind"/> of a trigger token. It is outside <see cref="ArmyOrderKind"/> and <see cref="FieldOrderKind"/> on purpose, so a host that switches on a kind lands in its default branch.</summary>
+    public const int TriggerKind = 100;
 
+    // VERSION 2 of the vocabulary (2026-10-19): tokens 0..53 are version 1 and unchanged (ids are wire data); 54..56 are the loss triggers.
     static readonly DoctrineOrder[] Table = Build();
     static DoctrineOrder[] Build()
     {
@@ -57,6 +65,7 @@ public static class DoctrineVocabulary
         for (int b = 0; b < Traits; b++) t.Add(new(OrderFamily.Army, (int)ArmyOrderKind.Cull, b));
         for (int g = 0; g < Groups; g++)
             for (int f = 0; f <= (int)FieldOrderKind.Hunt; f++) t.Add(new(OrderFamily.Field, f, g));
+        for (int q = 1; q <= TriggerLevels; q++) t.Add(new(OrderFamily.Trigger, TriggerKind, q));
         return t.ToArray();
     }
 
@@ -71,12 +80,15 @@ public static class DoctrineVocabulary
     }
     public static int Army(ArmyOrderKind k, int a = 0) => Encode(new(OrderFamily.Army, (int)k, a));
     public static int Field(FieldOrderKind k, int group) => Encode(new(OrderFamily.Field, (int)k, group));
+    /// <summary>The token "when this side has lost <paramref name="quarters"/> quarters of its soldiers" (1..<see cref="TriggerLevels"/>).</summary>
+    public static int WhenLost(int quarters) => Encode(new(OrderFamily.Trigger, TriggerKind, quarters));
     public static string Name(int token)
     {
         var o = Decode(token);
         return o.Family switch
         {
             OrderFamily.End => "End",
+            OrderFamily.Trigger => $"WhenLost{25 * o.A}",
             OrderFamily.Army => (ArmyOrderKind)o.Kind switch
             {
                 ArmyOrderKind.Age => "Age",
@@ -86,16 +98,40 @@ public static class DoctrineVocabulary
             _ => $"{(FieldOrderKind)o.Kind}@{o.A}",
         };
     }
-    /// <summary>The field orders carried by a doctrine, in slot order (a group named twice keeps the LAST word).</summary>
-    public static FieldOrder[] FieldOrders(DoctrineSet d)
+    /// <summary>The slot of the first trigger token of a doctrine, or <see cref="MaxSlots"/> when it has none.</summary>
+    static int TriggerSlot(DoctrineSet d)
+    {
+        for (int i = 0; i < MaxSlots; i++) if (Decode(d[i]).Family == OrderFamily.Trigger) return i;
+        return MaxSlots;
+    }
+
+    static FieldOrder[] FieldOrdersIn(DoctrineSet d, int from, int to)
     {
         var byGroup = new FieldOrder?[Groups];
-        for (int i = 0; i < MaxSlots; i++)
+        for (int i = from; i < to; i++)
         {
             var o = Decode(d[i]);
             if (o.Family == OrderFamily.Field) byGroup[o.A] = new FieldOrder(o.A, (FieldOrderKind)o.Kind, 1);
         }
         return byGroup.Where(f => f is not null).Select(f => f!.Value).ToArray();
+    }
+
+    /// <summary>
+    /// The field orders a battle OPENS with: the field orders carried by a doctrine, in slot order (a group named twice keeps the LAST word).
+    /// When the doctrine has a trigger token (<see cref="Trigger"/>) only the slots before the first one count; the rest are the "then" orders.
+    /// </summary>
+    public static FieldOrder[] FieldOrders(DoctrineSet d) => FieldOrdersIn(d, 0, TriggerSlot(d));
+
+    /// <summary>
+    /// The loss trigger of a doctrine, or null when it has no trigger token. The FIRST trigger token splits the doctrine: its level says how many quarters
+    /// of the side's soldiers must be lost, and the field orders after it (last word per group) replace the opening orders when that happens (a group not
+    /// named after it advances, the default). Later trigger tokens are ignored.
+    /// </summary>
+    public static LossTrigger? Trigger(DoctrineSet d)
+    {
+        int at = TriggerSlot(d);
+        if (at >= MaxSlots) return null;
+        return new LossTrigger(Decode(d[at]).A, FieldOrdersIn(d, at + 1, MaxSlots));
     }
     /// <summary>The army orders carried by a doctrine, in slot order.</summary>
     public static DoctrineOrder[] ArmyOrders(DoctrineSet d)
@@ -158,17 +194,29 @@ public static class Roster
     public static Trait TraitsOf(int kind) => Kinds[kind].Traits;
     public static int PriceOf(int kind) => Kinds[kind].Price;
 
+    /// <summary>One veterancy step adds this many power points (the ring has <see cref="VetPeriod"/> places and wraps).</summary>
+    public const int VetStepPct = 5;
+    public const int VetPeriod = 9;
+    /// <summary>The campaign the economy is priced for (<see cref="DoctrineDomain.MaxRounds"/> default): what a body serves, what an aura is rented against, what interest breaks even over.</summary>
+    public const int CampaignRounds = 8;
+
+    /// <summary>Power in percent: 100, plus <see cref="VetStepPct"/> per veterancy step, plus the aura bonus when the cohort carries a trait of an active aura.</summary>
+    public static int PowerPct(int veterancy, uint traits, int auraMask, int auraPct)
+        => 100 + VetStepPct * veterancy + ((traits & (uint)auraMask) != 0 ? auraPct : 0);
+
     /// <summary>
-    /// What a soldier with these traits is WORTH in gold: ceil(2 x damage percent / taken percent), read from the battle's own stat tables
-    /// (<see cref="Battle.UnitRules"/>). It prices a RELABEL (<see cref="RelabelCost"/>), not a draft: drafting still costs <see cref="PriceOf"/>
-    /// (the two scales differ on purpose, the draft prices are the game's feel and are the user's to change; see
-    /// todo\difficulty-2026-10-19.md, where deriving the draft price from this made a plain soldier 2 gold). Spearmen 2, Shieldwall 3, Riders 2,
-    /// Archers 2, Priests 2, Wights 3, Wolves 3, Catapults 4; a Spearman flipped to Machine is worth 5.
+    /// What a soldier with these traits is WORTH in gold: ceil(2 x damage x (100 + reach) / (taken x 100)), read from the battle's own stat tables
+    /// (<see cref="Battle.UnitRules"/>), reach being <see cref="Battle.UnitRules.ReachPct"/> (the free fire a longer weapon gets while a melee unit closes).
+    /// It prices a RELABEL (<see cref="RelabelCost"/>), an Age and an Aura, not a draft: drafting costs <see cref="PriceOf"/> (the two scales differ on purpose,
+    /// the draft prices are the game's feel and are the user's to change; see todo\difficulty-2026-10-19.md, where deriving the draft price from this made a
+    /// plain soldier 2 gold). With reach: Spearmen 2, Shieldwall 3, Riders 2, Archers 2, Priests 2, Wights 3, Wolves 3, Catapults 5; a Spearman flipped to
+    /// Machine is worth 7. Without reach (<paramref name="reach"/> false): Catapults 4, that Machine 5.
     /// </summary>
-    public static int TraitPrice(Trait t)
+    public static int TraitPrice(Trait t, bool reach = true)
     {
-        int dmg = Battle.UnitRules.DamagePct(t), taken = Math.Max(1, Battle.UnitRules.TakenPct(t));
-        return (2 * dmg + taken - 1) / taken;
+        long dmg = Battle.UnitRules.DamagePct(t), taken = Math.Max(1, Battle.UnitRules.TakenPct(t));
+        long boost = reach ? 100 + Battle.UnitRules.ReachPct(t) : 100;
+        return (int)((2 * dmg * boost + taken * 100 - 1) / (taken * 100));
     }
 
     /// <summary>
@@ -176,6 +224,28 @@ public static class Roster
     /// the new trait set is worth more (a better soldier is paid for), nothing when it is worth the same or less. An army-wide Flip costs the sum
     /// over its soldiers, so turning a levy into Machines is as dear as drafting Catapults.
     /// </summary>
-    public static int RelabelCost(Trait traits, int bit)
-        => Math.Max(0, TraitPrice((Trait)((byte)traits ^ (1 << bit))) - TraitPrice(traits));
+    public static int RelabelCost(Trait traits, int bit, bool reach = true)
+        => Math.Max(0, TraitPrice((Trait)((byte)traits ^ (1 << bit)), reach) - TraitPrice(traits, reach));
+
+    /// <summary>Gold-percent one soldier adds to an Age: its worth times the power points one more veterancy step gives (a wrap back to 0 loses power and is free).</summary>
+    public static long AgeWeight(Trait traits, int veterancy, bool reach)
+        => (long)TraitPrice(traits, reach) * Math.Max(0, PowerPct((veterancy + 1) % VetPeriod, 0, 0, 0) - PowerPct(veterancy, 0, 0, 0));
+
+    /// <summary>Gold-percent one soldier adds to an Aura: its worth times the power points the new aura state gives over the old one (never negative).</summary>
+    public static long AuraWeight(Trait traits, int maskNow, int pctNow, int maskAfter, int pctAfter, bool reach)
+        => (long)TraitPrice(traits, reach) * Math.Max(0, PowerPct(0, (uint)traits, maskAfter, pctAfter) - PowerPct(0, (uint)traits, maskNow, pctNow));
+
+    /// <summary>An aura is rented for one round: its price is spread over the rounds a bought body would have served (the campaign minus the rounds played, at least 1).</summary>
+    public static int AuraRentalDivisor(int round) => Math.Max(1, CampaignRounds - Math.Max(0, round));
+
+    /// <summary>The gold a weighted sum of soldiers costs: ceil(sum / (100 x divisor)).</summary>
+    public static int GoldFor(long weightedSum, int divisor = 1)
+    {
+        if (weightedSum <= 0) return 0;
+        long d = 100L * Math.Max(1, divisor);
+        return (int)Math.Min(int.MaxValue, (weightedSum + d - 1) / d);
+    }
+
+    /// <summary>Interest a purse pays at the close of a round: gold / (campaign - 1), the rate at which banking one round at the start of a campaign breaks even in soldier-rounds.</summary>
+    public static long Interest(long gold) => gold <= 0 ? 0 : gold / (CampaignRounds - 1);
 }

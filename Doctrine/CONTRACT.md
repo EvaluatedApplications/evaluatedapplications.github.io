@@ -44,10 +44,20 @@ Invariants (each is a named case in `ArmyContract`):
   it show: the player's army orders reach the army whole (see "Who judges a token" below, proved end to end).
 - Orders keep the army valid (counts > 0, slots 0..2, gold >= 0).
 - A FLIP IS PAID FOR (2026-10-19, `flip-is-paid-for-and-legal-only-when-affordable`). A Flip relabels one trait bit on every cohort; each soldier whose
-  new trait set is worth more costs the difference in gold (`Roster.RelabelCost`, worth = `Roster.TraitPrice` = ceil(2 x damage percent / taken
-  percent) from the battle's stat tables), a soldier made worse is free. The legal list offers the flip only while the army can pay the sum, and
+  new trait set is worth more costs the difference in gold (`Roster.RelabelCost`, worth = `Roster.TraitPrice` = ceil(2 x damage x (100 + reach) / (taken x 100))
+  from the battle's stat tables, reach = `UnitRules.ReachPct`, the free fire a longer weapon gets while a melee unit closes: 20 percent for range 7,
+  32 for range 10), a soldier made worse is free. The legal list offers the flip only while the army can pay the sum, and
   the order takes exactly that gold. Before this a Flip cost nothing: one "Flip Machine" token took a Spearmen levy from 0.53 to 0.91 wins
   (todo\difficulty-2026-10-19.md). The worth scale is not the draft price scale on purpose (`PriceOf` is the game's feel).
+- AN AGE IS PAID FOR (second round 2026-10-19, `age-is-paid-for-and-legal-only-when-affordable`). The army pays ceil(sum over its soldiers of worth x the power
+  points one more veterancy step gives, `Roster.AgeWeight`) / 100 gold; the step that wraps the ring back to 0 loses power and costs nothing. Legal only while the
+  army can pay. The sum is a Pleroma read (InnerProduct of the keys-only projection with a weight per kind), not a host multiplication.
+- AN AURA IS RENTED (`aura-is-rented-and-legal-only-when-affordable`). An aura lasts the round, so it costs the sum over soldiers of worth x the power points
+  it adds (`Roster.AuraWeight`: the new bonus is the soldiers carrying the trait, capped at 50, never below an aura already active) divided by the rounds a
+  bought body would still serve (`Roster.AuraRentalDivisor` = 8 - round, at least 1), rounded up. Legal only while the army can pay.
+- BANKED GOLD PAYS INTEREST (`banked-gold-pays-interest-when-a-round-closes`). When a round closes the purse pays `Roster.Interest` = gold / 7 (floor): the rate at
+  which banking one round at the start of an 8-round campaign breaks even in soldier-rounds. Done by `Pleroma.MapCounts` on the purse (no new Pleroma operation).
+  The three rules are switches of `ArmyRules` (default = the game): a measurement uses them to price one lever at a time, a mutant turns one off.
 - Draft spends exactly price x count; a refused pick (unknown kind, count <= 0, too little gold) is reported with a non-empty reason and
   changes nothing. There is no separate "command span" refusal: the span IS the roster (`Roster.Size` = 8 = the Pleroma's key capacity), so a
   ninth kind cannot exist. (A section may keep a guard for it; the contract cannot exercise it.)
@@ -95,6 +105,10 @@ Invariants (`BattleContract`, through the game's own battle pipeline):
   start frame equals the setup's cohorts (kind, slot, soldiers).
 - Result losses equal the soldiers that vanish between the first and last frame, per side, and no cohort loses more than it brought.
 - Events are between opposing sides, name known blobs, and deal damage > 0; fighting armies produce events.
+- A side's LOSS TRIGGER (BattleSide.Trigger, vocabulary section d) fires at the start of the first tick at which the side has lost N quarters or more of the soldiers
+  it brought, never before anything was lost, from the side's own losses only, and stays fired; from then on its cohorts follow the Then orders (a group not named
+  advances). A side with no trigger, or one that never fires, plays exactly as before. Proved in TracerTriggerTests with three broken variants watched red
+  (never fires, fires at the first tick, reads the enemy's losses: TracerBattleMutationProofs).
 - The same setup gives the same recording on the same device (`ReplayCodec.Digest` equal). Overwhelming force wins.
 - A battle is simulated ONCE by one authority and played back everywhere else. Cross-device equality is NOT required (floats); it is
   measured, not promised.
@@ -137,10 +151,18 @@ Invariants (`GeneralContract`):
 
 ## (d) DOCTRINE: shared vocabulary, `Core\Vocabulary.cs`, changed only by amendment here
 
-54 tokens (id 0 = End/pad): Rotate1-2, Flip0-7, Age, Merge0-7, Aura0-7, Cull0-7 (army orders), then six field orders x three groups
-(Advance, Hold, Flank, FallBack, Guard, Hunt at group 0..2). Token ids are wire data; never renumber. A doctrine is four slots
+57 tokens (id 0 = End/pad; VERSION 2 since 2026-10-19): Rotate1-2, Flip0-7, Age, Merge0-7, Aura0-7, Cull0-7 (army orders), then six field orders x three groups
+(Advance, Hold, Flank, FallBack, Guard, Hunt at group 0..2), then the loss triggers `WhenLost25/50/75` (ids 54..56, family `Trigger`, kind `TriggerKind` = 100).
+Version 1 was ids 0..53 and they did not move. Token ids are wire data; never renumber. A doctrine is four slots
 (`DoctrineSet` struct, named so it does not shadow the namespace `Doctrine`); `LegalMask` is one ulong over the token ids; `Roster` is the eight kinds with traits and prices;
-`DoctrineVocabulary.FieldOrders/ArmyOrders` split a doctrine. The vocabulary is at most 64 so a mask is one word.
+`DoctrineVocabulary.FieldOrders/ArmyOrders/Trigger` split a doctrine. The vocabulary is at most 64 so a mask is one word (57 used).
+
+THE LOSS TRIGGER. The FIRST trigger token splits a doctrine's field orders in two: those before it are the side's OPENING orders (last word per group wins, as
+without a trigger), those after it (last word per group) are the "then" orders, and a group not named after it advances. When the side has lost N quarters or
+more of the soldiers it brought (integers: lost x 4 against N x brought, read at the start of each tick, latched), its cohorts take their "then" orders for good.
+It reads only the side's own losses. A doctrine with no trigger token reads exactly as in version 1. The trigger token is not an army order (the army ignores it, like
+a field order) and is offered by the legal list whenever a line holds a cohort. The setup carries it as `BattleSide.Trigger` (a `LossTrigger`); the replay format is
+unchanged (it records cohorts, and the switch is seen as the movement it causes).
 
 ## (e) REPLAY: record format, `Core\Replay.cs`, owned by the skeleton; produced by Battle, played by the page
 
@@ -180,7 +202,7 @@ Order inside a round for a player: `DraftAsync`, `DraftedAsync`, `ChooseAsync`, 
   holds, then its Aura); a token legal at the start may be skipped (Merge 0 twice). What the army skips is counted in `RoundRecord.Orders`
   (`Skipped`) and the record's `PlayerDoctrine` keeps it: the record shows what the player asked, `Orders` shows what the army did.
 - The pipeline itself removes from the player's doctrine, and counts in `IllegalDropped`, only (1) ids outside the vocabulary and (2) FIELD
-  orders the start mask forbids (the army never judges a field order, and a group with no cohort has nobody to order).
+  and TRIGGER orders the start mask forbids (the army never judges a field order, and a group with no cohort has nobody to order).
 - `IllegalDropped` therefore counts what the PIPELINE removed (the general's forbidden tokens, the player's impossible ids and field orders),
   never what the army skipped.
 

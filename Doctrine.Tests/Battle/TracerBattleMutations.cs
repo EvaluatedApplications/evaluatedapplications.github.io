@@ -90,6 +90,14 @@ public class TracerBattleMutationProofs
     public async Task A_section_whose_gate_never_falls_is_caught()
         => Assert.NotNull(await TracerBattleTests.TheGateFalls(With(new TracerBattleOptions { DynamicObstacles = false })));
 
+    // ---- the loss trigger: broken three ways, each must turn the named checks red ----
+
+    [Fact] public async Task A_trigger_that_never_fires_is_caught() => Assert.NotNull(await TracerTriggerTests.FiresOnItsOwnLosses(With(new TracerBattleOptions { Probe = OrderProbe.TriggerNever })));
+    [Fact] public async Task A_trigger_that_never_fires_is_caught_in_a_rout() => Assert.NotNull(await TracerTriggerTests.LevelsWaitForMoreLosses(With(new TracerBattleOptions { Probe = OrderProbe.TriggerNever })));
+    [Fact] public async Task A_trigger_that_fires_at_the_first_tick_is_caught() => Assert.NotNull(await TracerTriggerTests.FiresOnItsOwnLosses(With(new TracerBattleOptions { Probe = OrderProbe.TriggerAtStart })));
+    [Fact] public async Task A_trigger_that_fires_in_a_battle_where_nobody_fought_is_caught() => Assert.NotNull(await TracerTriggerTests.StaysQuietWithoutLosses(With(new TracerBattleOptions { Probe = OrderProbe.TriggerAtStart })));
+    [Fact] public async Task A_trigger_that_reads_the_enemys_losses_instead_of_its_own_is_caught() => Assert.NotNull(await TracerTriggerTests.FiresOnItsOwnLosses(With(new TracerBattleOptions { Probe = OrderProbe.TriggerReadsEnemy })));
+
     [Fact]
     public async Task Recorded_positions_outside_the_arena_are_caught()
     {

@@ -6,10 +6,13 @@ namespace Doctrine.Tests;
 // must equal a store REBUILT from this model's cohorts, cell for cell, after every operation (as the Plenum proofs do).
 // Only the design decisions are repeated here: Cull is never legal on this shape (Phasor CG1), a new cohort enters at slot kind mod 3
 // with veterancy 0, an aura is legal once while it is not active, Score is the sum of count x price x power plus 100 per gold,
-// a Flip costs the army the sum over its soldiers of Roster.RelabelCost and is legal only while the army can pay it.
-internal sealed class ArmyModel(Side side)
+// a Flip costs the army the sum over its soldiers of Roster.RelabelCost and is legal only while the army can pay it; an Age costs the sum of
+// soldiers x Roster.AgeWeight and an Aura (rented for the round) the sum of soldiers x Roster.AuraWeight over the rounds left, each legal only while
+// the army can pay; banked gold pays Roster.Interest when a round closes; a contingency (WhenLost) is legal whenever a line has a cohort.
+internal sealed class ArmyModel(Side side, ArmyRules? rules = null)
 {
     public Side Side { get; } = side;
+    readonly ArmyRules _rules = rules ?? ArmyRules.Default;
     public int Round, Gold, FlipMask;
     public readonly int[] Soldiers = new int[Roster.Size];
     public readonly int[] Slot = new int[Roster.Size];
@@ -20,7 +23,7 @@ internal sealed class ArmyModel(Side side)
     public int Total => Soldiers.Sum();
     public int AuraMask { get { int m = 0; for (int b = 0; b < DoctrineVocabulary.Traits; b++) if (AuraPct[b] > 0) m |= 1 << b; return m; } }
     public int AuraMax => AuraPct.Max();
-    public int Power(int k) => 100 + Vet[k] * 5 + ((Traits(k) & AuraMask) != 0 ? AuraMax : 0);
+    public int Power(int k) => 100 + Roster.VetStepPct * Vet[k] + ((Traits(k) & AuraMask) != 0 ? AuraMax : 0);
     bool Present(int k) => Soldiers[k] > 0;
 
     public ArmyReadModel Read()
@@ -37,17 +40,22 @@ internal sealed class ArmyModel(Side side)
         if (Total == 0) return m;
         m = m.With(DoctrineVocabulary.Army(ArmyOrderKind.Rotate, 1)).With(DoctrineVocabulary.Army(ArmyOrderKind.Rotate, 2));
         for (int b = 0; b < DoctrineVocabulary.Traits; b++) if (FlipCost(b) <= Gold) m = m.With(DoctrineVocabulary.Army(ArmyOrderKind.Flip, b));
-        m = m.With(DoctrineVocabulary.Army(ArmyOrderKind.Age));
+        if (AgeCost() <= Gold) m = m.With(DoctrineVocabulary.Army(ArmyOrderKind.Age));
         for (int k = 0; k < Roster.Size; k++)
             if (Present(k) && Present((k + 1) % Roster.Size)) m = m.With(DoctrineVocabulary.Army(ArmyOrderKind.Merge, k));
         for (int b = 0; b < DoctrineVocabulary.Traits; b++)
         {
             bool anyWith = Enumerable.Range(0, Roster.Size).Any(k => Present(k) && ((Traits(k) >> b) & 1) != 0);
-            if (AuraPct[b] == 0 && anyWith) m = m.With(DoctrineVocabulary.Army(ArmyOrderKind.Aura, b));
+            if (AuraPct[b] == 0 && anyWith && AuraCost(b) <= Gold) m = m.With(DoctrineVocabulary.Army(ArmyOrderKind.Aura, b));
         }
+        bool anyLine = false;
         for (int g = 0; g < DoctrineVocabulary.Groups; g++)
             if (Enumerable.Range(0, Roster.Size).Any(k => Present(k) && Slot[k] == g))
+            {
+                anyLine = true;
                 for (int f = 0; f <= (int)FieldOrderKind.Hunt; f++) m = m.With(DoctrineVocabulary.Field((FieldOrderKind)f, g));
+            }
+        if (anyLine) for (int q = 1; q <= DoctrineVocabulary.TriggerLevels; q++) m = m.With(DoctrineVocabulary.WhenLost(q));
         return m;
     }
 
@@ -70,11 +78,31 @@ internal sealed class ArmyModel(Side side)
     public long FlipCost(int bit)
     {
         long cost = 0;
-        for (int k = 0; k < Roster.Size; k++) if (Present(k)) cost += (long)Soldiers[k] * Roster.RelabelCost((Trait)Traits(k), bit);
+        for (int k = 0; k < Roster.Size; k++) if (Present(k)) cost += (long)Soldiers[k] * Roster.RelabelCost((Trait)Traits(k), bit, _rules.PriceReach);
         return cost;
     }
     public void Flip(int bit) { Gold -= (int)FlipCost(bit); FlipMask ^= 1 << bit; }
-    public void Age() { for (int k = 0; k < Roster.Size; k++) if (Present(k)) Vet[k] = (Vet[k] + 1) % PleromaArmyLayout.Period; }
+    /// <summary>An age is paid for: sum over the soldiers of worth x the power one more step gives, in gold, rounded up.</summary>
+    public int AgeCost()
+    {
+        long sum = 0;
+        for (int k = 0; k < Roster.Size; k++) if (Present(k)) sum += (long)Soldiers[k] * Roster.AgeWeight((Trait)Traits(k), Vet[k], _rules.PriceReach);
+        return _rules.PriceAge ? Roster.GoldFor(sum) : 0;
+    }
+    public void Age() { Gold -= AgeCost(); for (int k = 0; k < Roster.Size; k++) if (Present(k)) Vet[k] = (Vet[k] + 1) % PleromaArmyLayout.Period; }
+    int AuraPctIf(int bit)
+    {
+        int n = 0;
+        for (int k = 0; k < Roster.Size; k++) if (Present(k) && ((Traits(k) >> bit) & 1) != 0) n += Soldiers[k];
+        return Math.Max(AuraMax, Math.Min(PleromaArmyLayout.AuraCap, n));
+    }
+    /// <summary>An aura is rented for the round: sum of worth x the power it adds, over the rounds a body would have served.</summary>
+    public int AuraCost(int bit)
+    {
+        long sum = 0; int after = AuraPctIf(bit), maskAfter = AuraMask | (1 << bit);
+        for (int k = 0; k < Roster.Size; k++) if (Present(k)) sum += (long)Soldiers[k] * Roster.AuraWeight((Trait)Traits(k), AuraMask, AuraMax, maskAfter, after, _rules.PriceReach);
+        return _rules.PriceAura ? Roster.GoldFor(sum, Roster.AuraRentalDivisor(Round)) : 0;
+    }
     public void Merge(int k)
     {
         int j = (k + 1) % Roster.Size;
@@ -83,6 +111,7 @@ internal sealed class ArmyModel(Side side)
     }
     public void Aura(int bit)
     {
+        Gold -= AuraCost(bit);
         int n = 0;
         for (int k = 0; k < Roster.Size; k++) if (Present(k) && ((Traits(k) >> bit) & 1) != 0) n += Soldiers[k];
         AuraPct[bit] = Math.Min(PleromaArmyLayout.AuraCap, n);
@@ -97,7 +126,7 @@ internal sealed class ArmyModel(Side side)
         Gold += Math.Max(0, gold);
         if (experience > 0) for (int k = 0; k < Roster.Size; k++) if (Present(k)) Vet[k] = (Vet[k] + experience) % PleromaArmyLayout.Period;
     }
-    public void EndRound() { Round++; Array.Clear(AuraPct); }
+    public void EndRound() { Round++; Array.Clear(AuraPct); if (_rules.BankInterest) Gold += (int)Roster.Interest(Gold); }
 
     /// <summary>A store built from scratch out of this model's cohorts: the independent reference for the cell comparison.</summary>
     public Pleroma Rebuild()

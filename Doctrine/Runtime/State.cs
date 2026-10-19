@@ -6,7 +6,7 @@ namespace Doctrine;
 public sealed class DoctrineDomain : DomainContext
 {
     public const int MaxRoundsLimit = 200;
-    public int MaxRounds { get; init; } = 8;
+    public int MaxRounds { get; init; } = Roster.CampaignRounds;
     public int TickLimit { get; init; } = BattleSetup.DefaultTickLimit;
     public int EnemyBaseGold { get; init; } = 14;
     public int EnemyGoldPerRound { get; init; } = 4;

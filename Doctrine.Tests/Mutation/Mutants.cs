@@ -30,6 +30,16 @@ public enum ArmyMut
     FlipAlwaysLegal,
     /// <summary>A Flip costs nothing: the gold it took is handed back.</summary>
     FlipIsFree,
+    /// <summary>An Age costs nothing: the gold it took is handed back.</summary>
+    AgeIsFree,
+    /// <summary>An Aura costs nothing: the rent it took is handed back.</summary>
+    AuraIsFree,
+    /// <summary>The legal list offers the Age whatever the army can pay.</summary>
+    AgeAlwaysLegal,
+    /// <summary>The legal list offers every Aura whatever the army can pay.</summary>
+    AuraAlwaysLegal,
+    /// <summary>The close of a round pays the interest twice.</summary>
+    InterestDoubled,
 }
 
 public sealed class MutantArmyService(IArmyService inner, ArmyMut m) : IArmyService
@@ -56,6 +66,8 @@ sealed class MutantArmy(IArmy inner, ArmyMut m) : IArmy
         {
             ArmyMut.ClaimsEverythingLegal => r with { Legal = LegalMask.All },
             ArmyMut.FlipAlwaysLegal => r with { Legal = Enumerable.Range(0, DoctrineVocabulary.Traits).Aggregate(r.Legal, (l, b) => l.With(DoctrineVocabulary.Army(ArmyOrderKind.Flip, b))) },
+            ArmyMut.AgeAlwaysLegal => r with { Legal = r.Legal.With(DoctrineVocabulary.Army(ArmyOrderKind.Age)) },
+            ArmyMut.AuraAlwaysLegal => r with { Legal = Enumerable.Range(0, DoctrineVocabulary.Traits).Aggregate(r.Legal, (l, b) => r.Cohorts.Any(c => ((int)c.Traits >> b & 1) != 0) ? l.With(DoctrineVocabulary.Army(ArmyOrderKind.Aura, b)) : l) },
             ArmyMut.VeterancyGrows => r with { Cohorts = r.Cohorts.Select(c => c with { Veterancy = c.Veterancy + 10 * _ordersApplied }).ToList() },
             _ => r,
         };
@@ -90,6 +102,15 @@ sealed class MutantArmy(IArmy inner, ArmyMut m) : IArmy
             int taken = before - inner.Read().Gold;
             if (taken > 0) await inner.ApplySpoilsAsync(new Spoils(taken, 0), ct);   // orders spend gold only on a Flip: hand it back
         }
+        else if (m is ArmyMut.AgeIsFree or ArmyMut.AuraIsFree)
+        {
+            // the doctrine's army orders are all of the one kind this mutant makes free: hand back what they took
+            var kind = m == ArmyMut.AgeIsFree ? ArmyOrderKind.Age : ArmyOrderKind.Aura;
+            int before = inner.Read().Gold;
+            rep = await inner.ApplyArmyOrdersAsync(doctrine, ct);
+            int taken = before - inner.Read().Gold;
+            if (taken > 0 && DoctrineVocabulary.ArmyOrders(doctrine).All(o => o.Kind == (int)kind)) await inner.ApplySpoilsAsync(new Spoils(taken, 0), ct);
+        }
         else rep = await inner.ApplyArmyOrdersAsync(doctrine, ct);
         _ordersApplied += rep.Applied;
         return rep;
@@ -110,7 +131,12 @@ sealed class MutantArmy(IArmy inner, ArmyMut m) : IArmy
         _goldWon += Math.Max(0, spoils.Gold);
         return inner.ApplySpoilsAsync(spoils, ct);
     }
-    public ValueTask EndRoundAsync(CancellationToken ct) => inner.EndRoundAsync(ct);
+    public async ValueTask EndRoundAsync(CancellationToken ct)
+    {
+        long gold = inner.Read().Gold;
+        await inner.EndRoundAsync(ct);
+        if (m == ArmyMut.InterestDoubled) await inner.ApplySpoilsAsync(new Spoils((int)Roster.Interest(gold), 0), ct);
+    }
     public string ToCode() => _cached ?? inner.ToCode();
 }
 

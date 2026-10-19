@@ -41,6 +41,12 @@ internal enum OrderProbe
     IdParityFlip = 8,
     /// <summary>Bake the arenas as before the mirror fix: every cell split along the same diagonal, so the mesh is not its own reflection.</summary>
     LegacyMesh = 16,
+    /// <summary>Mutant of the loss trigger: it never fires.</summary>
+    TriggerNever = 32,
+    /// <summary>Mutant of the loss trigger: it fires at the first tick, whatever was lost.</summary>
+    TriggerAtStart = 64,
+    /// <summary>Mutant of the loss trigger: it reads the ENEMY's losses instead of the side's own.</summary>
+    TriggerReadsEnemy = 128,
 }
 
 /// <summary>An agent of the battle: Tracer's <see cref="GameAgent"/> plus the integer facts the deterministic resolver needs.</summary>
@@ -57,16 +63,37 @@ public static class UnitRules
     /// <summary>The largest single hit, in 1/600 soldiers (keeps a hit exact in a float and every sum inside a long).</summary>
     public const int MaxHit = 8_000_000;
 
+    /// <summary>The reach of a soldier with no weapon trait, in arena units.</summary>
+    public const float MeleeRange = 2.2f;
+    /// <summary>The pace of a soldier with no speed trait, in arena units per tick.</summary>
+    public const float BaseSpeed = 2.0f;
+    /// <summary>The damage of one soldier at power 100 per tick, in 1/600 soldiers (<see cref="Fp"/> / 6: a soldier falls to six ticks of one soldier's fire).</summary>
+    public const int BaseDamage = 100;
+
     public static float Speed(Trait t)
     {
-        float s = 2.0f;
+        float s = BaseSpeed;
         if ((t & Trait.Swift) != 0) s *= 1.5f;
         if ((t & Trait.Heavy) != 0) s *= 0.7f;
         if ((t & Trait.Machine) != 0) s *= 0.8f;
         return s;
     }
 
-    public static float Range(Trait t) => (t & Trait.Machine) != 0 ? 10f : (t & Trait.Ranged) != 0 ? 7f : 2.2f;
+    public static float Range(Trait t) => (t & Trait.Machine) != 0 ? 10f : (t & Trait.Ranged) != 0 ? 7f : MeleeRange;
+
+    /// <summary>
+    /// What a longer reach is worth, in percent of a soldier's damage-over-durability: the free fire it gets while a melee unit closes on it.
+    /// Both sides advance, so the gap closes at twice the base speed; the longer weapon fires free for (range - melee range) / (2 x base speed) ticks, and each
+    /// tick of fire is <see cref="BaseDamage"/> of the <see cref="Fp"/> that kill a soldier. Archers and Priests (range 7) 20 percent, Machines (range 10) 32 percent.
+    /// Integer arithmetic on tenths of a unit, so the figure is exact on every device.
+    /// </summary>
+    public static int ReachPct(Trait t)
+    {
+        long tenths = (long)MathF.Round(Range(t) * 10f) - (long)MathF.Round(MeleeRange * 10f);
+        if (tenths <= 0) return 0;
+        long closing = (long)MathF.Round(2f * BaseSpeed * 10f);          // tenths of a unit per tick, both sides advancing
+        return (int)(tenths * BaseDamage * 100 / (closing * Fp));
+    }
 
     /// <summary>Percent of base damage this kind deals per soldier.</summary>
     public static int DamagePct(Trait t)

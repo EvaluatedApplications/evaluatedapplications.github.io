@@ -105,7 +105,8 @@ public sealed class PleromaArmyProofs
     public async Task Age_and_spoils_experience_match_the_ring_of_nine()
     {
         var a = Service.Create(Side.Enemy, 6); var m = ModelOf(a);
-        for (int i = 0; i < 10; i++) { await Order(a, DoctrineVocabulary.Army(ArmyOrderKind.Age)); m.Age(); SameArmy(m, a, $"age {i + 1}"); }
+        await a.ApplySpoilsAsync(new Spoils(500, 0), default); m.Spoils(500, 0);                 // an Age is paid for: the army is rich
+        for (int i = 0; i < 10; i++) { Assert.Equal(1, (await Order(a, DoctrineVocabulary.Army(ArmyOrderKind.Age))).Applied); m.Age(); SameArmy(m, a, $"age {i + 1}"); }
         await a.ApplySpoilsAsync(new Spoils(0, 13), default); m.Spoils(0, 13);
         SameArmy(m, a, "spoils 13 experience (13 mod 9)");
         Assert.All(a.Read().Cohorts, c => Assert.InRange(c.Veterancy, 0, PleromaArmyLayout.Period - 1));
