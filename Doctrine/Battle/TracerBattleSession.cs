@@ -109,13 +109,21 @@ public sealed class TracerBattleSession : IBattleSession
         RebuildNavigator();
     }
 
-    Cohort CohortOfUnit(int unitId) => _cohorts[unitId >> 8];
-    Unit UnitOf(int unitId) => _cohorts[unitId >> 8].Units[unitId & 255];
+    // An agent's id is also its priority in Tracer's conflict resolution (the LOWER id keeps its path, the higher one sidesteps). Cohort ids
+    // run attackers first, so an id of (cohort, index) would make every attacker outrank every defender and only the defenders would ever
+    // yield. The id therefore leads with the agent's index in its cohort and breaks each index's tie by a side that alternates with the index:
+    // ranks interleave across the two armies and neither side owns the right of way. Layout: index << 12 | side flag << 11 | cohort id.
+    const int CohortBits = 11, CohortMask = (1 << CohortBits) - 1, IndexShift = 12;
+    static int UnitIdOf(Cohort c, int k) => (k << IndexShift) | (((c.Role ^ (k & 1)) & 1) << CohortBits) | c.Id;
+    static int CohortIdOf(int unitId) => unitId & CohortMask;
+    static int IndexOfId(int unitId) => unitId >> IndexShift;
+    Cohort CohortOfUnit(int unitId) => _cohorts[CohortIdOf(unitId)];
+    Unit UnitOf(int unitId) => _cohorts[CohortIdOf(unitId)].Units[IndexOfId(unitId)];
 
     void RebuildNavigator()
     {
         var b = _world.CreateNavigator("doctrine-battle").WithMesh(_mesh).WithBehavior(_seek);
-        foreach (var c in _cohorts) if (c.Patrol is { } p) b.WithBehavior(new GatedBehavior(p, id => (id >> 8) == c.Id && UnitOf(id).Order == FieldOrderKind.Hold, 3f));
+        foreach (var c in _cohorts) if (c.Patrol is { } p) b.WithBehavior(new GatedBehavior(p, id => CohortIdOf(id) == c.Id && UnitOf(id).Order == FieldOrderKind.Hold, 3f));
         _navigator = b.WithBehavior(_retreat).Build();
     }
 
@@ -168,8 +176,8 @@ public sealed class TracerBattleSession : IBattleSession
             for (int k = 0; k < n; k++)
             {
                 var jitter = new Vector2((rng.Next(1000) / 1000f - 0.5f) * 0.4f, (rng.Next(1000) / 1000f - 0.5f) * 0.4f);
-                var u = new Unit { Id = (c.Id << 8) | k, Index = k, C = c, Order = OrderOf(c, k, n) };
-                u.P = _arena.Snap(c.Anchor + FormationOffset(k, n, c.Role == 0 ? 1.0f : 1.0f) + jitter);
+                var u = new Unit { Id = UnitIdOf(c, k), Index = k, C = c, Order = OrderOf(c, k, n) };
+                u.P = _arena.Snap(c.Anchor + FormationOffset(c, k, n, 1.0f) + jitter);
                 u.Goal = u.P;
                 c.Units.Add(u);
             }
@@ -194,10 +202,16 @@ public sealed class TracerBattleSession : IBattleSession
         return c.Orders[^1].Kind;
     }
 
-    static Vector2 FormationOffset(int k, int n, float spacing)
+    /// <summary>
+    /// An agent's place in its cohort's block, relative to the block centre. The block is MIRRORED for the right-hand side (role 1): the
+    /// last, partial row of the block is always the one furthest from the cohort's own edge. Without the mirror the attacker's partial row
+    /// is its front and the defender's partial row is its rear, so a mirrored army met a thinner front line on one side only.
+    /// </summary>
+    static Vector2 FormationOffset(Cohort c, int k, int n, float spacing)
     {
         int cols = (int)MathF.Ceiling(MathF.Sqrt(n)), rows = (n + cols - 1) / cols;
-        return new Vector2((k / cols - (rows - 1) / 2f) * spacing, (k % cols - (cols - 1) / 2f) * spacing);
+        float x = (k / cols - (rows - 1) / 2f) * spacing, y = (k % cols - (cols - 1) / 2f) * spacing;
+        return new Vector2(c.Role == 0 ? x : -x, y);
     }
 
     Vector2 Centroid(Cohort c)
@@ -400,7 +414,7 @@ public sealed class TracerBattleSession : IBattleSession
         {
             if (!u.Alive) continue;
             if (!centre.TryGetValue(u.Order, out var g)) centre[u.Order] = g = GoalFor(c, u.Order);
-            u.Goal = SnapGoal(g + FormationOffset(u.Index, c.Units.Count, 0.7f));
+            u.Goal = SnapGoal(g + FormationOffset(c, u.Index, c.Units.Count, 0.7f));
         }
     }
 

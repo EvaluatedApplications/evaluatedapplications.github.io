@@ -449,14 +449,14 @@ public class TracerBattleTests
     [Fact]
     public async Task The_game_plays_end_to_end_on_Tracer_through_the_builder_and_repeats_exactly()
     {
-        async Task<(GameResult R, int Calls)> Play()
+        async Task<(GameResult R, int Calls)> Play(int seed = 1234)
         {
             var world = TracerWorlds.Scratch();
             var counting = new CountingEngagement(world.CreateEngagementService("e2e"));
             var game = DoctrineBuilder.New().WithTracer(world, engagement: counting).WithBattle(ctx => new TracerBattleEngine(ctx.Tracer!)).Build();
             Assert.Same(world, game.Context.Tracer!.World);
             Assert.IsType<TracerBattleEngine>(game.Context.Battle);
-            return (await game.PlayAsync(1234), counting.Calls);
+            return (await game.PlayAsync(seed), counting.Calls);
         }
         var (a, calls) = await Play();
         var (b, _) = await Play();
@@ -465,7 +465,11 @@ public class TracerBattleTests
         Assert.Equal(a.Digest(), b.Digest());
         Assert.All(a.Rounds, r => Assert.NotEqual(BattleStatus.Running, r.Result.Outcome));
         foreach (var r in a.Rounds) foreach (var c in ReplayContract.Cases) Assert.Null(await c.RunAsync(r.Replay));
-        Assert.Contains(a.Rounds, r => r.Result.AttackerWon);
-        Assert.Contains(a.Rounds, r => !r.Result.AttackerWon);
+        // Both sides can win a game's rounds. After the fairness fix of 2026-10-19 (balance harness: the defender's formation was not mirrored) seed 1234
+        // alone happens to hold no attacker win, so the property is asserted over two games; seed 1236 is one the player wins rounds of.
+        var (other, _) = await Play(1236);
+        var all = a.Rounds.Concat(other.Rounds).ToList();
+        Assert.Contains(all, r => r.Result.AttackerWon);
+        Assert.Contains(all, r => !r.Result.AttackerWon);
     }
 }

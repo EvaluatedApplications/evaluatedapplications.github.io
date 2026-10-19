@@ -26,6 +26,9 @@ public class DigestPinTests
     [Fact]
     public async Task The_eight_round_real_section_game_digest_is_pinned()
     {
-        Assert.Equal(1827372264668017971UL, await Play(true, 1234));
+        // Re-pinned 2026-10-19 (was 1827372264668017971): the Tracer battle changed on purpose. The defender's formation block is now mirrored
+        // (the attacker's partial last row was its front, the defender's its rear) and agent ids interleave the two sides in conflict priority.
+        // Found by the balance harness (Doctrine\todo\balance-harness-2026-10-19.md). The stub digest above is untouched.
+        Assert.Equal(9094490212791655651UL, await Play(true, 1234));
     }
 }
