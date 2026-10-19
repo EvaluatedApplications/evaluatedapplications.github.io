@@ -5,16 +5,16 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Doctrine: an army game with a general that learns from you</title>
-    <meta name="description" content="An army game in your browser: draft cohorts, set a doctrine of up to four orders, and watch a battle on a navigation mesh. A small general learns how you set orders from your own choices." />
+    <meta name="description" content="An army game in your browser: each round the game offers a muster of companies and a council of orders, you choose up to four orders, and a battle runs on a navigation mesh. A small general learns how you set orders from your own choices." />
     <link rel="canonical" href="https://evaluatedapplications.github.io/tools/doctrine/" />
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="Evaluated Applications" />
     <meta property="og:title" content="Doctrine: an army game with a general that learns from you" />
-    <meta property="og:description" content="An army game in your browser: draft cohorts, set a doctrine of up to four orders, and watch a battle on a navigation mesh. A small general learns how you set orders from your own choices." />
+    <meta property="og:description" content="An army game in your browser: each round the game offers a muster of companies and a council of orders, you choose up to four orders, and a battle runs on a navigation mesh. A small general learns how you set orders from your own choices." />
     <meta property="og:url" content="https://evaluatedapplications.github.io/tools/doctrine/" />
     <meta name="twitter:card" content="summary" />
     <meta name="twitter:title" content="Doctrine: an army game with a general that learns from you" />
-    <meta name="twitter:description" content="An army game in your browser: draft cohorts, set a doctrine of up to four orders, and watch a battle on a navigation mesh. A small general learns how you set orders from your own choices." />
+    <meta name="twitter:description" content="An army game in your browser: each round the game offers a muster of companies and a council of orders, you choose up to four orders, and a battle runs on a navigation mesh. A small general learns how you set orders from your own choices." />
     <base href="/tools/" />
     <script>
       // THE ONE DATA SETTING. The big files (council data, the Prism checkpoint) live in the website-data repo and are served
@@ -45,7 +45,7 @@
     <script type="importmap">{
   "imports": {
     "./_framework/blazor.webassembly.js": "./_framework/blazor.webassembly.w3qd1tpl0e.js",
-    "./_framework/dotnet.js": "./_framework/dotnet.bhh6so9e73.js",
+    "./_framework/dotnet.js": "./_framework/dotnet.69uj9quunm.js",
     "./_framework/dotnet.native.js": "./_framework/dotnet.native.x0y05eze1z.js",
     "./_framework/dotnet.runtime.js": "./_framework/dotnet.runtime.azrfhwb804.js"
   },
@@ -53,8 +53,8 @@
   "integrity": {
     "./_framework/blazor.webassembly.js": "sha256-lDXsDYFgm62F+YUvxES7IOTCXYpiHpU3uR45YdC6mq4=",
     "./_framework/blazor.webassembly.w3qd1tpl0e.js": "sha256-lDXsDYFgm62F+YUvxES7IOTCXYpiHpU3uR45YdC6mq4=",
-    "./_framework/dotnet.bhh6so9e73.js": "sha256-AVYcQ5B1MjWYUUmQYqQvJd1cv0uslyiMkRKCP4B3fDo=",
-    "./_framework/dotnet.js": "sha256-AVYcQ5B1MjWYUUmQYqQvJd1cv0uslyiMkRKCP4B3fDo=",
+    "./_framework/dotnet.69uj9quunm.js": "sha256-6tD3cBLVLttcG3hXWjWkUvqfphF9YlSbQupgIE3j0Ms=",
+    "./_framework/dotnet.js": "sha256-6tD3cBLVLttcG3hXWjWkUvqfphF9YlSbQupgIE3j0Ms=",
     "./_framework/dotnet.native.js": "sha256-QXm5sjZDbx0hUNCro0Z5cmjioZ/2fr7gofTmPnZ1R34=",
     "./_framework/dotnet.native.x0y05eze1z.js": "sha256-QXm5sjZDbx0hUNCro0Z5cmjioZ/2fr7gofTmPnZ1R34=",
     "./_framework/dotnet.runtime.azrfhwb804.js": "sha256-muN076HgyOCoAaid7zD7a2/GN7aQ7tmK/BzdnKgw78g=",
@@ -116,21 +116,23 @@
 
 <div class="room dc " b-kfeqzjeiym><header class="room-head" b-kfeqzjeiym><nav class="crumb" b-kfeqzjeiym><a href="/tools/" b-kfeqzjeiym>Tools</a> <span b-kfeqzjeiym>/</span> Doctrine</nav>
             <h1 b-kfeqzjeiym>Doctrine</h1>
-            <p class="lede" b-kfeqzjeiym>Draft an army, give it up to four orders, and watch the battle run on a navigation mesh. Your general learns how you set
+            <p class="lede" b-kfeqzjeiym>Draft an army from the companies the game offers, give it up to four orders from a council it lays out, and watch the battle run on a navigation mesh. Your general learns how you set
                 orders from your own choices, in your browser, with nothing pre-trained, and suggests the next one. Nothing is uploaded.</p></header><section class="tool-start" aria-label="Start Doctrine" b-kxova46e5k><p class="tool-start-note" b-kxova46e5k>Doctrine runs on your own device, inside this tab. Starting it downloads the .NET runtime that does the
         work (about 11 MB the first time); your browser keeps it for next time.</p>
     <div class="tool-start-actions" b-kxova46e5k><button type="button" class="btn btn-primary" data-blazier-go b-kxova46e5k>Start Doctrine</button></div>
     <div class="tool-start-boot" data-boot-slot b-kxova46e5k></div>
     <noscript b-kxova46e5k><p class="hint" b-kxova46e5k>This tool needs JavaScript to run.</p></noscript></section><section class="outro" b-kfeqzjeiym><h2 b-kfeqzjeiym>How it works</h2>
-        <p b-kfeqzjeiym>The army is a set of Pleroma stores from the Phasor package, the battle runs on a Tracer navigation mesh, the rounds run as EvalApp
-            pipelines, and the general is a habit table with a tiny HoloFormer from the AlgFormer package.</p>
-        <p b-kfeqzjeiym>Each cohort of soldiers is an item in a Pleroma store: its kind is the key, its traits are the flags, its place in the line is the
-            arrangement, and its veterancy is a position on a ring of nine. An order is one operation on that store. Flip relabels a trait, Rotate
-            relabels the line, Age ticks the ring, Aura counts the soldiers who carry a trait, and the list of orders you may give is read from
-            the store, which is why some are greyed out. Field orders go to the battle: the ground is a baked Tracer navigation mesh, and each
-            cohort is a group of agents that path, take cover and strike on it.</p>
-        <p b-kfeqzjeiym>A battle is simulated once, on your device, and recorded. The replay is a recording of that one battle: playing it back does not
-            run it again.</p>
+        <p b-kfeqzjeiym>Each round the game offers you a muster of companies of soldiers and, once you have drafted, a council of orders. You spend gold on the
+            companies you want, may pay gold to draw the council again, give up to four of its orders (to a line, or to the whole host) and watch one battle. A battle is
+            simulated once, on your device, and recorded. The replay is a recording of that one battle: playing it back does not run it again.</p>
+        <details class="dc-about dc-built" b-kfeqzjeiym><summary b-kfeqzjeiym>How it is built</summary>
+            <p b-kfeqzjeiym>The army is a set of Pleroma stores from the Phasor package, the battle runs on a Tracer navigation mesh, the rounds run as EvalApp
+                pipelines, and the general is a habit table with a tiny HoloFormer from the AlgFormer package.</p>
+            <p b-kfeqzjeiym>Each cohort of soldiers is an item in a Pleroma store: its kind is the key, its traits are the flags, its place in the line is the
+                arrangement, and its seasoning is a position on a ring of nine. An order is one operation on that store. Reforge relabels a trait,
+                Reform the ranks relabels the line, Drill the host ticks the ring, Raise a banner counts the soldiers who carry a trait, and the list
+                of orders you may give is read from the store, which is why some are greyed out. Orders for a line go to the battle: the ground is a
+                baked Tracer navigation mesh, and each cohort is a group of agents that path, take cover and strike on it.</p></details>
         <details class="dc-about" b-kfeqzjeiym><summary b-kfeqzjeiym>About the general</summary>
             <p b-kfeqzjeiym>Your general starts empty. It learns how you set a doctrine from your own choices, in your browser, with nothing pre-trained, and
                 different players end up with different generals. It suggests and you decide: every doctrine you set is an example for it, and so is each
