@@ -57,26 +57,30 @@
         </div>
         <input class="dc-range" type="range" min="0" max="@_v.Last" step="1" value="@_tick" @oninput="OnScrub" aria-label="Scrub through the battle" />
 
-        <div class="dc-sides">
-            @foreach (var side in new[] { Side.Player, Side.Enemy })
-            {
-                <div class="dc-side @(side == Side.Player ? "mine" : "theirs")">
-                    <h3>@(side == Side.Player ? "Your cohorts" : "Enemy cohorts")</h3>
-                    <ul class="dc-cohorts">
-                        @foreach (var b in f.Blobs.Where(b => b.Side == side))
-                        {
-                            int start = Math.Max(1, _v.StartStrength(b.Id));
-                            <li @key="b.Id">
-                                <span class="nm">@DoctrineWords.KindName(b.Key) <span class="sl">@DoctrineWords.Slot(b.Slot)</span></span>
-                                <span class="ct">@b.Strength of @start</span>
-                                <span class="bar" aria-hidden="true"><span class="fill" style="--w:@(b.Strength * 100 / start)"></span></span>
-                            </li>
-                        }
-                    </ul>
-                </div>
-            }
-        </div>
-        <p class="hint dc-legend">Dark blocks are walls. Green is cover.@(_v.HasGate ? " The amber block is the gate: open until it falls, then shut." : "") This is a recording of one battle, simulated once on your device; playing it back does not run the battle again.</p>
+        <p class="hint dc-legend">This is a recording of one battle, simulated once on your device; playing it back does not run the battle again.</p>
+        <details class="dc-more">
+            <summary>Cohorts and key</summary>
+            <div class="dc-sides">
+                @foreach (var side in new[] { Side.Player, Side.Enemy })
+                {
+                    <div class="dc-side @(side == Side.Player ? "mine" : "theirs")">
+                        <h3>@(side == Side.Player ? "Your cohorts" : "Enemy cohorts")</h3>
+                        <ul class="dc-cohorts">
+                            @foreach (var b in f.Blobs.Where(b => b.Side == side))
+                            {
+                                int start = Math.Max(1, _v.StartStrength(b.Id));
+                                <li @key="b.Id">
+                                    <span class="nm">@DoctrineWords.KindName(b.Key) <span class="sl">@DoctrineWords.Slot(b.Slot)</span></span>
+                                    <span class="ct">@b.Strength of @start</span>
+                                    <span class="bar" aria-hidden="true"><span class="fill" style="--w:@(b.Strength * 100 / start)"></span></span>
+                                </li>
+                            }
+                        </ul>
+                    </div>
+                }
+            </div>
+            <p class="hint">Dark blocks are walls. Green is cover.@(_v.HasGate ? " The amber block is the gate: open until it falls, then shut." : "")</p>
+        </details>
     </section>
 }
 
