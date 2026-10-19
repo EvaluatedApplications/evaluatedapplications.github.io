@@ -41,6 +41,17 @@ Showroom\todo\doctrine-story-from-mechanics.md). Decisions below are made; each 
    'no soldiers and no gold' clause stays but standards are the real end; needs the comeback term so a loss streak is not
    instant. Mechanics as story: a lost field costs the host a standard.
 
+10. **The overworld map is the spine of the run (original idea, moved up).** A seeded map of provinces (a Pleroma store: province
+   = item, features = flags such as Barracks, Stables, Shrine, Granary, Pass, Watchtower, garrison/yield = counts, borders = the
+   arrangement). Each epoch the enemy threatens 2 or 3 fronts (each with its arena, terrain and a briefing of the enemy). The
+   player CHOOSES which front to fight and which to concede (conceding costs ground, a standard is never lost by conceding); a
+   held province yields gold and unlocks the kinds and orders of its feature while it is held (they widen the offer pool, never
+   raw power); a lost province takes its unlock with it. Endless mode (9) is this map continuing: the front line advances and
+   new provinces appear; captain fields are boss provinces. First slice (v0): a small fixed-size seeded map, one front chosen
+   per epoch out of 2 or 3, provinces that yield gold, three features that unlock (Barracks, Stables, Shrine), concede and
+   hold, briefing per front, standards, no splitting the army across fronts (fighting two fronts at once is a later stage).
+   Combat for fronts nobody fights is NOT simulated: the conceded front just falls; no host-side arithmetic.
+
 ## Queued (designed, not dispatched)
 
 - **Campaign layer.** Seeded map of provinces (a Pleroma store), player-chosen number of epochs, win the war not the battle
