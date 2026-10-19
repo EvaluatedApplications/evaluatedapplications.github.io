@@ -8,7 +8,7 @@ namespace Doctrine;
 /// <c>Round</c> = draft, doctrine, battle, spoils, then the next round (recursion through a PipelineRef).
 /// <c>Battle</c> = begin, tick until a win, loss or the tick limit, finish. <c>BattleTick</c> = one tick.
 /// </summary>
-public sealed class DoctrineGame
+public sealed partial class DoctrineGame
 {
     public DoctrineContext Context { get; }
     public DoctrineDomain Rules { get; }

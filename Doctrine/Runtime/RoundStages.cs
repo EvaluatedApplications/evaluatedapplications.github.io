@@ -107,9 +107,7 @@ sealed class DraftStage() : RoundStage(Stages.ArmyDraft)
         var report = await s.Player.DraftAsync(new DraftRequest(s.Round, s.Seed, picks), ct);
         if (notOffered.Count > 0) report = report with { Refused = report.Refused.Concat(notOffered).ToList() };
         await g.Player.DraftedAsync(report, ct);                       // the army's own verdict goes back to the player's hands
-        var enemy = g.Armies.Create(Side.Enemy, (int)GameRng.Mix(s.Seed, s.Round));
-        int gold = d.EnemyBaseGold + d.EnemyGoldPerRound * s.Round;
-        await enemy.DraftAsync(new DraftRequest(s.Round, s.Seed, ScriptedOpponent.Picks(s.Round, s.Seed, gold)), ct);
+        var enemy = await RoundRules.RaiseEnemyAsync(g.Armies, d, s.Seed, s.Round, ct);   // the briefing raises the same enemy
         return s with { Enemy = enemy, OfferRefused = s.OfferRefused + notOffered.Count };
     }
 }
@@ -186,10 +184,9 @@ sealed class SetupStage() : RoundStage(Stages.BattleSetup)
 {
     protected override ValueTask<RoundState> StepAsync(RoundState s, DoctrineContext g, DoctrineDomain d, CancellationToken ct)
     {
-        var arenas = g.Battle.Arenas;
-        var arena = arenas[(int)(GameRng.Mix(s.Seed, 3000 + s.Round) % (ulong)arenas.Count)];
+        var arena = RoundRules.ArenaFor(g.Battle.Arenas, s.Seed, s.Round);   // the briefing reads the same rules
         // A siege arena names a besieger, who carries the siege clock; the roles swap every round, so the player besieges in even rounds and the enemy in odd ones.
-        Side? besieger = d.Siege && arena.IsSiege ? SiegeRules.BesiegerOf(s.Round, d.SwapSiegeRoles) : null;
+        Side? besieger = RoundRules.BesiegerFor(d, arena, s.Round);
         var setup = new BattleSetup(arena.Id, (int)GameRng.Mix(s.Seed, 4000 + s.Round), d.TickLimit,
             new BattleSide(Side.Player, s.Player.Read().Cohorts, DoctrineVocabulary.FieldOrders(s.Choice!.Doctrine), DoctrineVocabulary.Trigger(s.Choice.Doctrine)),
             new BattleSide(Side.Enemy, s.Enemy!.Read().Cohorts, DoctrineVocabulary.FieldOrders(s.EnemyDoctrine), DoctrineVocabulary.Trigger(s.EnemyDoctrine)), besieger);
