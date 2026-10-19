@@ -3,6 +3,7 @@
 @implements IDisposable
 @inject IBuildTime Build
 @inject IJSRuntime JS
+@inject IServiceProvider Services
 @using ShowroomDoctrine
 @using Doctrine
 
@@ -14,8 +15,8 @@
         <h1>Doctrine</h1>
         <p class="lede">Draft an army, give it up to four orders, and watch the battle. Your general learns how you set a doctrine from your own
             choices, in your browser, with nothing pre-trained, and suggests the next one. The army is a set of Pleroma stores from the Phasor
-            package, the battle runs on a Tracer navigation mesh, the rounds run as EvalApp pipelines, and the general is a tiny AlgFormer model.
-            Nothing is uploaded.</p>
+            package, the battle runs on a Tracer navigation mesh, the rounds run as EvalApp pipelines, and the general is a habit table with a tiny
+            HoloFormer from the AlgFormer package. Nothing is uploaded.</p>
     </header>
 
     @if (Build.IsPrerender)
@@ -35,7 +36,7 @@
                         <li>Soldiers @a.Soldiers</li>
                         <li>@a.Kinds of @Roster.Size kinds</li>
                     }
-                    <li>General: @_s.Sections.General.ExamplesSeen @(_s.Sections.General.ExamplesSeen == 1 ? "example" : "examples") seen</li>
+                    <li>General: @_s.Sections.General.ExamplesSeen @(_s.Sections.General.ExamplesSeen == 1 ? "example" : "examples") seen (each doctrine you set and each battle result)</li>
                 </ul>
             </section>
         }
@@ -86,9 +87,10 @@
             <p>Your general starts empty. It learns how you set a doctrine from your own choices, in your browser, with nothing pre-trained, and
                 different players end up with different generals. It suggests and you decide: every doctrine you set is an example for it, and so is each
                 battle result.</p>
-            <p>Inside it are a small habit table and a tiny HoloFormer from the AlgFormer package. For each of the four slots, whichever of the two has
-                guessed your choices better so far speaks. The confidence shown is how often its whole suggestion has matched what you then chose,
-                out of 1000. Nothing is saved: refresh the page and the general is gone.</p>
+            <p>Inside it are a small habit table and a tiny HoloFormer from the AlgFormer package. For each of the four slots the table speaks, unless
+                the HoloFormer has been right on that slot at least two more times than the table over your recent choices, in which case it takes the
+                slot. The match record shown is how often its whole suggestion matched what you then chose, over your recent choices, out of 1000.
+                Nothing is saved: refresh the page and the general is gone.</p>
         </details>
     </section>
 </div>
@@ -121,7 +123,7 @@
     protected override void OnInitialized()
     {
         if (Build.IsPrerender) return;
-        _s = new DoctrineSession();
+        _s = new DoctrineSession(null, Services.GetService(typeof(DoctrineSectionsSource)) is DoctrineSectionsSource src ? src.Make : null);
         _s.Changed += OnChanged;
     }
 
@@ -181,7 +183,7 @@
         {
             <section class="dc-panel" aria-label="Your general">
                 <h2>Your general</h2>
-                <p class="hint">It has seen @_s.Sections.General.ExamplesSeen examples since you opened this page and will carry them into the next game. A refresh forgets them.</p>
+                <p class="hint">It has seen @_s.Sections.General.ExamplesSeen @(_s.Sections.General.ExamplesSeen == 1 ? "example" : "examples") (each doctrine you set and each battle result) since you opened this page and will carry them into the next game. A refresh forgets them.</p>
                 <button type="button" class="dc-btn" id="dc-resetgeneral" @onclick="ResetGeneral">Start with a new, empty general</button>
             </section>
         }
@@ -254,7 +256,7 @@
             <section class="dc-panel dc-draft" aria-label="Draft">
                 <h2>Draft <span class="dc-sub">you have @d.Army.Gold gold</span></h2>
                 <p class="hint">Buy soldiers for the coming battle. A kind you already hold joins its cohort; a new kind starts one. The army itself decides what it will accept.</p>
-                @if (d.Army.Soldiers == 0) { <p class="dc-notice" role="status">Your army has no soldiers left. Spend your gold on cohorts, or the next battle starts lost.</p> }
+                @if (d.Army.Soldiers == 0) { <p class="dc-notice" role="status">Your army has no soldiers left. Spend your gold on cohorts: a battle needs soldiers.</p> }
                 <ul class="dc-roster">
                     @for (int k = 0; k < Roster.Size; k++)
                     {
@@ -325,12 +327,25 @@
 
             @if (!ghost.Doctrine.IsEmpty && !_ghostHidden)
             {
-                <section class="dc-panel dc-ghost" style="--glow:@Glow(ghost.ConfidencePermille)" aria-label="Your general's suggestion">
+                var slotRec = ghost.SlotConfidence;
+                <section class="dc-panel dc-ghost" style="--glow:@Glow(PanelGlow(ghost))" aria-label="Your general's suggestion">
                     <h2>Your general suggests</h2>
                     <ol class="dc-ghostchips">
-                        @foreach (var t in ghost.Doctrine.Tokens.Where(t => t != 0)) { <li>@DoctrineWords.Label(t)</li> }
+                        @for (int sl = 0; sl < DoctrineVocabulary.MaxSlots; sl++)
+                        {
+                            int t = ghost.Doctrine[sl];
+                            if (t == 0) continue;
+                            if (slotRec is { } sr)
+                            {
+                                <li class="dc-ghostslot" data-slot="@sl" style="--glow:@Glow(sr[sl])">@DoctrineWords.Label(t) <span class="dc-slotrec">Match record <b>@sr[sl]</b> of 1000 on this slot</span></li>
+                            }
+                            else
+                            {
+                                <li class="dc-ghostslot" data-slot="@sl">@DoctrineWords.Label(t)</li>
+                            }
+                        }
                     </ol>
-                    <p class="dc-conf">Confidence <b>@ghost.ConfidencePermille</b> of 1000: how often its whole suggestion has matched what you then chose.</p>
+                    <p class="dc-conf">Match record <b>@ghost.ConfidencePermille</b> of 1000: how often its whole suggestion matched what you then chose, over your recent choices.</p>
                     <div class="dc-ghostbtns">
                         <button type="button" class="dc-btn strong" id="dc-accept" @onclick="() => Accept(ghost)">Accept</button>
                         <button type="button" class="dc-btn" id="dc-edit" @onclick="() => EditGhost(ghost)">Edit</button>
@@ -381,8 +396,8 @@
                     @Palette("Age the veterans", Tokens(ArmyOrderKind.Age), legal)
                     @Palette("Merge a kind into the one before it", Tokens(ArmyOrderKind.Merge), legal)
                     @Palette("Aura on a trait", Tokens(ArmyOrderKind.Aura), legal)
-                    @Palette("Cull a trait", Tokens(ArmyOrderKind.Cull), legal)
-                    @if (Tokens(ArmyOrderKind.Cull).All(t => !legal.Allows(t))) { <p class="hint dc-cullnote">Cull is greyed out for every army: the Pleroma refuses the Restrict operation on a store of this shape.</p> }
+                    @if (Tokens(ArmyOrderKind.Cull).Any(legal.Allows)) { @Palette("Cull a trait", Tokens(ArmyOrderKind.Cull), legal) }
+                    else { <p class="hint dc-cullnote">Cull is not available in this version of the army.</p> }
                 }
                 else
                 {
@@ -422,6 +437,14 @@
         </div>
     </div>;
 
+    /// <summary>The glow of the whole panel: the general's per-slot match record averaged over the orders it shows, or the whole-suggestion figure when it gives no per-slot one.</summary>
+    private static int PanelGlow(GeneralOutput g)
+    {
+        if (g.SlotConfidence is not { } sr) return g.ConfidencePermille;
+        var shown = Enumerable.Range(0, DoctrineVocabulary.MaxSlots).Where(i => g.Doctrine[i] != 0).Select(i => sr[i]).ToList();
+        return shown.Count == 0 ? g.ConfidencePermille : (int)shown.Average();
+    }
+
     private static string Glow(int permille) => (Math.Clamp(permille, 0, 1000) / 1000.0).ToString("0.###", System.Globalization.CultureInfo.InvariantCulture);
 
     private void Accept(GeneralOutput ghost) => _s!.SubmitChoice(ghost.Doctrine, false);
@@ -443,7 +466,7 @@
             <progress class="dc-progress" max="@_s.BattleTickLimit" value="@_s.BattleTick">Tick @_s.BattleTick</progress>
             <p class="hint">Tick @_s.BattleTick of up to @_s.BattleTickLimit. The battle ends sooner if one side falls.</p>
         }
-        <p class="hint">This runs on your device, one small step at a time, so the page stays usable.</p>
+        <p class="hint">This runs on your device, in small steps.</p>
         <button type="button" class="dc-btn" id="dc-cancel" @onclick="_s.CancelBattle">Cancel</button>
     </section>;
 
@@ -454,7 +477,7 @@
             var rec = v.Record;
             var lost = rec.Result.AttackerLosses.Sum(l => l.Lost);
             var theirLost = rec.Result.DefenderLosses.Sum(l => l.Lost);
-            var arena = _s.Sections.Engine?.Arenas.FirstOrDefault(x => x.Id == rec.ArenaId)?.Name ?? rec.ArenaId;
+            var arena = _s.ArenaName(rec.ArenaId);
             <section class="dc-panel dc-result" aria-label="Round result">
                 <h2>Round @(rec.Round + 1): @DoctrineWords.OutcomeShort(rec.Result.Outcome) <span class="dc-sub">@arena, @rec.Result.Ticks ticks</span></h2>
                 <p class="dc-says">@DoctrineWords.Outcome(rec.Result.Outcome)</p>
@@ -466,9 +489,13 @@
                     <li>You brought @v.YourSoldiers soldiers and lost @lost. The enemy brought @v.EnemySoldiers and lost @theirLost.</li>
                     <li>Spoils: @rec.Spoils.Gold gold@(rec.Spoils.Experience > 0 ? $" and {rec.Spoils.Experience} veterancy step{(rec.Spoils.Experience == 1 ? "" : "s")}" : "").</li>
                     <li>Your doctrine: @DoctrineWords.Orders(rec.PlayerDoctrine).</li>
+                    @if (rec.Orders is { Skipped: > 0 } ord)
+                    {
+                        <li class="dc-applied">@ord.Applied of your @(ord.Applied + ord.Skipped) army orders @(ord.Applied == 1 ? "was" : "were") applied. The army skipped @ord.Skipped that @(ord.Skipped == 1 ? "was" : "were") not legal when @(ord.Skipped == 1 ? "its" : "their") turn came.</li>
+                    }
                     @if (!rec.Ghost.IsEmpty)
                     {
-                        <li>Your general suggested: @DoctrineWords.Orders(rec.Ghost) (confidence @rec.GhostConfidence of 1000). @(rec.Overrode ? "You set something different." : "You took it as it stood.")</li>
+                        <li>Your general suggested: @DoctrineWords.Orders(rec.Ghost) (match record @rec.GhostConfidence of 1000). @(rec.Overrode ? "You set something different." : "You took it as it stood.")</li>
                     }
                     @if (rec.IllegalDropped > 0) { <li>@rec.IllegalDropped order@(rec.IllegalDropped == 1 ? "" : "s") were not legal and were dropped.</li> }
                 </ul>
@@ -502,7 +529,7 @@
                 </div>
                 @if (_copied.Length > 0) { <p class="hint" role="status">@_copied</p> }
                 <p class="hint">Paste it on the start screen to play on with this army. It holds the army only. Your general is not in it, and a refresh forgets the general.</p>
-                <p class="hint">Your general has seen @_s.Sections.General.ExamplesSeen examples since you opened this page.</p>
+                <p class="hint">Your general has seen @_s.Sections.General.ExamplesSeen @(_s.Sections.General.ExamplesSeen == 1 ? "example" : "examples") (each doctrine you set and each battle result) since you opened this page.</p>
             </section>
             <div class="dc-endbtns">
                 <button type="button" class="dc-btn strong" id="dc-again" @onclick="() => PlayOn(r)">Play on with this army</button>

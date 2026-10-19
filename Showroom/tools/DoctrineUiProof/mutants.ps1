@@ -18,7 +18,7 @@ sealed class ForgetfulMutant(IGeneral inner) : IGeneral
 
 $mutants = @(
     @{ Id = 'M1'; Name = 'an illegal order is enabled in the palette'; File = 'Pages\DoctrinePage.razor';
-       Old = 'bool ok = legal.Allows(token);'; New = 'bool ok = true;'; Append = ''; Expect = 'the palette holds all 53 orders and each is enabled exactly when' },
+       Old = 'bool ok = legal.Allows(token);'; New = 'bool ok = true;'; Append = ''; Expect = 'the palette holds every order but Cull' },
     @{ Id = 'M2'; Name = 'the general is wired so that it never records an example'; File = 'Services\Doctrine\DoctrineRoot.cs';
        Old = '.WithGeneral(General))'; New = '.WithGeneral(new ForgetfulMutant(General)))'; Append = $forgetful; Expect = 'the general had something to suggest after seeing the visitor' },
     @{ Id = 'M3'; Name = 'the scrubber ignores the frames'' WorldFlags (the gate never falls)'; File = 'Services\Doctrine\ReplayView.cs';
@@ -26,11 +26,25 @@ $mutants = @(
     @{ Id = 'M4'; Name = 'Accept reports the suggestion as overridden'; File = 'Pages\DoctrinePage.razor';
        Old = '_s!.SubmitChoice(ghost.Doctrine, false)'; New = '_s!.SubmitChoice(ghost.Doctrine, true)'; Append = ''; Expect = 'the accepted ghost is the doctrine that fought, recorded as NOT overridden' },
     @{ Id = 'M5'; Name = 'a cancelled round does not put the army back'; File = 'Services\Doctrine\DoctrineSession.cs';
-       Old = 's = s with { Player = back };'; New = 's = s with { };'; Append = ''; Expect = 'the army is back exactly as it stood at the start of the round' },
+       Old = '_restart = _restart! with { Player = back };'; New = '_restart = _restart! with { };'; Append = ''; Expect = 'the army is back exactly as it stood at the start of the round' },
     @{ Id = 'M6'; Name = 'the end screen hands back the army from before the last round'; File = 'Services\Doctrine\DoctrineSession.cs';
-       Old = 'if (!carryOn || last) { Finish(s.Player.ToCode()); return; }'; New = 'if (!carryOn || last) { Finish(_startCode); return; }'; Append = ''; Expect = 'it parses back to an army with the same read' },
+       Old = 's._closedCode = s._army!.ToCode();'; New = 's._closedCode = s._roundCode;'; Append = ''; Expect = 'it parses back to an army with the same read' },
     @{ Id = 'M7'; Name = 'the scrubber shows the frame after the one asked for'; File = 'Services\Doctrine\ReplayView.cs';
-       Old = 'Replay.Frames[Math.Clamp(tick, 0, Last)]'; New = 'Replay.Frames[Math.Clamp(tick + 1, 0, Last)]'; Append = ''; Expect = 'the tick before the fall shows the gate standing' }
+       Old = 'Replay.Frames[Math.Clamp(tick, 0, Last)]'; New = 'Replay.Frames[Math.Clamp(tick + 1, 0, Last)]'; Append = ''; Expect = 'the tick before the fall shows the gate standing' },
+    @{ Id = 'M8'; Name = 'RoundClosedAsync is ignored (the page never parks on a closed round)'; File = 'Services\Doctrine\DoctrineSession.cs';
+       Old = 'public async ValueTask RoundClosedAsync(RoundRecord rec, ArmyReadModel after, CancellationToken ct)'; New = 'public ValueTask RoundClosedAsync(RoundRecord rec, ArmyReadModel after, CancellationToken ct) => ValueTask.CompletedTask; public async ValueTask RoundClosedUnused(RoundRecord rec, ArmyReadModel after, CancellationToken ct)'; Append = ''; Expect = 'the closed round arrives through RoundClosedAsync' },
+    @{ Id = 'M9'; Name = 'RoundRecord.Final is ignored (the last round does not know it is the last)'; File = 'Services\Doctrine\DoctrineSession.cs';
+       Old = 'mine, theirs, rec.Final);'; New = 'mine, theirs, false);'; Append = ''; Expect = 'final: the pipeline marks only the last round Final' },
+    @{ Id = 'M10'; Name = 'the per-slot glow ignores GeneralOutput.SlotConfidence'; File = 'Pages\DoctrinePage.razor';
+       Old = 'style="--glow:@Glow(sr[sl])"'; New = 'style="--glow:@Glow(ghost.ConfidencePermille)"'; Append = ''; Expect = 'match record (per-slot): each order' },
+    @{ Id = 'M11'; Name = 'RoundRecord.Orders is never shown (skipped orders go unsaid)'; File = 'Pages\DoctrinePage.razor';
+       Old = 'rec.Orders is { Skipped: > 0 } ord'; New = 'rec.Orders is { Skipped: > 999 } ord'; Append = ''; Expect = 'orders: the watch screen says it in plain words' },
+    @{ Id = 'M12'; Name = 'the arena layout from DoctrineContext.LayoutOf is not used'; File = 'Services\Doctrine\DoctrineSession.cs';
+       Old = 's._game!.Context.LayoutOf(rec.ArenaId)'; New = 'null'; Append = ''; Expect = 'watch: the arena is drawn from the layout' },
+    @{ Id = 'M13'; Name = 'DraftedAsync drops the army''s verdict'; File = 'Services\Doctrine\DoctrineSession.cs';
+       Old = 'if (report.Refused.Count > 0)'; New = 'if (report.Refused.Count > 99)'; Append = ''; Expect = 'draft: what the army would not take' },
+    @{ Id = 'M14'; Name = 'the Cull chip comes back (greyed) in the palette'; File = 'Pages\DoctrinePage.razor';
+       Old = '@if (Tokens(ArmyOrderKind.Cull).Any(legal.Allows))'; New = '@if (true)'; Append = ''; Expect = 'the palette holds every order but Cull' }
 )
 
 $log = Join-Path $PSScriptRoot 'mutants.log'

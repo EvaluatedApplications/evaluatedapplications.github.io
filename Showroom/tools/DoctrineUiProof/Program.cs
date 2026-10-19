@@ -19,6 +19,7 @@ void Check(string name, bool ok, string detail = "")
 // The pages change state from the pipeline's own thread; bUnit caches the parsed DOM and a render racing a read can leave the cache stale, so a
 // wait that has not seen its condition for half a second asks the live pages to re-render once (this is a test-harness matter, not the page's).
 var livePages = new List<IRenderedComponent<DoctrinePage>>();
+bool reported = false;
 async Task<bool> Until(Func<bool> cond, int ms, string what)
 {
     var sw = System.Diagnostics.Stopwatch.StartNew();
@@ -26,10 +27,11 @@ async Task<bool> Until(Func<bool> cond, int ms, string what)
     while (sw.ElapsedMilliseconds < ms)
     {
         try { if (cond()) return true; } catch { }
-        if (sw.ElapsedMilliseconds >= nextRefresh) { nextRefresh += 500; foreach (var lp in livePages.ToArray()) { try { lp.Render(); } catch { } } }
+        if (sw.ElapsedMilliseconds >= nextRefresh) { nextRefresh += 500; foreach (var lp in livePages.ToArray()) { try { lp.Render(); } catch (ObjectDisposedException) { } catch (Exception rex) { Console.WriteLine("    (render failed: " + rex.GetType().Name + ": " + rex.Message + " :: " + rex.StackTrace?.Split('\n')[0] + ")"); } } }
         await Task.Delay(25);
     }
     Console.WriteLine($"  (timed out after {ms} ms waiting for: {what})");
+    foreach (var lp in livePages.ToArray()) { try { var ss = lp.Instance.Session; if (ss is { InGame: true }) Console.WriteLine($"    page stage {ss.Stage}, records {ss.Records.Count}, status '{ss.Status}', error '{ss.Error}'; dom has result {lp.FindAll(".dc-result").Count}; dom text: " + Regex.Replace(lp.Find(".dc").TextContent, @"\s+", " ").Substring(0, 400)); } catch (Exception ex) { Console.WriteLine("    (could not read a page: " + ex.GetType().Name + ")"); } }
     return false;
 }
 
@@ -179,10 +181,11 @@ Scan(page);
             if (off) disabled++; else enabled++;
         }
     }
-    Check("doctrine: the palette holds all 53 orders and each is enabled exactly when the army's legal list allows it", seen.Count == DoctrineVocabulary.Size - 1 && match, $"{enabled} enabled, {disabled} disabled");
-    Check("doctrine: the list really restricts (some enabled, some disabled) and Cull is never offered", enabled > 0 && disabled > 0);
+    int cullCount = Enumerable.Range(1, DoctrineVocabulary.Size - 1).Count(tk => DoctrineVocabulary.Decode(tk).Family == OrderFamily.Army && (ArmyOrderKind)DoctrineVocabulary.Decode(tk).Kind == ArmyOrderKind.Cull);
+    Check("doctrine: the palette holds every order but Cull (hidden: the army allows none) and each is enabled exactly when the army's legal list allows it", cullCount > 0 && seen.Count == DoctrineVocabulary.Size - 1 - cullCount && match, $"{enabled} enabled, {disabled} disabled, {cullCount} Cull tokens not shown");
+    Check("doctrine: the list really restricts (some enabled, some disabled) and no Cull chip exists at all", enabled > 0 && disabled > 0 && page.Markup.IndexOf("Cull a trait", StringComparison.Ordinal) < 0);
     await Tap(page, ".dc-tab", 0);
-    Check("doctrine: Cull is explained in a sentence", Has(page, ".dc-cullnote") && Text(page, ".dc-cullnote").Contains("Restrict"));
+    Check("doctrine: Cull is one plain sentence and the internal operation is never named", Has(page, ".dc-cullnote") && Text(page, ".dc-cullnote") == "Cull is not available in this version of the army." && !page.Markup.Contains("Restrict"), Text(page, ".dc-cullnote"));
     int illegal = Enumerable.Range(1, DoctrineVocabulary.Size - 1).First(t => !legal.Allows(t));
     await Tap(page, ".dc-tab", DoctrineVocabulary.Decode(illegal).Family == OrderFamily.Field ? 1 : 0);
     await Tap(page, $"[data-token='{illegal}']");
@@ -199,7 +202,7 @@ Check("battle: while the round works the page says so, with a Cancel button (44p
 Scan(page);
 
 // ---- round 0 result: the replay, the scrubber, the falling gate
-await Until(() => Has(page, ".dc-result"), 60000, "round 0 result");
+Check("watch: the closed round arrives through RoundClosedAsync and the page parks on its result", await Until(() => Has(page, ".dc-result") || S.Stage == DoctrineStage.Over, 60000, "round 0 result") && Has(page, ".dc-result") && S.Stage == DoctrineStage.Watch);
 roundTimes.Add(swGame.Elapsed.TotalMilliseconds);
 {
     var rec0 = S.Last!.Record;
@@ -254,7 +257,7 @@ Check("ghost: after 2 examples the confidence is within 0..1000 and every sugges
 Check("ghost: the general had something to suggest after seeing the visitor's first doctrine", !ghost1.Doctrine.IsEmpty);
 if (!ghost1.Doctrine.IsEmpty)
 {
-    Check("ghost: the suggestion is shown with its confidence as a glow (--glow 0..1) and as a number out of 1000", Has(page, ".dc-ghost") && Regex.IsMatch(page.Find(".dc-ghost").GetAttribute("style")!, @"--glow:(0|1|0\.\d+)") && Text(page, ".dc-conf").Contains($"{ghost1.ConfidencePermille} of 1000"), page.Find(".dc-ghost").GetAttribute("style")!);
+    Check("ghost: the suggestion is shown with its confidence as a glow (--glow 0..1) and as a number out of 1000", Has(page, ".dc-ghost") && Regex.IsMatch(page.Find(".dc-ghost").GetAttribute("style")!, @"--glow:(0|1|0\.\d+)") && Text(page, ".dc-conf").Contains($"Match record {ghost1.ConfidencePermille} of 1000"), page.Find(".dc-ghost").GetAttribute("style")!);
     Check("ghost: Accept, Edit and Ignore are three 44px buttons", Has(page, "#dc-accept") && Has(page, "#dc-edit") && Has(page, "#dc-ignore"));
     Scan(page);
 }
@@ -279,6 +282,7 @@ Check("accept: the accepted ghost is the doctrine that fought, recorded as NOT o
 Check("accept: accepting is a training example too (the general learned from this round twice more)", S.Sections.General.ExamplesSeen == examplesBeforeAccept + 2, $"{examplesBeforeAccept} -> {S.Sections.General.ExamplesSeen}");
 Check("accept: the spoils screen says the suggestion was taken as it stood", Text(page, ".dc-spoils").Contains("You took it as it stood."));
 Check("last round: the next button says it is the end", Text(page, "#dc-next") == "See the end of the game");
+Check("final: the pipeline marks only the last round Final, and the page takes its end from that (the button says so)", S.Records.Count == 3 && !S.Records[0].Final && !S.Records[1].Final && S.Records[2].Final && S.Last!.Last);
 var lastArmyAfter = S.Last!.ArmyAfter;
 await Tap(page, "#dc-next");
 
@@ -335,7 +339,7 @@ ulong startDigestB = SB.Draft!.Army.Digest();
 using var gate = new ManualResetEventSlim(false);
 bool frozeAtTick2 = false;
 Action<int> hold = t => { if (t == 2 && !frozeAtTick2) { frozeAtTick2 = true; gate.Wait(30000); } };
-SB.Sections.Observer.Ticked += hold;
+SB.Ticked += hold;
 await DoDraft(pageB, 0);
 await DoChoose(pageB, scriptB, 0);
 Check("cancel: the battle reaches tick 2 and the page shows the progress and a Cancel button", await Until(() => frozeAtTick2 && Has(pageB, "#dc-cancel") && Has(pageB, ".dc-progress"), 30000, "battle at tick 2") && SB.Stage == DoctrineStage.Working, $"tick {SB.BattleTick}");
@@ -344,7 +348,7 @@ Check("cancel: the progress text names the tick and says the battle runs on this
 await Tap(pageB, "#dc-cancel");
 gate.Set();
 Check("cancel: the round stops and the draft screen comes back", await Until(() => SB.Stage == DoctrineStage.Draft && Has(pageB, ".dc-draft"), 30000, "back to draft after cancel"));
-SB.Sections.Observer.Ticked -= hold;
+SB.Ticked -= hold;
 Check("cancel: the page says the battle was cancelled", Text(pageB, ".dc-notice").Contains("Battle cancelled"), pageB.Find(".dc-notice").TextContent);
 Check("cancel: the army is back exactly as it stood at the start of the round (same read)", SB.Draft!.Army.Digest() == startDigestB);
 Check("cancel: no round was recorded", SB.Records.Count == 0);
@@ -379,6 +383,78 @@ Check("leave: two rounds listed and the code is the army after round 2", pageB.F
     Check("autoplay: a jump to tick 0 shows tick 0", arenaP.Find(".dc-tick").TextContent.Trim() == "0");
 }
 
+// ---------------------------------------------------------------------------------------------- game O: refusals, skipped orders (the hooks' facts)
+{
+    using var ctxO = NewCtx(false);
+    var pageO = ctxO.Render<DoctrinePage>();
+    livePages.Add(pageO);
+    DoctrineSession SO = pageO.Instance.Session!;
+    await pageO.InvokeAsync(() => pageO.Find("#dc-seed").Input("11"));
+    await Tap(pageO, ".dc-opt", 0);
+    await Tap(pageO, "#dc-new");
+    await Until(() => Has(pageO, ".dc-draft"), 20000, "O draft");
+    foreach (var (kind, n) in new[] { (0, 3), (1, 1), (3, 2), (7, 4) })   // 9 gold of 12 for the first three; four catapults (16 gold) cannot be paid
+        for (int i = 0; i < n; i++) await pageO.InvokeAsync(() => pageO.FindAll(".dc-kind")[kind].QuerySelector(".dc-plus")!.Click());
+    await Tap(pageO, "#dc-confirm");
+    await Until(() => Has(pageO, ".dc-editor"), 20000, "O doctrine");
+    Check("draft: what the army would not take, as it told the pipeline (DraftedAsync), is said in plain words after the confirmation",
+        Has(pageO, ".dc-notice") && Text(pageO, ".dc-notice").StartsWith("The army did not take part of your draft.") && Text(pageO, ".dc-notice").Contains("Catapults x4: Too little gold for this pick."), Has(pageO, ".dc-notice") ? Text(pageO, ".dc-notice") : "no notice");
+    Scan(pageO);
+    int merge0 = DoctrineVocabulary.Army(ArmyOrderKind.Merge, 0);
+    Check("setup: merging kind 1 into kind 0 is legal while both are held", SO.Army!.Legal.Allows(merge0));
+    await TapChip(pageO, merge0);
+    await TapChip(pageO, merge0);
+    await Tap(pageO, "#dc-fight");
+    await Until(() => Has(pageO, ".dc-result") || SO.Stage == DoctrineStage.Over, 60000, "O result");
+    Scan(pageO);
+    var recO = SO.Records.FirstOrDefault();
+    Check("orders: the record carries the army's own count (one applied, one skipped: the second merge finds nothing to merge)", recO?.Orders is { Applied: 1, Skipped: 1 }, recO?.Orders?.ToString() ?? "none");
+    Check("orders: the watch screen says it in plain words", Has(pageO, ".dc-applied") && Text(pageO, ".dc-applied") == "1 of your 2 army orders was applied. The army skipped 1 that was not legal when its turn came.", Has(pageO, ".dc-applied") ? Text(pageO, ".dc-applied") : "missing");
+    await Tap(pageO, "#dc-leave");
+    await Until(() => Has(pageO, ".dc-end"), 20000, "O end");
+    var codeO = SO.Result!.PlayerArmyCode;
+    Check("leave: from the watch screen the end screen carries the army AFTER the closed round and the round played", SO.Result.Rounds.Count == 1 && new global::Doctrine.Army.PleromaArmyService().TryParse(codeO, out var armyO, out _) && armyO!.Read().Digest() == SO.Last!.ArmyAfter.Digest());
+}
+
+// ---------------------------------------------------------------------------------------------- the per-slot match record, and its fallback
+foreach (var withSlots in new[] { true, false })
+{
+    var slotValues = new SlotPermille(900, 300, 650, 0);
+    using var ctxS = NewCtx(false);
+    ctxS.Services.AddSingleton(new DoctrineSectionsSource(() => new DoctrineSections(new SlotLens(new global::Doctrine.General.TinyHoloGeneral(), withSlots ? slotValues : null))));
+    var pageS = ctxS.Render<DoctrinePage>();
+    livePages.Add(pageS);
+    DoctrineSession SS = pageS.Instance.Session!;
+    await pageS.InvokeAsync(() => pageS.Find("#dc-seed").Input("5"));
+    await Tap(pageS, ".dc-opt", 0);
+    await Tap(pageS, "#dc-new");
+    await DoDraft(pageS, 0);
+    await Until(() => Has(pageS, ".dc-editor"), 20000, "S doctrine");
+    string tag = withSlots ? "per-slot" : "fallback";
+    Scan(pageS);
+    var gs = SS.Ghost!;
+    var li = pageS.FindAll(".dc-ghostslot");
+    Check($"match record ({tag}): the ghost shows one line per order it suggests, and the whole figure under it", li.Count == gs.Doctrine.Used && li.Count >= 2 && Text(pageS, ".dc-conf").StartsWith($"Match record {gs.ConfidencePermille} of 1000: how often its whole suggestion matched what you then chose, over your recent choices."), Text(pageS, ".dc-conf"));
+    if (withSlots)
+    {
+        bool each = true;
+        for (int k = 0; k < li.Count; k++)
+        {
+            int slot = int.Parse(li[k].GetAttribute("data-slot")!);
+            each &= (li[k].GetAttribute("style") ?? "").Trim().TrimEnd(';') == "--glow:" + (slotValues[slot] / 1000.0).ToString("0.###", System.Globalization.CultureInfo.InvariantCulture) && li[k].QuerySelector(".dc-slotrec")!.TextContent.Trim() == $"Match record {slotValues[slot]} of 1000 on this slot";
+        }
+        Check("match record (per-slot): each order's glow and its figure come from the general's own value for THAT slot", each, string.Join(" | ", li.Select(e => e.GetAttribute("style") + " " + e.TextContent.Trim())));
+        Check("match record (per-slot): the panel's glow is the average of the slots shown", Regex.IsMatch(page_style(pageS), @"--glow:0\.6\d*\b"), page_style(pageS));
+    }
+    else
+    {
+        Check("match record (fallback): with no per-slot reading the orders carry no figure of their own and the glow is the whole figure", pageS.FindAll(".dc-slotrec").Count == 0 && li.All(e => !e.HasAttribute("style")) && page_style(pageS).Contains("--glow:" + (gs.ConfidencePermille / 1000.0).ToString("0.###", System.Globalization.CultureInfo.InvariantCulture)), page_style(pageS));
+    }
+    await Tap(pageS, "#dc-leave");
+    await Until(() => Has(pageS, ".dc-end"), 20000, "S end");
+}
+string page_style(IRenderedComponent<DoctrinePage> p) => p.Find(".dc-ghost").GetAttribute("style") ?? "";
+
 // ---------------------------------------------------------------------------------------------- an army with no soldiers
 {
     using var ctxN = NewCtx(false);
@@ -387,7 +463,8 @@ Check("leave: two rounds listed and the code is the army after round 2", pageB.F
     await pageN.InvokeAsync(() => pageN.Find("#dc-code").Input("DA2.0.0.12.0.."));
     await Tap(pageN, "#dc-load");
     await Until(() => Has(pageN, ".dc-draft"), 20000, "N draft");
-    Check("no soldiers: the draft screen says the army has none and to spend the gold", Text(pageN, ".dc-draft").Contains("no soldiers left"));
+    Check("no soldiers: the draft screen says the army has none and to spend the gold", Text(pageN, ".dc-draft").Contains("no soldiers left") && Text(pageN, ".dc-draft").Contains("Spend your gold on cohorts: a battle needs soldiers."));
+    Scan(pageN);
     await Tap(pageN, "#dc-confirm");
     await Until(() => Has(pageN, ".dc-editor"), 20000, "N doctrine");
     Check("no soldiers: nothing is legal, every order is greyed out and the page says why", pageN.FindAll(".dc-chip").All(c => c.HasAttribute("disabled")) && Text(pageN, ".dc-editor").Contains("no order is legal"));
@@ -400,13 +477,25 @@ Check("leave: two rounds listed and the code is the army after round 2", pageB.F
 {
     string all = string.Join("\n", allText);
     Check("wording: no em dash anywhere in the page", !all.Contains('—') && !allMarkup.Any(m => m.Contains('—')));
-    foreach (var bad in new[] { "universal", "complete", "open source", "free to use", "MIT", "chance", "luck", "lucky", "guaranteed", "unbeatable", "plays well", "outlearn", "outperform", "smarter", "pre-trained model" })
+    foreach (var bad in new[] { "universal", "complete", "open source", "free to use", "MIT", "chance", "luck", "lucky", "guaranteed", "unbeatable", "plays well", "outlearn", "outperform", "smarter", "pre-trained model", "probability", "accuracy", "accurate", "Confidence", "Restrict", "phone-tested", "tested on" })
         Check($"wording: no '{bad}'", !Regex.IsMatch(all, @"\b" + Regex.Escape(bad) + @"\b", RegexOptions.IgnoreCase));
     Check("wording: the general is described only as the probe allows (learns from your own choices, nothing pre-trained, different players different generals)",
         all.Contains("learns how you set a doctrine from your own choices, in your browser, with nothing pre-trained") && all.Contains("different players end up with different generals"));
     Check("wording: nothing says the net beats a table or quotes a hit rate", !Regex.IsMatch(all, @"beats a (lookup|table)|outlearns|3 (times )?in 10|4 in 10|5 in 10", RegexOptions.IgnoreCase));
     Check("wording: battles are said to be simulated once on this device and the replay to be a recording", all.Contains("simulated once, on your device") && all.Contains("The replay is a recording"));
     Check("wording: no persistence is claimed or invented (a refresh forgets the general)", all.Contains("Nothing is saved: refresh the page and the general is gone") && !all.Contains("saved in your browser"));
+    // the editorial fixes: each new phrase is there, each old one is gone
+    Check("wording A: the lede names the general as a habit table with a tiny HoloFormer from the AlgFormer package; no tiny AlgFormer model", all.Contains("and the general is a habit table with a tiny HoloFormer from the AlgFormer package.") && !all.Contains("tiny AlgFormer model"));
+    Check("wording A: About states the rule the code has (table speaks; the HoloFormer takes a slot at two more right answers than the table, on recent choices)",
+        all.Contains("Inside it are a small habit table and a tiny HoloFormer from the AlgFormer package. For each of the four slots the table speaks, unless the HoloFormer has been right on that slot at least two more times than the table over your recent choices, in which case it takes the slot.")
+        && !all.Contains("whichever of the two") && !all.Contains("guessed your choices better"));
+    Check("wording B: it is a match record, said as what it is; the word confidence is gone from every screen",
+        all.Contains("Match record") && all.Contains("how often its whole suggestion matched what you then chose, over your recent choices") && !Regex.IsMatch(all, "confiden", RegexOptions.IgnoreCase));
+    Check("wording C: the working screen says it runs on the device in small steps", all.Contains("This runs on your device, in small steps.") && !all.Contains("so the page stays usable") && !all.Contains("one small step at a time"));
+    Check("wording D: the examples count says what it counts, in the chip and on the start and end screens",
+        Regex.Matches(all, Regex.Escape("(each doctrine you set and each battle result)")).Count >= 3 && all.Contains("examples seen (each doctrine you set and each battle result)") && all.Contains("since you opened this page"));
+    Check("wording E: the empty-army sentence tells what to do and why", all.Contains("Spend your gold on cohorts: a battle needs soldiers.") && !all.Contains("starts lost"));
+    Check("wording F: Cull is one plain sentence and nothing else; no greyed Cull chip, no operation name", all.Contains("Cull is not available in this version of the army.") && !all.Contains("greyed out for every army") && !allMarkup.Any(m => m.Contains("Cull a trait")));
 }
 
 // -------------------------------------------------------------------------------- layout rules (no browser needed)
@@ -446,6 +535,21 @@ Console.WriteLine(failures == 0 ? $"ALL PASS ({checks} checks)" : $"{failures} F
 return failures == 0 ? 0 : 1;
 
 sealed class Time : IBuildTime { public Time(bool p) { IsPrerender = p; } public bool IsPrerender { get; } }
+
+/// <summary>A general for the per-slot match record: it asks the real general, then (so a suggestion exists on the very first round) makes up one
+/// from the first legal orders if the real one has none, and attaches the given per-slot reading (or none). Used only to drive the page's display.</summary>
+sealed class SlotLens(IGeneral inner, SlotPermille? slots) : IGeneral
+{
+    public int ExamplesSeen => inner.ExamplesSeen;
+    public async ValueTask<GeneralOutput> SuggestAsync(GeneralInput input, CancellationToken ct)
+    {
+        var o = await inner.SuggestAsync(input, ct);
+        var d = o.Doctrine.IsEmpty ? DoctrineSet.Of(Enumerable.Range(1, DoctrineVocabulary.Size - 1).Where(input.Legal.Allows).Take(3).ToArray()) : o.Doctrine;
+        return new GeneralOutput(d, 640, slots);
+    }
+    public ValueTask LearnAsync(GeneralExample e, CancellationToken ct) => inner.LearnAsync(e, ct);
+    public ValueTask LearnOutcomeAsync(GeneralOutcome o, CancellationToken ct) => inner.LearnOutcomeAsync(o, ct);
+}
 
 /// <summary>A visitor's habits as a function of the situation: used both to know what to tap and as an IPlayerInput for the headless game.</summary>
 sealed class ScriptHands(ScriptHands.How[] plan) : IPlayerInput

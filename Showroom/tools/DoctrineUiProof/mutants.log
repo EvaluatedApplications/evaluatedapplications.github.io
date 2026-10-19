@@ -1,7 +1,7 @@
-﻿Doctrine UI mutation proof, 2026-10-18T23:19:53
+﻿Doctrine UI mutation proof, 2026-10-19T01:41:40
 M1 [CAUGHT] an illegal order is enabled in the palette: 3 failing check(s)
-    FAIL  doctrine: the palette holds all 53 orders and each is enabled exactly when the army's legal list allows it  [53 enabled, 0 disabled]
-    FAIL  doctrine: the list really restricts (some enabled, some disabled) and Cull is never offered
+    FAIL  doctrine: the palette holds every order but Cull (hidden: the army allows none) and each is enabled exactly when the army's legal list allows it  [45 enabled, 0 disabled, 8 Cull tokens not shown]
+    FAIL  doctrine: the list really restricts (some enabled, some disabled) and no Cull chip exists at all
     FAIL  no soldiers: nothing is legal, every order is greyed out and the page says why
 M2 [CAUGHT] the general is wired so that it never records an example: 12 failing check(s)
     FAIL  round 0: the general has learned twice (the doctrine, then the result)  [0]
@@ -19,10 +19,29 @@ M4 [CAUGHT] Accept reports the suggestion as overridden: 3 failing check(s)
     FAIL  determinism: the page game and the headless game with the same hands have the SAME digest  [a2d02b4b4bf06ccf vs ef86ce7f3291bbb2]
 M5 [CAUGHT] a cancelled round does not put the army back: 1 failing check(s)
     FAIL  cancel: the army is back exactly as it stood at the start of the round (same read)
-M6 [CAUGHT] the end screen hands back the army from before the last round: 4 failing check(s)
+M6 [CAUGHT] the end screen hands back the army from before the last round: 5 failing check(s)
     FAIL  code: it parses back to an army with the same read, score and code
-    FAIL  determinism: the page game and the headless game with the same hands have the SAME digest  [0d073a1a0440e03a vs ef86ce7f3291bbb2]
+    FAIL  determinism: the page game and the headless game with the same hands have the SAME digest  [e3ab005e58e1d467 vs ef86ce7f3291bbb2]
     FAIL  determinism: the final army code is the same
-    FAIL  reload: pasting the code starts a game on that very army (same read, round and gold)  [0423cfbd841e8696 vs ef1266fbad6949ee]
+    FAIL  reload: pasting the code starts a game on that very army (same read, round and gold)  [04133b59df11f832 vs ef1266fbad6949ee]
+    FAIL  leave: from the watch screen the end screen carries the army AFTER the closed round and the round played
 M7 [CAUGHT] the scrubber shows the frame after the one asked for: 1 failing check(s)
     FAIL  watch: the tick before the fall shows the gate standing (no fallen block)
+M8 [CAUGHT] RoundClosedAsync is ignored (the page never parks on a closed round): 1 failing check(s)
+    FAIL  watch: the closed round arrives through RoundClosedAsync and the page parks on its result
+M9 [CAUGHT] RoundRecord.Final is ignored (the last round does not know it is the last): 2 failing check(s)
+    FAIL  last round: the next button says it is the end
+    FAIL  final: the pipeline marks only the last round Final, and the page takes its end from that (the button says so)
+M10 [CAUGHT] the per-slot glow ignores GeneralOutput.SlotConfidence: 1 failing check(s)
+    FAIL  match record (per-slot): each order's glow and its figure come from the general's own value for THAT slot  [--glow:0.64 Rotate 1 Match record 900 of 1000 on this slot | --glow:0.64 Rotate 2 Match record 300 of 1000 on this slot | --glow:0.64 Flip Heavy Match record 650 of 1000 on this slot]
+M11 [CAUGHT] RoundRecord.Orders is never shown (skipped orders go unsaid): 1 failing check(s)
+    FAIL  orders: the watch screen says it in plain words  [missing]
+M12 [CAUGHT] the arena layout from DoctrineContext.LayoutOf is not used: 4 failing check(s)
+    FAIL  watch: the arena is drawn from the layout: an SVG with wall, cover and gate blocks
+    FAIL  watch: the tick before the fall shows the gate standing (no fallen block)
+    FAIL  watch: on the frame the flag is set the gate's picture swaps to fallen
+    FAIL  watch: the gate stays fallen to the end (a bit never clears)
+M13 [CAUGHT] DraftedAsync drops the army's verdict: 1 failing check(s)
+    FAIL  draft: what the army would not take, as it told the pipeline (DraftedAsync), is said in plain words after the confirmation  [no notice]
+M14 [CAUGHT] the Cull chip comes back (greyed) in the palette: 1 failing check(s)
+    FAIL  doctrine: the palette holds every order but Cull (hidden: the army allows none) and each is enabled exactly when the army's legal list allows it  [43 enabled, 10 disabled, 8 Cull tokens not shown]

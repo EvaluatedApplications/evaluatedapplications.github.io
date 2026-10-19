@@ -122,3 +122,9 @@ large; the army panel collapses; the doctrine bar is a row of slots. Cohort blob
 
 Tracer in WebAssembly; combat arithmetic through MapCounts; whether the tiny model learns a doctrine from about 30
 examples; whether any of this is fun. The first slice exists to answer the first two.
+
+## 2026-10-19: hooks adopted, editorial fixes
+- The page runs the whole game as ONE pipeline run (real MaxRounds) and takes each round, its end (Final) and the army's applied/skipped count from IPlayerInput.RoundClosedAsync; progress from IRoundObserver; the arena from DoctrineContext.LayoutOf; refusals after confirm from DraftedAsync. No wrapper and no copied rule remain. The live pre-confirm cost hint still drafts on a copy.
+- The number on the ghost is a MATCH RECORD (how often the whole suggestion matched the choice that followed, over recent choices), per slot on each order when GeneralOutput.SlotConfidence is set. Wording to confirm with the algformer-owner once SlotConfidence lands: what exactly a slot's figure counts.
+- Cull is hidden (one sentence) while no army allows it.
+

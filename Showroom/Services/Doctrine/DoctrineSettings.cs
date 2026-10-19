@@ -14,3 +14,9 @@ public sealed class DoctrineSettings : IDoctrineSettings
     public bool AutoPlay { get; init; } = true;
     public int TickMs { get; init; } = 140;
 }
+
+/// <summary>Optional: a proof registers one to give the page its own sections (for example a general that fills the per-slot match record). The app registers none.</summary>
+public sealed class DoctrineSectionsSource(Func<DoctrineSections> make)
+{
+    public Func<DoctrineSections> Make { get; } = make;
+}

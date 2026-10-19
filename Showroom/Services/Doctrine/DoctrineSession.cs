@@ -1,17 +1,17 @@
-using System.Diagnostics;
 using Doctrine;
 using EvalApp;
 
 namespace ShowroomDoctrine;
 
 // One visitor's game of Doctrine, as the page sees it. The game itself is the skeleton's EvalApp round pipeline over the real sections
-// (DoctrineSections.Compose). The page is the player's hands (IPlayerInput): when the pipeline asks for a draft or a doctrine it parks here,
-// the page shows the screen, and the visitor's tap completes the question. No game rule is decided in this file.
+// (DoctrineSections). The page is the player's hands (IPlayerInput): when the pipeline asks for a draft or a doctrine it parks here, the page
+// shows the screen, and the visitor's tap completes the question. No game rule is decided in this file.
 //
-// ONE ROUND PER PIPELINE RUN. The game is built with MaxRounds = 1, so each run of the Round pipeline plays exactly one round and hands back its
-// RoundRecord (the replay, the spoils); the session then feeds RoundState.Advance() into the next run, which is what the pipeline does itself
-// when it recurses. The only rule copied from the skeleton is when a game ends (CloseStage: the round limit, or no soldiers and no gold);
-// it is marked below and listed as an amendment request (a round observer on IPlayerInput) in the hand-off.
+// THE WHOLE GAME IS ONE RUN of the Round pipeline, with the game's real MaxRounds. Each closed round arrives through
+// IPlayerInput.RoundClosedAsync (the record, the army as the next round finds it, and Final: whether the round ended the game), where the hands
+// park on the Watch screen until the visitor taps Next. The end of the game is the pipeline's answer (RoundRecord.Final); no rule is copied.
+// Progress comes from the skeleton's IRoundObserver, the arena's drawing from DoctrineContext.LayoutOf. A cancelled battle (or a visitor leaving)
+// cancels the run's token; the army is put back from the code taken when the round began and the run starts again from that round.
 
 public enum DoctrineStage { Start, Draft, Doctrine, Working, Watch, Over }
 
@@ -29,34 +29,38 @@ public sealed class DoctrineSession : IDisposable
     public const int DefaultRounds = 5;
 
     DoctrineGame? _game;
-    DoctrineDomain _rules = new() { MaxRounds = 1 };
+    DoctrineDomain _rules = new();
     CancellationTokenSource? _life, _round;
     TaskCompletionSource<IReadOnlyList<DraftPick>>? _draftTcs;
     TaskCompletionSource<PlayerChoice>? _chooseTcs;
     TaskCompletionSource<bool>? _next;
-    RoundState? _state;
-    string _startCode = "";
+    readonly List<RoundRecord> _records = new();
+    IArmy? _army;                    // the visitor's army, the one object the whole run carries
+    RoundState? _restart;            // the run's state as the CURRENT round began (where a cancelled round starts again)
+    string _roundCode = "";          // the army as the current round began
+    string _closedCode = "";         // the army as the closed round left it (valid while parked on the Watch screen)
+    bool _parked;                    // the hands are waiting on the Watch screen
     long _lastNotify;
+    readonly Watcher _watcher;
 
-    public DoctrineSession(DoctrineSections? sections = null)
+    public DoctrineSession(DoctrineSections? sections = null, Func<DoctrineSections>? makeSections = null)
     {
-        Sections = sections ?? new DoctrineSections();
-        Sections.Observer.Started += OnBattleStarted;
-        Sections.Observer.Ticked += OnBattleTick;
-        Sections.Observer.Finished += OnBattleFinished;
+        _makeSections = makeSections;
+        Sections = sections ?? makeSections?.Invoke() ?? new DoctrineSections();
+        _watcher = new Watcher(this);
     }
+    readonly Func<DoctrineSections>? _makeSections;
 
     public void Dispose()
     {
-        Sections.Observer.Started -= OnBattleStarted;
-        Sections.Observer.Ticked -= OnBattleTick;
-        Sections.Observer.Finished -= OnBattleFinished;
         try { _life?.Cancel(); } catch (ObjectDisposedException) { }
     }
 
     /// <summary>The sections and the general. They outlive a game so the general keeps what this visitor taught it.</summary>
     public DoctrineSections Sections { get; private set; }
     public event Action? Changed;
+    /// <summary>A tick of a battle was recorded (called on the pipeline's thread, quickly). The page does not use it; a proof can.</summary>
+    public event Action<int>? Ticked;
 
     // ---- what the page reads ----
     public DoctrineStage Stage { get; private set; } = DoctrineStage.Start;
@@ -70,16 +74,19 @@ public sealed class DoctrineSession : IDisposable
     public RoundView? Last { get; private set; }
     public string Status { get; private set; } = "";
     public int BattleTick { get; private set; }
-    public int BattleTickLimit => _rules.TickLimit;
-    /// <summary>A plain sentence for the page: a cancelled battle, a refused code. Cleared by the next action.</summary>
+    public int BattleTickLimit { get; private set; } = BattleSetup.DefaultTickLimit;
+    /// <summary>A plain sentence for the page: a cancelled battle, a refused pick. Cleared by the next action.</summary>
     public string Notice { get; private set; } = "";
     public string Error { get; private set; } = "";
     public GameResult? Result { get; private set; }
-    public IReadOnlyList<RoundRecord> Records => _state?.Records ?? Array.Empty<RoundRecord>();
+    public IReadOnlyList<RoundRecord> Records => _records;
     /// <summary>Doctrines the visitor has set (each one taught the general once; each battle result taught it once more).</summary>
     public int ChoicesMade { get; private set; }
     public bool InGame => Stage is not (DoctrineStage.Start or DoctrineStage.Over);
     public IArmyService? Armies => _game?.Context.Armies;
+
+    /// <summary>The name of an arena of the game most recently started (its engine's own catalogue), or the id when there is none.</summary>
+    public string ArenaName(string arenaId) => _game?.Context.Battle.Arenas.FirstOrDefault(a => a.Id == arenaId)?.Name ?? arenaId;
 
     // ---- starting a game ----
 
@@ -90,7 +97,9 @@ public sealed class DoctrineSession : IDisposable
         if (InGame) { error = "A game is already in progress. Leave it first."; return false; }
         Notice = ""; Error = ""; Result = null; Last = null; Ghost = null; Draft = null; Army = null; BattleTick = 0; ChoicesMade = 0;
         rounds = Math.Clamp(rounds, 1, 20);
-        _game = Sections.Build(new Hands(this), _rules);
+        _rules = new DoctrineDomain { MaxRounds = rounds };
+        BattleTickLimit = _rules.TickLimit;
+        _game = Sections.Build(new Hands(this), _rules, _watcher);
         IArmy army;
         var code = (armyCode ?? "").Trim();
         if (code.Length > 0)
@@ -105,11 +114,13 @@ public sealed class DoctrineSession : IDisposable
         }
         else army = _game.Context.Armies.Create(Side.Player, seed);
         Seed = seed; TotalRounds = rounds; RoundIndex = 0;
+        _records.Clear(); _parked = false;
+        _army = army; _roundCode = army.ToCode(); _closedCode = _roundCode;
+        _restart = new RoundState(0, seed, army);
         _life = new CancellationTokenSource();
-        _state = new RoundState(0, seed, army);
         Stage = DoctrineStage.Working; Status = "Raising the army";
         Notify();
-        _ = RunAsync(_state, _life.Token);
+        _ = RunAsync(_life.Token);
         return true;
     }
 
@@ -122,11 +133,14 @@ public sealed class DoctrineSession : IDisposable
         _draftTcs.TrySetResult(picks.Where(p => p.Count > 0).ToList());
     }
 
-    /// <summary>The army's own verdict on picks, asked of a COPY of the army (read from its code), so the real one is untouched until the visitor confirms.</summary>
+    /// <summary>
+    /// The army's own verdict on picks BEFORE the visitor confirms them (the live "this would cost" hint), asked of a COPY of the army read from
+    /// its round-start code, so the real one is untouched. The pipeline's own report (DraftedAsync) only exists after the confirmation.
+    /// </summary>
     public async ValueTask<DraftPreview?> PreviewDraftAsync(IReadOnlyList<DraftPick> picks)
     {
         if (Stage != DoctrineStage.Draft || Armies is null) return null;
-        if (!Armies.TryParse(_startCode, out var clone, out _) || clone is null) return null;
+        if (!Armies.TryParse(_roundCode, out var clone, out _) || clone is null) return null;
         var report = await clone.DraftAsync(new DraftRequest(RoundIndex, Seed, picks.Where(p => p.Count > 0).ToList()), CancellationToken.None);
         return new DraftPreview(report, clone.Read());
     }
@@ -151,11 +165,10 @@ public sealed class DoctrineSession : IDisposable
         _next?.TrySetResult(true);
     }
 
-    /// <summary>Leave the game here. From a draft or doctrine screen the army goes back to how it stood when the round began.</summary>
+    /// <summary>Leave the game here. From a draft or doctrine screen the army goes back to how it stood when the round began; from the watch screen it is the army after that round.</summary>
     public void Leave()
     {
         if (!InGame) return;
-        if (Stage == DoctrineStage.Watch) { _next?.TrySetResult(false); return; }
         try { _life?.Cancel(); } catch (ObjectDisposedException) { }
     }
 
@@ -171,85 +184,78 @@ public sealed class DoctrineSession : IDisposable
     public bool ResetGeneral()
     {
         if (InGame) return false;
-        Sections.Observer.Started -= OnBattleStarted; Sections.Observer.Ticked -= OnBattleTick; Sections.Observer.Finished -= OnBattleFinished;
-        Sections = new DoctrineSections();
-        Sections.Observer.Started += OnBattleStarted; Sections.Observer.Ticked += OnBattleTick; Sections.Observer.Finished += OnBattleFinished;
+        Sections = _makeSections?.Invoke() ?? new DoctrineSections();
         Ghost = null; ChoicesMade = 0;
         Notify();
         return true;
     }
 
-    // ---- the round loop ----
+    // ---- the run ----
 
-    async Task RunAsync(RoundState s, CancellationToken life)
+    async Task RunAsync(CancellationToken life)
     {
         try
         {
             while (true)
             {
-                _state = s; RoundIndex = s.Round; _startCode = s.Player.ToCode();
                 _round = CancellationTokenSource.CreateLinkedTokenSource(life);
                 BattleTick = 0; Ghost = null; Draft = null;
                 PipelineResult<RoundState>? run = null;
-                try { run = await _game!.Round.RunAsync(s, _round.Token); }
+                try { run = await _game!.Round.RunAsync(_restart!, _round.Token); }
                 catch (OperationCanceledException) { }
-                if (life.IsCancellationRequested) { Finish(_startCode); return; }
+                if (life.IsCancellationRequested) { Finish(_parked ? _closedCode : _roundCode); return; }
                 if (run is null || (run is PipelineResult<RoundState>.Failure cf && (_round.IsCancellationRequested || cf.Exception is OperationCanceledException)))
                 {
                     // A cancelled battle: put the army back as it stood when the round began and ask for the draft again.
-                    if (!_game!.Context.Armies.TryParse(_startCode, out var back, out var why) || back is null) throw new InvalidOperationException("could not restore the army: " + why);
-                    s = s with { Player = back };
+                    if (!_game!.Context.Armies.TryParse(_roundCode, out var back, out var why) || back is null) throw new InvalidOperationException("could not restore the army: " + why);
+                    _army = back; _parked = false;
+                    _restart = _restart! with { Player = back };
+                    _records.RemoveRange(_restart.Records.Count, _records.Count - _restart.Records.Count);
                     Notice = "Battle cancelled. The round starts again from your draft.";
                     continue;
                 }
                 if (run is PipelineResult<RoundState>.Failure f) throw f.Exception;
-                s = run.GetData();
-                _state = s;
-                var rec = s.Records[^1];
-                var after = s.Player.Read();
-                // THE END-OF-GAME RULE, copied from the skeleton's CloseStage (which cannot be asked, because the game runs one round per run):
-                // the round limit, or an army with no soldiers and no gold.
-                bool last = s.Records.Count >= TotalRounds || (after.Soldiers == 0 && after.Gold < 1);
-                var first = rec.Replay.Frames.Count > 0 ? rec.Replay.Frames[0] : null;
-                int mine = first?.Blobs.Where(b => b.Side == Side.Player).Sum(b => b.Strength) ?? 0;
-                int theirs = first?.Blobs.Where(b => b.Side == Side.Enemy).Sum(b => b.Strength) ?? 0;
-                Last = new RoundView(rec, after, Sections.LayoutOf(rec.ArenaId), mine, theirs, last);
-                Army = after;
-                Stage = DoctrineStage.Watch; Status = "";
-                Notify();
-                _next = new TaskCompletionSource<bool>();
-                bool carryOn = await _next.Task;
-                if (!carryOn || last) { Finish(s.Player.ToCode()); return; }
-                Notice = "";
-                s = s.Advance();
+                // The pipeline ran to its own end (the last round's Final): the army is the one the closed round left.
+                Finish(_closedCode);
+                return;
             }
         }
         catch (Exception e) when (e is not OutOfMemoryException)
         {
             Error = "The game stopped: " + e.Message;
-            Finish(_startCode);
+            Finish(_parked ? _closedCode : _roundCode);
         }
     }
 
     void Finish(string armyCode)
     {
-        Result = new GameResult(Seed, Records.ToList(), armyCode);
+        _parked = false;
+        Result = new GameResult(Seed, _records.ToList(), armyCode);
         Stage = DoctrineStage.Over; Status = "";
         Notify();
     }
 
-    // ---- battle progress (from the observer around the Tracer engine) ----
-
-    void OnBattleStarted(BattleSetup setup) { BattleTick = 0; Status = "Simulating the battle on this device"; Notify(); }
-    void OnBattleTick(int tick)
-    {
-        BattleTick = tick;
-        long now = Stopwatch.GetTimestamp();
-        if ((now - _lastNotify) * 1000 / Stopwatch.Frequency >= 60) { _lastNotify = now; Notify(); }
-    }
-    void OnBattleFinished(BattleResult r) { Status = "Settling losses and spoils; the general learns the result"; Notify(); }
-
     void Notify() => Changed?.Invoke();
+
+    // ---- progress (from the skeleton's observer: no section is wrapped) ----
+
+    sealed class Watcher(DoctrineSession s) : IRoundObserver
+    {
+        public void StageEntered(string stage, int round)
+        {
+            if (stage == Stages.GeneralImitate) { s.Status = "Your general is learning from this doctrine"; s.Notify(); }
+            else if (stage == Stages.GeneralOutcome) { s.Status = "Your general is learning from the result"; s.Notify(); }
+        }
+        public void BattleStarted(BattleSetup setup) { s.BattleTick = 0; s.BattleTickLimit = setup.TickLimit; s.Status = "Simulating the battle on this device"; s.Notify(); }
+        public void BattleTick(int tick, int tickLimit)
+        {
+            s.BattleTick = tick; s.BattleTickLimit = tickLimit;
+            s.Ticked?.Invoke(tick);
+            long now = System.Diagnostics.Stopwatch.GetTimestamp();
+            if ((now - s._lastNotify) * 1000 / System.Diagnostics.Stopwatch.Frequency >= 60) { s._lastNotify = now; s.Notify(); }
+        }
+        public void BattleFinished(BattleResult result) { s.Status = "Settling losses and spoils"; s.Notify(); }
+    }
 
     // ---- the page as the player's hands ----
 
@@ -257,6 +263,7 @@ public sealed class DoctrineSession : IDisposable
     {
         public async ValueTask<IReadOnlyList<DraftPick>> DraftAsync(ArmyReadModel army, int round, CancellationToken ct)
         {
+            s.RoundIndex = round; s.BattleTick = 0; s.Ghost = null;
             s.Army = army; s.Draft = new DraftView(army, round); s.Stage = DoctrineStage.Draft; s.Status = "";
             var tcs = s._draftTcs = new TaskCompletionSource<IReadOnlyList<DraftPick>>(TaskCreationOptions.RunContinuationsAsynchronously);
             s.Notify();
@@ -264,6 +271,14 @@ public sealed class DoctrineSession : IDisposable
             var picks = await tcs.Task;
             s.Stage = DoctrineStage.Working; s.Status = "Placing your picks and raising the enemy"; s.Notify();
             return picks;
+        }
+
+        public ValueTask DraftedAsync(DraftReport report, CancellationToken ct)
+        {
+            // The army's own verdict on what the visitor confirmed: say plainly what it would not take.
+            if (report.Refused.Count > 0)
+                s.Notice = "The army did not take part of your draft. " + string.Join(" ", report.Refused.Select(r => $"{DoctrineWords.KindName(r.Pick.Kind)} x{r.Pick.Count}: {DoctrineWords.Refusal(r.Reason)}"));
+            return ValueTask.CompletedTask;
         }
 
         public async ValueTask<PlayerChoice> ChooseAsync(ArmyReadModel army, GeneralOutput ghost, int round, CancellationToken ct)
@@ -275,6 +290,28 @@ public sealed class DoctrineSession : IDisposable
             var choice = await tcs.Task;
             s.Stage = DoctrineStage.Working; s.Status = "Your general is learning from this doctrine"; s.Notify();
             return choice;
+        }
+
+        public async ValueTask RoundClosedAsync(RoundRecord rec, ArmyReadModel after, CancellationToken ct)
+        {
+            ct.ThrowIfCancellationRequested();
+            s._records.Add(rec);
+            s._closedCode = s._army!.ToCode();
+            var first = rec.Replay.Frames.Count > 0 ? rec.Replay.Frames[0] : null;
+            int mine = first?.Blobs.Where(b => b.Side == Side.Player).Sum(b => b.Strength) ?? 0;
+            int theirs = first?.Blobs.Where(b => b.Side == Side.Enemy).Sum(b => b.Strength) ?? 0;
+            s.Last = new RoundView(rec, after, s._game!.Context.LayoutOf(rec.ArenaId), mine, theirs, rec.Final);
+            s.Army = after;
+            s.Stage = DoctrineStage.Watch; s.Status = ""; s._parked = true;
+            var tcs = s._next = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            s.Notify();
+            using var reg = ct.Register(() => tcs.TrySetCanceled(ct));
+            await tcs.Task;                       // a Leave (or a cancel) cancels the token and ends the wait with a cancellation
+            s._parked = false;
+            s.Notice = "";
+            s._roundCode = s._closedCode;
+            if (!rec.Final) s._restart = new RoundState(rec.Round + 1, s.Seed, s._army, History: s._records.ToList(),
+                LastOutcome: rec.Result.Outcome, LastPlayerWon: rec.Result.AttackerWon);
         }
     }
 }
