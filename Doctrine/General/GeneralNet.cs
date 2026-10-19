@@ -27,7 +27,7 @@ internal sealed class GeneralNet
     {
         _o = o;
         int vocab = _doctrineIds + (o.FeatureTokens ? GeneralSummary.Length * GeneralSummary.Vocab : GeneralSummary.Vocab);
-        int shifts = Math.Min(o.NetDim, Math.Max(4, HoloShape.ShiftsFor(Context, o.NetDim)));   // always > 1
+        int shifts = o.NetDim;   // S = d (user rule 2026-10-19): the relation bank is then a full dense map; S < d is a low-rank, gimped net. Always > 1 (NetDim >= 2)
         // (vocab, shifts, layers, context, width, frozenPrefix 0 = every embedding trainable, no embed seed, seed, bindFfn off, golden on, normalize on, unitary off)
         _m = new HoloFormer(vocab, shifts, o.NetLayers, Context, o.NetDim, 0, null, seed, false, true, true, false);
         _m.Iters = o.NetK; _m.IterAlphaServe = 1.0;
