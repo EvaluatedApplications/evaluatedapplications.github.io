@@ -26,7 +26,8 @@ sealed class OfferUnitsStage() : RoundStage(Stages.OfferUnits)
     protected override ValueTask<RoundState> StepAsync(RoundState s, DoctrineContext g, DoctrineDomain d, CancellationToken ct)
     {
         int gold = s.Player.Read().Gold;
-        var offer = d.Offers.Enabled ? g.Offers.Units(s.Seed, s.Round, gold, d.Offers) : UnitOffer.Open(gold);
+        var rules = s.Field?.Offers ?? d.Offers;
+        var offer = rules.Enabled ? g.Offers.Units(s.Seed, s.Round, gold, rules) : UnitOffer.Open(gold);
         return ValueTask.FromResult(s with { Units = offer });
     }
 }
@@ -40,7 +41,7 @@ sealed class OfferOrdersStage() : RoundStage(Stages.OfferOrders)
 {
     protected override async ValueTask<RoundState> StepAsync(RoundState s, DoctrineContext g, DoctrineDomain d, CancellationToken ct)
     {
-        var rules = d.Offers;
+        var rules = s.Field?.Offers ?? d.Offers;
         if (!rules.Enabled) return s with { OrderOffer = OrderOffer.Open() };
         var army = s.Player.Read();
         var offer = g.Offers.Orders(s.Seed, s.Round, 0, army.Legal, rules);
@@ -67,11 +68,12 @@ sealed class DraftStage() : RoundStage(Stages.ArmyDraft)
         IReadOnlyList<DraftPick> picks = await g.Player.DraftAsync(s.Player.Read(), offer, s.Round, ct);
         // THE OFFER BINDS THE PLAYER: a pick that is not exactly an offered pack (kind and count), or a pack bought twice, never reaches the army; it comes
         // back in the report with its reason and is counted in the record. The army still judges the gold of what is left.
-        var (bound, notOffered) = RoundLaws.BindDraft(offer, picks, d.Offers);
+        var (bound, notOffered) = RoundLaws.BindDraft(offer, picks, s.Field?.Offers ?? d.Offers);
         var report = await s.Player.DraftAsync(new DraftRequest(s.Round, s.Seed, bound), ct);
         if (notOffered.Count > 0) report = report with { Refused = report.Refused.Concat(notOffered).ToList() };
         await g.Player.DraftedAsync(report, ct);                       // the army's own verdict goes back to the player's hands
-        var enemy = await RoundRules.RaiseEnemyAsync(g.Armies, g.Opponent, d, s.Seed, s.Round, ct);   // the briefing raises the same enemy
+        // A campaign battle brings its own persistent enemy army (its losses carry); otherwise the briefing raises the same enemy.
+        var enemy = s.Field?.Enemy ?? await RoundRules.RaiseEnemyAsync(g.Armies, g.Opponent, d, s.Seed, s.Round, ct);
         return s with { Enemy = enemy, OfferRefused = s.OfferRefused + notOffered.Count };
     }
 }
@@ -109,7 +111,7 @@ sealed class ChooseStage() : RoundStage(Stages.PlayerChoose)
         int dropped = s.IllegalDropped;                                  // the general's, from the suggest stage
         // THE OFFER BINDS THE PLAYER: a token that is not on offer, or one picked twice, is removed and counted apart (OfferRefused); the pick is "up to four of the eight, each once".
         int refused = s.OfferRefused;
-        var clean = RoundLaws.BindChoice(choice.Doctrine, legal, offer, d.Offers, ref dropped, ref refused);
+        var clean = RoundLaws.BindChoice(choice.Doctrine, legal, offer, s.Field?.Offers ?? d.Offers, ref dropped, ref refused);
         return s with { Choice = choice with { Doctrine = clean }, IllegalDropped = dropped, OfferRefused = refused };
     }
 }
@@ -128,7 +130,8 @@ sealed class OrdersStage() : RoundStage(Stages.ArmyOrders)
     protected override async ValueTask<RoundState> StepAsync(RoundState s, DoctrineContext g, DoctrineDomain d, CancellationToken ct)
     {
         var report = await s.Player.ApplyArmyOrdersAsync(s.Choice!.Doctrine, ct);
-        var enemyDoctrine = await g.Opponent.DoctrineAsync(new OpponentRound(s.Seed, s.Round, RoundRules.EnemyGold(d, s.Round)), s.Enemy!.Read().Legal, ct);
+        var enemyTurn = s.Field is { } f ? new OpponentRound(s.Seed, f.EnemyRound, s.Enemy!.Read().Gold) : new OpponentRound(s.Seed, s.Round, RoundRules.EnemyGold(d, s.Round));
+        var enemyDoctrine = await g.Opponent.DoctrineAsync(enemyTurn, s.Enemy!.Read().Legal, ct);
         await s.Enemy.ApplyArmyOrdersAsync(enemyDoctrine, ct);
         return s with { EnemyDoctrine = enemyDoctrine, Orders = report };
     }
@@ -138,9 +141,9 @@ sealed class SetupStage() : RoundStage(Stages.BattleSetup)
 {
     protected override ValueTask<RoundState> StepAsync(RoundState s, DoctrineContext g, DoctrineDomain d, CancellationToken ct)
     {
-        var arena = RoundRules.ArenaFor(g.Battle.Arenas, s.Seed, s.Round);   // the briefing reads the same rules
+        var arena = s.Field is { } f ? g.Battle.Arenas.First(a => a.Id == f.ArenaId) : RoundRules.ArenaFor(g.Battle.Arenas, s.Seed, s.Round);   // the briefing reads the same rules
         // A siege arena names a besieger, who carries the siege clock; the roles swap every round, so the player besieges in even rounds and the enemy in odd ones.
-        Side? besieger = RoundRules.BesiegerFor(d, arena, s.Round);
+        Side? besieger = s.Field is { } fs ? fs.Besieger : RoundRules.BesiegerFor(d, arena, s.Round);
         var setup = RoundLaws.Setup(d, arena, s.Seed, s.Round, besieger, s.Player.Read(), s.Choice!.Doctrine, s.Enemy!.Read(), s.EnemyDoctrine);
         return ValueTask.FromResult(s with { Setup = setup });
     }
@@ -173,7 +176,7 @@ sealed class SpoilsStage() : RoundStage(Stages.ArmySpoils)
         bool won = s.Result!.AttackerWon;
         int killed = s.Result.DefenderLosses.Sum(l => l.Lost);
         var spoils = RoundLaws.BaseSpoils(d, won, killed);
-        if (d.Comeback && s.Round + 1 < d.MaxRounds)
+        if (d.Comeback && s.Field is null && s.Round + 1 < d.MaxRounds)   // a campaign battle has no muster: the enemy's losses persist instead
         {
             // THE MUSTER: half of what the army lacks against the strength the next enemy is raised at, paid in gold (it cannot lift an army above parity).
             var read = s.Player.Read();
@@ -202,9 +205,9 @@ sealed class CloseStage() : RoundStage(Stages.RoundClose)
         ulong playerDigest = s.Player.Read().Digest(), enemyDigest = s.Enemy!.Read().Digest();   // taken before the round ends, as ever
         await s.Player.EndRoundAsync(ct);
         var after = s.Player.Read();
-        bool done = s.Round + 1 >= d.MaxRounds || (after.Soldiers == 0 && after.Gold < 1);   // an army with no soldiers and no gold cannot go on
+        bool done = s.Field is not null || s.Round + 1 >= d.MaxRounds || (after.Soldiers == 0 && after.Gold < 1);   // an army with no soldiers and no gold cannot go on; a campaign battle ends its run (the campaign owns the rest)
         var record = new RoundRecord(s.Round, s.Choice!.Doctrine, s.Ghost!.Doctrine, s.Ghost.ConfidencePermille, s.Choice.Overrode,
-            s.IllegalDropped, s.Setup!.ArenaId, s.Result!, s.Replay!, s.Spoils!, playerDigest, enemyDigest, s.Orders, done,
+            s.IllegalDropped, s.Setup!.ArenaId, s.Result!, s.Replay!, s.Spoils!, playerDigest, enemyDigest, s.Orders, done && s.Field is null,
             s.Units, s.OrderOffer, s.Rerolls, s.OfferRefused);
         var history = new List<RoundRecord>(s.Records) { record };
         await g.Player.RoundClosedAsync(record, after, ct);          // the host sees the closed round, whole, before the next one starts

@@ -39,7 +39,8 @@ public sealed record RoundState(
     DoctrineSet EnemyDoctrine = default, BattleSetup? Setup = null, BattleResult? Result = null, BattleReplay? Replay = null,
     Spoils? Spoils = null, BattleStatus? LastOutcome = null, bool LastPlayerWon = false,
     IReadOnlyList<RoundRecord>? History = null, bool Done = false, ArmyOrdersReport? Orders = null,
-    UnitOffer? Units = null, OrderOffer? OrderOffer = null, int Rerolls = 0, int OfferRefused = 0)
+    UnitOffer? Units = null, OrderOffer? OrderOffer = null, int Rerolls = 0, int OfferRefused = 0,
+    FieldScenario? Field = null)
 {
     public IReadOnlyList<RoundRecord> Records => History ?? Array.Empty<RoundRecord>();
 
@@ -47,6 +48,13 @@ public sealed record RoundState(
     public RoundState Advance() => new(Round + 1, Seed, Player, History: History,
         LastOutcome: Result?.Outcome ?? LastOutcome, LastPlayerWon: Result?.AttackerWon ?? LastPlayerWon);
 }
+
+/// <summary>
+/// ONE battle of a campaign epoch (Campaign\CampaignGame.cs), carried in <see cref="RoundState.Field"/>. With a field set the round pipeline fights exactly one battle on the named
+/// arena against the GIVEN enemy army (a persistent one, so its losses carry), with the given besieger and offer rules (the campaign's unlock pools), and ends there
+/// (<c>Done</c>; the campaign owns what comes next). No comeback muster. Null (the default) is the round pipeline of the fixed games, byte for byte.
+/// </summary>
+public sealed record FieldScenario(string ArenaId, Side? Besieger, int EnemyRound, IArmy Enemy, OfferRules Offers);
 
 /// <summary>TASK DATA of the battle pipelines: the setup, the live session, and the frames recorded so far.</summary>
 public sealed record BattleState(
