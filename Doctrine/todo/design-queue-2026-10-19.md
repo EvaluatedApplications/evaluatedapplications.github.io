@@ -61,6 +61,13 @@ Showroom\todo\doctrine-story-from-mechanics.md). Decisions below are made; each 
    PvP = the other seat chooses; the armies are built to the same gold budget; offers come from the shared seed. Nothing in the
    map needs per-player randomness or hidden state beyond the sealed pick. Splitting the army across lanes stays out of scope.
 
+11. **PRIORITY CHANGE (user): PvP is PAUSED (nobody to play with); finish the whole single-player game including the overmap.**
+   The duel seam (Doctrine) and the DoctrineDuel relay service + proof are built and committed and stay as they are (no duel
+   screens, no more PvP work). Order now: pre-publish polish, then the MAP slice (items 10 and 10b: lanes, fronts, province
+   unlocks, standards, endless), then the briefing panel in the HUD, the unit reroll, the general commanding in battle, sprites.
+   With PvP paused the map no longer has to stay symmetric for a second player, but keep the sealed-lane-pick structure (it
+   makes the scripted enemy's choice and the later PvP return cheap).
+
 ## Queued (designed, not dispatched)
 
 - **Campaign layer.** Seeded map of provinces (a Pleroma store), player-chosen number of epochs, win the war not the battle
