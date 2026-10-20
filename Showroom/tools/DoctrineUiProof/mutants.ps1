@@ -203,7 +203,39 @@ $mutants = @(
     @{ Id = 'L1'; Name = 'a phone with a sheet or the council open keeps the goal and to-do lines (the cards get no more height)'; File = 'Pages\DoctrinePage.razor.css';
        Old = '.dc-hud:has(.dc-sheet.open, .dc-tray.open) .dc-goal, .dc-hud:has(.dc-sheet.open, .dc-tray.open) .dc-todo { display: none; }'; New = ''; Append = ''; Expect = 'council layout (phone)' },
     @{ Id = 'L2'; Name = 'the one-row slots rule leaks out of the phone query (it would reach the desktop)'; File = 'Pages\DoctrinePage.razor.css';
-       Old = '.dc-hud[data-stage=draft] .dc-slots { display: none; }'; New = '} .dc-hud:has(.dc-tray.open) .dc-mv { display: none; } @media (max-width: 699px) { .dc-hud[data-stage=draft] .dc-slots { display: none; }'; Append = ''; Expect = 'council layout (phone)' }
+       Old = '.dc-hud[data-stage=draft] .dc-slots { display: none; }'; New = '} .dc-hud:has(.dc-tray.open) .dc-mv { display: none; } @media (max-width: 699px) { .dc-hud[data-stage=draft] .dc-slots { display: none; }'; Append = ''; Expect = 'council layout (phone)' },
+    # ---- 2026-10-20 the overmap and the war: each is run with --war (only the war section of the proof, ~15 s)
+    @{ Id = 'V1'; Args = '--war'; Name = 'a lane card shows the ground of the next road'; File = 'Pages\DoctrinePage.razor';
+       Old = '@if (l.Arena is { } ar) { <p class="dc-lg">'; New = '@if (b.Lanes[(l.Lane + 1) % b.Lanes.Count].Arena is { } ar) { <p class="dc-lg">'; Append = ''; Expect = 'war: the lane cards equal the briefing' },
+    @{ Id = 'V2'; Args = '--war'; Name = 'holding back is described as costing a standard'; File = 'Services\Doctrine\CampaignWords.cs';
+       Old = 'so it costs ground, never a standard.";'; New = 'so it costs ground and a standard.";'; Append = ''; Expect = 'war: holding back' },
+    @{ Id = 'V3'; Args = '--war'; Name = 'the summary of a hold-back says a standard was lost'; File = 'Services\Doctrine\CampaignWords.cs';
+       Old = 'if (r.StandardsAfter < r.StandardsBefore) l.Add('; New = 'if (r.StandardsAfter < r.StandardsBefore || r.Conceded) l.Add('; Append = ''; Expect = 'war: the summary of epoch' },
+    @{ Id = 'V4'; Args = '--war'; Name = 'a lost province''s unlock is still offered (the page keeps every unlock it has seen)'; File = 'Services\Doctrine\DoctrineSession.cs';
+       Old = 'if (!c.Over) Briefing = await c.BriefingAsync(ct);'; New = 'if (!c.Over) Briefing = StickyMutant.Keep(await c.BriefingAsync(ct));'; Append = @'
+
+sealed class StickyMutant
+{
+    static Feature held;
+    public static CampaignBriefing Keep(CampaignBriefing b) { held |= b.HeldUnlocks; return b with { HeldUnlocks = held, OfferKinds = UnlockPools.Kinds(held) }; }
+}
+'@; Expect = 'war: an unlock' },
+    @{ Id = 'V5'; Args = '--war'; Name = 'the map colours the player''s provinces as the enemy''s and the reverse'; File = 'Services\Doctrine\OvermapView.cs';
+       Old = 'h switch { Holder.Player => "dc-p-player", Holder.Enemy => "dc-p-enemy", _ => "dc-p-neutral" };'; New = 'h switch { Holder.Player => "dc-p-enemy", Holder.Enemy => "dc-p-player", _ => "dc-p-neutral" };'; Append = ''; Expect = 'war: the map shown' },
+    @{ Id = 'V6'; Args = '--war'; Name = 'the stylesheet paints the enemy''s provinces in the player''s colour'; File = 'Pages\DoctrinePage.razor.css';
+       Old = '.dc-p-enemy .dc-box { fill: color-mix(in srgb, var(--bad) 22%, var(--bg-2)); stroke: var(--bad); }'; New = '.dc-p-enemy .dc-box { fill: color-mix(in srgb, var(--accent) 22%, var(--bg-2)); stroke: var(--accent); }'; Append = ''; Expect = 'war: map colours (stylesheet)' },
+    @{ Id = 'V7'; Args = '--war'; Name = 'the standards pips light one too many'; File = 'Pages\DoctrinePage.razor';
+       Old = '<i class="pip @(i < b.Standards ? "on" : "")"></i>'; New = '<i class="pip @(i <= b.Standards ? "on" : "")"></i>'; Append = ''; Expect = 'war: standards, score and income' },
+    @{ Id = 'V8'; Args = '--war'; Name = 'the drawing stops at the third province of a road (an endless refill is not shown)'; File = 'Services\Doctrine\OvermapView.cs';
+       Old = 'int hi = longest - 1;'; New = 'int hi = MapKeys.StartLaneLength - 1;'; Append = ''; Expect = 'war: the map shown' },
+    @{ Id = 'V9'; Args = '--war'; Name = 'the summary leaves out the gold the provinces paid'; File = 'Services\Doctrine\CampaignWords.cs';
+       Old = 'if (r.GoldPaid > 0) l.Add('; New = 'if (false) l.Add('; Append = ''; Expect = 'war: the summary of epoch' },
+    @{ Id = 'V10'; Args = '--war'; Name = 'the end screen''s score is the fields won alone'; File = 'Services\Doctrine\CampaignWords.cs';
+       Old = '$"Score {e.Score}: {e.FieldsWon}'; New = '$"Score {e.FieldsWon}: {e.FieldsWon}'; Append = ''; Expect = 'war: the end screen' },
+    @{ Id = 'V11'; Args = '--war'; Name = 'the Hold back card pushes road one instead of holding back'; File = 'Pages\DoctrinePage.razor';
+       Old = '@onclick="() => Pick(0, true)"'; New = '@onclick="() => Pick(0, false)"'; Append = ''; Expect = 'war: the summary of epoch' },
+    @{ Id = 'V12'; Args = '--war'; Name = 'the income line adds the number of provinces, not their yields'; File = 'Pages\DoctrinePage.razor';
+       Old = 'private int Income => _s!.Provinces.Where(p => p.Owner == Holder.Player).Sum(p => p.Yield);'; New = 'private int Income => _s!.Provinces.Where(p => p.Owner == Holder.Player).Count();'; Append = ''; Expect = 'war: standards, score and income' }
 )
 
 $log = Join-Path $PSScriptRoot 'mutants.log'
@@ -219,7 +251,7 @@ foreach ($m in $mutants) {
         [IO.File]::WriteAllText($path, $orig.Replace($m.Old, $m.New) + $m.Append, $utf8)
         BuildShowroom
         Push-Location (Join-Path $root 'tools\DoctrineUiProof')
-        try { $out = dotnet run -c Release 2>&1 | Out-String } finally { Pop-Location }
+        $extra = if ($m.Args) { @('--', $m.Args) } else { @() }; try { $out = dotnet run -c Release @extra 2>&1 | Out-String } finally { Pop-Location }
         $out | Out-File (Join-Path $PSScriptRoot ("mutants-" + $m.Id + ".out.txt")) -Encoding utf8
         $fails = @($out -split "`r?`n" | Where-Object { $_ -match '^FAIL' })
         $caught = $fails | Where-Object { $_ -like "*$($m.Expect)*" }

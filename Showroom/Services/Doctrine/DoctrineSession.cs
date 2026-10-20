@@ -13,7 +13,10 @@ namespace ShowroomDoctrine;
 // Progress comes from the skeleton's IRoundObserver, the arena's drawing from DoctrineContext.LayoutOf. A cancelled battle (or a visitor leaving)
 // cancels the run's token; the army is put back from the code taken when the round began and the run starts again from that round.
 
-public enum DoctrineStage { Start, Draft, Doctrine, Working, Watch, Over }
+public enum DoctrineStage { Start, Draft, Doctrine, Working, Watch, Map, Epoch, Over }
+
+/// <summary>How a war ended, for its end screen: the library's outcome (Running when the visitor left), the counts the library reports and every epoch's result.</summary>
+public sealed record CampaignEnd(int Seed, bool Endless, CampaignOutcome Outcome, bool Left, int Epochs, int FieldsWon, int ProvincesHeld, int Score, int Standards, string ArmyCode, IReadOnlyList<EpochResult> History);
 
 /// <summary>The draft screen's question: the army as it stands, the round and the companies the muster offers.</summary>
 public sealed record DraftView(ArmyReadModel Army, int Round, UnitOffer Offer);
@@ -155,6 +158,7 @@ public sealed class DoctrineSession : IDisposable
     async ValueTask<ArenaBrief?> GroundOfAsync(int round, CancellationToken ct)
     {
         if (_game is null) return null;
+        if (IsCampaign) return _epochGround;                       // a campaign battle is fought on the ground the lane card named
         try { return (await _game.BriefingAsync(Seed, round, 0, ct)).Arena; }
         catch (Exception e) when (e is not OperationCanceledException and not OutOfMemoryException) { return null; }
     }
@@ -168,6 +172,7 @@ public sealed class DoctrineSession : IDisposable
         if (InGame) { error = "A game is already in progress. Leave it first."; return false; }
         Notice = ""; Error = ""; Result = null; Last = null; Ghost = null; Draft = null; Army = null; BattleTick = 0; ChoicesMade = 0;
         OrdersOffered = null; Reroll = null;
+        IsCampaign = false; _campaign = null; End = null; Briefing = null; LastEpoch = null; _epochs.Clear();
         rounds = Math.Clamp(rounds, 1, 20);
         // The step a round is on: the ladder's own schedule, never below what this visitor has already opened (a restarted game keeps it, Show everything opens all).
         _rules = GameRules(rounds, round => Math.Max(_progress?.Step ?? 0, DoctrineUnlocks.StepForRound(round, rounds)));
@@ -195,6 +200,148 @@ public sealed class DoctrineSession : IDisposable
         Notify();
         _ = RunAsync(_life.Token);
         return true;
+    }
+
+    // ---- a campaign (the war): the map is the library's, the battle of an epoch is the same round pipeline with the hands parked here ----
+
+    /// <summary>The epochs of a fixed war (the library's default is the same figure; it is passed in so the page can say it).</summary>
+    public const int WarEpochs = 24;
+
+    CampaignGame? _campaign;
+    bool _endless;
+    ArenaBrief? _epochGround;
+    readonly List<EpochResult> _epochs = new();
+
+    /// <summary>True from the start of a campaign until the next game begins (its map, its battles and its end screen).</summary>
+    public bool IsCampaign { get; private set; }
+    public bool Endless => _endless;
+    /// <summary>The war itself (the proofs read it; the page reads the snapshots below).</summary>
+    public CampaignGame? Campaign => _campaign;
+    /// <summary>The library's briefing for the epoch now open: the three lanes, the standards, the score, what is held. Nothing of the enemy's pick is in it.</summary>
+    public CampaignBriefing? Briefing { get; private set; }
+    /// <summary>The map as the library reports it, read when the epoch opened.</summary>
+    public IReadOnlyList<Province> Provinces { get; private set; } = [];
+    /// <summary>What the epoch just played did (null before the first).</summary>
+    public EpochResult? LastEpoch { get; private set; }
+    /// <summary>The features held when the last pick was made (so the summary can say what opened and what closed).</summary>
+    public Feature HeldBefore { get; private set; }
+    public IReadOnlyList<EpochResult> Epochs => _epochs;
+    public CampaignEnd? End { get; private set; }
+    /// <summary>The standards the war began with and the wins that raise one again, as the first briefing reports them.</summary>
+    public int MaxStandards { get; private set; }
+    public int RestoreEvery { get; private set; }
+
+    /// <summary>Begin a war from <paramref name="seed"/>: a fixed one (<see cref="WarEpochs"/> epochs, or <paramref name="maxEpochs"/>) or an endless one.</summary>
+    public bool NewCampaign(int seed, bool endless, out string error, int maxEpochs = 0)
+    {
+        error = "";
+        if (InGame) { error = "A game is already in progress. Leave it first."; return false; }
+        Notice = ""; Error = ""; Result = null; Last = null; Ghost = null; Draft = null; Army = null; BattleTick = 0; ChoicesMade = 0;
+        OrdersOffered = null; Reroll = null; End = null; Briefing = null; LastEpoch = null; Provinces = []; _epochs.Clear(); _epochGround = null; _campaign = null;
+        IsCampaign = true; _endless = endless;
+        _rules = GameRules(WarEpochs);
+        BattleTickLimit = _rules.TickLimit;
+        _game = Sections.Build(new Hands(this), _rules, _watcher);
+        Seed = seed; TotalRounds = endless ? 0 : (maxEpochs > 0 ? maxEpochs : WarEpochs); RoundIndex = 0;
+        _records.Clear(); _parked = false;
+        _life = new CancellationTokenSource();
+        Stage = DoctrineStage.Working; Status = "Drawing the map and raising the armies";
+        Notify();
+        _ = StartCampaignAsync(maxEpochs, _life.Token);
+        return true;
+    }
+
+    async Task StartCampaignAsync(int maxEpochs, CancellationToken life)
+    {
+        try
+        {
+            var rules = new CampaignRules { Endless = _endless, MaxEpochs = maxEpochs > 0 ? maxEpochs : _endless ? 0 : WarEpochs };
+            _campaign = await _game!.NewCampaignAsync(Seed, rules, null, life);
+            _army = _campaign.Army; _roundCode = _army.ToCode(); _closedCode = _roundCode;
+            await RefreshMapAsync(life);
+            MaxStandards = Briefing!.Standards; RestoreEvery = Briefing.WinsToRestore;
+            Stage = DoctrineStage.Map; Status = "";
+            Notify();
+        }
+        catch (Exception e) when (e is not OutOfMemoryException)
+        {
+            if (!life.IsCancellationRequested) Error = "The war could not begin: " + e.Message;
+            FinishCampaign(true);
+        }
+    }
+
+    async ValueTask RefreshMapAsync(CancellationToken ct)
+    {
+        var c = _campaign!;
+        Provinces = c.Provinces();
+        Army = c.Army.Read();
+        if (!c.Over) Briefing = await c.BriefingAsync(ct);
+    }
+
+    /// <summary>
+    /// Seal the pick for this epoch: push <paramref name="lane"/> or hold back (<paramref name="concede"/>). The enemy's lane is chosen by the game, blind to it, and both are
+    /// revealed in the result. A push on a lane with nothing left to assault is not accepted.
+    /// </summary>
+    public bool PickLane(int lane, bool concede)
+    {
+        if (Stage != DoctrineStage.Map || _campaign is null || Briefing is not { } b) return false;
+        if (lane < 0 || lane >= b.Lanes.Count) return false;
+        if (!concede && b.Lanes[lane].Target is null) return false;
+        Notice = ""; HeldBefore = b.HeldUnlocks;
+        _epochGround = concede ? null : b.Lanes[lane].Arena;
+        RoundIndex = b.Epoch; BattleTick = 0; Ghost = null; Draft = null; Last = null;
+        _round = CancellationTokenSource.CreateLinkedTokenSource(_life!.Token);
+        Stage = DoctrineStage.Working; Status = "Your pick is sealed"; Notify();
+        _ = EpochAsync(new LanePick(lane, concede), _round.Token);
+        return true;
+    }
+
+    async Task EpochAsync(LanePick pick, CancellationToken ct)
+    {
+        try
+        {
+            var res = await _campaign!.PlayEpochAsync(pick, ct);
+            _parked = false;
+            await RefreshMapAsync(_life!.Token);
+            if (res.Kind == EpochKind.Refused) { Notice = res.Refused ?? "The pick was refused."; Stage = DoctrineStage.Map; Status = ""; Notify(); return; }
+            _epochs.Add(res); LastEpoch = res;
+            Stage = DoctrineStage.Epoch; Status = "";
+            Notify();
+        }
+        catch (Exception e) when (e is not OutOfMemoryException)
+        {
+            _parked = false;
+            if (_life!.IsCancellationRequested) { FinishCampaign(true); return; }
+            if (_round!.IsCancellationRequested)
+            {
+                try { await RefreshMapAsync(_life.Token); } catch (Exception) { }
+                Notice = "Battle cancelled. The map is as it was; your army is as the cancelled battle left it.";
+                Stage = DoctrineStage.Map; Status = ""; Notify();
+                return;
+            }
+            Error = "The war stopped: " + e.Message;
+            FinishCampaign(true);
+        }
+    }
+
+    /// <summary>From the epoch summary: back to the map, or to the end screen when the war is over.</summary>
+    public void ContinueCampaign()
+    {
+        if (Stage != DoctrineStage.Epoch || _campaign is null) return;
+        Notice = "";
+        if (_campaign.Over) { FinishCampaign(false); return; }
+        Stage = DoctrineStage.Map; Notify();
+    }
+
+    void FinishCampaign(bool left)
+    {
+        _parked = false;
+        var provs = _campaign?.Provinces() ?? Provinces;
+        var outcome = _campaign?.Outcome ?? CampaignOutcome.Running;
+        End = new CampaignEnd(Seed, _endless, outcome, left && outcome == CampaignOutcome.Running, _epochs.Count, _campaign?.FieldsWon ?? 0,
+            provs.Count(p => !p.IsCapital && p.Owner == Holder.Player), _campaign?.Score ?? 0, _campaign?.Standards ?? 0, _army?.ToCode() ?? "", _epochs.ToList());
+        Stage = DoctrineStage.Over; Status = "";
+        Notify();
     }
 
     // ---- the visitor's answers ----
@@ -319,6 +466,7 @@ public sealed class DoctrineSession : IDisposable
     public void Leave()
     {
         if (!InGame) return;
+        if (IsCampaign && Stage is DoctrineStage.Map or DoctrineStage.Epoch) { FinishCampaign(true); return; }   // nothing is running: the war ends here
         try { _life?.Cancel(); } catch (ObjectDisposedException) { }
     }
 
@@ -326,7 +474,7 @@ public sealed class DoctrineSession : IDisposable
     public void BackToStart()
     {
         if (InGame) return;
-        Stage = DoctrineStage.Start; Notice = ""; Error = "";
+        Stage = DoctrineStage.Start; Notice = ""; Error = ""; IsCampaign = false;
         Notify();
     }
 
@@ -490,7 +638,7 @@ public sealed class DoctrineSession : IDisposable
             s._parked = false;
             s.Notice = "";
             s._roundCode = s._closedCode;
-            if (!rec.Final) s._restart = new RoundState(rec.Round + 1, s.Seed, s._army, History: s._records.ToList(),
+            if (!rec.Final && !s.IsCampaign) s._restart = new RoundState(rec.Round + 1, s.Seed, s._army, History: s._records.ToList(),
                 LastOutcome: rec.Result.Outcome, LastPlayerWon: rec.Result.AttackerWon);
         }
     }

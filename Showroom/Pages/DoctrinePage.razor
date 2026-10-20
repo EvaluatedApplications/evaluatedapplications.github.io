@@ -76,11 +76,17 @@
             <p class="dc-siege-rule">@DoctrineWords.SiegeRule(RoundChoices.Max())@(_s?.Grounds is { } grounds ? " " + DoctrineWords.SiegeGrounds(grounds) : "")</p>
             <p class="dc-limit-rule">@DoctrineWords.TickLimitRule()</p>
         </details>
+        <details class="dc-about dc-warrules">
+            <summary>About the war</summary>
+            <p>A war is played in epochs. Each epoch you seal a pick of one road to push, or you hold back; the enemy picks its road without seeing yours, and both are shown together. If you both picked the same road, the two hosts meet in one battle on the ground of the province you assault, and the winner takes it. If you picked different roads, each side takes ground unopposed. A drawn battle moves nothing and costs nothing. A capital taken ends the war, and if both fall in one epoch it is a draw.</p>
+            <p>A lost battle costs a standard, and winning battles raises them again, one at a time and never above the number you began with. With none left the war is lost. Holding back loses ground, never a standard.</p>
+            <p>Every province you hold pays gold at the end of an epoch: open country the least, a province with a feature more, and the Granary the most. With no feature held the muster draws from @DoctrineWords.JoinAnd(UnlockPools.BaseKinds.Select(DoctrineWords.KindName).ToList()). @DoctrineWords.JoinAnd(new[] { Feature.Barracks, Feature.Stables, Feature.Shrine }.Select(f => DoctrineCampaignWords.FeatureName(f) + " adds " + DoctrineWords.JoinAnd(UnlockPools.KindsOf(f).Select(DoctrineWords.KindName).ToList())).ToList()), each for as long as you hold it; the Shrine also lets the council offer the order @DoctrineWords.ArmyTitle(ArmyOrderKind.Aura). A kind a feature opens is sold at the same price as any other, so it only widens the choice, and what you lose with a province leaves the next muster. The enemy's host on each road keeps its losses and musters back only a little each epoch.</p>
+        </details>
     </section>
 </div>
 
 @code {
-    private enum Sheet { None, Army, General, Draft, Chronicle }
+    private enum Sheet { None, Army, General, Draft, Chronicle, Lanes }
 
     /// <summary>The lengths of game the start screen offers (the siege rule is said for the longest).</summary>
     private static readonly int[] RoundChoices = [3, 5, 8];
@@ -134,7 +140,9 @@
     /// <summary>What this visitor has unlocked (the proofs read it).</summary>
     public DoctrineProgress Progress => _p;
 
-    private int Level => _p.Step;
+    private bool War => _s is { IsCampaign: true };
+    /// <summary>In a war every kind and order is open to the page (the offer pool is the campaign's: what the held provinces open), so the ladder is at its top.</summary>
+    private int Level => War ? DoctrineUnlocks.LastStep : _p.Step;
     private int SlotCount => DoctrineUnlocks.Slots(Level);
     private bool InDoctrine => _s?.Stage == DoctrineStage.Doctrine;
     /// <summary>The council is on the table and the visitor may put orders in the slots (not while the game is asking about a reroll, and not before the general has read it).</summary>
@@ -165,7 +173,7 @@
             Array.Clear(_slots); _preview = null; _advice = ""; _lastAdded = 0;
             int packs = _s!.Draft?.Offer.Packs.Count ?? 0;
             _sel = new bool[packs]; _rank = Enumerable.Repeat(-1, packs).ToArray(); _packNote = new string?[packs];
-            var news = _p.Reach(_s.RoundIndex, _s.TotalRounds);
+            var news = War ? null : _p.Reach(_s.RoundIndex, _s.TotalRounds);
             if (news is not null) _news = news;
             _sheet = Sheet.Draft;
             _ = RefreshPreview();
@@ -216,6 +224,21 @@
             }
         </section>
 
+        <section class="dc-panel dc-war" id="dc-war" aria-label="Start a war">
+            <h2>Or fight a war</h2>
+            <p class="hint">A war is fought over a map: your capital, the enemy's and @DoctrineWords.Cardinal(MapKeys.Lanes) roads of @DoctrineWords.Cardinal(MapKeys.StartLaneLength) provinces between them. Each epoch you seal a pick of the road to push; the enemy picks its road without seeing yours.
+                The same road is a battle, different roads a race, and holding back costs ground but never a standard. Provinces you hold pay gold, and some open new soldiers and orders for as long as you hold them. A capital taken ends the war.</p>
+            <p class="dc-h3" id="dc-mode-label">The war</p>
+            <div class="dc-modes" role="radiogroup" aria-labelledby="dc-mode-label">
+                <button type="button" class="dc-btn dc-mode @(!_endless ? "on" : "")" id="dc-mode-war" role="radio" aria-checked="@(!_endless ? "true" : "false")" @onclick="() => _endless = false">The war</button>
+                <button type="button" class="dc-btn dc-mode @(_endless ? "on" : "")" id="dc-mode-endless" role="radio" aria-checked="@(_endless ? "true" : "false")" @onclick="() => _endless = true">Endless</button>
+            </div>
+            <p class="hint dc-modehint">@(_endless
+                ? "Endless: the enemy has no capital. When you hold a whole road a fresh enemy province appears beyond it, and the enemy grows stronger every epoch. The run ends when your capital falls or you have no standards left. Your score is fields won plus provinces held."
+                : $"The war: it ends when a capital falls, you have no standards left, or {DoctrineSession.WarEpochs} epochs have passed. Your score is fields won plus provinces held.") The seed above applies here too.</p>
+            <button type="button" class="dc-btn strong" id="dc-campaign" @onclick="StartWar">@(_endless ? "Start the endless war" : "Start the war")</button>
+        </section>
+
         <section class="dc-panel dc-load" aria-label="Load an army code">
             <h2>Load an army code</h2>
             <p class="hint">An army code is a short piece of text that holds an army. Paste one from an earlier game to play on with that army.</p>
@@ -236,7 +259,21 @@
         }
     </div>;
 
-    private bool Locked => !_p.ShowAll && _p.Step < DoctrineUnlocks.LastStep;
+    private bool Locked => !War && !_p.ShowAll && _p.Step < DoctrineUnlocks.LastStep;
+
+    private bool _endless;                  // the war option chosen on the start screen
+
+    private void StartWar()
+    {
+        _loadError = "";
+        int seed;
+        if (_seedText.Trim().Length == 0) seed = (int)(Environment.TickCount64 & 0x7fffffff);
+        else if (!int.TryParse(_seedText.Trim(), System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out seed))
+        { _loadError = "A seed is a whole number, digits only."; return; }
+        _news = null;
+        _s!.NewCampaign(seed, _endless, out var why);
+        if (why.Length > 0) _loadError = why;
+    }
     private void ShowEverything() { _p.ShowEverything(); _news = null; }
 
     private void StartNew()
@@ -264,13 +301,29 @@
     private void ResetGeneral() => _s!.ResetGeneral();
 
     // ------------------------------------------------------------------------------------------------------- the scene
-    private string Goal => $"Goal: win as many of the {_s!.TotalRounds} {(_s.TotalRounds == 1 ? "field" : "fields")} as you can.";
+    private string Goal => War
+        ? (_s!.Endless
+            ? "Goal: hold the roads for as long as you can. The run ends when your capital falls or you have no standards left. Score is fields won plus provinces held."
+            : $"Goal: take the enemy capital before yours falls, before you have no standards left, and within {_s!.TotalRounds} epochs.")
+        : $"Goal: win as many of the {_s!.TotalRounds} {(_s.TotalRounds == 1 ? "field" : "fields")} as you can.";
+
+    private CampaignGame Cw => _s!.Campaign!;
+    /// <summary>The epoch on screen: the one just played on its summary, the one open otherwise.</summary>
+    private int EpochShown => _s!.Stage == DoctrineStage.Epoch && _s.LastEpoch is { } le ? le.Epoch : _s.Briefing?.Epoch ?? _s.RoundIndex;
+    private Func<int, ArenaInfo?> ArenaOf => i => _s?.Grounds is { Count: > 0 } g ? g[i % g.Count] : null;
+    private int Income => _s!.Provinces.Where(p => p.Owner == Holder.Player).Sum(p => p.Yield);
 
     private string Todo()
     {
         var s = _s!;
         switch (s.Stage)
         {
+            case DoctrineStage.Map:
+                return "Pick a road to push, or hold back. Your pick is sealed against the enemy's.";
+            case DoctrineStage.Epoch:
+                return "Read what changed, then go on.";
+            case DoctrineStage.Watch when War:
+                return "Watch, read the recap, then press Continue.";
             case DoctrineStage.Draft:
                 return s.RoundIndex == 0 && Level == 0
                     ? "Gold buys soldiers. Tap a company in the muster to buy it, then press Confirm."
@@ -301,14 +354,32 @@
     private RenderFragment Hud => @<div class="dc-hud" data-stage="@_s!.Stage.ToString().ToLowerInvariant()" data-step="@Level">
         @{ EnsureWatch(); }
         <header class="dc-top" aria-label="Where the game stands">
-            <ul class="dc-status dc-chips">
-                <li>Round @(_s.RoundIndex + 1) of @_s.TotalRounds</li>
-                @if (_s.Army is { } a) { <li>Gold @a.Gold</li> }
+            <ul class="dc-status dc-chips @(War ? "dc-warchips" : "")">
+                @if (War)
+                {
+                    <li class="dc-c-epoch">Epoch @(EpochShown + 1)@(_s.Endless ? "" : $" of {_s.TotalRounds}")</li>
+                    @if (_s.Army is { } wa) { <li class="dc-c-gold">Gold @wa.Gold</li> }
+                    @if (_s.Campaign is not null)
+                    {
+                        <li class="dc-c-score">Score @Cw.Score</li>
+                        <li class="dc-c-standards" aria-label="@DoctrineCampaignWords.StandardsWords(Cw.Standards, _s.MaxStandards, _s.Briefing?.WinsToRestore ?? _s.RestoreEvery, _s.RestoreEvery)">Standards @Pips()</li>
+                    }
+                }
+                else
+                {
+                    <li>Round @(_s.RoundIndex + 1) of @_s.TotalRounds</li>
+                    @if (_s.Army is { } a) { <li>Gold @a.Gold</li> }
+                }
             </ul>
             <div class="dc-sheetbtns">
                 <button type="button" id="dc-open-army" class="dc-btn dc-sheetbtn" aria-expanded="@(_sheet == Sheet.Army ? "true" : "false")" aria-controls="dc-army"
                         @onpointerdown="DragStart" @onpointerup="e => DragOpen(e, Sheet.Army)" @onclick="() => ToggleSheet(Sheet.Army)">Army</button>
-                @if (_s.Stage != DoctrineStage.Watch)
+                @if (_s.Stage == DoctrineStage.Map)
+                {
+                    <button type="button" id="dc-open-lanes" class="dc-btn dc-sheetbtn" aria-expanded="@(_sheet == Sheet.Lanes ? "true" : "false")" aria-controls="dc-lanes"
+                            @onpointerdown="DragStart" @onpointerup="e => DragOpen(e, Sheet.Lanes)" @onclick="() => ToggleSheet(Sheet.Lanes)">Roads</button>
+                }
+                @if (_s.Stage is not (DoctrineStage.Watch or DoctrineStage.Map or DoctrineStage.Epoch))
                 {
                     <button type="button" id="dc-open-general" class="dc-btn dc-sheetbtn" aria-expanded="@(_sheet == Sheet.General ? "true" : "false")" aria-controls="dc-general"
                             @onpointerdown="DragStart" @onpointerup="e => DragOpen(e, Sheet.General)" @onclick="() => ToggleSheet(Sheet.General)">General</button>
@@ -331,7 +402,8 @@
             <section class="dc-field" aria-label="The field">
                 @FieldView
             </section>
-            @GeneralSheet
+            @if (_s.Stage is not (DoctrineStage.Map or DoctrineStage.Epoch)) { @GeneralSheet }
+            @if (_s.Stage == DoctrineStage.Map) { @LanePanel }
             @if (_s.Stage == DoctrineStage.Watch && _chron is not null) { @ChronicleSheet }
             @if (_s.Stage == DoctrineStage.Draft) { @DraftDrawer }
             @if (InDoctrine) { @Tray }
@@ -372,9 +444,9 @@
         }
         else { <h2>Your army</h2><p class="hint">The army is being raised.</p> }
         @if (_s.Stage == DoctrineStage.Watch && _s.Last is { } v) { @Spoils(v) }
-        @if (_s.Stage is DoctrineStage.Draft or DoctrineStage.Doctrine or DoctrineStage.Watch)
+        @if (_s.Stage is DoctrineStage.Draft or DoctrineStage.Doctrine or DoctrineStage.Watch or DoctrineStage.Map or DoctrineStage.Epoch)
         {
-            <button type="button" class="dc-btn dc-leave" id="dc-leave" @onclick="_s.Leave">Leave this game</button>
+            <button type="button" class="dc-btn dc-leave" id="dc-leave" @onclick="_s.Leave">@(War ? "Leave the war" : "Leave this game")</button>
         }
     </aside>;
 
@@ -477,7 +549,9 @@
 
     // ---- the field (centre) ----
     private RenderFragment FieldView => @<div class="dc-fieldin">
-        @if (_s!.Stage == DoctrineStage.Watch && _s.Last is { } v)
+        @if (_s!.Stage == DoctrineStage.Map) { @MapView }
+        else if (_s.Stage == DoctrineStage.Epoch) { @EpochView }
+        else if (_s.Stage == DoctrineStage.Watch && _s.Last is { } v)
         {
             <DoctrineArena Replay="v.Record.Replay" Layout="v.Layout" Cursor="_cursor" SiegeClock="v.SiegeClock" />
         }
@@ -517,6 +591,82 @@
                     <div class="dc-foe" aria-label="The enemy">The enemy stands here</div>
                 </div>
             </div>
+        }
+    </div>;
+
+    // ---- the war: the map, the pick of a road, the summary of an epoch ----
+    private void Pick(int lane, bool hold) => _s!.PickLane(lane, hold);
+
+    private RenderFragment Pips() => @<span class="dc-pips" aria-hidden="true">
+        @for (int i = 0; i < _s!.MaxStandards; i++) { <i class="pip @(i < Cw.Standards ? "on" : "")"></i> }
+    </span>;
+
+    private RenderFragment MapView => @<div class="dc-overmap" id="dc-overmap">
+        @if (_s!.Briefing is { } b)
+        {
+            <div class="dc-warbar">
+                <p class="dc-standards" id="dc-standards"><span class="dc-pips" role="img" aria-label="@Cw.Standards of @_s.MaxStandards standards">
+                        @for (int i = 0; i < _s.MaxStandards; i++) { <i class="pip @(i < b.Standards ? "on" : "")"></i> }
+                    </span> @DoctrineCampaignWords.StandardsWords(b.Standards, _s.MaxStandards, b.WinsToRestore, _s.RestoreEvery)</p>
+                <p class="dc-held" id="dc-held">@DoctrineCampaignWords.HeldWords(b.HeldUnlocks) @DoctrineCampaignWords.OfferWords(b)</p>
+                <p class="dc-income" id="dc-income">Your provinces pay @Income gold at the end of an epoch. Score @b.Score: @b.FieldsWon @(b.FieldsWon == 1 ? "field" : "fields") won, and the provinces you hold.</p>
+            </div>
+            <div class="dc-map">@((MarkupString)OvermapView.Svg(_s.Provinces, b, ArenaOf))</div>
+            <p class="hint dc-legend">Your capital is below and the enemy's above. A dashed outline marks the province a push on that road would assault. Barracks are squares, Stables triangles, the Shrine a diamond and the Granary a circle.</p>
+        }
+    </div>;
+
+    private RenderFragment LanePanel => @<aside id="dc-lanes" class="dc-sheet dc-lanepanel @(_sheet == Sheet.Lanes ? "open" : "")" aria-label="Pick a road">
+        @Grip("Roads", CloseSheet)
+        @if (_s!.Briefing is { } b)
+        {
+            <h2>Pick a road <span class="dc-sub">epoch @(b.Epoch + 1)</span></h2>
+            <p class="hint dc-sealed">@DoctrineCampaignWords.SealWords</p>
+            <ul class="dc-lanecards">
+                @foreach (var lb in b.Lanes)
+                {
+                    var l = lb;
+                    <li class="dc-lanecard" data-lane="@l.Lane" data-target="@(l.Target?.Key ?? -1)" data-endswar="@(l.EndsWar ? "true" : "false")">
+                        <h3 class="dc-h3">@DoctrineCampaignWords.Road(l.Lane)</h3>
+                        @if (l.Target is { } t)
+                        {
+                            <p class="dc-lt">You would assault <b>@DoctrineCampaignWords.ProvinceMid(t)</b>, @DoctrineCampaignWords.HeldBy(t.Owner).</p>
+                            @if (l.Arena is { } ar) { <p class="dc-lg">@DoctrineCampaignWords.Ground(ar)</p> }
+                            @if (l.Enemy is { } en)
+                            {
+                                <p class="dc-le">@DoctrineCampaignWords.EnemyHead(en)</p>
+                                <ul class="dc-el">
+                                    @foreach (var line in DoctrineCampaignWords.EnemyLines(en)) { <li>@line</li> }
+                                </ul>
+                            }
+                            @if (DoctrineCampaignWords.Unlocks(l) is { Length: > 0 } opens) { <p class="dc-lu">@opens</p> }
+                            @if (l.EndsWar) { <p class="dc-lend">@DoctrineCampaignWords.EndsWarWords</p> }
+                            <button type="button" class="dc-btn strong dc-push" id="dc-lane-@l.Lane" @onclick="() => Pick(l.Lane, false)">Push the @DoctrineCampaignWords.Road(l.Lane).ToLowerInvariant()</button>
+                        }
+                        else
+                        {
+                            <p class="hint">Nothing is left to assault on this road.</p>
+                            <button type="button" class="dc-btn dc-push" id="dc-lane-@l.Lane" disabled>Push the @DoctrineCampaignWords.Road(l.Lane).ToLowerInvariant()</button>
+                        }
+                    </li>
+                }
+                <li class="dc-lanecard dc-holdcard">
+                    <h3 class="dc-h3">@DoctrineCampaignWords.HoldBackTitle</h3>
+                    <p class="dc-lh">@DoctrineCampaignWords.HoldBackWords</p>
+                    <button type="button" class="dc-btn dc-push" id="dc-holdback" @onclick="() => Pick(0, true)">@DoctrineCampaignWords.HoldBackTitle</button>
+                </li>
+            </ul>
+        }
+    </aside>;
+
+    private RenderFragment EpochView => @<div class="dc-epochview" id="dc-epoch">
+        @if (_s!.LastEpoch is { } r)
+        {
+            <h2>@DoctrineCampaignWords.EpochHeading(r)</h2>
+            <ul class="dc-epochlines">
+                @foreach (var line in DoctrineCampaignWords.EpochLines(r, _s.Provinces, _s.HeldBefore, Cw.Unlocks)) { <li>@line</li> }
+            </ul>
+            @if (r.Outcome != CampaignOutcome.Running) { <p class="dc-warover"><b>@DoctrineCampaignWords.EndHeading(r.Outcome, false)</b></p> }
         }
     </div>;
 
@@ -877,12 +1027,24 @@
 
     // ---- the dock (bottom): the slots, then the one action of this stage ----
     private RenderFragment Dock => @<footer class="dc-dock @(Choosing ? "dc-editor" : "") @(Asking ? "dc-asking" : "")" aria-label="Your orders">
-        @if (_s!.Stage == DoctrineStage.Watch && _s.Last is { } v)
+        @if (_s!.Stage == DoctrineStage.Map)
+        {
+            <div class="dc-dockbtns dc-roadsbtns">
+                <button type="button" class="dc-btn strong dc-roadsbtn" id="dc-roads-btn" aria-expanded="@(_sheet == Sheet.Lanes ? "true" : "false")" aria-controls="dc-lanes" @onclick="() => ToggleSheet(Sheet.Lanes)">Pick a road</button>
+            </div>
+        }
+        else if (_s.Stage == DoctrineStage.Epoch)
+        {
+            <div class="dc-dockbtns">
+                <button type="button" class="dc-btn strong dc-next" id="dc-epoch-next" @onclick="_s.ContinueCampaign">@DoctrineCampaignWords.ContinueWords(Cw.Over)</button>
+            </div>
+        }
+        else if (_s.Stage == DoctrineStage.Watch && _s.Last is { } v)
         {
             var rec = v.Record;
             var recap = DoctrineGuide.Of(v, _s.ArenaName(rec.ArenaId));
             <section class="dc-result" aria-label="Round result">
-                <h2>Round @(rec.Round + 1): @DoctrineWords.OutcomeShort(rec.Result.Outcome) <span class="dc-sub">@_s.ArenaName(rec.ArenaId), @rec.Result.Ticks ticks</span></h2>
+                <h2>@(War ? "Epoch" : "Round") @(rec.Round + 1): @DoctrineWords.OutcomeShort(rec.Result.Outcome) <span class="dc-sub">@_s.ArenaName(rec.ArenaId), @rec.Result.Ticks ticks</span></h2>
                 <ul class="dc-recap">
                     @foreach (var line in recap.What) { <li class="dc-recap-what">@line</li> }
                     @foreach (var line in recap.Siege) { <li class="dc-recap-siege">@line</li> }
@@ -891,7 +1053,7 @@
                 </ul>
             </section>
             <div class="dc-dockbtns">
-                <button type="button" class="dc-btn strong dc-next" id="dc-next" @onclick="_s.NextRound">@(v.Last ? "See the end of the game" : "Next round")</button>
+                <button type="button" class="dc-btn strong dc-next" id="dc-next" @onclick="_s.NextRound">@(War ? "Continue" : v.Last ? "See the end of the game" : "Next round")</button>
             </div>
         }
         else
@@ -950,7 +1112,31 @@
 
     // ------------------------------------------------------------------------------------------------------- over
     private RenderFragment OverView => @<div>
-        @if (_s!.Result is { } r)
+        @if (_s!.End is { } e)
+        {
+            <section class="dc-panel dc-end dc-warend" aria-label="The end of the war">
+                <h2 id="dc-endhead">@DoctrineCampaignWords.EndHeading(e.Outcome, e.Left)</h2>
+                <p class="dc-says dc-score" id="dc-score">@DoctrineCampaignWords.ScoreWords(e)</p>
+                <p class="dc-says">@e.Epochs @(e.Epochs == 1 ? "epoch" : "epochs") played. Game seed @e.Seed.</p>
+                @if (e.History.Count > 0)
+                {
+                    <ol class="dc-rounds-list">
+                        @foreach (var x in e.History) { <li>@DoctrineCampaignWords.EpochLine(x)</li> }
+                    </ol>
+                }
+                <h3 class="dc-h3">Your army code</h3>
+                <p><code class="dc-armycode" id="dc-armycode">@e.ArmyCode</code></p>
+                <div class="dc-ghostbtns">
+                    <button type="button" class="dc-btn" id="dc-copy" @onclick="() => Copy(e.ArmyCode)">Copy the code</button>
+                </div>
+                @if (_copied.Length > 0) { <p class="hint" role="status">@_copied</p> }
+                <p class="hint">Paste it on the start screen to play a fixed game with this army. It holds the army only, not the map.</p>
+            </section>
+            <div class="dc-endbtns">
+                <button type="button" class="dc-btn strong" id="dc-fresh" @onclick="_s.BackToStart">Back to the start</button>
+            </div>
+        }
+        else if (_s!.Result is { } r)
         {
             int won = r.Rounds.Count(x => x.Result.Outcome == BattleStatus.AttackerWon), lost = r.Rounds.Count(x => x.Result.Outcome == BattleStatus.DefenderWon), drawn = r.Rounds.Count - won - lost;
             <section class="dc-panel dc-end" aria-label="The end of the game">

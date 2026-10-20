@@ -223,6 +223,504 @@ async Task DoChoose(IRenderedComponent<DoctrinePage> p, ScriptHands sh, int roun
     await Tap(p, "#dc-fight");
 }
 
+// ============================================================================================== THE WAR (the overmap, campaign mode)
+// Everything below is checked against HAND-WRITTEN knowledge of the rules (the road names, the feature table, which kinds a feature opens, the lane rule, who takes what in
+// a race, the standards, the ordinals), not against the page's own words, and the map and the cards are compared with fresh reads of the library (Provinces(), BriefingAsync()).
+bool warOnly = args.Contains("--war");
+string[] RoadsHand = ["left road", "middle road", "right road"];
+string[] OrdHand = ["zeroth", "first", "second", "third", "fourth", "fifth", "sixth", "seventh", "eighth", "ninth", "tenth", "eleventh", "twelfth"];
+string FeatHand(Feature f) => f switch { Feature.Barracks => "Barracks", Feature.Stables => "Stables", Feature.Shrine => "Shrine", Feature.Granary => "Granary", _ => "Open country" };
+int[] KindIdsHand(Feature f) => f switch { Feature.Barracks => [0, 1], Feature.Stables => [2, 6], Feature.Shrine => [4], _ => [] };
+string OwnerWordHand(Holder h) => h switch { Holder.Player => "Yours", Holder.Enemy => "The enemy's", _ => "Nobody's" };
+string JoinHand(IReadOnlyList<string> l) => l.Count == 0 ? "none" : l.Count == 1 ? l[0] : string.Join(", ", l.Take(l.Count - 1)) + " and " + l[^1];
+string ProvMidHand(Province p) => p.IsCapital ? (p.Key == 36 ? "your capital" : "the enemy capital") : ProvHand(p);
+string ProvHand(Province p) => p.IsCapital ? (p.Key == 36 ? "Your capital" : "The enemy capital") : $"{FeatHand(p.Feature)}, {OrdHand[p.Index + 1]} from your capital on the {RoadsHand[p.Lane]}";
+Province? PlayerTargetHand(IReadOnlyList<Province> ps, int lane)
+{
+    foreach (var p in ps.Where(x => !x.IsCapital && x.Lane == lane).OrderBy(x => x.Index)) if (p.Owner != Holder.Player) return p;
+    var ec = ps.FirstOrDefault(x => x.Key == 37);
+    return ec is { Owner: not Holder.Player } ? ec : null;
+}
+Province? EnemyTargetHand(IReadOnlyList<Province> ps, int lane)
+{
+    foreach (var p in ps.Where(x => !x.IsCapital && x.Lane == lane).OrderByDescending(x => x.Index)) if (p.Owner != Holder.Enemy) return p;
+    var pc = ps.First(x => x.Key == 36);
+    return pc.Owner != Holder.Enemy ? pc : null;
+}
+Feature HeldHand(IReadOnlyList<Province> ps) { var h = Feature.None; foreach (var p in ps) if (!p.IsCapital && p.Owner == Holder.Player) h |= p.Feature; return h; }
+List<int> PoolHand(Feature held)
+{
+    var set = new SortedSet<int> { 3, 5, 7 };
+    foreach (var f in new[] { Feature.Barracks, Feature.Stables, Feature.Shrine }) if (held.HasFlag(f)) foreach (var k in KindIdsHand(f)) set.Add(k);
+    return set.ToList();
+}
+string NormText(AngleSharp.Dom.IElement e) => Regex.Replace(e.TextContent, @"\s+", " ").Trim();
+int LaneOf(int seed, int epoch) => ScriptedLanes.Lane(seed, epoch);          // the seeded rule of the scripted enemy, which the proof needs to KNOW to plan its picks (the page never asks)
+
+// seeds, found by the schedule alone (no battle is played to find them)
+int warSeed = -1, sweepSeed = -1, sweepLane = -1, tripleSeed = -1, endlessSeed = -1, endlessLane = -1, quietSeed = 7;
+for (int sd = 1; sd < 5000 && (warSeed < 0 || sweepSeed < 0 || tripleSeed < 0 || endlessSeed < 0); sd++)
+{
+    int l0 = LaneOf(sd, 0), l1 = LaneOf(sd, 1), l2 = LaneOf(sd, 2);
+    if (warSeed < 0 && l2 != l0 && l1 != l2) warSeed = sd;                                                   // push the lane the enemy picks at epoch 2 (a race), fight epoch 1 elsewhere, hold back at epoch 2
+    var distinct = new HashSet<int> { l0, l1, l2 };
+    if (sweepSeed < 0 && distinct.Count == 2) { sweepSeed = sd; sweepLane = Enumerable.Range(0, 3).First(x => !distinct.Contains(x)); }    // three races up one lane that the enemy never picks
+    if (tripleSeed < 0 && distinct.Count == 1) tripleSeed = sd;                                              // the enemy picks one lane three times running
+    if (endlessSeed < 0) { var two = new HashSet<int> { l0, l1 }; endlessSeed = sd; endlessLane = Enumerable.Range(0, 3).First(x => !two.Contains(x)); }
+}
+Check("war: seeds were found from the schedule alone (a mixed war, a sweep, a triple, an endless run)", warSeed > 0 && sweepSeed > 0 && tripleSeed > 0 && endlessSeed > 0, $"{warSeed} {sweepSeed}/{sweepLane} {tripleSeed} {endlessSeed}/{endlessLane}");
+
+// ---- the start screen: the war section beside the fixed games
+Check("war: the start screen offers the war and the endless run beside the 3, 5 and 8 round games (radio buttons, a start button, the seed field shared); the fixed options are still three",
+    page.FindAll(".dc-opt").Count == 3 && page.FindAll(".dc-mode[role=radio]").Count == 2 && Has(page, "#dc-mode-war") && Has(page, "#dc-mode-endless") && Has(page, "#dc-campaign") && Has(page, "#dc-seed")
+    && Text(page, "#dc-mode-war") == "The war" && Text(page, "#dc-mode-endless") == "Endless" && Text(page, "#dc-campaign") == "Start the war");
+await Tap(page, "#dc-mode-endless");
+Check("war: choosing Endless says so and relabels the start button", Text(page, "#dc-mode-endless").Length > 0 && page.Find("#dc-mode-endless").GetAttribute("aria-checked") == "true" && Text(page, "#dc-campaign") == "Start the endless war" && Text(page, ".dc-modehint").Contains("no capital"));
+await Tap(page, "#dc-mode-war");
+Check("war: the war's start text states the epoch limit the session passes to the game and the map's shape from the library", Text(page, ".dc-modehint").Contains($"{DoctrineSession.WarEpochs} epochs") && DoctrineSession.WarEpochs == 24 && Text(page, "#dc-war").Contains("three roads of three provinces"));
+Scan(page);
+
+// ---- the stylesheet: the colours of the map, the pips and the road column
+{
+    string wcss = File.ReadAllText(Path.Combine(showroom, "Pages", "DoctrinePage.razor.css"));
+    Check("war: map colours (stylesheet): yours is the accent, the enemy's the bad colour, nobody's the faint ink, the target a dashed warn outline",
+        Regex.IsMatch(wcss, @"\.dc-p-player \.dc-box \{[^}]*fill: color-mix\(in srgb, var\(--accent\)[^}]*stroke: var\(--accent\)") && Regex.IsMatch(wcss, @"\.dc-p-enemy \.dc-box \{[^}]*var\(--bad\)[^}]*stroke: var\(--bad\)")
+        && Regex.IsMatch(wcss, @"\.dc-p-neutral \.dc-box \{[^}]*stroke: var\(--ink-faint\)") && Regex.IsMatch(wcss, @"\.dc-target \{[^}]*stroke: var\(--warn\)[^}]*stroke-dasharray"));
+    Check("war: layout (css): the map has no fixed width, the road cards take the general's column on a wide screen and a sheet on a phone (at most 62% of the stage), the standards are pips",
+        Regex.IsMatch(wcss, @"\.dc-mapsvg \{[^}]*width: 100%;[^}]*height: auto") && Regex.IsMatch(wcss, @"min-width: 900px\) \{[\s\S]*\.dc-lanepanel \{ grid-column: 3; grid-row: 1 / -1; \}") && Regex.IsMatch(wcss, @"\.dc-lanepanel \{ max-height: 62%; \}")
+        && Regex.IsMatch(wcss, @"\.dc-pips \.pip\.on \{[^}]*background: var\(--accent\)") && Regex.IsMatch(wcss, @"\.dc-push \{ width: 100%;"));
+}
+
+// ---- the number of provinces the drawing shows, and what is checked at every state of the map
+async Task CheckMap(IRenderedComponent<DoctrinePage> p, string tag)
+{
+    var s0 = p.Instance.Session!; var c = s0.Campaign!;
+    var ps = c.Provinces(); var brief = await c.BriefingAsync();
+    int hi = Math.Max(2, ps.Where(x => !x.IsCapital).Max(x => x.Index)), lo = Math.Max(0, hi - 3);
+    var shown = ps.Where(x => x.IsCapital || (x.Index >= lo && x.Index <= hi)).ToList();
+    var targets = Enumerable.Range(0, 3).Select(l => PlayerTargetHand(ps, l)).Where(t => t is not null).Select(t => t!.Key).ToHashSet();
+    var problems = new List<string>();
+    if (p.FindAll("svg.dc-mapsvg g.dc-prov").Count != shown.Count) problems.Add($"{p.FindAll("svg.dc-mapsvg g.dc-prov").Count} drawn, {shown.Count} to draw");
+    foreach (var pr in shown)
+    {
+        var gs = p.FindAll($"g.dc-prov[data-key='{pr.Key}']");
+        if (gs.Count != 1) { problems.Add($"province {pr.Key}: {gs.Count} drawn"); continue; }
+        var g = gs[0]; var arena = s0.Grounds![pr.ArenaIndex % s0.Grounds.Count];
+        string own = pr.Owner switch { Holder.Player => "player", Holder.Enemy => "enemy", _ => "neutral" };
+        string cls = pr.Owner switch { Holder.Player => "dc-p-player", Holder.Enemy => "dc-p-enemy", _ => "dc-p-neutral" };
+        string txt = NormText(g);
+        if (g.GetAttribute("data-owner") != own || !g.ClassList.Contains(cls) || g.ClassList.Count(k => k.StartsWith("dc-p-")) != 1) problems.Add($"province {pr.Key}: owner/colour {g.GetAttribute("data-owner")} {string.Join(" ", g.ClassList)} for {own}");
+        if (g.GetAttribute("data-feature") != pr.Feature.ToString() || g.GetAttribute("data-yield") != pr.Yield.ToString() || g.GetAttribute("data-lane") != pr.Lane.ToString() || g.GetAttribute("data-index") != pr.Index.ToString()) problems.Add($"province {pr.Key}: feature/yield/place");
+        if (g.GetAttribute("data-arena") != arena.Id || g.GetAttribute("data-siege") != (arena.SiegeClock > 0 ? "true" : "false") || !txt.Contains(arena.Name)) problems.Add($"province {pr.Key}: arena {g.GetAttribute("data-arena")} vs {arena.Id}");
+        if (!txt.Contains($"Pays {pr.Yield} gold") || !txt.Contains(OwnerWordHand(pr.Owner))) problems.Add($"province {pr.Key}: yield or holder words");
+        if (!pr.IsCapital && (!txt.Contains(FeatHand(pr.Feature)) || (arena.SiegeClock > 0) != txt.Contains("Siege") || (arena.SiegeClock == 0 && !txt.Contains("Open ground")))) problems.Add($"province {pr.Key}: feature or siege mark");
+        if (!pr.IsCapital && (g.QuerySelectorAll(".dc-ic").Length != (pr.Feature == Feature.None ? 0 : 1) || (arena.SiegeClock > 0) != (g.QuerySelectorAll(".dc-siegemark").Length == 1))) problems.Add($"province {pr.Key}: icon or siege shape");
+        if (pr.IsCapital && !txt.Contains(pr.Key == 36 ? "Your capital" : "The enemy capital")) problems.Add($"capital {pr.Key}: name");
+        if (g.GetAttribute("data-target") != (targets.Contains(pr.Key) ? "true" : "false") || (g.QuerySelectorAll(".dc-target").Length == 1) != targets.Contains(pr.Key)) problems.Add($"province {pr.Key}: target mark");
+    }
+    if (s0.Endless && p.FindAll("g.dc-prov[data-key='37']").Count != 0) problems.Add("an endless map draws an enemy capital");
+    Check($"war: the map shown is the library's Provinces() ({tag}): every province in view once, its owner (and the colour class that goes with it), feature, yield, place, arena (name and siege mark) and the dashed target on exactly the provinces a push would assault",
+        problems.Count == 0, string.Join(" | ", problems.Take(3)));
+    var tk = brief.Lanes.Where(l => l.Target is not null).Select(l => l.Target!.Key).ToHashSet();
+    Check($"war: the targets the briefing names are the first province outward that the player does not hold, or the enemy capital ({tag})", tk.SetEquals(targets));
+    int sum = ps.Where(x => x.Owner == Holder.Player).Sum(x => x.Yield);
+    string standing = NormText(p.Find("#dc-standards")), held = NormText(p.Find("#dc-held"));
+    var heldNames = new[] { Feature.Barracks, Feature.Stables, Feature.Shrine, Feature.Granary }.Where(f => HeldHand(ps).HasFlag(f)).Select(FeatHand).ToList();
+    var pool = PoolHand(HeldHand(ps));
+    bool heldOk = (heldNames.Count == 0 ? held.Contains("You hold no feature.") : held.Contains("You hold: " + JoinHand(heldNames) + ".")) && held.Contains("The muster draws from " + JoinHand(pool.Select(Roster.NameOf).ToList()))
+        && (HeldHand(ps).HasFlag(Feature.Shrine) == held.Contains("Raise a banner"));
+    Check($"war: standards, score and income ({tag}): the pips are the standards the game keeps ({c.Standards} of three), the income line is the held provinces' yields added by hand, the chips show the epoch, gold and score",
+        s0.MaxStandards == 3 && p.FindAll("#dc-standards .pip").Count == 3 && p.FindAll("#dc-standards .pip.on").Count == c.Standards && p.FindAll(".dc-c-standards .pip.on").Count == c.Standards
+        && NormText(p.Find("#dc-income")).Contains($"Your provinces pay {sum} gold at the end of an epoch.") && NormText(p.Find("#dc-income")).Contains($"Score {brief.Score}:") && brief.Score == c.FieldsWon + ps.Count(x => !x.IsCapital && x.Owner == Holder.Player)
+        && Text(p, ".dc-c-epoch").StartsWith($"Epoch {c.Epoch + 1}") && Text(p, ".dc-c-gold") == $"Gold {c.Army.Read().Gold}" && Text(p, ".dc-c-score") == $"Score {c.Score}", $"{standing} / {sum}");
+    Check($"war: an unlock ({tag}): the pool the muster draws from is the three base kinds plus the kinds of the features held NOW (written out by hand), the unlocks held are the held provinces' features, and the page says both",
+        brief.OfferKinds.SequenceEqual(pool) && brief.HeldUnlocks == HeldHand(ps) && c.Unlocks == HeldHand(ps) && heldOk, $"offer {string.Join(",", brief.OfferKinds)} hand {string.Join(",", pool)}; '{held}'");
+    Check($"war: nothing of the enemy's pick is on the map screen before the pick ({tag}): no picked lane, no sealed pick revealed", !Regex.IsMatch(NormText(p.Find(".dc-hud")), @"\b(enemy picked|picked the|enemy chose|will march)\b") && p.FindAll("[data-enemylane], [data-enemypick]").Count == 0);
+}
+
+async Task CheckCards(IRenderedComponent<DoctrinePage> p, string tag)
+{
+    var s0 = p.Instance.Session!; var c = s0.Campaign!;
+    var ps = c.Provinces(); var brief = await c.BriefingAsync(); int epoch = c.Epoch;
+    var held = HeldHand(ps); var pool = PoolHand(held);
+    var problems = new List<string>();
+    for (int l = 0; l < 3; l++)
+    {
+        var cards = p.FindAll($".dc-lanecard[data-lane='{l}']");
+        if (cards.Count != 1) { problems.Add($"lane {l}: {cards.Count} cards"); continue; }
+        var card = cards[0]; string txt = NormText(card); var lb = brief.Lanes[l]; var t = PlayerTargetHand(ps, l);
+        var btn = p.FindAll($"#dc-lane-{l}");
+        if (!txt.Contains(char.ToUpperInvariant(RoadsHand[l][0]) + RoadsHand[l][1..])) problems.Add($"lane {l}: road name");
+        if (t is null) { if (lb.Target is not null || btn.Count != 1 || !btn[0].HasAttribute("disabled")) problems.Add($"lane {l}: nothing to assault but a push is offered"); continue; }
+        var arena = s0.Grounds![t.ArenaIndex % s0.Grounds.Count];
+        if (lb.Target?.Key != t.Key || card.GetAttribute("data-target") != t.Key.ToString()) problems.Add($"lane {l}: target {lb.Target?.Key} vs {t.Key}");
+        string who = t.Owner == Holder.Enemy ? "held by the enemy" : "held by no one";
+        if (!txt.Contains("You would assault " + ProvMidHand(t) + ", " + who + ".")) problems.Add($"lane {l}: province words");
+        // the ground: the arena of the province, who besieges (the parity swap on the epoch, written out by hand), the clock
+        var by = arena.SiegeClock > 0 ? (epoch % 2 == 0 ? Side.Player : Side.Enemy) : (Side?)null;
+        string ground = arena.SiegeClock == 0 ? $"{arena.Name}: an open ground." : $"{arena.Name}: a siege, and {(by == Side.Player ? "you besiege" : "the enemy besieges")} it (the clock is {arena.SiegeClock} ticks).";
+        if (lb.Arena?.Info.Id != arena.Id || lb.Arena?.Besieger != by || !txt.Contains(ground)) problems.Add($"lane {l}: ground '{ground}' vs briefing {lb.Arena?.Info.Id} {lb.Arena?.Besieger}");
+        // the enemy host: soldiers and one line to a rank, from the cohorts the briefing reports
+        var en = lb.Enemy!;
+        int soldiers = en.Cohorts.Sum(x => x.Count);
+        var lines = en.Cohorts.GroupBy(x => x.Slot).OrderBy(g => g.Key).Select(g => $"{new[] { "Front", "Middle", "Back" }[g.Key]} line: " + string.Join(", ", g.Select(x => $"{x.Count} {Roster.NameOf(x.Key)}"))).ToList();
+        if (en.Soldiers != soldiers || !txt.Contains($"The enemy host there: {soldiers} {(soldiers == 1 ? "soldier" : "soldiers")}.") || !card.QuerySelectorAll(".dc-el li").Select(NormText).SequenceEqual(lines)) problems.Add($"lane {l}: enemy host [{string.Join(" / ", lines)}] vs [{string.Join(" / ", card.QuerySelectorAll(".dc-el li").Select(NormText))}]");
+        // what holding it opens
+        var fresh = KindIdsHand(t.Feature).Where(k => !pool.Contains(k)).ToList();
+        string opens = t.IsCapital ? "" : t.Feature == Feature.Granary ? $"Holding it opens no new soldiers; it pays {t.Yield} gold." : t.Feature == Feature.None ? $"Holding it opens nothing; it pays {t.Yield} gold."
+            : fresh.Count == 0 && !(t.Feature == Feature.Shrine && !held.HasFlag(Feature.Shrine)) ? $"Holding it opens nothing new; it pays {t.Yield} gold."
+            : "Holding it opens " + string.Join(" and ", new[] { fresh.Count > 0 ? JoinHand(fresh.Select(Roster.NameOf).ToList()) + " to the muster" : "", t.Feature == Feature.Shrine && !held.HasFlag(Feature.Shrine) ? "the order Raise a banner to the council" : "" }.Where(x => x.Length > 0)) + $" while you hold it, and pays {t.Yield} gold.";
+        if (!lb.NewKinds.SequenceEqual(fresh) || lb.Unlocks != (t.IsCapital ? Feature.None : t.Feature) && !t.IsCapital || lb.EndsWar != t.IsCapital || (opens.Length > 0 && !txt.Contains(opens)) || (opens.Length == 0 && card.QuerySelectorAll(".dc-lu").Length != 0)) problems.Add($"lane {l}: unlocks '{opens}'");
+        if (t.IsCapital != txt.Contains("Taking it ends the war.") || card.GetAttribute("data-endswar") != (t.IsCapital ? "true" : "false")) problems.Add($"lane {l}: ends-the-war mark");
+        if (btn.Count != 1 || btn[0].HasAttribute("disabled") || !NormText(btn[0]).StartsWith("Push the ")) problems.Add($"lane {l}: push button");
+    }
+    Check($"war: the lane cards equal the briefing ({tag}): for each road the province a push would assault, who holds it, its arena (with who besieges and the clock, the parity swap written out by hand), the enemy host by rank, what holding it opens (against the pool written out by hand) and the ends-the-war mark",
+        problems.Count == 0, string.Join(" | ", problems.Take(3)));
+    var hold = p.FindAll("#dc-holdback"); string holdText = NormText(p.Find(".dc-holdcard"));
+    Check($"war: holding back ({tag}): the card says it costs ground and never a standard, forces no battle, and does not mention a standard being lost", hold.Count == 1 && NormText(hold[0]) == "Hold back" && holdText.Contains("fight no battle") && holdText.Contains("costs ground, never a standard") && !holdText.Contains("and a standard") && !Regex.IsMatch(holdText, @"costs? (you )?a standard"), holdText);
+    Check($"war: the sealed pick is explained on the map screen ({tag}); the map comes first (the Roads sheet is shut on entry) and the dock offers Pick a road", NormText(p.Find(".dc-lanepanel")).Contains("Your pick is sealed. The enemy picks its lane without seeing yours") && !p.Find("#dc-lanes").ClassList.Contains("open") && p.Find("#dc-open-lanes").GetAttribute("aria-expanded") == "false" && Text(p, "#dc-roads-btn") == "Pick a road" && p.Find("#dc-roads-btn").GetAttribute("aria-controls") == "dc-lanes");
+    Scan(p);
+}
+
+// what an epoch did, against the hand-written rules of the war
+async Task CheckEpoch(IRenderedComponent<DoctrinePage> p, IReadOnlyList<Province> before, Feature heldBefore, int standardsBefore, LanePick pick, string tag)
+{
+    var s0 = p.Instance.Session!; var r = s0.LastEpoch!; var c = s0.Campaign!; var ps = c.Provinces();
+    var problems = new List<string>();
+    int enemyLane = LaneOf(s0.Seed, r.Epoch);
+    var kind = pick.Concede ? EpochKind.Conceded : enemyLane == pick.Lane ? EpochKind.Battle : EpochKind.Race;
+    if (r.Kind != kind || r.EnemyLane != enemyLane || r.PlayerLane != pick.Lane || r.Conceded != pick.Concede || r.StandardsBefore != standardsBefore) problems.Add($"kind {r.Kind} vs {kind}, enemy lane {r.EnemyLane} vs {enemyLane}, standards before {r.StandardsBefore} vs {standardsBefore}");
+    var pt = pick.Concede ? null : PlayerTargetHand(before, pick.Lane); var et = EnemyTargetHand(before, enemyLane);
+    var want = new List<(int Key, Holder To)>();
+    if (kind == EpochKind.Battle)
+    {
+        var o = r.Battle!.Result.Outcome;
+        if (o == BattleStatus.AttackerWon) want.Add((pt!.Key, Holder.Player)); else if (o == BattleStatus.DefenderWon && et is not null) want.Add((et.Key, Holder.Enemy));
+    }
+    else { if (pt is not null) want.Add((pt.Key, Holder.Player)); if (et is not null) want.Add((et.Key, Holder.Enemy)); }
+    if (!r.Changes.Select(x => (x.Key, x.To)).OrderBy(x => x.Key).SequenceEqual(want.OrderBy(x => x.Key))) problems.Add($"changes [{string.Join(",", r.Changes.Select(x => x.Key + ">" + x.To))}] vs [{string.Join(",", want.Select(x => x.Key + ">" + x.To))}]");
+    int lostStd = kind == EpochKind.Battle && r.Battle!.Result.Outcome == BattleStatus.DefenderWon ? 1 : 0;
+    if (r.StandardsAfter != standardsBefore - lostStd || r.Restored) problems.Add($"standards {r.StandardsBefore} -> {r.StandardsAfter} (lost {lostStd})");
+    if (kind != EpochKind.Battle && r.StandardsAfter != r.StandardsBefore) problems.Add("a race or a hold-back changed the standards");
+    string all = NormText(p.Find("#dc-epoch")); var lis = p.FindAll("#dc-epoch .dc-epochlines li").Select(NormText).ToList();
+    if (!NormText(p.Find("#dc-epoch h2")).StartsWith($"Epoch {r.Epoch + 1}: ")) problems.Add("heading");
+    if (kind == EpochKind.Battle && !NormText(p.Find("#dc-epoch h2")).Contains($"a battle on the {RoadsHand[pick.Lane]}, {r.Battle!.Result.Outcome switch { BattleStatus.AttackerWon => "won", BattleStatus.DefenderWon => "lost", _ => "a draw" }}")) problems.Add("battle heading");
+    if (kind == EpochKind.Race && !(NormText(p.Find("#dc-epoch h2")).EndsWith("a race") && all.Contains($"You pushed the {RoadsHand[pick.Lane]}; the enemy picked the {RoadsHand[enemyLane]}.") && all.Contains("each took ground unopposed"))) problems.Add("race words");
+    if (kind == EpochKind.Conceded && !(NormText(p.Find("#dc-epoch h2")).EndsWith("you held back") && all.Contains($"You held back; the enemy picked the {RoadsHand[enemyLane]} and marched there unopposed."))) problems.Add("hold-back words");
+    if (kind == EpochKind.Battle && !all.Contains($"You pushed the {RoadsHand[pick.Lane]} and the enemy picked it too, so the two hosts met there.")) problems.Add("battle words");
+    foreach (var (key, to) in want)
+    {
+        var after = ps.First(x => x.Key == key); var was = before.First(x => x.Key == key);
+        string line = to == Holder.Player ? $"You took {ProvMidHand(after)}." : was.Owner == Holder.Player ? $"The enemy took {ProvMidHand(after)}, which was yours." : $"The enemy took {ProvMidHand(after)}.";
+        if (!lis.Contains(line)) problems.Add($"line missing: {line}");
+    }
+    if (want.Count == 0 && !lis.Contains("No ground changed hands.")) problems.Add("no-change line");
+    string std = lostStd == 1 ? $"You lost a standard: {r.StandardsAfter} left." : $"No standard was lost: {r.StandardsAfter} fly.";
+    if (!lis.Contains(std)) problems.Add("standards line: " + std);
+    int income = ps.Where(x => x.Owner == Holder.Player).Sum(x => x.Yield);
+    if (r.Outcome == CampaignOutcome.Running && (r.GoldPaid != income || !lis.Contains($"Your provinces paid {income} gold."))) problems.Add($"gold paid {r.GoldPaid} vs income {income}");
+    var heldAfter = HeldHand(ps); var kb = PoolHand(heldBefore); var ka = PoolHand(heldAfter);
+    var gained = ka.Except(kb).ToList(); var lost = kb.Except(ka).ToList();
+    bool bannerUp = heldAfter.HasFlag(Feature.Shrine) && !heldBefore.HasFlag(Feature.Shrine), bannerDown = heldBefore.HasFlag(Feature.Shrine) && !heldAfter.HasFlag(Feature.Shrine);
+    bool sawGain = lis.Any(x => x.StartsWith("From the next muster you may be offered ")), sawLoss = lis.Any(x => x.StartsWith("No longer offered, with the ground that gave them: "));
+    if (sawGain != (gained.Count > 0 || bannerUp) || sawLoss != (lost.Count > 0 || bannerDown)) problems.Add($"unlock lines gain {sawGain}/{gained.Count} loss {sawLoss}/{lost.Count}");
+    if (gained.Count > 0 && !all.Contains("From the next muster you may be offered " + JoinHand(gained.Select(Roster.NameOf).ToList()))) problems.Add("gained kinds not named");
+    if (lost.Count > 0 && !all.Contains("No longer offered, with the ground that gave them: " + JoinHand(lost.Select(Roster.NameOf).ToList()))) problems.Add("lost kinds not named");
+    int score = c.FieldsWon + ps.Count(x => !x.IsCapital && x.Owner == Holder.Player);
+    if (r.Score != score || !lis.Contains($"Score: {score}.")) problems.Add($"score {r.Score} vs {score}");
+    if (p.FindAll(".dc-c-standards .pip.on").Count != c.Standards) problems.Add("pips in the top bar");
+    Check($"war: the summary of epoch {r.Epoch + 1} ({tag}) is what the rules say: the kind (battle, race or hold-back from the two picks), the revealed enemy lane, who took which province (the lane rule written out by hand), the standards (a loss costs one, a race or a hold-back none), the gold paid (the held provinces' yields added by hand), what opened and closed (the pool by hand) and the score",
+        problems.Count == 0, string.Join(" | ", problems.Take(4)));
+    Scan(p);
+}
+
+// the playable steps
+async Task WaitMap(IRenderedComponent<DoctrinePage> p, string what)
+    => await Until(() => p.Instance.Session!.Stage == DoctrineStage.Map && Has(p, ".dc-overmap") && Has(p, ".dc-lanecard"), 40000, what);
+async Task<bool> PickAndSummarise(IRenderedComponent<DoctrinePage> p, int lane, bool hold, string tag)
+{
+    var s0 = p.Instance.Session!; var c = s0.Campaign!;
+    var before = c.Provinces(); var heldBefore = HeldHand(before); int stdBefore = c.Standards;
+    await Tap(p, hold ? "#dc-holdback" : $"#dc-lane-{lane}");
+    bool ok = await Until(() => s0.Stage == DoctrineStage.Epoch && Has(p, "#dc-epoch"), 40000, "the epoch summary of " + tag);
+    if (ok) await CheckEpoch(p, before, heldBefore, stdBefore, new LanePick(lane, hold), tag);
+    return ok;
+}
+async Task ContinueToMap(IRenderedComponent<DoctrinePage> p)
+{
+    var s0 = p.Instance.Session!;
+    Check("war: the summary's button goes on (back to the map, or to the end of the war when it is over)", Has(p, "#dc-epoch-next") && Text(p, "#dc-epoch-next") == (s0.Campaign!.Over ? "See the end of the war" : "Back to the map"));
+    await Tap(p, "#dc-epoch-next");
+    if (!s0.Campaign!.Over) await WaitMap(p, "the map after the summary"); else await Until(() => s0.Stage == DoctrineStage.Over && Has(p, ".dc-warend"), 20000, "the end of the war");
+}
+var warScript = new ScriptHands([ScriptHands.How.Manual, ScriptHands.How.Ignore]);
+async Task<bool> PlayBattle(IRenderedComponent<DoctrinePage> p, int lane, string tag)
+{
+    var s0 = p.Instance.Session!; var c = s0.Campaign!;
+    var before = c.Provinces(); var heldBefore = HeldHand(before); int stdBefore = c.Standards; var brief = s0.Briefing!; var lb = brief.Lanes[lane]; int epoch = brief.Epoch;
+    var hand = PlayerTargetHand(before, lane)!; var armsHand = s0.Grounds![hand.ArenaIndex % s0.Grounds.Count];
+    await Tap(p, $"#dc-lane-{lane}");
+    if (!await Until(() => Has(p, ".dc-draft"), 40000, "the draft of the battle " + tag)) return false;
+    // the battle is the card: the ground the top bar names, the session's ground, the pool the muster draws from
+    bool groundOk = s0.Ground?.Info.Id == armsHand.Id && s0.Ground?.Besieger == lb.Arena?.Besieger && Has(p, ".dc-groundline") && Text(p, ".dc-groundline").Contains(armsHand.Name);
+    bool poolOk = s0.Draft!.Offer.Packs.Count > 0 && s0.Draft.Offer.Packs.All(pk => brief.OfferKinds.Contains(pk.Kind)) && s0.Draft.Offer.Packs.All(pk => PoolHand(HeldHand(before)).Contains(pk.Kind));
+    Check($"war: a battle epoch ({tag}) is fought on the card's ground, and the muster offers only kinds of the pool the card's briefing named (the pool written out by hand)", groundOk && poolOk, $"ground {s0.Ground?.Info.Id} vs {armsHand.Id}; packs {string.Join(",", s0.Draft.Offer.Packs.Select(x => x.Kind))} pool {string.Join(",", brief.OfferKinds)}");
+    Check($"war: in a battle epoch ({tag}) the page keeps the whole round: the muster note, the Epoch chip, no slot count below the war's four, the ladder's news card never appears", Text(p, ".dc-musternote") == DoctrineWords.MusterNote && Text(p, ".dc-c-epoch").StartsWith($"Epoch {epoch + 1}") && !Has(p, ".dc-unlock") && p.FindAll(".dc-slots li").Count == 4);
+    Scan(p);
+    foreach (int i in ScriptHands.PackIndices(s0.Draft.Offer, s0.Draft.Army.Gold)) await TapPack(p, i);
+    await Tap(p, "#dc-confirm");
+    await PassAsk(p, 40000);
+    await Until(() => Has(p, ".dc-editor"), 30000, "the doctrine of the battle " + tag);
+    var st = warScript.Decide(epoch, s0.Army!, s0.Ghost!, s0.OrdersOffered!);
+    Check($"war: the council of a battle epoch ({tag}) has orders on the table and the Raise a banner order only when a Shrine is held (the pool's order rule by hand)", s0.OrdersOffered!.Tokens.Count > 0
+        && s0.OrdersOffered.Tokens.Any(t => DoctrineVocabulary.Decode(t) is { Family: OrderFamily.Army } o && (ArmyOrderKind)o.Kind == ArmyOrderKind.Aura) is var aura && (!aura || HeldHand(before).HasFlag(Feature.Shrine)));
+    Scan(p);
+    switch (st.How)
+    {
+        case ScriptHands.How.Accept: await Tap(p, "#dc-accept"); break;
+        case ScriptHands.How.Ignore: await Tap(p, "#dc-ignore"); foreach (var t in st.Tokens) await TapChip(p, t); await Tap(p, "#dc-fight"); break;
+        default: foreach (var t in st.Tokens) await TapChip(p, t); await Tap(p, "#dc-fight"); break;
+    }
+    if (!await Until(() => Has(p, ".dc-result"), 90000, "the result of the battle " + tag)) return false;
+    var rec = s0.Records[^1];
+    Check($"war: the battle's record is the card's ({tag}): the arena, who besieged, and the enemy's soldiers at the first frame are the briefing's", rec.ArenaId == armsHand.Id && rec.Replay.Besieger == lb.Arena?.Besieger && s0.Last!.EnemySoldiers == lb.Enemy!.Soldiers && Text(p, ".dc-result h2").StartsWith($"Epoch {rec.Round + 1}:") && rec.Round == epoch && Text(p, "#dc-next") == "Continue",
+        $"enemy {s0.Last!.EnemySoldiers} vs {lb.Enemy!.Soldiers}; besieger {rec.Replay.Besieger} vs {lb.Arena?.Besieger}");
+    Scan(p);
+    await Tap(p, "#dc-next");
+    bool ok = await Until(() => s0.Stage == DoctrineStage.Epoch && Has(p, "#dc-epoch"), 40000, "the epoch summary of " + tag);
+    if (ok) await CheckEpoch(p, before, heldBefore, stdBefore, new LanePick(lane, false), tag);
+    return ok;
+}
+
+// ---------------------------------------------------------------- scenario 1: a mixed war (a race, a battle, a hold-back that loses ground, a battle)
+{
+    using var wctx = NewCtx(false);
+    var wp = wctx.Render<DoctrinePage>(); livePages.Add(wp);
+    var WS = wp.Instance.Session!;
+    await wp.InvokeAsync(() => wp.Find("#dc-seed").Input(warSeed.ToString()));
+    await Tap(wp, "#dc-campaign");
+    bool up = await Until(() => WS.Stage == DoctrineStage.Map && Has(wp, ".dc-lanecard"), 60000, "the map of the war");
+    Check("war: the campaign begins on the map with three road cards and the hold-back card, in the HUD", up && WS.IsCampaign && wp.FindAll(".dc-lanecard").Count == 4 && Has(wp, ".dc-hud") && wp.Find(".dc-hud").GetAttribute("data-stage") == "map" && !WS.Endless && Text(wp, ".dc-c-epoch") == $"Epoch 1 of {DoctrineSession.WarEpochs}");
+    Check("war: the game seed is the field's, so the same seed draws the same map", WS.Seed == warSeed && WS.Campaign!.Seed == warSeed);
+    await CheckMap(wp, "epoch 1 start"); await CheckCards(wp, "epoch 1");
+    await Tap(wp, "#dc-roads-btn");
+    bool opened = wp.Find("#dc-lanes").ClassList.Contains("open") && wp.Find("#dc-roads-btn").GetAttribute("aria-expanded") == "true" && wp.Find("#dc-open-lanes").GetAttribute("aria-expanded") == "true";
+    Shot("war-map-sheet", wp);
+    await Tap(wp, "#dc-roads-btn");
+    Check("war: the dock button opens the road cards as a sheet and shuts them again", opened && !wp.Find("#dc-lanes").ClassList.Contains("open"));
+    Shot("war-map", wp);
+    // epoch 0: a race up the lane the enemy picks at epoch 2
+    int xl = LaneOf(warSeed, 2);
+    var p0 = WS.Campaign!.Provinces();
+    Check("war: the first push is a race (the enemy's lane at epoch 1 differs), planned from the schedule", LaneOf(warSeed, 0) != xl);
+    if (await PickAndSummarise(wp, xl, false, "race"))
+    {
+        Shot("war-epoch", wp);
+        var mid = WS.Campaign!.Provinces().First(q => q.Lane == xl && q.Index == 1);
+        Check("war: a race gave the player the middle province of the road he pushed (a feature that opens soldiers), and the held unlocks say so", mid.Owner == Holder.Player && mid.Feature is Feature.Barracks or Feature.Stables or Feature.Shrine && WS.Campaign.Unlocks.HasFlag(mid.Feature));
+        await ContinueToMap(wp);
+        await CheckMap(wp, "after the race"); await CheckCards(wp, "epoch 2");
+        var poolNow = WS.Briefing!.OfferKinds;
+        Check("war: an unlock appears in the offer after a hold: the pool of the next epoch has the kinds the held province opens", KindIdsHand(mid.Feature).All(poolNow.Contains) && poolNow.Count > 3);
+        // epoch 1: a battle on the enemy's lane, which differs from the one just held
+        int b = LaneOf(warSeed, 1);
+        if (await PlayBattle(wp, b, "epoch 2"))
+        {
+            await ContinueToMap(wp);
+            await CheckMap(wp, "after the battle"); await CheckCards(wp, "epoch 3");
+            int stdMid = WS.Campaign!.Standards;
+            // epoch 2: the enemy marches on the lane whose middle province we hold; we hold back (no battle): ground is lost, no standard
+            var held2 = WS.Campaign.Provinces().First(q => q.Lane == xl && q.Index == 1);
+            Check("war: before the hold-back the player still holds the middle province of that road", held2.Owner == Holder.Player);
+            bool lostTheOne = false;
+            if (await PickAndSummarise(wp, 0, true, "hold back"))
+            {
+                var r = WS.LastEpoch!;
+                var after = WS.Campaign.Provinces().First(q => q.Lane == xl && q.Index == 1);
+                lostTheOne = after.Owner == Holder.Enemy;
+                Check("war: holding back cost ground and no standard: the enemy took the province it marched on (the middle province we held) and the standards are what they were", r.Kind == EpochKind.Conceded && r.EnemyLane == xl && lostTheOne && r.StandardsBefore == stdMid && r.StandardsAfter == stdMid && WS.Campaign.Standards == stdMid);
+                await ContinueToMap(wp);
+                await CheckMap(wp, "after the hold-back"); await CheckCards(wp, "epoch 4");
+                var poolAfter = WS.Briefing!.OfferKinds;
+                var handPool = PoolHand(HeldHand(WS.Campaign.Provinces()));
+                Check("war: a lost province's unlock leaves the offer: the pool of the next epoch is the base kinds plus the kinds of what is held now, and none of the kinds the lost province opened remain", poolAfter.SequenceEqual(handPool) && (HeldHand(WS.Campaign.Provinces()).HasFlag(mid.Feature) || KindIdsHand(mid.Feature).All(k => !poolAfter.Contains(k))));
+                int d = LaneOf(warSeed, 3);
+                if (await PlayBattle(wp, d, "epoch 4"))
+                {
+                    Shot("war-epoch-battle", wp);
+                    await ContinueToMap(wp);
+                    await CheckMap(wp, "after the second battle"); await CheckCards(wp, "epoch 5");
+                }
+            }
+        }
+    }
+    // leaving the war from the map: the end screen is the visitor's
+    if (WS.Stage == DoctrineStage.Map)
+    {
+        await Tap(wp, "#dc-leave");
+        await Until(() => WS.Stage == DoctrineStage.Over && Has(wp, ".dc-warend"), 20000, "left the war");
+        var e = WS.End!;
+        Check("war: the end screen of a war the visitor left says so, reports the score as fields won plus provinces held (hand count), lists every epoch played and offers the way back",
+            e.Left && e.Outcome == CampaignOutcome.Running && Text(wp, "#dc-endhead") == "You left the war." && e.Score == e.FieldsWon + e.ProvincesHeld && e.ProvincesHeld == WS.Campaign!.Provinces().Count(q => !q.IsCapital && q.Owner == Holder.Player)
+            && Text(wp, "#dc-score").StartsWith($"Score {e.Score}: {e.FieldsWon} ") && wp.FindAll(".dc-warend .dc-rounds-list li").Count == e.Epochs && e.Epochs == WS.Epochs.Count && Has(wp, "#dc-fresh") && !Has(wp, "#dc-again"));
+        Scan(wp); Shot("war-end", wp);
+        await Tap(wp, "#dc-fresh");
+        Check("war: from the end of a war the way back is the start screen, where the fixed games are as they were", WS.Stage == DoctrineStage.Start && !WS.IsCampaign && wp.FindAll(".dc-opt").Count == 3);
+    }
+    livePages.Remove(wp);
+}
+
+// ---------------------------------------------------------------- scenario 2: three races up one road take the enemy capital (WarWon)
+{
+    using var wctx = NewCtx(false);
+    var wp = wctx.Render<DoctrinePage>(); livePages.Add(wp);
+    var WS = wp.Instance.Session!;
+    await wp.InvokeAsync(() => wp.Find("#dc-seed").Input(sweepSeed.ToString()));
+    await Tap(wp, "#dc-campaign");
+    await WaitMap(wp, "the map of the sweep");
+    for (int e = 0; e < 3 && WS.Stage == DoctrineStage.Map; e++)
+    {
+        await CheckMap(wp, "sweep " + e); await CheckCards(wp, "sweep " + e);
+        if (e == 2)
+        {
+            var card = WS.Briefing!.Lanes[sweepLane];
+            Check("war: the last card of the sweep names the enemy capital and says taking it ends the war", card.EndsWar && card.Target is { IsCapital: true } && NormText(wp.Find($".dc-lanecard[data-lane='{sweepLane}']")).Contains("the enemy capital") && NormText(wp.Find($".dc-lanecard[data-lane='{sweepLane}']")).Contains("Taking it ends the war."));
+            Shot("war-map-last", wp);
+        }
+        if (!await PickAndSummarise(wp, sweepLane, false, "sweep " + e)) break;
+        if (e < 2) Check("war: a race changes no standard", WS.LastEpoch!.StandardsAfter == WS.LastEpoch.StandardsBefore && WS.Campaign!.Standards == WS.MaxStandards);
+        await ContinueToMap(wp);
+    }
+    Check("war: three races up the road the enemy never picks take its capital: the war is won, and the end screen says so", WS.Stage == DoctrineStage.Over && WS.End?.Outcome == CampaignOutcome.WarWon && Text(wp, "#dc-endhead") == "The war is won: the enemy capital is yours." && WS.End.Epochs == 3 && !WS.End.Left);
+    Check("war: the end screen lists the three races and the score is the provinces held (no field was fought)", wp.FindAll(".dc-warend .dc-rounds-list li").Count == 3 && wp.FindAll(".dc-warend .dc-rounds-list li").All(li => NormText(li).Contains(": a race, you on the ")) && WS.End!.FieldsWon == 0 && WS.End.Score == WS.End.ProvincesHeld);
+    Scan(wp);
+    livePages.Remove(wp);
+}
+
+// ---------------------------------------------------------------- scenario 3: the enemy marches up one road three times; holding back each time loses the capital but never a standard (WarLost)
+{
+    using var wctx = NewCtx(false);
+    var wp = wctx.Render<DoctrinePage>(); livePages.Add(wp);
+    var WS = wp.Instance.Session!;
+    await wp.InvokeAsync(() => wp.Find("#dc-seed").Input(tripleSeed.ToString()));
+    await Tap(wp, "#dc-campaign");
+    await WaitMap(wp, "the map of the retreat");
+    for (int e = 0; e < 3 && WS.Stage == DoctrineStage.Map; e++)
+    {
+        await CheckMap(wp, "retreat " + e);
+        if (!await PickAndSummarise(wp, 0, true, "retreat " + e)) break;
+        Check($"war: concede costs no standard (hold-back {e + 1} of three): the pips are all lit and the epoch says no standard was lost", WS.Campaign!.Standards == WS.MaxStandards && p_pips(wp) == WS.MaxStandards);
+        await ContinueToMap(wp);
+    }
+    Check("war: holding back three times while the enemy marches up one road loses the capital: the war is lost with every standard still flying", WS.Stage == DoctrineStage.Over && WS.End?.Outcome == CampaignOutcome.WarLost && Text(wp, "#dc-endhead") == "The war is lost: your capital has fallen." && WS.End.Standards == WS.MaxStandards);
+    Scan(wp);
+    livePages.Remove(wp);
+    int p_pips(IRenderedComponent<DoctrinePage> q) => q.FindAll(".dc-c-standards .pip.on").Count;
+}
+
+// ---------------------------------------------------------------- scenario 4: both capitals fall in one epoch (WarDrawn)
+{
+    using var wctx = NewCtx(false);
+    var wp = wctx.Render<DoctrinePage>(); livePages.Add(wp);
+    var WS = wp.Instance.Session!;
+    int a = LaneOf(tripleSeed, 0), mine = (a + 1) % 3;
+    await wp.InvokeAsync(() => wp.Find("#dc-seed").Input(tripleSeed.ToString()));
+    await Tap(wp, "#dc-campaign");
+    await WaitMap(wp, "the map of the draw");
+    for (int e = 0; e < 3 && WS.Stage == DoctrineStage.Map; e++)
+    {
+        if (!await PickAndSummarise(wp, mine, false, "draw " + e)) break;
+        await ContinueToMap(wp);
+    }
+    Check("war: both capitals taken in one epoch is a draw, said as such", WS.Stage == DoctrineStage.Over && WS.End?.Outcome == CampaignOutcome.WarDrawn && Text(wp, "#dc-endhead") == "A draw: both capitals fell in the same epoch.");
+    livePages.Remove(wp);
+}
+
+// ---------------------------------------------------------------- scenario 5: the epochs run out (EpochsUp), set short through the session
+{
+    using var wctx = NewCtx(false);
+    var wp = wctx.Render<DoctrinePage>(); livePages.Add(wp);
+    var WS = wp.Instance.Session!;
+    WS.NewCampaign(quietSeed, false, out var whyNot, maxEpochs: 2);
+    await WaitMap(wp, "the map of the short war");
+    Check("war: a short war shows its epoch limit in the chip and goal", whyNot.Length == 0 && Text(wp, ".dc-c-epoch") == "Epoch 1 of 2" && Text(wp, ".dc-goal").Contains("within 2 epochs"));
+    for (int e = 0; e < 2 && WS.Stage == DoctrineStage.Map; e++)
+    {
+        if (!await PickAndSummarise(wp, 0, true, "short " + e)) break;
+        await ContinueToMap(wp);
+    }
+    Check("war: when the epochs run out the war is over and the end screen says so", WS.Stage == DoctrineStage.Over && WS.End?.Outcome == CampaignOutcome.EpochsUp && Text(wp, "#dc-endhead") == "The war is over: the epochs have run out." && WS.End.Epochs == 2);
+    foreach (var o in Enum.GetValues<CampaignOutcome>())
+    {
+        string h = DoctrineCampaignWords.EndHeading(o, false);
+        Check($"war: the end heading for {o} is its own sentence", h.Length > 0 && (o == CampaignOutcome.Running || (o switch { CampaignOutcome.WarWon => h.Contains("won"), CampaignOutcome.WarLost => h.Contains("capital has fallen"), CampaignOutcome.WarDrawn => h.StartsWith("A draw"), CampaignOutcome.OutOfStandards => h.Contains("no standards left"), _ => h.Contains("epochs have run out") })));
+    }
+    livePages.Remove(wp);
+}
+
+// ---------------------------------------------------------------- scenario 6: endless: a cleared road refills, there is no enemy capital, the score counts fields plus provinces
+{
+    using var wctx = NewCtx(false);
+    var wp = wctx.Render<DoctrinePage>(); livePages.Add(wp);
+    var WS = wp.Instance.Session!;
+    await Tap(wp, "#dc-mode-endless");
+    await wp.InvokeAsync(() => wp.Find("#dc-seed").Input(endlessSeed.ToString()));
+    await Tap(wp, "#dc-campaign");
+    await WaitMap(wp, "the map of the endless run");
+    Check("war: an endless run says so: no 'of' in the epoch chip, the goal is the score, and the map has no enemy capital", WS.Endless && Text(wp, ".dc-c-epoch") == "Epoch 1" && Text(wp, ".dc-goal").Contains("Score is fields won plus provinces held") && !Has(wp, "g.dc-prov[data-key='37']"));
+    await CheckMap(wp, "endless start"); await CheckCards(wp, "endless start");
+    for (int e = 0; e < 2 && WS.Stage == DoctrineStage.Map; e++)
+    {
+        if (!await PickAndSummarise(wp, endlessLane, false, "endless " + e)) break;
+        await ContinueToMap(wp);
+    }
+    var ps = WS.Campaign!.Provinces();
+    var line = ps.Where(q => !q.IsCapital && q.Lane == endlessLane).OrderBy(q => q.Index).ToList();
+    Check("war: endless refill: a road the player has cleared grows a fresh enemy province beyond it, and the map draws it", line.Count == 4 && line[..3].All(q => q.Owner == Holder.Player) && line[3].Owner == Holder.Enemy && Has(wp, $"g.dc-prov[data-key='{line[3].Key}'][data-owner='enemy']"));
+    await CheckMap(wp, "endless after the refill"); await CheckCards(wp, "endless after the refill");
+    var next = WS.Briefing!.Lanes[endlessLane];
+    Check("war: endless refill: the road's card now assaults the fresh province (the fourth from the capital), not a capital", next.Target?.Key == line[3].Key && !next.EndsWar && next.Target.Index == 3 && NormText(wp.Find($".dc-lanecard[data-lane='{endlessLane}']")).Contains("fourth from your capital"));
+    Shot("war-map-endless", wp);
+    await Tap(wp, "#dc-leave");
+    await Until(() => WS.Stage == DoctrineStage.Over && Has(wp, ".dc-warend"), 20000, "left the endless run");
+    var en = WS.End!;
+    Check("war: the endless run's score is fields won plus provinces held, said so", en.Endless && en.Score == en.FieldsWon + en.ProvincesHeld && en.ProvincesHeld == WS.Campaign.Provinces().Count(q => !q.IsCapital && q.Owner == Holder.Player) && Text(wp, "#dc-score").Contains("(the score of an endless run)") && Text(wp, "#dc-score").StartsWith($"Score {en.Score}: "));
+    Scan(wp);
+    livePages.Remove(wp);
+}
+
+// ---------------------------------------------------------------- scenario 7: a battle the player wins takes the province and costs nothing
+{
+    int wonSeed = -1;
+    for (int sd = 1; sd <= 60 && wonSeed < 0; sd++)
+    {
+        using var wctx = NewCtx(false);
+        var wp = wctx.Render<DoctrinePage>(); livePages.Add(wp);
+        var WS = wp.Instance.Session!;
+        WS.NewCampaign(sd, false, out _);
+        await WaitMap(wp, "the map of a battle hunt");
+        int lane = LaneOf(sd, 0);
+        var target = PlayerTargetHand(WS.Campaign!.Provinces(), lane)!;
+        if (await PlayBattle(wp, lane, "hunt " + sd) && WS.LastEpoch!.Battle!.Result.Outcome == BattleStatus.AttackerWon)
+        {
+            wonSeed = sd;
+            var r = WS.LastEpoch!; var ps = WS.Campaign.Provinces();
+            Check("war: a won battle takes the province it was fought for, loses no standard, counts a field won, and the summary says it won", ps.First(q => q.Key == target.Key).Owner == Holder.Player && r.StandardsAfter == r.StandardsBefore && WS.Campaign.FieldsWon == 1
+                && NormText(wp.Find("#dc-epoch h2")).EndsWith("won") && r.Score == 1 + ps.Count(q => !q.IsCapital && q.Owner == Holder.Player));
+            await ContinueToMap(wp);
+            await CheckMap(wp, "after a won battle"); await CheckCards(wp, "after a won battle");
+        }
+        livePages.Remove(wp);
+    }
+    Console.WriteLine($"  (a won battle was found at seed {wonSeed})");
+    Check("war: a battle the scripted visitor wins was found and checked", wonSeed > 0);
+}
+if (warOnly)
+{
+    Console.WriteLine(failures == 0 ? $"ALL PASS ({checks} checks, war only)" : $"{failures} FAILED of {checks} (war only)");
+    return failures == 0 ? 0 : 1;
+}
+
 // start screen
 Check("start: rounds options (three 44px buttons), seed field, new game, army code field and load button", page.FindAll(".dc-opt").Count == 3 && Has(page, "#dc-seed") && Has(page, "#dc-new") && Has(page, "#dc-code") && Has(page, "#dc-load"));
 Check("start: the Doctrine stage is Start and no game runs", S.Stage == DoctrineStage.Start && !S.InGame);
@@ -2000,7 +2498,7 @@ foreach (var (code, rerollsPaid) in new[] { ("DA2.0.0.0.0..0:5:0:0", 0), ("DA2.0
     {
         string src = Path.Combine(showroom, "Services", "Doctrine");
         var typed = new List<string>();
-        foreach (var f in new[] { "DoctrineWords.cs", "DoctrineProgress.cs", "DoctrineGuide.cs", "BattleChronicle.cs" })
+        foreach (var f in new[] { "DoctrineWords.cs", "DoctrineProgress.cs", "DoctrineGuide.cs", "BattleChronicle.cs", "CampaignWords.cs" })
         {
             string code = Regex.Replace(File.ReadAllText(Path.Combine(src, f)), @"//[^\n]*", "");
             foreach (var lit in Lex.StringTexts(code))
@@ -2031,7 +2529,7 @@ foreach (var (code, rerollsPaid) in new[] { ("DA2.0.0.0.0..0:5:0:0", 0), ("DA2.0
         {
             ("Pleroma", @"Pleroma"), ("store", @"\bstores?\b"), ("operation", @"\boperations?\b"), ("relabel", @"[Rr]elabel"), ("arrangement", @"\barrangements?\b"), ("flag", @"\bflags?\b"),
             ("veterancy", @"[Vv]eterancy"), ("legal", @"\blegal\b"), ("command span", @"command span"),
-            ("an old order name", @"\b(Rotate|Flip|Aura|Merge|Cull|Advance|Hunt|Flank)\b|\bHold\b(?! the line)|\bGuard\b(?! the host)"),
+            ("an old order name", @"\b(Rotate|Flip|Aura|Merge|Cull|Advance|Hunt|Flank)\b|\bHold\b(?! the line| back)|\bGuard\b(?! the host)"),
         };
         foreach (var (name, pattern) in banned)
         {

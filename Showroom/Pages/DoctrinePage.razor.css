@@ -201,6 +201,45 @@ code { font-family: var(--mono); font-size: 0.82rem; overflow-wrap: anywhere; }
 .dc-about { margin-top: 0.8rem; }
 .dc-about summary { display: flex; align-items: center; color: var(--ink-soft); }
 
+/* the war: the start section, the standards, the map, the road cards, the summary of an epoch */
+.dc-modes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.4rem; margin: 0.3rem 0 0.6rem; }
+#dc-campaign { width: 100%; }
+.dc-pips { display: inline-flex; gap: 0.25rem; vertical-align: middle; }
+.dc-pips .pip { display: inline-block; width: 0.9rem; height: 0.9rem; border-radius: 50%; border: 2px solid var(--ink-soft); box-sizing: border-box; }
+.dc-pips .pip.on { background: var(--accent); border-color: var(--accent); }
+.dc-chips .dc-c-standards { display: inline-flex; align-items: center; gap: 0.4rem; }
+.dc-overmap { display: flex; flex-direction: column; gap: 0.3rem; }
+.dc-top .dc-status.dc-warchips { flex-wrap: wrap; }
+.dc-warbar p { margin: 0 0 0.3rem; font-size: 0.88rem; line-height: 1.4; color: var(--ink-soft); }
+.dc-warbar .dc-standards { color: var(--ink); }
+.dc-map { width: 100%; }
+.dc-map ::deep .dc-mapsvg { display: block; width: 100%; height: auto; max-width: 100%; }
+.dc-map ::deep .dc-box { stroke-width: 2; }
+.dc-map ::deep .dc-p-player .dc-box { fill: color-mix(in srgb, var(--accent) 26%, var(--bg-2)); stroke: var(--accent); }
+.dc-map ::deep .dc-p-neutral .dc-box { fill: var(--bg-2); stroke: var(--ink-faint); }
+.dc-map ::deep .dc-p-enemy .dc-box { fill: color-mix(in srgb, var(--bad) 22%, var(--bg-2)); stroke: var(--bad); }
+.dc-map ::deep .dc-target { fill: none; stroke: var(--warn); stroke-width: 2; stroke-dasharray: 5 3; }
+.dc-map ::deep .dc-ic { fill: var(--ink-soft); }
+.dc-map ::deep .dc-siegemark { fill: var(--warn); }
+.dc-map ::deep text { fill: var(--ink-soft); font-size: 10.5px; font-family: inherit; }
+.dc-map ::deep .dc-pname { fill: var(--ink); font-size: 13px; font-weight: 700; }
+.dc-map ::deep .dc-parena { fill: var(--ink); }
+.dc-map ::deep .dc-pyield { fill: var(--accent-ink); }
+.dc-map ::deep .dc-road, .dc-map ::deep .dc-behind { fill: var(--ink-faint); font-size: 11px; }
+.dc-legend { margin: 0.2rem 0 0; }
+.dc-lanepanel { max-height: 62%; }
+.dc-lanecards { list-style: none; padding: 0; margin: 0.4rem 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 0.5rem; }
+.dc-lanecard { border: 1px solid var(--border-2); border-radius: 10px; padding: 0.4rem 0.7rem 0.6rem; background: var(--bg-2); min-width: 0; overflow-wrap: anywhere; }
+.dc-lanecard .dc-h3 { margin-top: 0.2rem; }
+.dc-lanecard p { margin: 0.25rem 0; font-size: 0.88rem; line-height: 1.4; }
+.dc-lanecard .dc-lu { color: var(--accent-ink); }
+.dc-lanecard .dc-lend { color: var(--warn); font-weight: 650; }
+.dc-el { margin: 0.2rem 0; padding-left: 1.1rem; font-size: 0.85rem; line-height: 1.4; color: var(--ink-soft); }
+.dc-push { width: 100%; margin-top: 0.4rem; }
+.dc-epochview { margin: auto 0; }
+.dc-epochlines { margin: 0.3rem 0; padding-left: 1.2rem; line-height: 1.6; }
+.dc-warover { margin: 0.6rem 0 0; color: var(--accent-ink); }
+
 .outro { margin-top: 1.5rem; max-width: 70ch; line-height: 1.55; color: var(--ink-soft); }
 .dc-ingame .outro { margin-top: 1rem; }
 
@@ -229,6 +268,16 @@ code { font-family: var(--mono); font-size: 0.82rem; overflow-wrap: anywhere; }
     .dc-armypanel { grid-column: 1; grid-row: 1 / -1; }
     .dc-field { grid-column: 2; grid-row: 1; }
     .dc-generalpanel, .dc-chroniclepanel { grid-column: 3; grid-row: 1 / -1; }
+    /* the map: the road cards take the general's column, a little wider (the general has nothing to say on the map) */
+    .dc-hud[data-stage=map] .dc-stage { grid-template-columns: minmax(200px, 240px) minmax(0, 1fr) minmax(280px, 340px); }
+    .dc-lanepanel { grid-column: 3; grid-row: 1 / -1; }
+    .dc-hud[data-stage=epoch] .dc-field { grid-column: 2 / 4; }
+    /* the map fits the height of the field (the capitals stay in view); on a phone it keeps its own height and the field scrolls */
+    .dc-overmap { height: 100%; }
+    .dc-map { flex: 1 1 auto; min-height: 16rem; position: relative; }
+    .dc-map ::deep .dc-mapsvg { position: absolute; inset: 0; height: 100%; }
+    .dc-roadsbtns { display: none; }
+    .dc-lanecards { gap: 0.6rem; }
     /* on the watch screen the chronicle takes the general's column (the general has nothing to say until the next doctrine) */
     .dc-hud[data-stage=watch] .dc-generalpanel { display: none; }
     .dc-grip { display: none; }

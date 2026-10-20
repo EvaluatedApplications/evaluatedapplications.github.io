@@ -42,7 +42,7 @@ public static class DoctrineWords
     static string Lower(string s) => s.Length == 0 ? s : char.ToLowerInvariant(s[0]) + s[1..];
 
     static readonly string[] Ordinals = ["zeroth", "first", "second", "third", "fourth", "fifth", "sixth", "seventh", "eighth", "ninth", "tenth", "eleventh", "twelfth"];
-    static string Ordinal(int n) => (uint)n < (uint)Ordinals.Length ? Ordinals[n] : n + "th";
+    internal static string Ordinal(int n) => (uint)n < (uint)Ordinals.Length ? Ordinals[n] : n + "th";
 
     /// <summary>How many of the host's quarters a trigger waits for, said as a fraction ("a quarter", "half", "three quarters"). The count is the token's own.</summary>
     public static string QuartersWords(int quarters) => quarters switch
@@ -407,7 +407,7 @@ public static class DoctrineWords
     /// <summary>A small count in words ("six"); beyond twelve, the figure.</summary>
     public static string Cardinal(int n) => (uint)n < (uint)Cardinals.Length ? Cardinals[n] : n.ToString(System.Globalization.CultureInfo.InvariantCulture);
     static string MoreTimes(int n) => n == 1 ? "one more time" : Cardinal(n) + " more times";
-    static string JoinAnd(IReadOnlyList<string> l) => l.Count == 0 ? "none" : l.Count == 1 ? l[0] : string.Join(", ", l.Take(l.Count - 1)) + " and " + l[^1];
+    internal static string JoinAnd(IReadOnlyList<string> l) => l.Count == 0 ? "none" : l.Count == 1 ? l[0] : string.Join(", ", l.Take(l.Count - 1)) + " and " + l[^1];
 
     // ---- the general: how it chooses and what its two records mean ----
 
