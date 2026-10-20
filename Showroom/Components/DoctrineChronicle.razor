@@ -11,7 +11,8 @@
     bool atEnd = now >= LastTick;
     bool showWhy = atEnd || _all;
     <h2>Chronicle <span class="dc-sub">@shown.Count of @Chronicle.Lines.Count lines</span></h2>
-    @if (shown.Count <= 1 && !_all) { <p class="hint dc-logempty">The account fills in as the battle plays.</p> }
+    @* only the opening lines (the opening and, in a siege, the siege) are there until the first line after tick 0 *@
+    @if (!shown.Any(l => l.Tick > 0) && !_all) { <p class="hint dc-logempty">The account fills in as the battle plays.</p> }
     <ol class="dc-log @(_all ? "all" : "live")" aria-label="Battle chronicle">
         @if (_all)
         {

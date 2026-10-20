@@ -54,7 +54,7 @@
         <details class="dc-about dc-built">
             <summary>How it is built</summary>
             <p>The army is a set of Pleroma stores from the Phasor package, the battle runs on a Tracer navigation mesh, the rounds run as EvalApp
-                pipelines, and the general is a habit table with a tiny HoloFormer from the AlgFormer package.</p>
+                pipelines, and the general is @(DoctrineWords.GeneralBuilt(GeneralOpts)).</p>
             <p>Each cohort of soldiers is an item in a Pleroma store: its kind is the key, its traits are the flags, its place in the line is the
                 arrangement, and its seasoning is a position on a ring of nine. An order is one operation on that store. Reforge relabels a trait,
                 Reform the ranks relabels the line, Drill the host ticks the ring, Raise a banner counts the soldiers who carry a trait, and the list
@@ -66,16 +66,27 @@
             <p>Your general starts empty. It learns how you set a doctrine from your own choices, in your browser, with nothing pre-trained, and
                 different players end up with different generals. It suggests and you decide: every doctrine you set is an example for it, and so is each
                 battle result.</p>
-            <p>Inside it are a small habit table and a tiny HoloFormer from the AlgFormer package. For each of the four slots the table speaks, unless
-                the HoloFormer has been right on that slot at least two more times than the table over your recent choices, in which case it takes the
-                slot. The match record shown is a score out of 1000 for how well its whole suggestion has matched what you then chose, over your recent choices. It starts low and climbs as the matches keep coming.
-                Nothing is saved: refresh the page and the general is gone.</p>
+            @foreach (var how in DoctrineWords.GeneralHow(GeneralOpts)) { <p class="dc-how">@how</p> }
+            <p class="dc-howrecord">The match record is a score out of @DoctrineWords.RecordScale. @DoctrineWords.SlotRecordWords() For the whole pick it reads: @DoctrineWords.WholeRecordWords()</p>
+            <p>Nothing is saved: refresh the page and the general is gone.</p>
+        </details>
+        <details class="dc-about dc-rules">
+            <summary>About the field</summary>
+            <p class="dc-dugin-rule">@DoctrineWords.DugInRule()</p>
+            <p class="dc-siege-rule">@DoctrineWords.SiegeRule(RoundChoices.Max())@(_s?.Grounds is { } grounds ? " " + DoctrineWords.SiegeGrounds(grounds) : "")</p>
+            <p class="dc-limit-rule">@DoctrineWords.TickLimitRule()</p>
         </details>
     </section>
 </div>
 
 @code {
     private enum Sheet { None, Army, General, Draft, Chronicle }
+
+    /// <summary>The lengths of game the start screen offers (the siege rule is said for the longest).</summary>
+    private static readonly int[] RoundChoices = [3, 5, 8];
+
+    /// <summary>The knobs of the general this page runs (the game's own default when the sections hold another kind), so the words follow what it does.</summary>
+    private global::Doctrine.General.GeneralOptions GeneralOpts => (_s?.Sections.General as global::Doctrine.General.TinyHoloGeneral)?.Options ?? new global::Doctrine.General.GeneralOptions();
 
     private ReplayCursor? _cursor;          // the tick on screen, shared by the replay and the chronicle
     private Chronicle? _chron;              // the account of the battle on screen
@@ -188,7 +199,7 @@
                 draft, set a doctrine, and watch one battle. Each round the game offers a muster of companies to buy and a council of orders to choose from. Round one offers two kinds of soldier and a few orders; more can be offered as the rounds go on.</p>
             <p class="dc-h3" id="dc-rounds-label">Rounds</p>
             <div class="dc-opts" role="radiogroup" aria-labelledby="dc-rounds-label">
-                @foreach (var n in new[] { 3, 5, 8 })
+                @foreach (var n in RoundChoices)
                 {
                     var r = n;
                     <button type="button" class="dc-btn dc-opt @(_rounds == r ? "on" : "")" role="radio" aria-checked="@(_rounds == r ? "true" : "false")" @onclick="() => _rounds = r">@r rounds</button>
@@ -284,7 +295,7 @@
         if (_s is not { Stage: DoctrineStage.Watch, Last: { } v } || ReferenceEquals(_chronFor, v)) return;
         _chronFor = v;
         _cursor = new ReplayCursor();
-        _chron = BattleChronicle.Build(v.Record.Replay, v.Record.PlayerDoctrine, _s.ArenaName(v.Record.ArenaId), DoctrineWords.KindName, v.TraitsOf);
+        _chron = BattleChronicle.Build(v.Record.Replay, v.Record.PlayerDoctrine, _s.ArenaName(v.Record.ArenaId), DoctrineWords.KindName, v.TraitsOf, v.SiegeClock);
     }
 
     private RenderFragment Hud => @<div class="dc-hud" data-stage="@_s!.Stage.ToString().ToLowerInvariant()" data-step="@Level">
@@ -309,6 +320,7 @@
                 }
             </div>
             <p class="dc-goal">@Goal</p>
+            @if (_s.Stage is DoctrineStage.Draft or DoctrineStage.Doctrine && _s.Ground is { } ground) { <p class="dc-groundline">@DoctrineWords.GroundBriefing(ground)</p> }
             <p class="dc-todo" role="status">@Todo()</p>
             @if (_s.Notice.Length > 0) { <p class="dc-notice" role="status">@_s.Notice</p> }
             @if (_s.Error.Length > 0) { <p class="err" role="alert">@_s.Error</p> }
@@ -372,6 +384,7 @@
         <details class="dc-det">
             <summary>Details</summary>
             <span class="meta">@DoctrineWords.CohortDetails(c)</span>
+            <span class="meta dc-dugin">@DoctrineWords.DugInFor(c.Traits)</span>
         </details>
     </li>;
 
@@ -392,7 +405,7 @@
             }
             @if (!rec.Ghost.IsEmpty)
             {
-                <li>Your general suggested: @DoctrineWords.Orders(rec.Ghost) (match record @rec.GhostConfidence of 1000). @(rec.Overrode ? "You set something different." : "You took it as it stood.")</li>
+                <li>Your general suggested: @DoctrineWords.Orders(rec.Ghost) (match record @rec.GhostConfidence of 1000 for the whole pick). @(rec.Overrode ? "You set something different." : "You took it as it stood.")</li>
             }
             @if (rec.IllegalDropped > 0) { <li>@rec.IllegalDropped @(rec.IllegalDropped == 1 ? "order was" : "orders were") not allowed and @(rec.IllegalDropped == 1 ? "was" : "were") dropped.</li> }
             @if (rec.Rerolls > 0) { <li class="dc-rerolled">You paid for @rec.Rerolls @(rec.Rerolls == 1 ? "reroll" : "rerolls") of the council.</li> }
@@ -411,6 +424,7 @@
             bool fits = DoctrineUnlocks.AllowsAll(ghost.Doctrine, Level) && ghost.Doctrine.Tokens.All(onTable.Allows);
             <section class="dc-ghost" style="--glow:@Glow(PanelGlow(ghost))" aria-label="Your general's suggestion">
                 <h3 class="dc-h3">Your general's pick of the council</h3>
+                <p class="hint dc-gensays">@DoctrineWords.GeneralRanked</p>
                 <ol class="dc-ghostchips">
                     @for (int sl = 0; sl < DoctrineVocabulary.MaxSlots; sl++)
                     {
@@ -426,14 +440,15 @@
                         }
                     }
                 </ol>
-                <p class="dc-conf">Match record <b>@ghost.ConfidencePermille</b> of 1000: a score for how well its whole suggestion has matched what you then chose, over your recent choices. It starts low and climbs as the matches keep coming.</p>
-                <p class="hint dc-ghostmark">The orders it would take are marked on the council's cards.</p>
                 @if (!fits) { <p class="hint dc-ghostlock">Part of this pick uses orders that are not on the table or slots that are not open yet, so it cannot be used as it stands. Edit it to keep the ones that are.</p> }
                 <div class="dc-ghostbtns">
                     <button type="button" class="dc-btn strong" id="dc-accept" disabled="@(!fits)" @onclick="() => Accept(ghost)">Use it</button>
                     <button type="button" class="dc-btn" id="dc-edit" @onclick="() => EditGhost(ghost)">Edit</button>
                     <button type="button" class="dc-btn" id="dc-ignore" @onclick="IgnoreGhost">Mine</button>
                 </div>
+                <p class="hint dc-ghostmark">The orders it would take are marked on the council's cards.</p>
+                @if (slotRec is not null) { <p class="hint dc-slotexp">@DoctrineWords.SlotRecordWords()</p> }
+                <p class="dc-conf">Match record <b>@ghost.ConfidencePermille</b> of 1000 for the whole pick: @DoctrineWords.WholeRecordWords()</p>
             </section>
         }
         else if (Choosing && _s!.Ghost is { } g0 && g0.Doctrine.IsEmpty)
@@ -444,7 +459,7 @@
         }
         else if (!Choosing)
         {
-            <p class="hint">Its pick of the council arrives once you keep the council and set a doctrine.</p>
+            <p class="hint">Its pick of the council arrives once you have kept the council.</p>
         }
         <p class="dc-examples">General: @_s!.Sections.General.ExamplesSeen @(_s.Sections.General.ExamplesSeen == 1 ? "example" : "examples") seen (each doctrine you set and each battle result)</p>
     </aside>;
@@ -464,7 +479,7 @@
     private RenderFragment FieldView => @<div class="dc-fieldin">
         @if (_s!.Stage == DoctrineStage.Watch && _s.Last is { } v)
         {
-            <DoctrineArena Replay="v.Record.Replay" Layout="v.Layout" Cursor="_cursor" />
+            <DoctrineArena Replay="v.Record.Replay" Layout="v.Layout" Cursor="_cursor" SiegeClock="v.SiegeClock" />
         }
         else if (_s.Stage == DoctrineStage.Working)
         {
@@ -586,6 +601,7 @@
         {
             <h2>The muster <span class="dc-sub">you have @d.Army.Gold gold</span></h2>
             <p class="hint">These companies are offered this round. Buy any you can pay for, each whole or not at all; a kind you already hold joins its cohort, and a new kind joins the line the balance rule gives it. The army itself decides what it will accept.</p>
+            <p class="hint dc-musternote">@DoctrineWords.MusterNote</p>
             <button type="button" class="dc-btn dc-advicebtn" id="dc-advice-btn" @onclick="UseDraftAdvice">Use starter advice</button>
             @if (_advice.Length > 0) { <p class="dc-advice">@_advice</p> }
             @if (d.Army.Soldiers == 0) { <p class="dc-notice" role="status">Your army has no soldiers left. Spend your gold on cohorts: a battle needs soldiers.</p> }
@@ -686,8 +702,7 @@
         <div class="dc-trayscroll">
             @if (_s.Reroll is { } ask) { <p class="dc-rerollnote" role="status">@DoctrineWords.RerollWords(ask.Offer, ask.Army.Gold) Look the council over: keep it, or pay for another.</p> }
             @if (_advice.Length > 0) { <p class="dc-advice">@_advice</p> }
-            <p class="hint dc-councilhint">These orders are on the table this round. Tap one to put it in the first empty slot, tap it again to take it out.</p>
-            <div class="dc-chipgrid">
+            <p class="hint dc-councilhint">These orders are on the table this round. Tap one to put it in the first empty slot, tap it again to take it out.</p>            <div class="dc-chipgrid">
                 @foreach (var tk in offer.Tokens)
                 {
                     int token = tk;
@@ -870,6 +885,8 @@
                 <h2>Round @(rec.Round + 1): @DoctrineWords.OutcomeShort(rec.Result.Outcome) <span class="dc-sub">@_s.ArenaName(rec.ArenaId), @rec.Result.Ticks ticks</span></h2>
                 <ul class="dc-recap">
                     @foreach (var line in recap.What) { <li class="dc-recap-what">@line</li> }
+                    @foreach (var line in recap.Siege) { <li class="dc-recap-siege">@line</li> }
+                    @if (recap.Limit is { } limitLine) { <li class="dc-recap-limit">@limitLine</li> }
                     @if (recap.TryNext is { } tn) { <li class="dc-recap-try">@tn</li> }
                 </ul>
             </section>

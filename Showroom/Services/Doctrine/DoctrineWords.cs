@@ -193,7 +193,8 @@ public static class DoctrineWords
         if (token == 0) return "No order in this slot.";
         var o = DoctrineVocabulary.Decode(token);
         if (o.Family == OrderFamily.Field)
-            return $"{Slot(o.A)} line, {FieldOrders[o.Kind].ToLowerInvariant()}: {Lower(FieldSentences[o.Kind])} A line with no order presses on.";
+            return $"{Slot(o.A)} line, {FieldOrders[o.Kind].ToLowerInvariant()}: {Lower(FieldSentences[o.Kind])} "
+                   + ((FieldOrderKind)o.Kind == FieldOrderKind.Hold ? DugInShort() + " " : "") + "A line with no order presses on.";
         if (o.Family == OrderFamily.Trigger)
         {
             string w = QuartersWords(o.A);
@@ -399,4 +400,147 @@ public static class DoctrineWords
         BattleStatus.Draw => "Draw",
         _ => "Unfinished",
     };
+
+    // ---- small counts in words, and lists ----
+
+    static readonly string[] Cardinals = ["no", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve"];
+    /// <summary>A small count in words ("six"); beyond twelve, the figure.</summary>
+    public static string Cardinal(int n) => (uint)n < (uint)Cardinals.Length ? Cardinals[n] : n.ToString(System.Globalization.CultureInfo.InvariantCulture);
+    static string MoreTimes(int n) => n == 1 ? "one more time" : Cardinal(n) + " more times";
+    static string JoinAnd(IReadOnlyList<string> l) => l.Count == 0 ? "none" : l.Count == 1 ? l[0] : string.Join(", ", l.Take(l.Count - 1)) + " and " + l[^1];
+
+    // ---- the general: how it chooses and what its two records mean ----
+
+    /// <summary>
+    /// The general counts its record over about this many rounds: it halves every count when its window passes the figure. The library does not publish it (it is a
+    /// private constant of TinyHoloGeneral), so the proof PROBES a real general and goes red if this drifts from what the general does.
+    /// </summary>
+    public const int RecordWindow = 64;
+    /// <summary>The scale of the match record (the general reports permille: one thousand is every round).</summary>
+    public const int RecordScale = 1000;
+
+    /// <summary>What the general did with the council, said at the head of its panel.</summary>
+    public const string GeneralRanked = "It ranked the cards on this council from what you have taken from councils before, and fills the slots in that order.";
+
+    /// <summary>What the figure beside each card means: how often the card it ranked in that slot was the card you took there.</summary>
+    public static string SlotRecordWords() => $"Beside each card: over about the last {RecordWindow} rounds, how often the card it ranked in that slot was the card you took in that slot (a round where neither of you named a card for the slot is not counted).";
+
+    /// <summary>What the figure under the whole pick means: the share of rounds in which all of it came out exactly as the doctrine you set.</summary>
+    public static string WholeRecordWords()
+        => $"over about the last {RecordWindow} rounds, the share of rounds in which all of it came out exactly as the doctrine you then set. A short record reads a little under that share, so it starts low and climbs as the picks keep matching.";
+
+    /// <summary>What the general is made of, for the top of How it works (read from its options: a table-only or a net-only general would say so).</summary>
+    public static string GeneralBuilt(global::Doctrine.General.GeneralOptions o) => o.Mode switch
+    {
+        global::Doctrine.General.GeneralMode.TableOnly => "two small tables",
+        global::Doctrine.General.GeneralMode.NetOnly => "a tiny HoloFormer from the AlgFormer package",
+        _ => "two small tables and a tiny HoloFormer from the AlgFormer package",
+    };
+
+    /// <summary>How the general chooses (the rule of TinyHoloGeneral, with the margin read from its options).</summary>
+    public static IReadOnlyList<string> GeneralHow(global::Doctrine.General.GeneralOptions o)
+    {
+        var l = new List<string>();
+        if (o.Mode != global::Doctrine.General.GeneralMode.NetOnly)
+            l.Add("Each round it reads the cards on the council and ranks them, first, second, third and fourth. Two small tables do the ranking. The habit table remembers which order you put in each slot in a situation like this one: the round, how many soldiers and kinds you hold, your gold, the traits your host carries, how big the enemy host is, and how the last battle went. The taste table remembers what kind of card you take from a council: the sort of order, the line, trait or kind it touches, and the very card, so a liking for one kind of card carries to cards it has not met. Orders that are not on the council are left out of the pick."
+                + (o.History ? " The taste table also reads whether a card repeats what you took last round." : " It does not read what you took last round."));
+        switch (o.Mode)
+        {
+            case global::Doctrine.General.GeneralMode.Hybrid:
+                l.Add($"A tiny HoloFormer from the AlgFormer package learns beside them from the same examples. For each slot the table that has guessed your picks better speaks, and the HoloFormer takes the slot only once it has been right on that slot at least {MoreTimes(o.Margin)} than that table, over your recent rounds.");
+                break;
+            case global::Doctrine.General.GeneralMode.TableOnly:
+                l.Add("For each slot the table that has guessed your picks better speaks.");
+                break;
+            default:
+                l.Add("A tiny HoloFormer from the AlgFormer package learns from the same examples and speaks for every slot.");
+                break;
+        }
+        return l;
+    }
+
+    // ---- the muster ----
+
+    /// <summary>The game offers no second draw of the companies: only the council can be drawn again.</summary>
+    public const string MusterNote = "The muster is dealt once a round and cannot be drawn again. Only the council can be, for gold.";
+
+    // ---- the battle's own rules, said once (every figure read from them) ----
+
+    /// <summary>The name of the state of a line that has held its ground.</summary>
+    public const string DugInName = "Dug in";
+
+    /// <summary>The rule of a line that holds its ground, from the battle's tables.</summary>
+    public static string DugInRule()
+        => $"{DugInName}. A line that holds its ground for {Cardinal(UnitRules.SetTicks)} ticks without being hit is dug in: it strikes harder until it is hit or moves. A line that already shoots from afar gains less, and the longest reach on the field gains nothing.";
+
+    /// <summary>What being dug in is worth to a cohort with these traits, from the battle's own bonus.</summary>
+    public static string DugInFor(Trait t)
+    {
+        int bonus = UnitRules.SetBonusPct(t);
+        return bonus > 0 ? $"{DugInName}, it strikes {bonus}% harder." : $"{DugInName}, it gains nothing: its reach is already the longest.";
+    }
+
+    static string DugInShort() => $"Unhit for {Cardinal(UnitRules.SetTicks)} ticks, it is dug in and strikes harder until it is hit or moves.";
+
+    /// <summary>"first, third, fifth and seventh": the rounds of a game of that many rounds in which you besiege (the game's own rule for who besieges).</summary>
+    public static string YourSiegeRounds(int rounds)
+    {
+        var l = new List<string>();
+        for (int r = 0; r < rounds; r++) if (SiegeRules.BesiegerOf(r) == Side.Player) l.Add(Ordinal(r + 1));
+        return JoinAnd(l);
+    }
+
+    /// <summary>The siege rule, said once and without a name: who besieges, the clock, the stance, the swap. Safe in the static shell.</summary>
+    public static string SiegeRule(int rounds)
+        => $"Some grounds are sieges: a wall stands between the armies and one side besieges. The besieger carries a siege clock. A besieger that has traded no blow when the clock runs out loses its stance, and every company of it must advance; the other side may wait. The sides swap every round: in a game of {Cardinal(rounds)} rounds you besiege in the {YourSiegeRounds(rounds)} rounds and the enemy in the rest. The open grounds have no clock.";
+
+    /// <summary>The grounds of the game, sieges with their clocks and the open ones, read from the battle's catalogue.</summary>
+    public static string SiegeGrounds(IReadOnlyList<ArenaInfo> arenas)
+        => $"The sieges are {SiegeList(arenas)}; the open grounds are {JoinAnd(arenas.Where(a => !a.IsSiege).Select(a => a.Name).ToList())}.";
+
+    static string SiegeList(IReadOnlyList<ArenaInfo> arenas) => JoinAnd(arenas.Where(a => a.IsSiege).Select(a => $"{a.Name} (a clock of {a.SiegeClock} ticks)").ToList());
+
+    /// <summary>The briefing line of a round, from the game's own answer about its ground (<c>DoctrineGame.BriefingAsync</c>): which ground, whether it is a siege, who besieges and the clock.</summary>
+    public static string GroundBriefing(ArenaBrief a)
+    {
+        if (!a.IsSiege) return $"This round: {a.Info.Name}, an open ground with no siege clock.";
+        return a.Besieger switch
+        {
+            Side.Player => $"This round: {a.Info.Name}, a siege. You besiege; the clock is {a.SiegeClock} ticks.",
+            Side.Enemy => $"This round: {a.Info.Name}, a siege. The enemy besieges; the clock is {a.SiegeClock} ticks.",
+            _ => $"This round: {a.Info.Name}, a siege ground that no side besieges.",
+        };
+    }
+
+    /// <summary>The chip on the replay: who besieges, and the clock.</summary>
+    public static string SiegeChip(Side besieger, int clock)
+        => (besieger == Side.Player ? "You besiege" : "The enemy besieges") + (clock > 0 ? $": the clock is {clock} ticks" : "");
+
+    /// <summary>The chip on the replay from the frame the clock has fallen.</summary>
+    public static string ClockFellChip(Side besieger) => besieger == Side.Player ? "The clock has fallen: you have lost your stance" : "The clock has fallen: the enemy has lost its stance";
+
+    /// <summary>The line of the recap that names the ground a siege and who besieged it.</summary>
+    public static string SiegeRecap(string arenaName, Side besieger, int clock)
+        => $"{arenaName} is a siege, and {(besieger == Side.Player ? "you besieged" : "the enemy besieged")} it" + (clock > 0 ? $": the clock was {clock} ticks." : ".");
+
+    /// <summary>The recap line for a clock that fell: the frame the recording sets the bit.</summary>
+    public static string ClockFellRecap(Side besieger, int tick)
+        => $"The clock fell at tick {tick}: {(besieger == Side.Player ? "you" : "the enemy")} had traded no blow by then, lost the stance, and every company of {(besieger == Side.Player ? "yours" : "theirs")} advanced.";
+
+    /// <summary>The recap line for a clock that did not fall because the besieger had traded a blow.</summary>
+    public static string StanceKeptRecap(Side besieger)
+        => $"{(besieger == Side.Player ? "You" : "The enemy")} traded a blow before the clock ran out, and kept the stance.";
+
+    /// <summary>The recap line of a battle the tick limit stopped (both sides still stood): who the field went to and that power, not the count of soldiers, decides it.</summary>
+    public static string LimitRecap(BattleStatus outcome) => outcome switch
+    {
+        BattleStatus.AttackerWon => "The battle stopped at its tick limit, and the field went to you: the greater power left decides it, not the number of soldiers.",
+        BattleStatus.DefenderWon => "The battle stopped at its tick limit, and the field went to the enemy: the greater power left decides it, not the number of soldiers.",
+        BattleStatus.Draw => "The battle stopped at its tick limit with the power left on the two sides equal.",
+        _ => "The battle stopped at its tick limit.",
+    };
+
+    /// <summary>What the tick limit does, said once.</summary>
+    public static string TickLimitRule()
+        => "If the tick limit stops a battle, the field goes to the side with the greater power left, each company's soldiers weighed by its power, how hard it strikes, how far it reaches and how little damage it takes, not to the side with more soldiers; equal power is a draw.";
 }

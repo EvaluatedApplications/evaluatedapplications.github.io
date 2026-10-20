@@ -48,7 +48,7 @@ code { font-family: var(--mono); font-size: 0.82rem; overflow-wrap: anywhere; }
 .dc-hud { display: flex; flex-direction: column; gap: 0.4rem; height: 100vh; height: max(calc(100dvh - 5rem), 20rem); min-height: 0; box-sizing: border-box; }
 
 /* top bar: round and gold, the sheet buttons, the goal, what to do now */
-.dc-top { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "chips btns" "goal goal" "todo todo" "note note"; gap: 0.15rem 0.5rem; align-items: center; flex: none; }
+.dc-top { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "chips btns" "goal goal" "ground ground" "todo todo" "note note"; gap: 0.15rem 0.5rem; align-items: center; flex: none; }
 .dc-top .dc-notice, .dc-top .err { grid-area: note; margin: 0.2rem 0 0; padding: 0.4rem 0.7rem; font-size: 0.9rem; }
 .dc-top .dc-status { grid-area: chips; flex-wrap: nowrap; }
 .dc-top .dc-status li { white-space: nowrap; padding: 0.25rem 0.5rem; font-size: 0.8rem; }
@@ -56,6 +56,7 @@ code { font-family: var(--mono); font-size: 0.82rem; overflow-wrap: anywhere; }
 .dc-sheetbtn { padding: 0.3rem 0.6rem; touch-action: none; }
 .dc-sheetbtn[aria-expanded=true] { background: var(--accent); color: #fff; border-color: transparent; }
 .dc-goal { grid-area: goal; margin: 0; font-size: 0.85rem; color: var(--ink-faint); line-height: 1.35; }
+.dc-groundline { grid-area: ground; margin: 0; font-size: 0.85rem; color: var(--ink-soft); line-height: 1.35; }
 .dc-todo { grid-area: todo; margin: 0; font-size: 1rem; font-weight: 600; line-height: 1.35; color: var(--ink); }
 
 /* the stage holds the field and everything that rises over it */
@@ -91,6 +92,7 @@ code { font-family: var(--mono); font-size: 0.82rem; overflow-wrap: anywhere; }
 .dc-cohortlist .plain { grid-column: 1 / -1; line-height: 1.4; }
 .dc-cohortlist .meta, .dc-kind .meta { grid-column: 1 / -1; font-size: 0.85rem; color: var(--ink-faint); line-height: 1.35; }
 .dc-det, .dc-other { grid-column: 1 / -1; }
+.dc-det .meta { display: block; }
 .dc-det summary, .dc-other summary { display: flex; align-items: center; color: var(--ink-soft); font-size: 0.85rem; }
 .dc-other summary { font-weight: 650; font-size: 0.9rem; }
 .dc-leave { width: 100%; margin-top: 0.8rem; }
@@ -189,6 +191,7 @@ code { font-family: var(--mono); font-size: 0.82rem; overflow-wrap: anywhere; }
 .dc-result h2 { margin: 0 0 0.2rem; }
 .dc-recap { margin: 0; padding-left: 1rem; font-size: 0.9rem; line-height: 1.4; }
 .dc-recap-try { color: var(--accent-ink); }
+.dc-recap-siege { color: var(--warn); }
 
 /* end screen */
 .dc-list { margin: 0.3rem 0; padding-left: 1.2rem; line-height: 1.55; }
@@ -215,7 +218,7 @@ code { font-family: var(--mono); font-size: 0.82rem; overflow-wrap: anywhere; }
 @media (min-width: 900px) {
     .dc-ingame { max-width: 1400px; }
     .dc-hud { gap: 0.5rem; }
-    .dc-top { grid-template-columns: auto minmax(0, 1fr); grid-template-areas: "chips goal" "chips todo" "note note"; gap: 0 1rem; }
+    .dc-top { grid-template-columns: auto minmax(0, 1fr); grid-template-areas: "chips goal" "chips ground" "chips todo" "note note"; gap: 0 1rem; }
     .dc-sheetbtns { display: none; }
     .dc-goal { align-self: end; }
     .dc-todo { align-self: start; font-size: 1.05rem; }
@@ -258,6 +261,16 @@ code { font-family: var(--mono); font-size: 0.82rem; overflow-wrap: anywhere; }
 /* a phone in portrait: four slots with their arrows would not fit one row, so they take two */
 @media (max-width: 699px) {
     .dc-slots { grid-auto-flow: row; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-auto-columns: auto; }
+}
+/* a phone with a sheet or the council open: that is the task, so the sheet gets the height. The top bar gives up its goal and its to-do line (the sheet says the same), the recap gives way to the chronicle, the slots are put away
+   while the muster is on the table, and with a sheet or the council open they take one row (their orders cut short: a card says "In slot N") with the arrows and the Council button (the council is open) away until it is closed. */
+@media (max-width: 699px) {
+    .dc-hud[data-stage=draft] .dc-slots { display: none; }
+    .dc-hud:has(.dc-sheet.open, .dc-tray.open) .dc-goal, .dc-hud:has(.dc-sheet.open, .dc-tray.open) .dc-todo { display: none; }
+    .dc-hud:has(.dc-chroniclepanel.open) .dc-recap { display: none; }
+    .dc-hud:has(.dc-sheet.open, .dc-tray.open) .dc-slots { grid-auto-flow: column; grid-template-columns: none; grid-auto-columns: minmax(0, 1fr); }
+    .dc-hud:has(.dc-sheet.open, .dc-tray.open) .dc-slot .t { min-width: 0; max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .dc-hud:has(.dc-sheet.open, .dc-tray.open) .dc-mv, .dc-hud:has(.dc-tray.open) #dc-orders { display: none; }
 }
 @media (max-width: 359px) {
     .dc-chipgrid { grid-template-columns: minmax(0, 1fr); }

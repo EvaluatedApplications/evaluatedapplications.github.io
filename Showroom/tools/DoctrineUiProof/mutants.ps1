@@ -142,7 +142,68 @@ $mutants = @(
     @{ Id = 'N27'; Name = 'the starter advice buys companies the purse cannot pay'; File = 'Services\Doctrine\DoctrineGuide.cs';
        Old = 'if (taken[i] || !p.Affordable || p.Cost > gold) continue;'; New = 'if (taken[i] || !p.Affordable) continue;'; Append = ''; Expect = 'starter advice is labelled as the game' },
     @{ Id = 'N28'; Name = 'the orders advice ignores the council (takes orders that are not on the table)'; File = 'Services\Doctrine\DoctrineGuide.cs';
-       Old = 'Where(t => t != 0 && offer.Allows(t) && DoctrineUnlocks.Allows(t, step) && army.Legal.Allows(t))'; New = 'Where(t => t != 0 && DoctrineUnlocks.Allows(t, step) && army.Legal.Allows(t))'; Append = ''; Expect = 'starter advice is labelled as the game' }
+       Old = 'Where(t => t != 0 && offer.Allows(t) && DoctrineUnlocks.Allows(t, step) && army.Legal.Allows(t))'; New = 'Where(t => t != 0 && DoctrineUnlocks.Allows(t, step) && army.Legal.Allows(t))'; Append = ''; Expect = 'starter advice is labelled as the game' },
+    # ---- 2026-10-19 pre-publish pass: the general's words, dug in, the siege, the briefing, the tick limit
+    @{ Id = 'P1'; Name = 'the match record window is typed wrong (32, the general counts over 64)'; File = 'Services\Doctrine\DoctrineWords.cs';
+       Old = 'public const int RecordWindow = 64;'; New = 'public const int RecordWindow = 32;'; Append = ''; Expect = 'match record: the window the words state' },
+    @{ Id = 'P2'; Name = 'the margin in the words is typed, not read from the general''s options'; File = 'Services\Doctrine\DoctrineWords.cs';
+       Old = 'MoreTimes(o.Margin)'; New = 'MoreTimes(2)'; Append = ''; Expect = 'wording A: the margin in the words is the general''s own' },
+    @{ Id = 'P3'; Name = 'being dug in is worth the reach edge instead of the set bonus'; File = 'Services\Doctrine\DoctrineWords.cs';
+       Old = 'int bonus = UnitRules.SetBonusPct(t);'; New = 'int bonus = UnitRules.ReachPct(t);'; Append = ''; Expect = 'dug in (words): what it is worth to a cohort' },
+    @{ Id = 'P4'; Name = 'the dug-in rule says one tick too many'; File = 'Services\Doctrine\DoctrineWords.cs';
+       Old = 'Cardinal(UnitRules.SetTicks)} ticks without being hit is dug in'; New = 'Cardinal(UnitRules.SetTicks + 1)} ticks without being hit is dug in'; Append = ''; Expect = 'dug in (words): the rule is said once' },
+    @{ Id = 'P5'; Name = 'the Hold the line sentence loses the dug-in rule'; File = 'Services\Doctrine\DoctrineWords.cs';
+       Old = '((FieldOrderKind)o.Kind == FieldOrderKind.Hold ? DugInShort() + " " : "")'; New = '""'; Append = ''; Expect = 'dug in (words): the rule is said once' },
+    @{ Id = 'P6'; Name = 'the rounds you besiege are the enemy''s'; File = 'Services\Doctrine\DoctrineWords.cs';
+       Old = 'if (SiegeRules.BesiegerOf(r) == Side.Player) l.Add(Ordinal(r + 1));'; New = 'if (SiegeRules.BesiegerOf(r) == Side.Enemy) l.Add(Ordinal(r + 1));'; Append = ''; Expect = 'siege (words): who besieges in which round' },
+    @{ Id = 'P7'; Name = 'the briefing says the enemy besieges when you do'; File = 'Services\Doctrine\DoctrineWords.cs';
+       Old = 'Side.Player => $"This round: {a.Info.Name}, a siege. You besiege;'; New = 'Side.Player => $"This round: {a.Info.Name}, a siege. The enemy besieges;'; Append = ''; Expect = 'ground (briefing)' },
+    @{ Id = 'P8'; Name = 'the session asks the game for the briefing of the NEXT round'; File = 'Services\Doctrine\DoctrineSession.cs';
+       Old = '(await _game.BriefingAsync(Seed, round, 0, ct)).Arena'; New = '(await _game.BriefingAsync(Seed, round + 1, 0, ct)).Arena'; Append = ''; Expect = 'ground (briefing)' },
+    @{ Id = 'P9'; Name = 'the recap names the other side as besieger'; File = 'Services\Doctrine\DoctrineWords.cs';
+       Old = '(besieger == Side.Player ? "you besieged" : "the enemy besieged")'; New = '(besieger == Side.Player ? "the enemy besieged" : "you besieged")'; Append = ''; Expect = 'ground (briefing)' },
+    @{ Id = 'P10'; Name = 'the scrubber ignores the clock bit (the clock never falls on the replay)'; File = 'Services\Doctrine\ReplayView.cs';
+       Old = 'public bool ClockFell(int tick) => (At(tick).WorldFlags & WorldFlag.ClockFell) != 0;'; New = 'public bool ClockFell(int tick) => false;'; Append = ''; Expect = 'replay chips' },
+    @{ Id = 'P11'; Name = 'the siege chip forgets the clock'; File = 'Components\DoctrineArena.razor';
+       Old = 'DoctrineWords.SiegeChip(besieger, SiegeClock)'; New = 'DoctrineWords.SiegeChip(besieger, 0)'; Append = ''; Expect = 'replay chips' },
+    @{ Id = 'P12'; Name = 'the muster no longer says it is dealt once'; File = 'Pages\DoctrinePage.razor';
+       Old = '<p class="hint dc-musternote">@DoctrineWords.MusterNote</p>'; New = ''; Append = ''; Expect = 'ground (briefing)' },
+    @{ Id = 'P13'; Name = 'the cohort Details lose the dug-in line'; File = 'Pages\DoctrinePage.razor';
+       Old = '<span class="meta dc-dugin">@DoctrineWords.DugInFor(c.Traits)</span>'; New = ''; Append = ''; Expect = 'army panel (round 1): the same Details say' },
+    @{ Id = 'P14'; Name = 'the per-card match record is described as a share of cards'; File = 'Services\Doctrine\DoctrineWords.cs';
+       Old = 'how often the card it ranked in that slot was the card you took in that slot (a round'; New = 'the share of cards it ranked in that slot (a round'; Append = ''; Expect = 'wording B' },
+    @{ Id = 'P15'; Name = 'the words say the HoloFormer speaks first'; File = 'Services\Doctrine\DoctrineWords.cs';
+       Old = 'the table that has guessed your picks better speaks, and the HoloFormer'; New = 'the HoloFormer speaks, and the table'; Append = ''; Expect = 'wording A: About says how it chooses' },
+    @{ Id = 'P16'; Name = 'the top bar never shows the ground'; File = 'Pages\DoctrinePage.razor';
+       Old = 'DoctrineStage.Doctrine && _s.Ground is { } ground)'; New = 'DoctrineStage.Doctrine && _s.Ground is { } ground && false)'; Append = ''; Expect = 'ground (briefing)' },
+    @{ Id = 'P17'; Name = 'the recap says the tick limit goes to the side with more soldiers'; File = 'Services\Doctrine\DoctrineWords.cs';
+       Old = 'and the field went to you: the greater power left decides it, not the number of soldiers.'; New = 'and the field went to you: the side with more soldiers decides it.'; Append = ''; Expect = 'recap (synthetic siege)' },
+    @{ Id = 'P18'; Name = 'every battle with a survivor is said to have stopped at the tick limit (one side standing is enough)'; File = 'Services\Doctrine\DoctrineGuide.cs';
+       Old = 'lastFrame.Blobs.Any(b => b.Side == Side.Player && b.Strength > 0) && lastFrame.Blobs.Any(b => b.Side == Side.Enemy && b.Strength > 0);'; New = 'lastFrame.Blobs.Any(b => b.Side == Side.Player && b.Strength > 0) || lastFrame.Blobs.Any(b => b.Side == Side.Enemy && b.Strength > 0);'; Append = ''; Expect = 'recap (synthetic siege)' },
+    @{ Id = 'C1'; Name = 'the siege line names the other side as besieger'; File = 'Services\Doctrine\BattleChronicle.cs';
+       Old = 'string head = bs0 == Side.Player ? "A siege. You besiege" : "A siege. The enemy besieges";'; New = 'string head = bs0 == Side.Player ? "A siege. The enemy besieges" : "A siege. You besiege";'; Append = ''; Expect = 'siege (synthetic frames): you besiege on a ground' },
+    @{ Id = 'C2'; Name = 'the clock line is put one tick early'; File = 'Services\Doctrine\BattleChronicle.cs';
+       Old = 'Add(cur.Tick, ChronicleKind.Clock, sg == Side.Player'; New = 'Add(prev.Tick, ChronicleKind.Clock, sg == Side.Player'; Append = ''; Expect = 'siege (synthetic frames): you besiege on a ground' },
+    @{ Id = 'C3'; Name = 'the clock line is written although the besieger had traded a blow'; File = 'Services\Doctrine\BattleChronicle.cs';
+       Old = '(prev.WorldFlags & WorldFlag.ClockFell) == 0 && !besiegerTraded)'; New = '(prev.WorldFlags & WorldFlag.ClockFell) == 0)'; Append = ''; Expect = 'siege (synthetic frames): no clock line when the besieger had traded' },
+    @{ Id = 'C4'; Name = 'a strike does not start the dug-in count again'; File = 'Services\Doctrine\BattleChronicle.cs';
+       Old = 'if (struck.Contains(b.Id)) { st.Reset(b); continue; }'; New = 'if (struck.Contains(b.Id) && false) { st.Reset(b); continue; }'; Append = ''; Expect = 'chronicle (synthetic frames): the log is exactly the hand-written account' },
+    @{ Id = 'C5'; Name = 'a cohort is called dug in one tick early'; File = 'Services\Doctrine\BattleChronicle.cs';
+       Old = 'if (st.Count >= UnitRules.SetTicks && !st.Set)'; New = 'if (st.Count >= UnitRules.SetTicks - 1 && !st.Set)'; Append = ''; Expect = 'chronicle (synthetic frames): the log is exactly the hand-written account' },
+    @{ Id = 'C6'; Name = 'a step too close to the reach to tell counts as standing still'; File = 'Services\Doctrine\BattleChronicle.cs';
+       Old = 'else if (dist < reach - DugInMargin)'; New = 'else if (dist < reach + DugInMargin)'; Append = ''; Expect = 'dug in (synthetic frames): the first cohort of each side' },
+    @{ Id = 'C7'; Name = 'the dug-in line states the reach edge instead of the set bonus'; File = 'Services\Doctrine\BattleChronicle.cs';
+       Old = 'int bonus = UnitRules.SetBonusPct(tr);'; New = 'int bonus = UnitRules.ReachPct(tr);'; Append = ''; Expect = 'chronicle (synthetic frames): the log is exactly the hand-written account' },
+    @{ Id = 'C8'; Name = 'the end says the tick limit goes to more soldiers'; File = 'Services\Doctrine\BattleChronicle.cs';
+       Old = 'where the field goes to the side with the greater power left, not to the side with more soldiers.'; New = 'where the field goes to the side with more soldiers left.'; Append = ''; Expect = 'siege (synthetic frames): you besiege on a ground' },
+    @{ Id = 'C9'; Name = 'the clock line reads the gate bit'; File = 'Services\Doctrine\BattleChronicle.cs';
+       Old = '(cur.WorldFlags & WorldFlag.ClockFell) != 0 && (prev'; New = '(cur.WorldFlags & WorldFlag.GateFallen) != 0 && (prev'; Append = ''; Expect = 'siege (synthetic frames): you besiege on a ground' },
+    @{ Id = 'C10'; Name = 'the dug-in margin is zero (no step is too close to tell)'; File = 'Services\Doctrine\BattleChronicle.cs';
+       Old = 'public const double DugInMargin = 1.5;'; New = 'public const double DugInMargin = 0.0;'; Append = ''; Expect = 'dug in (synthetic frames): the first cohort of each side' },
+    @{ Id = 'L1'; Name = 'a phone with a sheet or the council open keeps the goal and to-do lines (the cards get no more height)'; File = 'Pages\DoctrinePage.razor.css';
+       Old = '.dc-hud:has(.dc-sheet.open, .dc-tray.open) .dc-goal, .dc-hud:has(.dc-sheet.open, .dc-tray.open) .dc-todo { display: none; }'; New = ''; Append = ''; Expect = 'council layout (phone)' },
+    @{ Id = 'L2'; Name = 'the one-row slots rule leaks out of the phone query (it would reach the desktop)'; File = 'Pages\DoctrinePage.razor.css';
+       Old = '.dc-hud[data-stage=draft] .dc-slots { display: none; }'; New = '} .dc-hud:has(.dc-tray.open) .dc-mv { display: none; } @media (max-width: 699px) { .dc-hud[data-stage=draft] .dc-slots { display: none; }'; Append = ''; Expect = 'council layout (phone)' }
 )
 
 $log = Join-Path $PSScriptRoot 'mutants.log'

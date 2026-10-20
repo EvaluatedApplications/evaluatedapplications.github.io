@@ -13,3 +13,20 @@
 
 ## Doctrine wasm measurement (moved from CLAUDE.md, 2026-10-19)
 MEASURED (AOT wasm under Node, 2026-10-18, BEFORE the hook change): digest equal to desktop, ~105-130 ms/round, longest step 19 ms, probe bundle +10.8 MB raw / +3.0 MB gzip.
+
+
+## Doctrine details moved from CLAUDE.md (2026-10-19 pre-publish pass)
+- **Hooks**: progress = the skeleton's `IRoundObserver` (`StageEntered`/`BattleTick`), the arena's drawing = `DoctrineContext.LayoutOf`, refusals after the confirm =
+  `DraftedAsync`; the live "would cost" hint still drafts onto a COPY via `TryParse(code)` because the pipeline report only exists after the confirm. Cancel/Leave cancel the
+  run's token; a cancelled round restores the army from its round-start code and restarts the run.
+- **Copy rules**: the general "learns how you set a doctrine from your own choices, in your browser, with nothing pre-trained"; examples = each doctrine AND each battle result;
+  never that the net beats a table or "plays well"; battles "simulated once on your device", the replay "is a recording"; no saved form; Cull HIDDEN (one sentence) while no army allows it.
+- **Order names** (user 2026-10-19: lord-based, no builder's terms): Press on, Hold the line, Ride the flank, Fall back, Guard the host, Run them down; Reform the ranks, Reforge,
+  Drill the host, Swear into the, Raise the banner of; Should a quarter / half / three quarters fall. `DoctrineSession.Trial` previews an order on a copy of the host; table in
+  `todo/doctrine-story-from-mechanics.md`.
+- **The general is masked to the council** by the game, so under offers it often has no pick (a habit on orders that are not on the table is dropped). FINDING (Doctrine army, not
+  ours): the same draft with its picks in another order has the same army digest and a different battle.
+- **Gotchas**: a bUnit DOM cache can go stale after a background-thread render (the proof re-renders on a stalled wait); a lambda parameter may reuse a local's name in this C#.
+- **2026-10-19 pre-publish pass facts**: the proof reads `DoctrinePage.razor.css` from disk (so a mutant of the css is possible); the siege briefing needs `DoctrineGame.BriefingAsync`
+  (committed in Doctrine eabe96d); the muster has no reroll (`UnitOffer` has no reroll member; the proof asserts it by reflection); `TinyHoloGeneral`'s class comment still says
+  "TableOnly is the shipped default" while `GeneralOptions.Mode` defaults to Hybrid (code wins; flagged to the coordinator).

@@ -34,6 +34,9 @@ public sealed class ReplayView
         // The frame the gate first shows as fallen, read from the recording itself.
         for (int i = 0; i < replay.Frames.Count; i++)
             if ((replay.Frames[i].WorldFlags & WorldFlag.GateFallen) != 0) { GateFellAt = replay.Frames[i].Tick; break; }
+        // The frame the siege clock first shows as fallen, read from the recording itself (version 3 recordings of a siege).
+        for (int i = 0; i < replay.Frames.Count; i++)
+            if ((replay.Frames[i].WorldFlags & WorldFlag.ClockFell) != 0) { ClockFellAt = replay.Frames[i].Tick; break; }
     }
 
     public BattleReplay Replay { get; }
@@ -43,6 +46,9 @@ public sealed class ReplayView
     public int Cell { get; }
     public IReadOnlyList<GroundRun> Ground { get; }
     public int? GateFellAt { get; }
+    public int? ClockFellAt { get; }
+    /// <summary>The side that besieged, as the recording's header names it (null: an open ground, or a recording older than version 3).</summary>
+    public Side? Besieger => Replay.Besieger;
     public bool HasGate => Layout is { GateRadius: > 0 };
     public int Last => Math.Max(0, Replay.Frames.Count - 1);
 
@@ -60,6 +66,7 @@ public sealed class ReplayView
 
     public ReplayFrame At(int tick) => Replay.Frames[Math.Clamp(tick, 0, Last)];
     public bool GateFallen(int tick) => (At(tick).WorldFlags & WorldFlag.GateFallen) != 0;
+    public bool ClockFell(int tick) => (At(tick).WorldFlags & WorldFlag.ClockFell) != 0;
 
     public int Soldiers(int tick, Side side) => At(tick).Blobs.Where(b => b.Side == side).Sum(b => b.Strength);
 

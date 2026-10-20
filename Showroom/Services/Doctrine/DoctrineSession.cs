@@ -33,6 +33,9 @@ public sealed record RoundView(RoundRecord Record, ArmyReadModel ArmyAfter, glob
     /// <summary>The battle's own set-up as the pipeline handed it to the battle (both sides' cohorts with the traits they fought with), or null when none was seen.</summary>
     public BattleSetup? Setup { get; init; }
 
+    /// <summary>The siege clock of the arena the round was fought on, in ticks, from the battle's own catalogue (0 for an open ground, or when not known).</summary>
+    public int SiegeClock { get; init; }
+
     /// <summary>The traits the cohort of this side and kind fought with, from the set-up; null when the set-up is not known.</summary>
     public Trait? TraitsOf(Side side, int key)
     {
@@ -136,6 +139,25 @@ public sealed class DoctrineSession : IDisposable
 
     /// <summary>The name of an arena of the game most recently started (its engine's own catalogue), or the id when there is none.</summary>
     public string ArenaName(string arenaId) => _game?.Context.Battle.Arenas.FirstOrDefault(a => a.Id == arenaId)?.Name ?? arenaId;
+
+    /// <summary>The siege clock of an arena of the game most recently started, in ticks (0: an open ground, or none started yet).</summary>
+    public int SiegeClockOf(string arenaId) => _game?.Context.Battle.Arenas.FirstOrDefault(a => a.Id == arenaId)?.SiegeClock ?? 0;
+
+    /// <summary>The grounds of the game most recently started (its engine's own catalogue), or null before the first game: the grounds exist only in a built game.</summary>
+    public IReadOnlyList<ArenaInfo>? Grounds => _game?.Context.Battle.Arenas;
+
+    /// <summary>
+    /// The ground of the round now being played and who besieges it, asked of the game itself before the draft (<c>DoctrineGame.BriefingAsync</c>: the same rules the setup stage
+    /// uses, so it cannot disagree with the battle that follows). Null before the first round, or if the game could not say.
+    /// </summary>
+    public ArenaBrief? Ground { get; private set; }
+
+    async ValueTask<ArenaBrief?> GroundOfAsync(int round, CancellationToken ct)
+    {
+        if (_game is null) return null;
+        try { return (await _game.BriefingAsync(Seed, round, 0, ct)).Arena; }
+        catch (Exception e) when (e is not OperationCanceledException and not OutOfMemoryException) { return null; }
+    }
 
     // ---- starting a game ----
 
@@ -395,6 +417,7 @@ public sealed class DoctrineSession : IDisposable
         public async ValueTask<IReadOnlyList<DraftPick>> DraftAsync(ArmyReadModel army, UnitOffer offer, int round, CancellationToken ct)
         {
             s.RoundIndex = round; s.BattleTick = 0; s.Ghost = null; s.OrdersOffered = null; s.Reroll = null;
+            s.Ground = await s.GroundOfAsync(round, ct);
             s.Army = army; s.Draft = new DraftView(army, round, offer); s.Stage = DoctrineStage.Draft; s.Status = ""; s.Turn++;
             var tcs = s._draftTcs = new TaskCompletionSource<IReadOnlyList<DraftPick>>(TaskCreationOptions.RunContinuationsAsynchronously);
             s.Notify();
@@ -457,7 +480,7 @@ public sealed class DoctrineSession : IDisposable
             int mine = first?.Blobs.Where(b => b.Side == Side.Player).Sum(b => b.Strength) ?? 0;
             int theirs = first?.Blobs.Where(b => b.Side == Side.Enemy).Sum(b => b.Strength) ?? 0;
             s.Last = new RoundView(rec, after, s._game!.Context.LayoutOf(rec.ArenaId), mine, theirs, rec.Final);
-            s.Last = s.Last with { Setup = s._setup };
+            s.Last = s.Last with { Setup = s._setup, SiegeClock = s.SiegeClockOf(rec.ArenaId) };
             s.Army = after;
             s.Stage = DoctrineStage.Watch; s.Status = ""; s._parked = true;
             var tcs = s._next = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);

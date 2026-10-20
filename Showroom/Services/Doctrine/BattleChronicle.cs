@@ -8,12 +8,18 @@ namespace ShowroomDoctrine;
 // no line is flavour. Every line is read from the recording and carries a CITE, the exact thing in the recording that backs it, so a checker
 // can look the line up again (tools\DoctrineUiProof does, with its own code). A line the recording cannot back is not written.
 
-public enum ChronicleKind { Start, Contact, Gate, Flank, Holy, Blow, Run, Break, Stand, Lull, End }
+public enum ChronicleKind { Start, Siege, Contact, Gate, Clock, Flank, Holy, DugIn, Blow, Run, Break, Stand, Lull, End }
 
 public enum CiteKind
 {
     /// <summary>Frame 0: A = your soldiers, B = the enemy's.</summary>
     Start,
+    /// <summary>Frame 0 of a siege: A = the side the recording's header names as besieger (0 yours, 1 the enemy's), Value = the arena's siege clock in ticks (0 when the caller did not know it).</summary>
+    Siege,
+    /// <summary>The clock-fell bit is set in the frame at <c>Tick</c> and was not in the frame before; A = the besieger's side as the header names it. No frame before this one has a blow dealt or taken by that side.</summary>
+    Clock,
+    /// <summary>The blob A is DUG IN in the frame at <c>Tick</c>: Value ticks running (the battle's set time) it was struck in no frame and stood within a melee reach of where its stillness began; Value2 = the bonus percent its traits give.</summary>
+    Set,
     /// <summary>A strike in the frame at <c>Tick</c>: A = source blob, B = target blob, Value = the damage the event records.</summary>
     Event,
     /// <summary>The blob A has strength 0 in the frame at <c>Tick</c> and had more in the frame before.</summary>
@@ -62,12 +68,27 @@ public static class BattleChronicle
     /// <summary>A blow is heavy when it is at least this many soldiers AND a quarter of what the target had before the tick.</summary>
     public const int HeavyMin = 5;
     public const int MaxHeavy = 2, MaxRuns = 3, MaxLulls = 3, MaxHoly = 2;
+    /// <summary>
+    /// How far, in 1/16 of an arena unit, a cohort's recorded place may differ from the battle's exact one in a comparison with the melee reach: each place is rounded to
+    /// the nearest 1/16 in x and y, so two of them differ from the truth by at most 1.42 of these units. A distance within this margin of the reach is NOT PROVABLE from the
+    /// frames and the cohort is not called dug in from there on (until a blow resets it).
+    /// </summary>
+    public const double DugInMargin = 1.5;
+
+    sealed class Still(int x, int y)
+    {
+        public int Count, RX = x, RY = y;
+        public bool Known = true, Set;
+        public void Reset(ReplayBlob b) { Count = 0; RX = b.X; RY = b.Y; Known = true; Set = false; }
+    }
 
     /// <summary>
     /// Build the chronicle. <paramref name="kindName"/> names a kind key (default: the roster). <paramref name="traitsOf"/> gives the traits a cohort
-    /// really fought with (side, kind key), or null when they are not known; without it no holy line is written, because a flip can change a kind's traits.
+    /// really fought with (side, kind key), or null when they are not known; without it no holy line is written, because a flip can change a kind's traits,
+    /// and no dug-in line, because the bonus is the cohort's own. <paramref name="siegeClock"/> is the arena's siege clock in ticks (0 when not known); the
+    /// recording names the besieger (version 3) but not the clock.
     /// </summary>
-    public static Chronicle Build(BattleReplay replay, DoctrineSet doctrine, string arenaName, Func<int, string>? kindName = null, Func<Side, int, Trait?>? traitsOf = null)
+    public static Chronicle Build(BattleReplay replay, DoctrineSet doctrine, string arenaName, Func<int, string>? kindName = null, Func<Side, int, Trait?>? traitsOf = null, int siegeClock = 0)
     {
         var F = replay.Frames;
         int n = F.Count;
@@ -90,6 +111,23 @@ public static class BattleChronicle
         var f0 = F[0];
         Add(f0.Tick, ChronicleKind.Start, $"{arenaName}. {Total(f0, Side.Player)} of your soldiers face the enemy's {Total(f0, Side.Enemy)}.",
             new ChronicleCite(CiteKind.Start, f0.Tick, Total(f0, Side.Player), Total(f0, Side.Enemy)));
+
+        // ---- the siege: who besieges is in the recording's header; the clock is the arena's, handed in by the caller
+        Side? besieger = replay.Besieger;
+        if (besieger is { } bs0)
+        {
+            string head = bs0 == Side.Player ? "A siege. You besiege" : "A siege. The enemy besieges";
+            string said = siegeClock > 0
+                ? head + $", and the siege clock is {siegeClock} ticks: " + (bs0 == Side.Player
+                    ? "if you have traded no blow by then, you lose your stance and every company of yours must advance."
+                    : "if it has traded no blow by then, it loses its stance and every company of it must advance. You may wait.")
+                : head + ".";
+            Add(f0.Tick, ChronicleKind.Siege, said, new ChronicleCite(CiteKind.Siege, f0.Tick, (int)bs0, 0, siegeClock));
+        }
+        bool besiegerTraded = false;
+        var still = new Dictionary<int, Still>();
+        foreach (var b in f0.Blobs) still[b.Id] = new Still(b.X, b.Y);
+        var dug = new (int Tick, ReplayBlob Blob)?[2];     // the first cohort of each side to be dug in, by side
 
         bool contacted = false;
         int contactTick = 0, breaks = 0, linesGone = 0;
@@ -150,6 +188,13 @@ public static class BattleChronicle
             // the gate
             if ((cur.WorldFlags & WorldFlag.GateFallen) != 0 && (prev.WorldFlags & WorldFlag.GateFallen) == 0)
                 Add(cur.Tick, ChronicleKind.Gate, "The gate has fallen.", new ChronicleCite(CiteKind.Gate, cur.Tick));
+
+            // the siege clock: the bit is first set in this frame, and no frame before it holds a blow dealt or taken by the besieger (else the line is not written)
+            if (besieger is { } sg && (cur.WorldFlags & WorldFlag.ClockFell) != 0 && (prev.WorldFlags & WorldFlag.ClockFell) == 0 && !besiegerTraded)
+                Add(cur.Tick, ChronicleKind.Clock, sg == Side.Player
+                    ? "The siege clock has run out. You had traded no blow, so you lose your stance: every company of yours now advances."
+                    : "The siege clock has run out. The enemy had traded no blow, so it loses its stance: every company of theirs now advances.",
+                    new ChronicleCite(CiteKind.Clock, cur.Tick, (int)sg));
 
             foreach (var (e, s, t) in evs)
             {
@@ -230,6 +275,31 @@ public static class BattleChronicle
                 if (cur.Events.Count == 0) { if (emptyFrom < 0) emptyFrom = cur.Tick; emptyTo = cur.Tick; }
                 else if (emptyFrom >= 0) { lulls.Add((emptyFrom, emptyTo)); emptyFrom = -1; }
             }
+
+            // dug in: the battle's own rule (UnitRules.SetTicks still ticks: struck in none, and within a melee reach of where the stillness began), followed on the recorded places.
+            // A strike on the cohort, or a clear move of more than the reach, starts the count again from where it stands; a distance too close to the reach to tell is not provable.
+            var struck = new HashSet<int>();
+            foreach (var e in cur.Events) struck.Add(e.Target);
+            double reach = UnitRules.MeleeRange * Q;
+            foreach (var b in cur.Blobs.OrderBy(x => x.Id))
+            {
+                if (!still.TryGetValue(b.Id, out var st)) continue;
+                if (b.Strength <= 0) { st.Set = false; st.Known = false; continue; }
+                if (struck.Contains(b.Id)) { st.Reset(b); continue; }
+                if (!st.Known) continue;
+                double dist = Math.Sqrt((double)(b.X - st.RX) * (b.X - st.RX) + (double)(b.Y - st.RY) * (b.Y - st.RY));
+                if (dist > reach + DugInMargin) st.Reset(b);
+                else if (dist < reach - DugInMargin)
+                {
+                    st.Count++;
+                    if (st.Count >= UnitRules.SetTicks && !st.Set) { st.Set = true; if (dug[(int)b.Side] is null) dug[(int)b.Side] = (cur.Tick, b); }
+                }
+                else { st.Known = false; st.Set = false; }
+            }
+
+            // the besieger has traded a blow once a frame holds one dealt or taken by its side
+            if (besieger is { } sb)
+                foreach (var (_, s, t) in evs) if (s.Side == sb || t.Side == sb) besiegerTraded = true;
         }
         if (emptyFrom >= 0) lulls.Add((emptyFrom, emptyTo));
 
@@ -247,6 +317,17 @@ public static class BattleChronicle
         foreach (var (from, to) in lulls.Where(l => l.To - l.From + 1 >= LullTicks).OrderByDescending(l => l.To - l.From).ThenBy(l => l.From).Take(MaxLulls))
             Add(from, ChronicleKind.Lull, $"A lull: no blow lands from tick {from} to tick {to}.", new ChronicleCite(CiteKind.Span, from, from, to));
 
+        // dug in: the first cohort of each side to be so, where its traits (and so its bonus) are known
+        if (traitsOf is not null)
+            foreach (var side in new[] { Side.Player, Side.Enemy })
+                if (dug[(int)side] is { } dg && traitsOf(side, dg.Blob.Key) is { } tr)
+                {
+                    int bonus = UnitRules.SetBonusPct(tr);
+                    string edge = bonus > 0 ? $"They strike {bonus}% harder until they are hit or move." : "Their reach is already the longest, so it gains them nothing.";
+                    Add(dg.Tick, ChronicleKind.DugIn, $"{Cap(Lab(dg.Blob))} are dug in: {DoctrineWords.Cardinal(UnitRules.SetTicks)} ticks unhit and in place. {edge}",
+                        new ChronicleCite(CiteKind.Set, dg.Tick, dg.Blob.Id, 0, UnitRules.SetTicks, bonus));
+                }
+
         // the end
         var fl = F[n - 1];
         int mineEnd = Total(fl, Side.Player), theirsEnd = Total(fl, Side.Enemy);
@@ -258,7 +339,9 @@ public static class BattleChronicle
                                                               : $"Both sides fall together. You have {mineEnd}; the enemy has {theirsEnd}.",
             _ => $"The battle did not finish. You have {mineEnd}; the enemy has {theirsEnd}.",
         };
-        if (mineEnd > 0 && theirsEnd > 0) endText += " The battle stopped at its tick limit.";
+        if (mineEnd > 0 && theirsEnd > 0)
+            endText += replay.Result.Outcome == BattleStatus.Draw ? " The battle stopped at its tick limit with the power left on the two sides equal."
+                                                                  : " The battle stopped at its tick limit, where the field goes to the side with the greater power left, not to the side with more soldiers.";
         Add(fl.Tick, ChronicleKind.End, endText, new ChronicleCite(CiteKind.End, fl.Tick, mineEnd, theirsEnd, (int)replay.Result.Outcome));
 
         var lines = rows.OrderBy(r => r.Line.Tick).ThenBy(r => r.Rank).ThenBy(r => r.Seq).Select(r => r.Line).ToList();

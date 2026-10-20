@@ -12,8 +12,13 @@ public sealed record DraftAdvice(IReadOnlyList<DraftPick> Picks, string Reason);
 /// <summary>A starter doctrine: the orders and the one plain line saying where they came from.</summary>
 public sealed record DoctrineAdvice(DoctrineSet Doctrine, string Reason);
 
-/// <summary>Two lines on what happened and (when the record supports one) one thing to try next.</summary>
-public sealed record Recap(IReadOnlyList<string> What, string? TryNext);
+/// <summary>Two lines on what happened and (when the record supports one) one thing to try next; <see cref="Siege"/> holds the lines on a siege (none on an open ground).</summary>
+public sealed record Recap(IReadOnlyList<string> What, string? TryNext)
+{
+    public IReadOnlyList<string> Siege { get; init; } = [];
+    /// <summary>The line on a battle the tick limit stopped (both sides still stood at the last frame), or null.</summary>
+    public string? Limit { get; init; }
+}
 
 public static class DoctrineGuide
 {
@@ -100,6 +105,31 @@ public static class DoctrineGuide
             next = $"Try next: {DoctrineWords.KindName(worst.Key)} lost the most ({worst.Lost}). Give the {DoctrineWords.Slot(worst.Slot)} line a different order, or draft more of them.";
         else if (v.ArmyAfter.Gold > 0)
             next = $"Try next: you have {v.ArmyAfter.Gold} gold. The draft turns gold into soldiers.";
-        return new Recap(what, next);
+        // a siege: the recording names who besieged; the clock is the arena's; whether it fell is the recording's own bit
+        var siege = new List<string>();
+        if (rec.Replay.Besieger is { } bs)
+        {
+            siege.Add(DoctrineWords.SiegeRecap(arenaName, bs, v.SiegeClock));
+            var fell = rec.Replay.Frames.FirstOrDefault(f => (f.WorldFlags & WorldFlag.ClockFell) != 0);
+            if (fell is not null) siege.Add(DoctrineWords.ClockFellRecap(bs, fell.Tick));
+            else if (v.SiegeClock > 0 && rec.Result.Ticks > v.SiegeClock && TradedBy(rec.Replay, bs, v.SiegeClock)) siege.Add(DoctrineWords.StanceKeptRecap(bs));
+        }
+        // the tick limit: both sides still stand in the last frame, so the limit stopped it and POWER left (not the count) gave the field
+        var lastFrame = rec.Replay.Frames.Count > 0 ? rec.Replay.Frames[^1] : null;
+        bool stopped = lastFrame is not null && lastFrame.Blobs.Any(b => b.Side == Side.Player && b.Strength > 0) && lastFrame.Blobs.Any(b => b.Side == Side.Enemy && b.Strength > 0);
+        return new Recap(what, next) { Siege = siege, Limit = stopped ? DoctrineWords.LimitRecap(rec.Result.Outcome) : null };
+    }
+
+    /// <summary>True when a frame up to <paramref name="byTick"/> holds a blow dealt or taken by a cohort of <paramref name="side"/>.</summary>
+    static bool TradedBy(BattleReplay r, Side side, int byTick)
+    {
+        foreach (var f in r.Frames)
+        {
+            if (f.Tick > byTick) break;
+            foreach (var e in f.Events)
+                foreach (var b in f.Blobs)
+                    if ((b.Id == e.Source || b.Id == e.Target) && b.Side == side) return true;
+        }
+        return false;
     }
 }

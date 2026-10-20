@@ -12,6 +12,7 @@ using ShowroomDoctrine;
 // tiny HoloFormer general), the taps are a visitor's. Nothing is launched: bUnit renders the component in memory.
 string showroom = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, @"..\..\..\..\.."));
 int failures = 0, checks = 0;
+const int RecordWindowHand = 64;          // written out by hand: the window the match record is counted over, as the words state it (probed on a real general below)
 void Check(string name, bool ok, string detail = "")
 {
     checks++;
@@ -125,10 +126,70 @@ async Task TapPack(IRenderedComponent<DoctrinePage> p, int index)
         catch (Bunit.Rendering.UnknownEventHandlerIdException) { p.Render(); }
     }
 }
+// The grounds, written out by hand: the catalogue's order, the names, the clocks and the draw (seed, round) -> ground, so the page's briefing is compared with something that is not the game's own answer.
+string[] arenaIdsHand = ["open-field", "chokepoint", "ridge", "falling-gate"];
+string ArenaIdHand(int seed, int round) => arenaIdsHand[(int)(GameRng.Mix(seed, 3000 + round) % 4)];
+Side? BesiegerHand(string id, int round) => id is "chokepoint" or "falling-gate" ? (round % 2 == 0 ? Side.Player : Side.Enemy) : null;
+string ArenaNameHand(string id) => id switch { "open-field" => "Open Field", "chokepoint" => "The Chokepoint", "ridge" => "Ridge Road", _ => "The Falling Gate" };
+int ClockHand(string id) => id switch { "chokepoint" => 14, "falling-gate" => 16, _ => 0 };
+string GroundHand(string id, int round) => BesiegerHand(id, round) is { } by
+    ? $"This round: {ArenaNameHand(id)}, a siege. {(by == Side.Player ? "You besiege" : "The enemy besieges")}; the clock is {ClockHand(id)} ticks."
+    : $"This round: {ArenaNameHand(id)}, an open ground with no siege clock.";
+var groundProblems = new List<string>(); int groundChecked = 0, limitChecked = 0, limitStopped = 0;
+void GroundSeen(IRenderedComponent<DoctrinePage> p, string where)
+{
+    var s0 = p.Instance.Session!;
+    string id = ArenaIdHand(s0.Seed, s0.RoundIndex), want = GroundHand(id, s0.RoundIndex);
+    groundChecked++;
+    string got = Has(p, ".dc-groundline") ? Text(p, ".dc-groundline") : "(no line)";
+    if (got != want || s0.Ground is not { } g || g.Info.Id != id || g.Besieger != BesiegerHand(id, s0.RoundIndex) || g.SiegeClock != ClockHand(id)) groundProblems.Add($"{where} seed {s0.Seed} round {s0.RoundIndex}: page says '{got}', hand says '{want}'");
+}
+// After a round has closed: a battle the tick limit stopped (both sides stood at the last frame) says so on the result screen, and that POWER left, not the count of soldiers, gave the field; any other battle says nothing of it.
+void LimitAfter(IRenderedComponent<DoctrinePage> p, int round)
+{
+    var rec = p.Instance.Session!.Records[round];
+    var lastF = rec.Replay.Frames[^1];
+    bool stopped = lastF.Blobs.Any(b => b.Side == Side.Player && b.Strength > 0) && lastF.Blobs.Any(b => b.Side == Side.Enemy && b.Strength > 0);
+    var got = p.FindAll(".dc-recap-limit").Select(e => e.TextContent.Trim()).ToList();
+    string want = rec.Result.Outcome switch
+    {
+        BattleStatus.AttackerWon => "The battle stopped at its tick limit, and the field went to you: the greater power left decides it, not the number of soldiers.",
+        BattleStatus.DefenderWon => "The battle stopped at its tick limit, and the field went to the enemy: the greater power left decides it, not the number of soldiers.",
+        BattleStatus.Draw => "The battle stopped at its tick limit with the power left on the two sides equal.",
+        _ => "The battle stopped at its tick limit.",
+    };
+    limitChecked++;
+    if (stopped) { limitStopped++; if (!got.SequenceEqual([want])) groundProblems.Add($"round {round}: the tick limit stopped it ({rec.Result.Outcome}) but the result screen says [{string.Join(" / ", got)}], wanted [{want}]"); }
+    else if (got.Count != 0) groundProblems.Add($"round {round}: a battle that ended before the limit says it stopped at it");
+}
+// After a round has closed (the result screen at tick 0): the record's ground and besieger are what the briefing said, and the result screen says the siege in the record's own words, from the recording's header and bit.
+void GroundAfter(IRenderedComponent<DoctrinePage> p, int round)
+{
+    var s0 = p.Instance.Session!;
+    if (round >= s0.Records.Count) { groundProblems.Add("no record for round " + round); return; }
+    var rec = s0.Records[round];
+    string id = ArenaIdHand(s0.Seed, round);
+    var by = BesiegerHand(id, round);
+    groundChecked++;
+    if (rec.ArenaId != id || rec.Replay.Besieger != by || rec.Replay.Version != (by is null ? 2 : 3)) groundProblems.Add($"round {round}: the battle was on {rec.ArenaId} with besieger {rec.Replay.Besieger} (v{rec.Replay.Version}), the hand says {id} and {by}");
+    var lines = p.FindAll(".dc-recap-siege").Select(e => e.TextContent.Trim()).ToList();
+    var chips = p.FindAll(".dc-siegechip");
+    if (by is null) { if (lines.Count != 0 || chips.Count != 0) groundProblems.Add($"round {round}: an open ground shows siege lines or a chip"); return; }
+    string who = by == Side.Player ? "you" : "the enemy";
+    var want = new List<string> { $"{ArenaNameHand(id)} is a siege, and {(by == Side.Player ? "you besieged" : "the enemy besieged")} it: the clock was {ClockHand(id)} ticks." };
+    int fellAt = rec.Replay.Frames.Where(f => (f.WorldFlags & 2) != 0).Select(f => f.Tick).DefaultIfEmpty(-1).First();
+    bool traded = rec.Replay.Frames.Any(f => f.Tick <= ClockHand(id) && f.Events.Any(e => f.Blobs.Any(b => (b.Id == e.Source || b.Id == e.Target) && b.Side == by)));
+    if (fellAt >= 0) want.Add($"The clock fell at tick {fellAt}: {who} had traded no blow by then, lost the stance, and every company of {(by == Side.Player ? "yours" : "theirs")} advanced.");
+    else if (rec.Result.Ticks > ClockHand(id) && traded) want.Add($"{(by == Side.Player ? "You" : "The enemy")} traded a blow before the clock ran out, and kept the stance.");
+    string chipWant = (by == Side.Player ? "You besiege" : "The enemy besieges") + $": the clock is {ClockHand(id)} ticks";
+    if (!lines.SequenceEqual(want) || chips.Count != 1 || Regex.Replace(chips[0].TextContent, @"\s+", " ").Trim() != chipWant) groundProblems.Add($"round {round}: recap '{string.Join(" / ", lines)}' chip '{(chips.Count == 1 ? chips[0].TextContent.Trim() : chips.Count.ToString())}', wanted '{string.Join(" / ", want)}' and '{chipWant}'");
+}
 async Task DoDraft(IRenderedComponent<DoctrinePage> p, int round, bool pass = true)
 {
     await Until(() => Has(p, ".dc-draft"), 20000, "draft screen");
     var sess = p.Instance.Session!;
+    GroundSeen(p, "draft");
+    if (!Has(p, ".dc-musternote") || Text(p, ".dc-musternote") != DoctrineWords.MusterNote) groundProblems.Add("the muster note differs");
     foreach (int i in ScriptHands.PackIndices(sess.Draft!.Offer, sess.Draft.Army.Gold)) await TapPack(p, i);   // a visitor taps the companies the script wants
     Scan(p);
     await Tap(p, "#dc-confirm");
@@ -139,6 +200,7 @@ async Task DoChoose(IRenderedComponent<DoctrinePage> p, ScriptHands sh, int roun
 {
     await PassAsk(p, 40000);
     await Until(() => Has(p, ".dc-editor"), 20000, "doctrine screen");
+    GroundSeen(p, "council");
     var st = sh.Decide(round, p.Instance.Session!.Army!, p.Instance.Session!.Ghost!, p.Instance.Session!.OrdersOffered!);
     Console.WriteLine($"  (hands, round {round}: {st.How} {string.Join(" ", st.Tokens.Select(DoctrineVocabulary.Name))}; army {p.Instance.Session!.Army!.Soldiers} soldiers, {p.Instance.Session!.Army!.Gold} gold)");
     Scan(p);
@@ -244,7 +306,7 @@ Check("muster: tapping a company that cannot be paid buys nothing (the total and
     }
     Check("muster: every company names the line it would join (or 'Joins' once bought), equal to what the army itself does when the same companies are drafted on an independent army", checkedRanks >= 2 && wrong.Count == 0, string.Join(" | ", wrong.Take(3)) + $" ({checkedRanks} checked)");
 }
-Shot("m1-muster-bought", page);
+Shot("m1-muster-bought", page); Shot("m0-muster", page);
 // taking a company back
 await TapPack(page, bought[0]);
 Check("muster: tapping a bought company takes it back, and the total drops by its price", Text(page, ".dc-sum") == $"This draft costs {total0 - offer0.Packs[bought[0]].Cost} of {gold0} gold." && page.FindAll(".dc-pack")[bought[0]].GetAttribute("aria-pressed") == "false");
@@ -267,6 +329,7 @@ await DoDraft(page, 0, pass: false);
 await Until(() => Has(page, ".dc-editor"), 20000, "round 0 doctrine screen");
 Check("doctrine: round 0, the general has seen nothing: no ghost, a plain sentence instead, confidence 0", !Has(page, ".dc-ghost") && Has(page, ".dc-noghost") && S.Ghost!.ConfidencePermille == 0 && S.Ghost.Doctrine.IsEmpty && S.Sections.General.ExamplesSeen == 0, Has(page, ".dc-noghost") ? Text(page, ".dc-noghost") : "no sentence");
 Scan(page);
+Shot("r0-council", page);
 
 // the council: the cards are exactly the offer, and only an offered, legal order can be put in a slot
 {
@@ -312,6 +375,7 @@ Scan(page);
 // ---- round 0 result: the replay, the scrubber, the falling gate
 Check("watch: the closed round arrives through RoundClosedAsync and the page parks on its result", await Until(() => Has(page, ".dc-result") || S.Stage == DoctrineStage.Over, 60000, "round 0 result") && Has(page, ".dc-result") && S.Stage == DoctrineStage.Watch);
 roundTimes.Add(swGame.Elapsed.TotalMilliseconds);
+GroundAfter(page, 0); LimitAfter(page, 0);
 {
     var rec0 = S.Last!.Record;
     Scan(page);
@@ -356,21 +420,21 @@ roundTimes.Add(swGame.Elapsed.TotalMilliseconds);
     {
         var cv = S.Last!;
         string arenaNm = S.ArenaName(rec0.ArenaId);
-        var expected = BattleChronicle.Build(rec0.Replay, rec0.PlayerDoctrine, arenaNm, DoctrineWords.KindName, cv.TraitsOf);
+        var expected = BattleChronicle.Build(rec0.Replay, rec0.PlayerDoctrine, arenaNm, DoctrineWords.KindName, cv.TraitsOf, cv.SiegeClock);
         var kids = page.Find(".dc-stage").Children.Select(c => string.Join(" ", c.ClassList)).ToList();
         Check("chronicle: the docked panel is in the stage after the field and the general, with a sheet button for a phone", kids.Count == 4 && kids[0].Contains("dc-armypanel") && kids[1].Contains("dc-field") && kids[2].Contains("dc-generalpanel") && kids[3].Contains("dc-chroniclepanel") && Has(page, "#dc-open-chronicle") && page.Find("#dc-chronicle").ClassList.Contains("dc-sheet"), string.Join(" | ", kids));
         Check("chronicle: the battle's set-up was seen (the player is the attacker) and the log reads each cohort's own traits from it", cv.Setup is { } su && su.Attacker.Side == Side.Player && su.Defender.Side == Side.Enemy && su.ArenaId == rec0.ArenaId
             && su.Attacker.Cohorts.All(c => cv.TraitsOf(Side.Player, c.Key) == c.Traits) && su.Defender.Cohorts.All(c => cv.TraitsOf(Side.Enemy, c.Key) == c.Traits));
-        Check("chronicle: the page's log is the chronicle function applied to the recording (same lines, same why)", expected.Lines.Count >= 4 && ChronicleCheck.Verify(expected, rec0.Replay, DoctrineWords.KindName, cv.TraitsOf).Count == 0 && ChronicleCheck.VerifyWhy(expected, rec0.Replay, rec0.PlayerDoctrine, DoctrineWords.KindName).Count == 0,
-            string.Join(" | ", ChronicleCheck.Verify(expected, rec0.Replay, DoctrineWords.KindName, cv.TraitsOf).Concat(ChronicleCheck.VerifyWhy(expected, rec0.Replay, rec0.PlayerDoctrine, DoctrineWords.KindName)).Take(3)));
+        Check("chronicle: the page's log is the chronicle function applied to the recording (same lines, same why)", expected.Lines.Count >= 4 && ChronicleCheck.Verify(expected, rec0.Replay, DoctrineWords.KindName, cv.TraitsOf, cv.SiegeClock).Count == 0 && ChronicleCheck.VerifyWhy(expected, rec0.Replay, rec0.PlayerDoctrine, DoctrineWords.KindName).Count == 0,
+            string.Join(" | ", ChronicleCheck.Verify(expected, rec0.Replay, DoctrineWords.KindName, cv.TraitsOf, cv.SiegeClock).Concat(ChronicleCheck.VerifyWhy(expected, rec0.Replay, rec0.PlayerDoctrine, DoctrineWords.KindName)).Take(3)));
 
         int[] LogTicks() => page.FindAll(".dc-logline[data-tick]").Select(e => int.Parse(e.GetAttribute("data-tick")!)).ToArray();
         string[] LogTexts() => page.FindAll(".dc-logline[data-tick] .x").Select(e => e.TextContent.Trim()).ToArray();
         async Task ScrubTo(int t) { await page.InvokeAsync(() => page.Find(".dc-range").Input(t.ToString())); await Until(() => Text(page, ".dc-tick") == t.ToString(), 3000, $"scrub to {t}"); }
 
         await ScrubTo(0);
-        Check("chronicle: at tick 0 the log holds only the opening line and says it fills in as the battle plays; no Why yet",
-            await Until(() => LogTicks().Length == expected.Lines.Count(l => l.Tick <= 0), 3000, "log at 0") && Has(page, ".dc-logempty") && !Has(page, ".dc-why") && LogTexts().SequenceEqual(expected.Lines.Where(l => l.Tick <= 0).Select(l => l.Text)));
+        Check("chronicle: at tick 0 the log holds only the opening lines (the opening and, in a siege, the siege) and says it fills in as the battle plays; no Why yet",
+            await Until(() => LogTicks().Length == expected.Lines.Count(l => l.Tick <= 0), 3000, "log at 0") && Has(page, ".dc-logempty") && !Has(page, ".dc-why") && LogTexts().OrderBy(x => x).SequenceEqual(expected.Lines.Where(l => l.Tick <= 0).Select(l => l.Text).OrderBy(x => x)));
         int contactTick = expected.Lines.First(l => l.Kind == ChronicleKind.Contact).Tick;
         int midTick = expected.Lines.Where(l => l.Kind == ChronicleKind.Break).Select(l => (int?)l.Tick).FirstOrDefault() ?? contactTick;
         await ScrubTo(midTick);
@@ -403,7 +467,7 @@ roundTimes.Add(swGame.Elapsed.TotalMilliseconds);
             await Until(() => LogTicks().Length == expected.Lines.Count, 3000, "all lines") && LogTicks().SequenceEqual(expected.Lines.Select(l => l.Tick)) && page.FindAll(".dc-logline.later").Count == expected.Lines.Count(l => l.Tick > 0) && Has(page, ".dc-why") && Has(page, "ol.dc-log.all") && page.Find("#dc-log-all").GetAttribute("aria-pressed") == "true");
         Scan(page);
         await Tap(page, "#dc-log-all");
-        Check("chronicle: and back to only what has happened", await Until(() => LogTicks().Length == 1 && Has(page, "ol.dc-log.live"), 3000, "back to live"));
+        Check("chronicle: and back to only what has happened", await Until(() => LogTicks().Length == expected.Lines.Count(l => l.Tick <= 0) && Has(page, "ol.dc-log.live"), 3000, "back to live"));
         // the phone's sheet button
         await ScrubTo(lastTick);
         await Tap(page, "#dc-open-chronicle");
@@ -430,7 +494,7 @@ Check("ghost: after 2 examples the confidence is within 0..1000 and every sugges
 Check("ghost: the general had something to suggest after seeing the visitor's first doctrine", !ghost1.Doctrine.IsEmpty);
 if (!ghost1.Doctrine.IsEmpty)
 {
-    Check("ghost: the suggestion is shown with its confidence as a glow (--glow 0..1) and as a number out of 1000", Has(page, ".dc-ghost") && Regex.IsMatch(page.Find(".dc-ghost").GetAttribute("style")!, @"--glow:(0|1|0\.\d+)") && Text(page, ".dc-conf").Contains($"Match record {ghost1.ConfidencePermille} of 1000"), page.Find(".dc-ghost").GetAttribute("style")!);
+    Check("ghost: the suggestion is shown with its match record as a glow (--glow 0..1) and as a number out of 1000", Has(page, ".dc-ghost") && Regex.IsMatch(page.Find(".dc-ghost").GetAttribute("style")!, @"--glow:(0|1|0\.\d+)") && Text(page, ".dc-conf").Contains($"Match record {ghost1.ConfidencePermille} of 1000"), page.Find(".dc-ghost").GetAttribute("style")!);
     Check("ghost: Use, Edit and Mine are three 44px buttons", Has(page, "#dc-accept") && Has(page, "#dc-edit") && Has(page, "#dc-ignore"));
     Scan(page);
     Shot("a2-doctrine-ghost", page);
@@ -438,6 +502,7 @@ if (!ghost1.Doctrine.IsEmpty)
 await DoChoose(page, script, 1);
 await Until(() => Has(page, ".dc-result"), 60000, "round 1 result");
 Scan(page);
+GroundAfter(page, 1); LimitAfter(page, 1);
 Check("round 1: the visitor's doctrine was recorded as differing from the ghost (Overrode)", S.Records.Count == 2 && S.Records[1].Overrode == (S.Records[1].PlayerDoctrine != S.Records[1].Ghost), $"overrode={S.Records[1].Overrode}");
 Check("round 1: the general has now learned 4 times", S.Sections.General.ExamplesSeen == 4, S.Sections.General.ExamplesSeen.ToString());
 await Tap(page, "#dc-next");
@@ -454,6 +519,7 @@ int examplesBeforeAccept = S.Sections.General.ExamplesSeen;
 await DoChoose(page, script, 2);
 await Until(() => Has(page, ".dc-result") || S.Stage == DoctrineStage.Over, 60000, "round 2 result");
 Scan(page);
+GroundAfter(page, 2); LimitAfter(page, 2);
 Check("accept (round 3, when the general had a pick): the accepted pick is the doctrine that fought, recorded as NOT overridden",
     S.Records.Count == 3 && (ghost2.Doctrine.IsEmpty || (S.Records[2].PlayerDoctrine == ghost2.Doctrine && !S.Records[2].Overrode && S.Records[2].GhostConfidence == ghost2.ConfidencePermille)));
 Check("accept: accepting is a training example too (the general learned from this round twice more)", S.Sections.General.ExamplesSeen == examplesBeforeAccept + 2, $"{examplesBeforeAccept} -> {S.Sections.General.ExamplesSeen}");
@@ -691,7 +757,7 @@ foreach (var withSlots in new[] { true, false })
     Scan(pageS);
     var gs = SS.Ghost!;
     var li = pageS.FindAll(".dc-ghostslot");
-    Check($"match record ({tag}): the ghost shows one line per order it suggests, and the whole figure under it", li.Count == gs.Doctrine.Used && li.Count >= 2 && Text(pageS, ".dc-conf").StartsWith($"Match record {gs.ConfidencePermille} of 1000: a score for how well its whole suggestion has matched what you then chose, over your recent choices."), Text(pageS, ".dc-conf"));
+    Check($"match record ({tag}): the ghost shows one line per order it suggests, and the whole figure under it", li.Count == gs.Doctrine.Used && li.Count >= 2 && Text(pageS, ".dc-conf").StartsWith($"Match record {gs.ConfidencePermille} of 1000 for the whole pick: over about the last {RecordWindowHand} rounds, the share of rounds in which all of it came out exactly as the doctrine you then set."), Text(pageS, ".dc-conf"));
     if (withSlots)
     {
         bool each = true;
@@ -834,6 +900,8 @@ string GeneralFree(string s) => Regex.IsMatch(s, "general", RegexOptions.IgnoreC
                 Check("army panel (round 1): the sentences carry no trait name, no 'veterancy', no 'power' and no 'None'", rows.All(r => !Regex.IsMatch(r.QuerySelector(".plain")!.TextContent, @"Heavy|Swift|Ranged|Holy|Cursed|Beast|Machine|Shielded|[Vv]eterancy|[Pp]ower|None")));
                 Check("army panel (round 1): traits, veterancy and power sit in a Details expander of each cohort, closed", rows.Zip(openC).All(p => p.First.QuerySelector("details.dc-det") is { } d && !d.HasAttribute("open") && d.QuerySelector("summary")!.TextContent.Trim() == "Details"
                     && Regex.Replace(d.QuerySelector(".meta")!.TextContent, @"\s+", " ").Trim() == $"Traits: {DoctrineWords.TraitList(p.Second.Traits)}. Seasoned {p.Second.Veterancy} {(p.Second.Veterancy == 1 ? "year" : "years")}. Power {p.Second.PowerPct}%."));
+                Check("army panel (round 1): the same Details say what being dug in is worth to that cohort, from the battle's table (written out by hand: 32% for a plain line, 12% for far shooters, nothing for the longest reach)",
+                    rows.Count > 0 && rows.Zip(openC).All(p => p.First.QuerySelector("details.dc-det .dc-dugin") is { } e && e.TextContent.Trim() == (ChronicleCheck.HandBonus(p.Second.Traits) > 0 ? $"Dug in, it strikes {ChronicleCheck.HandBonus(p.Second.Traits)}% harder." : "Dug in, it gains nothing: its reach is already the longest.")));
                 var oth = pageU.FindAll(".dc-armypanel details.dc-other");
                 Check("army panel (round 1): the kinds not open yet wait under one collapsed 'Other soldiers: N' line (N is their soldiers), expandable to the same plain rows", otherC.Count == 0 ? oth.Count == 0
                     : oth.Count == 1 && !oth[0].HasAttribute("open") && oth[0].QuerySelector("summary")!.TextContent.Trim() == $"Other soldiers: {otherC.Sum(c => c.Count)}" && oth[0].QuerySelectorAll(".dc-cohortlist > li").Length == otherC.Count
@@ -1311,6 +1379,8 @@ foreach (var (code, rerollsPaid) in new[] { ("DA2.0.0.0.0..0:5:0:0", 0), ("DA2.0
         (0, ChronicleKind.Start, "Test Ground. 24 of your soldiers face the enemy's 24."),
         (4, ChronicleKind.Contact, "First contact. Your Riders strike the enemy Spearmen, and the enemy has not struck yet."),
         (6, ChronicleKind.Gate, "The gate has fallen."),
+        (6, ChronicleKind.DugIn, "Your Priests are dug in: six ticks unhit and in place. They strike 12% harder until they are hit or move."),
+        (6, ChronicleKind.DugIn, "The enemy Wights are dug in: six ticks unhit and in place. They strike 32% harder until they are hit or move."),
         (7, ChronicleKind.Run, "The enemy Spearmen have been struck 4 ticks running, 10 in all."),
         (7, ChronicleKind.Break, "The enemy Spearmen break. The first to fall. The enemy Front line is gone, the first line to fall."),
         (8, ChronicleKind.Flank, "Your Priests strike the enemy Wights from the side, 11 units across the field from where they began."),
@@ -1324,7 +1394,7 @@ foreach (var (code, rerollsPaid) in new[] { ("DA2.0.0.0.0..0:5:0:0", 0), ("DA2.0
         (14, ChronicleKind.Break, "The enemy Archers break. The enemy Back line is gone."),
         (14, ChronicleKind.End, "The field is yours. 15 of your soldiers stand; the enemy has 0."),
     };
-    Check("chronicle (synthetic frames): the log is exactly the hand-written account: first contact, the gate, a run, the first break and the first line gone, a flank, holy against cursed, the heaviest blow, a lull, the final stand, the end",
+    Check("chronicle (synthetic frames): the log is exactly the hand-written account: first contact, the gate, the first cohort of each side to dig in (the Priests and the Wights: unhit and in place from tick 0 to 6), a run, the first break and the first line gone, a flank, holy against cursed, the heaviest blow, a lull, the final stand, the end",
         cs.Lines.Select(l => (l.Tick, l.Kind, l.Text)).SequenceEqual(want), string.Join(" | ", cs.Lines.Select(l => $"{l.Tick} {l.Kind} {l.Text}").Except(want.Select(w => $"{w.Tick} {w.Kind} {w.Text}")).Take(3)));
     Check("chronicle (synthetic frames): a line reads as the Count says it ('Tick 12. ...')", cs.Lines.Any(l => l.Full == "Tick 4. First contact. Your Riders strike the enemy Spearmen, and the enemy has not struck yet."));
     Check("chronicle (synthetic frames): the Why is hand-written too: the turning point (largest swing in soldiers), the first line to fall, and one hint tied to the Flank order given",
@@ -1400,20 +1470,22 @@ foreach (var (code, rerollsPaid) in new[] { ("DA2.0.0.0.0..0:5:0:0", 0), ("DA2.0
     for (int seed = 1; seed <= 8; seed++)
     {
         var tap = new SetupTap();
-        var game = await new DoctrineSections().Build(new VarietyHands(seed), new DoctrineDomain { MaxRounds = 2, Offers = OfferRules.Off }, tap).PlayAsync(seed);
+        var gm = new DoctrineSections().Build(new VarietyHands(seed), new DoctrineDomain { MaxRounds = 2, Offers = OfferRules.Off }, tap);
+        var game = await gm.PlayAsync(seed);
         for (int rd = 0; rd < game.Rounds.Count; rd++)
         {
             var rec = game.Rounds[rd];
             var setup = tap.Setups[rd];
+            int clk = gm.Context.Battle.Arenas.First(a => a.Id == rec.ArenaId).SiegeClock;
             Func<Side, int, Trait?> traitsOf = (s, k) => (s == Side.Player ? setup.Attacker : setup.Defender).Cohorts.Where(c => c.Key == k).Select(c => (Trait?)c.Traits).FirstOrDefault();
-            var c = BattleChronicle.Build(rec.Replay, rec.PlayerDoctrine, "Arena", kn, traitsOf);
+            var c = BattleChronicle.Build(rec.Replay, rec.PlayerDoctrine, "Arena", kn, traitsOf, clk);
             battles++; linesTotal += c.Lines.Count;
             foreach (var l in c.Lines) tally[l.Kind] = tally.GetValueOrDefault(l.Kind) + 1;
             if (c.Why.Hint is not null) hintsSeen.Add(c.Why.Hint);
-            var pr = ChronicleCheck.Verify(c, rec.Replay, kn, traitsOf); if (pr.Count > 0) { bad++; firstProblems.AddRange(pr.Take(2).Select(x => $"seed {seed} round {rd}: {x}")); }
+            var pr = ChronicleCheck.Verify(c, rec.Replay, kn, traitsOf, clk); if (pr.Count > 0) { bad++; firstProblems.AddRange(pr.Take(2).Select(x => $"seed {seed} round {rd}: {x}")); }
             var wp = ChronicleCheck.VerifyWhy(c, rec.Replay, rec.PlayerDoctrine, kn); if (wp.Count > 0) { whyBad++; firstProblems.AddRange(wp.Take(2).Select(x => $"seed {seed} round {rd} why: {x}")); }
-            if (Sig(c) != Sig(BattleChronicle.Build(rec.Replay, rec.PlayerDoctrine, "Arena", kn, traitsOf))
-                || !ReplayCodec.TryDecode(ReplayCodec.Encode(rec.Replay), out var back, out _) || Sig(c) != Sig(BattleChronicle.Build(back!, rec.PlayerDoctrine, "Arena", kn, traitsOf))) detBad++;
+            if (Sig(c) != Sig(BattleChronicle.Build(rec.Replay, rec.PlayerDoctrine, "Arena", kn, traitsOf, clk))
+                || !ReplayCodec.TryDecode(ReplayCodec.Encode(rec.Replay), out var back, out _) || Sig(c) != Sig(BattleChronicle.Build(back!, rec.PlayerDoctrine, "Arena", kn, traitsOf, clk))) detBad++;
             // the record's own losses equal what the frames show (so a Why built from the frames is built from the record)
             int youDrop = rec.Replay.Frames[0].Blobs.Where(b => b.Side == Side.Player).Sum(b => b.Strength) - rec.Replay.Frames[^1].Blobs.Where(b => b.Side == Side.Player).Sum(b => b.Strength);
             int enDrop = rec.Replay.Frames[0].Blobs.Where(b => b.Side == Side.Enemy).Sum(b => b.Strength) - rec.Replay.Frames[^1].Blobs.Where(b => b.Side == Side.Enemy).Sum(b => b.Strength);
@@ -1447,6 +1519,257 @@ foreach (var (code, rerollsPaid) in new[] { ("DA2.0.0.0.0..0:5:0:0", 0), ("DA2.0
         Check("mutant (recorded battle): the checker is clean on the real log and finds a swapped side, a wrong tick and a fabricated break in it",
             ChronicleCheck.Verify(c, rec.Replay, kn, traitsOf).Count == 0 && ChronicleCheck.Verify(m1, rec.Replay, kn, traitsOf).Count > 0 && ChronicleCheck.Verify(m2, rec.Replay, kn, traitsOf).Count > 0 && ChronicleCheck.Verify(m3, rec.Replay, kn, traitsOf).Count > 0);
     }
+
+    // ---- a siege, synthetic: every line written out by hand. Nine frames; nobody strikes until tick 7; the clock bit is set from tick 5.
+    {
+        int[][] Flat(int n) => [Enumerable.Repeat(10, n).ToArray(), Enumerable.Repeat(8, n).ToArray(), Enumerable.Repeat(6, n).ToArray(), Enumerable.Repeat(10, n).ToArray(), Enumerable.Repeat(8, n).ToArray(), Enumerable.Repeat(6, n).ToArray()];
+        int[][] sg = Flat(9);
+        sg[0][8] = 9; sg[3][7] = 8; sg[3][8] = 8;                                               // the Spearmen lose two at tick 7, the Riders one at tick 8
+        var sgEv = new Dictionary<int, (int S, int T, int D)[]> { [7] = [(0, 3, 2)], [8] = [(3, 0, 1)] };
+        BattleReplay Siege(Side? by, Dictionary<int, (int S, int T, int D)[]> ev, int bitFrom = 5, int version = 3, BattleStatus outcome = BattleStatus.AttackerWon)
+            => new(version, "test-siege", 1, 120, Enumerable.Range(0, 9).Select(t => SynFrame(t, null, sg, ev, bitFrom >= 0 && t >= bitFrom ? WorldFlag.ClockFell : 0)).ToList(), new BattleResult(outcome, 8, [], []), by);
+        const string limitSentence = " The battle stopped at its tick limit, where the field goes to the side with the greater power left, not to the side with more soldiers.";
+
+        var sP = Siege(Side.Player, sgEv);
+        var csP = BattleChronicle.Build(sP, DoctrineSet.Empty, "Test Ground", kn, null, 14);
+        var wantP = new (int Tick, ChronicleKind Kind, string Text)[]
+        {
+            (0, ChronicleKind.Start, "Test Ground. 24 of your soldiers face the enemy's 24."),
+            (0, ChronicleKind.Siege, "A siege. You besiege, and the siege clock is 14 ticks: if you have traded no blow by then, you lose your stance and every company of yours must advance."),
+            (5, ChronicleKind.Clock, "The siege clock has run out. You had traded no blow, so you lose your stance: every company of yours now advances."),
+            (7, ChronicleKind.Contact, "First contact. Your Riders strike the enemy Spearmen, and the enemy has not struck yet."),
+            (8, ChronicleKind.End, "The field is yours. 23 of your soldiers stand; the enemy has 22." + limitSentence),
+        };
+        Check("siege (synthetic frames): you besiege on a ground whose clock is 14 ticks and have traded no blow when the bit is set at tick 5: the log is exactly the hand-written account (the siege at the opening, the clock at tick 5, first contact, the end said with the tick-limit rule)",
+            csP.Lines.Select(l => (l.Tick, l.Kind, l.Text)).SequenceEqual(wantP), string.Join(" | ", csP.Lines.Select(l => $"{l.Tick} {l.Kind} {l.Text}")));
+        Check("siege (synthetic frames): the independent checker finds the siege line and the clock line backed by the recording's header and bit", ChronicleCheck.Verify(csP, sP, kn, null, 14).Count == 0, string.Join(" | ", ChronicleCheck.Verify(csP, sP, kn, null, 14).Take(3)));
+        var sE = Siege(Side.Enemy, sgEv);
+        var csE = BattleChronicle.Build(sE, DoctrineSet.Empty, "Test Ground", kn, null, 16);
+        Check("siege (synthetic frames): when the enemy besieges, the opening and the clock say so, in the enemy's person and with 'You may wait'",
+            csE.Lines.Any(l => l.Kind == ChronicleKind.Siege && l.Text == "A siege. The enemy besieges, and the siege clock is 16 ticks: if it has traded no blow by then, it loses its stance and every company of it must advance. You may wait.")
+            && csE.Lines.Any(l => l.Kind == ChronicleKind.Clock && l.Tick == 5 && l.Text == "The siege clock has run out. The enemy had traded no blow, so it loses its stance: every company of theirs now advances.")
+            && ChronicleCheck.Verify(csE, sE, kn, null, 16).Count == 0);
+        var csNoClock = BattleChronicle.Build(sP, DoctrineSet.Empty, "Test Ground", kn, null, 0);
+        Check("siege (synthetic frames): when the arena's clock is not known the opening still names the besieger and states no figure", csNoClock.Lines.Any(l => l.Kind == ChronicleKind.Siege && l.Text == "A siege. You besiege.") && ChronicleCheck.Verify(csNoClock, sP, kn, null, 0).Count == 0);
+        var sTraded = Siege(Side.Player, new() { [2] = [(0, 3, 1)], [7] = [(0, 3, 2)], [8] = [(3, 0, 1)] });
+        var csTraded = BattleChronicle.Build(sTraded, DoctrineSet.Empty, "Test Ground", kn, null, 14);
+        Check("siege (synthetic frames): no clock line when the besieger had traded a blow before the bit (the bit alone is not enough: the line must be backed by the frames)",
+            csTraded.Lines.All(l => l.Kind != ChronicleKind.Clock) && csTraded.Lines.Any(l => l.Kind == ChronicleKind.Siege) && ChronicleCheck.Verify(csTraded, sTraded, kn, null, 14).Count == 0);
+        var sNone = Siege(null, sgEv, 5, 2);
+        var csNone = BattleChronicle.Build(sNone, DoctrineSet.Empty, "Test Ground", kn, null, 14);
+        Check("siege (synthetic frames): an open ground (no besieger in the header) has no siege line and no clock line, whatever the bit says", csNone.Lines.All(l => l.Kind != ChronicleKind.Siege && l.Kind != ChronicleKind.Clock) && ChronicleCheck.Verify(csNone, sNone, kn, null, 14).Count == 0);
+        Check("siege (determinism): the same recording gives the same log twice and after an encode/decode (a version 3 recording)", ReplayCodec.TryDecode(ReplayCodec.Encode(sP), out var sP2, out _) && sP2!.Version == 3 && sP2.Besieger == Side.Player && Sig(csP) == Sig(BattleChronicle.Build(sP2, DoctrineSet.Empty, "Test Ground", kn, null, 14)));
+        // the recap on the result screen, from the same recordings: the siege and the clock in the recording's own words, and what the tick limit did
+        {
+            RoundView View(BattleReplay r, int clock) => new(new RoundRecord(0, DoctrineSet.Empty, DoctrineSet.Empty, 0, false, 0, r.ArenaId, r.Result, r, new Spoils(0, 0), 0UL, 0UL, null, true), null!, null, 24, 24, true) { SiegeClock = clock };
+            var recapP = DoctrineGuide.Of(View(sP, 14), "Test Ground");
+            Check("recap (synthetic siege): you besiege, the clock fell at the frame the bit is set, and the tick limit stopped the battle: the lines are written out by hand",
+                recapP.Siege.SequenceEqual(["Test Ground is a siege, and you besieged it: the clock was 14 ticks.", "The clock fell at tick 5: you had traded no blow by then, lost the stance, and every company of yours advanced."])
+                && recapP.Limit == "The battle stopped at its tick limit, and the field went to you: the greater power left decides it, not the number of soldiers.", string.Join(" | ", recapP.Siege));
+            var recapE = DoctrineGuide.Of(View(sE, 16), "Test Ground");
+            Check("recap (synthetic siege): the enemy besieges and its clock fell: said in the enemy's person",
+                recapE.Siege.SequenceEqual(["Test Ground is a siege, and the enemy besieged it: the clock was 16 ticks.", "The clock fell at tick 5: the enemy had traded no blow by then, lost the stance, and every company of theirs advanced."]));
+            // a long battle where the besieger traded a blow in time: it kept the stance; one that ended before the clock says nothing of the stance
+            int[][] sgLong = Flat(17);
+            var evLong = new Dictionary<int, (int S, int T, int D)[]> { [2] = [(0, 3, 1)], [9] = [(3, 0, 1)] };
+            var longR = new BattleReplay(3, "test-siege", 1, 120, Enumerable.Range(0, 17).Select(t => SynFrame(t, null, sgLong, evLong, 0)).ToList(), new BattleResult(BattleStatus.DefenderWon, 16, [], []), Side.Player);
+            var recapL = DoctrineGuide.Of(View(longR, 14), "Test Ground");
+            Check("recap (synthetic siege): a besieger that traded a blow before the clock kept its stance (said), and the tick limit gave the field to the enemy (said)",
+                recapL.Siege.SequenceEqual(["Test Ground is a siege, and you besieged it: the clock was 14 ticks.", "You traded a blow before the clock ran out, and kept the stance."])
+                && recapL.Limit == "The battle stopped at its tick limit, and the field went to the enemy: the greater power left decides it, not the number of soldiers.");
+            var recapShort = DoctrineGuide.Of(View(Siege(Side.Player, sgEv, -1), 14), "Test Ground");
+            Check("recap (synthetic siege): a battle that ended before the clock says nothing of the stance (neither line is backed)", recapShort.Siege.Count == 1 && recapShort.Siege[0].StartsWith("Test Ground is a siege"));
+            Check("recap (synthetic siege): an open ground has no siege line; a battle that one side lost whole has no tick-limit line; equal power at the limit is said as equal",
+                DoctrineGuide.Of(View(Siege(null, sgEv, 5, 2), 0), "Test Ground").Siege.Count == 0 && DoctrineGuide.Of(View(syn, 0), "Test Ground").Limit is null
+                && DoctrineGuide.Of(View(Siege(null, sgEv, -1, 2, BattleStatus.Draw), 0), "Test Ground").Limit == "The battle stopped at its tick limit with the power left on the two sides equal.");
+        }
+        // mutants of the siege log: each must be found by the checker
+        {
+            Chronicle Edit(Chronicle c0, ChronicleKind k, Func<ChronicleLine, ChronicleLine> f) => c0 with { Lines = c0.Lines.Select(l => l.Kind == k ? f(l) : l).ToList() };
+            var swappedSide = Edit(csP, ChronicleKind.Siege, l => l with { Text = l.Text.Replace("You besiege", "The enemy besieges"), Cite = l.Cite with { A = 1 } });
+            Check("mutant: a siege line that names the other side as besieger is found", ChronicleCheck.Verify(swappedSide, sP, kn, null, 14).Count > 0);
+            var wrongClock = Edit(csP, ChronicleKind.Siege, l => l with { Text = l.Text.Replace("14 ticks", "15 ticks"), Cite = l.Cite with { Value = 15 } });
+            Check("mutant: a siege line with another clock than the arena's is found", ChronicleCheck.Verify(wrongClock, sP, kn, null, 14).Count > 0);
+            var earlyClock = Edit(csP, ChronicleKind.Clock, l => l with { Tick = 4, Cite = l.Cite with { Tick = 4 } });
+            Check("mutant: the clock falling a tick before the bit is found", ChronicleCheck.Verify(earlyClock, sP, kn, null, 14).Count > 0);
+            var fakeClock = csTraded with { Lines = csTraded.Lines.Concat([csP.Lines.First(l => l.Kind == ChronicleKind.Clock)]).OrderBy(l => l.Tick).ToList() };
+            Check("mutant: a clock line for a besieger that had traded a blow is found", ChronicleCheck.Verify(fakeClock, sTraded, kn, null, 14).Count > 0);
+            var noClock = csP with { Lines = csP.Lines.Where(l => l.Kind != ChronicleKind.Clock).ToList() };
+            Check("mutant: a missing clock line (the bit is set, the besieger had not struck) is found", ChronicleCheck.Verify(noClock, sP, kn, null, 14).Count > 0);
+            var noSiege = csP with { Lines = csP.Lines.Where(l => l.Kind != ChronicleKind.Siege).ToList() };
+            Check("mutant: a missing siege line (the header names a besieger) is found", ChronicleCheck.Verify(noSiege, sP, kn, null, 14).Count > 0);
+            var otherSideClock = Edit(csE, ChronicleKind.Clock, l => l with { Text = l.Text.Replace("The enemy had", "You had") });
+            Check("mutant: a clock line that names the wrong side is found", ChronicleCheck.Verify(otherSideClock, sE, kn, null, 16).Count > 0);
+            var softEnd = Edit(csP, ChronicleKind.End, l => l with { Text = l.Text.Replace("the greater power left", "more soldiers left") });
+            Check("mutant: an end that says the tick limit goes to more soldiers is found", ChronicleCheck.Verify(softEnd, sP, kn, null, 14).Count > 0);
+        }
+    }
+
+    // ---- dug in, synthetic: eleven frames, no strike at all. Yours: 0 Riders step 3 units at tick 2; 1 Priests step 35/16 of a unit at tick 3 (too close to the melee reach to tell); 2 Archers stay.
+    // Theirs: 3 Spearmen step 3 units at tick 5; 4 Wights and 5 Archers stay.
+    {
+        int[][] st = [Enumerable.Repeat(10, 11).ToArray(), Enumerable.Repeat(8, 11).ToArray(), Enumerable.Repeat(6, 11).ToArray(), Enumerable.Repeat(10, 11).ToArray(), Enumerable.Repeat(8, 11).ToArray(), Enumerable.Repeat(6, 11).ToArray()];
+        ReplayFrame Dug(int t, Func<int, int, (int X, int Y)> q) => new(t, Enumerable.Range(0, 6).Select(i => { var (qx, qy) = q(t, i); return new ReplayBlob(i, kinds[i].Item1, kinds[i].Item2, kinds[i].Item3, qx, qy, st[i][t]); }).ToList(), [], 0);
+        (int, int) Q(int t, int i)
+        {
+            int x = startAt[i].Item1 * Qm, y = startAt[i].Item2 * Qm;
+            if (i == 0 && t >= 2) x += 48;
+            if (i == 1 && t >= 3) x += 35;
+            if (i == 3 && t >= 5) x += 48;
+            return (x, y);
+        }
+        BattleReplay Quiet(Func<int, int, (int X, int Y)> q) => new(2, "test-quiet", 1, 120, Enumerable.Range(0, 11).Select(t => Dug(t, q)).ToList(), new BattleResult(BattleStatus.Draw, 10, [], []));
+        var qd = Quiet(Q);
+        var csD = BattleChronicle.Build(qd, DoctrineSet.Empty, "Test Ground", kn, roster);
+        var wantD = new (int Tick, ChronicleKind Kind, string Text)[]
+        {
+            (0, ChronicleKind.Start, "Test Ground. 24 of your soldiers face the enemy's 24."),
+            (6, ChronicleKind.DugIn, "Your Archers are dug in: six ticks unhit and in place. They strike 12% harder until they are hit or move."),
+            (6, ChronicleKind.DugIn, "The enemy Wights are dug in: six ticks unhit and in place. They strike 32% harder until they are hit or move."),
+            (10, ChronicleKind.End, "Neither side held the field. You have 24; the enemy has 24. The battle stopped at its tick limit with the power left on the two sides equal."),
+        };
+        Check("dug in (synthetic frames): the first cohort of each side to be provably dug in has its line: the Riders that stepped three units are not yet, the Priests (a step of 35/16 of a unit, too close to the reach to tell) are not provable, so it is the Archers at tick 6; theirs are the Wights (the Spearmen stepped); a battle that ends with both sides standing says the power left was equal",
+            csD.Lines.Select(l => (l.Tick, l.Kind, l.Text)).SequenceEqual(wantD), string.Join(" | ", csD.Lines.Select(l => $"{l.Tick} {l.Kind} {l.Text}")));
+        Check("dug in (synthetic frames): the independent checker finds both lines backed (six frames without a strike, in place, alive) and the first of their side", ChronicleCheck.Verify(csD, qd, kn, roster).Count == 0, string.Join(" | ", ChronicleCheck.Verify(csD, qd, kn, roster).Take(3)));
+        Check("dug in (synthetic frames): without the cohorts' own traits no dug-in line is written (the bonus is the cohort's own, a flip may have changed it)", BattleChronicle.Build(qd, DoctrineSet.Empty, "Test Ground", kn, null).Lines.All(l => l.Kind != ChronicleKind.DugIn));
+        var csM = BattleChronicle.Build(qd, DoctrineSet.Empty, "Test Ground", kn, (s, k) => Roster.TraitsOf(7));
+        Check("dug in (synthetic frames): a cohort with the longest reach gains nothing from it and the line says so, in the engine's table (a Catapult's bonus is nothing)",
+            csM.Lines.Where(l => l.Kind == ChronicleKind.DugIn).Select(l => l.Text).SequenceEqual(["Your Archers are dug in: six ticks unhit and in place. Their reach is already the longest, so it gains them nothing.", "The enemy Wights are dug in: six ticks unhit and in place. Their reach is already the longest, so it gains them nothing."])
+            && UnitRules.SetBonusPct(Roster.TraitsOf(7)) == 0 && ChronicleCheck.Verify(csM, qd, kn, (s, k) => Roster.TraitsOf(7)).Count == 0);
+        Check("dug in (hand-written bonuses): the bonus in a line is the battle's own (pike line 32, far shooters 12, a Catapult none), the set time is six ticks",
+            UnitRules.SetTicks == 6 && UnitRules.SetBonusPct(Trait.None) == 32 && UnitRules.SetBonusPct(Trait.Ranged) == 12 && UnitRules.SetBonusPct(Trait.Holy | Trait.Ranged) == 12 && Enumerable.Range(0, 8).All(k => UnitRules.SetBonusPct(Roster.TraitsOf(k)) == ChronicleCheck.HandBonus(Roster.TraitsOf(k))));
+        // a cohort that steps CLEARLY within the reach stays still, and the same cohort stepping clearly beyond it starts again (the two sides of the margin)
+        {
+            (int, int) QIn(int t, int i) => i == 1 && t >= 3 ? (startAt[1].Item1 * Qm + 30, startAt[1].Item2 * Qm) : (startAt[i].Item1 * Qm, startAt[i].Item2 * Qm);       // 30/16 of a unit: clearly inside
+            var inside = BattleChronicle.Build(Quiet(QIn), DoctrineSet.Empty, "Test Ground", kn, roster);
+            var dl = inside.Lines.Where(l => l.Kind == ChronicleKind.DugIn).ToList();
+            Check("dug in (synthetic frames): a step clearly inside the melee reach does not start the count again (the Riders, first by id, are dug in at tick 6)", dl.Count == 2 && dl[0].Tick == 6 && dl[0].Text.StartsWith("Your Riders are dug in"), string.Join(" | ", dl.Select(l => l.Text)));
+        }
+        // mutants: each must be found by the checker
+        {
+            Chronicle Edit(Chronicle c0, Func<ChronicleLine, bool> pick, Func<ChronicleLine, ChronicleLine> f) { var first = c0.Lines.First(pick); return c0 with { Lines = c0.Lines.Select(l => ReferenceEquals(l, first) ? f(l) : l).ToList() }; }
+            var early = Edit(csD, l => l.Kind == ChronicleKind.DugIn, l => l with { Tick = 5, Cite = l.Cite with { Tick = 5 } });
+            Check("mutant: a dug-in line one tick early is found", ChronicleCheck.Verify(early, qd, kn, roster).Count > 0);
+            var ambiguous = Edit(csD, l => l.Kind == ChronicleKind.DugIn, l => l with { Text = "Your Priests are dug in: six ticks unhit and in place. They strike 12% harder until they are hit or move.", Cite = l.Cite with { A = 1 } });
+            Check("mutant: a dug-in line for a cohort whose step is too close to the reach to tell is found", ChronicleCheck.Verify(ambiguous, qd, kn, roster).Count > 0);
+            var stepped = Edit(csD, l => l.Kind == ChronicleKind.DugIn, l => l with { Text = "Your Riders are dug in: six ticks unhit and in place. They strike 32% harder until they are hit or move.", Cite = l.Cite with { A = 0, Value2 = 32 } });
+            Check("mutant: a dug-in line for a cohort that stepped three units at tick 2 (the count started again) is found", ChronicleCheck.Verify(stepped, qd, kn, roster).Count > 0);
+            var bonus = Edit(csD, l => l.Kind == ChronicleKind.DugIn, l => l with { Text = l.Text.Replace("12%", "32%"), Cite = l.Cite with { Value2 = 32 } });
+            Check("mutant: a dug-in line with the wrong bonus for the cohort's traits is found", ChronicleCheck.Verify(bonus, qd, kn, roster).Count > 0);
+            var twice = csD with { Lines = csD.Lines.Concat([csD.Lines.Last(l => l.Kind == ChronicleKind.DugIn) with { Cite = new ChronicleCite(CiteKind.Set, 6, 5, 0, 6, 12), Text = "The enemy Archers are dug in: six ticks unhit and in place. They strike 12% harder until they are hit or move." }]).OrderBy(l => l.Tick).ToList() };
+            Check("mutant: a second dug-in line for a side (not the first of its side) is found", ChronicleCheck.Verify(twice, qd, kn, roster).Count > 0);
+            var missing = csD with { Lines = csD.Lines.Where(l => l.Kind != ChronicleKind.DugIn).ToList() };
+            Check("mutant: no dug-in line where a cohort is provably dug in is found", ChronicleCheck.Verify(missing, qd, kn, roster).Count > 0);
+        }
+    }
+
+    // ---- sieges and dug-in lines in REAL battles, against the engine's own counters. The same set-up is run again by hand to read the session's Stats
+    // (SetFirstTick: the tick at whose start a cohort of the side was first set; ClockFiredAtTick: the tick at whose start the clock fell).
+    {
+        string FrameSig(ReplayFrame f) => string.Join(";", f.Blobs.Select(b => $"{b.Id}:{b.X},{b.Y},{b.Strength}")) + "|" + string.Join(";", f.Events.Select(e => $"{e.Source}>{e.Target}={e.Damage}")) + "|" + f.WorldFlags;
+        int sieges = 0, fell = 0, kept = 0, youBesiege = 0, enemyBesieges = 0, dugLines = 0, dugAtEngineTick = 0, dugLater = 0, dugEarlier = 0, omitted = 0, replayBad = 0, headerBad = 0, clockBad = 0, verifyBad = 0, handSieges = 0, handFell = 0;
+        var probs = new List<string>();
+
+        // the set-up run by hand on the game's own engine: its frames, its result and the session's counters
+        async Task<(List<ReplayFrame> Frames, BattleResult Result, TracerBattleStats Stats)> ByHand(DoctrineGame gm, BattleSetup setup)
+        {
+            var sess = (TracerBattleSession)await gm.Context.Battle.StartAsync(setup, default);
+            var frames = new List<ReplayFrame> { sess.Snapshot() };
+            while (sess.Status == BattleStatus.Running && sess.Tick < setup.TickLimit) { await sess.FieldOrdersAsync(default); await sess.MoveAsync(default); await sess.EngageAsync(default); await sess.ApplyLossesAsync(default); frames.Add(sess.Record()); }
+            return (frames, sess.Finish(sess.Tick >= setup.TickLimit), sess.Stats);
+        }
+        // one siege battle judged: the chronicle checked, its clock line and dug-in lines against the engine's counters
+        void Judge(string label, BattleReplay replay, BattleSetup setup, DoctrineSet doctrine, ArenaInfo info, TracerBattleStats stats, bool hand)
+        {
+            Func<Side, int, Trait?> traitsOf = (s, k) => (s == Side.Player ? setup.Attacker : setup.Defender).Cohorts.Where(c => c.Key == k).Select(c => (Trait?)c.Traits).FirstOrDefault();
+            var c = BattleChronicle.Build(replay, doctrine, info.Name, kn, traitsOf, info.SiegeClock);
+            var pr = ChronicleCheck.Verify(c, replay, kn, traitsOf, info.SiegeClock); if (pr.Count > 0) { verifyBad++; probs.AddRange(pr.Take(2).Select(x => $"{label}: {x}")); }
+            var wp = ChronicleCheck.VerifyWhy(c, replay, doctrine, kn); if (wp.Count > 0) { verifyBad++; probs.AddRange(wp.Take(2).Select(x => $"{label} why: {x}")); }
+            bool hdr = replay.Version == 3 && replay.Besieger is not null && setup.Besieger == replay.Besieger && info.SiegeClock > 0 && c.Lines.Count(l => l.Kind == ChronicleKind.Siege) == 1;
+            if (!hdr) { headerBad++; probs.Add($"{label}: header {replay.Version} {replay.Besieger}"); }
+            var sieger = replay.Besieger!.Value;
+            if (hand) handSieges++; else { sieges++; if (sieger == Side.Player) youBesiege++; else enemyBesieges++; }
+            var clockLine = c.Lines.FirstOrDefault(l => l.Kind == ChronicleKind.Clock);
+            int fired = stats.ClockFiredAtTick;
+            if (fired >= 0 ? clockLine is null || clockLine.Tick != fired + 1 : clockLine is not null) { clockBad++; probs.Add($"{label}: engine clock fired at {fired}, chronicle {clockLine?.Tick.ToString() ?? "no line"}"); }
+            bool tradedInTime = replay.Frames.Any(f => f.Tick <= info.SiegeClock && f.Events.Any(e => f.Blobs.Any(b => (b.Id == e.Source || b.Id == e.Target) && b.Side == sieger)));
+            if (fired >= 0) { if (hand) handFell++; else fell++; if (tradedInTime) { clockBad++; probs.Add($"{label}: the clock fell although the besieger had traded"); } }
+            else if (tradedInTime) { if (!hand) kept++; }
+            else if (replay.Result.Ticks > info.SiegeClock) { clockBad++; probs.Add($"{label}: the clock did not fall and the besieger had not traded"); }       // a battle over before the clock is neither
+            for (int role = 0; role < 2; role++)
+            {
+                var side = role == 0 ? Side.Player : Side.Enemy;
+                var dl = c.Lines.FirstOrDefault(l => l.Kind == ChronicleKind.DugIn && replay.Frames[0].Blobs.First(b => b.Id == l.Cite.A).Side == side);
+                int eng = stats.SetFirstTick[role];
+                if (dl is null) { if (eng >= 0) omitted++; continue; }
+                dugLines++;
+                if (dl.Tick == eng) dugAtEngineTick++; else if (dl.Tick > eng) dugLater++; else { dugEarlier++; probs.Add($"{label}: {side} dug-in line at {dl.Tick}, the engine first set one at {eng}"); }
+            }
+        }
+
+        // (1) games on the real sections: the player holds every line in the rounds it besieges, the variety orders in the others
+        for (int seed = 1; seed <= 80 && sieges < 14; seed++)
+        {
+            var tapS = new SetupTap();
+            var gm = new DoctrineSections().Build(new SiegeHands(seed), new DoctrineDomain { MaxRounds = 2, Offers = OfferRules.Off }, tapS);
+            if (!Enumerable.Range(0, 2).Any(r => gm.ArenaFor(seed, r).IsSiege)) continue;
+            var game = await gm.PlayAsync(seed);
+            for (int rd = 0; rd < game.Rounds.Count; rd++)
+            {
+                var info = gm.ArenaFor(seed, rd);
+                if (!info.IsSiege) continue;
+                var rec = game.Rounds[rd]; var setup = tapS.Setups[rd];
+                string label = $"seed {seed} round {rd}";
+                if (rec.Replay.Besieger != (rd % 2 == 0 ? Side.Player : Side.Enemy)) { headerBad++; probs.Add($"{label}: besieger {rec.Replay.Besieger}"); }
+                var (frames, _, stats) = await ByHand(gm, setup);
+                if (frames.Count != rec.Replay.Frames.Count || !frames.Zip(rec.Replay.Frames).All(p => FrameSig(p.First) == FrameSig(p.Second))) { replayBad++; probs.Add($"{label}: the hand-run battle is not the recording"); continue; }
+                Judge(label, rec.Replay, setup, rec.PlayerDoctrine, info, stats, false);
+            }
+        }
+
+        // (2) hand-set sieges on the same engine (cohorts and orders written out here): both sides hold, or the besieger advances; each arena, each besieger
+        {
+            CohortRead Co(int key, int n, int slot) => new(key, n, Roster.TraitsOf(key), slot, 0, 100);
+            FieldOrder Fo(int group, FieldOrderKind kind) => new(group, kind, 1);
+            var gm = new DoctrineSections().Build(new SiegeHands(1), new DoctrineDomain { MaxRounds = 1, Offers = OfferRules.Off });
+            foreach (var arenaId in new[] { "chokepoint", "falling-gate" })
+                foreach (var by in new[] { Side.Player, Side.Enemy })
+                    foreach (var advance in new[] { false, true })
+                    {
+                        var info = gm.Context.Battle.Arenas.First(a => a.Id == arenaId);
+                        FieldOrder[] orders(bool besieger) => besieger && advance ? [Fo(0, FieldOrderKind.Advance), Fo(1, FieldOrderKind.Advance), Fo(2, FieldOrderKind.Advance)] : [Fo(0, FieldOrderKind.Hold), Fo(1, FieldOrderKind.Hold), Fo(2, FieldOrderKind.Hold)];
+                        var setup = new BattleSetup(arenaId, 7, 60,
+                            new BattleSide(Side.Player, [Co(0, 24, 0), Co(3, 16, 1), Co(4, 12, 2)], orders(by == Side.Player)),
+                            new BattleSide(Side.Enemy, [Co(1, 20, 0), Co(3, 16, 1), Co(5, 14, 2)], orders(by == Side.Enemy)), by);
+                        var (frames, byHandResult, stats) = await ByHand(gm, setup);
+                        var replay = new BattleReplay(BattleReplay.VersionFor(setup.Besieger), arenaId, setup.Seed, setup.TickLimit, frames, byHandResult, setup.Besieger);
+                        Judge($"hand {arenaId} {by} {(advance ? "besieger advances" : "both hold")}", replay, setup, DoctrineSet.Empty, info, stats, true);
+                    }
+        }
+        Console.WriteLine($"  (real sieges: {sieges} battles, you besiege in {youBesiege}, the enemy in {enemyBesieges}; the clock fell in {fell} and the besieger traded in time in {kept}; hand-set sieges {handSieges}, the clock fell in {handFell}; dug-in lines {dugLines}: at the engine's own first tick {dugAtEngineTick}, later {dugLater}, earlier {dugEarlier}; sides with a set cohort but no line {omitted})");
+        Check($"siege (recorded battles): {sieges} real siege battles (both besiegers) and {handSieges} hand-set ones are read right: version 3, the besieger by the game's roles rule and the same in the set-up, one siege line each, and the independent checker finds every line (siege, clock, dug in, Why) backed", sieges >= 8 && youBesiege >= 3 && enemyBesieges >= 3 && handSieges == 8 && headerBad == 0 && verifyBad == 0, string.Join(" | ", probs.Take(3)));
+        Check("siege (engine): running the same set-up again by hand gives the very frames of the recording, so the session's own counters are the recording's", replayBad == 0, string.Join(" | ", probs.Where(x => x.Contains("hand-run")).Take(2)));
+        Check($"siege (engine): the clock line is on the frame after the tick at whose start the engine's clock fell (ClockFiredAtTick + 1), there is none when it did not fall, and it falls exactly when the besieger had traded no blow by it; both happened ({fell + handFell} fell, {kept} kept the stance)", clockBad == 0 && fell + handFell >= 3 && kept >= 1, string.Join(" | ", probs.Where(x => x.Contains("clock")).Take(2)));
+        Check($"dug in (engine): no dug-in line is ever earlier than the engine's first set tick for its side, and {dugAtEngineTick} of {dugLines} are exactly at it (the rest name a later cohort because an earlier one was not provable)", dugEarlier == 0 && dugLines >= 6 && dugAtEngineTick * 4 >= dugLines * 3, string.Join(" | ", probs.Where(x => x.Contains("dug-in")).Take(2)));
+    }
+    // ---- the chips of the replay, on a component of their own: the siege and the fallen clock, from the recording's header and bit
+    {
+        using var ctxA = NewCtx(false);
+        var sg9 = Enumerable.Range(0, 9).Select(t => SynFrame(t, null, null, new(), t >= 5 ? WorldFlag.ClockFell : 0)).ToList();
+        var rp = new BattleReplay(3, "test-siege", 1, 120, sg9, new BattleResult(BattleStatus.Draw, 8, [], []), Side.Enemy);
+        var arenaC = ctxA.Render<Showroom.Components.DoctrineArena>(ps => ps.Add(p => p.Replay, rp).Add(p => p.SiegeClock, 14));
+        string Chip() => Regex.Replace(arenaC.Find(".dc-siegechip").TextContent, @"\s+", " ").Trim();
+        string before = Chip(); bool beforeFell = arenaC.Find(".dc-siegechip").ClassList.Contains("fallen");
+        await arenaC.InvokeAsync(() => arenaC.Instance.Seek(4)); string at4 = Chip();
+        await arenaC.InvokeAsync(() => arenaC.Instance.Seek(5)); string at5 = Chip(); bool fell5 = arenaC.Find(".dc-siegechip").ClassList.Contains("fallen");
+        await arenaC.InvokeAsync(() => arenaC.Instance.Seek(8)); string at8 = Chip();
+        Check("replay chips: a recording that names the enemy as besieger shows who besieges and the clock until the frame the bit is set, then that the clock has fallen and the enemy has lost its stance, to the end (a bit never clears)",
+            before == "The enemy besieges: the clock is 14 ticks" && !beforeFell && at4 == before && at5 == "The clock has fallen: the enemy has lost its stance" && fell5 && at8 == at5, $"{before} | {at4} | {at5} | {at8}");
+        var open9 = new BattleReplay(2, "test-open", 1, 120, sg9, new BattleResult(BattleStatus.Draw, 8, [], []));
+        var arenaO = ctxA.Render<Showroom.Components.DoctrineArena>(ps => ps.Add(p => p.Replay, open9));
+        Check("replay chips: an open ground (no besieger in the header) shows no siege chip, whatever the bit says", arenaO.FindAll(".dc-siegechip").Count == 0);
+        Check("replay chips: the text alternative of the arena says the siege too", arenaC.Find("svg.dc-arena").GetAttribute("aria-label")!.EndsWith("The clock has fallen: the enemy has lost its stance."));
+    }
 }
 
 // ---------------------------------------------------------------------------------------------- wording
@@ -1461,12 +1784,28 @@ foreach (var (code, rerollsPaid) in new[] { ("DA2.0.0.0.0..0:5:0:0", 0), ("DA2.0
     Check("wording: battles are said to be simulated once on this device and the replay to be a recording", all.Contains("simulated once, on your device") && all.Contains("The replay is a recording"));
     Check("wording: no persistence is claimed or invented (a refresh forgets the general)", all.Contains("Nothing is saved: refresh the page and the general is gone") && !all.Contains("saved in your browser"));
     // the editorial fixes: each new phrase is there, each old one is gone
-    Check("wording A: the top of How it works names the general as a habit table with a tiny HoloFormer from the AlgFormer package; no tiny AlgFormer model", all.Contains("and the general is a habit table with a tiny HoloFormer from the AlgFormer package.") && !all.Contains("tiny AlgFormer model"));
-    Check("wording A: About states the rule the code has (table speaks; the HoloFormer takes a slot at two more right answers than the table, on recent choices)",
-        all.Contains("Inside it are a small habit table and a tiny HoloFormer from the AlgFormer package. For each of the four slots the table speaks, unless the HoloFormer has been right on that slot at least two more times than the table over your recent choices, in which case it takes the slot.")
-        && !all.Contains("whichever of the two") && !all.Contains("guessed your choices better"));
-    Check("wording B: it is a match record, said as what it is; the word confidence is gone from every screen",
-        all.Contains("Match record") && all.Contains("a score out of 1000 for how well its whole suggestion has matched what you then chose, over your recent choices. It starts low and climbs as the matches keep coming.") && all.Contains("of 1000: a score for how well its whole suggestion has matched what you then chose, over your recent choices.") && !all.Contains("how often") && !Regex.IsMatch(all, "confiden", RegexOptions.IgnoreCase));
+    // The general as TinyHoloGeneral now is (Hybrid by default, history off, margin from its options): two tables rank the cards on the council, the net takes a slot at the margin
+    Check("wording A: the top of How it works names the general as two small tables and a tiny HoloFormer from the AlgFormer package (the page runs the Hybrid general); no habit table 'with' a net, no tiny AlgFormer model",
+        new global::Doctrine.General.GeneralOptions().Mode == global::Doctrine.General.GeneralMode.Hybrid && all.Contains("and the general is two small tables and a tiny HoloFormer from the AlgFormer package.") && !all.Contains("a habit table with a tiny HoloFormer") && !all.Contains("tiny AlgFormer model"));
+    Check("wording A: About says how it chooses, as the code does: it ranks the cards on the council; the habit table (the situation) and the taste table (sort of order, line, trait or kind, the very card) rank them; the table that has guessed better speaks per slot; the HoloFormer takes a slot at the margin; last round is not read",
+        all.Contains("Each round it reads the cards on the council and ranks them, first, second, third and fourth. Two small tables do the ranking. The habit table remembers which order you put in each slot in a situation like this one:")
+        && all.Contains("The taste table remembers what kind of card you take from a council: the sort of order, the line, trait or kind it touches, and the very card, so a liking for one kind of card carries to cards it has not met.")
+        && all.Contains("It does not read what you took last round.")
+        && all.Contains("A tiny HoloFormer from the AlgFormer package learns beside them from the same examples. For each slot the table that has guessed your picks better speaks, and the HoloFormer takes the slot only once it has been right on that slot at least two more times than that table, over your recent rounds.")
+        && !all.Contains("whichever of the two") && !all.Contains("guessed your choices better") && !all.Contains("Inside it are a small habit table"));
+    Check("wording A: the margin in the words is the general's own (Margin 2 reads 'two more times'; Margin 1 and 3 read 'one more time' and 'three more times'), the history sentence follows the option, and a table-only or net-only general says so",
+        new global::Doctrine.General.GeneralOptions().Margin == 2
+        && string.Join(" ", DoctrineWords.GeneralHow(new global::Doctrine.General.GeneralOptions { Margin = 3 })).Contains("at least three more times than that table")
+        && string.Join(" ", DoctrineWords.GeneralHow(new global::Doctrine.General.GeneralOptions { Margin = 1 })).Contains("at least one more time than that table")
+        && string.Join(" ", DoctrineWords.GeneralHow(new global::Doctrine.General.GeneralOptions { History = true })).Contains("also reads whether a card repeats what you took last round")
+        && !string.Join(" ", DoctrineWords.GeneralHow(new global::Doctrine.General.GeneralOptions { Mode = global::Doctrine.General.GeneralMode.TableOnly })).Contains("HoloFormer")
+        && !string.Join(" ", DoctrineWords.GeneralHow(new global::Doctrine.General.GeneralOptions { Mode = global::Doctrine.General.GeneralMode.NetOnly })).Contains("table")
+        && DoctrineWords.GeneralBuilt(new global::Doctrine.General.GeneralOptions { Mode = global::Doctrine.General.GeneralMode.TableOnly }) == "two small tables");
+    Check("wording B: it is a match record, said as what it is, in the two senses the code has: beside a card, how often the card ranked in a slot was the card taken there; under the pick, the share of rounds in which all of it came out as set; over about the last 64 rounds; no confidence, probability or accuracy",
+        all.Contains("Match record") && all.Contains($"The match record is a score out of 1000. Beside each card: over about the last {RecordWindowHand} rounds, how often the card it ranked in that slot was the card you took in that slot (a round where neither of you named a card for the slot is not counted). For the whole pick it reads: over about the last {RecordWindowHand} rounds, the share of rounds in which all of it came out exactly as the doctrine you then set. A short record reads a little under that share, so it starts low and climbs as the picks keep matching.")
+        && all.Contains($"of 1000 for the whole pick: over about the last {RecordWindowHand} rounds, the share of rounds in which all of it came out exactly as the doctrine you then set.")
+        && all.Contains("It ranked the cards on this council from what you have taken from councils before, and fills the slots in that order.")
+        && !all.Contains("a score for how well") && !Regex.IsMatch(all, "confiden", RegexOptions.IgnoreCase));
     Check("wording C: the working screen says it runs on the device in small steps", all.Contains("This runs on your device, in small steps.") && !all.Contains("so the page stays usable") && !all.Contains("one small step at a time"));
     Check("wording D: the examples count says what it counts, in the chip and on the start and end screens",
         Regex.Matches(all, Regex.Escape("(each doctrine you set and each battle result)")).Count >= 3 && all.Contains("examples seen (each doctrine you set and each battle result)") && all.Contains("since you opened this page"));
@@ -1474,6 +1813,52 @@ foreach (var (code, rerollsPaid) in new[] { ("DA2.0.0.0.0..0:5:0:0", 0), ("DA2.0
     Check("wording F: Cull never appears (the army allows none, so the council never holds one): no card, no sentence, no operation name", !all.Contains("Cull") && !all.Contains("No order to dismiss soldiers") && !all.Contains("this version") && !allMarkup.Any(m => m.Contains("Cull a trait") || m.Contains("Dismiss a trait") || m.Contains("Dismiss ")));
     Check("wording G: the offers are said in the lord's voice: the muster of companies and the council of orders, a pick is a whole company, a reroll has a price and a limit", all.Contains("The muster") && all.Contains("The council") && all.Contains("each whole or not at all") && all.Contains("The three formations") && Regex.IsMatch(all, @"Reroll for \d+ gold \(\d+ left\)") && all.Contains("Keep these") && all.Contains("Your general's pick of the council"));
     Check("wording G: no word of the offers says draw as luck: the offers are the game's own draw from the game seed, never 'random', 'lucky' or 'roguelike'", !Regex.IsMatch(all, @"\b(random|randomly|roguelike|loot|gacha)\b", RegexOptions.IgnoreCase));
+    Check("wording H: the muster says it is dealt once a round and only the council can be drawn again (the game offers no second draw of companies)",
+        DoctrineWords.MusterNote == "The muster is dealt once a round and cannot be drawn again. Only the council can be, for gold." && all.Contains(DoctrineWords.MusterNote)
+        && typeof(UnitOffer).GetProperties().All(p => !p.Name.Contains("Reroll")) && typeof(OrderOffer).GetProperties().Any(p => p.Name == "RerollCost"));
+
+    // ---- the match record's window: probed on a real general (a table-only one: the counting is the same code). A player who never changes: the whole-pick figure climbs until the window passes its size, then the counts are halved and it falls.
+    {
+        var gp = new global::Doctrine.General.TinyHoloGeneral(new global::Doctrine.General.GeneralOptions { Mode = global::Doctrine.General.GeneralMode.TableOnly });
+        var sum = new int[GeneralSummary.Length];
+        var picks = DoctrineSet.Of(DoctrineVocabulary.Field(FieldOrderKind.Advance, 0), DoctrineVocabulary.Field(FieldOrderKind.Hold, 2));
+        var input = new GeneralInput(0, sum, LegalMask.All);
+        int prevConf = -1, fellAt = -1;
+        for (int n = 1; n <= 100 && fellAt < 0; n++)
+        {
+            await gp.LearnAsync(new GeneralExample(input, picks, false), default);
+            int conf = (await gp.SuggestAsync(input, default)).ConfidencePermille;
+            if (prevConf >= 0 && conf < prevConf) fellAt = n;
+            prevConf = conf;
+        }
+        Check($"match record: the window the words state ('about the last {RecordWindowHand} rounds') is the general's own: its counts are halved when the window passes the figure (probed: the whole-pick figure first falls at example {fellAt}), and DoctrineWords states that figure",
+            fellAt == RecordWindowHand && DoctrineWords.RecordWindow == RecordWindowHand && DoctrineWords.RecordScale == 1000, $"first fall at example {fellAt}");
+    }
+
+    // ---- dug in, the siege and the tick limit, said once in the battle's own figures
+    {
+        const string dugRule = "Dug in. A line that holds its ground for six ticks without being hit is dug in: it strikes harder until it is hit or moves. A line that already shoots from afar gains less, and the longest reach on the field gains nothing.";
+        Check("dug in (words): the rule is said once with the battle's set time (six ticks) and read from it, on the page under 'About the field'; the Hold card's sentence carries it, no other order's does",
+            DoctrineWords.DugInRule() == dugRule && UnitRules.SetTicks == 6 && all.Contains(dugRule) && all.Contains("About the field")
+            && DoctrineWords.Sentence(DoctrineVocabulary.Field(FieldOrderKind.Hold, 1)).Contains("Unhit for six ticks, it is dug in and strikes harder until it is hit or moves.")
+            && Enumerable.Range(0, 6).Where(k => k != (int)FieldOrderKind.Hold).All(k => !DoctrineWords.Sentence(DoctrineVocabulary.Field((FieldOrderKind)k, 0)).Contains("dug in")));
+        Check("dug in (words): what it is worth to a cohort is the battle's own bonus, per traits: 32% for a plain line, 12% for far shooters, nothing for the longest reach",
+            DoctrineWords.DugInFor(Trait.None) == "Dug in, it strikes 32% harder." && DoctrineWords.DugInFor(Trait.Ranged) == "Dug in, it strikes 12% harder."
+            && DoctrineWords.DugInFor(Roster.TraitsOf(7)) == "Dug in, it gains nothing: its reach is already the longest." && Enumerable.Range(0, 8).All(k => DoctrineWords.DugInFor(Roster.TraitsOf(k)).Contains($"{ChronicleCheck.HandBonus(Roster.TraitsOf(k))}%") || ChronicleCheck.HandBonus(Roster.TraitsOf(k)) == 0));
+        Check("siege (words): who besieges in which round is the game's own roles rule: you in the first, third, fifth and seventh rounds of eight, the enemy in the rest (five rounds: first, third and fifth; three: first and third)",
+            DoctrineWords.YourSiegeRounds(8) == "first, third, fifth and seventh" && DoctrineWords.YourSiegeRounds(5) == "first, third and fifth" && DoctrineWords.YourSiegeRounds(3) == "first and third"
+            && Enumerable.Range(0, 8).All(r => SiegeRules.BesiegerOf(r) == (r % 2 == 0 ? Side.Player : Side.Enemy)));
+        const string siegeRule = "Some grounds are sieges: a wall stands between the armies and one side besieges. The besieger carries a siege clock. A besieger that has traded no blow when the clock runs out loses its stance, and every company of it must advance; the other side may wait. The sides swap every round: in a game of eight rounds you besiege in the first, third, fifth and seventh rounds and the enemy in the rest. The open grounds have no clock.";
+        Check("siege (words): the rule is on the page under 'About the field' without a ground's name (so the static shell can carry it), and after a game has been started it adds the grounds of the battle's own catalogue with their clocks",
+            DoctrineWords.SiegeRule(8) == siegeRule && all.Contains(siegeRule)
+            && all.Contains("The sieges are The Chokepoint (a clock of 14 ticks) and The Falling Gate (a clock of 16 ticks); the open grounds are Open Field and Ridge Road."));
+        Check("tick limit (words): the rule is that the greater power left takes the field, not the side with more soldiers, and equal power is a draw; it is on the page and nowhere does the page say the count of soldiers decides it",
+            DoctrineWords.TickLimitRule() == "If the tick limit stops a battle, the field goes to the side with the greater power left, each company's soldiers weighed by its power, how hard it strikes, how far it reaches and how little damage it takes, not to the side with more soldiers; equal power is a draw." && all.Contains(DoctrineWords.TickLimitRule())
+            && !Regex.IsMatch(all, @"more soldiers (left )?wins|the side with more soldiers (left )?wins"));
+        // the rule itself, read from the battle: Rating counts power, so a side with fewer soldiers can hold more of it
+        Check("tick limit (the rule): the battle's own Rating is soldiers x power x damage x reach / taken, so fewer Catapults outweigh more Spearmen (what the words say)",
+            UnitRules.Rating(10, 100, Roster.TraitsOf(7)) > UnitRules.Rating(11, 100, Roster.TraitsOf(0)) && new TracerBattleOptions().LimitByPower);
+    }
 }
 
 // ---------------------------------------------------------------------------------------------- the orders in a lord's words, against the rules
@@ -1615,7 +2000,7 @@ foreach (var (code, rerollsPaid) in new[] { ("DA2.0.0.0.0..0:5:0:0", 0), ("DA2.0
     {
         string src = Path.Combine(showroom, "Services", "Doctrine");
         var typed = new List<string>();
-        foreach (var f in new[] { "DoctrineWords.cs", "DoctrineProgress.cs", "DoctrineGuide.cs" })
+        foreach (var f in new[] { "DoctrineWords.cs", "DoctrineProgress.cs", "DoctrineGuide.cs", "BattleChronicle.cs" })
         {
             string code = Regex.Replace(File.ReadAllText(Path.Combine(src, f)), @"//[^\n]*", "");
             foreach (var lit in Lex.StringTexts(code))
@@ -1677,6 +2062,15 @@ foreach (var (code, rerollsPaid) in new[] { ("DA2.0.0.0.0..0:5:0:0", 0), ("DA2.0
     Check("offers layout: the packs and the formations are one column on a phone and two and three on a wide screen; the slots with their arrows take two columns in portrait on a phone",
         Regex.IsMatch(css, @"\.dc-packs \{[^}]*grid-template-columns: minmax\(0, 1fr\)") && Regex.IsMatch(css, @"min-width: 900px\) \{[\s\S]*\.dc-packs \{ grid-template-columns: repeat\(2, minmax\(0, 1fr\)\)") && Regex.IsMatch(css, @"\.dc-formgrid \{[^}]*grid-template-columns: minmax\(0, 1fr\)")
         && Regex.IsMatch(css, @"max-width: 699px\) \{\s*\.dc-slots \{[^}]*repeat\(2, minmax\(0, 1fr\)\)"));
+    {
+        string rl = css.Replace("\r\n", "\n");
+        int firstHas = rl.IndexOf(".dc-hud:has("), lastHas = rl.LastIndexOf(".dc-hud:has(");
+        int mediaStart = firstHas < 0 ? -1 : rl.LastIndexOf("@media", firstHas), mediaEnd = mediaStart < 0 ? -1 : rl.IndexOf("\n}", mediaStart);
+        Check("council layout (phone): with a sheet, the muster or the council open the top bar gives up its goal and to-do line, the recap gives way to the chronicle, the slots are put away in the draft and take one row (arrows away) while a sheet or the council is open, and the Council button goes while the council is open, so the cards get the height; every one of these rules is inside the one below-700px query (the desktop is untouched)",
+            Regex.IsMatch(rl, @"@media \(max-width: 699px\) \{\n\s*\.dc-hud\[data-stage=draft\] \.dc-slots \{ display: none; \}\n\s*\.dc-hud:has\(\.dc-sheet\.open, \.dc-tray\.open\) \.dc-goal, \.dc-hud:has\(\.dc-sheet\.open, \.dc-tray\.open\) \.dc-todo \{ display: none; \}\n\s*\.dc-hud:has\(\.dc-chroniclepanel\.open\) \.dc-recap \{ display: none; \}")
+            && Regex.IsMatch(rl, @"\.dc-hud:has\(\.dc-sheet\.open, \.dc-tray\.open\) \.dc-slots \{ grid-auto-flow: column; grid-template-columns: none;") && Regex.IsMatch(rl, @"#dc-orders \{ display: none; \}")
+            && mediaStart >= 0 && rl.Substring(mediaStart).StartsWith("@media (max-width: 699px) {") && lastHas < mediaEnd);
+    }
     Check("offers layout: the arrows and the formation and pack cards keep the 44px rule (the page rule covers every button) and the cards wrap long words instead of widening", Regex.IsMatch(css, @"\.dc-pack \{[^}]*overflow-wrap: anywhere") && Regex.IsMatch(css, @"\.dc-form \{[^}]*overflow-wrap: anywhere") && Regex.IsMatch(css, @"\.dc-mv \.dc-btn \{[^}]*padding: 0"));
     string index = File.ReadAllText(Path.Combine(showroom, "wwwroot", "index.html"));
     Check("viewport meta: width=device-width, initial-scale=1", Regex.IsMatch(index, "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1(\\.0)?\""));
@@ -1710,6 +2104,9 @@ foreach (var (code, rerollsPaid) in new[] { ("DA2.0.0.0.0..0:5:0:0", 0), ("DA2.0
     Check("no title attribute or px inline style at any screen scanned", allMarkup.All(m => !Regex.IsMatch(m, @"\stitle=""") && !Regex.IsMatch(m, @"style=""[^""]*\d+px")));
     Check("the SVG arena has a text alternative", allMarkup.Any(m => Regex.IsMatch(m, @"<svg[^>]*role=""img""[^>]*aria-label=""Arena at tick")));
 }
+
+Check($"ground (briefing): in every round of every page game ({groundChecked} screens and results) the top bar named the ground the battle was then fought on and who besieged it (against a hand-written draw, names and clocks), the game's own answer agreed, the muster said it is dealt once, the record's ground and besieger were the briefing's, and the result screen said the siege and the clock in the recording's own words",
+    groundChecked >= 14 && groundProblems.Count == 0, string.Join(" | ", groundProblems.Take(3)));
 
 // --dump <file>: write the visible text of every screen the proof reached (for the coordinator to show the user)
 if (args.Length >= 2 && args[0] == "--dump") File.WriteAllText(args[1], string.Join("\n\n==== next screen ====\n\n", allText));
@@ -1800,6 +2197,19 @@ sealed class VarietyHands(int variant) : IPlayerInput
 }
 
 /// <summary>
+/// A visitor who drafts like <see cref="VarietyHands"/>; in an even round (the player besieges, when the ground is a siege) holds all three lines so that the siege clock can fall,
+/// in an odd round (the enemy besieges) gives the variety orders.
+/// </summary>
+sealed class SiegeHands(int variant) : IPlayerInput
+{
+    readonly VarietyHands _v = new(variant);
+    public ValueTask<IReadOnlyList<DraftPick>> DraftAsync(ArmyReadModel army, int round, CancellationToken ct) => _v.DraftAsync(army, round, ct);
+    public ValueTask<PlayerChoice> ChooseAsync(ArmyReadModel army, GeneralOutput ghost, int round, CancellationToken ct)
+        => round % 2 != 0 ? _v.ChooseAsync(army, ghost, round, ct)
+            : ValueTask.FromResult(new PlayerChoice(DoctrineSet.Of(Enumerable.Range(0, 3).Select(g => DoctrineVocabulary.Field(FieldOrderKind.Hold, g)).Where(army.Legal.Allows).ToArray()), false));
+}
+
+/// <summary>
 /// The independent check of a chronicle: it looks every line's cite up again in the recording, with its own code, and checks what the text says of it
 /// (the side and the kind it names, the numbers, the tick). It returns the problems; none means every line is backed.
 /// </summary>
@@ -1820,7 +2230,34 @@ static class ChronicleCheck
     /// <summary>The blobs that broke (strength above zero before, zero now) between frame i-1 and i, lowest id first.</summary>
     static List<ReplayBlob> Broke(BattleReplay r, int i) => r.Frames[i].Blobs.Where(b => b.Strength <= 0 && B(r.Frames[i - 1], b.Id) is { Strength: > 0 }).OrderBy(b => b.Id).ToList();
 
-    public static List<string> Verify(Chronicle c, BattleReplay r, Func<int, string> kn, Func<Side, int, Trait?>? traits)
+    const int ClockBit = 2;                 // WorldFlag.ClockFell, written out by hand
+    static readonly string[] SetWords = ["no", "one", "two", "three", "four", "five", "six", "seven", "eight"];
+
+    /// <summary>The bonus a dug-in cohort of these traits gets, written out by hand from the battle's tables: a Machine's reach is the longest (nothing to gain), a far shooter gains the difference, the rest gain the longest edge.</summary>
+    public static int HandBonus(Trait t) => (t & Trait.Machine) != 0 ? 0 : (t & Trait.Ranged) != 0 ? 12 : 32;
+
+    /// <summary>
+    /// Is cohort <paramref name="id"/> PROVABLY dug in for the first time at frame <paramref name="at"/>? Written apart from the chronicle: a reference frame, six frames since it without a strike on the cohort
+    /// and within a melee reach (35.2 sixteenths) of it, alive throughout; a distance within 1.5 of the reach makes the cohort unprovable until a strike resets it.
+    /// </summary>
+    public static bool DugInAt(BattleReplay r, int id, int at)
+    {
+        var F = r.Frames;
+        if (at < 6 || at >= F.Count || B(F[0], id) is not { } b0) return false;
+        int start = 0; bool unknown = false; int rx = b0.X, ry = b0.Y;
+        for (int j = 1; j <= at; j++)
+        {
+            if (B(F[j], id) is not { Strength: > 0 } bj) return false;
+            if (F[j].Events.Any(e => e.Target == id)) { start = j; rx = bj.X; ry = bj.Y; unknown = false; continue; }
+            if (unknown) continue;
+            double d = Math.Sqrt(Math.Pow(bj.X - rx, 2) + Math.Pow(bj.Y - ry, 2));
+            if (d > 36.7) { start = j; rx = bj.X; ry = bj.Y; }
+            else if (d >= 33.7) unknown = true;
+        }
+        return !unknown && at - start == 6;
+    }
+
+    public static List<string> Verify(Chronicle c, BattleReplay r, Func<int, string> kn, Func<Side, int, Trait?>? traits, int siegeClock = 0)
     {
         var bad = new List<string>();
         var F = r.Frames;
@@ -1840,6 +2277,9 @@ static class ChronicleCheck
             bool kindOk = l.Kind switch
             {
                 ChronicleKind.Start => ck.Kind == CiteKind.Start,
+                ChronicleKind.Siege => ck.Kind == CiteKind.Siege,
+                ChronicleKind.Clock => ck.Kind == CiteKind.Clock,
+                ChronicleKind.DugIn => ck.Kind == CiteKind.Set,
                 ChronicleKind.Contact or ChronicleKind.Flank or ChronicleKind.Holy or ChronicleKind.Blow => ck.Kind == CiteKind.Event,
                 ChronicleKind.Gate => ck.Kind == CiteKind.Gate,
                 ChronicleKind.Run => ck.Kind == CiteKind.Run,
@@ -1916,6 +2356,41 @@ static class ChronicleCheck
                     }
                     break;
                 }
+                case CiteKind.Siege:
+                {
+                    string who = r.Besieger == Side.Player ? "You besiege" : "The enemy besieges";
+                    string want = siegeClock > 0
+                        ? $"A siege. {who}, and the siege clock is {siegeClock} ticks: " + (r.Besieger == Side.Player
+                            ? "if you have traded no blow by then, you lose your stance and every company of yours must advance."
+                            : "if it has traded no blow by then, it loses its stance and every company of it must advance. You may wait.")
+                        : $"A siege. {who}.";
+                    if (i != 0 || r.Besieger is not { } bsg || ck.A != (int)bsg || ck.Value != siegeClock || text != want) bad.Add(w + " the siege line does not match the recording's besieger and the arena's clock");
+                    break;
+                }
+                case CiteKind.Clock:
+                {
+                    bool ok = r.Besieger is { } bsc && ck.A == (int)bsc && (f.WorldFlags & ClockBit) != 0 && p is not null && (p.WorldFlags & ClockBit) == 0;
+                    if (ok)
+                        for (int j = 1; j < i && ok; j++)
+                            foreach (var e in F[j].Events)
+                                if (B(F[j], e.Source) is { } s1 && s1.Side == r.Besieger || B(F[j], e.Target) is { } t1 && t1.Side == r.Besieger) { ok = false; break; }
+                    string want = r.Besieger == Side.Player
+                        ? "The siege clock has run out. You had traded no blow, so you lose your stance: every company of yours now advances."
+                        : "The siege clock has run out. The enemy had traded no blow, so it loses its stance: every company of theirs now advances.";
+                    if (!ok || text != want) bad.Add(w + " the clock bit is not first set in this frame, or the besieger had traded a blow before it, or the text differs");
+                    break;
+                }
+                case CiteKind.Set:
+                {
+                    var b = B(f, ck.A); var tr = b is null ? null : traits?.Invoke(b.Value.Side, b.Value.Key);
+                    if (b is null || tr is null || ck.Value != 6 || ck.Value2 != HandBonus(tr.Value) || !DugInAt(r, ck.A, i)) { bad.Add(w + " that cohort is not provably dug in for the first time at this tick, or the bonus is not its traits'"); break; }
+                    // the first of its side: no cohort of the side before it by tick, and none of lower id on the same tick
+                    bool earlier = false;
+                    for (int j = 6; j <= i; j++) foreach (var o in F[j].Blobs.Where(x => x.Side == b.Value.Side && x.Id != ck.A && (j < i || x.Id < ck.A))) if (DugInAt(r, o.Id, j)) earlier = true;
+                    string edge = ck.Value2 > 0 ? $"They strike {ck.Value2}% harder until they are hit or move." : "Their reach is already the longest, so it gains them nothing.";
+                    if (earlier || text != $"{Cap(Nm(kn, b.Value))} are dug in: {SetWords[ck.Value]} ticks unhit and in place. {edge}") bad.Add(w + " not the first cohort of its side to dig in, or the text differs");
+                    break;
+                }
                 case CiteKind.Gate:
                     if ((f.WorldFlags & WorldFlag.GateFallen) == 0 || (p is not null && (p.WorldFlags & WorldFlag.GateFallen) != 0) || text != "The gate has fallen.") bad.Add(w + " the recording's gate flag is not first set in this frame");
                     break;
@@ -1952,13 +2427,35 @@ static class ChronicleCheck
                 {
                     int me = Sum(f, Side.Player), they = Sum(f, Side.Enemy);
                     string start = r.Result.Outcome switch { BattleStatus.AttackerWon => "The field is yours.", BattleStatus.DefenderWon => "The enemy holds the field.", BattleStatus.Draw => me > 0 && they > 0 ? "Neither side held the field." : "Both sides fall together.", _ => "The battle did not finish." };
+                    // both sides still standing at the last frame means the tick limit stopped it: the field goes to the greater POWER left (not the greater count), or it is a draw on equal power
+                    string limit = me > 0 && they > 0 ? (r.Result.Outcome == BattleStatus.Draw ? " The battle stopped at its tick limit with the power left on the two sides equal." : " The battle stopped at its tick limit, where the field goes to the side with the greater power left, not to the side with more soldiers.") : "";
+                    bool winnerOk = limit.Length > 0 || !(r.Result.Outcome == BattleStatus.AttackerWon && !(me > they)) && !(r.Result.Outcome == BattleStatus.DefenderWon && !(they > me));
                     if (i != F.Count - 1 || ck.Value != (int)r.Result.Outcome || ck.A != me || ck.B != they || !text.StartsWith(start) || !text.Contains($"{me}") || !text.Contains($"{they}")
-                        || r.Result.Outcome == BattleStatus.AttackerWon && !(me > they) || r.Result.Outcome == BattleStatus.DefenderWon && !(they > me)) bad.Add(w + " the end does not match the last frame and the recorded outcome");
+                        || (limit.Length > 0 ? !text.EndsWith(limit) : text.Contains("tick limit")) || !winnerOk) bad.Add(w + " the end does not match the last frame and the recorded outcome");
                     break;
                 }
             }
         }
         if (c.Lines.Count(x => x.Kind == ChronicleKind.Start) != 1 || c.Lines.Count(x => x.Kind == ChronicleKind.End) != 1 || c.Lines.Count(x => x.Kind == ChronicleKind.Contact) > 1 || c.Lines.Count(x => x.Kind == ChronicleKind.Gate) > 1) bad.Add("a line kind appears the wrong number of times");
+        if (c.Lines.Count(x => x.Kind == ChronicleKind.Siege) != (r.Besieger is null || F.Count == 0 ? 0 : 1) || c.Lines.Count(x => x.Kind == ChronicleKind.Clock) > 1) bad.Add("the siege line or the clock line appears the wrong number of times");
+        if (c.Lines.Where(x => x.Kind == ChronicleKind.DugIn).GroupBy(x => B(F[idx[x.Tick]], x.Cite.A)?.Side).Any(g => g.Count() > 1) || (traits is null && c.Lines.Any(x => x.Kind == ChronicleKind.DugIn))) bad.Add("a side has two dug-in lines, or a dug-in line is written without the cohorts' traits");
+        // every siege recording whose bit is set while the besieger had traded no blow before it must have its clock line
+        if (r.Besieger is { } bsAll && F.Count > 1)
+        {
+            int firstBit = Enumerable.Range(1, F.Count - 1).Where(j => (F[j].WorldFlags & ClockBit) != 0 && (F[j - 1].WorldFlags & ClockBit) == 0).DefaultIfEmpty(-1).First();
+            bool traded = firstBit > 0 && Enumerable.Range(1, firstBit - 1).Any(j => F[j].Events.Any(e => B(F[j], e.Source) is { } a && a.Side == bsAll || B(F[j], e.Target) is { } d && d.Side == bsAll));
+            if (firstBit > 0 && !traded && c.Lines.All(x => x.Kind != ChronicleKind.Clock)) bad.Add("the clock fell in the recording but no line says so");
+            if (firstBit < 0 && c.Lines.Any(x => x.Kind == ChronicleKind.Clock)) bad.Add("a clock line without the bit in the recording");
+        }
+        // every cohort provably dug in, the first of its side, has its line (when the traits are known)
+        if (traits is not null && F.Count > 6)
+            foreach (var side in new[] { Side.Player, Side.Enemy })
+            {
+                int firstAt = -1, firstId = -1;
+                for (int j = 6; j < F.Count && firstAt < 0; j++) foreach (var o in F[j].Blobs.Where(x => x.Side == side).OrderBy(x => x.Id)) if (DugInAt(r, o.Id, j)) { firstAt = j; firstId = o.Id; break; }
+                bool has = c.Lines.Any(x => x.Kind == ChronicleKind.DugIn && x.Cite.A == firstId && x.Tick == F[Math.Max(0, firstAt)].Tick);
+                if (firstAt >= 0 && traits(side, B(F[firstAt], firstId)!.Value.Key) is not null && !has) bad.Add($"{side} has a cohort provably dug in at tick {F[firstAt].Tick} but no line says so");
+            }
         if (F.Any(x => x.Events.Count > 0) && c.Lines.All(x => x.Kind != ChronicleKind.Contact)) bad.Add("there are strikes in the recording but no first contact");
         if (F.Any(x => (x.WorldFlags & WorldFlag.GateFallen) != 0) && F.Count > 1 && (F[0].WorldFlags & WorldFlag.GateFallen) == 0 && c.Lines.All(x => x.Kind != ChronicleKind.Gate)) bad.Add("the gate fell in the recording but no line says so");
         return bad;

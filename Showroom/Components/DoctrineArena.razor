@@ -46,6 +46,11 @@
             {
                 <li class="dc-gatechip @(fallen ? "fallen" : "")">@(fallen ? "The gate has fallen" : "The gate is standing")</li>
             }
+            @if (_v.Besieger is { } besieger)
+            {
+                bool clockFell = _v.ClockFell(_tick);
+                <li class="dc-siegechip @(clockFell ? "fallen" : "")">@(clockFell ? DoctrineWords.ClockFellChip(besieger) : DoctrineWords.SiegeChip(besieger, SiegeClock))</li>
+            }
         </ul>
 
         <div class="dc-controls" role="group" aria-label="Replay controls">
@@ -87,6 +92,8 @@
 @code {
     [Parameter, EditorRequired] public BattleReplay Replay { get; set; } = default!;
     [Parameter] public global::Doctrine.Battle.ArenaLayout? Layout { get; set; }
+    /// <summary>The siege clock of the arena in ticks, from the battle's catalogue (the recording names the besieger but not the clock); 0 when not known.</summary>
+    [Parameter] public int SiegeClock { get; set; }
     /// <summary>Optional: shared with the chronicle beside the field. The replay reports every tick it shows; the chronicle can ask it to jump.</summary>
     [Parameter] public ReplayCursor? Cursor { get; set; }
 
@@ -170,7 +177,8 @@
         => $"<text class=\"dc-lbl\" y=\"0.3\" text-anchor=\"middle\" dominant-baseline=\"middle\">{WebUtility.HtmlEncode(b.Strength > 0 ? b.Strength.ToString(CultureInfo.InvariantCulture) : "x")}</text>";
 
     private string Alt(ReplayFrame f, bool fallen)
-        => $"Arena at tick {f.Tick}: {f.Blobs.Count(b => b.Side == Side.Player && b.Strength > 0)} of your cohorts and {f.Blobs.Count(b => b.Side == Side.Enemy && b.Strength > 0)} enemy cohorts standing." + (_v!.HasGate ? (fallen ? " The gate has fallen." : " The gate is standing.") : "");
+        => $"Arena at tick {f.Tick}: {f.Blobs.Count(b => b.Side == Side.Player && b.Strength > 0)} of your cohorts and {f.Blobs.Count(b => b.Side == Side.Enemy && b.Strength > 0)} enemy cohorts standing." + (_v!.HasGate ? (fallen ? " The gate has fallen." : " The gate is standing.") : "")
+           + (_v.Besieger is { } bs ? " " + (_v.ClockFell(_tick) ? DoctrineWords.ClockFellChip(bs) : DoctrineWords.SiegeChip(bs, SiegeClock)) + "." : "");
 
     private void OnSeekRequested(int tick) => _ = InvokeAsync(() => Seek(tick));
 
