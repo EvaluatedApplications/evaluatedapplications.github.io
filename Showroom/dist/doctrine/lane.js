@@ -13,6 +13,106 @@ const INK = '#14110f', SKIN = '#f1c9a0';
 
 let S = null;
 
+// ---- sound: 8-bit effects made in the browser with Web Audio (no files, nothing to download). The audio engine starts only after the first tap or key press, is quiet by default,
+// plays at most MAX_PER_TICK sounds per game tick (the most important few) and never the same sound twice inside its gap. The mute choice is kept in localStorage when there is one.
+
+const MAX_PER_TICK = 2, MAX_PER_SECOND = 14, MASTER = 0.1, MUTE_KEY = 'doctrine-sound';
+// w: square | pulse | triangle | noise. f: [from, to] in Hz (noise: pitch of the hiss). d: seconds. g: loudness 0..1. at: start delay. pri: which one wins when there are too many. gap: ms before the same sound may repeat.
+const SFX = {
+  tap:        { pri: 3, gap: 40,  v: [{ w: 'square', f: [900, 1300], d: 0.05, g: 0.5 }] },
+  stage:      { pri: 4, gap: 40,  v: [{ w: 'pulse', f: [520, 520], d: 0.05, g: 0.5 }, { w: 'pulse', f: [780, 780], d: 0.07, g: 0.5, at: 0.05 }] },
+  orderSet:   { pri: 4, gap: 40,  v: [{ w: 'square', f: [440, 440], d: 0.05, g: 0.45 }, { w: 'square', f: [660, 660], d: 0.07, g: 0.45, at: 0.05 }] },
+  orderClear: { pri: 4, gap: 40,  v: [{ w: 'square', f: [660, 660], d: 0.05, g: 0.4 }, { w: 'square', f: [330, 330], d: 0.07, g: 0.4, at: 0.05 }] },
+  tick:       { pri: 5, gap: 300, v: [{ w: 'square', f: [1000, 1000], d: 0.04, g: 0.35 }] },
+  tickLast:   { pri: 6, gap: 300, v: [{ w: 'square', f: [1600, 1600], d: 0.09, g: 0.5 }, { w: 'square', f: [1600, 1600], d: 0.09, g: 0.5, at: 0.12 }] },
+  runStart:   { pri: 9, gap: 500, v: [{ w: 'pulse', f: [330, 330], d: 0.08, g: 0.5 }, { w: 'pulse', f: [440, 440], d: 0.08, g: 0.5, at: 0.08 }, { w: 'pulse', f: [660, 660], d: 0.14, g: 0.5, at: 0.16 }] },
+  hit:        { pri: 2, gap: 90,  v: [{ w: 'noise', f: [1400, 1400], d: 0.05, g: 0.45 }, { w: 'square', f: [220, 110], d: 0.05, g: 0.3 }] },
+  arrow:      { pri: 2, gap: 120, v: [{ w: 'triangle', f: [1500, 500], d: 0.09, g: 0.4 }] },
+  charge:     { pri: 3, gap: 250, v: [{ w: 'pulse', f: [180, 360], d: 0.16, g: 0.4 }, { w: 'noise', f: [600, 600], d: 0.12, g: 0.2 }] },
+  thud:       { pri: 5, gap: 250, v: [{ w: 'triangle', f: [140, 45], d: 0.2, g: 0.7 }, { w: 'noise', f: [400, 400], d: 0.08, g: 0.3 }] },
+  fall:       { pri: 3, gap: 140, v: [{ w: 'square', f: [440, 90], d: 0.16, g: 0.35 }] },
+  castleHit:  { pri: 6, gap: 300, v: [{ w: 'noise', f: [500, 500], d: 0.14, g: 0.5 }, { w: 'triangle', f: [110, 60], d: 0.14, g: 0.5 }] },
+  castleFall: { pri: 8, gap: 800, v: [{ w: 'noise', f: [350, 350], d: 0.5, g: 0.55 }, { w: 'triangle', f: [200, 30], d: 0.5, g: 0.6 }] },
+  win:        { pri: 10, gap: 1500, v: [523, 659, 784, 1047].map((f, i) => ({ w: 'square', f: [f, f], d: i === 3 ? 0.3 : 0.11, g: 0.45, at: i * 0.12 })) },
+  lose:       { pri: 10, gap: 1500, v: [392, 330, 262, 196].map((f, i) => ({ w: i === 3 ? 'triangle' : 'square', f: [f, f], d: i === 3 ? 0.35 : 0.13, g: 0.45, at: i * 0.15 })) },
+};
+const AUD = { ctx: null, master: null, muted: false, last: {}, tick: -1, count: 0, winStart: 0, winCount: 0, pulse: null, noise: null, unlockOn: false, played: 0 };
+
+function loadMute() { try { AUD.muted = globalThis.localStorage && globalThis.localStorage.getItem(MUTE_KEY) === 'off'; } catch (e) { AUD.muted = false; } }
+function saveMute() { try { globalThis.localStorage && globalThis.localStorage.setItem(MUTE_KEY, AUD.muted ? 'off' : 'on'); } catch (e) { /* no storage: the choice lasts for this visit */ } }
+function setMuted(m) { AUD.muted = !!m; saveMute(); }
+
+/** Starts the audio engine. Called only from a tap, a click or a key press (browsers refuse it otherwise). */
+function unlock() {
+  if (AUD.ctx) { try { if (AUD.ctx.state === 'suspended') AUD.ctx.resume(); } catch (e) { } return; }
+  try {
+    const AC = globalThis.AudioContext || globalThis.webkitAudioContext;
+    if (!AC) return;
+    const c = new AC();
+    const m = c.createGain(); m.gain.value = MASTER; m.connect(c.destination);
+    AUD.ctx = c; AUD.master = m;
+    if (c.state === 'suspended') c.resume();
+  } catch (e) { AUD.ctx = null; }
+}
+function onGesture() { unlock(); }
+function listenForGesture() {
+  if (AUD.unlockOn || typeof document === 'undefined' || !document.addEventListener) return;
+  AUD.unlockOn = true;
+  for (const n of ['click', 'touchend', 'keydown']) document.addEventListener(n, onGesture, true);
+}
+function stopListeningForGesture() {
+  if (!AUD.unlockOn) return;
+  AUD.unlockOn = false;
+  for (const n of ['click', 'touchend', 'keydown']) document.removeEventListener(n, onGesture, true);
+}
+
+function voice(c, out, v, t0) {
+  const st = t0 + (v.at || 0), en = st + v.d, g = c.createGain();
+  g.gain.setValueAtTime(0.0001, st); g.gain.linearRampToValueAtTime(v.g, st + 0.004); g.gain.exponentialRampToValueAtTime(0.0001, en);
+  let src;
+  if (v.w === 'noise') {
+    if (!AUD.noise) { const n = Math.floor(c.sampleRate * 0.25) || 8000, b = c.createBuffer(1, n, c.sampleRate || 32000), d = b.getChannelData(0); for (let i = 0; i < n; i++) d[i] = Math.random() * 2 - 1; AUD.noise = b; }
+    src = c.createBufferSource(); src.buffer = AUD.noise; src.loop = true; if (src.playbackRate) src.playbackRate.value = v.f[0] / 1000;
+  } else {
+    src = c.createOscillator();
+    if (v.w === 'pulse') {
+      if (!AUD.pulse) { const re = new Float32Array(24), im = new Float32Array(24); for (let n = 1; n < 24; n++) re[n] = (2 / (n * Math.PI)) * Math.sin(n * Math.PI * 0.25); AUD.pulse = c.createPeriodicWave(re, im); }
+      src.setPeriodicWave(AUD.pulse);
+    } else src.type = v.w;
+    src.frequency.setValueAtTime(v.f[0], st);
+    if (v.f[1] !== v.f[0]) src.frequency.exponentialRampToValueAtTime(Math.max(20, v.f[1]), en);
+  }
+  src.connect(g); g.connect(out); src.start(st); src.stop(en + 0.02);
+}
+
+/** Plays one named sound now. False when it was not played (unknown, muted, no gesture yet, too soon after the same sound, or too many this second). */
+function sfxPlay(name, nowMs) {
+  const A = AUD, def = SFX[name];
+  if (!def || A.muted || !A.ctx) return false;
+  if (nowMs - (A.last[name] === undefined ? -1e9 : A.last[name]) < def.gap) return false;
+  if (nowMs - A.winStart >= 1000) { A.winStart = nowMs; A.winCount = 0; }
+  if (A.winCount >= MAX_PER_SECOND) return false;
+  A.last[name] = nowMs; A.winCount++;
+  const t0 = A.ctx.currentTime + 0.005;
+  try { for (const v of def.v) voice(A.ctx, A.master, v, t0); A.played++; } catch (e) { return false; }
+  return true;
+}
+
+/** The sounds of one game tick: the same sound once, the most important MAX_PER_TICK of them, so a big clash is a few clicks and not a wall of noise. Returns how many played. */
+function sfxBatch(names, tick, nowMs) {
+  const A = AUD;
+  if (A.muted || !A.ctx || !names.length) return 0;
+  if (tick !== A.tick) { A.tick = tick; A.count = 0; }
+  const uniq = [...new Set(names)].filter((n) => SFX[n]).sort((a, b) => SFX[b].pri - SFX[a].pri);
+  let n = 0;
+  for (const nm of uniq) {
+    if (A.count >= MAX_PER_TICK) break;
+    if (sfxPlay(nm, nowMs)) { A.count++; n++; }
+  }
+  return n;
+}
+const clockMs = () => (typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now());
+
 // ---- small drawing helpers ----------------------------------------------------------------------------------------------------------
 
 function pen(c, w) { c.lineWidth = w || 2; c.strokeStyle = INK; c.lineJoin = 'round'; c.lineCap = 'round'; }
@@ -226,7 +326,8 @@ function fit() {
   const vh = (typeof window !== 'undefined' && window.innerHeight) || 800;
   S.vertical = w < 720;
   S.cssW = w;
-  S.cssH = S.vertical ? Math.round(clamp(vh * 0.82, 480, 920)) : Math.round(clamp(w * 0.46, 330, vh * 0.8));
+  // the board leaves room for the tray under it, so the whole game fits one screen
+  S.cssH = S.vertical ? Math.round(clamp(vh * 0.64, 440, 860)) : Math.round(clamp(w * 0.46, 330, Math.max(330, vh * 0.68)));
   S.dpr = Math.min((typeof window !== 'undefined' && window.devicePixelRatio) || 1, 2);
   if (S.vertical) { S.v = S.cssW / S.L.height; S.u = S.cssH / S.L.width; }
   else { S.u = S.cssW / S.L.width; S.v = S.cssH / S.L.height; }
@@ -242,9 +343,11 @@ function applyPacket(u8, nowMs) {
   const buf = u8.buffer.slice(u8.byteOffset, u8.byteOffset + u8.byteLength);   // a copy, so the floats are aligned
   const f = new Float32Array(buf);
   const t = nowMs / 1000, n = f[5] | 0;
-  const prevStage = S.head.stage;
+  const prevStage = S.head.stage, prevP = S.head.pBase, prevE = S.head.eBase;
   S.head = { tick: f[0], stage: f[1], status: f[2], pBase: f[3], eBase: f[4], alpha: f[6] };
-  const seen = new Set();
+  const seen = new Set(), ev = [];
+  const fighting = {};   // side*8+lane -> bit mask of the kinds fighting there (who is hitting whom, roughly, for the sound)
+  for (let i = 0; i < n; i++) { const o = 8 + i * 10; if (f[o + 9] > 0.5) { const k = (f[o + 1] | 0) * 8 + (f[o + 2] | 0); fighting[k] = (fighting[k] || 0) | (1 << (f[o + 3] | 0)); } }
   for (let i = 0; i < n; i++) {
     const o = 8 + i * 10, id = f[o] | 0;
     let b = S.bodies.get(id);
@@ -256,11 +359,14 @@ function applyPacket(u8, nowMs) {
     } else {
       b.px = b.x; b.py = b.y; b.x = x; b.y = y;
       if (hp < b.hp - 0.002) {
+        const mask = fighting[(1 - b.side) * 8 + b.lane] || 0;   // the other side's kinds fighting in this lane
+        ev.push(mask & (1 << 7) ? 'thud' : mask & (1 << 3) ? 'arrow' : 'hit');
         b.hitAt = t;
         if (t - b.floatAt > 0.15 && S.floats.length < 60) { S.floats.push({ x, y, t0: t, text: '-' + Math.max(1, Math.round((b.hp - hp) * 100)) }); b.floatAt = t; }
       }
       b.hp = hp; b.fx = f[o + 6]; b.fy = f[o + 7];
     }
+    if (S.ready && !b.fight && f[o + 9] > 0.5 && b.kind === 2) ev.push('charge');
     b.fight = f[o + 9] > 0.5;
     const moved = Math.abs(b.x - b.px) + Math.abs(b.y - b.py) > 0.004;
     b.mv = b.mv * 0.7 + (moved ? 0.3 : 0);
@@ -269,10 +375,17 @@ function applyPacket(u8, nowMs) {
     seen.add(id);
   }
   for (const [id, b] of S.bodies) {
-    if (!seen.has(id)) { S.corpses.push({ b, t0: t }); S.bodies.delete(id); }
+    if (!seen.has(id)) { S.corpses.push({ b, t0: t }); S.bodies.delete(id); ev.push('fall'); }
+  }
+  if (S.ready) {
+    if (f[3] < prevP - 0.001) ev.push(f[3] <= 0 ? 'castleFall' : 'castleHit');
+    if (f[4] < prevE - 0.001) ev.push(f[4] <= 0 ? 'castleFall' : 'castleHit');
+    if (prevStage === 0 && S.head.stage === 1) ev.push('runStart');
+    if (prevStage !== 2 && S.head.stage === 2) ev.push(S.head.status === 1 ? 'win' : 'lose');
   }
   S.ready = true;
   if (prevStage !== S.head.stage) S.stageAt = t;
+  if (ev.length) sfxBatch(ev, f[0], nowMs);
 }
 
 // ---- drawing ------------------------------------------------------------------------------------------------------------------------------
@@ -340,9 +453,20 @@ function drawLaneMarks(c, t) {
       const staged = side === 0 && info.stagedOrders ? info.stagedOrders[lane] : undefined;
       const text = (staged !== undefined ? 'Next: ' + ORDER_NAME[staged] : ORDER_NAME[cur]);
       const wx = side === 0 ? L.playerEdge + 5 : L.enemyEdge - 1;
-      const px = sx(wx, y0 + 0.6), py = sy(wx, y0 + 0.6);
+      const ay0 = S.vertical ? cy : y0 + 0.6;   // on a phone the chip is centred on the lane
+      const px = sx(wx, ay0), py = (S.vertical && side === 0) ? sy(L.playerEdge + 2.2, cy) - 38 : sy(wx, ay0);   // on a phone, just above the lane's number
       const col = staged !== undefined ? 'rgba(180,120,0,0.92)' : (side === 0 ? 'rgba(29,79,168,0.9)' : 'rgba(154,42,28,0.9)');
-      chip(c, text, px, py - (S.vertical ? 0 : 0), col, S.vertical ? 'center' : (side === 0 ? 'left' : 'right'));
+      const al = S.vertical ? 'center' : (side === 0 ? 'left' : 'right');
+      chip(c, text, px, py, col, al);
+      // your plays at work: what was sent into this lane at the last pause, a few seconds into the run
+      if (side === 0 && info.stage === 1 && info.work && info.work[lane] && S.head.stage === 1) {
+        const fade = clamp(1 - (t - S.stageAt - 10) / 3, 0, 1);
+        if (fade > 0) {
+          c.globalAlpha = fade;
+          info.work[lane].forEach((txt, k) => chip(c, txt, px, S.vertical ? py - 19 * (k + 1) : py + 19 * (k + 1), 'rgba(40,90,170,0.92)', al));
+          c.globalAlpha = 1;
+        }
+      }
       // a held line is drawn where the bodies will stop
       if (cur === 1) {
         const len = L.enemyEdge - L.playerEdge, hx = side === 0 ? L.playerEdge + len * L.holdPct / 100 : L.enemyEdge - len * L.holdPct / 100;
@@ -351,6 +475,85 @@ function drawLaneMarks(c, t) {
       }
     }
   }
+}
+
+// ---- the orders drawn ON the selected lane, the mute button, and what a tap hits --------------------------------------------------------
+
+const TAP = 44;   // the smallest tap target, in CSS pixels
+
+function laneRect(lane) {
+  const L = S.L, [y0, y1] = laneBand(lane);
+  const ax = sx(L.playerEdge, y0), ay = sy(L.playerEdge, y0), bx = sx(L.enemyEdge, y1), by = sy(L.enemyEdge, y1);
+  return [Math.min(ax, bx), Math.min(ay, by), Math.abs(bx - ax), Math.abs(by - ay)];
+}
+/** The order chips of a lane: a column down the middle of a tall lane (phone), a row along the middle of a wide one. Each is at least 44 px tall. */
+function menuBoxes(lane) {
+  const menu = (S.info && S.info.menu) || [], n = menu.length, gap = 6, out = [];
+  if (!n) return out;
+  const [x, y, w, h] = laneRect(lane);
+  if (S.vertical) {
+    const bw = clamp(w - 8, 64, 130), top = y + (h - (n * TAP + (n - 1) * gap)) / 2;
+    menu.forEach((m, i) => out.push({ x: x + (w - bw) / 2, y: top + i * (TAP + gap), w: bw, h: TAP, order: m.order, name: m.name }));
+  } else {
+    const bw = clamp((w * 0.7 - (n - 1) * gap) / n, 64, 124), left = x + (w - (n * bw + (n - 1) * gap)) / 2;
+    menu.forEach((m, i) => out.push({ x: left + i * (bw + gap), y: y + (h - TAP) / 2, w: bw, h: TAP, order: m.order, name: m.name }));
+  }
+  return out;
+}
+const menuOn = () => !!(S.info && S.info.human && S.info.stage === 0 && S.selected >= 0);
+const pausePick = () => !!(S.info && S.info.human && S.info.stage === 0);
+function muteBox() { return { x: S.cssW - 92 - 8, y: 8, w: 92, h: TAP }; }
+const inBox = (b, px, py) => px >= b.x && px <= b.x + b.w && py >= b.y && py <= b.y + b.h;
+
+/** What a tap at (px, py) on the canvas means: the mute button, an order chip of the selected lane, the selected lane's number (puts the lane down), or a lane. Null when nothing. */
+function hitAt(px, py) {
+  if (inBox(muteBox(), px, py)) return { kind: 'mute' };
+  if (!pausePick()) return null;
+  if (menuOn()) for (const b of menuBoxes(S.selected)) if (inBox(b, px, py)) return { kind: 'order', lane: S.selected, order: b.order };
+  if (S.selected >= 0) {
+    const cy = S.L.laneCentreY[S.selected], nx = sx(S.L.playerEdge + 2.2, cy), ny = sy(S.L.playerEdge + 2.2, cy);
+    if (Math.hypot(px - nx, py - ny) <= 22) return { kind: 'deselect' };
+  }
+  const wy = S.vertical ? px / S.v : py / S.v;
+  const pitch = S.L.laneCentreY.length > 1 ? S.L.laneCentreY[1] - S.L.laneCentreY[0] : S.L.height;
+  return { kind: 'lane', lane: clamp(Math.floor(wy / pitch), 0, S.L.laneCentreY.length - 1) };
+}
+
+function tapAt(px, py) {
+  unlock();   // a tap is a gesture: the sound may start now
+  const h = hitAt(px, py), now = clockMs();
+  if (!h) return null;
+  if (h.kind === 'mute') { setMuted(!AUD.muted); sfxPlay('tap', now); }
+  else if (h.kind === 'order') {
+    const staged = S.info.stagedOrders ? S.info.stagedOrders[h.lane] : undefined;
+    sfxPlay(staged === h.order ? 'orderClear' : 'orderSet', now);
+    S.ref.invokeMethodAsync('OnOrderTap', h.lane, h.order);
+  } else if (h.kind === 'deselect') { S.selected = -1; sfxPlay('tap', now); S.ref.invokeMethodAsync('OnLaneTap', -1); }
+  else { S.selected = h.lane; sfxPlay('tap', now); S.ref.invokeMethodAsync('OnLaneTap', h.lane); }
+  return h;
+}
+
+function drawMenu(c) {
+  if (!menuOn()) return;
+  const lane = S.selected, info = S.info;
+  const inForce = info.orders && info.orders[0] ? info.orders[0][lane] | 0 : -1;
+  const staged = info.stagedOrders ? info.stagedOrders[lane] : undefined;
+  c.font = '700 14px system-ui, sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle';
+  for (const b of menuBoxes(lane)) {
+    const on = staged === b.order, now = staged === undefined && inForce === b.order;
+    c.beginPath(); if (c.roundRect) c.roundRect(b.x, b.y, b.w, b.h, 10); else c.rect(b.x, b.y, b.w, b.h);
+    c.fillStyle = on ? '#ffd95a' : 'rgba(20,17,15,0.84)'; c.fill();
+    c.lineWidth = now ? 3 : 2; c.strokeStyle = on ? '#ffffff' : now ? '#a9ccff' : 'rgba(255,255,255,0.7)'; c.stroke();
+    c.fillStyle = on ? '#14110f' : '#ffffff'; c.fillText(b.name, b.x + b.w / 2, b.y + b.h / 2 + 0.5);
+  }
+}
+
+function drawMute(c) {
+  const b = muteBox();
+  c.beginPath(); if (c.roundRect) c.roundRect(b.x, b.y, b.w, b.h, 10); else c.rect(b.x, b.y, b.w, b.h);
+  c.fillStyle = 'rgba(20,17,15,0.7)'; c.fill(); c.lineWidth = 2; c.strokeStyle = 'rgba(255,255,255,0.6)'; c.stroke();
+  c.fillStyle = AUD.muted ? '#ffb7aa' : '#ffffff'; c.font = '700 13px system-ui, sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle';
+  c.fillText(AUD.muted ? 'Sound off' : 'Sound on', b.x + b.w / 2, b.y + b.h / 2 + 0.5);
 }
 
 function drawGhosts(c, t) {
@@ -430,6 +633,8 @@ function draw(t) {
     const k = (t - f.t0) / 0.75, x = sx(f.x, f.y), y = sy(f.x, f.y) - S.sz * 0.9 - k * 16;
     c.globalAlpha = 1 - k; c.strokeStyle = 'rgba(0,0,0,0.8)'; c.lineWidth = 3; c.strokeText(f.text, x, y); c.fillStyle = '#fff4c2'; c.fillText(f.text, x, y); c.globalAlpha = 1;
   }
+  drawMenu(c);
+  drawMute(c);
 }
 
 // ---- public ---------------------------------------------------------------------------------------------------------------------------
@@ -438,23 +643,21 @@ export async function init(canvas, ref, layout, imgBase) {
   dispose();
   S = {
     canvas, ctx: canvas.getContext('2d'), ref, L: typeof layout === 'string' ? JSON.parse(layout) : layout, imgs: {}, sprites: makeSprites(), terrain: null, vertical: false, cssW: 0, cssH: 0, dpr: 1, u: 1, v: 1, sz: 30,
-    bodies: new Map(), corpses: [], floats: [], rings: [], head: { tick: 0, stage: 0, status: 0, pBase: 1, eBase: 1, alpha: 1 }, info: null, selected: -1,
+    bodies: new Map(), corpses: [], floats: [], rings: [], head: { tick: 0, stage: 0, status: 0, pBase: 1, eBase: 1, alpha: 1 }, info: null, selected: -1, lastLeft: -1,
     raf: 0, busy: false, last: 0, lastCall: 0, ready: false, stageAt: 0, ro: null, onTap: null, onResize: null,
   };
   const names = ['grass1', 'grass2', 'stone', 'bush', 'pine', 'keep', 'castle'];
   const loaded = await Promise.all(names.map((n) => loadImg(imgBase + n + '.png')));
   names.forEach((n, i) => { S.imgs[n] = loaded[i]; });
   fit();
+  // a click (a finished tap, so a swipe that scrolls the page picks nothing)
   S.onTap = (e) => {
     const r = S.canvas.getBoundingClientRect();
-    const px = e.clientX - r.left, py = e.clientY - r.top;
-    const wy = S.vertical ? px / S.v : py / S.v;
-    const pitch = S.L.laneCentreY.length > 1 ? S.L.laneCentreY[1] - S.L.laneCentreY[0] : S.L.height;
-    const lane = clamp(Math.floor(wy / pitch), 0, S.L.laneCentreY.length - 1);
-    S.selected = lane;
-    S.ref.invokeMethodAsync('OnLaneTap', lane);
+    tapAt(e.clientX - r.left, e.clientY - r.top);
   };
-  canvas.addEventListener('pointerdown', S.onTap);
+  canvas.addEventListener('click', S.onTap);
+  loadMute();
+  listenForGesture();
   S.onResize = () => { if (S) fit(); };
   window.addEventListener('resize', S.onResize);
   if (typeof ResizeObserver !== 'undefined' && canvas.parentElement) { S.ro = new ResizeObserver(S.onResize); S.ro.observe(canvas.parentElement); }
@@ -478,7 +681,17 @@ export function setInfo(info) {
   if (typeof info === 'string') info = JSON.parse(info);
   S.info = info;
   if (typeof info.selected === 'number') S.selected = info.selected;
+  // the last seconds of the pause tick, and the last one sounds different
+  if (info.human && info.stage === 0 && typeof info.left === 'number') {
+    if (info.left !== S.lastLeft) {
+      S.lastLeft = info.left;
+      if (info.left >= 1 && info.left <= 5) sfxPlay(info.left === 1 ? 'tickLast' : 'tick', clockMs());
+    }
+  } else S.lastLeft = -1;
 }
+
+/** A sound the page asks for (staging a pack, a refused tap). Silent before the first tap or when muted. */
+export function sfx(name) { sfxPlay(name, clockMs()); }
 
 /** One picture of each soldier in your colour, as data URLs, for the buttons. */
 export function icons() {
@@ -489,11 +702,18 @@ export function icons() {
 export function dispose() {
   if (!S) return;
   if (S.raf) cancelAnimationFrame(S.raf);
-  if (S.canvas && S.onTap) S.canvas.removeEventListener('pointerdown', S.onTap);
+  if (S.canvas && S.onTap) S.canvas.removeEventListener('click', S.onTap);
   if (S.onResize) window.removeEventListener('resize', S.onResize);
   if (S.ro) S.ro.disconnect();
+  stopListeningForGesture();
+  if (AUD.ctx) { try { AUD.ctx.close(); } catch (e) { } }
+  AUD.ctx = null; AUD.master = null; AUD.pulse = null; AUD.noise = null; AUD.last = {}; AUD.tick = -1; AUD.count = 0; AUD.winStart = 0; AUD.winCount = 0; AUD.played = 0;
   S = null;
 }
 
 // for the offline smoke test only
-export const _test = { applyPacket: (u8, ms) => applyPacket(u8, ms), draw: (t) => draw(t), state: () => S };
+export const _test = {
+  applyPacket: (u8, ms) => applyPacket(u8, ms), draw: (t) => draw(t), state: () => S,
+  tap: (x, y) => tapAt(x, y), hit: (x, y) => hitAt(x, y), menu: (lane) => menuBoxes(lane), muteBox: () => muteBox(),
+  sfx: { table: SFX, audio: AUD, play: sfxPlay, batch: sfxBatch, unlock, gesture: onGesture, setMuted, maxPerTick: MAX_PER_TICK, maxPerSecond: MAX_PER_SECOND },
+};
