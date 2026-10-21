@@ -90,6 +90,13 @@ for (const [name, width] of [['wide', 1100], ['narrow (vertical)', 390]]) {
   const tick = async () => { now += 16; rafCb(now); await new Promise((r) => setTimeout(r, 0)); };
   await tick(); await tick();
   check(st.bodies.size === 16 && frames.length >= 1, `the first packet put 16 bodies on the field (${st.bodies.size})`);
+  // ---- team colours: two different colours, and every body on the field gets its team disc under its feet
+  const tm = lane._test.teams();
+  check(tm.length === 2 && /^#[0-9a-f]{6}$/i.test(tm[0].main) && /^#[0-9a-f]{6}$/i.test(tm[1].main) && tm[0].main.toLowerCase() !== tm[1].main.toLowerCase() && tm[0].light !== tm[1].light && tm[0].dark !== tm[1].dark, `the two teams have different colours (${tm[0].main} you, ${tm[1].main} them)`);
+  const e0 = counts.ellipse || 0; lane._test.draw(3); const e1 = counts.ellipse || 0;
+  const discs = e1 - e0;
+  lane._test.draw(3); const perDraw = (counts.ellipse || 0) - e1;
+  check(perDraw === discs && discs >= st.bodies.size, `each body is drawn with a team disc under its feet (${discs} ellipses for ${st.bodies.size} bodies)`);
   // a hit, then a death, then a new arrival
   next = packet(bodies.map((b, i) => (i === 2 ? { ...b, hp: 0.6, fight: true } : b)).filter((b) => b.id !== 5).concat([{ id: 40, side: 0, lane: 1, kind: 4, x: 8, y: 26, hp: 1 }]));
   await tick(); await tick();

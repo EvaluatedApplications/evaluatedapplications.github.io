@@ -27,6 +27,8 @@ public static class LanePayload
         sb.Append(",\"laneHalf\":").Append(F(half)).Append(",\"holdPct\":").Append(LaneRules.HoldPct);
         sb.Append(",\"laneCentreY\":[").Append(string.Join(",", lay.LaneCentreY.Select(y => F(y)))).Append(']');
         sb.Append(",\"mirror\":").Append(mirror ? "true" : "false");
+        // the two team colours, always you first (the same for both players, each from their own view)
+        sb.Append(",\"teams\":[").Append(string.Join(",", new[] { LaneTeams.You, LaneTeams.Them }.Select(t => "{\"main\":\"" + t.Main + "\",\"dark\":\"" + t.Dark + "\",\"light\":\"" + t.Light + "\"}"))).Append(']');
         sb.Append(",\"rows\":[").Append(string.Join(",", lay.Rows.Select(r => "\"" + (mirror ? new string(r.Reverse().ToArray()) : r) + "\""))).Append("]}");
         return sb.ToString();
     }
@@ -54,7 +56,8 @@ public static class LanePayload
             sb.Append(string.Join(",", m.LastPlans[local].Packs.GroupBy(p => p.Lane).OrderBy(g => g.Key).Select(g =>
                 "\"" + g.Key + "\":[" + string.Join(",", g.GroupBy(p => p.Kind).Select(k => "\"" + LaneWords.KindName(k.Key) + " x" + (k.Count() * LaneEconomy.PackSize) + " sent\"")) + "]")));
         sb.Append("},\"stagedPacks\":[");
-        if (h is not null) sb.Append(string.Join(",", h.Packs.Select(p => "{\"lane\":" + p.Lane + ",\"kind\":" + p.Kind + ",\"count\":" + LaneEconomy.PackSize + "}")));
+        // same soldiers in the same lane are ONE entry with the total count (the lane shows one ghost "+8", not two "+4")
+        if (h is not null) sb.Append(string.Join(",", LaneStaging.Collapse(h.Packs).Select(g => "{\"lane\":" + g.Lane + ",\"kind\":" + g.Kind + ",\"count\":" + g.Soldiers + "}")));
         sb.Append("],\"stagedOrders\":{");
         if (h is not null) sb.Append(string.Join(",", h.Orders.OrderBy(o => o.Key).Select(o => "\"" + o.Key + "\":" + (int)o.Value)));
         sb.Append("}}");

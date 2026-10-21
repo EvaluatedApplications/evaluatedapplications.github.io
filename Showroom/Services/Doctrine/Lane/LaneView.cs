@@ -81,6 +81,45 @@ public static class LanePack
     }
 }
 
+/// <summary>
+/// The two team colours, as every player sees them: side 0 is always YOU (blue) and side 1 is always THEM (red), from each player's own view. The canvas script draws a ring, a
+/// ground disc and an outline in these colours; the tray's legend uses the same two. The script holds the same values as its defaults (the proof checks that they agree).
+/// </summary>
+public static class LaneTeams
+{
+    public sealed record Team(string Name, string Main, string Dark, string Light);
+
+    public static readonly Team You = new("Your soldiers", "#3f8cff", "#1d4fa8", "#a9ccff");
+    public static readonly Team Them = new("Enemy soldiers", "#e5533d", "#9a2a1c", "#ffb7aa");
+
+    /// <summary>0 = you, 1 = them.</summary>
+    public static Team Of(int side) => side == 0 ? You : Them;
+}
+
+/// <summary>One entry of the staged list: every pack of the same soldiers going to the same lane, collapsed into one with a count.</summary>
+public sealed record StagedGroup(int Lane, int Kind, int Packs, IReadOnlyList<int> Indices)
+{
+    /// <summary>Soldiers in the entry (packs times the pack size).</summary>
+    public int Soldiers => Packs * LaneEconomy.PackSize;
+}
+
+/// <summary>Collapses what is staged for the player to pick from: same soldiers, same lane = ONE entry with a count. A different kind, or the same kind in another lane, stays its own entry.</summary>
+public static class LaneStaging
+{
+    /// <summary>Groups in the order each (lane, kind) was first staged. <see cref="StagedGroup.Indices"/> are the positions in the staged list (ascending), so a group can be taken back whole.</summary>
+    public static IReadOnlyList<StagedGroup> Collapse(IReadOnlyList<PackBuy> packs)
+    {
+        var order = new List<(int Lane, int Kind)>(); var at = new Dictionary<(int, int), List<int>>();
+        for (int i = 0; i < packs.Count; i++)
+        {
+            var key = (packs[i].Lane, packs[i].Kind);
+            if (!at.TryGetValue(key, out var list)) { at[key] = list = new List<int>(); order.Add(key); }
+            list.Add(i);
+        }
+        return order.Select(k => new StagedGroup(k.Lane, k.Kind, at[k].Count, at[k])).ToList();
+    }
+}
+
 /// <summary>Plain words for the page (no jargon, and no figure typed here: names and prices are read from the game's tables).</summary>
 public static class LaneWords
 {

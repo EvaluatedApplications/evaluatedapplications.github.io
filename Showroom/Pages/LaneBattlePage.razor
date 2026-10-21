@@ -224,6 +224,10 @@
                 {
                     <p class="ln-net" role="status"><span class="ln-dot @(_on!.Online ? "on" : "off")" aria-hidden="true"></span> <span class="ln-who">@(_on.OpponentName.Length > 0 ? _on.OpponentName : "Opponent"):</span> @_on.StatusLine</p>
                 }
+                <p class="ln-legend" aria-label="Team colours">
+                    <span class="ln-team"><i class="ln-sw" style="background: @LaneTeams.You.Main" aria-hidden="true"></i> @LaneTeams.You.Name</span>
+                    <span class="ln-team"><i class="ln-sw" style="background: @LaneTeams.Them.Main" aria-hidden="true"></i> @LaneTeams.Them.Name</span>
+                </p>
                 @if (_m.Behind) { <p class="ln-warn">This device cannot keep up with the battle, so it is running slower than the clock.</p> }
                 @if (_err.Length > 0) { <p class="err" role="alert">@_err</p> }
 
@@ -256,10 +260,11 @@
                     @if (me.Packs.Count > 0)
                     {
                         <div class="ln-staged" role="group" aria-label="Sent this pause">
-                            @for (int i = 0; i < me.Packs.Count; i++)
+                            @* the same soldiers in the same lane are ONE entry with a count; Take back lifts them all *@
+                            @foreach (var g in LaneStaging.Collapse(me.Packs))
                             {
-                                var idx = i; var p = me.Packs[i];
-                                <button type="button" class="ln-x" disabled="@me.Frozen" @onclick="() => Unbuy(idx)"><span>@LaneWords.LaneName(p.Lane, _lanes): @LaneWords.KindName(p.Kind) x@(LaneEconomy.PackSize)</span> <b>Take back</b></button>
+                                var grp = g;
+                                <button type="button" class="ln-x" style="border-color: @LaneTeams.You.Main" disabled="@me.Frozen" @onclick="() => UnbuyGroup(grp)"><span>@LaneWords.LaneName(g.Lane, _lanes): @LaneWords.KindName(g.Kind) x@(g.Soldiers)</span> <b>Take back</b></button>
                             }
                         </div>
                     }
@@ -557,7 +562,12 @@
         await Sfx(ok ? "stage" : "tap");
     }
 
-    async Task Unbuy(int index) { _m?.Human?.RemovePack(index); _note = ""; await SyncInfo(); await Sfx("orderClear"); }
+    /// <summary>Takes back every pack of a collapsed entry (the highest position first, so the positions below it stay true).</summary>
+    async Task UnbuyGroup(StagedGroup g)
+    {
+        if (_m?.Human is { } h) foreach (var i in g.Indices.OrderByDescending(i => i)) h.RemovePack(i);
+        _note = ""; await SyncInfo(); await Sfx("orderClear");
+    }
 
     async Task Sfx(string name)
     {

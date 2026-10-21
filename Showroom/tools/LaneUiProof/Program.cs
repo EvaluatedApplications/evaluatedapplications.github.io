@@ -87,6 +87,57 @@ using (var ctx = NewCtx(out var mod))
     await page.InvokeAsync(() => page.Instance.OnLaneTap(-1));
     Check("tapping the picked lane's number puts it down: the hint and the disabled packs come back", Text(page, ".ln-tip").Contains("Pick a lane") && page.FindAll(".ln-pack").All(b => b.HasAttribute("disabled")));
 
+    // ---- team colours: two different colours, sent to the script, named in the tray, and the same as the script's own defaults
+    {
+        var lay = (string)mod.Invocations.First(i => i.Identifier == "init").Arguments[2]!;
+        var tm = Regex.Matches(lay, "\"teams\":\\[\\{\"main\":\"(#[0-9a-f]{6})\",\"dark\":\"(#[0-9a-f]{6})\",\"light\":\"(#[0-9a-f]{6})\"\\},\\{\"main\":\"(#[0-9a-f]{6})\",\"dark\":\"(#[0-9a-f]{6})\",\"light\":\"(#[0-9a-f]{6})\"\\}\\]");
+        var g = tm.Count == 1 ? tm[0].Groups : null;
+        Check("colours: the script is sent two team colours (main, dark, light each) and the two teams differ in all three", g is not null && g[1].Value != g[4].Value && g[2].Value != g[5].Value && g[3].Value != g[6].Value, lay.Length > 200 ? lay[..200] : lay);
+        var jsSrc = File.ReadAllText(Path.Combine(showroom, @"wwwroot\doctrine\lane.js"));
+        Check("colours: the script's own default team colours are the same two", g is not null && jsSrc.Contains($"main: '{g[1].Value}', dark: '{g[2].Value}', light: '{g[3].Value}'") && jsSrc.Contains($"main: '{g[4].Value}', dark: '{g[5].Value}', light: '{g[6].Value}'"));
+        Check("colours: you and them are two different colours in the service too", LaneTeams.Of(0).Main != LaneTeams.Of(1).Main && LaneTeams.Of(0) == LaneTeams.You && LaneTeams.Of(1) == LaneTeams.Them);
+        var sw = page.FindAll(".ln-legend .ln-sw").Select(e => e.GetAttribute("style") ?? "").ToArray();
+        Check("colours: the tray names both teams, each with its own swatch in the colour the script draws", sw.Length == 2 && g is not null && sw[0].Contains(g[1].Value) && sw[1].Contains(g[4].Value) && Text(page, ".ln-legend").Contains("Your soldiers") && Text(page, ".ln-legend").Contains("Enemy soldiers"), string.Join(" | ", sw));
+    }
+
+    // ---- collapse: the same soldiers in the same lane are ONE entry with a count; other kinds and other lanes stay separate; Take back lifts the whole entry
+    {
+        int[] byCost = Enumerable.Range(0, 8).OrderBy(k => LaneEconomy.Cost(k)).ThenBy(k => k).ToArray();
+        int ka = byCost[0], kb = byCost[1], budget = 10;
+        var plan = new List<(int Lane, int Kind)>();
+        foreach (var (lane, kind) in new[] { (2, ka), (2, ka), (2, kb), (0, ka), (2, ka) })
+            if (LaneEconomy.Cost(kind) <= budget) { budget -= LaneEconomy.Cost(kind); plan.Add((lane, kind)); }
+        foreach (var (lane, kind) in plan)
+        {
+            await page.InvokeAsync(() => page.Instance.OnLaneTap(lane));
+            page.FindAll(".ln-pack")[kind].Click();
+        }
+        var want = plan.GroupBy(p => p).Select(gp => (gp.Key.Lane, gp.Key.Kind, Count: gp.Count())).ToList();   // first-staged order
+        var entries = page.FindAll(".ln-staged .ln-x");
+        bool dup = want.Any(w => w.Count >= 2);
+        Check("collapse: packs of the same soldiers in the same lane make ONE entry (fewer entries than packs), other kinds or lanes stay apart", dup && entries.Count == want.Count && entries.Count < plan.Count, $"{entries.Count} entries for {plan.Count} packs, wanted {want.Count}");
+        Check("collapse: each entry names lane, soldiers and the total count (x4 a pack), in the order first staged",
+            want.Select((w, i) => Regex.Replace(entries[i].TextContent, @"\s+", " ").Contains($"{LaneWords.LaneName(w.Lane, 3)}: {LaneWords.KindName(w.Kind)} x{w.Count * LaneEconomy.PackSize}")).All(x => x), string.Join(" | ", entries.Select(e => Regex.Replace(e.TextContent, @"\s+", " ").Trim())));
+        var big = want.First(w => w.Count >= 2);
+        Check("collapse: the lane gets ONE ghost for the entry with the total (no separate +4 for each pack)", LastInfo().Contains($"{{\"lane\":{big.Lane},\"kind\":{big.Kind},\"count\":{big.Count * LaneEconomy.PackSize}}}") && Regex.Matches(LastInfo(), "\"stagedPacks\":\\[(.*?)\\]").Single().Groups[1].Value.Split("},{").Length == want.Count, LastInfo());
+        int spentAll = plan.Sum(p => LaneEconomy.Cost(p.Kind));
+        Check("collapse: the points left count every pack, collapsed or not", Text(page, ".ln-pts strong") == (10 - spentAll).ToString());
+        int firstPacks = want[0].Count, firstCost = firstPacks * LaneEconomy.Cost(want[0].Kind);
+        page.FindAll(".ln-staged .ln-x")[0].Click();
+        Check("collapse: Take back on a collapsed entry lifts all of its packs at once and gives all their points back", page.FindAll(".ln-staged .ln-x").Count == want.Count - 1 && Text(page, ".ln-pts strong") == (10 - spentAll + firstCost).ToString(), Text(page, ".ln-pts strong"));
+        while (page.FindAll(".ln-staged .ln-x").Count > 0) page.FindAll(".ln-staged .ln-x")[0].Click();
+        Check("collapse: taking back every entry leaves nothing staged and the whole purse", page.FindAll(".ln-staged").Count == 0 && Text(page, ".ln-pts strong") == "10" && LastInfo().Contains("\"stagedPacks\":[]"));
+    }
+    {
+        var pk = (int lane, int kind) => new PackBuy(lane, kind);
+        var packs = new[] { pk(2, 0), pk(0, 3), pk(2, 0), pk(2, 1), pk(0, 3), pk(2, 0) };
+        var grp = LaneStaging.Collapse(packs);
+        Check("collapse: the grouping is by (lane, kind) in first-seen order, with the positions of every pack, and the counts add up to the packs", grp.Count == 3 && grp.Sum(x => x.Packs) == packs.Length
+            && grp[0] is { Lane: 2, Kind: 0, Packs: 3 } && grp[0].Indices.SequenceEqual(new[] { 0, 2, 5 }) && grp[1] is { Lane: 0, Kind: 3, Packs: 2 } && grp[1].Indices.SequenceEqual(new[] { 1, 4 }) && grp[2] is { Lane: 2, Kind: 1, Packs: 1 }
+            && grp[0].Soldiers == 3 * LaneEconomy.PackSize, string.Join(" ", grp.Select(x => $"{x.Lane}/{x.Kind}x{x.Packs}")));
+        Check("collapse: nothing staged is no entries; a single pack is a single entry of one pack", LaneStaging.Collapse(Array.Empty<PackBuy>()).Count == 0 && LaneStaging.Collapse(new[] { pk(1, 4) }) is { Count: 1 } one && one[0].Packs == 1);
+    }
+
     // ---- packs go into the picked lane
     await page.InvokeAsync(() => page.Instance.OnLaneTap(0));
     page.FindAll(".ln-pack")[3].Click();   // archers, lane 1
