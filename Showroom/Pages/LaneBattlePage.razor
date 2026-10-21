@@ -1,35 +1,48 @@
-@page "/lane"
+@page "/doctrine"
+@attribute [BlazierPage("doctrine", Title = "Doctrine: a lane battle between two castles, in your browser", Layout = typeof(MainLayout), Static = true)]
 @implements IAsyncDisposable
+@inject IBuildTime Build
 @inject IJSRuntime JS
 @inject NavigationManager Nav
 @using ShowroomLane
 @using Doctrine
 @using Doctrine.Lane
 
-@* THE LANE BATTLE, a local development page. Deliberately NOT a [BlazierPage] (no static shell is rendered for it), not in tools.json, the nav, the sitemap or the llms files, and it
-   draws nothing but a notice on any host other than localhost. The canvas script and pictures live in wwwroot/lane-dev, which a Release publish leaves out (Showroom.csproj). *@
+@* DOCTRINE, the lane battle. Soldiers march down three lanes between two castles. The canvas script and pictures are in wwwroot/doctrine (NOTICE.txt and KENNEY-LICENSE.txt stay with them).
+   The static shell (Blazier) shows the title, the intro and How to play as real text; the match itself starts only when the visitor starts the runtime. *@
 
-<PageTitle>Lane battle (development page)</PageTitle>
-<HeadContent><meta name="robots" content="noindex,nofollow" /></HeadContent>
+<PageTitle>Doctrine: a lane battle between two castles, in your browser</PageTitle>
 
 <div class="room ln">
     <header class="room-head">
-        <nav class="crumb"><a href="/tools/">Tools</a> <span>/</span> Lane battle (development page)</nav>
-        <h1>Lane battle</h1>
-        <p class="lede">A battle that never stops: soldiers march down three lanes between two bases and fight. Every 30 seconds the battle pauses. At the pause you add soldiers to a lane and
-            give a lane one order, the enemy does the same, and both sets of plays land together when the pause ends. Nothing is uploaded.</p>
+        <nav class="crumb"><a href="/tools/">Tools</a> <span>/</span> Doctrine</nav>
+        <h1>Doctrine</h1>
+        <p class="lede">Two castles, three lanes. Send soldiers down the lanes, give each lane an order, and watch the battle play out in your browser. Nothing is uploaded.</p>
     </header>
 
-    @if (!_dev)
+    @if (_m is null)
     {
-        <p class="hint">This page is a local development page and is not available here.</p>
+    <section class="ln-how" aria-label="How to play">
+        <h2>How to play</h2>
+        <ol>
+            <li>Pick a lane.</li>
+            <li>Tap a pack of soldiers to send it down that lane. Each pack costs points, and you get new points every pause.</li>
+            <li>Tap an order to tell that lane's soldiers what to do.</li>
+            <li>Press Ready. You have 30 seconds to choose, then the battle starts anyway.</li>
+            <li>Watch the battle for 30 seconds. Then it pauses and you choose again. The enemy chooses at the same time, and both sets of plays arrive together.</li>
+        </ol>
+        <p><strong>Destroy the other castle before yours falls.</strong></p>
+    </section>
+    }
+    @if (Build.IsPrerender)
+    {
+        <ToolStart Tool="Doctrine" Label="Start Doctrine" />
     }
     else if (_m is null)
     {
         <section class="ln-start">
-            <label class="ln-label" for="ln-seed">Seed (the same seed gives the same match)</label>
+            <label class="ln-label" for="ln-seed">Match number (the same number gives the same match)</label>
             <input id="ln-seed" class="ln-input" type="number" inputmode="numeric" @bind="_seed" />
-            <label class="ln-check"><input type="checkbox" @bind="_bots" /> Let the bots play both sides (to compare the hash line with the desktop run)</label>
             @if (_err.Length > 0) { <p class="err" role="alert">@_err</p> }
             <button class="ln-btn strong" type="button" @onclick="StartAsync" disabled="@_starting">@(_starting ? "Building the lanes..." : "Start the battle")</button>
         </section>
@@ -74,7 +87,7 @@
                 else
                 {
                     <button class="ln-btn strong" type="button" @onclick="PlayAgain">Play again</button>
-                    <button class="ln-btn" type="button" @onclick="SameSeed">Same seed again</button>
+                    <button class="ln-btn" type="button" @onclick="SameSeed">Same match again</button>
                 }
             </div>
             <div class="ln-bases">
@@ -180,46 +193,45 @@
                 else
                 {
                     <h2>@LaneWords.Outcome(_m.Status)</h2>
-                    <p class="hint">The battle lasted @_m.Phase phases. Same seed, same plays, same match.</p>
+                    <p class="hint">The battle lasted @_m.Phase phases. Same match number, same plays, same match.</p>
                 }
             </aside>
         </div>
 
-        <section class="ln-hash" aria-label="Pause hashes">
-            <h2>Hash at every pause (tick:hash)</h2>
-            <p class="mono">@HashLine</p>
-            <p class="hint">Compare with <code>dotnet run -c Release -- hashes @_m.Seed</code> in tools/DoctrineLaneProof when both seats are bots (tick the box on the start screen).</p>
-        </section>
+        @if (_bots)
+        {
+            <section class="ln-hash" aria-label="Pause hashes">
+                <h2>Hash at every pause (tick:hash)</h2>
+                <p class="mono">@HashLine</p>
+            </section>
+        }
     }
+    <p class="hint ln-credit">Terrain pictures: RTS Pack: Medieval by Kenney (kenney.nl), CC0.</p>
 </div>
 
 @code {
-    [SupplyParameterFromQuery(Name = "seed")] public int? SeedQuery { get; set; }
-    [SupplyParameterFromQuery(Name = "bots")] public string? BotsQuery { get; set; }
-
     ElementReference _canvas;
     LaneMatch? _m;
     DotNetObjectReference<LaneBattlePage>? _self;
     IJSObjectReference? _js;
     string[] _icons = Array.Empty<string>();
     string _err = "", _note = "";
-    bool _dev, _starting, _bots, _jsReady, _framing, _asked;
+    bool _starting, _bots, _jsReady, _framing;
     int _seed = 1, _sel, _lanes = 3, _lastSec = -1, _lastBal = -1, _lastSpeed;
 
     protected override void OnInitialized()
     {
-        _dev = new Uri(Nav.Uri).Host == "localhost";
         _seed = Environment.TickCount & 0xFFFF;
+        if (Build.IsPrerender) return;   // the static shell is built without a page address
+        // ?seed=7 fixes the match number; ?bots=1 lets the bots play both seats (a check mode: the hash line is shown and can be compared with the batch run)
+        foreach (var part in new Uri(Nav.Uri).Query.TrimStart('?').Split('&', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var kv = part.Split('=', 2);
+            var val = kv.Length > 1 ? Uri.UnescapeDataString(kv[1]) : "";
+            if (kv[0] == "seed" && int.TryParse(val, out var s)) _seed = s;
+            else if (kv[0] == "bots" && (val == "1" || val == "true")) _bots = true;
+        }
     }
-
-    protected override void OnParametersSet()
-    {
-        if (_asked) return;
-        _asked = true;
-        if (SeedQuery is { } s) _seed = s;
-        if (BotsQuery is "1" or "true") _bots = true;
-    }
-
     async Task StartAsync()
     {
         _starting = true; _err = "";
@@ -235,13 +247,13 @@
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (_m is null || _jsReady || !_dev) return;
+        if (Build.IsPrerender || _m is null || _jsReady) return;
         _jsReady = true;   // set first: a render during the awaits below must not start a second init
         try
         {
             _self ??= DotNetObjectReference.Create(this);
-            _js ??= await JS.InvokeAsync<IJSObjectReference>("import", Nav.BaseUri + "lane-dev/lane.js");
-            await _js.InvokeVoidAsync("init", _canvas, _self, LanePayload.Layout(_m), Nav.BaseUri + "lane-dev/img/");
+            _js ??= await JS.InvokeAsync<IJSObjectReference>("import", Nav.BaseUri + "doctrine/lane.js");
+            await _js.InvokeVoidAsync("init", _canvas, _self, LanePayload.Layout(_m), Nav.BaseUri + "doctrine/img/");
             _icons = await _js.InvokeAsync<string[]>("icons") ?? Array.Empty<string>();
             await SyncInfo();
             StateHasChanged();

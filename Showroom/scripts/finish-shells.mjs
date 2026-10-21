@@ -18,7 +18,7 @@ const PAGES = {
   'analyst': { d: 'A real SQL database running in your browser tab profiles any CSV, JSON or log you give it, charts it, and answers your SQL. Nothing is uploaded.' },
   'helix': { d: 'Paste DNA sequences and measurements and see the helix in the numbers: a score graded in your browser, with the controls that would expose a false win shown beside it.' },
   'plenum': { d: 'A card game played on one array of exact numbers: every card is one operation on the array, and you see which cells it changed. Play solo or in a two-player duel. Runs in your browser.' },
-  'doctrine': { d: 'An army game in your browser: each round the game offers a muster of companies and a council of orders, you choose up to four orders, and a battle runs on a navigation mesh. A small general learns how you set orders from your own choices.' },
+  'doctrine': { d: 'A lane battle in your browser: two castles, three lanes. Pick a lane, send a pack of soldiers, give an order, press Ready, and watch the battle for 30 seconds. Destroy the other castle. Nothing is uploaded.' },
   'prose': { d: 'Paste in text and a rules-first English grammar mines it in your browser, then recombines what it learned into sentences and question and answer pairs.' },
   'council-spending': { d: "Mechanical checks over English councils' published spending data, the same rules for every council, run in your browser. Nothing is uploaded." },
 };

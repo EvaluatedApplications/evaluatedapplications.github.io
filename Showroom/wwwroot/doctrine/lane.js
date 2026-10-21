@@ -1,4 +1,4 @@
-// Lane battle canvas renderer (the unlisted dev page /tools/lane/). It draws what the .NET match hands it and nothing else: every frame the page's Frame() call returns one packet
+// Lane battle canvas renderer (the Doctrine page, /tools/doctrine/). It draws what the .NET match hands it and nothing else: every frame the page's Frame() call returns one packet
 // (bodies already placed BETWEEN the last two ticks by the service), this file draws the ground, the bases, one picture per body and the effects. It never decides anything about the
 // battle. Packet: 8 header floats (tick, stage 0 pause 1 run 2 over, status, your base 0..1, their base 0..1, body count, alpha, spare) then 10 floats a body (id, side, lane, kind,
 // x, y, facing x, facing y, hit points 0..1, fighting 0/1). Pictures: terrain and buildings are Kenney CC0 (see NOTICE.txt); the eight soldiers are drawn here with canvas paths.

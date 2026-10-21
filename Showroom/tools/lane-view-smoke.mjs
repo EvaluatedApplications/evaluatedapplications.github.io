@@ -1,4 +1,4 @@
-// Offline smoke test of wwwroot/lane-dev/lane.js (no browser): runs the whole canvas script against a stub 2D context and a synthetic packet stream, in the wide and the
+// Offline smoke test of wwwroot/doctrine/lane.js (no browser): runs the whole canvas script against a stub 2D context and a synthetic packet stream, in the wide and the
 // narrow (vertical) layout, and fails on any exception or on a missing effect. It proves the script RUNS and keeps its state straight; it cannot show what the drawing LOOKS like.
 // Usage: node tools/lane-view-smoke.mjs   (from the Showroom folder)
 import fs from 'node:fs';
@@ -6,7 +6,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-const src = fs.readFileSync(new URL('../wwwroot/lane-dev/lane.js', import.meta.url), 'utf8');
+const src = fs.readFileSync(new URL('../wwwroot/doctrine/lane.js', import.meta.url), 'utf8');
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'lane-smoke-'));
 const file = path.join(tmp, 'lane.mjs');
 fs.writeFileSync(file, src);
@@ -55,7 +55,7 @@ for (const [name, width] of [['wide', 1100], ['narrow (vertical)', 390]]) {
   let next = packet(bodies);
   const ref = { invokeMethodAsync: async (m, a) => { if (m === 'Frame') { frames.push(a); const p = next; next = null; return p; } if (m === 'OnLaneTap') tapped = a; } };
   const cv = canvas(width);
-  await lane.init(cv, ref, layout, '/tools/lane-dev/img/');
+  await lane.init(cv, ref, layout, '/tools/doctrine/img/');
   const st = lane._test.state();
   check(st.vertical === (width < 720) && st.cssW === width && st.cssH > 300, `layout fits (vertical ${st.vertical}, ${st.cssW} x ${st.cssH})`);
   check(lane.icons().length === 8, 'eight soldier pictures are made');
