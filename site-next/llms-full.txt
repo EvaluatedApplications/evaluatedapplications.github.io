@@ -3081,42 +3081,46 @@ Laid out for a phone screen: one column, 44 px tap targets.
 
 #### How a game goes
 
-A game is 3, 5 or 8 rounds. You start with an army levied for you and some gold. Each round you draft, set a doctrine, and watch one battle against an army the game raises.
+Each round you take your pick of the muster, a set of companies you can buy with your gold, and choose up to four orders from the council of eight on the table. Then you watch one battle against an army the game raises. A game is 3, 5 or 8 rounds, or you can fight a war.
 
-The same seed raises the same enemies on the same ground, so you can replay a game. Leave the seed empty for a new one.
+The first game opens its choices step by step: round one offers only a few orders and kinds, and more join the offer as you go. The same seed raises the same enemies on the same ground, so you can replay a game.
+
+#### The war
+
+In a war the field is a map: your capital, the enemy's, and three roads of three provinces between them. Each turn you pick a road to push and the enemy picks one, revealed together. If you both pick the same road there is a battle for the next province; if not, you each take ground unopposed. You may hold back on a road, which costs ground but never a standard.
+
+A province you hold pays gold, and while you hold it opens something in your offers: Barracks open Spearmen and Shieldwall, Stables open Riders and Wolves, a Shrine opens Priests and the banner order. Lose the province and it leaves your next offer. You have three standards, a lost battle costs one, and every fifth battle won restores one. Take the enemy capital to win. Endless mode refills the roads as the enemy marches, with no limit to its strength, and scores the fields you won plus the provinces you hold.
 
 #### Orders
 
-A doctrine is up to four orders, and no orders is allowed: every line then advances. There are two kinds. Army orders change the army itself before the battle. Field orders go to a whole line during it. An order the army says is not legal right now is greyed out.
+Orders for a line go to a whole line of your army: Press on, Hold the line, Ride the flank, Fall back, Guard the host, Run them down. Orders for the whole host change the army before the battle. An order the army says is not legal right now is not offered.
 
-- Rotate the line: Moves every cohort to the next place in the line.
-- Flip a trait: Cohorts that had the trait lose it and the others gain it, all at once. It costs gold for the soldiers who gain power. Twice undoes the traits, not the gold.
-- Age: Ticks the veterancy ring of every cohort one place.
-- Merge: Moves one kind of cohort into the kind before it.
-- Aura: Counts the soldiers who carry a trait.
-- Field orders: Advance, Hold, Flank, Fall back, Guard and Hunt. A line with no order advances.
+- Reform the ranks: Every cohort steps along the line, front to middle to back, then round. Each rank is a mix of kinds, so the three arrangements are a real choice.
+- Reforge: Cohorts that wore a trait shed it and the rest take it up. It costs gold for the soldiers who gain power.
+- Drill the host: Every cohort gains a year of seasoning and fights harder; after the ninth year the ring starts again.
+- Swear into: The soldiers of one kind join the kind before it.
+- Raise the banner: Cohorts that carry a trait fight harder this round.
+- Should a quarter fall: Orders placed after it take over once your side has lost that share of its soldiers.
 
 #### The battle
 
-The ground is a baked Tracer navigation mesh. Each cohort is a group of agents that path, take cover and strike on it, and you watch the arena as it runs.
+The ground is a baked Tracer navigation mesh. Each cohort is a group of agents that path, take cover and strike on it. Two grounds are sieges: the besieger must trade a blow by the siege clock or it loses its stance, and sides swap each round. A line that holds its ground without being hit for a few ticks is dug in and strikes harder until it is hit or moves.
 
-A battle is simulated once, on your device, and recorded. The replay is a recording of that one battle: playing it back does not run it again, and you can scrub through it.
+A battle is simulated once, on your device, and recorded. The replay is a recording of that one battle, and a chronicle beside it tells the fight in terse lines, each tied to a real moment in the recording. If the clock runs out, the greater power left decides it, not the number of soldiers.
 
 #### The general
 
-Your general starts empty. It learns how you set a doctrine from your own choices, in your browser, with nothing pre-trained, so different players end up with different generals. It suggests and you decide.
+Your general starts empty and learns from your own choices, in your browser, with nothing pre-trained, so different players end up with different generals. It suggests and you decide.
 
-Every doctrine you set is an example for it, and so is each battle result. Inside it are a small habit table and a tiny HoloFormer from the AlgFormer package. For each of the four slots the table speaks, unless the HoloFormer has been right on that slot at least two more times than the table over your recent choices, in which case it takes the slot.
-
-The match record beside a suggestion is a score out of 1000 for how well its whole suggestion has matched what you then chose, over your recent choices. It starts low and climbs as the matches keep coming. Nothing is saved: refresh the page and the general is gone, though it carries what it has seen into your next game on the same page.
+Inside it are two small tables, one for the situation and one for your taste in orders, and a tiny HoloFormer from the AlgFormer package. It ranks the cards on the council; the HoloFormer takes a slot only when it has been right at least two more times than the better table. The match record is, over about your last 64 rounds, how often the card it ranked in a slot was the card you took there. Nothing is saved: refresh the page and the general is gone.
 
 #### Army codes
 
-At the end of a game you can copy an army code, a short piece of text that holds your army. Paste it on the start screen to play on with that army. It holds the army only: your general is not in it.
+At the end of a game you can copy an army code, a short piece of text that holds your army. It holds the army only: your general is not in it.
 
 #### What powers it
 
-Each cohort is an item in a Pleroma store from the Phasor package: its kind is the key, its traits are the flags, its place in the line is the arrangement, and its veterancy is a position on a ring of nine. An order is one operation on that store, and the list of orders you may give is read from the store.
+Each cohort is an item in a Pleroma store from the Phasor package, and so is the map of the war. An order is one operation on that store, and the list of orders you may give is read from the store.
 
 The battle runs on Tracer, the rounds run as EvalApp pipelines, and the general uses AlgFormer. Nothing is uploaded: the whole game runs in your browser tab. Read more on the Pleroma page.
 
