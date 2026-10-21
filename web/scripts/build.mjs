@@ -22,6 +22,7 @@ import researchArticle from '../src/templates/research-article.mjs';
 import * as evidenceT from '../src/templates/evidence.mjs';
 import partner from '../src/templates/partner.mjs';
 import licence from '../src/templates/licence.mjs';
+import aiDeclaration from '../src/templates/ai-declaration.mjs';
 import ai from '../src/templates/ai.mjs';
 import about from '../src/templates/about.mjs';
 import demo from '../src/templates/demo.mjs';
@@ -112,7 +113,7 @@ async function main() {
   for (const e of ctx.evidence) pages.push(evidenceT.record(ctx, e));
   pages.push(researchIndex(ctx));
   for (const r of ctx.research) if (r.status === 'migrated') pages.push(researchArticle(ctx, r));
-  pages.push(partner(ctx), about(ctx), licence(ctx), ai(ctx), notFound(ctx));
+  pages.push(partner(ctx), about(ctx), licence(ctx), ai(ctx), aiDeclaration(ctx), notFound(ctx));
 
   const urls = new Set();
   for (const pg of pages) {
