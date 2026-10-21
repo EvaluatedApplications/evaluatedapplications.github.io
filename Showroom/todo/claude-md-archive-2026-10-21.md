@@ -34,3 +34,8 @@
     section of `DoctrineUiProof` (`-- --war` runs only it, ~10 s): scenarios mixed war (race, battle, hold-back, battle), sweep (WarWon),
     triple (WarLost, WarDrawn), short (EpochsUp), endless refill, a won battle; hand-written rules (lane rule, pool, parity, ordinals);
     mutants V1-V12 in `mutants.ps1` (key `Args`). OutOfStandards is checked by its words only (three lost battles are not scripted).
+
+## Header history moved out of CLAUDE.md (2026-10-21, online lane battle pass)
+- 2026-10-21 (earlier): Doctrine = the lane battle, old game removed, LaneUiProof 38, DuelProof 438.
+- 2026-10-21 (earlier still): LANE BATTLE playable dev page: Release 0/0, DoctrineLaneProof ALL PASS 446, LaneUiProof ALL PASS 31, lane-view-smoke PASS; NOT seen in a browser, not published.
+- 2026-10-20: Doctrine overmap and war: DoctrineUiProof ALL PASS 689, mutants V1-V12 caught.

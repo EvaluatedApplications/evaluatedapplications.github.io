@@ -38,20 +38,27 @@ public static class LanePack
 {
     public const int HeaderFloats = 8, BodyFloats = 10;
 
+    /// <summary>
+    /// The packet seen from the human seat: side 0 is always YOU and your base is the first fraction. A guest who sits on the Enemy side (an online match) gets the board turned the
+    /// other way round (x mirrored, facing mirrored), so every player sees their own base on their own side; the lanes keep their numbers and the simulation is untouched.
+    /// </summary>
     public static byte[] Pack(LaneMatch m)
     {
         var bodies = m.Bodies();
         var f = new float[HeaderFloats + bodies.Count * BodyFloats];
         var s = m.Curr;
+        bool mirror = m.LocalSide == Doctrine.Side.Enemy;
+        float width = m.Battle.Layout.Width;
+        float mine = s.BaseMaxHp == 0 ? 0 : (float)(mirror ? s.EnemyBaseHp : s.PlayerBaseHp) / s.BaseMaxHp;
+        float theirs = s.BaseMaxHp == 0 ? 0 : (float)(mirror ? s.PlayerBaseHp : s.EnemyBaseHp) / s.BaseMaxHp;
         f[0] = s.Tick; f[1] = (int)m.Stage; f[2] = (int)s.Status;
-        f[3] = s.BaseMaxHp == 0 ? 0 : (float)s.PlayerBaseHp / s.BaseMaxHp;
-        f[4] = s.BaseMaxHp == 0 ? 0 : (float)s.EnemyBaseHp / s.BaseMaxHp;
+        f[3] = mine; f[4] = theirs;
         f[5] = bodies.Count; f[6] = (float)m.Alpha;
         for (int i = 0; i < bodies.Count; i++)
         {
             var b = bodies[i]; int o = HeaderFloats + i * BodyFloats;
-            f[o] = b.Id; f[o + 1] = (int)b.Side; f[o + 2] = b.Lane; f[o + 3] = b.Kind; f[o + 4] = b.X; f[o + 5] = b.Y;
-            f[o + 6] = b.FacingX; f[o + 7] = b.FacingY; f[o + 8] = b.HpFrac; f[o + 9] = b.Fighting ? 1f : 0f;
+            f[o] = b.Id; f[o + 1] = b.Side == m.LocalSide ? 0 : 1; f[o + 2] = b.Lane; f[o + 3] = b.Kind; f[o + 4] = mirror ? width - b.X : b.X; f[o + 5] = b.Y;
+            f[o + 6] = mirror ? -b.FacingX : b.FacingX; f[o + 7] = b.FacingY; f[o + 8] = b.HpFrac; f[o + 9] = b.Fighting ? 1f : 0f;
         }
         var bytes = new byte[f.Length * sizeof(float)];
         Buffer.BlockCopy(f, 0, bytes, 0, bytes.Length);
@@ -111,13 +118,20 @@ public static class LaneWords
 
     public static string KindName(int kind) => Roster.NameOf(kind);
 
-    public static string Outcome(LaneStatus s) => s switch
+    public static string Outcome(LaneStatus s) => Outcome(s, Side.Player);
+
+    /// <summary>The result in the words of the seat that reads it: <paramref name="local"/> is the side that seat sits on.</summary>
+    public static string Outcome(LaneStatus s, Side local)
     {
-        LaneStatus.PlayerWon => "You win. The enemy base has fallen.",
-        LaneStatus.EnemyWon => "You lose. Your base has fallen.",
-        LaneStatus.Draw => "A draw. Neither base fell in time, or both fell together.",
-        _ => "",
-    };
+        if (local == Side.Enemy && s is LaneStatus.PlayerWon or LaneStatus.EnemyWon) s = s == LaneStatus.PlayerWon ? LaneStatus.EnemyWon : LaneStatus.PlayerWon;
+        return s switch
+        {
+            LaneStatus.PlayerWon => "You win. The enemy base has fallen.",
+            LaneStatus.EnemyWon => "You lose. Your base has fallen.",
+            LaneStatus.Draw => "A draw. Neither base fell in time, or both fell together.",
+            _ => "",
+        };
+    }
 
     /// <summary>Minutes and seconds of a count of seconds, as 0:24.</summary>
     public static string Clock(double seconds) { int s = (int)Math.Ceiling(Math.Max(0, seconds)); return $"{s / 60}:{s % 60:00}"; }

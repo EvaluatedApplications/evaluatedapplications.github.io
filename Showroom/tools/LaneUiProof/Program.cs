@@ -6,6 +6,7 @@ using Doctrine.Lane;
 using Microsoft.Extensions.DependencyInjection;
 using Showroom.Pages;
 using ShowroomLane;
+using ShowroomPlenum;
 
 // UI proof for the Doctrine page (the lane battle, route /doctrine). See the csproj header. The page is the REAL one, the match is the REAL service (Tracer navmesh, Pleroma roster); the canvas script is
 // a loose stand-in, so this proves the page logic (start, stage, tap, pause, run, hashes, words), not what the canvas looks like.
@@ -18,6 +19,9 @@ void Check(string name, bool ok, string detail = "")
     if (!ok) failures++;
 }
 string Text(IRenderedComponent<LaneBattlePage> p, string sel) => Regex.Replace(p.Find(sel).TextContent, @"\s+", " ").Trim();
+string TextOr(IRenderedComponent<LaneBattlePage> p, string sel) => p.FindAll(sel).FirstOrDefault() is { } e ? Regex.Replace(e.TextContent, @"\s+", " ").Trim() : "";
+AngleSharp.Dom.IElement Btn(IRenderedComponent<LaneBattlePage> p, string text) => p.FindAll("button").First(b => Regex.Replace(b.TextContent, @"\s+", " ").Trim() == text);
+bool HasBtn(IRenderedComponent<LaneBattlePage> p, string text) => p.FindAll("button").Any(b => Regex.Replace(b.TextContent, @"\s+", " ").Trim() == text);
 
 async Task<bool> Until(Func<bool> cond, int ms)
 {
@@ -26,10 +30,12 @@ async Task<bool> Until(Func<bool> cond, int ms)
     return false;
 }
 
-BunitContext NewCtx(out BunitJSModuleInterop module, bool prerender = false, string? url = null)
+BunitContext NewCtx(out BunitJSModuleInterop module, bool prerender = false, string? url = null, IPlenumRelayFactory? relays = null, IPlenumClock? clock = null)
 {
     var c = new BunitContext();
     c.Services.AddSingleton<IBuildTime>(new Time(prerender));
+    c.Services.AddSingleton<IPlenumRelayFactory>(relays ?? new LoopbackRelayFactory(new LoopbackBroker()));
+    c.Services.AddSingleton<IPlenumClock>(clock ?? new FakeClock());
     if (url is not null) c.Services.GetRequiredService<Microsoft.AspNetCore.Components.NavigationManager>().NavigateTo(url);
     c.JSInterop.Mode = JSRuntimeMode.Loose;
     module = c.JSInterop.SetupModule("http://localhost/doctrine/lane.js");
@@ -140,6 +146,118 @@ using (var ctx = NewCtx(out var mod))
     Check("leaving the page tells the script to stop", mod.Invocations.Any(i => i.Identifier == "dispose"));
 }
 
+// ---------------------------------------------------------------------------------------------- online: the lobby screens, two visitors and a third
+{
+    var broker = new LoopbackBroker(); var relays = new LoopbackRelayFactory(broker); var clock = new FakeClock();
+    using var ctxH = NewCtx(out var modH, relays: relays, clock: clock);
+    using var ctxG = NewCtx(out _, relays: relays, clock: clock);
+    using var ctxT = NewCtx(out var modT, relays: relays, clock: clock);
+    var host = ctxH.Render<LaneBattlePage>(); var guest = ctxG.Render<LaneBattlePage>(); var third = ctxT.Render<LaneBattlePage>();
+
+    // ---- the start screen: the computer, and three ways in to a game against a person
+    Check("lobby: the start screen offers Play the computer and Play another person side by side", host.FindAll(".ln-modes > section").Count == 2 && host.FindAll(".ln-start").Count == 1 && host.FindAll(".ln-online").Count == 1 && host.FindAll(".ln-start .ln-btn.strong").Count == 1);
+    Check("lobby: Create a room, Join with a code and Open rooms are there, with an optional name box and a code box", HasBtn(host, "Create a room") && HasBtn(host, "Join with a code") && HasBtn(host, "Open rooms") && host.FindAll("#ln-name").Count == 1 && host.FindAll("#ln-code").Count == 1 && host.Find("#ln-name").GetAttribute("maxlength") == "24");
+    string pub = Text(host, ".ln-public");
+    Check("lobby: the page says in plain words that the relay is public, that anyone with a code sees the room, that the list is visible to everyone, that there are no accounts and to use a made-up name",
+        pub.Contains("public") && pub.Contains("Anyone who has a room's code can see that room") && pub.Contains("visible to everyone") && pub.Contains("no accounts") && pub.Contains("made-up name"), pub);
+    Check("lobby: Join with a code waits for a code (disabled while the box is empty)", Btn(host, "Join with a code").HasAttribute("disabled"));
+    host.Find("#ln-code").Input("a/b");
+    Check("lobby: a typed code enables it", !Btn(host, "Join with a code").HasAttribute("disabled"));
+    Btn(host, "Join with a code").Click();
+    bool bad = await Until(() => host.FindAll(".ln-online .err").Count == 1, 5000);
+    Check("lobby: a code that is not a code is refused on the start screen, in words, and the screen stays", bad && Text(host, ".ln-online .err").Contains("not a room code") && host.FindAll(".ln-online").Count == 1 && host.FindAll(".ln-room").Count == 0, bad ? Text(host, ".ln-online .err") : "no error");
+    host.Find("#ln-code").Input("");
+    Btn(host, "Open rooms").Click();
+    await Until(() => host.FindAll(".ln-rooms").Count == 1, 5000);
+    Check("lobby: Open rooms with nobody waiting says so", Text(host, ".ln-rooms").Contains("No open rooms right now"), Text(host, ".ln-rooms"));
+    Btn(host, "Hide open rooms").Click();
+    Check("lobby: the list can be hidden again", host.FindAll(".ln-rooms").Count == 0 && HasBtn(host, "Open rooms"));
+
+    // ---- create a room
+    host.Find("#ln-name").Input("  Lord  Test ");
+    Btn(host, "Create a room").Click();
+    bool made = await Until(() => host.FindAll(".ln-room").Count == 1 && host.FindAll(".ln-codeshow").Count == 1, 8000);
+    Check("lobby: Create a room opens the waiting screen with a room code", made);
+    if (!made) { Console.WriteLine("ABORT: " + (host.FindAll(".err").Count > 0 ? Text(host, ".err") : "no error shown")); return 1; }
+    string code = Text(host, ".ln-codeshow");
+    Check("lobby: the code is short (six letters or digits) and there is a Copy code button, Leave the room and a connection line", System.Text.RegularExpressions.Regex.IsMatch(code, @"^[A-Z0-9]{6}$") && HasBtn(host, "Copy code") && HasBtn(host, "Leave the room") && Text(host, ".ln-room .ln-net").Contains("Connected"), code);
+    Check("lobby: the waiting screen says it is waiting for a second player, that the room is also listed, and not to share the code widely", Text(host, ".ln-room").Contains("Waiting for a second player") && Text(host, ".ln-room").Contains("also listed under Open rooms") && Text(host, ".ln-room").Contains("share it only with the person you mean to play"));
+    Check("lobby: the start screen is gone while in a room, and so is How to play", host.FindAll(".ln-modes").Count == 0 && host.FindAll(".ln-how").Count == 0 && host.FindAll("canvas").Count == 0);
+    Btn(host, "Copy code").Click();
+    Check("lobby: Copy code puts the code on the clipboard (the page asks the script) and says Copied", ctxH.JSInterop.Invocations.Any(i => i.Identifier == "copyText" && (i.Arguments[0] as string) == code) && HasBtn(host, "Copied"));
+    string? entry = broker.RetainedText(LaneTopics.Lobby(code));
+    Check("lobby: the room is listed on the relay under plenum/v1/doctrine-lane/lobby/ with the typed name cleaned, and the entry holds no match number", entry is not null && entry.Contains("Lord Test") && !entry.Contains("seed"), entry ?? "none");
+
+    // ---- another visitor looks at the list
+    Btn(third, "Open rooms").Click();
+    bool listed = await Until(() => third.FindAll(".ln-rooms li").Count == 1, 8000);
+    Check("lobby: the room shows in another visitor's Open rooms with the host's name, its age and a Join button", listed && TextOr(third, ".ln-rooms li .ln-rname") == "Lord Test" && TextOr(third, ".ln-rooms li .ln-rage") == "just now" && TextOr(third, ".ln-rooms li button") == "Join");
+    clock.Advance(12_000);
+    bool aged = await Until(() => TextOr(third, ".ln-rooms li .ln-rage").Contains("12 s ago") || TextOr(third, ".ln-rooms li .ln-rage") == "just now", 8000);
+    Check("lobby: the list keeps itself up to date: the age moves on, and when the host repeats its entry it is fresh again (a room that is not repeated expires from the list)", aged, TextOr(third, ".ln-rooms li .ln-rage"));
+
+    // ---- join from the list
+    Btn(third, "Join").Click();
+    bool seated = await Until(() => host.FindAll(".ln-dock").Count == 1 && third.FindAll(".ln-dock").Count == 1, 90000);
+    Check("lobby: Join from the list seats the visitor; both screens go on to the battle", seated);
+    if (!seated) { Console.WriteLine("ABORT: host " + Text(host, ".ln-room") + " | guest " + (third.FindAll(".ln-room").Count > 0 ? Text(third, ".ln-room") : third.FindAll(".err").Count > 0 ? Text(third, ".err") : "-")); return 1; }
+    await Until(() => modH.Invocations.Any(i => i.Identifier == "init") && modT.Invocations.Any(i => i.Identifier == "init"), 8000);
+    Check("lobby: the room left the list once it was full", broker.RetainedText(LaneTopics.Lobby(code)) is null);
+    string hostSees = Text(host, ".ln-net .ln-who"), guestSees = Text(third, ".ln-net .ln-who");
+    Check("lobby: each tray names the other player (the host typed a name, the guest got a made-up 'Lord ...' one) and shows the connection", guestSees == "Lord Test:" && hostSees.StartsWith("Lord ") && hostSees.EndsWith(":") && host.FindAll(".ln-net .ln-dot.on").Count == 1 && third.FindAll(".ln-net .ln-dot.on").Count == 1, hostSees + " / " + guestSees);
+    bool counting = await Until(() => Text(host, ".ln-tag") == "Starting" && Text(third, ".ln-tag") == "Starting" && Text(host, ".ln-time") == "0:03" && Text(third, ".ln-time") == "0:03", 20000);
+    Check("lobby: before the start both screens say Starting and count down the 3 s to the agreed start", counting, Text(host, ".ln-tag") + " " + Text(host, ".ln-time") + " | " + Text(third, ".ln-tag") + " " + Text(third, ".ln-time"));
+    Check("lobby: no Ready button and no speed buttons before the start", !HasBtn(host, "Ready") && host.FindAll(".ln-speed").Count == 0);
+
+    // ---- perspective: the script is given the ground turned for the guest only
+    string layH = (string)modH.Invocations.First(i => i.Identifier == "init").Arguments[2]!, layG = (string)modT.Invocations.First(i => i.Identifier == "init").Arguments[2]!;
+    Check("lobby: the host gets the ground as it is and the guest gets it turned (each sees their own base on their own side)", layH.Contains("\"mirror\":false") && layG.Contains("\"mirror\":true") && layH != layG);
+
+    // ---- the start, then Ready means "I have committed"
+    clock.Advance(3500);
+    bool paused = await Until(() => Text(host, ".ln-tag") == "Pause" && Text(third, ".ln-tag") == "Pause", 15000);
+    Check("lobby: at the agreed start both screens show the first pause with 30 s to choose", paused && Text(host, ".ln-time") == "0:30" && Text(host, ".ln-pts strong") == "10" && HasBtn(host, "Ready") && HasBtn(third, "Ready"));
+    Check("lobby: no speed buttons in an online match (a pause has none, and the run will not either)", host.FindAll(".ln-speed").Count == 0 && third.FindAll(".ln-speed").Count == 0 && !HasBtn(host, "Play again"));
+    await host.InvokeAsync(() => host.Instance.OnLaneTap(0));
+    host.FindAll(".ln-pack:not([disabled])")[0].Click();
+    Btn(host, "Ready").Click();
+    bool waitingFirst = await Until(() => HasBtn(host, "Waiting for opponent"), 8000);
+    Check("lobby: Ready on one side means 'I have committed': the button says Waiting for opponent and is locked", waitingFirst && Btn(host, "Waiting for opponent").HasAttribute("disabled"));
+    bool otherSees = await Until(() => Text(third, ".ln-net").Contains("is ready"), 8000);
+    Check("lobby: the connection line tells each side who they are waiting for, and the other side that they are ready", otherSees && Text(host, ".ln-net").Contains("You are ready. Waiting for"), Text(host, ".ln-net") + " | " + Text(third, ".ln-net"));
+    Check("lobby: once ready the packs and Take back are locked", host.FindAll(".ln-pack").All(b => b.HasAttribute("disabled")) && host.FindAll(".ln-staged .ln-x").All(b => b.HasAttribute("disabled")));
+    Btn(third, "Ready").Click();
+    bool running = await Until(() => host.FindAll(".ln-tag.run").Count == 1 && third.FindAll(".ln-tag.run").Count == 1, 15000);
+    Check("lobby: when both are ready the plays are shown together and the battle starts on both screens, with no speed buttons", running && host.FindAll(".ln-speed").Count == 0 && third.FindAll(".ln-speed").Count == 0);
+    var pkH = await host.InvokeAsync(() => host.Instance.Frame(0.0)); var pkG = await third.InvokeAsync(() => third.Instance.Frame(0.0));
+    if (pkH is null) pkH = await host.InvokeAsync(() => host.Instance.Frame(0.0));
+    if (pkG is null) pkG = await third.InvokeAsync(() => third.Instance.Frame(0.0));
+    bool pk = pkH is { Length: > 32 } && pkG is { Length: > 32 };
+    var bodiesH = pk ? LanePack.Unpack(pkH!).Bodies : new(); var bodiesG = pk ? LanePack.Unpack(pkG!).Bodies : new();
+    Check("lobby: the picture each screen gets is its own: the host's soldiers are side 0 (yours) on the host's screen and side 1 (theirs) on the guest's, the same bodies", pk && bodiesH.Count > 0 && bodiesH.Count(b => b.Side == Side.Player) == bodiesG.Count(b => b.Side == Side.Enemy) && bodiesH.Count(b => b.Side == Side.Enemy) == bodiesG.Count(b => b.Side == Side.Player), $"{bodiesH.Count} / {bodiesG.Count}");
+    Check("lobby: in the run the tray keeps to the connection line, the clock and Leave (no packs, no Ready)", host.FindAll(".ln-packs").Count == 0 && !HasBtn(host, "Ready") && HasBtn(host, "Leave") && host.FindAll("button").All(b => b.Closest(".ln-dock") is not null));
+
+    // ---- a third visitor with the code finds the room full
+    guest.Find("#ln-code").Input(code.ToLowerInvariant());
+    Btn(guest, "Join with a code").Click();
+    bool full = await Until(() => guest.FindAll(".ln-online .err").Count == 1, 8000);
+    Check("lobby: a visitor who joins with the code of a full room is told so in words and stays on the start screen", full && Text(guest, ".ln-online .err").Contains("already has two players") && guest.FindAll(".ln-modes").Count == 1);
+
+    // ---- leaving a running match gives it to the other player; the first tap only asks
+    Btn(host, "Leave").Click();
+    Check("lobby: the first tap on Leave in a running match only asks (it would give the match away)", HasBtn(host, "Tap again to leave. The other player wins.") && host.FindAll(".ln-tag.run").Count == 1);
+    Btn(host, "Tap again to leave. The other player wins.").Click();
+    bool hostBack = await Until(() => host.FindAll(".ln-modes").Count == 1, 8000);
+    Check("lobby: the second tap leaves: the host is back on the start screen", hostBack && host.FindAll(".ln-dock").Count == 0);
+    bool told = await Until(() => third.FindAll(".ln-tag.over").Count == 1, 8000);
+    Check("lobby: the other player is told at once, in words, that the opponent left and that the match is theirs", told && Text(third, ".ln-outcome").Contains("left the match") && Text(third, ".ln-outcome").Contains("The match is yours"), told ? Text(third, ".ln-outcome") : "");
+    Check("lobby: after that match there is Leave, and no Rematch (the opponent is gone), no speed buttons", HasBtn(third, "Leave") && !HasBtn(third, "Rematch") && third.FindAll(".ln-speed").Count == 0);
+    Btn(third, "Leave").Click();
+    bool thirdBack = await Until(() => third.FindAll(".ln-modes").Count == 1, 8000);
+    Check("lobby: Leave takes the other visitor back to the start screen too, and the relay holds nothing of the room", thirdBack && await Until(() => broker.RetainedTopics.Count == 0, 5000), string.Join(", ", broker.RetainedTopics.Take(3)));
+    await host.Instance.DisposeAsync(); await guest.Instance.DisposeAsync(); await third.Instance.DisposeAsync();
+}
+
 // ---------------------------------------------------------------------------------------------- bots on both sides: the hash line is the batch run's
 using (var ctx = NewCtx(out var mod, url: "http://localhost/doctrine?seed=7&bots=1"))
 {
@@ -180,7 +298,8 @@ var words = Read(@"Services\Doctrine\Lane\LaneView.cs"); var js = Read(@"wwwroot
 var bannedTerms = new[] { "Pleroma", "Tracer", "EvalApp", "Phasor", "navmesh", "hologram", "holographic", "HoloFormer", "free to use", "open source", "MIT licen", "development", "dev page", "localhost" };
 string visible = Regex.Replace(page_, @"@code\s*\{.*", "", RegexOptions.Singleline) + words;
 Check("the words a player reads carry no builder's term and no licence slip", bannedTerms.All(t => !visible.Contains(t, StringComparison.OrdinalIgnoreCase)), string.Join(",", bannedTerms.Where(t => visible.Contains(t, StringComparison.OrdinalIgnoreCase))));
-var all = new[] { page_, css, words, js, Read(@"Services\Doctrine\Lane\LaneMatch.cs"), Read(@"Services\Doctrine\Lane\LaneSeats.cs"), Read(@"Services\Doctrine\Lane\LaneEconomy.cs"), Read(@"Services\Doctrine\Lane\LanePayload.cs"), Read(@"wwwroot\doctrine\NOTICE.txt") };
+var online = Directory.GetFiles(Path.Combine(showroom, @"Services\Doctrine\Lane\Online"), "*.cs").Select(File.ReadAllText).ToArray();
+var all = new[] { page_, css, words, js, Read(@"Services\Doctrine\Lane\LaneMatch.cs"), Read(@"Services\Doctrine\Lane\LaneSeats.cs"), Read(@"Services\Doctrine\Lane\LaneEconomy.cs"), Read(@"Services\Doctrine\Lane\LanePayload.cs"), Read(@"wwwroot\doctrine\NOTICE.txt") }.Concat(online).ToArray();
 Check("no em dash in any new text", all.All(t => !t.Contains('—') && !t.Contains('–')));
 Check("the CSS keeps the 44px tap rule, the wide-screen breakpoint, and no fixed width over 360px", css.Contains("min-height: 44px") && css.Contains("min-width: 720px") && !Regex.IsMatch(css, @"(?<![-\w])width:\s*(3[6-9]\d|[4-9]\d\d|\d{4,})px"));
 Check("the source has no side panel or order buttons left (page and styles)", new[] { "ln-side", "ln-lanes", "ln-orders", "ln-ord", "ln-top", "ln-bases" }.All(s => !page_.Contains(s) && !css.Contains(s)));
@@ -203,4 +322,5 @@ Check("the nav does not mention the page by a second name", !Read(@"Layout\MainL
 Console.WriteLine(failures == 0 ? $"ALL PASS ({checks} checks)" : $"{failures} FAILED of {checks}");
 return failures == 0 ? 0 : 1;
 
+sealed class FakeClock : IPlenumClock { public long NowMs { get; private set; } = 1_000_000; public long UnixMs { get; private set; } = 1_760_000_000_000; public void Advance(long ms) { NowMs += ms; UnixMs += ms; } }
 sealed class Time : IBuildTime { public Time(bool p) { IsPrerender = p; } public bool IsPrerender { get; } }

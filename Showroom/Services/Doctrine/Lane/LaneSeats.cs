@@ -45,6 +45,7 @@ public sealed class ManualSeat : ILaneSeat
     readonly List<PackBuy> _packs = new();
     readonly Dictionary<int, FieldOrderKind> _orders = new();
     internal Func<bool> Open { get; set; } = () => true;
+    bool _frozen;
 
     internal ManualSeat(LaneEconomy econ, int lanes, LaneMatchProbe probe) { _econ = econ; _lanes = lanes; _probe = probe; }
 
@@ -53,13 +54,21 @@ public sealed class ManualSeat : ILaneSeat
     public IReadOnlyDictionary<int, FieldOrderKind> Orders => _orders;
     /// <summary>The purse less what is staged.</summary>
     public int Remaining => _econ.Balance - _packs.Sum(p => LaneEconomy.Cost(p.Kind));
+    /// <summary>True once the plays are locked in (online: you pressed Ready, so the plan you committed to cannot change). Clear at the next pause.</summary>
+    public bool Frozen => _frozen;
+    /// <summary>Locks the plan as it stands: further staging, taking back and orders are refused until the next pause.</summary>
+    public void Freeze() => _frozen = true;
 
-    bool Allowed => _probe.HasFlag(LaneMatchProbe.PlaysAnyTime) || Open();
+    /// <summary>What is staged right now, as a plan.</summary>
+    public LanePlan CurrentPlan() => new(_packs.ToArray(), _orders.OrderBy(o => o.Key).Select(o => new LaneOrderChoice(o.Key, o.Value)).ToArray());
+
+    bool Allowed => !_frozen && (_probe.HasFlag(LaneMatchProbe.PlaysAnyTime) || Open());
 
     /// <summary>Stages one pack. False with the reason in plain words when it is refused.</summary>
     public bool Buy(int lane, int kind, out string why)
     {
         why = "";
+        if (_frozen) { why = "You are ready. Your plays are locked in."; return false; }
         if (!Allowed) { why = "Plays can only be made at the pause."; return false; }
         if ((uint)lane >= (uint)_lanes) { why = "No such lane."; return false; }
         if ((uint)kind >= (uint)Roster.Size) { why = "No such soldiers."; return false; }
@@ -80,6 +89,7 @@ public sealed class ManualSeat : ILaneSeat
     public bool Order(int lane, FieldOrderKind order, out string why)
     {
         why = "";
+        if (_frozen) { why = "You are ready. Your plays are locked in."; return false; }
         if (!Allowed) { why = "Plays can only be made at the pause."; return false; }
         if ((uint)lane >= (uint)_lanes) { why = "No such lane."; return false; }
         if (order is not (FieldOrderKind.Advance or FieldOrderKind.Hold or FieldOrderKind.FallBack or FieldOrderKind.Hunt or FieldOrderKind.Guard)) { why = "That order is not used in a lane."; return false; }
@@ -88,10 +98,9 @@ public sealed class ManualSeat : ILaneSeat
     }
 
     /// <summary>Forgets everything staged (a new pause starts clean).</summary>
-    public void Clear() { _packs.Clear(); _orders.Clear(); }
+    public void Clear() { _packs.Clear(); _orders.Clear(); _frozen = false; }
 
-    public ValueTask<LanePlan> PlanAsync(LaneSeatView view, CancellationToken ct)
-        => ValueTask.FromResult(new LanePlan(_packs.ToArray(), _orders.OrderBy(o => o.Key).Select(o => new LaneOrderChoice(o.Key, o.Value)).ToArray()));
+    public ValueTask<LanePlan> PlanAsync(LaneSeatView view, CancellationToken ct) => ValueTask.FromResult(CurrentPlan());
 }
 
 /// <summary>

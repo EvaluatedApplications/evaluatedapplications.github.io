@@ -4,12 +4,16 @@
 @inject IBuildTime Build
 @inject IJSRuntime JS
 @inject NavigationManager Nav
+@inject ShowroomPlenum.IPlenumRelayFactory Relays
+@inject ShowroomPlenum.IPlenumClock Clock
 @using ShowroomLane
 @using Doctrine
 @using Doctrine.Lane
 
 @* DOCTRINE, the lane battle. Soldiers march down three lanes between two castles. The canvas script and pictures are in wwwroot/doctrine (NOTICE.txt and KENNEY-LICENSE.txt stay with them).
-   The static shell (Blazier) shows the title, the intro and How to play as real text; the match itself starts only when the visitor starts the runtime. *@
+   The static shell (Blazier) shows the title, the intro and How to play as real text; the match itself starts only when the visitor starts the runtime.
+   Two ways to play: against the computer, or against another person (a room: create it and share its code, join with a code, or pick an open room). The online part is the UI-free
+   service in Services/Doctrine/Lane/Online (LaneOnline, LaneLobby); this page only shows what it says. *@
 
 <PageTitle>Doctrine: a lane battle between two castles, in your browser</PageTitle>
 
@@ -17,10 +21,10 @@
     <header class="room-head">
         <nav class="crumb"><a href="/tools/">Tools</a> <span>/</span> Doctrine</nav>
         <h1>Doctrine</h1>
-        <p class="lede">Two castles, three lanes. Send soldiers down the lanes, give each lane an order, and watch the battle play out in your browser. Nothing is uploaded.</p>
+        <p class="lede">Two castles, three lanes. Send soldiers down the lanes, give each lane an order, and watch the battle play out in your browser. Play the computer or another person. Nothing is uploaded.</p>
     </header>
 
-    @if (_m is null)
+    @if (_m is null && _on is null)
     {
     <section class="ln-how" aria-label="How to play">
         <h2>How to play</h2>
@@ -32,77 +36,198 @@
             <li>Watch the battle for 30 seconds. Then it pauses and you choose again. The enemy chooses at the same time, and both sets of plays arrive together.</li>
         </ol>
         <p><strong>Destroy the other castle before yours falls.</strong></p>
+        <p>You can also play another person: make a room and share its code, join with a code, or pick an open room. You each choose in secret and the plays are shown together. Both of you run the same battle in your own browser.</p>
     </section>
     }
     @if (Build.IsPrerender)
     {
         <ToolStart Tool="Doctrine" Label="Start Doctrine" />
     }
-    else if (_m is null)
+    else if (_m is null && _on is null)
     {
+        <div class="ln-modes">
         <section class="ln-start">
+            <h2>Play the computer</h2>
             <label class="ln-label" for="ln-seed">Match number (the same number gives the same match)</label>
             <input id="ln-seed" class="ln-input" type="number" inputmode="numeric" @bind="_seed" />
             @if (_err.Length > 0) { <p class="err" role="alert">@_err</p> }
             <button class="ln-btn strong" type="button" @onclick="StartAsync" disabled="@_starting">@(_starting ? "Building the lanes..." : "Start the battle")</button>
         </section>
+
+        <section class="ln-online" aria-label="Play another person">
+            <h2>Play another person</h2>
+            <label class="ln-label" for="ln-name">Your name (optional; use a made-up one)</label>
+            <input id="ln-name" class="ln-input" type="text" maxlength="24" autocomplete="off" placeholder="Lord ..." @bind="_name" @bind:event="oninput" />
+            <div class="ln-actions">
+                <button class="ln-btn" type="button" @onclick="CreateRoomAsync" disabled="@_busy">Create a room</button>
+            </div>
+            <label class="ln-label" for="ln-code">Join with a code</label>
+            <div class="ln-actions">
+                <input id="ln-code" class="ln-input ln-codebox" type="text" maxlength="14" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="Room code" @bind="_joinCode" @bind:event="oninput" />
+                <button class="ln-btn" type="button" @onclick="() => JoinAsync(_joinCode)" disabled="@(_busy || _joinCode.Trim().Length == 0)">Join with a code</button>
+            </div>
+            <div class="ln-actions">
+                <button class="ln-btn" type="button" aria-expanded="@B(_showRooms)" @onclick="ToggleRoomsAsync" disabled="@_busy">@(_showRooms ? "Hide open rooms" : "Open rooms")</button>
+            </div>
+            @if (_showRooms)
+            {
+                <div class="ln-rooms" aria-live="polite">
+                    @if (_lobby is { Online: false } l0 && l0.Problem.Length > 0) { <p class="err" role="alert">@l0.Problem</p> }
+                    else if (_lobby is null || _rooms.Count == 0) { <p class="hint">No open rooms right now. Make one and wait, or ask a friend for their code.</p> }
+                    else
+                    {
+                        <ul>
+                            @foreach (var r in _rooms)
+                            {
+                                var code = r.Code;
+                                <li>
+                                    <span class="ln-rname">@r.Host</span>
+                                    <span class="ln-rage">@AgeWords(r.AgeSeconds)</span>
+                                    <button class="ln-btn" type="button" disabled="@_busy" @onclick="() => JoinAsync(code)">Join</button>
+                                </li>
+                            }
+                        </ul>
+                    }
+                </div>
+            }
+            @if (_onErr.Length > 0) { <p class="err" role="alert">@_onErr</p> }
+            <p class="hint ln-public">A room lives on a public message relay. Anyone who has a room's code can see that room and the plays made in it, and the list of open rooms is visible to everyone who opens it, with the host's name. There are no accounts. Pick any made-up name: nothing else about you is sent.</p>
+        </section>
+        </div>
     }
-    else
+    else if (_m is null && _on is { } waiting)
     {
+        <section class="ln-room" aria-live="polite" aria-label="Your room">
+            @switch (waiting.Phase)
+            {
+                case OnlinePhase.Idle:
+                    <h2>Opening your room</h2>
+                    <p>Reaching the message relay.</p>
+                    break;
+                case OnlinePhase.Waiting:
+                    <h2>Your room is open</h2>
+                    <p class="ln-code">Room code <strong class="mono ln-codeshow">@waiting.Code</strong> <button class="ln-btn" type="button" @onclick="CopyCode">@(_copied ? "Copied" : "Copy code")</button></p>
+                    <p>Waiting for a second player. Send them the code, or wait: your room is also listed under Open rooms for anyone who looks.</p>
+                    <p class="hint">Anyone with the code can join, so share it only with the person you mean to play.</p>
+                    break;
+                case OnlinePhase.Joining:
+                    <h2>Joining room @waiting.Code</h2>
+                    <p>Asking for the second seat.</p>
+                    break;
+                case OnlinePhase.Ended:
+                    <h2>The match did not start</h2>
+                    <p>@(waiting.End?.Text ?? "")</p>
+                    break;
+                default:
+                    <h2>@(waiting.OpponentName.Length > 0 ? waiting.OpponentName : "The other player") is in the room</h2>
+                    <p>Building the lanes. The battle starts as soon as both of you are ready.</p>
+                    break;
+            }
+            @if (waiting.Notices.Count > 0 && waiting.Phase != OnlinePhase.Ended) { <p class="hint ln-last">@waiting.Notices[^1]</p> }
+            @if (_onErr.Length > 0) { <p class="err" role="alert">@_onErr</p> }
+            <p class="ln-net" role="status"><span class="ln-dot @(waiting.Online ? "on" : "off")" aria-hidden="true"></span> @(waiting.Online ? "Connected to the relay." : "Connection lost. Trying to get it back.")</p>
+            <div class="ln-actions"><button class="ln-btn" type="button" @onclick="LeaveAsync">@(waiting.Phase == OnlinePhase.Ended ? "Back" : "Leave the room")</button></div>
+        </section>
+    }
+    else if (_m is not null)
+    {
+        bool online = _on is not null;
+        bool onEnded = _on is { Phase: OnlinePhase.Ended };
+        bool starting = _on is { Phase: OnlinePhase.Starting };
         <div class="ln-stage">
             <div class="ln-board"><canvas @ref="_canvas" class="ln-canvas" aria-label="The battlefield: three lanes between your base and theirs. Tap a lane to pick it, then tap an order on the lane. The Sound button is in the top corner."></canvas></div>
 
             <section class="ln-dock" aria-label="Your soldiers and the clock">
                 <div class="ln-status" aria-live="polite">
                     <div class="ln-clock">
-                        @switch (_m.Stage)
+                        @if (onEnded)
                         {
-                            case MatchStage.Pause:
-                                <span class="ln-tag pause">Pause</span>
-                                <strong class="ln-time">@(_bots ? "Bots only" : LaneWords.Clock(_m.PauseLeft))</strong>
-                                <span class="ln-hintline">@(_bots ? "" : "to choose")</span>
-                                break;
-                            case MatchStage.Run:
-                                <span class="ln-tag run">Battle</span>
-                                <strong class="ln-time">@LaneWords.Clock(_m.Battle.TicksToPause / (double)(LaneRules.TicksPerSecond * _m.Speed))</strong>
-                                <span class="ln-hintline">to the next pause</span>
-                                break;
-                            default:
-                                <span class="ln-tag over">Over</span>
-                                <strong class="ln-time ln-outcome">@LaneWords.Outcome(_m.Status)</strong>
-                                break;
+                            <span class="ln-tag over">Over</span>
+                            <strong class="ln-time ln-outcome">@_on!.End!.Text</strong>
+                        }
+                        else if (starting)
+                        {
+                            <span class="ln-tag pause">Starting</span>
+                            <strong class="ln-time">@LaneWords.Clock(_on!.StartInMs / 1000.0)</strong>
+                            <span class="ln-hintline">to the start</span>
+                        }
+                        else
+                        {
+                            @switch (_m.Stage)
+                            {
+                                case MatchStage.Pause:
+                                    <span class="ln-tag pause">Pause</span>
+                                    <strong class="ln-time">@(_bots ? "Bots only" : LaneWords.Clock(_m.PauseLeft))</strong>
+                                    <span class="ln-hintline">@(_bots ? "" : "to choose")</span>
+                                    break;
+                                case MatchStage.Run:
+                                    <span class="ln-tag run">Battle</span>
+                                    <strong class="ln-time">@LaneWords.Clock(_m.Battle.TicksToPause / (double)(LaneRules.TicksPerSecond * _m.Speed))</strong>
+                                    <span class="ln-hintline">to the next pause</span>
+                                    break;
+                                default:
+                                    <span class="ln-tag over">Over</span>
+                                    <strong class="ln-time ln-outcome">@LaneWords.Outcome(_m.Status, _m.LocalSide)</strong>
+                                    break;
+                            }
                         }
                     </div>
-                    @if (_m.Stage != MatchStage.Over)
+                    @if (!onEnded && _m.Stage != MatchStage.Over)
                     {
-                        <span class="ln-pts">Points left: <strong>@(_m.Human?.Remaining ?? _m.Economy(Side.Player).Balance)</strong></span>
+                        <span class="ln-pts">Points left: <strong>@(_m.Human?.Remaining ?? _m.LocalEconomy.Balance)</strong></span>
                     }
                     <div class="ln-ctl">
-                        @if (_m.Stage == MatchStage.Pause && !_bots)
+                        @if (online)
                         {
-                            <button class="ln-btn strong" type="button" @onclick="OnReady">Ready</button>
-                        }
-                        @if (_m.Stage == MatchStage.Run)
-                        {
-                            <span class="ln-speed" role="group" aria-label="Battle speed">
-                                @foreach (var sp in new[] { 1, 2, 4 })
+                            @if (!onEnded && _on!.Phase == OnlinePhase.Playing && _m.Stage == MatchStage.Pause)
+                            {
+                                <button class="ln-btn strong" type="button" disabled="@(_on.MyCommitted || !_on.PauseOpen)" @onclick="OnReady">@(_on.MyCommitted ? (_on.OpponentCommitted ? "Ready" : "Waiting for opponent") : "Ready")</button>
+                            }
+                            @if (onEnded)
+                            {
+                                @if (_on!.CanRematch)
                                 {
-                                    var s = sp;
-                                    <button class="ln-btn @(_m.Speed == s ? "on" : "")" type="button" aria-pressed="@B(_m.Speed == s)" @onclick="() => OnSpeed(s)">@(s)x</button>
+                                    <button class="ln-btn strong" type="button" disabled="@_on.MyRematch" @onclick="RematchAsync">@(_on.MyRematch ? "Waiting for " + _on.OpponentName : (_on.OpponentRematch ? "Accept the rematch" : "Rematch"))</button>
                                 }
-                            </span>
+                                <button class="ln-btn" type="button" @onclick="LeaveAsync">Leave</button>
+                            }
+                            else
+                            {
+                                <button class="ln-btn" type="button" @onclick="LeaveClickAsync">@(_confirmLeave ? "Tap again to leave. The other player wins." : "Leave")</button>
+                            }
                         }
-                        @if (_m.Stage == MatchStage.Over)
+                        else
                         {
-                            <button class="ln-btn strong" type="button" @onclick="PlayAgain">Play again</button>
-                            <button class="ln-btn" type="button" @onclick="SameSeed">Same match again</button>
+                            @if (_m.Stage == MatchStage.Pause && !_bots)
+                            {
+                                <button class="ln-btn strong" type="button" @onclick="OnReady">Ready</button>
+                            }
+                            @if (_m.Stage == MatchStage.Run)
+                            {
+                                <span class="ln-speed" role="group" aria-label="Battle speed">
+                                    @foreach (var sp in new[] { 1, 2, 4 })
+                                    {
+                                        var s = sp;
+                                        <button class="ln-btn @(_m.Speed == s ? "on" : "")" type="button" aria-pressed="@B(_m.Speed == s)" @onclick="() => OnSpeed(s)">@(s)x</button>
+                                    }
+                                </span>
+                            }
+                            @if (_m.Stage == MatchStage.Over)
+                            {
+                                <button class="ln-btn strong" type="button" @onclick="PlayAgain">Play again</button>
+                                <button class="ln-btn" type="button" @onclick="SameSeed">Same match again</button>
+                            }
                         }
                     </div>
                 </div>
-                @if (_m.Behind) { <p class="ln-warn">This device cannot keep up at this speed, so the battle is running slower than the clock.</p> }
+                @if (online)
+                {
+                    <p class="ln-net" role="status"><span class="ln-dot @(_on!.Online ? "on" : "off")" aria-hidden="true"></span> <span class="ln-who">@(_on.OpponentName.Length > 0 ? _on.OpponentName : "Opponent"):</span> @_on.StatusLine</p>
+                }
+                @if (_m.Behind) { <p class="ln-warn">This device cannot keep up with the battle, so it is running slower than the clock.</p> }
                 @if (_err.Length > 0) { <p class="err" role="alert">@_err</p> }
 
-                @if (_m.Stage == MatchStage.Pause && _m.Human is { } me)
+                @if (!onEnded && _m.Stage == MatchStage.Pause && _m.Human is { } me)
                 {
                     <p class="ln-tip" role="status">
                         @if (_sel < 0)
@@ -120,7 +245,7 @@
                         @for (int k = 0; k < Roster.Size; k++)
                         {
                             var kind = k;
-                            <button class="ln-pack" type="button" disabled="@(_sel < 0 || LaneEconomy.Cost(kind) > me.Remaining)" @onclick="() => Buy(kind)">
+                            <button class="ln-pack" type="button" disabled="@(_sel < 0 || me.Frozen || LaneEconomy.Cost(kind) > me.Remaining)" @onclick="() => Buy(kind)">
                                 @if (_icons.Length > kind) { <img class="ln-icon" src="@_icons[kind]" alt="" /> }
                                 <span class="ln-pname">@LaneWords.KindName(kind) <small>x@(LaneEconomy.PackSize)</small></span>
                                 <span class="ln-pcost">@LaneEconomy.Cost(kind) points</span>
@@ -134,14 +259,14 @@
                             @for (int i = 0; i < me.Packs.Count; i++)
                             {
                                 var idx = i; var p = me.Packs[i];
-                                <button type="button" class="ln-x" @onclick="() => Unbuy(idx)"><span>@LaneWords.LaneName(p.Lane, _lanes): @LaneWords.KindName(p.Kind) x@(LaneEconomy.PackSize)</span> <b>Take back</b></button>
+                                <button type="button" class="ln-x" disabled="@me.Frozen" @onclick="() => Unbuy(idx)"><span>@LaneWords.LaneName(p.Lane, _lanes): @LaneWords.KindName(p.Kind) x@(LaneEconomy.PackSize)</span> <b>Take back</b></button>
                             }
                         </div>
                     }
                 }
-                else if (_m.Stage == MatchStage.Run)
+                else if (!onEnded && _m.Stage == MatchStage.Run)
                 {
-                    <p class="ln-tip">Plays are made at the pause. You have @_m.Battle.Bodies(Side.Player) soldiers on the field, they have @_m.Battle.Bodies(Side.Enemy). Your plays show on the lanes.</p>
+                    <p class="ln-tip">Plays are made at the pause. You have @_m.Battle.Bodies(_m.LocalSide) soldiers on the field, they have @_m.Battle.Bodies(_m.LocalSide == Side.Player ? Side.Enemy : Side.Player). Your plays show on the lanes.</p>
                 }
                 else if (_m.Stage == MatchStage.Over)
                 {
@@ -164,12 +289,16 @@
 @code {
     ElementReference _canvas;
     LaneMatch? _m;
+    LaneOnline? _on;
+    LaneLobby? _lobby;
+    CancellationTokenSource? _ticker;
     DotNetObjectReference<LaneBattlePage>? _self;
     IJSObjectReference? _js;
     string[] _icons = Array.Empty<string>();
-    string _err = "", _note = "";
-    bool _starting, _bots, _jsReady, _framing;
-    int _seed = 1, _sel = -1, _lanes = 3, _lastSec = -1, _lastBal = -1, _lastSpeed;
+    IReadOnlyList<LaneLobbyEntry> _rooms = Array.Empty<LaneLobbyEntry>();
+    string _err = "", _note = "", _onErr = "", _name = "", _joinCode = "";
+    bool _starting, _bots, _jsReady, _framing, _busy, _showRooms, _copied, _disposed, _confirmLeave;
+    int _seed = 1, _sel = -1, _lanes = 3, _lastSec = -1, _lastBal = -1, _lastSpeed, _packedStage = -1;
 
     protected override void OnInitialized()
     {
@@ -184,18 +313,164 @@
             else if (kv[0] == "bots" && (val == "1" || val == "true")) _bots = true;
         }
     }
+
+    /// <summary>A new match is on the board: the board starts clean (nothing picked, the script told to start again on the new canvas).</summary>
+    void AttachMatch(LaneMatch m)
+    {
+        _m = m;
+        _lanes = m.Battle.Setup.Lanes; _sel = -1;   // no lane picked: the tray asks for one
+        _jsReady = false; _note = ""; _lastSec = -1; _lastBal = -1; _packedStage = -1;
+    }
+
     async Task StartAsync()
     {
         _starting = true; _err = "";
         try
         {
             var o = new LaneMatchOptions { Seed = _seed, Player = _bots ? new LaneBot() : null };
-            _m = await LaneMatch.CreateAsync(o);
-            _lanes = _m.Battle.Setup.Lanes; _sel = -1;   // no lane picked: the tray asks for one _jsReady = false; _note = ""; _lastSec = -1; _lastBal = -1;
+            AttachMatch(await LaneMatch.CreateAsync(o));
         }
         catch (Exception e) { _err = "Could not start: " + e.Message; _m = null; }
         _starting = false;
     }
+
+    // ---------------------------------------------------------------------------------------------- online: rooms, the list, joining
+
+    LaneOnlineOptions OnlineOptions() => new() { Relays = Relays, Clock = Clock };
+
+    void StartTicker()
+    {
+        if (_ticker is not null) return;
+        _ticker = new CancellationTokenSource();
+        _ = TickLoop(_ticker.Token);
+    }
+
+    /// <summary>About four times a second (the browser runs a timer in a hidden tab too): lets the online service answer the other player and the list drop expired rooms.</summary>
+    async Task TickLoop(CancellationToken ct)
+    {
+        try
+        {
+            while (!ct.IsCancellationRequested)
+            {
+                await Task.Delay(250, ct);
+                if (_disposed) return;
+                try
+                {
+                    if (_lobby is { } l) { l.Tick(); }
+                    if (_on is { } on) { await on.AdvanceAsync(ct); }
+                }
+                catch (OperationCanceledException) { throw; }
+                catch (Exception) { }
+                if (_on is not null || _lobby is not null) await InvokeAsync(StateHasChanged);
+            }
+        }
+        catch (OperationCanceledException) { }
+    }
+
+    void OnOnlineChanged()
+    {
+        if (_disposed) return;
+        _ = InvokeAsync(() =>
+        {
+            SyncOnline();
+            StateHasChanged();
+        });
+    }
+
+    void SyncOnline()
+    {
+        if (_on is not { } on) return;
+        if (on.Match is { } m && !ReferenceEquals(m, _m)) AttachMatch(m);
+        else if (on.Match is null && _m is not null) _m = null;
+    }
+
+    async Task CreateRoomAsync()
+    {
+        if (_busy) return;
+        _busy = true; _onErr = "";
+        try
+        {
+            await CloseLobbyAsync();
+            var on = new LaneOnline(OnlineOptions());
+            on.Changed += OnOnlineChanged;
+            _on = on;
+            await on.CreateRoomAsync(_name);
+            StartTicker();
+        }
+        catch (Exception e) { _onErr = "Could not open a room: the message relay could not be reached (" + e.Message + ")."; await DropOnlineAsync(); }
+        _busy = false;
+    }
+
+    async Task JoinAsync(string code)
+    {
+        if (_busy) return;
+        _busy = true; _onErr = "";
+        try
+        {
+            await CloseLobbyAsync();
+            var on = new LaneOnline(OnlineOptions());
+            on.Changed += OnOnlineChanged;
+            _on = on;
+            StartTicker();
+            var err = await on.JoinAsync(code, _name);
+            if (err is not null) { _onErr = err; await DropOnlineAsync(); }
+        }
+        catch (Exception e) { _onErr = "Could not join: " + e.Message; await DropOnlineAsync(); }
+        _busy = false;
+    }
+
+    async Task ToggleRoomsAsync()
+    {
+        if (_showRooms) { await CloseLobbyAsync(); return; }
+        _showRooms = true; _onErr = "";
+        var lobby = new LaneLobby(new LaneLobbyOptions { Relays = Relays, Clock = Clock });
+        lobby.Changed += () => { _rooms = lobby.Rooms; _ = InvokeAsync(StateHasChanged); };
+        _lobby = lobby;
+        StartTicker();
+        await lobby.StartAsync();
+        _rooms = lobby.Rooms;
+    }
+
+    async Task CloseLobbyAsync()
+    {
+        _showRooms = false;
+        var l = _lobby; _lobby = null; _rooms = Array.Empty<LaneLobbyEntry>();
+        if (l is not null) { try { await l.DisposeAsync(); } catch { } }
+    }
+
+    async Task DropOnlineAsync()
+    {
+        var on = _on; _on = null;
+        if (on is not null) { on.Changed -= OnOnlineChanged; try { await on.LeaveAsync(); } catch { } }
+        _m = null;
+    }
+
+    /// <summary>Leaving a running match gives it to the other player, so the first tap only asks.</summary>
+    async Task LeaveClickAsync()
+    {
+        if (_on is { Phase: OnlinePhase.Playing } && !_confirmLeave) { _confirmLeave = true; return; }
+        await LeaveAsync();
+    }
+
+    async Task LeaveAsync()
+    {
+        _confirmLeave = false;
+        _onErr = "";
+        await DropOnlineAsync();
+        _sel = -1; _note = "";
+    }
+
+    async Task RematchAsync() { if (_on is { } on) await on.RematchAsync(); }
+
+    async Task CopyCode()
+    {
+        if (_on is null) return;
+        try { await JS.InvokeVoidAsync("copyText", _on.Code); _copied = true; } catch (JSException) { } catch (JSDisconnectedException) { }
+    }
+
+    static string AgeWords(int seconds) => seconds < 5 ? "just now" : seconds < 60 ? seconds + " s ago" : (seconds / 60) + " min ago";
+
+    // ---------------------------------------------------------------------------------------------- the canvas
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -222,17 +497,27 @@
         _framing = true;
         try
         {
-            var adv = await m.AdvanceAsync(dt);
+            LaneAdvance adv;
+            if (_on is { } on)
+            {
+                adv = await on.AdvanceAsync();   // the online service owns the clock (both players' shared start), so the frame's own seconds are not used
+                if (on.Match is { } om && !ReferenceEquals(om, m)) { AttachMatch(om); return null; }
+                if (on.Match is null) return null;
+            }
+            else adv = await m.AdvanceAsync(dt);
             int sec = m.Stage == MatchStage.Pause ? (int)Math.Ceiling(m.PauseLeft) : (int)Math.Ceiling(m.Battle.TicksToPause / (double)(LaneRules.TicksPerSecond * m.Speed));
-            int bal = m.Economy(Side.Player).Balance;
-            if (adv.StageChanged || sec != _lastSec || bal != _lastBal || m.Speed != _lastSpeed || m.Behind)
+            int bal = m.LocalEconomy.Balance;
+            bool stageMoved = (int)m.Stage != _packedStage;
+            if (adv.StageChanged || stageMoved || sec != _lastSec || bal != _lastBal || m.Speed != _lastSpeed || m.Behind)
             {
                 _lastSec = sec; _lastBal = bal; _lastSpeed = m.Speed;
-                if (adv.StageChanged) _note = "";
+                if (adv.StageChanged || stageMoved) _note = "";
                 await SyncInfo();
                 await InvokeAsync(StateHasChanged);
             }
-            return m.Stage == MatchStage.Run || adv.StageChanged ? LanePack.Pack(m) : null;
+            bool send = m.Stage == MatchStage.Run || adv.StageChanged || stageMoved;
+            _packedStage = (int)m.Stage;
+            return send ? LanePack.Pack(m) : null;
         }
         catch (Exception e) { _err = "The battle stopped: " + e.Message; await InvokeAsync(StateHasChanged); return null; }
         finally { _framing = false; }
@@ -279,7 +564,11 @@
         try { if (_js is not null) await _js.InvokeVoidAsync("sfx", name); } catch (JSException) { } catch (JSDisconnectedException) { }
     }
 
-    void OnReady() => _m?.Ready();
+    async Task OnReady()
+    {
+        if (_on is { } on) { await on.ReadyAsync(); await SyncInfo(); }
+        else _m?.Ready();
+    }
     void OnSpeed(int s) => _m?.SetSpeed(s);
 
     void PlayAgain() { _seed = Environment.TickCount & 0xFFFF; _m = null; }
@@ -291,7 +580,11 @@
 
     public async ValueTask DisposeAsync()
     {
+        _disposed = true;
+        _ticker?.Cancel();
         _m = null;
+        if (_on is { } on) { _on = null; on.Changed -= OnOnlineChanged; try { await on.LeaveAsync(); } catch { } }
+        if (_lobby is { } l) { _lobby = null; try { await l.DisposeAsync(); } catch { } }
         try { if (_js is not null) { await _js.InvokeVoidAsync("dispose"); await _js.DisposeAsync(); } } catch (JSDisconnectedException) { } catch (JSException) { }
         _self?.Dispose();
     }

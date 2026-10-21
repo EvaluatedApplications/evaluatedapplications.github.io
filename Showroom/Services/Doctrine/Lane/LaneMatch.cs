@@ -24,6 +24,13 @@ public sealed record LaneMatchOptions
     public ILaneSeat? Enemy { get; init; }
     /// <summary>Most ticks one <see cref="LaneMatch.AdvanceAsync"/> call may run. A slow device then plays slower than the clock instead of freezing the page (see <see cref="LaneMatch.Behind"/>).</summary>
     public int MaxTicksPerAdvance { get; init; } = 6;
+    /// <summary>The side the human seat sits on. Player (the default) is the left base; an online guest sits on Enemy and the page then draws the board from the guest's side.</summary>
+    public Side LocalSide { get; init; } = Side.Player;
+    /// <summary>
+    /// Online: the match never ends a pause by itself. The caller (the online session) sets the clock with <see cref="LaneMatch.SetPauseLeft"/> and ends the pause with
+    /// <see cref="LaneMatch.EndPauseNowAsync"/> once both players' plays are known; Ready does nothing here.
+    /// </summary>
+    public bool ExternalPause { get; init; }
     internal LaneMatchProbe Probe { get; init; }
 
     /// <summary>The setup of the playable page and of the desktop hash line: three lanes, the library's defaults for the rest.</summary>
@@ -90,9 +97,11 @@ public sealed class LaneMatch
     {
         _b = b; _o = o; _probe = o.Probe;
         _econ[0] = new LaneEconomy(_probe); _econ[1] = new LaneEconomy(_probe);
-        var player = o.Player; var enemy = o.Enemy ?? new LaneBot(_probe);
-        if (player is null) { Human = new ManualSeat(_econ[0], b.Setup.Lanes, _probe) { Open = () => Stage == MatchStage.Pause }; player = Human; }
-        _seats[0] = player; _seats[1] = enemy;
+        int local = (int)o.LocalSide;
+        var mine = local == 0 ? o.Player : o.Enemy;
+        var other = (local == 0 ? o.Enemy : o.Player) ?? new LaneBot(_probe);
+        if (mine is null) { Human = new ManualSeat(_econ[local], b.Setup.Lanes, _probe) { Open = () => Stage == MatchStage.Pause }; mine = Human; }
+        _seats[local] = mine; _seats[1 - local] = other;
         Prev = Curr = b.Snapshot();
         EnterPause(b.StateHash());
     }
@@ -115,7 +124,7 @@ public sealed class LaneMatch
     /// <summary>Ends the pause early (the Ready button). False outside a pause.</summary>
     public bool Ready()
     {
-        if (Stage != MatchStage.Pause || _probe.HasFlag(LaneMatchProbe.ReadyIgnored)) return false;
+        if (Stage != MatchStage.Pause || _o.ExternalPause || _probe.HasFlag(LaneMatchProbe.ReadyIgnored)) return false;
         _ready = true;
         return true;
     }
@@ -161,6 +170,7 @@ public sealed class LaneMatch
             }
             case MatchStage.Pause:
             {
+                if (_o.ExternalPause) break;   // online: the session owns the clock and ends the pause
                 double scale = _probe.HasFlag(LaneMatchProbe.SpeedScalesPause) ? Speed : 1.0;
                 if (!_probe.HasFlag(LaneMatchProbe.PauseClockIgnored)) PauseLeft -= dt * scale;
                 if (!AnyHuman || _ready || (PauseLeft <= 0 && !_probe.HasFlag(LaneMatchProbe.PauseClockIgnored))) await EndPauseAsync(ct);
@@ -168,6 +178,21 @@ public sealed class LaneMatch
             }
         }
         return new LaneAdvance(ran, Stage != before);
+    }
+
+    /// <summary>The side the human seat sits on (see <see cref="LaneMatchOptions.LocalSide"/>).</summary>
+    public Side LocalSide => _o.LocalSide;
+    /// <summary>The purse of the human seat's side.</summary>
+    public LaneEconomy LocalEconomy => _econ[(int)_o.LocalSide];
+
+    /// <summary>Online only: sets the pause clock (the caller counts it from the shared start). Ignored outside a pause.</summary>
+    public void SetPauseLeft(double seconds) { if (Stage == MatchStage.Pause) PauseLeft = Math.Max(0, seconds); }
+
+    /// <summary>Online only: prices and applies both seats' plays at this pause tick and starts the run (the same call a local pause end makes).</summary>
+    public async ValueTask EndPauseNowAsync(CancellationToken ct = default)
+    {
+        if (Stage != MatchStage.Pause) throw new InvalidOperationException("the match is not in a pause");
+        await EndPauseAsync(ct);
     }
 
     void Finish(ulong hash)

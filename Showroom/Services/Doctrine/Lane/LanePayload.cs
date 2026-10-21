@@ -18,12 +18,16 @@ public static class LanePayload
         var lay = m.Battle.Layout; int lanes = m.Battle.Setup.Lanes;
         float pitch = lanes > 1 ? lay.LaneCentreY[1] - lay.LaneCentreY[0] : lay.Height;
         float half = lanes > 1 ? (pitch - lay.Cell) / 2f : lay.Height / 2f;
+        // a guest on the Enemy side sees the ground turned round: the rows read right to left and the two base edges swap (the lanes keep their numbers)
+        bool mirror = m.LocalSide == Doctrine.Side.Enemy;
+        float pe = mirror ? lay.Width - lay.EnemyBaseEdgeX : lay.PlayerBaseEdgeX, ee = mirror ? lay.Width - lay.PlayerBaseEdgeX : lay.EnemyBaseEdgeX;
         var sb = new StringBuilder();
         sb.Append("{\"cell\":").Append(lay.Cell).Append(",\"width\":").Append(F(lay.Width)).Append(",\"height\":").Append(F(lay.Height));
-        sb.Append(",\"playerEdge\":").Append(F(lay.PlayerBaseEdgeX)).Append(",\"enemyEdge\":").Append(F(lay.EnemyBaseEdgeX));
+        sb.Append(",\"playerEdge\":").Append(F(pe)).Append(",\"enemyEdge\":").Append(F(ee));
         sb.Append(",\"laneHalf\":").Append(F(half)).Append(",\"holdPct\":").Append(LaneRules.HoldPct);
         sb.Append(",\"laneCentreY\":[").Append(string.Join(",", lay.LaneCentreY.Select(y => F(y)))).Append(']');
-        sb.Append(",\"rows\":[").Append(string.Join(",", lay.Rows.Select(r => "\"" + r + "\""))).Append("]}");
+        sb.Append(",\"mirror\":").Append(mirror ? "true" : "false");
+        sb.Append(",\"rows\":[").Append(string.Join(",", lay.Rows.Select(r => "\"" + (mirror ? new string(r.Reverse().ToArray()) : r) + "\""))).Append("]}");
         return sb.ToString();
     }
 
@@ -34,9 +38,11 @@ public static class LanePayload
         var sb = new StringBuilder();
         sb.Append("{\"selected\":").Append(selected).Append(",\"stage\":").Append((int)m.Stage);
         sb.Append(",\"orders\":[");
-        for (int s = 0; s < 2; s++)
+        int local = (int)m.LocalSide;   // the first list is always YOURS
+        for (int k = 0; k < 2; k++)
         {
-            if (s > 0) sb.Append(',');
+            int s = k == 0 ? local : 1 - local;
+            if (k > 0) sb.Append(',');
             sb.Append('[').Append(string.Join(",", Enumerable.Range(0, lanes).Select(l => (int)m.Battle.OrderOf((Doctrine.Side)s, l)))).Append(']');
         }
         var h = m.Human;
@@ -45,7 +51,7 @@ public static class LanePayload
         sb.Append(",\"menu\":[").Append(string.Join(",", LaneWords.Orders.Select(o => "{\"order\":" + (int)o + ",\"name\":\"" + LaneWords.OrderName(o) + "\"}"))).Append(']');
         sb.Append(",\"work\":{");
         if (m.Stage == MatchStage.Run)
-            sb.Append(string.Join(",", m.LastPlans[0].Packs.GroupBy(p => p.Lane).OrderBy(g => g.Key).Select(g =>
+            sb.Append(string.Join(",", m.LastPlans[local].Packs.GroupBy(p => p.Lane).OrderBy(g => g.Key).Select(g =>
                 "\"" + g.Key + "\":[" + string.Join(",", g.GroupBy(p => p.Kind).Select(k => "\"" + LaneWords.KindName(k.Key) + " x" + (k.Count() * LaneEconomy.PackSize) + " sent\"")) + "]")));
         sb.Append("},\"stagedPacks\":[");
         if (h is not null) sb.Append(string.Join(",", h.Packs.Select(p => "{\"lane\":" + p.Lane + ",\"kind\":" + p.Kind + ",\"count\":" + LaneEconomy.PackSize + "}")));
