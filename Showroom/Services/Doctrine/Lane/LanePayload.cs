@@ -39,8 +39,15 @@ public static class LanePayload
             if (s > 0) sb.Append(',');
             sb.Append('[').Append(string.Join(",", Enumerable.Range(0, lanes).Select(l => (int)m.Battle.OrderOf((Doctrine.Side)s, l)))).Append(']');
         }
-        sb.Append("],\"stagedPacks\":[");
         var h = m.Human;
+        // the order chips drawn on the lane (names are the page's words), who is playing, whole seconds left of the pause, and what the last pause's packs came to (only shown during the run)
+        sb.Append("],\"human\":").Append(h is not null ? "true" : "false").Append(",\"left\":").Append((int)Math.Ceiling(Math.Max(0, m.PauseLeft)));
+        sb.Append(",\"menu\":[").Append(string.Join(",", LaneWords.Orders.Select(o => "{\"order\":" + (int)o + ",\"name\":\"" + LaneWords.OrderName(o) + "\"}"))).Append(']');
+        sb.Append(",\"work\":{");
+        if (m.Stage == MatchStage.Run)
+            sb.Append(string.Join(",", m.LastPlans[0].Packs.GroupBy(p => p.Lane).OrderBy(g => g.Key).Select(g =>
+                "\"" + g.Key + "\":[" + string.Join(",", g.GroupBy(p => p.Kind).Select(k => "\"" + LaneWords.KindName(k.Key) + " x" + (k.Count() * LaneEconomy.PackSize) + " sent\"")) + "]")));
+        sb.Append("},\"stagedPacks\":[");
         if (h is not null) sb.Append(string.Join(",", h.Packs.Select(p => "{\"lane\":" + p.Lane + ",\"kind\":" + p.Kind + ",\"count\":" + LaneEconomy.PackSize + "}")));
         sb.Append("],\"stagedOrders\":{");
         if (h is not null) sb.Append(string.Join(",", h.Orders.OrderBy(o => o.Key).Select(o => "\"" + o.Key + "\":" + (int)o.Value)));

@@ -53,30 +53,63 @@ using (var ctx = NewCtx(out var mod))
     var page = ctx.Render<LaneBattlePage>();
     page.Find("#ln-seed").Change("7");
     page.Find(".ln-start .ln-btn.strong").Click();
-    bool started = await Until(() => page.FindAll(".ln-top").Count == 1, 60000);
+    bool started = await Until(() => page.FindAll(".ln-dock").Count == 1, 60000);
     Check("a start builds the lanes and shows the match", started);
     if (!started) { Console.WriteLine("ABORT: " + (page.FindAll(".err").Count > 0 ? Text(page, ".err") : "no error shown")); return 1; }
     await Until(() => mod.Invocations.Any(i => i.Identifier == "init"), 5000);
     Check("the canvas script is loaded and started with the ground and the picture base", mod.Invocations.Any(i => i.Identifier == "init" && i.Arguments.Count == 4 && (i.Arguments[2] as string)!.Contains("\"rows\"") && (i.Arguments[3] as string)!.EndsWith("doctrine/img/")));
+    string LastInfo() => (string)mod.Invocations.Where(i => i.Identifier == "setInfo").Last().Arguments[0]!;
     Check("the first pause: tag, clock of 30 s, ten points", Text(page, ".ln-tag") == "Pause" && Text(page, ".ln-time") == "0:30" && Text(page, ".ln-pts strong") == "10");
-    Check("the pause shows three lane buttons, eight packs and five orders", page.FindAll(".ln-lane").Count == 3 && page.FindAll(".ln-pack").Count == 8 && page.FindAll(".ln-ord").Count == 5);
-    Check("speed is for the run only (the three speed buttons are disabled in the pause)", page.FindAll(".ln-speed button").All(b => b.HasAttribute("disabled")));
 
-    // tapping on the board (the script calls OnLaneTap) selects a lane
+    // ---- nothing outside the board and the bottom tray
+    string[] outside = { ".ln-side", ".ln-lanes", ".ln-lane", ".ln-orders", ".ln-ord", ".ln-top", ".ln-bases", ".ln-plan" };
+    Check("no side panel, no lane buttons, no order buttons and no top strip: the stage holds the board and the tray only", outside.All(s => page.FindAll(s).Count == 0) && string.Join(",", page.Find(".ln-stage").Children.Select(c => c.ClassList.First())) == "ln-board,ln-dock", string.Join(",", outside.Where(s => page.FindAll(s).Count > 0)));
+    Check("every button of the live page is in the tray (the board is the canvas)", page.FindAll("button").Count > 0 && page.FindAll("button").All(b => b.Closest(".ln-dock") is not null));
+    Check("the page holds only the heading, the stage and the credit while it plays", page.Find(".ln").Children.Select(c => c.ClassList.FirstOrDefault() ?? c.TagName.ToLowerInvariant()).SequenceEqual(new[] { "room-head", "ln-stage", "hint" }), string.Join(",", page.Find(".ln").Children.Select(c => c.ClassList.FirstOrDefault() ?? c.TagName)));
+
+    // ---- no lane picked: a plain hint, the packs are there but cannot be used
+    Check("no lane picked: the tray says Pick a lane and all eight packs are disabled", Text(page, ".ln-tip").Contains("Pick a lane") && page.FindAll(".ln-pack").Count == 8 && page.FindAll(".ln-pack").All(b => b.HasAttribute("disabled")));
+    Check("each pack shows a picture, a name, a cost and its one plain line", page.FindAll(".ln-pack").All(b => b.QuerySelector(".ln-icon") is not null && b.QuerySelector(".ln-pname")!.TextContent.Length > 2 && b.QuerySelector(".ln-pcost")!.TextContent.Contains("points") && b.QuerySelector(".ln-pline")!.TextContent.Contains("strong against")));
+    Check("speed is for the run only: no speed buttons in the pause", page.FindAll(".ln-speed").Count == 0);
+    var info0 = LastInfo();
+    Check("the script is told it is a human pause, the seconds left, and the five orders with the page's words", info0.Contains("\"human\":true") && info0.Contains("\"left\":30") && info0.Contains("\"selected\":-1") && info0.Contains("\"menu\":[{\"order\":0,\"name\":\"Advance\"},{\"order\":1,\"name\":\"Hold\"},{\"order\":3,\"name\":\"Fall back\"},{\"order\":5,\"name\":\"Hunt\"},{\"order\":4,\"name\":\"Guard\"}]"), info0);
+
+    // ---- a tap on a lane (the script calls OnLaneTap) picks it; the packs wake up
     await page.InvokeAsync(() => page.Instance.OnLaneTap(2));
-    Check("a tap on the canvas selects lane 3 (the button is on)", page.FindAll(".ln-lane")[2].ClassList.Contains("on") && page.Markup.Contains("Add soldiers to lane 3"));
-    page.FindAll(".ln-lane")[0].Click();
-    page.FindAll(".ln-pack")[3].Click();   // archers
-    page.FindAll(".ln-pack")[0].Click();   // spearmen
-    page.FindAll(".ln-ord")[1].Click();    // hold
-    Check("two packs and an order are staged and listed", page.FindAll(".ln-plan li").Count == 3 && Text(page, ".ln-plan").Contains("Archers") && Text(page, ".ln-plan").Contains("Hold"));
-    int left = 10 - LaneEconomy.Cost(3) - LaneEconomy.Cost(0);
-    Check("the points to spend went down by the two packs", Text(page, ".ln-pts strong") == left.ToString(), $"{Text(page, ".ln-pts strong")} vs {left}");
-    Check("the script is told what is staged (ghosts and the order chip)", mod.Invocations.Where(i => i.Identifier == "setInfo").Any(i => (i.Arguments[0] as string)!.Contains("\"stagedPacks\":[{\"lane\":0,\"kind\":3") && (i.Arguments[0] as string)!.Contains("\"stagedOrders\":{\"0\":1}")));
-    page.FindAll(".ln-x")[1 - 1].Click();
-    Check("taking a pack back lifts it from the list and gives the points back", page.FindAll(".ln-plan li").Count == 2 && Text(page, ".ln-pts strong") == (10 - LaneEconomy.Cost(0)).ToString());
-    page.FindAll(".ln-pack")[3].Click();
+    int affordable = Enumerable.Range(0, 8).Count(k => LaneEconomy.Cost(k) <= 10);
+    Check("a tap on lane 3 picks it: the tray names it and the packs the purse allows are enabled", Text(page, ".ln-tip").Contains("Lane 3") && page.FindAll(".ln-pack:not([disabled])").Count == affordable && affordable > 0 && LastInfo().Contains("\"selected\":2"), $"{page.FindAll(".ln-pack:not([disabled])").Count} vs {affordable}");
+    await page.InvokeAsync(() => page.Instance.OnLaneTap(-1));
+    Check("tapping the picked lane's number puts it down: the hint and the disabled packs come back", Text(page, ".ln-tip").Contains("Pick a lane") && page.FindAll(".ln-pack").All(b => b.HasAttribute("disabled")));
 
+    // ---- packs go into the picked lane
+    await page.InvokeAsync(() => page.Instance.OnLaneTap(0));
+    page.FindAll(".ln-pack")[3].Click();   // archers, lane 1
+    await page.InvokeAsync(() => page.Instance.OnLaneTap(2));
+    page.FindAll(".ln-pack")[0].Click();   // spearmen, lane 3
+    var info1 = LastInfo();
+    Check("a pack is staged in the lane that was picked when it was tapped (archers in lane 1, spearmen in lane 3)", info1.Contains("\"stagedPacks\":[{\"lane\":0,\"kind\":3,\"count\":4},{\"lane\":2,\"kind\":0,\"count\":4}]"), info1);
+    Check("the tray lists them by lane, each with a Take back", page.FindAll(".ln-staged .ln-x").Count == 2 && Text(page, ".ln-staged").Contains("Lane 1: Archers") && Text(page, ".ln-staged").Contains("Lane 3: Spearmen") && Text(page, ".ln-staged").Contains("Take back"));
+    int left = 10 - LaneEconomy.Cost(3) - LaneEconomy.Cost(0);
+    Check("the points left went down by the two packs", Text(page, ".ln-pts strong") == left.ToString(), $"{Text(page, ".ln-pts strong")} vs {left}");
+
+    // ---- orders are set from the lane (the script calls OnOrderTap with the lane the chip sits on)
+    await page.InvokeAsync(() => page.Instance.OnOrderTap(0, (int)FieldOrderKind.Hold));
+    Check("a tap on the Hold chip of lane 1 sets that lane's order", LastInfo().Contains("\"stagedOrders\":{\"0\":1}"), LastInfo());
+    await page.InvokeAsync(() => page.Instance.OnLaneTap(0));
+    Check("the tray tells what the staged order does", Text(page, ".ln-tip").Contains("Hold") && Text(page, ".ln-tip").Contains(LaneWords.OrderLine(FieldOrderKind.Hold)));
+    await page.InvokeAsync(() => page.Instance.OnOrderTap(0, (int)FieldOrderKind.Hold));
+    Check("a second tap on the same chip clears the order", LastInfo().Contains("\"stagedOrders\":{}"), LastInfo());
+    await page.InvokeAsync(() => page.Instance.OnOrderTap(0, (int)FieldOrderKind.Hunt));
+    await page.InvokeAsync(() => page.Instance.OnOrderTap(0, (int)FieldOrderKind.Hold));
+    Check("a different chip replaces the order of that lane (one order a lane)", LastInfo().Contains("\"stagedOrders\":{\"0\":1}"), LastInfo());
+    await page.InvokeAsync(() => page.Instance.OnOrderTap(1, (int)FieldOrderKind.Flank));
+    await page.InvokeAsync(() => page.Instance.OnOrderTap(9, (int)FieldOrderKind.Hold));
+    Check("an order that is not used in a lane, or a lane that is not there, changes nothing", LastInfo().Contains("\"stagedOrders\":{\"0\":1}"), LastInfo());
+
+    page.FindAll(".ln-staged .ln-x")[0].Click();
+    Check("Take back lifts the pack from the tray and gives the points back", page.FindAll(".ln-staged .ln-x").Count == 1 && Text(page, ".ln-pts strong") == (10 - LaneEconomy.Cost(0)).ToString());
+    page.FindAll(".ln-pack")[3].Click();   // lane 1 is picked again: archers back in lane 1
+    Check("the pick is kept: archers go back into lane 1", LastInfo().Contains("{\"lane\":2,\"kind\":0,\"count\":4},{\"lane\":0,\"kind\":3,\"count\":4}"), LastInfo());
     // Ready ends the pause: the next Frame applies both sides' plays and starts the run
     page.Find(".ln-ctl .ln-btn.strong").Click();
     byte[]? first = await page.InvokeAsync(() => page.Instance.Frame(0.0));
@@ -86,7 +119,9 @@ using (var ctx = NewCtx(out var mod))
     Check("the run shows speed buttons and the clock to the next pause", page.FindAll(".ln-speed button:not([disabled])").Count == 3 && Text(page, ".ln-time") == "0:30");
     page.FindAll(".ln-speed button")[2].Click();
     Check("4x is taken", page.FindAll(".ln-speed button")[2].ClassList.Contains("on"));
-    Check("your plays at work: the list names the soldiers sent and the order", Text(page, ".ln-side").Contains("Archers") && Text(page, ".ln-side").Contains("Hold") && Text(page, ".ln-side").Contains("sent"));
+    var runInfo = LastInfo();
+    Check("your plays at work: the lanes are told what was sent where (shown on the board, compact) and the tray keeps to one line", runInfo.Contains("\"work\":{\"0\":[\"Archers x4 sent\"],\"2\":[\"Spearmen x4 sent\"]}") && runInfo.Contains("\"stage\":1") && page.FindAll(".ln-packs").Count == 0 && page.FindAll(".ln-tip").Count == 1, runInfo);
+    Check("the order you set is now the lane's order, shown on the lane by the script", runInfo.Contains("\"orders\":[[1,0,0]"), runInfo);
 
     // run to the next pause with 0.125 s frames at 4x: 5 ticks a frame, 60 frames
     int frames = 0; byte[]? last = null;
@@ -110,8 +145,8 @@ using (var ctx = NewCtx(out var mod, url: "http://localhost/doctrine?seed=7&bots
 {
     var page = ctx.Render<LaneBattlePage>();
     page.Find(".ln-start .ln-btn.strong").Click();
-    bool started = await Until(() => page.FindAll(".ln-top").Count == 1, 60000);
-    Check("bots: the match starts and the pause shows bots only (no Ready button)", started && Text(page, ".ln-time") == "Bots only" && page.FindAll(".ln-ctl .ln-btn.strong").Count == 0);
+    bool started = await Until(() => page.FindAll(".ln-dock").Count == 1, 60000);
+    Check("bots: the match starts and the pause shows bots only (no Ready button)", started && Text(page, ".ln-time") == "Bots only" && page.FindAll(".ln-ctl .ln-btn.strong").Count == 0 && page.FindAll(".ln-pack").Count == 0);
     int guard = 0;
     while (guard++ < 5000)
     {
@@ -147,7 +182,10 @@ string visible = Regex.Replace(page_, @"@code\s*\{.*", "", RegexOptions.Singleli
 Check("the words a player reads carry no builder's term and no licence slip", bannedTerms.All(t => !visible.Contains(t, StringComparison.OrdinalIgnoreCase)), string.Join(",", bannedTerms.Where(t => visible.Contains(t, StringComparison.OrdinalIgnoreCase))));
 var all = new[] { page_, css, words, js, Read(@"Services\Doctrine\Lane\LaneMatch.cs"), Read(@"Services\Doctrine\Lane\LaneSeats.cs"), Read(@"Services\Doctrine\Lane\LaneEconomy.cs"), Read(@"Services\Doctrine\Lane\LanePayload.cs"), Read(@"wwwroot\doctrine\NOTICE.txt") };
 Check("no em dash in any new text", all.All(t => !t.Contains('—') && !t.Contains('–')));
-Check("the CSS keeps the 44px tap rule, the desktop breakpoint, and no fixed width over 360px", css.Contains("min-height: 44px") && css.Contains("min-width: 1000px") && !Regex.IsMatch(css, @"(?<![-\w])width:\s*(3[6-9]\d|[4-9]\d\d|\d{4,})px"));
+Check("the CSS keeps the 44px tap rule, the wide-screen breakpoint, and no fixed width over 360px", css.Contains("min-height: 44px") && css.Contains("min-width: 720px") && !Regex.IsMatch(css, @"(?<![-\w])width:\s*(3[6-9]\d|[4-9]\d\d|\d{4,})px"));
+Check("the source has no side panel or order buttons left (page and styles)", new[] { "ln-side", "ln-lanes", "ln-orders", "ln-ord", "ln-top", "ln-bases" }.All(s => !page_.Contains(s) && !css.Contains(s)));
+Check("the order chips on the lane are at least 44 px tall and are hit-tested in the canvas script; the page has an OnOrderTap for them", js.Contains("const TAP = 44") && js.Contains("function menuBoxes") && js.Contains("function hitAt") && page_.Contains("public async Task OnOrderTap(int lane, int order)"));
+Check("sound is made in the script with Web Audio: no sound file, no audio tag, the audio context is built in one place only (the gesture handler)", !Regex.IsMatch(js, @"\.(mp3|ogg|wav|m4a|flac)\b|new Audio\(|<audio") && Regex.Matches(js, @"new AC\(").Count == 1 && Directory.GetFiles(Path.Combine(showroom, "wwwroot"), "*.*", SearchOption.AllDirectories).All(f => !Regex.IsMatch(f, @"\.(mp3|ogg|wav|m4a|flac)$", RegexOptions.IgnoreCase)));
 Check("the page is the published Doctrine tool: route /doctrine, a Blazier shell, indexable, no local-only gate", page_.StartsWith("@page \"/doctrine\"") && page_.Contains("[BlazierPage(\"doctrine\"") && page_.Contains("Static = true") && !page_.Contains("noindex") && !page_.Contains("not available here") && !page_.Contains("localhost"));
 var cs = Read("Showroom.csproj");
 Check("a Release publish carries the pictures and the script (no exclusion of wwwroot\\doctrine or lane-dev)", !cs.Contains(@"wwwroot\doctrine") && !cs.Contains("lane-dev"));
