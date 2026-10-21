@@ -4,3 +4,5 @@ using System.Runtime.CompilerServices;
 [assembly: InternalsVisibleTo("Doctrine.Tests")]
 // The measurement runners (scratch projects kept as .txt under Doctrine\todo\difficulty-candidates\) read ScriptedOpponent to model the briefing; they are not shipped.
 [assembly: InternalsVisibleTo("dgo5")]
+// The lane battle's proof (Showroom\tools\DoctrineLaneProof) flips LaneSetup.Probe, the internal mutation switches, to watch each check go red.
+[assembly: InternalsVisibleTo("DoctrineLaneProof")]
