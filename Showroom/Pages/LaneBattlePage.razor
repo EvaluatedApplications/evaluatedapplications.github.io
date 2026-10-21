@@ -1,0 +1,335 @@
+@page "/lane"
+@implements IAsyncDisposable
+@inject IJSRuntime JS
+@inject NavigationManager Nav
+@using ShowroomLane
+@using Doctrine
+@using Doctrine.Lane
+
+@* THE LANE BATTLE, a local development page. Deliberately NOT a [BlazierPage] (no static shell is rendered for it), not in tools.json, the nav, the sitemap or the llms files, and it
+   draws nothing but a notice on any host other than localhost. The canvas script and pictures live in wwwroot/lane-dev, which a Release publish leaves out (Showroom.csproj). *@
+
+<PageTitle>Lane battle (development page)</PageTitle>
+<HeadContent><meta name="robots" content="noindex,nofollow" /></HeadContent>
+
+<div class="room ln">
+    <header class="room-head">
+        <nav class="crumb"><a href="/tools/">Tools</a> <span>/</span> Lane battle (development page)</nav>
+        <h1>Lane battle</h1>
+        <p class="lede">A battle that never stops: soldiers march down three lanes between two bases and fight. Every 30 seconds the battle pauses. At the pause you add soldiers to a lane and
+            give a lane one order, the enemy does the same, and both sets of plays land together when the pause ends. Nothing is uploaded.</p>
+    </header>
+
+    @if (!_dev)
+    {
+        <p class="hint">This page is a local development page and is not available here.</p>
+    }
+    else if (_m is null)
+    {
+        <section class="ln-start">
+            <label class="ln-label" for="ln-seed">Seed (the same seed gives the same match)</label>
+            <input id="ln-seed" class="ln-input" type="number" inputmode="numeric" @bind="_seed" />
+            <label class="ln-check"><input type="checkbox" @bind="_bots" /> Let the bots play both sides (to compare the hash line with the desktop run)</label>
+            @if (_err.Length > 0) { <p class="err" role="alert">@_err</p> }
+            <button class="ln-btn strong" type="button" @onclick="StartAsync" disabled="@_starting">@(_starting ? "Building the lanes..." : "Start the battle")</button>
+        </section>
+    }
+    else
+    {
+        <section class="ln-top" aria-live="polite">
+            <div class="ln-clock">
+                @switch (_m.Stage)
+                {
+                    case MatchStage.Pause:
+                        <span class="ln-tag pause">Pause</span>
+                        <strong class="ln-time">@(_bots ? "Bots only" : LaneWords.Clock(_m.PauseLeft))</strong>
+                        <span class="ln-hintline">@(_bots ? "" : "to choose. Press Ready to start now.")</span>
+                        break;
+                    case MatchStage.Run:
+                        <span class="ln-tag run">Battle</span>
+                        <strong class="ln-time">@LaneWords.Clock(_m.Battle.TicksToPause / (double)(LaneRules.TicksPerSecond * _m.Speed))</strong>
+                        <span class="ln-hintline">to the next pause</span>
+                        break;
+                    default:
+                        <span class="ln-tag over">Over</span>
+                        <strong class="ln-time">@LaneWords.Outcome(_m.Status)</strong>
+                        break;
+                }
+            </div>
+            <div class="ln-ctl">
+                @if (_m.Stage == MatchStage.Pause && !_bots)
+                {
+                    <button class="ln-btn strong" type="button" @onclick="OnReady">Ready</button>
+                }
+                @if (_m.Stage != MatchStage.Over)
+                {
+                    <span class="ln-speed" role="group" aria-label="Battle speed">
+                        @foreach (var sp in new[] { 1, 2, 4 })
+                        {
+                            var s = sp;
+                            <button class="ln-btn @(_m.Speed == s ? "on" : "")" type="button" disabled="@(_m.Stage != MatchStage.Run)" aria-pressed="@B(_m.Speed == s)" @onclick="() => OnSpeed(s)">@(s)x</button>
+                        }
+                    </span>
+                }
+                else
+                {
+                    <button class="ln-btn strong" type="button" @onclick="PlayAgain">Play again</button>
+                    <button class="ln-btn" type="button" @onclick="SameSeed">Same seed again</button>
+                }
+            </div>
+            <div class="ln-bases">
+                <span>Your base <span class="ln-bar"><i class="you" style="width:@BasePct(0)%"></i></span></span>
+                <span>Their base <span class="ln-bar"><i class="them" style="width:@BasePct(1)%"></i></span></span>
+                <span class="ln-pts">Points to spend: <strong>@(_m.Human?.Remaining ?? _m.Economy(Side.Player).Balance)</strong></span>
+            </div>
+            @if (_m.Behind) { <p class="ln-warn">This device cannot keep up at this speed, so the battle is running slower than the clock.</p> }
+            @if (_err.Length > 0) { <p class="err" role="alert">@_err</p> }
+        </section>
+
+        <div class="ln-stage">
+            <div class="ln-board"><canvas @ref="_canvas" class="ln-canvas" aria-label="The battlefield: three lanes between your base and theirs"></canvas></div>
+
+            <aside class="ln-side">
+                @if (_m.Stage == MatchStage.Pause && _m.Human is { } me)
+                {
+                    <h2>Choose a lane</h2>
+                    <div class="ln-lanes">
+                        @for (int l = 0; l < _lanes; l++)
+                        {
+                            var lane = l;
+                            <button class="ln-lane @(_sel == lane ? "on" : "")" type="button" aria-pressed="@B(_sel == lane)" @onclick="() => SelectLane(lane)">
+                                <strong>@LaneWords.LaneName(lane, _lanes)</strong>
+                                <span>@LaneWords.LaneGround(lane, _lanes)</span>
+                                <span class="ln-mini">You @CountIn(Side.Player, lane), them @CountIn(Side.Enemy, lane). Order: @LaneWords.OrderName(_m.Battle.OrderOf(Side.Player, lane))</span>
+                            </button>
+                        }
+                    </div>
+
+                    <h2>Add soldiers to @LaneWords.LaneName(_sel, _lanes).ToLowerInvariant()</h2>
+                    <div class="ln-packs">
+                        @for (int k = 0; k < Roster.Size; k++)
+                        {
+                            var kind = k;
+                            <button class="ln-pack" type="button" disabled="@(LaneEconomy.Cost(kind) > me.Remaining)" @onclick="() => Buy(kind)">
+                                @if (_icons.Length > kind) { <img class="ln-icon" src="@_icons[kind]" alt="" /> }
+                                <span class="ln-pname">@LaneWords.KindName(kind) <small>x@(LaneEconomy.PackSize)</small></span>
+                                <span class="ln-pcost">@LaneEconomy.Cost(kind) points</span>
+                                <span class="ln-pline">@LaneWords.KindLine(kind)</span>
+                            </button>
+                        }
+                    </div>
+
+                    <h2>Give @LaneWords.LaneName(_sel, _lanes).ToLowerInvariant() an order</h2>
+                    <div class="ln-orders">
+                        @foreach (var o in LaneWords.Orders)
+                        {
+                            var order = o;
+                            bool staged = me.Orders.TryGetValue(_sel, out var cur) && cur == order;
+                            <button class="ln-ord @(staged ? "on" : "")" type="button" aria-pressed="@B(staged)" @onclick="() => SetOrder(order)">
+                                <strong>@LaneWords.OrderName(order)</strong>
+                                <span>@LaneWords.OrderLine(order)</span>
+                            </button>
+                        }
+                    </div>
+
+                    <h2>Your plays this pause</h2>
+                    @if (me.Packs.Count == 0 && me.Orders.Count == 0)
+                    {
+                        <p class="hint">Nothing yet. Soldiers you add arrive at your base when the pause ends, and the enemy's plays land at the same moment.</p>
+                    }
+                    else
+                    {
+                        <ul class="ln-plan">
+                            @for (int i = 0; i < me.Packs.Count; i++)
+                            {
+                                var idx = i; var p = me.Packs[i];
+                                <li><span>@LaneWords.LaneName(p.Lane, _lanes): @LaneWords.KindName(p.Kind) x@(LaneEconomy.PackSize)</span> <button type="button" class="ln-x" aria-label="Take back" @onclick="() => Unbuy(idx)">Take back</button></li>
+                            }
+                            @foreach (var o in me.Orders)
+                            {
+                                <li><span>@LaneWords.LaneName(o.Key, _lanes): @LaneWords.OrderName(o.Value)</span></li>
+                            }
+                        </ul>
+                    }
+                    @if (_note.Length > 0) { <p class="hint" role="status">@_note</p> }
+                }
+                else if (_m.Stage == MatchStage.Run)
+                {
+                    <h2>The battle is running</h2>
+                    <p class="hint">Plays are made at the pause. You have @_m.Battle.Bodies(Side.Player) soldiers on the field, they have @_m.Battle.Bodies(Side.Enemy). Your points carry over: @_m.Economy(Side.Player).Balance now.</p>
+                    <h2>Your plays at work</h2>
+                    var plan = _m.LastPlans[0];
+                    @if (plan.IsEmpty)
+                    {
+                        <p class="hint">You made no plays at the last pause.</p>
+                    }
+                    else
+                    {
+                        <ul class="ln-plan">
+                            @foreach (var g in plan.Packs.GroupBy(p => (p.Lane, p.Kind)))
+                            {
+                                <li>@LaneWords.LaneName(g.Key.Lane, _lanes): @LaneWords.KindName(g.Key.Kind) x@(g.Count() * LaneEconomy.PackSize) sent</li>
+                            }
+                            @foreach (var o in plan.Orders)
+                            {
+                                <li>@LaneWords.LaneName(o.Lane, _lanes): @LaneWords.OrderName(o.Order)</li>
+                            }
+                        </ul>
+                    }
+                }
+                else
+                {
+                    <h2>@LaneWords.Outcome(_m.Status)</h2>
+                    <p class="hint">The battle lasted @_m.Phase phases. Same seed, same plays, same match.</p>
+                }
+            </aside>
+        </div>
+
+        <section class="ln-hash" aria-label="Pause hashes">
+            <h2>Hash at every pause (tick:hash)</h2>
+            <p class="mono">@HashLine</p>
+            <p class="hint">Compare with <code>dotnet run -c Release -- hashes @_m.Seed</code> in tools/DoctrineLaneProof when both seats are bots (tick the box on the start screen).</p>
+        </section>
+    }
+</div>
+
+@code {
+    [SupplyParameterFromQuery(Name = "seed")] public int? SeedQuery { get; set; }
+    [SupplyParameterFromQuery(Name = "bots")] public string? BotsQuery { get; set; }
+
+    ElementReference _canvas;
+    LaneMatch? _m;
+    DotNetObjectReference<LaneBattlePage>? _self;
+    IJSObjectReference? _js;
+    string[] _icons = Array.Empty<string>();
+    string _err = "", _note = "";
+    bool _dev, _starting, _bots, _jsReady, _framing, _asked;
+    int _seed = 1, _sel, _lanes = 3, _lastSec = -1, _lastBal = -1, _lastSpeed;
+
+    protected override void OnInitialized()
+    {
+        _dev = new Uri(Nav.Uri).Host == "localhost";
+        _seed = Environment.TickCount & 0xFFFF;
+    }
+
+    protected override void OnParametersSet()
+    {
+        if (_asked) return;
+        _asked = true;
+        if (SeedQuery is { } s) _seed = s;
+        if (BotsQuery is "1" or "true") _bots = true;
+    }
+
+    async Task StartAsync()
+    {
+        _starting = true; _err = "";
+        try
+        {
+            var o = new LaneMatchOptions { Seed = _seed, Player = _bots ? new LaneBot() : null };
+            _m = await LaneMatch.CreateAsync(o);
+            _lanes = _m.Battle.Setup.Lanes; _sel = Math.Min(1, _lanes - 1); _jsReady = false; _note = ""; _lastSec = -1; _lastBal = -1;
+        }
+        catch (Exception e) { _err = "Could not start: " + e.Message; _m = null; }
+        _starting = false;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_m is null || _jsReady || !_dev) return;
+        _jsReady = true;   // set first: a render during the awaits below must not start a second init
+        try
+        {
+            _self ??= DotNetObjectReference.Create(this);
+            _js ??= await JS.InvokeAsync<IJSObjectReference>("import", Nav.BaseUri + "lane-dev/lane.js");
+            await _js.InvokeVoidAsync("init", _canvas, _self, LanePayload.Layout(_m), Nav.BaseUri + "lane-dev/img/");
+            _icons = await _js.InvokeAsync<string[]>("icons") ?? Array.Empty<string>();
+            await SyncInfo();
+            StateHasChanged();
+        }
+        catch (Exception e) { _err = "The battlefield could not start: " + e.Message; StateHasChanged(); }
+    }
+
+    /// <summary>Called by the canvas script once per animation frame with the seconds since its last call. Returns the picture packet while the battle runs (and once at each change), else null.</summary>
+    [JSInvokable]
+    public async Task<byte[]?> Frame(double dt)
+    {
+        var m = _m;
+        if (m is null || _framing) return null;
+        _framing = true;
+        try
+        {
+            var adv = await m.AdvanceAsync(dt);
+            int sec = m.Stage == MatchStage.Pause ? (int)Math.Ceiling(m.PauseLeft) : (int)Math.Ceiling(m.Battle.TicksToPause / (double)(LaneRules.TicksPerSecond * m.Speed));
+            int bal = m.Economy(Side.Player).Balance;
+            if (adv.StageChanged || sec != _lastSec || bal != _lastBal || m.Speed != _lastSpeed || m.Behind)
+            {
+                _lastSec = sec; _lastBal = bal; _lastSpeed = m.Speed;
+                if (adv.StageChanged) _note = "";
+                await SyncInfo();
+                await InvokeAsync(StateHasChanged);
+            }
+            return m.Stage == MatchStage.Run || adv.StageChanged ? LanePack.Pack(m) : null;
+        }
+        catch (Exception e) { _err = "The battle stopped: " + e.Message; await InvokeAsync(StateHasChanged); return null; }
+        finally { _framing = false; }
+    }
+
+    [JSInvokable]
+    public async Task OnLaneTap(int lane)
+    {
+        if (lane < 0 || lane >= _lanes) return;
+        _sel = lane;
+        await SyncInfo();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    async Task SyncInfo()
+    {
+        if (_js is null || _m is null) return;
+        try { await _js.InvokeVoidAsync("setInfo", LanePayload.Info(_m, _sel)); } catch (JSException) { }
+    }
+
+    async Task SelectLane(int lane) { _sel = lane; await SyncInfo(); }
+
+    async Task Buy(int kind)
+    {
+        if (_m?.Human is not { } h) return;
+        h.Buy(_sel, kind, out var why); _note = why;
+        await SyncInfo();
+    }
+
+    async Task Unbuy(int index) { _m?.Human?.RemovePack(index); _note = ""; await SyncInfo(); }
+
+    async Task SetOrder(FieldOrderKind o)
+    {
+        if (_m?.Human is not { } h) return;
+        h.Order(_sel, o, out var why); _note = why;
+        await SyncInfo();
+    }
+
+    void OnReady() => _m?.Ready();
+    void OnSpeed(int s) => _m?.SetSpeed(s);
+
+    void PlayAgain() { _seed = Environment.TickCount & 0xFFFF; _m = null; }
+    void SameSeed() { _m = null; }
+
+    static string B(bool v) => v ? "true" : "false";
+
+    int BasePct(int side)
+    {
+        var s = _m!.Curr;
+        long hp = side == 0 ? s.PlayerBaseHp : s.EnemyBaseHp;
+        return s.BaseMaxHp == 0 ? 0 : (int)Math.Clamp(hp * 100 / s.BaseMaxHp, 0, 100);
+    }
+
+    int CountIn(Side side, int lane) => _m!.Curr.Units.Count(u => u.Side == side && u.Lane == lane);
+
+    string HashLine => string.Join("  ", _m!.PauseHashes.Select(h => h.Tick + ":" + LaneMatch.ShortHash(h.Hash)));
+
+    public async ValueTask DisposeAsync()
+    {
+        _m = null;
+        try { if (_js is not null) { await _js.InvokeVoidAsync("dispose"); await _js.DisposeAsync(); } } catch (JSDisconnectedException) { } catch (JSException) { }
+        _self?.Dispose();
+    }
+}
