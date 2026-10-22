@@ -3,10 +3,13 @@
 // battle. Packet: 8 header floats (tick, stage 0 pause 1 run 2 over, status, your base 0..1, their base 0..1, body count, alpha, spare) then 10 floats a body (id, side, lane, kind,
 // x, y, facing x, facing y, hit points 0..1, fighting 0/1). Pictures: terrain and buildings are Kenney CC0 (see NOTICE.txt); the eight soldiers are drawn here with canvas paths.
 
+// The team colours: side 0 is always YOU (blue), side 1 THEM (red), from each player's own view. These are the defaults; the page sends the same two in the layout (LaneTeams) and they win.
+// A soldier shows its team three ways: a coloured outline baked into the picture, a coloured disc on the ground under its feet, and the coloured accent of its clothes.
 const SIDE = [
   { main: '#3f8cff', dark: '#1d4fa8', light: '#a9ccff' },   // you
   { main: '#e5533d', dark: '#9a2a1c', light: '#ffb7aa' },   // them
 ];
+const OUTLINE = 3;   // px of the team outline, in the 96 px sprite
 const ORDER_NAME = ['Advance', 'Hold', 'Flank', 'Fall back', 'Guard', 'Hunt'];   // FieldOrderKind order
 const KINDS = 8, SPR = 96;   // sprite canvases are 96 px, drawn in a 64 unit box (scale 1.5)
 const INK = '#14110f', SKIN = '#f1c9a0';
@@ -237,9 +240,16 @@ function makeSprites() {
   const out = [[], []], flash = [[], []];
   for (let side = 0; side < 2; side++) {
     for (let k = 0; k < KINDS; k++) {
-      const cv = document.createElement('canvas'); cv.width = SPR; cv.height = SPR;
+      let cv = document.createElement('canvas'); cv.width = SPR; cv.height = SPR;
       const c = cv.getContext('2d'); c.scale(SPR / 64, SPR / 64); pen(c, 2);
       DRAW[k](c, SIDE[side]);
+      // the team outline: the picture stamped round its edge in the team colour, then the picture itself on top
+      const ov = document.createElement('canvas'); ov.width = SPR; ov.height = SPR;
+      const o = ov.getContext('2d');
+      for (let a = 0; a < 8; a++) o.drawImage(cv, Math.cos(a * Math.PI / 4) * OUTLINE, Math.sin(a * Math.PI / 4) * OUTLINE);
+      o.globalCompositeOperation = 'source-in'; o.fillStyle = SIDE[side].main; o.fillRect(0, 0, SPR, SPR);
+      o.globalCompositeOperation = 'source-over'; o.drawImage(cv, 0, 0);
+      cv = ov;
       out[side][k] = cv;
       const fv = document.createElement('canvas'); fv.width = SPR; fv.height = SPR;
       const f = fv.getContext('2d'); f.drawImage(cv, 0, 0); f.globalCompositeOperation = 'source-atop'; f.fillStyle = '#ffffff'; f.fillRect(0, 0, SPR, SPR);
@@ -582,6 +592,9 @@ function drawBody(c, b, t, run) {
   else if (run && b.mv > 0.12) { dy = -Math.abs(Math.sin(ph)) * s * 0.09; rot = Math.sin(ph) * 0.05; }
   else dy = Math.sin(t * 2 + b.phase) * s * 0.015;
   const age = t - b.born, grow = age < 0.35 ? 0.4 + 0.6 * (age / 0.35) : 1;
+  // the team disc on the ground under the feet (ellipses only, so a crowd stays cheap)
+  c.beginPath(); c.ellipse(x, y + s * 0.02, s * 0.36 * grow, s * 0.13 * grow, 0, 0, Math.PI * 2);
+  c.globalAlpha = 0.55; c.fillStyle = SIDE[side].main; c.fill(); c.globalAlpha = 1; c.lineWidth = 2; c.strokeStyle = SIDE[side].light; c.stroke();
   c.save();
   c.translate(x + dx, y + dy);
   c.rotate(rot);
@@ -641,8 +654,10 @@ function draw(t) {
 
 export async function init(canvas, ref, layout, imgBase) {
   dispose();
+  const L0 = typeof layout === 'string' ? JSON.parse(layout) : layout;
+  if (Array.isArray(L0.teams) && L0.teams.length === 2) for (let i = 0; i < 2; i++) SIDE[i] = { ...SIDE[i], ...L0.teams[i] };   // the page's two team colours win over the defaults
   S = {
-    canvas, ctx: canvas.getContext('2d'), ref, L: typeof layout === 'string' ? JSON.parse(layout) : layout, imgs: {}, sprites: makeSprites(), terrain: null, vertical: false, cssW: 0, cssH: 0, dpr: 1, u: 1, v: 1, sz: 30,
+    canvas, ctx: canvas.getContext('2d'), ref, L: L0, imgs: {}, sprites: makeSprites(), terrain: null, vertical: false, cssW: 0, cssH: 0, dpr: 1, u: 1, v: 1, sz: 30,
     bodies: new Map(), corpses: [], floats: [], rings: [], head: { tick: 0, stage: 0, status: 0, pBase: 1, eBase: 1, alpha: 1 }, info: null, selected: -1, lastLeft: -1,
     raf: 0, busy: false, last: 0, lastCall: 0, ready: false, stageAt: 0, ro: null, onTap: null, onResize: null,
   };
@@ -713,6 +728,7 @@ export function dispose() {
 
 // for the offline smoke test only
 export const _test = {
+  teams: () => SIDE.map((s) => ({ ...s })), outline: OUTLINE,
   applyPacket: (u8, ms) => applyPacket(u8, ms), draw: (t) => draw(t), state: () => S,
   tap: (x, y) => tapAt(x, y), hit: (x, y) => hitAt(x, y), menu: (lane) => menuBoxes(lane), muteBox: () => muteBox(),
   sfx: { table: SFX, audio: AUD, play: sfxPlay, batch: sfxBatch, unlock, gesture: onGesture, setMuted, maxPerTick: MAX_PER_TICK, maxPerSecond: MAX_PER_SECOND },
