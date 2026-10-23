@@ -59,7 +59,7 @@ the full feature list, limits, evidence, related.
 - H1: Ten million rows. Dashboard answers in microseconds.
 - Sub: Put a SQL database inside your app that rolls up a ledger in a blink, ranks rows by resemblance and keeps ACID transactions. Tables can be bigger than memory.
 - Tool under the hero: Umbrarium, preset demo (up to 3 million rows in the tab, with a SQL console)
-- Tiles: 0.02 ms (a ten-million-invoice rollup; DuckDB 41.63 ms) / 1,600 times and more (faster than DuckDB on that rollup) / 3.3 times (faster than DuckDB on a join to 200,000 customers) / 16 of 16 (queries returning identical results to SQLite and DuckDB)
+- Tiles: 0.02 ms (a ten-million-invoice rollup read from a maintained total; out-of-the-box DuckDB 41.63 ms) / 13 of 16 (queries faster than out-of-the-box DuckDB, in process) / 9 of 14 (compared queries where HoloDb declared beat tuned SQL Server at 100,000,000 invoices; tuned SQL Server ahead on 5) / 16 of 16 (queries returning identical results on every engine). The 1,600 times rollup ratio was retired: it compared a maintained total with a scan.
 - What you can build, added: Apply a thousand changes as one atomic step (readers never see half a batch; one commit group; the SQL upsert is ON CONFLICT). Links to /holodb/docs/#changes.
 - Meta: Put a SQL database inside your .NET app that totals ten million invoices in 0.02 ms, ranks rows by resemblance and survives a crash.
 

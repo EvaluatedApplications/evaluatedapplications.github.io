@@ -44,7 +44,7 @@
       ],
       "list": [
         { "term": "Three-valued logic", "text": "WHERE and HAVING keep a row only when the predicate is true. A comparison, LIKE, IN or BETWEEN on a NULL is unknown; false AND unknown is false, true OR unknown is true, NOT unknown is unknown. x NOT IN (SELECT ...) is never true when the subquery returns a NULL. IS NULL and IS NOT NULL are always true or false." },
-        { "term": "Aggregates skip NULL", "text": "COUNT(*) counts rows; COUNT(col), COUNT(DISTINCT col), SUM, AVG, MIN and MAX count and combine the non-NULL values. SUM, AVG, MIN and MAX of a group whose values are all NULL are NULL. Whole-table COUNT, SUM, AVG, MIN and MAX of an INT column and a one-column GROUP BY with COUNT, SUM and AVG stay maintained answers with NULLs present: no row is read. On an empty selection SUM is 0 and AVG is 0.0, as for a NOT NULL column." },
+        { "term": "Aggregates skip NULL", "text": "COUNT(*) counts rows; COUNT(col), COUNT(DISTINCT col), SUM, AVG, MIN and MAX count and combine the non-NULL values. SUM, AVG, MIN and MAX of a group whose values are all NULL are NULL. Whole-table COUNT, SUM, AVG, MIN and MAX of an INT column and a one-column GROUP BY with COUNT, SUM and AVG stay maintained answers with NULLs present: no row is read. On an empty selection SUM, AVG, MIN and MAX are NULL and COUNT is 0, as for a NOT NULL column, and an aggregate without GROUP BY always answers one row." },
         { "term": "Groups, order and joins", "text": "GROUP BY and DISTINCT make one group of all the NULLs, apart from 0 and the empty string. ORDER BY puts NULL first ascending and last descending. An INNER JOIN never matches a NULL key, not even another NULL. In NEAREST a NULL cell adds nothing to the row's similarity." },
         { "term": "Results", "text": "A result that holds a NULL is row-form: read it with Rows or GetValue, where the cell is DBNull.Value, and QueryResult.IsNull(row, col) says so. GetLong, GetDouble and GetText serve a non-NULL cell of the matching type and throw a HoloException on a NULL." },
         { "term": "Where it stops", "text": "CREATE INDEX (sorted, text, composite) takes NOT NULL columns only. A Pleroma plane stores the type zero for a NULL and declines, so the engine answers, any statement that touches a plane column holding one; it never answers wrongly. A summary table keeps no rows to fall back on and refuses a NULL, and paged tables do not take NULL columns." },
@@ -73,7 +73,10 @@
         { "provenIn": "holodb-sql-tour", "text": "SELECT region, COUNT(*), SUM(amount), AVG(amount)\nFROM sales\nWHERE amount BETWEEN 10 AND 1000\nGROUP BY region\nHAVING SUM(amount) > 50\nORDER BY sum(amount) DESC\nLIMIT 10" },
         { "provenIn": "holodb-sql-tour", "label": "A join across two tables", "text": "SELECT orders.id, customers.name, orders.total\nFROM orders\nINNER JOIN customers ON orders.customer_id = customers.id\nWHERE orders.total > 100\nORDER BY orders.total DESC" }
       ],
-      "paragraphsAfter": [ "Qualify joined columns with the table name, as above. Table aliases are not supported." ]
+      "paragraphsAfter": [
+        "Qualify joined columns with the table name, as above. Table aliases are not supported. A join is INNER JOIN only: LEFT, RIGHT, FULL, CROSS and NATURAL joins, USING and comma joins are refused with an error, never answered as an inner join. Several INNER JOINs may share one statement on in-memory tables, and a paged table takes one.",
+        "SUM, AVG, MIN and MAX over no rows are NULL, COUNT is 0, and an aggregate without GROUP BY always returns one row. If your code read the SUM or AVG of an empty selection as 0, test QueryResult.IsNull first: GetLong and GetDouble throw on a NULL cell. An INT SUM is exact: it is held in 128 bits, and the statement throws only if the true total leaves 64 bits, on in-memory and paged tables alike. Without ORDER BY the row order, and so which rows a LIMIT keeps, is unspecified."
+      ]
     },
     {
       "id": "results",
@@ -94,7 +97,7 @@
       "id": "similarity",
       "title": "Similarity search",
       "paragraphs": [
-        "Because rows are stored holographically, HoloDb ranks rows by similarity to a partial description, with no separate vector index. Use the NEAREST clause with the fields you know and a LIMIT for how many neighbours you want. Add score to the projection to read the ranking metric.",
+        "Each row's columns also feed a holographic vector derived from them, so HoloDb ranks rows by similarity to a partial description, with no separate vector index. Use the NEAREST clause with the fields you know and a LIMIT for how many neighbours you want. Add score to the projection to read the ranking metric.",
         "Similarity is graded: a close number or date, or a near-identical string, ranks ahead of a far or unrelated one. It is an exact scan below 8,000 rows and whenever the query has a WHERE, and above that an approximate sublinear index (locality-sensitive hashing) ranks candidates, so the result can differ from an exact scan. With a WHERE the filter runs first and the survivors are ranked. NEAREST does not combine with GROUP BY, and an UPDATE, DELETE or ALTER TABLE on the table forces the next NEAREST to rebuild its index."
       ],
       "snippets": [ { "provenIn": "holodb-sql-tour", "text": "SELECT id, title\nFROM articles\nNEAREST (title = 'holographic database')\nLIMIT 5" } ]
@@ -139,7 +142,8 @@
       "title": "Larger than memory: paged tables",
       "paragraphs": [
         "The default engine keeps everything in RAM. When a table needs to outgrow memory, create it as a paged table. It lives on an 8 KB buffer-pool page store with a redo-only write-ahead log, so cold pages spill to disk, and the constant-time aggregates stay maintained on disk. Once created, a paged table is driven through the same Execute call as an in-memory table.",
-        "The buffer-pool size (bufferFrames, 8,192 frames of 8 KB by default) bounds how much stays resident. The one structure that scales with row count is the primary-key index, which stays in RAM at about 35 bytes per row, measured at 39 and 34 bytes per entry for 1,000,000 and 10,000,000 entries. That index, not the buffer pool, bounds how far a single paged table can grow past memory."
+        "The buffer-pool size (bufferFrames, 8,192 frames of 8 KB by default) bounds how much stays resident. A paged table's primary-key index is built on first use. A key column loaded in increasing order is its own index, searched in place with no RAM. Any other order keeps a dictionary in RAM at about 35 bytes per row, measured at 39 and 34 bytes per entry for 1,000,000 and 10,000,000 entries, and that index, not the buffer pool, then bounds how far a single paged table can grow past memory.",
+        "Every 8 KB page carries a CRC-32C, kept in a small side file of 4 bytes per page. A page that fails its checksum is refused with an error that names the page, never read as a different answer. UPDATE and DELETE find their rows through the primary key, a sorted index, a group index that proves a value absent, or the block scan, and they move only the pages that change. A statement may change more pages than the buffer pool holds: the pool spills the open transaction to a scratch file, so a DELETE that moves every later row completes, and a rollback or a power cut still leaves the table exactly as it was. Filtered scans, GROUP BY of any cardinality, top-K and GROUP BY over a join read the needed columns a page run at a time across all cores."
       ],
       "snippets": [ { "source": "snippets/holodb-paged.cs", "output": "snippets/holodb-paged.out.txt" } ]
     },
@@ -148,7 +152,8 @@
       "title": "Indexes, and why aggregates are instant",
       "paragraphs": [
         "A sorted index speeds range and lookup queries. You rarely need one for counting: COUNT and SUM over integer columns are served from maintained accumulators in constant time, independent of how many rows the table holds, so the engine does not scan to count. An index needs an INT or TEXT column.",
-        "CREATE INDEX also builds the optional aggregate plane, and SHOW INDEXES and EXPLAIN report what exists and what answers a query. Those are described with the plane."
+        "CREATE INDEX also builds the optional aggregate plane, and on a paged table it takes USING SUMMARY, SORTED or KEYED. SHOW INDEXES and EXPLAIN report what exists and what answers a query. Those are described with the plane.",
+        "You do not have to declare any of them. With the default SET summaries = auto and SET indexes = auto, the engine builds a summary, a sorted index, an equality index or a keyed summary itself when repeated scans have paid for it, and drops it when the workload moves on. SET summaries = declared or off, and the same for indexes, turn that off. The answers are the same with or without the structure."
       ],
       "snippets": [ { "provenIn": "holodb-sql-tour", "text": "CREATE INDEX ON sales (region)" } ],
       "more": { "label": "The plane, index SQL and EXPLAIN", "href": "/holodb/pleroma/#index-sql" }

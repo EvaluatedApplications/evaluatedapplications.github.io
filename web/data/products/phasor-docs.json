@@ -99,6 +99,25 @@
       ]
     },
     {
+      "id": "keyed-summary",
+      "title": "Exact sums per key",
+      "paragraphs": [
+        "A keyed summary keeps, for each dense key, an exact row count and exact sums of one or more measures. The counts are 64-bit and the sums are 128-bit, so a total past 64 bits is still exact. Reads are constant time per key, and memory is 8 bytes plus 16 bytes per measure for each key. Keys are dense codes from zero up to the capacity, so a 64-bit id is mapped to a code by the caller."
+      ],
+      "list": [
+        { "term": "Add and remove rows", "text": "A remove that would take a key below zero is refused and changes nothing." },
+        { "term": "Batches", "text": "Apply a batch of signed changes all at once. A batch that would leave any key below zero is refused as a whole." },
+        { "term": "Merge and subtract", "text": "Partial summaries of the same shape merge and subtract, and writes to disjoint key ranges can run on several threads." },
+        { "term": "Fold through a map", "text": "Fold the keys through a key-to-group map in one pass: each group's count and sums come back exact, and keys mapped to -1 are left out." },
+        { "term": "Top keys", "text": "Ask for the k keys with the largest or smallest sum, count or mean of one measure. The summary keeps block bounds itself and refreshes them after writes, so a sum ranking reads only the blocks that can still reach the k-th best. Ties are visited, so the answer is exact." },
+        { "term": "Pre-grouped totals", "text": "FoldDelta pushes fact appends straight into group totals you hold, exactly and all-or-nothing. FoldRemap moves a key's totals from one group to another when the key changes groups, so a dimension row that moves carries its totals with it." },
+        { "term": "Save and load", "text": "Pages carry CRC-32C checksums. A flipped byte is refused on load and is never read as a value." }
+      ],
+      "paragraphsAfter": [
+        "Crc32C is the public checksum behind this. It uses the SSE4.2 instruction on x64 and the CRC32C instruction on ARM64 where the CPU has one, and a table otherwise; every path gives the same value."
+      ]
+    },
+    {
       "id": "codecs",
       "title": "The phasor codecs",
       "paragraphs": [

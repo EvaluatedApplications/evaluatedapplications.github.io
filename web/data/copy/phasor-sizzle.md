@@ -35,7 +35,7 @@ Demo heading: Three items, two operators, one pass. (Step through it, or press R
 
 Number tiles (value, then plain claim):
 - 0.17 to 0.44 ms: for one pass that applies from 1 to 10,368 operators at once
-- 200 of 200: trials recovering 64 stored items exactly, where a float baseline held 4 at the same storage
+- 200 of 200: trials recovering 64 stored items exactly, where Plate's HRR held at least 95 percent only up to 4 items, at the same storage
 - 12,800 of 12,800: reads past capacity answered with a clear no. It never guesses
 - 0.6 ms: to read a whole 3,150-slot page, exactly
 

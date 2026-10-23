@@ -13,7 +13,7 @@
   "factDiagrams": ["superposition-scene", "coverage-meter", "pleroma-map", "commutation-map"],
   "stats": [
     { "value": "{applyLo} to {applyHi} ms", "label": "for one pass that applies from 1 to {elementsMax} operators at once" },
-    { "value": "200 of 200", "label": "trials recovering 64 stored items exactly, where a float baseline held 4 at the same storage" },
+    { "value": "200 of 200", "label": "trials recovering 64 stored items exactly, where Plate's HRR held at least 95 percent only up to 4 items, at the same storage" },
     { "value": "12,800 of 12,800", "label": "reads past capacity answered with a clear no. It never guesses" },
     { "value": "0.6 ms", "label": "to read a whole 3,150-slot page, exactly" }
   ],
@@ -21,8 +21,8 @@
     "summary": "See the numbers",
     "items": [
       { "claim": "One pass, from 1 to {elementsMax} operators", "text": "Apply took {applyLo} to {applyHi} ms per call over two runs, with no trend in the number of elements. Building the same store from the moved items took {brute1} ms at 1 element and {brute1000} ms at 1,000. Conditions: a 10,464-cell store (GF(13,879), 6 flag bits, S_3, time period 27, joint flags by order by time, key capacity 4, a continuous component, 10 items on four keys), random kernels, the mean of 20 calls after one warm-up, Release build, a loaded i9-11950H." },
-      { "claim": "64 items recovered exactly", "text": "At equal storage (about 2,000 to 2,600 bits), the exact key view recovered 64 items in 200 of 200 trials. The best float baseline reached 95 percent at 4 items. That is 16 times the items at these budgets. The benchmark is not part of the shipped package." },
-      { "claim": "A clear no past capacity", "text": "Past capacity (65 to 96 items), the keys-only hologram refused 12,800 of 12,800 trials with no wrong answer. Every float baseline answered wrongly every time." },
+      { "claim": "Measured against HRR", "text": "At equal storage (about 2,000 to 2,600 bits, measured at about 2,064 and 2,580 bits), the exact key view recovered 64 items in 200 of 200 trials. Plate's Holographic Reduced Representations (HRR), with the standard decoder or a stronger one, held at least 95 percent only up to 4 items. These are the figures for these budgets only. The benchmark is not part of the shipped package." },
+      { "claim": "A clear no past capacity", "text": "Past capacity (65 to 96 items), the keys-only hologram refused 12,800 of 12,800 trials with no wrong answer. Every HRR baseline answered wrongly every time." },
       { "claim": "A whole page in 0.6 ms", "text": "With a complete key band, reading a 3,150-slot page costs about 0.6 ms (188 to 246 ns per slot). Building a page from a count vector is about 100 times faster than adding its keys one by one." }
     ]
   },
@@ -35,7 +35,8 @@
       { "title": "A store that repairs itself", "text": "Lose up to five values and get them back, 300 of 300 times. Catch one corrupted cell in either copy, 10,000 of 10,000 times. Rebuild a lost store from its group, 100 of 100 times." },
       { "title": "A memory that reads exactly", "text": "Store pairs and read them back without drift. At equal storage, recall held at 100 percent from 2 to 32 pairs, where a float bundle fell to 21.9 percent at 32." },
       { "title": "Age and reshape everything at once", "text": "Age, relabel, diffuse or bind every item in one pass. The cost follows the size of the store, not the number of items in it." },
-      { "title": "Any question, one read", "text": "Count the items that match any condition on their flags, however tangled, in one read. Ask for counts, shares and parity from one query." }
+      { "title": "Any question, one read", "text": "Count the items that match any condition on their flags, however tangled, in one read. Ask for counts, shares and parity from one query." },
+      { "title": "Exact totals per key", "text": "Keep an exact count and a 128-bit sum for each of millions of keys, rank the top k, fold keys into groups, and move a key's totals when it changes group. A read costs the same for every key, and a saved file checks every page.", "link": { "href": "/phasor/docs/#keyed-summary", "label": "See exact sums per key" } }
     ]
   },
   "code": {
@@ -142,7 +143,7 @@
     "title": "Put it to work",
     "line": "Four uses, each with its limit",
     "items": [
-      { "title": "HoloDb aggregate plane", "text": "Database.EnablePleroma(table, options) derives a Pleroma from a table's columns and serves COUNT, SUM, GROUP BY, WHERE, COUNT DISTINCT, MIN and MAX of dimensions, HAVING, and a single equi-join COUNT or SUM from exact slices. It holds in-RAM tables and is not persisted, so call it again after Open. AVG and other shapes use the engine.", "link": { "href": "/holodb/pleroma/", "label": "HoloDb on the Pleroma" } },
+      { "title": "HoloDb aggregate plane", "text": "Database.EnablePleroma(table, options) derives a Pleroma from a table's columns and serves COUNT, SUM, GROUP BY, WHERE, COUNT DISTINCT, MIN and MAX of dimensions, HAVING, and a single equi-join COUNT or SUM from exact slices. A plane made with EnablePleroma is not persisted, so call it again after Open. A plane made with CREATE INDEX ... USING SUMMARY, or built automatically, is saved with its table, paged tables included. AVG and other shapes use the engine.", "link": { "href": "/holodb/pleroma/", "label": "HoloDb on the Pleroma" } },
       { "title": "Page store, larger than memory", "text": "Pages of one shape are stored as records with a check prime that verifies every record, parity groups that rebuild one lost record each, restore points, and journal numbers so replay applies each add once. It needs a complete key band, and a reader may see a batch half applied while it runs.", "link": { "href": "/holodb/pleroma/", "label": "HoloDb on the Pleroma" } },
       { "title": "Replica reconciliation", "text": "Two replicas each hold a CycleHologram. The one with the difference sends its hologram, and the other subtracts its own and decodes the exact signed difference. The message is sized to the difference, not to the data. It decodes when the difference has at most the capacity's worth of distinct symbols, so size the capacity to the largest difference you expect.", "code": { "source": "snippets/phasor-cyclehologram-replicas.cs", "output": "snippets/phasor-cyclehologram-replicas.out.txt" } },
       { "title": "Batch relabel, age and diffuse", "text": "Tick, Diffuse, RelabelFlags, RelabelArrangements, ShiftKeys, ScaleKeys (on a complete key band) and Apply(kernel) each act on every stored item at once. A mix of different harmonic permutations costs one pass per term. Key shifts join a keyed kernel. Diffuse readbacks need TimeScale times the total to stay within half the field." }

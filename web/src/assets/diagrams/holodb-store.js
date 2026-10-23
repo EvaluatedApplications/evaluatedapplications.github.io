@@ -59,7 +59,7 @@ function latencySvg(d, mode) {
     const y = 8 + i * rowH;
     return `<text class="lab" x="0" y="${y + 10}">${esc(r.label)}</text>` + cols.map((c, k) => `<text class="eng" x="${left - 6}" y="${y + 21 + k * 11}" text-anchor="end">${esc(c)}</text><rect class="b${k === L.focus ? ' focus' : ''}" x="${left}" y="${y + 14 + k * 11}" width="${x(r.values[k]).toFixed(1)}" height="7" rx="2"/><text class="val" x="${left + x(r.values[k]) + 6}" y="${y + 21 + k * 11}">${f2(r.values[k])} ms</text>`).join('');
   }).join('');
-  return `<svg class="hd-lat-svg" viewBox="0 0 ${W} ${rows.length * rowH + 12}" role="img" aria-label="Median latency in milliseconds on a ledger of 10,000,000 invoices, logarithmic scale: ${esc(rows.map((r) => `${r.label}: ${cols.map((c, k) => `${c} ${f2(r.values[k])}`).join(', ')}`).join('. '))}">${g}</svg>`;
+  return `<svg class="hd-lat-svg" viewBox="0 0 ${W} ${rows.length * rowH + 12}" role="img" aria-label="Median latency in milliseconds on a ledger of 10,000,000 invoices, logarithmic scale: ${esc(rows.map((r) => `${r.label}: ${cols.map((c, k) => `${c}${L.qualifiers && L.qualifiers[k] ? ` (${L.qualifiers[k]})` : ''} ${f2(r.values[k])}`).join(', ')}`).join('. '))}">${g}</svg>${L.note ? `<p class="muted hd-note">${esc(L.note)}</p>` : ''}`;
 }
 
 export function staticSvg(d) {

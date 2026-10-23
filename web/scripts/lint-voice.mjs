@@ -15,7 +15,8 @@ export const RULES = [
   ['C', 'internal id, process or role', [/\bEXP-?[A-Z]*\d+\b/, /\b(PB|PS)\d+\b/, /pre-?registered/i, /Genesis\//, /\bMonoRepo\b/, /last verified/i, /prepared for/i, /written down first/i, /experiment id/i, /\bthe doc\b/i, /\bowners?\b/i, /\bcoordinator\b/i, /\bdirective\b/i, /\beditorial\b/i, /site\.md/i, /\btodo\b/i]],
   ['D', 'run-condition boilerplate', [/one run on one machine/i, /not interpreted/i, /idle[- ]machine/i]],
   ['E', 'work-in-progress or hedge', [/\bR&D\b/, /subject to change/i, /early research/i, /work in progress/i, /\bprototype\b/i, /proof of concept/i, /still learning/i, /\bhonest(ly)?\b/i, /limitations included/i, /\bnot yet\b/i, /coming soon/i]],
-  ['F', 'hard-coded version, count or size', [/\b\d+\.\d+\.\d+(\.\d+)?\b/, /\b(one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve) (libraries|packages|tools|products)\b/i, /\b\d+ (libraries|packages|tools|products)\b/i, /\b\d[\d,]*\s+parameters\b/i, /~\s*\d+\s*MB/]],
+  // the version of a rival engine or of .NET is a measurement condition, not one of our releases, so "DuckDB 1.5.5" and ".NET 8.0.27" pass
+  ['F', 'hard-coded version, count or size', [/(?<!DuckDB )(?<!\.NET )\b\d+\.\d+\.\d+(\.\d+)?\b/, /\b(one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve) (libraries|packages|tools|products)\b/i, /\b\d+ (libraries|packages|tools|products)\b/i, /\b\d[\d,]*\s+parameters\b/i, /~\s*\d+\s*MB/]],
   ['G', 'first person singular', [/\b(I|I'm|I've|I'd|my|me)\b/]],
   ['H', 'roadmap', [/what'?s next/i, /\bplanned\b/i, /\bdeferred\b/i, /future (tier|release|version)/i, /\broadmap\b/i, /\bupcoming\b/i, /\bwe plan\b/i]],
   ['L', 'licence wording', [/free to use/i, /\bMIT\b/, /open[- ]source/i, /Pricing: Free/i, /—/]],

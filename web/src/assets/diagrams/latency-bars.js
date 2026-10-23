@@ -5,6 +5,8 @@ import { hasDom, prefersReducedMotion } from './core.js';
 
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const f2 = (n) => Number(n).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+// A column may carry a qualifier (d.qualifiers[i], such as "out of the box" or "primary keys only") so that no sentence names an engine without its setup.
+const qn = (d, i) => d.columns[i] + (d.qualifiers && d.qualifiers[i] ? ` (${d.qualifiers[i]})` : '');
 const FLOOR = 0.005;   // the benchmark prints two decimals: a printed 0.00 is read as below half a hundredth
 
 export function outcome(row, d, rivalIdx) {
@@ -21,11 +23,11 @@ export function metrics(d) {
 
 export function summaryFor(d, m, rivalIdx) {
   const p = m.per[rivalIdx];
-  return `${m.focus} against ${d.columns[rivalIdx]}: faster on ${p.wins} of ${m.rows} queries, ${p.ties === 0 ? 'tied on none' : `tied on ${p.ties}`} and slower on ${p.losses}. A difference under ${d.tieBelow ?? 1.15}x counts as a tie. Bars use a logarithmic scale, and shorter is faster.`;
+  return `${m.focus} against ${qn(d, rivalIdx)}: faster on ${p.wins} of ${m.rows} queries, ${p.ties === 0 ? 'tied on none' : `tied on ${p.ties}`} and slower on ${p.losses}. A difference under ${d.tieBelow ?? 1.15}x counts as a tie. Bars use a logarithmic scale, and shorter is faster.`;
 }
 
 export function rowText(d, r, rivalIdx) {
-  const vals = d.columns.map((c, i) => `${c} ${f2(r.values[i])} ms`).join(', ');
+  const vals = d.columns.map((c, i) => `${qn(d, i)} ${f2(r.values[i])} ms`).join(', ');
   return `${r.label}: ${vals}. ${r.verdict}.`;
 }
 
@@ -54,7 +56,7 @@ export function chartSvg(d, { rival = d.rival, mode = 'table', narrow = false, w
 <rect class="bar focus" x="${left}" y="${by + 9}" width="${b.toFixed(1)}" height="7" rx="2"/>
 <text class="val" x="${left + Math.max(a, b) + 6}" y="${by + 13}">${f2(r.values[d.focus])} ms</text></g>`;
   }).join('');
-  return `<svg class="lb-svg" viewBox="0 0 ${width} ${H}" role="img" aria-labelledby="${id}-t"><title id="${id}-t">${esc(d.caption)}, drawn on a logarithmic scale. ${esc(d.columns[d.focus])} against ${esc(d.columns[rival])}.</title>
+  return `<svg class="lb-svg" viewBox="0 0 ${width} ${H}" role="img" aria-labelledby="${id}-t"><title id="${id}-t">${esc(d.caption)}, drawn on a logarithmic scale. ${esc(qn(d, d.focus))} against ${esc(qn(d, rival))}.</title>
 <line class="axis" x1="${left}" y1="${top}" x2="${left}" y2="${H - 18}"/>${parts}<text class="foot" x="${left}" y="${H - 4}">logarithmic scale, shorter is faster</text></svg>`;
 }
 
@@ -65,7 +67,7 @@ export function controlsHtml(id, m, d) {
   const rivals = m.rivals.map(({ c, i }) => `<button type="button" class="chip" data-rival="${i}" aria-pressed="${i === d.rival}">${esc(c)}</button>`).join('');
   return {
     tabs: '',
-    controls: `<p class="lb-key"><span class="sw sw-rival"></span><span data-ctl="rivalname">${esc(d.columns[d.rival])}</span><span class="sw sw-focus"></span>${esc(m.focus)}<span class="sw sw-ahead"></span>where the other engine is ahead</p>
+    controls: `<p class="lb-key"><span class="sw sw-rival"></span><span data-ctl="rivalname">${esc(qn(d, d.rival))}</span><span class="sw sw-focus"></span>${esc(m.focus)}<span class="sw sw-ahead"></span>where the other engine is ahead</p>
 <div class="dia-controls dia-ui" hidden><span class="dia-seg" role="group" aria-label="Compare ${esc(m.focus)} with">${rivals}</span>
 <span class="dia-seg" role="group" aria-label="Order"><button type="button" class="chip" data-order="table" aria-pressed="true">Table order</button><button type="button" class="chip" data-order="gap" aria-pressed="false">Biggest gap first</button></span></div>
 <p class="dia-hint dia-ui" hidden>Point at a bar, or focus the chart and press the up and down arrows, to read a row.</p>
@@ -74,7 +76,7 @@ export function controlsHtml(id, m, d) {
 }
 
 export function tablesHtml(d, m) {
-  const head = ['Query', ...d.columns, 'Result'];
+  const head = ['Query', ...d.columns.map((c, i) => qn(d, i)), d.resultLabel || 'Result'];
   const rows = d.rows.map((r) => `<tr><th scope="row">${esc(r.label)}</th>${r.values.map((v, i) => `<td class="num${i === d.focus && r.state === 'win' ? ' is-win' : i === d.rival && r.state === 'loss' ? ' is-rival' : ''}">${f2(v)}</td>`).join('')}<td class="${r.state === 'loss' ? 'is-loss' : ''}">${esc(r.verdict)}</td></tr>`).join('');
   return `<div class="tbl-wrap"><table class="tbl"><caption>${esc(d.caption)}</caption><thead><tr>${head.map((h, i) => `<th scope="col"${i > 0 && i < head.length - 1 ? ' class="num"' : ''}>${esc(h)}</th>`).join('')}</tr></thead><tbody>${rows}</tbody></table></div>`;
 }
@@ -120,7 +122,7 @@ export function mount(root, d) {
     if (used) e.preventDefault();
   });
   root.querySelectorAll('[data-rival]').forEach((b) => b.addEventListener('click', () => {
-    S.rival = Number(b.dataset.rival); root.querySelector('[data-ctl=rivalname]').textContent = d.columns[S.rival]; root.querySelectorAll('[data-rival]').forEach((x) => x.setAttribute('aria-pressed', String(x === b))); render(); say();
+    S.rival = Number(b.dataset.rival); root.querySelector('[data-ctl=rivalname]').textContent = qn(d, S.rival); root.querySelectorAll('[data-rival]').forEach((x) => x.setAttribute('aria-pressed', String(x === b))); render(); say();
   }));
   root.querySelectorAll('[data-order]').forEach((b) => b.addEventListener('click', () => {
     S.mode = b.dataset.order; root.querySelectorAll('[data-order]').forEach((x) => x.setAttribute('aria-pressed', String(x === b))); render(); say();

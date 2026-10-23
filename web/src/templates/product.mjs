@@ -13,7 +13,7 @@ function withLatency(ctx, data, spec) {
   if (!spec) return data;
   const tb = ctx.evidence.find((e) => e.id === spec.evidence).sections.flatMap((s) => s.tables).find((t) => t.id === spec.table);
   const pick = (labels) => labels.map((l) => { const r = tb.rows.find((x) => x.label === l); if (!r) throw new Error('latency row not found: ' + l); return { label: r.label, values: r.values }; });
-  return { ...data, latency: { columns: tb.columns, focus: tb.focus, key: pick(spec.key), aggregate: pick(spec.aggregate) } };
+  return { ...data, latency: { columns: tb.columns, qualifiers: tb.qualifiers, note: spec.note, focus: tb.focus, key: pick(spec.key), aggregate: pick(spec.aggregate) } };
 }
 
 // A diagram caption written in the product's data. {version} becomes the generated release, kept as a generated value.

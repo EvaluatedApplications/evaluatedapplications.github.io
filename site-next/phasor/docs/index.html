@@ -43,7 +43,7 @@
 
 
 <section class="sec"><div class="wrap">
-  <nav class="toc" aria-labelledby="toc-h"><h2 id="toc-h">On this page</h2><ul><li><a href="#pleroma-views">Reading a Pleroma</a></li><li><a href="#bind">Bind two stores</a></li><li><a href="#kernel">Apply a weighted kernel in one pass</a></li><li><a href="#parity">Bit counts and parity</a></li><li><a href="#flags">Flag reads, widening and tenants</a></li><li><a href="#more-operations">More operations</a></li><li><a href="#cyclehologram">CycleHologram: the keys-only case</a></li><li><a href="#codecs">The phasor codecs</a></li><li><a href="#hologram">Hologram: readable algebra with operators</a></li><li><a href="#arithmetic">Arithmetic with numbers</a></li><li><a href="#gotchas">Things to know</a></li></ul></nav>
+  <nav class="toc" aria-labelledby="toc-h"><h2 id="toc-h">On this page</h2><ul><li><a href="#pleroma-views">Reading a Pleroma</a></li><li><a href="#bind">Bind two stores</a></li><li><a href="#kernel">Apply a weighted kernel in one pass</a></li><li><a href="#parity">Bit counts and parity</a></li><li><a href="#flags">Flag reads, widening and tenants</a></li><li><a href="#more-operations">More operations</a></li><li><a href="#cyclehologram">CycleHologram: the keys-only case</a></li><li><a href="#keyed-summary">Exact sums per key</a></li><li><a href="#codecs">The phasor codecs</a></li><li><a href="#hologram">Hologram: readable algebra with operators</a></li><li><a href="#arithmetic">Arithmetic with numbers</a></li><li><a href="#gotchas">Things to know</a></li></ul></nav>
 </div></section>
 <section class="sec doc-sec" aria-labelledby="pleroma-views"><div class="wrap">
   <div class="sec-head"><span class="sec-dot cat-foundation" aria-hidden="true"></span><h2 id="pleroma-views">Reading a Pleroma</h2></div>
@@ -339,6 +339,18 @@ if (delta.TryDecode(out var diff))
         Console.WriteLine($&quot;{symbol}: {count}&quot;);</code></pre></div><div class="code out"><div class="code-bar"><span>Output</span><button class="copy" type="button" aria-label="Copy Output">copy</button></div><pre><code class="language-text">wire size 192 bytes
 777001: 1
 777002: -2</code></pre></div>
+  
+  
+</div></section><section class="sec doc-sec" aria-labelledby="keyed-summary"><div class="wrap">
+  <div class="sec-head"><span class="sec-dot cat-foundation" aria-hidden="true"></span><h2 id="keyed-summary">Exact sums per key</h2></div>
+  <div class="prose-block"><p>A keyed summary keeps, for each dense key, an exact row count and exact sums of one or more measures. The counts are 64-bit and the sums are 128-bit, so a total past 64 bits is still exact. Reads are constant time per key, and memory is 8 bytes plus 16 bytes per measure for each key. Keys are dense codes from zero up to the capacity, so a 64-bit id is mapped to a code by the caller.</p></div>
+  <dl class="term-list"><dt>Add and remove rows</dt><dd>A remove that would take a key below zero is refused and changes nothing.</dd><dt>Batches</dt><dd>Apply a batch of signed changes all at once. A batch that would leave any key below zero is refused as a whole.</dd><dt>Merge and subtract</dt><dd>Partial summaries of the same shape merge and subtract, and writes to disjoint key ranges can run on several threads.</dd><dt>Fold through a map</dt><dd>Fold the keys through a key-to-group map in one pass: each group&#39;s count and sums come back exact, and keys mapped to -1 are left out.</dd><dt>Top keys</dt><dd>Ask for the k keys with the largest or smallest sum, count or mean of one measure. The summary keeps block bounds itself and refreshes them after writes, so a sum ranking reads only the blocks that can still reach the k-th best. Ties are visited, so the answer is exact.</dd><dt>Pre-grouped totals</dt><dd>FoldDelta pushes fact appends straight into group totals you hold, exactly and all-or-nothing. FoldRemap moves a key&#39;s totals from one group to another when the key changes groups, so a dimension row that moves carries its totals with it.</dd><dt>Save and load</dt><dd>Pages carry CRC-32C checksums. A flipped byte is refused on load and is never read as a value.</dd></dl>
+  
+  
+  
+  
+  <div class="prose-block"><p>Crc32C is the public checksum behind this. It uses the SSE4.2 instruction on x64 and the CRC32C instruction on ARM64 where the CPU has one, and a table otherwise; every path gives the same value.</p></div>
+  
   
   
 </div></section><section class="sec doc-sec" aria-labelledby="codecs"><div class="wrap">

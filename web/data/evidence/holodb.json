@@ -2,39 +2,50 @@
   "id": "holodb",
   "product": "holodb",
   "slug": "/holodb/evidence/",
-  "scope": "engine",
+  "scope": "Rivals as shipped and tuned, one run each",
   "title": "HoloDb benchmarks",
-  "description": "HoloDb against SQLite, DuckDB and SQL Server on a 10,000,000-invoice ledger, the optional plane, writes, and the checks behind the figures.",
-  "claim": "On a 10,000,000-invoice ledger joined to 200,000 customers, the dashboard rollups read in microseconds in the embedded engine, and every result is identical across the engines. The queries where HoloDb is slower are listed beside the wins.",
+  "description": "HoloDb against SQLite, DuckDB and SQL Server at 10,000,000 invoices, then against tuned DuckDB and SQL Server at 100,000,000, with the plane, writes and checks.",
+  "claim": "On a 10,000,000-invoice ledger joined to 200,000 customers, the dashboard rollups read in microseconds in the embedded engine because they read a maintained total, and every result is identical across the engines. That comparison sets DuckDB and SQL Server up as they ship. At 100,000,000 invoices against tuned DuckDB and tuned SQL Server, HoloDb declared is behind tuned SQL Server on 5 of 14 compared queries and HoloDb out of the box is behind tuned DuckDB on 5 of 14. Every query where HoloDb is slower is listed beside the wins.",
   "tieBelow": 1.15,
+  "extraTiles": [
+    {
+      "value": "9 / 0 / 5",
+      "label": "HoloDb declared against tuned SQL Server at 100,000,000 invoices: ahead, equal, behind, on 14 compared queries"
+    },
+    {
+      "value": "8 / 1 / 5",
+      "label": "HoloDb out of the box against tuned DuckDB at 100,000,000 invoices: ahead, equal, behind, on 14 compared queries"
+    }
+  ],
   "method": {
-    "workload": "A billing business's invoice ledger (a normalised invoices fact of 10,000,000 rows joined to a customers dimension of 200,000 rows) with sixteen queries: five rollups, a single-invoice lookup, five single-table scans and five joins to the customer dimension. The plane sections use three constructed workloads: a live dashboard, ingest while querying, and multi-tenant slices and joins. These are out-of-the-box benchmarks: every engine ran as it ships, with default settings, no indexes added and no summary or rollup tables built for the queries.",
+    "workload": "A billing business's invoice ledger (a normalised invoices fact joined to a customers dimension) with sixteen queries: five rollups, a single-invoice lookup, five single-table scans and five joins to the customer dimension. It runs at two sizes. At 10,000,000 invoices every engine ran as it ships, with default settings, no indexes added (primary keys only) and no summary or rollup tables built for the queries, so DuckDB and SQL Server are untuned there. At 100,000,000 invoices (2,000,000 customers) DuckDB and SQL Server are tuned, and HoloDb appears twice: out of the box (nothing declared, nothing saved beside the table) and declared (summary, sorted index and keyed summary saved beside the data, a restored state). The plane sections use three constructed workloads: a live dashboard, ingest while querying, and multi-tenant slices and joins, with every other engine out of the box.",
     "engines": [
       "SQLite (in memory, the external reference, always listed first)",
-      "DuckDB (in process, in memory)",
-      "SQL Server 2022 LocalDB (tables in tempdb on disk)",
+      "DuckDB (in process, in memory; untuned at 10,000,000 invoices, tuned DuckDB 1.5.5 at 100,000,000)",
+      "SQL Server 2022 LocalDB (tables in tempdb on disk, primary keys only; at 100,000,000 invoices SQL Server 2022 Developer in a container with a columnstore index, a descending index on amount_cents and indexed views)",
       "HoloDb embedded (in process)",
       "HoloDb server (networked over TLS on the loopback interface)",
-      "HoloDb engine: the same database without a plane. HoloDb plane: a database with the optional Pleroma plane attached."
+      "HoloDb engine: the same database without a plane; HoloDb plane: a database with the optional Pleroma plane attached",
+      "HoloDb out of the box and HoloDb declared: the two paged-table arms of the 100,000,000-invoice comparison."
     ],
-    "verification": "Before any query is timed, its full result set is normalised and compared across the engines. Every timed result is identical, including on the queries where HoloDb is slower. After each plane workload the plane is compared with a rebuild from the columns and found equal.",
-    "statistic": "Medians of repeated calls through each engine's typed client API, execute plus consume every row. A cell whose own two timing loops disagree by more than 25 percent is marked noisy, and no ratio is drawn from it. A difference under 1.15x counts as a tie.",
-    "machine": "One 16-core laptop CPU (Intel Core i9-11950H). The billing comparison ran with no other benchmark or heavy application running. The plane showcase ran with ordinary desktop applications and the SQL Server service open. The scaling runs used a Release build with no other heavy application running (our Prism trainer was switched off), and each point is the median of three repetitions.",
-    "memory": "Every HoloDb figure is an in-memory database with no write-ahead log; SQLite and DuckDB ran in memory and SQL Server used tempdb on disk. The single-row write tables therefore compare the engine alone against in-memory SQLite and do not measure durable commits: a database opened with a write-ahead log flushes each committed statement to disk before returning, which adds one flush per commit, set by the disk and not measured here. Bulk-load rates compare unlike modes: typed arrays into memory, an appender, inserts in one transaction, and a bulk copy into tempdb.",
+    "verification": "Before any query is timed, its full result set is normalised (at 100,000,000 invoices, hashed) and compared across the engines. Every timed result is identical, including on the queries where HoloDb is slower. After each plane workload the plane is compared with a rebuild from the columns and found equal.",
+    "statistic": "Medians of repeated calls through each engine's typed client API, execute plus consume every row. A cell whose own two timing loops disagree by more than 25 percent is marked noisy, and no ratio is drawn from it. A difference under 1.15x counts as a tie. In the 100,000,000-invoice table a difference of 20 percent or less is equal, cold means the first run after the operating system's file cache was evicted, and warm is the median of three runs.",
+    "machine": "One 16-core laptop CPU (Intel Core i9-11950H). The billing comparison at 10,000,000 invoices ran with no other benchmark or heavy application running. The plane showcase ran with ordinary desktop applications and the SQL Server service open. The 100,000,000-invoice comparison was one session with each engine in its own process (34.1 GB of memory, Windows 11, .NET 8.0.27). The scaling runs used a Release build with no other heavy application running (our Prism trainer was switched off), and each point is the median of three repetitions.",
+    "memory": "The 10,000,000-invoice comparison, the plane runs, the million-row classes and the single-row write tables use in-memory HoloDb databases with no write-ahead log; SQLite and DuckDB ran in memory and SQL Server LocalDB used tempdb on disk. The single-row write tables therefore compare the engine alone against in-memory SQLite and do not measure durable commits: a database opened with a write-ahead log flushes each committed statement to disk before returning, which adds one flush per commit, set by the disk and not measured here. Bulk-load rates compare unlike modes: typed arrays into memory, an appender, inserts in one transaction, and a bulk copy into tempdb. The 100,000,000-invoice comparison is the exception: HoloDb used paged tables in files on disk. The opening and live-ingest figures say which mode they used.",
     "tie": "Fresh process means the first statements of a newly started process, which is what an application feels after it starts. The cost of just-in-time compilation is included."
   },
   "sections": [
     {
       "id": "billing",
-      "title": "Billing ledger against SQLite, DuckDB and SQL Server",
+      "title": "Billing ledger against SQLite, DuckDB and SQL Server, all out of the box",
       "intro": [
-        "The headline results below are the engine's own: the optional Pleroma plane was not attached in these comparisons. The ledger has 200,000 customers, about 50 invoices each, over 24 months, four regions and five statuses, with money held as integer cents.",
+        "The headline results below are the engine's own: the optional Pleroma plane was not attached in these comparisons. The ledger has 10,000,000 invoices and 200,000 customers, about 50 invoices each, over 24 months, four regions and five statuses, with money held as integer cents. In this section every engine ran as it ships: SQLite and DuckDB in memory with default settings, SQL Server 2022 LocalDB with primary keys only, and no index or summary table added for the queries. The next section repeats the queries at 100,000,000 invoices against tuned DuckDB and tuned SQL Server.",
         "Bulk load, rows per second: DuckDB 1,159,279; HoloDb server 1,051,473; SQLite 726,050; SQL Server 693,231; HoloDb embedded 679,271."
       ],
       "tables": [
         {
           "id": "inprocess",
-          "caption": "In process, in memory: HoloDb embedded against DuckDB and SQLite (median milliseconds)",
+          "caption": "In process, 10,000,000 invoices: HoloDb embedded against DuckDB and SQLite (median milliseconds, in memory, no index or summary added to any engine, one run on one laptop)",
           "columns": [
             "SQLite",
             "DuckDB",
@@ -50,7 +61,7 @@
                 41.63,
                 0.02
               ],
-              "verdict": "HoloDb, more than 1,600x",
+              "verdict": "HoloDb, more than 1,600x (reads a maintained total)",
               "state": "win"
             },
             {
@@ -60,7 +71,7 @@
                 34.33,
                 0.02
               ],
-              "verdict": "HoloDb, more than 1,300x",
+              "verdict": "HoloDb, more than 1,300x (reads a maintained total)",
               "state": "win"
             },
             {
@@ -70,7 +81,7 @@
                 2.56,
                 0
               ],
-              "verdict": "HoloDb, more than 510x",
+              "verdict": "HoloDb, more than 510x (reads a maintained total)",
               "state": "win"
             },
             {
@@ -80,7 +91,7 @@
                 5.48,
                 0.04
               ],
-              "verdict": "HoloDb, more than 120x",
+              "verdict": "HoloDb, more than 120x (reads a maintained total)",
               "state": "win"
             },
             {
@@ -90,7 +101,7 @@
                 0.68,
                 0
               ],
-              "verdict": "HoloDb, more than 130x",
+              "verdict": "HoloDb, more than 130x (reads a maintained total)",
               "state": "win"
             },
             {
@@ -100,7 +111,7 @@
                 0.6,
                 0.02
               ],
-              "verdict": "SQLite ahead, 0.01 ms",
+              "verdict": "SQLite (in memory) ahead, 0.01 ms",
               "state": "loss"
             },
             {
@@ -200,14 +211,20 @@
                 11.96,
                 14.92
               ],
-              "verdict": "DuckDB 1.25x",
+              "verdict": "DuckDB out of the box, 1.25x",
               "state": "loss"
             }
-          ]
+          ],
+          "qualifiers": [
+            "in memory",
+            "out of the box",
+            ""
+          ],
+          "resultLabel": "Result against DuckDB (out of the box)"
         },
         {
           "id": "networked",
-          "caption": "Networked: HoloDb server against SQL Server and SQLite (median milliseconds)",
+          "caption": "Networked, 10,000,000 invoices: HoloDb server against SQL Server LocalDB and SQLite (median milliseconds, SQL Server not tuned, one run on one laptop)",
           "columns": [
             "SQLite",
             "SQL Server",
@@ -223,7 +240,7 @@
                 2088.59,
                 0.19
               ],
-              "verdict": "HoloDb, about 11,000x",
+              "verdict": "HoloDb, about 11,000x (reads a maintained total)",
               "state": "win"
             },
             {
@@ -233,7 +250,7 @@
                 2178.58,
                 0.2
               ],
-              "verdict": "HoloDb, about 10,900x",
+              "verdict": "HoloDb, about 10,900x (reads a maintained total)",
               "state": "win"
             },
             {
@@ -243,7 +260,7 @@
                 1485.33,
                 0.35
               ],
-              "verdict": "HoloDb, about 4,200x",
+              "verdict": "HoloDb, about 4,200x (reads a maintained total)",
               "state": "win"
             },
             {
@@ -253,7 +270,7 @@
                 943.63,
                 0.25
               ],
-              "verdict": "HoloDb, about 3,800x",
+              "verdict": "HoloDb, about 3,800x (reads a maintained total)",
               "state": "win"
             },
             {
@@ -263,7 +280,7 @@
                 470.33,
                 0.17
               ],
-              "verdict": "HoloDb, about 2,800x",
+              "verdict": "HoloDb, about 2,800x (reads a maintained total)",
               "state": "win"
             },
             {
@@ -373,15 +390,21 @@
                 0.07,
                 0.18
               ],
-              "verdict": "SQL Server, 2.6x",
+              "verdict": "SQL Server (primary keys only), 2.6x",
               "state": "loss"
             }
-          ]
+          ],
+          "qualifiers": [
+            "in memory",
+            "primary keys only",
+            ""
+          ],
+          "resultLabel": "Result against SQL Server (primary keys only)"
         }
       ],
       "notes": [
-        "HoloDb embedded is faster than SQLite on 15 of the 16 queries, from 48x (top customers by revenue) to more than 2,700x on the rollups. Against DuckDB, counting a difference under 1.15x as a tie, it is faster on 13 queries, tied on 2 and slower on 1. The rollups and the lookup read a maintained total or the primary-key index, so they take microseconds and do not grow with the ledger. The benchmark prints two decimals, so those cells are shown at that resolution and the ratios are lower bounds.",
-        "HoloDb server is faster than SQL Server on 15 of the 16 queries, including all five joins by 21x to 185x. Both are networked services paying a client and server round trip. The server figures are medians of five calls, so they include the first-call cost of the network path: a longer loop through the same client measured the rollups and the lookup at a steady 0.06 to 0.10 ms, and a point query pays a fixed 0.07 ms of client, TLS, socket and result encoding that the same query does not pay embedded (1 to 3 microseconds).",
+        "HoloDb embedded is faster than in-memory SQLite on 15 of the 16 queries, from 48x (top customers by revenue) to more than 2,700x on the rollups. Against DuckDB out of the box, counting a difference under 1.15x as a tie, it is faster on 13 queries, tied on 2 and slower on 1. The rollups and the lookup read a maintained total or the primary-key index, so they take microseconds and do not grow with the ledger, while the other engines scan. The benchmark prints two decimals, so those cells are shown at that resolution and the ratios are lower bounds. A ratio on a rollup compares a maintained total with a scan; the ratios on the joins and scans, 1.4x to 3.3x, are the ones that compare the engines doing the same work.",
+        "HoloDb server is faster than SQL Server with primary keys only on 15 of the 16 queries, including all five joins by 21x to 185x. Both are networked services paying a client and server round trip. With a columnstore index and indexed views added, SQL Server answers four of the five dimension joins faster than HoloDb at 100,000,000 invoices (next section). The server figures are medians of five calls, so they include the first-call cost of the network path: a longer loop through the same client measured the rollups and the lookup at a steady 0.06 to 0.10 ms, and a point query pays a fixed 0.07 ms of client, TLS, socket and result encoding that the same query does not pay embedded (1 to 3 microseconds).",
         "Total invoiced across 10,000,000 invoices (SELECT SUM(amount_cents)): SQLite 414.54 ms, DuckDB 2.56 ms, SQL Server 943.63 ms, HoloDb under 0.01 ms, because a maintained total is read instead of 10 million rows."
       ],
       "losses": [
@@ -391,16 +414,163 @@
       ]
     },
     {
+      "id": "hundred-million",
+      "title": "100,000,000 invoices: HoloDb out of the box, HoloDb declared, and tuned competitors",
+      "intro": [
+        "The same 16 billing queries on 100,000,000 invoices (2,000,000 customers), one session on one machine: an 11th Gen Intel Core i9-11950H at 2.60 GHz, 16 logical cores, 34.1 GB of memory, Windows 11, .NET 8.0.27. Each engine ran in its own process. Before any timing, the result of every query was hashed, and all engines returned identical results on all 16 queries.",
+        "The four arms. HoloDb out of the box: a paged table with nothing declared and nothing saved beside it; the planner may earn structures from repeated scans (here it saw each statement four times: the cold run and three warm runs). HoloDb declared: a paged table with the summary, sorted index and keyed summary declared and saved beside the data, opened from those files (a restored state). DuckDB 1.5.5 tuned: the table written in customer_id order, ANALYZE, explicit thread and memory settings. SQL Server 2022 Developer tuned: a nonclustered columnstore index, a descending index on amount_cents, and indexed views over region, status and month, customer, segment, cohort and customer name, with max server memory 5,120 MB in a container. We chose the tuning after a 10,000,000-row trial and fixed it before the 100,000,000-row build. Cold means the first run after the operating system's file cache was evicted by reading a 34 GB file (and, for SQL Server, dropping its buffers); warm is the median of three runs, and the table shows warm."
+      ],
+      "tables": [
+        {
+          "id": "hundred-million",
+          "kind": "matrix",
+          "caption": "Warm median milliseconds at 100,000,000 invoices: tuned DuckDB, tuned SQL Server, HoloDb out of the box and HoloDb declared (one run, one session, one 16-core laptop)",
+          "columns": [
+            "Query",
+            "DuckDB tuned",
+            "SQL Server tuned",
+            "HoloDb out of the box",
+            "HoloDb declared"
+          ],
+          "rows": [
+            [
+              "invoices by status",
+              "77.60",
+              "1.12",
+              "0.13",
+              "0.12"
+            ],
+            [
+              "revenue by month",
+              "69.35",
+              "1.20",
+              "0.20",
+              "0.22"
+            ],
+            [
+              "revenue by region",
+              "67.54",
+              "1.06",
+              "0.13",
+              "0.16"
+            ],
+            [
+              "total invoiced",
+              "23.17",
+              "0.65",
+              "0.13",
+              "0.16"
+            ],
+            [
+              "invoice count",
+              "0.67",
+              "0.62",
+              "0.10",
+              "0.09"
+            ],
+            [
+              "look up one invoice",
+              "0.76",
+              "0.58",
+              "0.16",
+              "0.16"
+            ],
+            [
+              "overdue outstanding",
+              "67.76",
+              "0.64",
+              "198.84",
+              "0.31"
+            ],
+            [
+              "big-ticket invoices",
+              "35.02",
+              "17.21",
+              "111.31",
+              "0.12"
+            ],
+            [
+              "largest invoices",
+              "6.70",
+              "0.81",
+              "281.64",
+              "0.27"
+            ],
+            [
+              "top customers by revenue",
+              "190.14",
+              "38.50",
+              "3,087.82",
+              "51.66"
+            ],
+            [
+              "revenue by region and status",
+              "261.46",
+              "0.91",
+              "355.86",
+              "0.29"
+            ],
+            [
+              "revenue by segment (JOIN)",
+              "488.31",
+              "0.65",
+              "6.62",
+              "6.26"
+            ],
+            [
+              "enterprise revenue (JOIN)",
+              "102.06",
+              "0.64",
+              "7.40",
+              "7.43"
+            ],
+            [
+              "revenue by signup cohort (JOIN)",
+              "285.55",
+              "0.62",
+              "9.05",
+              "7.54"
+            ],
+            [
+              "top named customers (JOIN)",
+              "576.07",
+              "121.54",
+              "33.60",
+              "33.57"
+            ],
+            [
+              "revenue by segment and status (JOIN)",
+              "603.65",
+              "0.77",
+              "715.47",
+              "36.47"
+            ]
+          ]
+        }
+      ],
+      "notes": [
+        "Counting a difference of 20 percent or less as equal, and leaving out the invoice count and the lookup (both tuned competitors moved more than 20 percent between the two runs of the same arm there, so no ratio is drawn from those cells), the 14 remaining queries come out as follows. HoloDb declared is ahead of tuned DuckDB on 14, equal on 0 and behind on 0; against tuned SQL Server it is ahead on 9, equal on 0 and behind on 5. HoloDb out of the box is ahead of tuned DuckDB on 8, equal on 1 and behind on 5; against tuned SQL Server it is ahead on 5, equal on 0 and behind on 9.",
+        "Why out of the box loses where it does: its first touches of a query are scans, and it earns a structure only after repeats. The four rollups it answers from a maintained total (invoices by status, revenue by month, revenue by region and total invoiced) read in 0.13 to 0.20 ms, against 23.17 to 77.60 ms for tuned DuckDB scanning 100,000,000 rows. That gap is a maintained total against a scan, and it says nothing about queries that scan.",
+        "In a later run on the same machine, with the pre-grouped join totals present in the declared database (warm medians of three, one run, the competitors were not timed again), the four dimension joins read 0.19, 0.20, 0.23 and 0.25 ms, top customers 0.58 ms and top named customers 0.93 ms. The SQL Server figures to compare with are the ones in the table above.",
+        "Load once and size: HoloDb out of the box 165 s and 4.94 GB, HoloDb declared 192 s and 6.84 GB, DuckDB tuned 168 s and 2.46 GB, SQL Server tuned 484 s and 8.88 GB."
+      ],
+      "losses": [
+        "Tuned SQL Server is ahead of HoloDb declared on four of the five dimension joins (revenue by segment, enterprise revenue, revenue by signup cohort and revenue by segment and status): 0.62 to 0.77 ms against 6.26 to 36.47 ms. It is also ahead on top customers by revenue, 38.50 ms against 51.66 ms. Both are warm medians from the same session.",
+        "HoloDb out of the box is slower than tuned DuckDB on overdue outstanding, big-ticket invoices, largest invoices, top customers by revenue and revenue by region and status: 198.84, 111.31, 281.64, 3,087.82 and 355.86 ms against 67.76, 35.02, 6.70, 190.14 and 261.46 ms. On revenue by segment and status it reads 715.47 ms against 603.65 ms, which is inside the 20 percent counted as equal.",
+        "HoloDb out of the box is behind tuned SQL Server on 9 of the 14 compared queries."
+      ]
+    },
+    {
       "id": "plane-billing",
       "title": "The optional plane on the billing ledger",
       "intro": [
-        "The plane is opt-in per table and was not on in the comparison above. This is a separate run of the same workload with a plane attached to the invoices table: dimensions region (4 values), status (5) and month (24), a 10-bit joint, and the measure amount_cents. Building it for 10,000,000 rows took 741 ms (749 ms on the server's database) and its cells take 34,528 bytes. All 16 results were again identical across the engines."
+        "The plane is opt-in per table and was not on in the 10,000,000-invoice comparison above. This is a separate run of the same workload with a plane attached to the invoices table: dimensions region (4 values), status (5) and month (24), a 10-bit joint, and the measure amount_cents. Building it for 10,000,000 rows took 741 ms (749 ms on the server's database) and its cells take 34,528 bytes. All 16 results were again identical across the engines."
       ],
       "tables": [
         {
           "id": "plane-billing",
           "kind": "matrix",
-          "caption": "Plane off and plane on, median milliseconds",
+          "caption": "Plane off and plane on, 10,000,000 invoices, median milliseconds (SQLite and DuckDB out of the box, in memory, one run)",
           "columns": [
             "Query",
             "SQLite",
@@ -449,7 +619,7 @@
         {
           "id": "dash-classes",
           "kind": "matrix",
-          "caption": "Plane against the engine and against the best other engine, by class of slice",
+          "caption": "Plane against the engine and against the best other engine (SQLite, DuckDB and SQL Server, each out of the box), by class of slice; one run on a laptop with ordinary applications open",
           "columns": [
             "Class (queries)",
             "Plane vs engine, median",
@@ -486,7 +656,7 @@
         {
           "id": "dash-first",
           "kind": "matrix",
-          "caption": "First call of each query, median milliseconds",
+          "caption": "First call of each query, median milliseconds (DuckDB and SQL Server out of the box, one run)",
           "columns": [
             "Query",
             "DuckDB",
@@ -552,7 +722,7 @@
         {
           "id": "ingest-rounds",
           "kind": "matrix",
-          "caption": "Per round, median milliseconds",
+          "caption": "Per round, median milliseconds (SQLite, DuckDB and SQL Server out of the box, one run)",
           "columns": [
             "Per round (ms)",
             "SQLite",
@@ -590,13 +760,13 @@
       "id": "tenants",
       "title": "Multi-tenant slices and joins",
       "intro": [
-        "Five million events spread over six tenant tables (2,000,000 down to 150,000 rows) and a 2,000-product dimension table. A filter with a COUNT and SUM on one tenant is a median 11.70x faster than the engine and 25.0x faster than the best other engine. The largest tenant reads 0.171 ms with the plane, 4.263 ms for the engine, 6.312 ms for DuckDB and 195.195 ms for SQL Server."
+        "Five million events spread over six tenant tables (2,000,000 down to 150,000 rows) and a 2,000-product dimension table. A filter with a COUNT and SUM on one tenant is a median 11.70x faster than the engine and 25.0x faster than the best other engine (DuckDB, SQLite and SQL Server each out of the box). The largest tenant reads 0.171 ms with the plane, 4.263 ms for the engine, 6.312 ms for DuckDB and 195.195 ms for SQL Server."
       ],
       "tables": [
         {
           "id": "tenant-joins",
           "kind": "matrix",
-          "caption": "The same join repeated, median milliseconds",
+          "caption": "The same join repeated, median milliseconds (DuckDB and SQL Server out of the box, one run)",
           "columns": [
             "Query",
             "DuckDB",
@@ -659,7 +829,7 @@
         {
           "id": "classes",
           "kind": "matrix",
-          "caption": "Seventeen query classes at 1,000,000 rows",
+          "caption": "Seventeen query classes at 1,000,000 rows (SQLite in memory; the two INT joins have 40 distinct join keys and the TEXT join has 4; one run)",
           "columns": [
             "Query class",
             "SQLite",
@@ -791,7 +961,7 @@
         }
       ],
       "notes": [
-        "The engine alone is faster than SQLite on every class, from 9x (the TEXT join) to more than 250x on COUNT(*) and more than 20,000x on SUM, single-column GROUP BY, MIN and MAX and COUNT DISTINCT over the whole table. The plane is faster than SQLite on every class it serves. Against the engine it wins where there is a real scan or join to avoid. Outcome counts for the plane against the engine: 7 classes at least 2x faster, 3 ties, 1 between 1.25x and 2x, 4 slower, 2 noisy.",
+        "The engine alone is faster than in-memory SQLite on every class, from 9x (the TEXT join) to more than 250x on COUNT(*) and more than 20,000x on SUM, single-column GROUP BY, MIN and MAX and COUNT DISTINCT over the whole table; those last classes compare a maintained total with a scan. The plane is faster than SQLite on every class it serves. Against the engine it wins where there is a real scan or join to avoid. Outcome counts for the plane against the engine: 7 classes at least 2x faster, 3 ties, 1 between 1.25x and 2x, 4 slower, 2 noisy.",
         "At 100,000 rows the engine is faster than the plane on seven of the 17 classes: the whole-table classes, the single-column GROUP BY and MIN and MAX (0.33x to 0.51x), the two-column GROUP BY (0.26x), GROUP BY with a WHERE (0.41x) and COUNT DISTINCT with a WHERE (0.58x). At 300,000 rows the plane is faster on every filter and join (24x to 1,887x) and on the two-column GROUP BY (1.77x). Default routing sends GROUP BY with a WHERE to the engine below 140,000 rows.",
         "The plane's cost when attached, against the engine alone: single-row INSERT 1.4x to 1.9x, UPDATE 1.6x to 1.8x (these cells are microseconds and move with the order the two arms run in); batch load of the whole table 1.93 s with the plane against 1.80 s without at 1,000,000 rows; rebuilding the plane from the columns 131 ms; a heap of 139.7 bytes per row with the plane against 135.2 without; the plane's cells are a flat 0.92 MB joint slice whatever the row count.",
         "The TEXT-key join is faster than SQLite in the engine alone (39.98 ms against 322.17 ms at 1,000,000 rows, rows identical). It requires both join columns to be TEXT; a join between an INT column and a TEXT column takes the general path and is much slower."
@@ -1023,7 +1193,7 @@
       "id": "live",
       "title": "Dashboard reads during live ingest, and opening a database",
       "intro": [
-        "Whole-table counts and sums, and GROUP BY on a column with up to 64 distinct values, are served from a snapshot republished after every write, without taking the engine's write lock. In one run, 2,000,000 events were ingested in 1,000-row batches at 1.16 million events a second while 4 concurrent readers queried: median read 0.009 to 0.09 ms, p99 0.8 ms (group by region), 1.1 ms (sum) and 6.6 ms (count), worst single read 6.7 ms.",
+        "Whole-table counts and sums, and GROUP BY on a column with up to 64 distinct values, are served from a snapshot republished after every write, without taking the engine's write lock. In one run on a 16-core laptop that was not idle, 2,000,000 events were ingested in 1,000-row batches at 1.16 million events a second while 4 concurrent readers queried: median read 0.009 to 0.09 ms, p99 0.8 ms (group by region), 1.1 ms (sum) and 6.6 ms (count), worst single read 6.7 ms.",
         "Opening a database of 1,000,000 rows (a 43 MB log) takes about 2.0 s by replaying its write-ahead log (1.95 to 2.05 s across two runs) and about 1.1 s from a checkpoint (1.09 to 1.11 s), with the loaded state checked correct and a heap of about 110 bytes per row, in a newly started process. This is the engine's own recovery and checkpoint; it does not use the plane or the page store."
       ],
       "tables": [],
@@ -1043,16 +1213,18 @@
         "Queries the plane declines or leaves to the engine stay within noise: of the 16 queries that run the same path in both arms, none fell outside a band of 0.8x to 1.25x, with class medians of 0.97 and 0.99. A deliberately wrong plane (the measure column shuffled at 1,000,000 rows) was caught on every query it changes and matched on every query it does not: 0 failures of 32.",
         "The aggregate plane returns row-for-row the same answers as the engine and SQLite across the parity suite (2,853 checks at 2,000 rows, and the suite also passes at 5,000 and 100,000 rows), including a random insert, update, delete, rollback and reopen log, and sums past 64 bits. Nine deliberate mutations (a dropped carry, a missed delete, a stale join limb and others) each turned the suite red. Sums past 64 bits are never wrapped: the plane raises an error and PleromaSumExact returns the exact 128-bit total.",
         "The page store passes 72 of 72 checks: exactly-once replay after a crash, a torn journal tail discarded, restore points that rewind without recounting, and repair of a lost page from its parity group. Eight deliberate mutations and a tiny-cache case each turned the suite red.",
+        "A paged table checks every 8 KB data page against a checksum kept in a small side file. In a test that flipped 61 bits in the data file of a 91 MB paged table, on the laptop described above, none gave a silently different answer: 36 were reported with an error that names the page, and 25 were in pages never read.",
         "Atomicity and crash recovery are covered by a 48-check suite (a failing log append is undone in full, a reopen from the log reproduces the committed state) and a 58-check transaction suite plus about 600 randomised comparisons against SQLite; three deliberate mutations each turned it red."
       ],
       "losses": []
     }
   ],
   "limits": [
-    "One run per size on one machine, and constructed workloads for the plane sections: one synthetic table (9 columns, four small-domain dimensions, a 14-bit joint). The plane serves only the columns you attach, lives in RAM and is not persisted.",
+    "Each figure comes from a single run on a single machine, and the plane sections use constructed workloads: one synthetic table (9 columns, four small-domain dimensions, a 14-bit joint). The plane serves only the columns you attach. A plane made with EnablePleroma lives in RAM and is not persisted; a plane made with SQL, and the summaries the planner builds by itself, are saved with the table.",
+    "The 100,000,000-invoice comparison is one session on one laptop. We chose the tuning of DuckDB and SQL Server after a 10,000,000-row trial and fixed it before the 100,000,000-row build, and a different tuning is untested. HoloDb out of the box saw each statement four times (the cold run and three warm runs) and earns a structure only after repeats. The cold runs are not on this page.",
     "In the engine alone, GROUP BY with a WHERE is about 3 ms at 1,000,000 rows because the filter and the grouping are separate passes. The dense-code GROUP BY covers INT and TEXT columns whose combined distinct count is at most 65,536, and anything else uses a slower string-key path. REAL aggregates over a filter use the older scan.",
     "The first DDL statement inside a transaction takes a snapshot of every in-memory table, so it costs time proportional to the data. After a ROLLBACK of deleted rows the table holds the same rows but not necessarily in the same internal order.",
-    "The plane does not help the billing joins (200,000 join keys against the limit of 4,095) or the top-customers query. A plane join over fewer keys is served, as in the tenant workload.",
+    "The aggregate plane does not serve the billing joins at 10,000,000 invoices (200,000 join keys against its limit of 4,095) or the top-customers query; the keyed summary and the pre-grouped join totals in the 100,000,000-invoice section do. A plane join over fewer keys is served, as in the tenant workload.",
     "The scaling lines are fits over four or five sizes on one machine, and the write-then-read pairs are one run per table size of one repeated group-by. Time slopes under about 0.4 are not read as exact exponents.",
     "Page-store throughput is not reported here."
   ],

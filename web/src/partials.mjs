@@ -68,7 +68,7 @@ export function codeBlock({ code, lang = 'csharp', label, out }) {
 const fmtCell = (n) => fmt2(n);
 
 export function evidenceTable(tb) {
-  const head = ['Query', ...tb.columns, 'Result'];
+  const head = ['Query', ...tb.columns.map((c, k) => c + (tb.qualifiers && tb.qualifiers[k] ? ` (${tb.qualifiers[k]})` : '')), tb.resultLabel || 'Result'];
   return html`<div class="tbl-wrap"><table class="tbl"><caption>${tb.caption}</caption>
 <thead><tr>${head.map((h, i) => html`<th scope="col"${i > 0 && i < head.length - 1 ? raw(' class="num"') : ''}>${h}</th>`)}</tr></thead>
 <tbody>${tb.rows.map((r) => html`<tr><th scope="row">${r.label}</th>${r.values.map((v, i) => {
@@ -104,12 +104,13 @@ export function evidenceTiles(e) {
   if (e.headline) return e.headline;
   const tiles = [];
   allTables(e).filter((tb) => tb.kind !== 'matrix').forEach((tb, i) => {
-    const f = e.facts[tb.id], focus = tb.columns[tb.focus], rival = tb.columns[tb.rival];
-    if (i === 0) tiles.push({ value: `${f.beatsFirst} of ${f.total}`, label: `queries where ${focus} beats ${tb.columns[0]}` });
+    const q = (k) => tb.columns[k] + (tb.qualifiers && tb.qualifiers[k] ? ` (${tb.qualifiers[k]})` : '');
+    const f = e.facts[tb.id], focus = q(tb.focus), rival = q(tb.rival);
+    if (i === 0) tiles.push({ value: `${f.beatsFirst} of ${f.total}`, label: `queries where ${focus} beats ${q(0)}` });
     if (f.ties > 0 || f.losses > 0) tiles.push({ value: `${f.wins} / ${f.ties} / ${f.losses}`, label: `wins, ties and losses against ${rival}` });
     else tiles.push({ value: `${f.wins} of ${f.total}`, label: `queries where ${focus} beats ${rival}` });
   });
-  return tiles;
+  return [...tiles, ...(e.extraTiles || [])];
 }
 
 // ---- sizzle-first pieces (design-language section 8): number tiles with the conditions behind a disclosure, and the tool entry ----

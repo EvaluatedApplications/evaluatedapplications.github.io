@@ -39,7 +39,7 @@ export function record(ctx, e) {
     kinds.add('latency-bars');
     return diagramFigure({
       id: 'lb-' + tb.id, kind: 'latency-bars', title: '', lede: '', level: 3,
-      data: { schema: 'ea-diagram/1', kind: 'latency-bars', id: tb.id, caption: tb.caption, columns: tb.columns, focus: tb.focus, rival: tb.rival, tieBelow: e.tieBelow ?? 1.15, rows: tb.rows },
+      data: { schema: 'ea-diagram/1', kind: 'latency-bars', id: tb.id, caption: tb.caption, columns: tb.columns, focus: tb.focus, rival: tb.rival, tieBelow: e.tieBelow ?? 1.15, resultLabel: tb.resultLabel, qualifiers: tb.qualifiers, rows: tb.rows },
       stageLabel: 'Latency chart. Use the up and down arrows to read each row.',
       caption: html`Drawn from the table, which holds every value.`,
     }).html;

@@ -249,7 +249,7 @@ try {
   ok('evidence: bars mount without console errors', b.errors.length === 0, JSON.stringify(b.errors));
   ok('evidence: default readout states wins, ties and losses from the data', await b.evaluate("/faster on 13 of 16 queries, tied on 2 and slower on 1/.test(document.querySelector('[data-diagram=latency-bars] [data-ctl=readout]').textContent)"));
   await b.evaluate("document.querySelector('[data-diagram=latency-bars] [data-rival=\"0\"]').click()");
-  ok('evidence: comparing with SQLite changes the summary', await b.evaluate("/against SQLite: faster on 15 of 16/.test(document.querySelector('[data-diagram=latency-bars] [data-ctl=readout]').textContent)"));
+  ok('evidence: comparing with SQLite changes the summary', await b.evaluate("/against SQLite \\(in memory\\): faster on 15 of 16/.test(document.querySelector('[data-diagram=latency-bars] [data-ctl=readout]').textContent)"));
   await b.evaluate("document.querySelector('[data-diagram=latency-bars] [data-order=gap]').click()");
   ok('evidence: ordering by gap puts the biggest speed-up first', await b.evaluate("(()=>{const g=document.querySelector('[data-diagram=latency-bars] .lb-row text.lab');return /invoices by status|revenue by region|total invoiced|revenue by month/.test(g.textContent)})()"));
   await b.evaluate("document.querySelector('[data-diagram=latency-bars] .dia-stage').focus()");
