@@ -15,7 +15,7 @@
 <meta name="twitter:card" content="summary">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%23f0796a'/%3E%3Cstop offset='.5' stop-color='%237bd86a'/%3E%3Cstop offset='1' stop-color='%23c07dff'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='32' height='32' rx='7' fill='%23050608'/%3E%3Cpath d='M16 5L27 26H5Z' fill='none' stroke='url(%23g)' stroke-width='2' stroke-linejoin='round'/%3E%3C/svg%3E">
 <script>document.documentElement.classList.add('js')</script>
-<link rel="stylesheet" href="/assets/ea.css?v=0077e144">
+<link rel="stylesheet" href="/assets/ea.css?v=d3373212">
 <script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Home","item":"https://evaluatedapplications.github.io/"},{"@type":"ListItem","position":2,"name":"Products","item":"https://evaluatedapplications.github.io/products/"},{"@type":"ListItem","position":3,"name":"HoloDb","item":"https://evaluatedapplications.github.io/holodb/"},{"@type":"ListItem","position":4,"name":"Docs","item":"https://evaluatedapplications.github.io/holodb/docs/"}]}</script>
 
 </head>
@@ -335,7 +335,7 @@ foreach (var row in db.Execute(&quot;SELECT id, region, total FROM orders ORDER 
 1 north 50
 3 east 7</code></pre></div>
   
-  <p class="more-link"><a href="/holodb/evidence/#scaling">Scaling: a batch against one statement at a time</a></p>
+  <p class="more-link"><a href="/holodb/evidence/deep-dive/#scaling">Scaling: a batch against one statement at a time</a></p>
 </div></section><section class="sec doc-sec" aria-labelledby="durable"><div class="wrap">
   <div class="sec-head"><span class="sec-dot cat-holodb" aria-hidden="true"></span><h2 id="durable">In memory or durable</h2></div>
   <div class="prose-block"><p>By default the database lives in memory and is gone when the process ends. To make writes durable, give it a write-ahead log path. Durable state is a compact snapshot of the current data plus a short log of the writes since the last checkpoint. A durable commit flushes to disk before it returns. Recovery is bounded by how much data you hold, not by how long the database has been running: reopening loads a snapshot and replays only the recent tail.</p><p>The log is folded into a fresh snapshot automatically once it passes a threshold (CheckpointThresholdBytes, 8 MB by default), and you can force one with Checkpoint, for example before a clean shutdown. In WebAssembly there is no file system, so leave WalPath null and use the in-memory engine. To work with the engine directly, without the async wrapper, call Database.Open with a path, or with null for in memory.</p></div>

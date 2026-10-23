@@ -9,11 +9,11 @@
     "sub": "Switch on the plane for a table and HoloDb answers filters, group-bys, distinct counts and joins from a small exact summary instead of scanning rows. It is optional, off until you ask, and every answer matches the engine's.",
     "cta": "See the numbers",
     "briefTitle": "What Pleroma gives HoloDb",
-    "evidence": ["holodb"],
+    "evidence": ["holodb-deep-dive"],
     "stats": [
-      { "value": "About 600 times", "label": "faster for an overdue-invoices rollup on 10,000,000 rows with the plane on: 5.93 ms down to 0.01 ms", "cite": ["evidence/holodb.json"] },
-      { "value": "121 times", "proof": ["121.40"], "label": "median speed-up over the engine on nine ad-hoc filters across a 10,000,000-event dashboard", "cite": ["evidence/holodb.json"] },
-      { "value": "343 to 385 microseconds", "label": "for one insert and one group-by with the plane on, from 100,000 to 1,000,000 rows. The engine alone climbs from 1.03 to 3.54 ms", "cite": ["evidence/holodb.json"] }
+      { "value": "About 600 times", "label": "faster for an overdue-invoices rollup on 10,000,000 rows with the plane on: 5.93 ms down to 0.01 ms", "cite": ["evidence/holodb-deep-dive.json"] },
+      { "value": "121 times", "proof": ["121.40"], "label": "median speed-up over the engine on nine ad-hoc filters across a 10,000,000-event dashboard", "cite": ["evidence/holodb-deep-dive.json"] },
+      { "value": "343 to 385 microseconds", "label": "for one insert and one group-by with the plane on, from 100,000 to 1,000,000 rows. The engine alone climbs from 1.03 to 3.54 ms", "cite": ["evidence/holodb-deep-dive.json"] }
     ],
     "numbers": {
       "summary": "See the numbers, and what the plane costs",
@@ -31,9 +31,9 @@
       "id": "framing",
       "title": "Engine results and plane results",
       "paragraphs": [
-        "The headline results on the evidence page are the engine's, not the plane's. The 10,000,000-invoice billing comparison against SQLite, DuckDB and SQL Server, and the single-row write tables against SQLite, were run on the HoloDb engine alone, with no plane attached. The plane is a separate, opt-in feature, measured in its own runs, where its costs sit beside its wins."
+        "The 10,000,000-invoice comparison against engines as they ship ran on the HoloDb engine alone, with no plane attached, and the 100,000,000-invoice comparison uses summaries that are declared or built by the planner. The plane is a separate, opt-in feature, measured in its own runs in the deep dive, where its costs sit beside its wins."
       ],
-      "more": { "label": "Plane results and costs", "href": "/holodb/evidence/#dashboard" }
+      "more": { "label": "Plane results and costs", "href": "/holodb/evidence/deep-dive/#dashboard" }
     },
     {
       "id": "plane",
@@ -85,7 +85,7 @@
       "id": "exactness",
       "title": "Exactness",
       "paragraphs": [ "The plane returns row-for-row the same answers as the engine and SQLite across its parity suite, including a random insert, update, delete, rollback and reopen log, and sums past 64 bits, and the page store passes its fault suite. The checks, and the deliberate mutations that turned them red, are listed with the figures." ],
-      "more": { "label": "Checks behind the figures", "href": "/holodb/evidence/#checks" }
+      "more": { "label": "Checks behind the figures", "href": "/holodb/evidence/deep-dive/#checks" }
     }
   ]
 }

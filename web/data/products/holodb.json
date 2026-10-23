@@ -1,27 +1,27 @@
 {
-  "title": "HoloDb: answers in microseconds",
-  "description": "Put a SQL database inside your .NET app that totals ten million invoices in 0.02 ms, ranks rows by resemblance and survives a crash.",
+  "title": "HoloDb: answers in under a millisecond",
+  "description": "Put a SQL database inside your .NET app that totals 100,000,000 invoices in 0.12 ms, ranks rows by resemblance and survives a crash.",
   "sizzle": {
-    "headline": "Ten million rows. Dashboard answers in microseconds.",
-    "sub": "Put a SQL database inside your app that rolls up a ledger in a blink, ranks rows by resemblance and keeps ACID transactions. Tables can be bigger than memory.",
+    "headline": "100,000,000 invoices. Dashboard answers in under a millisecond.",
+    "sub": "A SQL database inside your .NET app that keeps your totals ready, ranks rows by resemblance, runs in a browser tab and survives a crash. Declare what you ask often, or let it learn. Tables can be bigger than memory.",
     "tool": "umbrarium",
     "mechanismTitle": "One store, three ways to ask",
     "stats": [
-      { "value": "0.02 ms", "label": "to roll up 10,000,000 invoices by status. HoloDb reads a maintained total, and DuckDB out of the box, scanning them, took 41.63 ms", "cite": ["evidence/holodb.json"] },
-      { "value": "13 of 16", "label": "billing queries where in-process HoloDb beat out-of-the-box DuckDB on 10,000,000 invoices. Two tied and one was DuckDB's", "cite": ["evidence/holodb.json"] },
-      { "value": "9 of 14", "label": "compared queries where HoloDb with its structures declared beat tuned SQL Server at 100,000,000 invoices. Tuned SQL Server was ahead on the other 5", "cite": ["evidence/holodb.json"] },
-      { "value": "16 of 16", "label": "queries that returned the same rows on every engine, at both sizes. The ones where HoloDb is slower are listed too", "cite": ["evidence/holodb.json"] }
+      { "evidence": "holodb", "tile": 0 },
+      { "evidence": "holodb", "tile": 1 },
+      { "evidence": "holodb", "tile": 2 },
+      { "evidence": "holodb", "tile": 3 }
     ],
     "numbers": {
-      "summary": "See the numbers",
+      "summary": "See every query",
       "items": [
-        { "claim": "Five rollups in microseconds, because a maintained total is read", "text": "Revenue by status takes 0.02 ms against 41.63 ms for DuckDB and 3,719.66 ms for SQLite. All five rollups take 0.04 ms or less in HoloDb against 0.68 ms or more in DuckDB, which scans. A rollup compares a maintained total with a scan, so read it as that and not as a general speed-up. Conditions: DuckDB and SQLite out of the box (default settings, no added indexes, no summary tables), a ledger of 10,000,000 invoices joined to 200,000 customers, in process and in memory, medians of repeated calls through each engine's typed client API, one run on one 16-core laptop CPU (Intel Core i9-11950H) with nothing else heavy running." },
-        { "claim": "Joins against out-of-the-box DuckDB: ahead on three, tied on one, behind on one", "text": "Revenue by segment takes 14.71 ms against 49.01 ms for DuckDB (3.3 times). Top named customers is 2.2 times faster and revenue by segment and status 2.1 times. Enterprise revenue ties with DuckDB (1.03 times), and revenue by signup cohort is DuckDB's by 1.25 times. These joins do the same work in both engines, so the ratios are the fair ones." },
-        { "claim": "At 100,000,000 invoices, against tuned engines", "text": "On the same 16 queries with DuckDB and SQL Server tuned (SQL Server with a columnstore index, a descending index and indexed views), HoloDb with its structures declared and saved is ahead of tuned DuckDB on all 14 compared queries and ahead of tuned SQL Server on 9. It is behind tuned SQL Server on 5: four dimension joins and top customers. HoloDb out of the box, with nothing declared, is behind tuned DuckDB on 5 and behind tuned SQL Server on 9, because its first touches are scans and it earns a structure only after repeats. Conditions: one session on one 16-core laptop, each engine in its own process, warm medians of three, tuning fixed before the build, identical results on all 16 queries. The invoice count and the lookup are left out of the 14 because the tuned competitors moved more than 20 percent between their two runs there." },
-        { "claim": "Where SQLite is ahead", "text": "Looking up one invoice takes 0.01 ms in SQLite and 0.02 ms in HoloDb. Every HoloDb figure in the 10,000,000-invoice comparison is an in-memory database with no write-ahead log. A database opened with a log flushes each committed statement to disk, which adds one flush per commit, set by the disk." },
-        { "claim": "Identical answers", "text": "Before any query is timed, its full result set is compared across the engines. All 16 results are identical at both sizes, including on the queries where HoloDb is slower." }
+        { "claim": "All sixteen queries, four engines, warm and cold", "text": "The evidence page charts every query for HoloDb restored, HoloDb out of the box, tuned DuckDB and tuned SQL Server. The queries where HoloDb is slower are the amber bars. Each tile above says its own condition." }
       ]
     },
+    "figures": [
+      { "id": "hw", "kind": "holodb-how", "secId": "how", "title": "How it gets there", "line": "Six short scenes. The motion is schematic; the numbers are measured.", "stageLabel": "Animated explainer. Choose a scene, then press Play or drag the scrubber.", "caption": "The motion is schematic. The figures in each caption are measured, and each is read from the result files." },
+      { "id": "ft", "kind": "holodb-fit", "secId": "fit", "title": "When HoloDb fits, and when it does not", "line": "Everything is a trade-off. Set your workload and read the answer, including when to use something else.", "stageLabel": "Decision helper. Choose an answer in each row to see the verdict.", "tradeoffs": true, "tradeoffsTitle": "The five trade-offs", "caption": "The answer comes from the measured results and the list of limits. Every rule is in the table below." }
+    ],
     "build": {
       "title": "What you can build",
       "line": "Each one is in the package today.",
@@ -52,7 +52,7 @@
     "title": "One store, three ways to ask",
     "stageLabel": "Interactive 3D view of the invoices table. Drag to turn it, or use the arrow keys. Choose a way to query above.",
     "lede": "The same 24 rows answer a key lookup, a similarity ranking and an aggregate. Each answer, route and usage-meter reading was captured from a run of the package; the bars use the benchmark's own medians.",
-    "latency": { "evidence": "holodb", "table": "inprocess", "key": ["look up one invoice"], "aggregate": ["invoices by status", "total invoiced"], "note": "In memory, one run on a 16-core laptop. SQLite and DuckDB are out of the box, with no added indexes or summary tables. The aggregates here read a maintained total. Tuned DuckDB and tuned SQL Server at 100,000,000 invoices are on the evidence page." }
+    "latency": { "race": true, "title": "The same question on 100,000,000 invoices", "key": ["look up one invoice"], "aggregate": ["invoices by status", "total invoiced"], "note": "Warm medians in milliseconds, one machine. HoloDb restored has its structures declared and saved; the tuned rivals have the matching structures built by hand. All sixteen queries are on the evidence page." }
   },
   "quickstart": {
     "lede": "Create a service, run some SQL and read the rows back.",
@@ -74,16 +74,13 @@
     { "title": "Embedded or networked", "text": "Use it in process, or run it as a server with a matching typed client and a columnar wire protocol. The same managed code also runs in a browser tab." },
     { "title": "The optional Pleroma plane and page store", "text": "Attach an exact, derived summary to chosen columns to answer filters, group-bys, distinct counts and joins without scanning, or keep exact Pleroma pages durably as the data itself." }
   ],
+  "limitsFrom": "holodb-fit",
   "limits": [
-    "A plain INSERT of an existing primary key throws. To insert or replace, use INSERT with ON CONFLICT (key) DO UPDATE SET column = EXCLUDED.column, or ApplyChanges with RowChange.Upsert. Both work on in-memory tables only, and a paged table refuses them.",
-    "A table has one PRIMARY KEY, an INT or TEXT column. Joins are INNER JOINs only: several in one statement on in-memory tables, one on a paged table. LEFT, RIGHT, FULL, CROSS and NATURAL joins, USING and comma joins are refused with an error.",
-    "ALTER TABLE supports ADD COLUMN only: a NOT NULL column needs a DEFAULT, a column declared NULL may leave it out. There is no DROP, rename or type change.",
-    "There is no column aliasing with AS. Table aliases in a join are not supported, so qualify columns with the table name.",
-    "A column holds NULL only when it is declared NULL. An index takes NOT NULL columns only, paged tables and summary tables refuse NULL, and the Pleroma plane hands any statement that touches a column holding a NULL to the engine. A statement on a column holding NULLs that is not a maintained aggregate reads boxed rows, slower than a NOT NULL column. A table that declares a NULL column is not read lock-free.",
-    "NEAREST with a WHERE filters first and then ranks the survivors, and NEAREST does not combine with GROUP BY.",
-    "Only integer aggregates are constant time. Real-number aggregates scan.",
-    "A plane attached through the API with EnablePleroma is not persisted: call it again after opening. A plane made with CREATE INDEX ... USING SUMMARY, or built automatically, is saved with its table, on paged tables too. A plane serves a dimension only up to its cap of distinct values and a join of at most 4,095 keys, and declines anything else to the engine.",
-    "The package ships compiled, without XML documentation."
+    "Upsert: a plain INSERT of an existing primary key throws. To insert or replace, use INSERT with ON CONFLICT (key) DO UPDATE SET column = EXCLUDED.column, or ApplyChanges with RowChange.Upsert. Both work on in-memory tables only, and a paged table refuses them.",
+    "Keys: a table has one PRIMARY KEY, an INT or TEXT column.",
+    "NULL: a column holds NULL only when it is declared NULL. An index takes NOT NULL columns only, paged tables and summary tables refuse NULL, and the Pleroma plane hands any statement that touches a column holding a NULL to the engine. A statement on a column holding NULLs that is not a maintained aggregate reads boxed rows, slower than a NOT NULL column. A table that declares a NULL column is not read lock-free.",
+    "Similarity: NEAREST with a WHERE filters first and then ranks the survivors, and NEAREST does not combine with GROUP BY.",
+    "Documentation: the package ships compiled, without XML documentation."
   ],
   "reference": "Every public type is documented with a worked example in the package readme on NuGet."
 }

@@ -22,7 +22,7 @@ Versions are read from `MonoRepo/<Pkg>/<Pkg>.csproj` when it exists and written 
 
 Regenerate the Pleroma replay and capacity data: `dotnet run -c Release --project web/generators/pleroma-demos -- web/data/diagrams/pleroma-superposition.json web/data/diagrams/pleroma-capacity.json`. The Phasor pyramid, superposition scene, coverage meter and ladder table are copied from the Phasor owner's `pleroma-map.json`, `superposition-coverage.json` and `site.md` by `scripts/migrate/extract-superposition.mjs` (nothing is typed). The sizzle-first pattern for product pages, with the Phasor copy, is in `data/copy/phasor-sizzle.md`. The home scene data is written by the build (`data/generated/stack-map.json`).
 
-Regenerate the HoloDb diagram data: `dotnet run -c Release --project web/generators/holodb-demo -- web/data/diagrams/holodb-store.json`. The HoloDb evidence record is migrated from the owner doc by `scripts/migrate/extract-holodb-evidence.mjs`. `verify-labels.mjs` checks label collisions.
+Regenerate the HoloDb diagram data: `dotnet run -c Release --project web/generators/holodb-demo -- web/data/diagrams/holodb-store.json`. The HoloDb evidence records and the race, explainer and decision-helper data are generated in order by `scripts/migrate/extract-holodb-scaling.mjs`, `extract-holodb-race.mjs`, `extract-holodb-story.mjs` and `extract-holodb-evidence.mjs` (see CLAUDE.md). `verify-labels.mjs` checks label collisions.
 
 Regenerate the Tracer diagram: `dotnet run -c Release --project web/generators/tracer-field -- web/data/diagrams/tracer-field.json`. Re-run the page sample: `dotnet run -c Release --project web/generators/tracer-sample`, then save its output to `data/snippets/tracer-quickstart.out.txt`.
 

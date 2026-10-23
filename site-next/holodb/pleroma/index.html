@@ -15,7 +15,7 @@
 <meta name="twitter:card" content="summary">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%23f0796a'/%3E%3Cstop offset='.5' stop-color='%237bd86a'/%3E%3Cstop offset='1' stop-color='%23c07dff'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='32' height='32' rx='7' fill='%23050608'/%3E%3Cpath d='M16 5L27 26H5Z' fill='none' stroke='url(%23g)' stroke-width='2' stroke-linejoin='round'/%3E%3C/svg%3E">
 <script>document.documentElement.classList.add('js')</script>
-<link rel="stylesheet" href="/assets/ea.css?v=0077e144">
+<link rel="stylesheet" href="/assets/ea.css?v=d3373212">
 <script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Home","item":"https://evaluatedapplications.github.io/"},{"@type":"ListItem","position":2,"name":"Products","item":"https://evaluatedapplications.github.io/products/"},{"@type":"ListItem","position":3,"name":"HoloDb","item":"https://evaluatedapplications.github.io/holodb/"},{"@type":"ListItem","position":4,"name":"Built on Pleroma","item":"https://evaluatedapplications.github.io/holodb/pleroma/"}]}</script>
 
 </head>
@@ -45,7 +45,7 @@
   <dl class="stats stats-big"><div class="stat"><dt>faster for an overdue-invoices rollup on 10,000,000 rows with the plane on: 5.93 ms down to 0.01 ms</dt><dd>About 600 times</dd></div><div class="stat"><dt>median speed-up over the engine on nine ad-hoc filters across a 10,000,000-event dashboard</dt><dd>121 times</dd></div><div class="stat"><dt>for one insert and one group-by with the plane on, from 100,000 to 1,000,000 rows. The engine alone climbs from 1.03 to 3.54 ms</dt><dd>343 to 385 microseconds</dd></div></dl>
   <details class="dia-data numbers-more"><summary>See the numbers, and what the plane costs</summary>
     <ul class="numbers-list"><li><h3>Rollups on the billing ledger</h3><p>Overdue outstanding falls from 5.93 ms to 0.01 ms, and revenue by region and status from 32.30 ms to 0.18 ms. Building the plane for 10,000,000 rows took 741 ms and its cells take 34,528 bytes. All 16 results were identical across the engines.</p></li><li><h3>A live dashboard of 10,000,000 events</h3><p>Across nine scalar filter slices the median speed-up over the engine is 121.40 times, and 191.5 times over the best of out-of-the-box SQLite, DuckDB and SQL Server (default settings, no added indexes, no summary tables). Group-bys gain 20.90 times, HAVING 24.57 times and distinct or min and max with a filter 18.42 times. Queries the plane declines tie with the engine at 0.97 times.</p></li><li><h3>Write, then read, as the table grows</h3><p>One insert followed by the same two-column group-by costs 385, 343 and 354 microseconds with the plane at 100,000, 300,000 and 1,000,000 rows, and 1.03, 1.44 and 3.54 milliseconds for the engine alone. A placebo pair that both arms run the same way reads 1.04, 1.03 and 0.97. Conditions: Release build, a 16-core laptop CPU (Intel Core i9-11950H) with nothing else heavy running, 200 pairs at each size.</p></li><li><h3>What it costs</h3><p>Writes cost more with the plane attached: a 10,000-row bulk load takes 11.62 ms against 9.85 ms, and 200 single-row inserts take 1.55 ms against 1.23 ms. On a table of 1,000,000 rows the plane is slower than the engine on whole-table counts and sums, single-column group-bys, and minimums and maximums, because the engine already reads a maintained total there in microseconds. A join that is not a repeat usually costs more through the plane than the engine&#39;s own join.</p></li></ul>
-    <p class="more-link"><a href="/holodb/evidence/">HoloDb benchmarks</a></p>
+    <p class="more-link"><a href="/holodb/evidence/deep-dive/">HoloDb deep dive</a></p>
   </details>
   
 </div></section>
@@ -55,7 +55,7 @@
 </div></section>
 <section class="sec doc-sec" aria-labelledby="framing"><div class="wrap">
   <div class="sec-head"><span class="sec-dot cat-holodb" aria-hidden="true"></span><h2 id="framing">Engine results and plane results</h2></div>
-  <div class="prose-block"><p>The headline results on the evidence page are the engine&#39;s, not the plane&#39;s. The 10,000,000-invoice billing comparison against SQLite, DuckDB and SQL Server, and the single-row write tables against SQLite, were run on the HoloDb engine alone, with no plane attached. The plane is a separate, opt-in feature, measured in its own runs, where its costs sit beside its wins.</p></div>
+  <div class="prose-block"><p>The 10,000,000-invoice comparison against engines as they ship ran on the HoloDb engine alone, with no plane attached, and the 100,000,000-invoice comparison uses summaries that are declared or built by the planner. The plane is a separate, opt-in feature, measured in its own runs in the deep dive, where its costs sit beside its wins.</p></div>
   
   
   
@@ -64,7 +64,7 @@
   
   
   
-  <p class="more-link"><a href="/holodb/evidence/#dashboard">Plane results and costs</a></p>
+  <p class="more-link"><a href="/holodb/evidence/deep-dive/#dashboard">Plane results and costs</a></p>
 </div></section><section class="sec doc-sec" aria-labelledby="plane"><div class="wrap">
   <div class="sec-head"><span class="sec-dot cat-holodb" aria-hidden="true"></span><h2 id="plane">The aggregate plane: exact answers from a derived summary</h2></div>
   <div class="prose-block"><p>You name a few small-domain columns (dimensions, INT or TEXT) and the INT columns to sum (measures). HoloDb keeps a Pleroma summary of them, updated by every write, and answers filters, multi-column GROUP BY, COUNT(DISTINCT), MIN and MAX of a dimension, and equi-join COUNT and SUM from it, without scanning the table.</p></div>
@@ -170,7 +170,7 @@ True
   
   
   
-  <p class="more-link"><a href="/holodb/evidence/#checks">Checks behind the figures</a></p>
+  <p class="more-link"><a href="/holodb/evidence/deep-dive/#checks">Checks behind the figures</a></p>
 </div></section></div>
 </main>
 <footer class="site-footer"><div class="wrap">

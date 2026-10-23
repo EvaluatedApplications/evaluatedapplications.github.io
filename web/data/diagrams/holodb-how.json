@@ -1,0 +1,152 @@
+{
+ "schema": "ea-diagram/1",
+ "kind": "holodb-how",
+ "id": "holodb-how",
+ "generator": "web/scripts/migrate/extract-holodb-story.mjs",
+ "scenes": [
+  {
+   "id": "read",
+   "tab": "Instant totals",
+   "promise": "A total that is already added up.",
+   "how": [
+    "HoloDb keeps the running total of an integer column next to the data, so a sum, a count or a group-by reads a few numbers instead of scanning rows.",
+    "Each insert pays a few microseconds to keep that total current, so the cost moves from every read to every write."
+   ],
+   "caption": "Illustrative motion. Measured at 100,000,000 invoices, warm: total invoiced 0.12 ms for HoloDb restored, 23.17 ms for tuned DuckDB scanning and 0.65 ms for tuned SQL Server with an indexed view. Keeping the summary current cost 6.5 microseconds per INSERT in memory and about 90 on a paged table.",
+   "fig": {
+    "rows": 100000000,
+    "totalCents": 22452661973818,
+    "newCents": 42080,
+    "holoMs": 0.1201,
+    "duckMs": 23.1707,
+    "sqlMs": 0.6506,
+    "writeRam": 6.5,
+    "writePaged": 90
+   }
+  },
+  {
+   "id": "build",
+   "tab": "Builds its own",
+   "promise": "It notices what you keep asking, and builds the answer.",
+   "how": [
+    "When a query shape repeats and the scans have cost as much as a summary or index would cost to build, the planner builds it in the background.",
+    "If writes later make it cost more than it saves, the planner drops it again. A DBA can declare structures instead, and those are saved and kept."
+   ],
+   "caption": "Illustrative motion. Measured out of the box at 100,000,000 invoices: invoices by status took 1,330.8 ms on its first run, then 0.13 ms. Overdue outstanding was still a scan after four runs, 198.84 ms against 67.76 ms for tuned DuckDB. Declared, it read in 0.26 ms.",
+   "fig": {
+    "status": {
+     "label": "invoices by status",
+     "first": "1,330.8",
+     "after": "0.13"
+    },
+    "overdue": {
+     "label": "overdue outstanding",
+     "oob": "198.84",
+     "duck": "67.76",
+     "restored": "0.26"
+    }
+   }
+  },
+  {
+   "id": "join",
+   "tab": "Joins without joining",
+   "promise": "Joins that read a handful of numbers.",
+   "how": [
+    "Declare a keyed summary and HoloDb keeps the totals of every customer segment already grouped, so a join reads the groups instead of the invoices.",
+    "Move a customer to another segment and only that customer's total moves, exactly, from one group to the other."
+   ],
+   "caption": "Illustrative motion. Measured at 100,000,000 invoices joined to 2,000,000 customers, warm: revenue by segment 0.19 ms for HoloDb restored, 0.65 ms for tuned SQL Server, 488.31 ms for tuned DuckDB. Changing an invoice row, not a customer, makes the pre-grouped totals stale and those joins fall back to a scan.",
+   "fig": {
+    "rows": 100000000,
+    "customers": "2,000,000",
+    "holoMs": 0.1885
+   }
+  },
+  {
+   "id": "open",
+   "tab": "Start in a second",
+   "promise": "Close it, open it, ask.",
+   "how": [
+    "Declared structures are saved beside the data with checksums. On open, HoloDb trusts them only if they match the data's change counter, its row count and its exact totals.",
+    "A structure that does not match is discarded or rebuilt, so a restored database answers from its first query without rebuilding."
+   ],
+   "caption": "Illustrative motion. Measured at 100,000,000 invoices on one NVMe laptop: built once in 183.9 s, 6.84 GB with its structures; reopened in 1.62 s; all 16 queries cold (file cache cleared first) in 0.10 s in total. Tuned DuckDB opens its file in 0.01 s and the SQL Server service was already running. The bars are drawn to one scale.",
+   "fig": {
+    "loadSeconds": 183.9396,
+    "openSeconds": 1.6169,
+    "coldTotal": 0.1015,
+    "files": [
+     {
+      "name": "the data pages",
+      "size": "4.94 GB"
+     },
+     {
+      "name": "sorted index",
+      "size": "1.60 GB"
+     },
+     {
+      "name": "keyed totals",
+      "size": "306 MB"
+     },
+     {
+      "name": "summary",
+      "size": "35 KB"
+     }
+    ]
+   }
+  },
+  {
+   "id": "exact",
+   "tab": "Exact",
+   "promise": "Exact to the last digit.",
+   "how": [
+    "Integer sums are held in 128 bits, never rounded and never wrapped: a sum that would pass 64 bits throws an error instead of returning a wrong number.",
+    "Before any query is timed, its rows are fingerprinted and compared across HoloDb, DuckDB and SQL Server."
+   ],
+   "caption": "Illustrative motion. Measured: the fingerprint of all 16 queries is identical on all four arms at 100,000,000 invoices, including the queries where HoloDb is slower. Money is held as integer cents; DECIMAL is a double.",
+   "fig": {
+    "total": 22452661973818,
+    "engines": [
+     "HoloDb restored",
+     "DuckDB tuned",
+     "SQL Server tuned"
+    ],
+    "hashes": [
+     "A21B8A98C0827A17",
+     "60A339EBC6C01682",
+     "171C7D53DFC6B45B",
+     "8737534A4C191E7F",
+     "E59BBEA6227C578F",
+     "DEF8949BCDA24ED7",
+     "AEAA0A03867CCCB3",
+     "1C8734C7E3B34BF6",
+     "2DE261208D34390B",
+     "62D104EB972E29C9",
+     "A143F129D8410461",
+     "BF92D2F46CA805EE",
+     "E6DF3855BEDB76DF",
+     "0687A9045DF78DCF",
+     "C3F5EFA3E7095A87",
+     "37D452ED69CC76D3"
+    ]
+   }
+  },
+  {
+   "id": "disk",
+   "tab": "Checksums",
+   "promise": "It tells you when the disk lies.",
+   "how": [
+    "Every 8 KB data page carries a checksum, and every read checks it.",
+    "A page that fails is refused with an error that names the page, so a flipped bit is reported and never read as an answer."
+   ],
+   "caption": "Illustrative layout. Measured: 61 bits flipped in the data file of a 91 MB paged table; 36 were reported with an error naming the page, 25 were in pages never read, and none changed an answer. The damage is simulated; a real power cut and a full disk are not tested.",
+   "fig": {
+    "flipped": 61,
+    "reported": 36,
+    "unread": 25,
+    "wrong": 0,
+    "sizeMb": 91
+   }
+  }
+ ]
+}

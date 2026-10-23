@@ -11,6 +11,10 @@ const read = (rel) => fs.readFileSync(path.join(DATA, rel), 'utf8').replace(/\r\
 // A diagram can carry a small latency block copied from an evidence record, so the numbers it shows are the record's.
 function withLatency(ctx, data, spec) {
   if (!spec) return data;
+  if (spec.race) {
+    const rd = ctx.diagrams['holodb-race'], pick = (labels) => labels.map((l) => { const q = rd.queries.find((x) => x.label === l); if (!q) throw new Error('latency row not found: ' + l); return { label: q.label, values: q.warm }; });
+    return { ...data, latency: { columns: rd.arms.map((a) => a.label), title: spec.title, ledger: `${rd.rows.toLocaleString('en-GB')} invoices`, note: spec.note, focus: 0, key: pick(spec.key), aggregate: pick(spec.aggregate) } };
+  }
   const tb = ctx.evidence.find((e) => e.id === spec.evidence).sections.flatMap((s) => s.tables).find((t) => t.id === spec.table);
   const pick = (labels) => labels.map((l) => { const r = tb.rows.find((x) => x.label === l); if (!r) throw new Error('latency row not found: ' + l); return { label: r.label, values: r.values }; });
   return { ...data, latency: { columns: tb.columns, qualifiers: tb.qualifiers, note: spec.note, focus: tb.focus, key: pick(spec.key), aggregate: pick(spec.aggregate) } };
@@ -92,6 +96,17 @@ export default function product(ctx, p) {
     ribbon: html`<p class="licence-ribbon"><span>Release <b data-gen="version">${primary.version}</b></span><span>${(doc.facts || []).join(' · ')}</span></p>`,
   }) : '';
 
+  // further diagrams in the page's own order (the explainer, the decision helper), each with its trade-off strip when it has one
+  const figSecs = (sz?.figures || []).map((f) => {
+    const g = diagramFigure({ id: f.id, kind: f.kind, title: '', lede: '', level: 3, data: ctx.diagrams[f.kind], stageLabel: f.stageLabel, caption: html`${f.caption}` });
+    const to = f.tradeoffs ? ctx.diagrams[f.kind].tradeoffs : null;
+    return html`<section class="sec doc-sec" id="${f.secId}" aria-labelledby="h-${f.secId}"><div class="wrap">
+  ${secHead({ title: f.title, line: f.line, cat: p.cat, id: 'h-' + f.secId })}
+  ${g.html}
+  ${to ? html`<h3 class="sub-h" id="trade-offs">${f.tradeoffsTitle || 'Trade-offs'}</h3><ul class="tradeoffs">${to.map((x) => html`<li><h4>${x.title}</h4><div class="to-pair"><div class="to-l"><b>${x.left.label}</b><p>${x.left.text}</p></div><div class="to-r"><b>${x.right.label}</b><p>${x.right.text}</p></div></div></li>`)}</ul>` : ''}
+</div></section>`;
+  });
+
   const buildSec = sz?.build ? html`<section class="sec doc-sec" id="build" aria-labelledby="h-build"><div class="wrap">
   ${secHead({ title: sz.build.title || 'What you can build', line: sz.build.line, cat: p.cat, id: 'h-build' })}
   <ul class="points build-points">${sz.build.items.map((c) => html`<li><h3>${c.title}</h3><p>${fill(c.text)}</p>${c.link ? html`<p class="more-link"><a href="${c.link.href}">${c.link.label}</a></p>` : ''}</li>`)}</ul>
@@ -151,9 +166,11 @@ export default function product(ctx, p) {
   <ul class="limits">${doc.otherTools.items.map((l) => html`<li>${fill(l)}</li>`)}</ul>
 </div></section>` : '';
 
-  const limSec = doc.limits ? html`<section class="sec doc-sec" aria-labelledby="h-lim"><div class="wrap">
+  // the limits table of the decision helper leads the list, so the page and the evidence record say the same thing
+  const limitItems = [...(doc.limitsFrom ? ctx.diagrams[doc.limitsFrom].limits.map(([k, v]) => `${k}: ${v}`) : []), ...(doc.limits || [])];
+  const limSec = limitItems.length ? html`<section class="sec doc-sec" aria-labelledby="h-lim"><div class="wrap">
   ${secHead({ title: sz ? 'Know before you start' : 'Limits', line: `What ${p.name} does not do, and where to be careful`, cat: p.cat, id: 'h-lim' })}
-  <ul class="limits">${doc.limits.map((l) => html`<li>${fill(l)}</li>`)}</ul>
+  <ul class="limits">${limitItems.map((l) => html`<li>${fill(l)}</li>`)}</ul>
   ${doc.reference ? html`<p class="muted tool-note">${doc.reference} <a href="${primary.nuget}" rel="noopener">Open the NuGet page</a>.</p>` : ''}
 </div></section>` : '';
 
@@ -185,6 +202,7 @@ ${productSubnav(p, 'overview')}
 ${bandSec}
 ${figSec}
 ${numbersSec}
+${figSecs}
 ${lossSec}
 ${buildSec}
 ${qsSec}
@@ -216,7 +234,7 @@ ${licSec}`;
     url: p.slug, type: 'product', section: 'products', cat: p.cat,
     title: doc.title, description: doc.description,
     crumbs, jsonld: [ld, crumbsLd(ctx, crumbs)],
-    scripts: doc.diagram ? ['/assets/diagrams/' + doc.diagram.id + '.js'] : [],
+    scripts: [doc.diagram?.id, ...(sz?.figures || []).map((f) => f.kind)].filter(Boolean).map((k) => '/assets/diagrams/' + k + '.js'),
     main,
   };
 }

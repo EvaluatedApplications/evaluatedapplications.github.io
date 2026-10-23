@@ -59,7 +59,7 @@ function latencySvg(d, mode) {
     const y = 8 + i * rowH;
     return `<text class="lab" x="0" y="${y + 10}">${esc(r.label)}</text>` + cols.map((c, k) => `<text class="eng" x="${left - 6}" y="${y + 21 + k * 11}" text-anchor="end">${esc(c)}</text><rect class="b${k === L.focus ? ' focus' : ''}" x="${left}" y="${y + 14 + k * 11}" width="${x(r.values[k]).toFixed(1)}" height="7" rx="2"/><text class="val" x="${left + x(r.values[k]) + 6}" y="${y + 21 + k * 11}">${f2(r.values[k])} ms</text>`).join('');
   }).join('');
-  return `<svg class="hd-lat-svg" viewBox="0 0 ${W} ${rows.length * rowH + 12}" role="img" aria-label="Median latency in milliseconds on a ledger of 10,000,000 invoices, logarithmic scale: ${esc(rows.map((r) => `${r.label}: ${cols.map((c, k) => `${c}${L.qualifiers && L.qualifiers[k] ? ` (${L.qualifiers[k]})` : ''} ${f2(r.values[k])}`).join(', ')}`).join('. '))}">${g}</svg>${L.note ? `<p class="muted hd-note">${esc(L.note)}</p>` : ''}`;
+  return `<svg class="hd-lat-svg" viewBox="0 0 ${W} ${rows.length * rowH + 12}" role="img" aria-label="Median latency in milliseconds on a ledger of ${esc(L.ledger || '10,000,000 invoices')}, logarithmic scale: ${esc(rows.map((r) => `${r.label}: ${cols.map((c, k) => `${c}${L.qualifiers && L.qualifiers[k] ? ` (${L.qualifiers[k]})` : ''} ${f2(r.values[k])}`).join(', ')}`).join('. '))}">${g}</svg>${L.note ? `<p class="muted hd-note">${esc(L.note)}</p>` : ''}`;
 }
 
 export function staticSvg(d) {
@@ -81,7 +81,7 @@ export function controlsHtml(id, m, d) {
 <button type="button" class="btn btn-ghost btn-sm" data-ctl="play" aria-pressed="true">Pause motion</button></div>
 <div class="hd-qlist dia-ui" data-ctl="qlist" hidden role="group" aria-label="Queries to explain">${planeBtns}</div>
 <div class="hd-panel" data-ctl="panel" role="status"><h3 class="hd-h">${esc(p0.title)}</h3><pre class="hd-sql"><code>${esc(p0.sql)}</code></pre>${p0.lines.map((l) => `<p>${esc(l)}</p>`).join('')}</div>
-<div class="hd-latency" data-ctl="latency"><h3 class="hd-h">Same question on a 10,000,000-invoice ledger</h3><div data-ctl="latbody">${latencySvg(d, 'key')}</div></div>`,
+<div class="hd-latency" data-ctl="latency"><h3 class="hd-h">${esc(d.latency && d.latency.title || 'Same question on a 10,000,000-invoice ledger')}</h3><div data-ctl="latbody">${latencySvg(d, 'key')}</div></div>`,
   };
 }
 

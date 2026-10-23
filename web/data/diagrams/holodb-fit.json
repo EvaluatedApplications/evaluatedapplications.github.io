@@ -1,0 +1,525 @@
+{
+ "schema": "ea-diagram/1",
+ "kind": "holodb-fit",
+ "id": "holodb-fit",
+ "generator": "web/scripts/migrate/extract-holodb-story.mjs",
+ "thresholds": {
+  "possible": 1,
+  "other": 4
+ },
+ "kindLabels": {
+  "plus": "Fits",
+  "note": "Note",
+  "caution": "Trade-off",
+  "blocker": "Does not fit"
+ },
+ "verdicts": {
+  "good": {
+   "line": "Your answers sit where HoloDb is strongest."
+  },
+  "possible": {
+   "line": "It can work. Weigh the trade-offs below before you commit."
+  },
+  "other": {
+   "line": "At least one answer points to a tool built for it."
+  }
+ },
+ "noAlt": "Nothing in your answers points to another database.",
+ "rule": "A thing HoloDb does not do is a hard no. Trade-offs add up: one makes it possible, several make another tool the better choice.",
+ "questions": [
+  {
+   "id": "work",
+   "short": "Workload",
+   "label": "What does your app mostly do?",
+   "default": "reads",
+   "options": [
+    {
+     "id": "reads",
+     "label": "Reads"
+    },
+    {
+     "id": "mixed",
+     "label": "Reads and writes"
+    },
+    {
+     "id": "writes",
+     "label": "Writes"
+    }
+   ]
+  },
+  {
+   "id": "queries",
+   "short": "Queries",
+   "label": "Do you know the queries ahead?",
+   "default": "known",
+   "options": [
+    {
+     "id": "known",
+     "label": "Known: dashboards, reports"
+    },
+    {
+     "id": "adhoc",
+     "label": "Ad hoc: any filter, any day"
+    }
+   ]
+  },
+  {
+   "id": "size",
+   "short": "Data",
+   "label": "How much data?",
+   "default": "m10",
+   "options": [
+    {
+     "id": "xs",
+     "label": "Under 1M rows"
+    },
+    {
+     "id": "m1",
+     "label": "1M to 10M"
+    },
+    {
+     "id": "m10",
+     "label": "10M to 100M"
+    },
+    {
+     "id": "m100",
+     "label": "100M or more"
+    }
+   ]
+  },
+  {
+   "id": "writers",
+   "short": "Writers",
+   "label": "Who writes?",
+   "default": "one",
+   "options": [
+    {
+     "id": "one",
+     "label": "One process"
+    },
+    {
+     "id": "many",
+     "label": "Several processes"
+    }
+   ]
+  },
+  {
+   "id": "lang",
+   "short": "Language",
+   "label": "Which language?",
+   "default": "net",
+   "options": [
+    {
+     "id": "net",
+     "label": ".NET"
+    },
+    {
+     "id": "other",
+     "label": "Something else"
+    }
+   ]
+  },
+  {
+   "id": "exact",
+   "short": "Exact sums",
+   "label": "Need exact sums?",
+   "default": "yes",
+   "options": [
+    {
+     "id": "yes",
+     "label": "Yes"
+    },
+    {
+     "id": "no",
+     "label": "No"
+    }
+   ]
+  },
+  {
+   "id": "sim",
+   "short": "Similarity",
+   "label": "Need similarity search?",
+   "default": "no",
+   "options": [
+    {
+     "id": "no",
+     "label": "No"
+    },
+    {
+     "id": "yes",
+     "label": "Yes"
+    }
+   ]
+  },
+  {
+   "id": "where",
+   "short": "Runs",
+   "label": "Where does it run?",
+   "default": "embedded",
+   "options": [
+    {
+     "id": "embedded",
+     "label": "Inside the app"
+    },
+    {
+     "id": "browser",
+     "label": "In the browser"
+    },
+    {
+     "id": "server",
+     "label": "As a server"
+    }
+   ]
+  },
+  {
+   "id": "sql",
+   "short": "SQL",
+   "label": "How much SQL?",
+   "default": "basic",
+   "options": [
+    {
+     "id": "basic",
+     "label": "Select, join, group by"
+    },
+    {
+     "id": "wide",
+     "label": "CASE, UNION, outer joins, aliases"
+    }
+   ]
+  }
+ ],
+ "rules": [
+  {
+   "when": {
+    "work": [
+     "reads"
+    ]
+   },
+   "kind": "plus",
+   "line": "Reads become microseconds because totals are kept up to date as rows are written: 0.12 ms for a total over 100,000,000 invoices, against 23.17 ms for tuned DuckDB scanning."
+  },
+  {
+   "when": {
+    "work": [
+     "mixed"
+    ]
+   },
+   "kind": "caution",
+   "weight": 1,
+   "line": "Single-row INSERT took 7.0 to 7.7 microseconds against SQLite's 4.3 to 5.2, UPDATE 10.5 to 11.6 against 5.3 to 5.5, DELETE 7.9 to 8.3 against 4.3 to 4.8 (engine alone, in memory, no log, a 9-column table). The maintained totals are updated on every write."
+  },
+  {
+   "when": {
+    "work": [
+     "writes"
+    ]
+   },
+   "kind": "caution",
+   "weight": 2,
+   "alt": "sqlite",
+   "line": "Single-row INSERT took 7.0 to 7.7 microseconds against SQLite's 4.3 to 5.2, UPDATE 10.5 to 11.6 against 5.3 to 5.5, DELETE 7.9 to 8.3 against 4.3 to 4.8 (engine alone, in memory, no log, a 9-column table). The maintained totals are updated on every write. Each durable commit is one fsync with no group commit, and its cost against other databases is not measured."
+  },
+  {
+   "when": {
+    "queries": [
+     "known"
+    ]
+   },
+   "kind": "plus",
+   "line": "Known dashboards and reports can be declared as summaries and indexes, saved beside the data and read in microseconds. The planner also builds them once repeats pay for them."
+  },
+  {
+   "when": {
+    "queries": [
+     "adhoc"
+    ],
+    "size": [
+     "xs",
+     "m1"
+    ]
+   },
+   "kind": "note",
+   "line": "Ad hoc questions scan, and a scan over a few million rows is quick in any engine. Questions that repeat earn a structure."
+  },
+  {
+   "when": {
+    "queries": [
+     "adhoc"
+    ],
+    "size": [
+     "m10"
+    ]
+   },
+   "kind": "caution",
+   "weight": 1,
+   "alt": "duckdb",
+   "line": "Scans that no structure covers are slower than tuned DuckDB until the planner has built one: out of the box at 100,000,000 invoices, overdue outstanding (67.76 ms tuned DuckDB against 198.84 ms), big-ticket invoices (35.02 ms tuned DuckDB against 111.31 ms), largest invoices (6.70 ms tuned DuckDB against 281.64 ms), top customers by revenue (190.14 ms tuned DuckDB against 3,087.82 ms) and revenue by region and status (261.46 ms tuned DuckDB against 355.86 ms)."
+  },
+  {
+   "when": {
+    "queries": [
+     "adhoc"
+    ],
+    "size": [
+     "m100"
+    ]
+   },
+   "kind": "caution",
+   "weight": 2,
+   "alt": "duckdb",
+   "line": "Scans that no structure covers are slower than tuned DuckDB until the planner has built one: out of the box at 100,000,000 invoices, overdue outstanding (67.76 ms tuned DuckDB against 198.84 ms), big-ticket invoices (35.02 ms tuned DuckDB against 111.31 ms), largest invoices (6.70 ms tuned DuckDB against 281.64 ms), top customers by revenue (190.14 ms tuned DuckDB against 3,087.82 ms) and revenue by region and status (261.46 ms tuned DuckDB against 355.86 ms)."
+  },
+  {
+   "when": {
+    "size": [
+     "xs"
+    ]
+   },
+   "kind": "caution",
+   "weight": 1,
+   "alt": "sqlite",
+   "line": "Under a million rows every engine answers quickly, so maintained totals save little. SQLite is one file with the widest tooling."
+  },
+  {
+   "when": {
+    "size": [
+     "m100"
+    ]
+   },
+   "kind": "caution",
+   "weight": 1,
+   "line": "Tested to 100,000,000 rows (4.94 GB paged, 165 s to load). Beyond that is untested."
+  },
+  {
+   "when": {
+    "writers": [
+     "one"
+    ]
+   },
+   "kind": "note",
+   "line": "One process owns a database and one writer runs at a time, which suits an embedded store."
+  },
+  {
+   "when": {
+    "writers": [
+     "many"
+    ]
+   },
+   "kind": "blocker",
+   "alt": "pg",
+   "line": "One process owns a database's files and one writer runs at a time, with no MVCC. A second process cannot open the files, and a long transaction blocks every other writer."
+  },
+  {
+   "when": {
+    "lang": [
+     "net"
+    ]
+   },
+   "kind": "plus",
+   "line": "A .NET package: call it in process from ordinary C#."
+  },
+  {
+   "when": {
+    "lang": [
+     "other"
+    ]
+   },
+   "kind": "blocker",
+   "alt": "pg",
+   "line": "The engine is a .NET package, and the server's only client is .NET. There is no JDBC, ODBC, Python, Node or Go client and no PostgreSQL wire compatibility."
+  },
+  {
+   "when": {
+    "exact": [
+     "yes"
+    ]
+   },
+   "kind": "plus",
+   "line": "Integer sums are exact: held in 128 bits, never wrapped, and identical to DuckDB and SQL Server on all 16 queries. Money is held as integer cents, because DECIMAL is a double."
+  },
+  {
+   "when": {
+    "sim": [
+     "yes"
+    ]
+   },
+   "kind": "plus",
+   "line": "NEAREST ranks rows by closeness in SQL with no separate vector index. From 8,000 rows an approximate index ranks the candidates; with a WHERE it is an exact scan."
+  },
+  {
+   "when": {
+    "where": [
+     "embedded"
+    ]
+   },
+   "kind": "plus",
+   "line": "Embedded, a point query takes 1 to 3 microseconds, with no client or network in the way."
+  },
+  {
+   "when": {
+    "where": [
+     "browser"
+    ]
+   },
+   "kind": "plus",
+   "line": "It runs in a browser tab: the same managed code, which is how The Analyst works."
+  },
+  {
+   "when": {
+    "where": [
+     "server"
+    ]
+   },
+   "kind": "caution",
+   "weight": 1,
+   "line": "As a server it speaks TCP and TLS to a .NET client, and a point query pays about 0.07 ms of client, TLS and socket cost that the embedded engine does not."
+  },
+  {
+   "when": {
+    "sql": [
+     "basic"
+    ]
+   },
+   "kind": "note",
+   "line": "SELECT, WHERE, GROUP BY, HAVING, ORDER BY, LIMIT and INNER JOIN are supported: several joins on in-memory tables, one on a paged table."
+  },
+  {
+   "when": {
+    "sql": [
+     "wide"
+    ]
+   },
+   "kind": "blocker",
+   "alt": "pg",
+   "line": "The SQL is narrower than PostgreSQL's: no AS aliases, ALTER TABLE ADD COLUMN only, no CASE, OFFSET, UNION or outer joins, no expressions in the select list, and one join on a paged table."
+  }
+ ],
+ "alts": {
+  "duckdb": {
+   "name": "Tuned DuckDB",
+   "line": "for ad hoc analytics scans, where it needs no declared structure. At 100,000,000 invoices it beat HoloDb out of the box on overdue outstanding (67.76 ms tuned DuckDB against 198.84 ms), big-ticket invoices (35.02 ms tuned DuckDB against 111.31 ms), largest invoices (6.70 ms tuned DuckDB against 281.64 ms), top customers by revenue (190.14 ms tuned DuckDB against 3,087.82 ms) and revenue by region and status (261.46 ms tuned DuckDB against 355.86 ms)."
+  },
+  "pg": {
+   "name": "PostgreSQL or SQL Server",
+   "line": "for several writers or processes, MVCC, a wide SQL dialect, and drivers in every language."
+  },
+  "sqlite": {
+   "name": "SQLite",
+   "line": "for a small single-file store with the widest tooling, and for write-heavy single-row work: its single-row INSERT took 4.3 to 5.2 microseconds against HoloDb's 7.0 to 7.7 (engine alone, in memory)."
+  }
+ },
+ "tradeoffs": [
+  {
+   "title": "Read speed against write cost",
+   "left": {
+    "label": "Reads",
+    "text": "A total over 100,000,000 invoices reads in 0.12 ms, because totals are kept up to date as rows are written."
+   },
+   "right": {
+    "label": "Writes and space",
+    "text": "Single-row INSERT, UPDATE and DELETE took 1.5 to 2.1 times SQLite's time (engine alone, in memory). The structures take space: 6.84 GB restored, 4.94 GB out of the box, 2.46 GB for tuned DuckDB."
+   }
+  },
+  {
+   "title": "Exact against approximate",
+   "left": {
+    "label": "Exact",
+    "text": "Integer sums are 128-bit and identical on all four engines for all 16 queries. A sum past 64 bits throws; it never wraps."
+   },
+   "right": {
+    "label": "Approximate",
+    "text": "Only similarity search: from 8,000 rows an approximate index picks the candidates. Money is integer cents, because DECIMAL is a double."
+   }
+  },
+  {
+   "title": "Automatic against hand-tuned",
+   "left": {
+    "label": "Automatic",
+    "text": "The planner builds a summary or index when repeats pay for it, and drops it when writes cost more than it saves."
+   },
+   "right": {
+    "label": "Hand-tuned",
+    "text": "A DBA can declare structures, which are saved and never dropped. Without them, scans no structure covers are slower than tuned DuckDB: 5 of 16 queries at 100,000,000 invoices."
+   }
+  },
+  {
+   "title": "Embedded against server",
+   "left": {
+    "label": "Embedded",
+    "text": "In process: a point query takes 1 to 3 microseconds. One process owns the files and one writer runs at a time."
+   },
+   "right": {
+    "label": "Server",
+    "text": "TCP and TLS with a typed .NET client: about 0.07 ms more per point query. No JDBC, ODBC or PostgreSQL wire."
+   }
+  },
+  {
+   "title": "Memory against disk",
+   "left": {
+    "label": "In memory",
+    "text": "The fastest path, bounded by RAM at about 110 bytes per row."
+   },
+   "right": {
+    "label": "Paged",
+    "text": "Tables bigger than memory through an 8 KB buffer pool: 100,000,000 invoices in 4.94 GB, 165 s to load, a 3.16 GB peak working set out of the box and 1.26 GB restored."
+   }
+  }
+ ],
+ "limits": [
+  [
+   "Joins",
+   "INNER JOIN only. Several in one statement on in-memory tables, one on a paged table. LEFT, RIGHT, FULL, CROSS, NATURAL, USING and comma joins are refused."
+  ],
+  [
+   "Aliases",
+   "No AS on columns or tables. Aggregate columns are named agg(col), such as count(*)."
+  ],
+  [
+   "ALTER TABLE",
+   "ADD COLUMN only, with a DEFAULT or NULL. No DROP COLUMN, RENAME COLUMN or RENAME TO."
+  ],
+  [
+   "Expressions",
+   "No CASE, LENGTH(), OFFSET or UNION, and no arithmetic in the select list or inside SUM(v * 2). COUNT(DISTINCT col), LIKE and IN (SELECT ...) work on in-memory tables."
+  ],
+  [
+   "Money",
+   "Constant-time totals are for INT columns. REAL SUM is a SIMD scan, and DECIMAL and NUMERIC are REAL (a double), so hold money as integer cents. There is no fixed-point type."
+  ],
+  [
+   "Saved summaries",
+   "A summary made with CREATE INDEX ... USING SUMMARY, or built by the planner, is saved with the table and restored on open. A plane attached with the EnablePleroma call on an in-memory table is not saved: call it again after Open."
+  ],
+  [
+   "Summary limits",
+   "A declared summary takes up to 4,095 distinct values per column (1,024 for one the planner builds) and a joint of 12 bits. A column over its limit goes to a scan and is never approximated."
+  ],
+  [
+   "Joins on paged tables",
+   "The keyed summary holds up to 4,194,304 consecutive INT keys. The 100,000,000-invoice run joins 2,000,000 customers."
+  ],
+  [
+   "Languages",
+   "A .NET library. The server speaks a TCP and TLS binary protocol whose only client is .NET. No JDBC, ODBC, Python, Node or Go client, and no PostgreSQL or MySQL wire."
+  ],
+  [
+   "Concurrency",
+   "One process per database and one writer at a time. Simple aggregate reads run off a snapshot without the lock. A second process cannot open a paged database's files, and there is no MVCC: a long transaction blocks other writers."
+  ],
+  [
+   "Table size",
+   "Tested to 100,000,000 rows (4.94 GB paged, 165 s to load). In-memory tables are bounded by RAM at about 110 bytes per row. A paged primary key loaded out of order keeps a RAM dictionary of about 35 bytes per row. Beyond 100,000,000 rows is untested."
+  ],
+  [
+   "Backup",
+   "Offline: copy the files of a closed database. There is no online backup and no point-in-time recovery."
+  ],
+  [
+   "Crash safety",
+   "One fsync per commit. Tests cut the log at every record boundary, flip bits in the log and the data file, and tear a page during a checkpoint. A real power cut, a disk that lies about fsync, a full disk and several processes are not tested."
+  ]
+ ],
+ "sources": {
+  "writeRatio": "1.5 to 2.1"
+ }
+}

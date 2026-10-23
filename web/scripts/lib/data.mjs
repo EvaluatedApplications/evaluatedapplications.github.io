@@ -147,6 +147,8 @@ export async function loadAll(opts = {}) {
     e.facts = evidenceFacts(e);
     return e;
   });
+  // a deep-dive record belongs to its product but never leads: the product's evidence link goes to the main record
+  evidence.sort((a, b) => (a.layout === 'deep') - (b.layout === 'deep'));
   for (const p of products) p.evidence = evidence.filter((e) => e.product === p.id);
 
   const research = readDir(path.join(DATA, 'research')).map((f) => readJson(path.join(DATA, 'research', f))).sort((a, b) => a.order - b.order);

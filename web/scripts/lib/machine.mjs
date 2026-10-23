@@ -90,7 +90,8 @@ export function composeLlmsFull(ctx, stamp) {
         if (d.sizzle?.pointer) L.push(`${d.sizzle.pointer.title}. ${(d.sizzle.pointer.line || '').replace(/\{(\w+)\}/g, (_, k) => (ctx.limitFacts[p.id] || {})[k] ?? `{${k}}`)}`, '');
         if (d.today) L.push(`${d.today.title}:`, ...d.today.items.map((w) => `- ${w.title} (${w.built ? 'built' : 'not built'}). ${w.text.replace(/\{(\w+)\}/g, (_, k) => (ctx.limitFacts[p.id] || {})[k] ?? `{${k}}`)}`), '');
         if (d.otherTools) L.push(`${d.otherTools.title}:`, ...d.otherTools.items.map((l) => `- ${l}`), '');
-        if (d.limits) L.push('Limits:', ...d.limits.map((l) => `- ${l.replace(/\{(\w+)\}/g, (_, k) => (ctx.limitFacts[p.id] || {})[k] ?? `{${k}}`)}`), '');
+        if (d.limitsFrom) L.push('Limits:', ...ctx.diagrams[d.limitsFrom].limits.map(([k, v]) => `- ${k}: ${v}`), '');
+        if (d.limits) L.push(d.limitsFrom ? 'Also:' : 'Limits:', ...d.limits.map((l) => `- ${l.replace(/\{(\w+)\}/g, (_, k) => (ctx.limitFacts[p.id] || {})[k] ?? `{${k}}`)}`), '');
       }
     }
     for (const sp of p.subpages || []) {
@@ -124,6 +125,14 @@ export function composeLlmsFull(ctx, stamp) {
   if (ctx.evidence.length) {
     L.push('## Evidence', '');
     for (const e of ctx.evidence) {
+      if (e.layout === 'story') {
+        const r = ctx.diagrams['holodb-race'], fit = ctx.diagrams['holodb-fit'];
+        L.push(`### ${e.title}`, '', e.claim, '', `Page: ${abs(ctx, e.slug)}`, '', ...e.headline.map((t) => `- ${t.value}: ${t.label}`), '', e.story.conditions, '');
+        L.push(`Warm median milliseconds at ${r.rows.toLocaleString('en-GB')} invoices (${r.arms.map((a) => a.label).join(' | ')}):`, ...r.queries.map((q) => `- ${q.label}: ${q.warm.map((v) => v.toFixed(2)).join(' | ')}`), '', e.story.chart.caption, '');
+        L.push('How we measured:', ...e.story.method.rows.map(([k, v]) => `- ${k}: ${v}`), '', `${e.story.limits.title}:`, ...e.story.limits.table.rows.map(([k, v]) => `- ${k}: ${v}`), '');
+        L.push(`When to use it: ${abs(ctx, '/holodb/#fit')}. Trade-offs:`, ...fit.tradeoffs.map((t) => `- ${t.title}. ${t.left.label}: ${t.left.text} ${t.right.label}: ${t.right.text}`), '');
+        continue;
+      }
       L.push(`### ${e.title}`, '', e.claim, '', `Page: ${abs(ctx, e.slug)}`, '', 'Method:');
       const m = e.method;
       L.push(...[['Workload', m.workload], ['Engines', m.engines.join('; ')], ['Check', m.verification], ['Statistic', m.statistic], ['Machine', m.machine], ['Memory and logging', m.memory], ['Ties', m.tie]].filter(([, v]) => v).map(([k, v]) => `- ${k}: ${v}`), '');
@@ -133,6 +142,7 @@ export function composeLlmsFull(ctx, stamp) {
         for (const tb of s.tables || []) L.push(table(tb), '');
         for (const t of s.notes || []) L.push(t, '');
         if (s.losses?.length) L.push('Where it is slower:', ...s.losses.map((l) => `- ${l}`), '');
+        if (s.costs?.length) L.push('What it costs:', ...s.costs.map((l) => `- ${l}`), '');
       }
       L.push('Limits:', ...e.limits.map((l) => `- ${l}`), '');
     }

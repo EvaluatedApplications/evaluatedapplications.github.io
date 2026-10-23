@@ -1,0 +1,593 @@
+{
+ "schema": "ea-diagram/1",
+ "kind": "holodb-race",
+ "id": "holodb-race",
+ "generator": "web/scripts/migrate/extract-holodb-race.mjs",
+ "caption": "Warm medians at 100,000,000 invoices for the 16 billing queries: HoloDb restored, HoloDb out of the box, tuned DuckDB and tuned SQL Server.",
+ "rows": 100000000,
+ "machine": "11th Gen Intel(R) Core(TM) i9-11950H @ 2.60GHz; 16 logical cores; RAM 34.1 GB total, 22.2 GB free now; disk 335 GB free of 1023 GB on C:\\; Microsoft Windows NT 10.0.26200.0; .NET 8.0.27",
+ "utc": "2026-10-23",
+ "fingerprint": "inv=100000000|4999999950000000|99983170002966|20235650142862|22452661973818|st=failed:1999668,overdue:7000072,paid:77999324,pending:10001659,refunded:2999277|cust=2000000|404512952450|1999999000000",
+ "arms": [
+  {
+   "id": "restored",
+   "label": "HoloDb restored",
+   "line": "structures declared and saved beside the data, opened from them",
+   "source": "holodeclared-s4",
+   "loadSeconds": 183.9396,
+   "sizeBytes": 6843457046,
+   "openSeconds": 1.6169,
+   "peakBytes": 1260109824,
+   "coldTotalSeconds": 0.1015,
+   "version": "EvaluatedApplications.HoloDb 6.0.0.0 (paged Store/, declared summary + saved group indexes and key, restored on open)"
+  },
+  {
+   "id": "oob",
+   "label": "HoloDb out of the box",
+   "line": "nothing declared, nothing saved; the planner builds what repeats earn",
+   "source": "holopaged-s2",
+   "loadSeconds": 165.332,
+   "sizeBytes": 4937097249,
+   "openSeconds": 0.5645,
+   "peakBytes": 3158147072,
+   "coldTotalSeconds": 12.5737,
+   "version": "EvaluatedApplications.HoloDb 6.0.0.0 (paged Store/, default 8192-frame = 64 MB buffer pool per table)"
+  },
+  {
+   "id": "duck",
+   "label": "DuckDB tuned",
+   "line": "table sorted by customer_id, ANALYZE, 16 threads, 12 GB limit",
+   "source": "duckdbtuned",
+   "loadSeconds": 168.4876,
+   "sizeBytes": 2463641600,
+   "openSeconds": 0.0144,
+   "peakBytes": 1042059264,
+   "coldTotalSeconds": 3.0303,
+   "version": "DuckDB.NET 1.5.5, DuckDB v1.5.5; threads=16, memory_limit=12GB, preserve_insertion_order=false, ANALYZE; table sorted by customer_id"
+  },
+  {
+   "id": "sql",
+   "label": "SQL Server tuned",
+   "line": "columnstore index, descending index on amount_cents, indexed views",
+   "source": "sqlservertuned",
+   "loadSeconds": 483.5531,
+   "sizeBytes": 8875147264,
+   "openSeconds": 0.0102,
+   "peakBytes": 64630784,
+   "coldTotalSeconds": 1.0073,
+   "version": "Microsoft SQL Server 2022 (RTM-CU26) (KB5093420) - 16.0.4265.3 (X64); edition Developer Edition (64-bit); max server memory 5120 MB (server default)"
+  }
+ ],
+ "queries": [
+  {
+   "label": "invoices by status",
+   "group": "rollup",
+   "hash": "A21B8A98C0827A17",
+   "rows": 5,
+   "first": "failed|1999668|449792984163",
+   "warm": [
+    0.1534,
+    0.1288,
+    77.5985,
+    1.1163
+   ],
+   "warm2": [
+    0.1496,
+    0.1983,
+    74.9182,
+    1.0245
+   ],
+   "cold": [
+    0.2398,
+    1330.7923,
+    181.7819,
+    5.2286
+   ],
+   "cold2": [
+    0.244,
+    1352.5968,
+    172.2147,
+    5.1596
+   ]
+  },
+  {
+   "label": "revenue by month",
+   "group": "rollup",
+   "hash": "60A339EBC6C01682",
+   "rows": 24,
+   "first": "202301|935968154850",
+   "warm": [
+    0.2334,
+    0.1977,
+    69.352,
+    1.1985
+   ],
+   "warm2": [
+    0.2531,
+    0.2433,
+    66.5952,
+    1.1926
+   ],
+   "cold": [
+    1.4479,
+    1.6293,
+    70.4708,
+    3.2728
+   ],
+   "cold2": [
+    1.119,
+    1.8199,
+    66.6047,
+    3.1968
+   ]
+  },
+  {
+   "label": "revenue by region",
+   "group": "rollup",
+   "hash": "171C7D53DFC6B45B",
+   "rows": 4,
+   "first": "APAC|4488524308008",
+   "warm": [
+    0.2645,
+    0.1288,
+    67.539,
+    1.0642
+   ],
+   "warm2": [
+    0.2731,
+    0.1323,
+    63.5977,
+    1.0763
+   ],
+   "cold": [
+    0.0641,
+    0.0574,
+    103.7628,
+    318.1233
+   ],
+   "cold2": [
+    0.0514,
+    0.0554,
+    91.2933,
+    309.7075
+   ]
+  },
+  {
+   "label": "total invoiced",
+   "group": "rollup",
+   "hash": "8737534A4C191E7F",
+   "rows": 1,
+   "first": "22452661973818",
+   "warm": [
+    0.1201,
+    0.1326,
+    23.1707,
+    0.6506
+   ],
+   "warm2": [
+    0.1303,
+    0.1027,
+    20.9107,
+    0.6538
+   ],
+   "cold": [
+    0.0222,
+    0.018,
+    21.2502,
+    3.254
+   ],
+   "cold2": [
+    0.0117,
+    0.0202,
+    20.353,
+    3.0535
+   ]
+  },
+  {
+   "label": "invoice count",
+   "group": "rollup",
+   "hash": "E59BBEA6227C578F",
+   "rows": 1,
+   "first": "100000000",
+   "warm": [
+    0.1809,
+    0.0978,
+    0.6725,
+    0.6236
+   ],
+   "warm2": [
+    0.1082,
+    0.0908,
+    0.4821,
+    0.8124
+   ],
+   "cold": [
+    0.0125,
+    0.014,
+    0.7216,
+    3.1202
+   ],
+   "cold2": [
+    0.0086,
+    0.0091,
+    0.6165,
+    2.6297
+   ]
+  },
+  {
+   "label": "look up one invoice",
+   "group": "lookup",
+   "hash": "DEF8949BCDA24ED7",
+   "rows": 1,
+   "first": "556517|US|paid|42080",
+   "warm": [
+    0.1465,
+    0.1582,
+    0.758,
+    0.5828
+   ],
+   "warm2": [
+    0.1671,
+    0.141,
+    0.6125,
+    0.648
+   ],
+   "cold": [
+    0.8928,
+    102.396,
+    2.7126,
+    4.3868
+   ],
+   "cold2": [
+    0.721,
+    94.916,
+    1.6784,
+    3.4257
+   ]
+  },
+  {
+   "label": "overdue outstanding",
+   "group": "scan",
+   "hash": "AEAA0A03867CCCB3",
+   "rows": 1,
+   "first": "1570755279581",
+   "warm": [
+    0.255,
+    198.8406,
+    67.7591,
+    0.6418
+   ],
+   "warm2": [
+    0.2399,
+    189.9404,
+    65.5134,
+    0.631
+   ],
+   "cold": [
+    0.3033,
+    190.6199,
+    68.8836,
+    3.2477
+   ],
+   "cold2": [
+    0.2665,
+    179.4915,
+    65.5428,
+    2.7066
+   ]
+  },
+  {
+   "label": "big-ticket invoices (>$5k)",
+   "group": "scan",
+   "hash": "1C8734C7E3B34BF6",
+   "rows": 1,
+   "first": "5008385",
+   "warm": [
+    0.1908,
+    111.31,
+    35.023,
+    17.2128
+   ],
+   "warm2": [
+    0.1707,
+    100.3925,
+    33.0454,
+    17.1222
+   ],
+   "cold": [
+    1.7942,
+    78.3381,
+    36.0969,
+    169.429
+   ],
+   "cold2": [
+    1.7638,
+    77.3087,
+    33.8787,
+    168.9548
+   ]
+  },
+  {
+   "label": "largest invoices",
+   "group": "scan",
+   "hash": "2DE261208D34390B",
+   "rows": 20,
+   "first": "19491303|104886|5000086",
+   "warm": [
+    0.2968,
+    281.6409,
+    6.7026,
+    0.8105
+   ],
+   "warm2": [
+    0.342,
+    264.1613,
+    6.4572,
+    0.7677
+   ],
+   "cold": [
+    3.5241,
+    275.6429,
+    8.3907,
+    5.4857
+   ],
+   "cold2": [
+    3.6467,
+    323.004,
+    8.3331,
+    5.4942
+   ]
+  },
+  {
+   "label": "top customers by revenue",
+   "group": "scan",
+   "hash": "62D104EB972E29C9",
+   "rows": 10,
+   "first": "1203450|46122286",
+   "warm": [
+    0.576,
+    3087.8203,
+    190.1431,
+    38.4962
+   ],
+   "warm2": [
+    0.5261,
+    3080.9288,
+    185.3244,
+    37.2924
+   ],
+   "cold": [
+    39.0612,
+    3579.3016,
+    193.908,
+    331.4081
+   ],
+   "cold2": [
+    40.616,
+    3602.9374,
+    190.8675,
+    310.2835
+   ]
+  },
+  {
+   "label": "revenue by region & status",
+   "group": "scan",
+   "hash": "A143F129D8410461",
+   "rows": 20,
+   "first": "APAC|failed|90107752445",
+   "warm": [
+    0.2766,
+    355.8591,
+    261.4587,
+    0.911
+   ],
+   "warm2": [
+    0.2573,
+    350.9941,
+    254.6251,
+    0.8506
+   ],
+   "cold": [
+    1.3783,
+    440.6923,
+    262.4058,
+    4.3286
+   ],
+   "cold2": [
+    1.2365,
+    433.6072,
+    253.7746,
+    4.5394
+   ]
+  },
+  {
+   "label": "revenue by segment (JOIN)",
+   "group": "join",
+   "hash": "BF92D2F46CA805EE",
+   "rows": 4,
+   "first": "enterprise|4482677264083",
+   "warm": [
+    0.1885,
+    6.6244,
+    488.307,
+    0.6456
+   ],
+   "warm2": [
+    0.1753,
+    6.8503,
+    472.8995,
+    0.6685
+   ],
+   "cold": [
+    13.8823,
+    635.7307,
+    496.9606,
+    5.7371
+   ],
+   "cold2": [
+    9.8871,
+    646.6494,
+    478.8193,
+    6.7423
+   ]
+  },
+  {
+   "label": "enterprise revenue (JOIN)",
+   "group": "join",
+   "hash": "E6DF3855BEDB76DF",
+   "rows": 1,
+   "first": "4482677264083",
+   "warm": [
+    0.2046,
+    7.4024,
+    102.0578,
+    0.6364
+   ],
+   "warm2": [
+    0.1711,
+    7.21,
+    98.7157,
+    0.6306
+   ],
+   "cold": [
+    2.0619,
+    545.1982,
+    113.7429,
+    3.919
+   ],
+   "cold2": [
+    1.416,
+    524.2779,
+    98.683,
+    4.6859
+   ]
+  },
+  {
+   "label": "revenue by signup cohort (JOIN)",
+   "group": "join",
+   "hash": "0687A9045DF78DCF",
+   "rows": 24,
+   "first": "202201|937880223569",
+   "warm": [
+    0.2302,
+    9.055,
+    285.5527,
+    0.6187
+   ],
+   "warm2": [
+    0.1757,
+    6.7059,
+    277.2613,
+    0.6268
+   ],
+   "cold": [
+    0.3704,
+    498.5217,
+    281.298,
+    2.5115
+   ],
+   "cold2": [
+    0.2463,
+    502.909,
+    282.0301,
+    2.9782
+   ]
+  },
+  {
+   "label": "top named customers (JOIN)",
+   "group": "join",
+   "hash": "C3F5EFA3E7095A87",
+   "rows": 10,
+   "first": "Cust-017761|47382391",
+   "warm": [
+    0.9344,
+    33.6009,
+    576.0723,
+    121.543
+   ],
+   "warm2": [
+    2.0618,
+    29.6551,
+    552.359,
+    119.1641
+   ],
+   "cold": [
+    34.5645,
+    4053.124,
+    566.5006,
+    136.4803
+   ],
+   "cold2": [
+    28.5406,
+    4163.4596,
+    560.9722,
+    133.9271
+   ]
+  },
+  {
+   "label": "revenue by segment & status (JOIN)",
+   "group": "join",
+   "hash": "37D452ED69CC76D3",
+   "rows": 20,
+   "first": "enterprise|failed|89137287128",
+   "warm": [
+    0.2473,
+    715.4703,
+    603.6489,
+    0.7728
+   ],
+   "warm2": [
+    0.1718,
+    729.0276,
+    612.6411,
+    0.815
+   ],
+   "cold": [
+    0.1629,
+    839.2471,
+    618.324,
+    5.2729
+   ],
+   "cold2": [
+    0.0851,
+    832.3277,
+    610.1353,
+    4.685
+   ]
+  }
+ ],
+ "extra": {
+  "restoredBuild": {
+   "holodeclared\\customers\\data.pages": 131923968,
+   "holodeclared\\customers\\derived.idx": 4332,
+   "holodeclared\\customers\\table.meta": 17,
+   "holodeclared\\customers\\wal.log": 0,
+   "holodeclared\\invoices\\data.pages": 4805173248,
+   "holodeclared\\invoices\\derived.idx": 5412,
+   "holodeclared\\invoices\\keyed.decl": 51,
+   "holodeclared\\invoices\\keyed.ix_customer.joins": 4780,
+   "holodeclared\\invoices\\keyed.ix_customer.pks": 306015314,
+   "holodeclared\\invoices\\sorted.amount_cents.idx": 1600294912,
+   "holodeclared\\invoices\\sorted.decl": 30,
+   "holodeclared\\invoices\\summary.decl": 34966,
+   "holodeclared\\invoices\\table.meta": 16,
+   "holodeclared\\invoices\\wal.log": 0
+  },
+  "restoredFiles": {
+   "customers/data.pages": 131923968,
+   "customers/derived.idx": 4332,
+   "customers/table.meta": 17,
+   "customers/wal.log": 0,
+   "invoices/data.pages": 4805173248,
+   "invoices/derived.idx": 5412,
+   "invoices/keyed.decl": 51,
+   "invoices/keyed.ix_customer.joins": 4780,
+   "invoices/keyed.ix_customer.pks": 306015314,
+   "invoices/sorted.amount_cents.idx": 1600294912,
+   "invoices/sorted.decl": 30,
+   "invoices/summary.decl": 34966,
+   "invoices/table.meta": 16,
+   "invoices/wal.log": 0
+  }
+ }
+}

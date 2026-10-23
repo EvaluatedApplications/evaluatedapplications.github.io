@@ -37,12 +37,13 @@ Updated: 2026-10-23
 - [What attention costs](https://evaluatedapplications.github.io/algformer/evidence/): At the same shape and the same parameter count, reading a 1,984-token prompt takes 182 ms with softmax attention and 7.08 ms with holographic attention. Each further token takes 181 µs against 3.60 µs, and the serve cache holds 2,253 KB against 3.40 KB. Softmax reading grows with the square of the length (exponent 1.9) and holographic reading grows in step with it (1.0).
 - [What a visitor waits for](https://evaluatedapplications.github.io/blazier/evidence/): On the sample app the static page downloads 6.8 KB before the visitor acts, against 2.8 MB when the same app boots the usual way. Real content is on screen in 72 to 100 ms on desktop and 416 to 484 ms on the phone profile, against 748 to 1,165 ms and 13.2 to 15.5 s. After the visitor presses Start the runtime takes 710 to 1,170 ms on desktop and 12.7 to 15.4 s on the phone profile to reach a working page, the same wait as the usual boot.
 - [What a gate bound does](https://evaluatedapplications.github.io/evalapp/evidence/): The gate never admitted more downloads than its bound: in every recorded run the most in flight equalled the bound. The time to finish 24 queued jobs fell from 1,113 ms at a bound of 1 to 139 ms at 8, then rose again to 410 ms when all 24 ran at once, because the simulated service slows when it is crowded.
-- [HoloDb benchmarks](https://evaluatedapplications.github.io/holodb/evidence/): On a 10,000,000-invoice ledger joined to 200,000 customers, the dashboard rollups read in microseconds in the embedded engine because they read a maintained total, and every result is identical across the engines. That comparison sets DuckDB and SQL Server up as they ship. At 100,000,000 invoices against tuned DuckDB and tuned SQL Server, HoloDb declared is behind tuned SQL Server on 5 of 14 compared queries and HoloDb out of the box is behind tuned DuckDB on 5 of 14. Every query where HoloDb is slower is listed beside the wins.
+- [HoloDb benchmarks](https://evaluatedapplications.github.io/holodb/evidence/): Totals over 100,000,000 invoices in 0.12 ms and four joins to two million customers in 0.19 to 0.25 ms, against tuned DuckDB and tuned SQL Server on the same machine and data. Out of the box, scans that no structure covers are slower, and the chart shows each of them as an amber bar.
 - [How HoloGenome scores against the lab](https://evaluatedapplications.github.io/hologenome/evidence/): A linear readout trained on 12,472 random-sequence constructs and tested on 82,368 yeast-gene constructs (no shared sequence, forward or reverse complement) scores r = 0.529 with vectors that use the measured twist, against 0.483 with one constant twist (difference 0.046, 95% interval 0.041 to 0.050). Adding the local-shape layer lifts it to 0.600, a further 0.071. A small phasor model that chose its own period, starting from 12 bases, settled at 10.49, 10.51, 10.48 and 10.51 bases per turn on four independent libraries, against the crystallographic 10.534. The best trained network scores higher: the 22-parameter fit trails it by 0.28 to 0.39.
 - [Detail against components read](https://evaluatedapplications.github.io/holovoxel/evidence/): One 16 by 16 chunk stored as a single hologram decodes 98.4 percent of its cells correctly at the full budget of 8,192 components, 131,072 bytes and 17.0 ms. Reading fewer components is cheaper and fuzzier: 67.1 percent at 1,568 components, and 19.5 percent at 24, which takes 384 bytes and 0.09 ms.
 - [Exact recall and refusal](https://evaluatedapplications.github.io/phasor/evidence/): At equal storage the exact key view recovered 64 items with no errors where holographic reduced representations held 95 percent or better only up to 4. Past capacity the exact store refused every time, while the baseline answered wrongly every time.
 - [Pleroma costs and checks](https://evaluatedapplications.github.io/phasor/evidence/costs/): A superposed kernel applies in 0.17 to 0.44 ms on a 10,464-cell store whether it holds 1 or 10,368 elements, and the repair and corruption checks recovered or detected every case tried.
 - [Generated sentences pass the gate](https://evaluatedapplications.github.io/prose/evidence/): Of 2,000 sentences requested in one run, 1,966 different ones came back. Every one passed the package's validity gate on a fresh parse, and every word in every one was observed in the corpus.
+- [HoloDb deep dive](https://evaluatedapplications.github.io/holodb/evidence/deep-dive/): The numbers behind the plane: what it serves, what it declines, how its cost grows with size, and the 10,000,000-invoice comparison against engines as they ship. These workloads are built to suit the plane, so they sit apart from the 100,000,000-invoice comparison.
 
 ## Research
 
@@ -61,7 +62,7 @@ Updated: 2026-10-23
 - [The Pleroma: exact counts in one array](https://evaluatedapplications.github.io/phasor/pleroma/)
 - [EvalApp: run it all at once](https://evaluatedapplications.github.io/evalapp/)
 - [EvalApp docs: steps, gates and sagas](https://evaluatedapplications.github.io/evalapp/docs/)
-- [HoloDb: answers in microseconds](https://evaluatedapplications.github.io/holodb/)
+- [HoloDb: answers in under a millisecond](https://evaluatedapplications.github.io/holodb/)
 - [HoloDb docs: tables, SQL, transactions](https://evaluatedapplications.github.io/holodb/docs/)
 - [HoloDb on Pleroma: no scanning](https://evaluatedapplications.github.io/holodb/pleroma/)
 - [HoloDb client and wire protocol](https://evaluatedapplications.github.io/holodb/client/)
@@ -86,6 +87,7 @@ Updated: 2026-10-23
 - [Exact recall and refusal](https://evaluatedapplications.github.io/phasor/evidence/)
 - [Pleroma costs and checks](https://evaluatedapplications.github.io/phasor/evidence/costs/)
 - [Generated sentences pass the gate](https://evaluatedapplications.github.io/prose/evidence/)
+- [HoloDb deep dive](https://evaluatedapplications.github.io/holodb/evidence/deep-dive/)
 - [Research: inside a tiny model](https://evaluatedapplications.github.io/research/)
 - [Fifty reads, one store](https://evaluatedapplications.github.io/research/one-store-many-reads/)
 - [The Four-Token Ceiling](https://evaluatedapplications.github.io/research/context-four/)

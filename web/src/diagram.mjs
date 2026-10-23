@@ -26,6 +26,9 @@ import * as commutationMap from './assets/diagrams/commutation-map.js';
 import * as blazierBoot from './assets/diagrams/blazier-boot.js';
 import * as hologenomeScores from './assets/diagrams/hologenome-scores.js';
 import * as scalingCurve from './assets/diagrams/scaling-curve.js';
+import * as holodbRace from './assets/diagrams/holodb-race.js';
+import * as holodbHow from './assets/diagrams/holodb-how.js';
+import * as holodbFit from './assets/diagrams/holodb-fit.js';
 
 const KINDS = {
   'tracer-field': tracerField, 'stack-map': stackMap, 'pleroma-map': pleromaMap, 'pleroma-grid': pleromaGrid,
@@ -33,7 +36,7 @@ const KINDS = {
   'evalapp-gate': evalappGate, 'algformer-cost': algformerCost, 'holovoxel-lod': holovoxelLod, 'prose-pipeline': prosePipeline,
   'round-timeline': roundTimeline, 'slot-grow': slotGrow, 'layer-stack': layerStack, 'size-bars': sizeBars, 'design-effect': designEffect,
   'superposition-scene': superpositionScene, 'coverage-meter': coverageMeter, 'commutation-map': commutationMap, 'blazier-boot': blazierBoot, 'hologenome-scores': hologenomeScores,
-  'scaling-curve': scalingCurve,
+  'scaling-curve': scalingCurve, 'holodb-race': holodbRace, 'holodb-how': holodbHow, 'holodb-fit': holodbFit,
 };
 
 export function diagramModule(kind) {
