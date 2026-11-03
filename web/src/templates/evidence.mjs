@@ -9,13 +9,13 @@ import { diagramFigure } from '../diagram.mjs';
 export function hub(ctx) {
   const crumbs = [{ label: 'Home', href: '/' }, { label: 'Evidence', href: '/evidence/' }];
   const main = html`
-${pageHead({ crumbs, h1: 'Evidence', lede: 'What we have measured and how. Every record states its method once, checks that every engine returns the same result before timing, and lists where we lose.' })}
+${pageHead({ crumbs, h1: 'Evidence', lede: 'What we have tested and measured, and how. Every record states its method once and lists what went against the library.' })}
 <section class="sec" aria-labelledby="h-all"><div class="wrap"><h2 class="sr-only" id="h-all">All measurements</h2>
   <ul class="cards">${ctx.evidence.map((e) => evidenceCard(e, ctx.byId))}</ul>
 </div></section>`;
   return {
     url: '/evidence/', type: 'evidence', section: 'evidence',
-    title: 'Evidence', description: 'Every published measurement of our libraries, with the method stated once and the losses shown beside the wins.',
+    title: 'Evidence', description: 'Every published test and measurement of our libraries, with the method stated once and the losses shown beside the results.',
     crumbs, jsonld: [crumbsLd(ctx, [...crumbs])], main,
   };
 }
@@ -28,22 +28,12 @@ export function record(ctx, e) {
   const sections = e.sections || [{ id: 'results', title: 'Results', intro: [], tables: e.tables, notes: [], losses: [] }];
   const kinds = new Set();
   const rows = [['Workload', m.workload], ['Engines', m.engines.join('; ')], ['Check', m.verification], ['Statistic', m.statistic], ['Machine', m.machine], ['Memory and logging', m.memory], ['Ties', m.tie]].filter(([, v]) => v);
-  // losses: derived from timing rows where another engine is ahead, plus the ones each section states
+  // losses: the ones each section states, then the record's own
   const losses = [];
   for (const s of sections) {
-    for (const tb of s.tables || []) if (tb.kind !== 'matrix') for (const r of tb.rows) if (r.state === 'loss') losses.push({ sec: s, text: `${r.label} (${tb.columns[tb.focus]}): ${r.verdict}.` });
     for (const l of s.losses || []) losses.push({ sec: s, text: l });
   }
   for (const l of e.losses || []) losses.push({ sec: null, text: l });
-  const timingFigure = (s, tb) => {
-    kinds.add('latency-bars');
-    return diagramFigure({
-      id: 'lb-' + tb.id, kind: 'latency-bars', title: '', lede: '', level: 3,
-      data: { schema: 'ea-diagram/1', kind: 'latency-bars', id: tb.id, caption: tb.caption, columns: tb.columns, focus: tb.focus, rival: tb.rival, tieBelow: e.tieBelow ?? 1.15, resultLabel: tb.resultLabel, qualifiers: tb.qualifiers, rows: tb.rows },
-      stageLabel: 'Latency chart. Use the up and down arrows to read each row.',
-      caption: html`Drawn from the table, which holds every value.`,
-    }).html;
-  };
   // a section may carry a diagram drawn from a generated data file ({ id, kind, stageLabel, caption }); its table alternative sits beside it
   const sectionFigure = (s) => {
     if (!s.diagram) return '';
@@ -59,7 +49,7 @@ ${pageHead({ crumbs, eyebrow: `${p.name} evidence`, h1: e.title, lede: e.claim, 
     extra: html`<ul class="facts"><li class="fact">${e.scope === 'engine' ? 'Engine alone, without the optional plane' : e.scope}</li><li class="fact">Losses shown</li></ul>` })}
 ${productSubnav(p, e.slug === p.evidence[0]?.slug ? 'evidence' : 'evidence')}
 ${e.sections && e.sections.length > 2 ? html`<section class="sec"><div class="wrap">
-  <nav class="toc" aria-labelledby="toc-h"><h2 id="toc-h">On this page</h2><ul><li><a href="#h-head">Headline</a></li><li><a href="#h-loss">${e.lossTitle || 'Where it is slower'}</a></li><li><a href="#h-method">How it was measured</a></li>${sections.map((s) => html`<li><a href="#${s.id}">${s.title}</a></li>`)}<li><a href="#h-lim">Limits</a></li></ul></nav>
+  <nav class="toc" aria-labelledby="toc-h"><h2 id="toc-h">On this page</h2><ul><li><a href="#h-head">Headline</a></li><li><a href="#h-loss">${e.lossTitle || 'What it costs'}</a></li><li><a href="#h-method">How it was measured</a></li>${sections.map((s) => html`<li><a href="#${s.id}">${s.title}</a></li>`)}<li><a href="#h-lim">Limits</a></li></ul></nav>
 </div></section>` : ''}
 
 <section class="sec" aria-labelledby="h-head"><div class="wrap">
@@ -68,8 +58,8 @@ ${e.sections && e.sections.length > 2 ? html`<section class="sec"><div class="wr
 </div></section>
 
 <section class="sec" aria-labelledby="h-loss"><div class="wrap">
-  ${secHead({ title: e.lossTitle || 'Where it is slower', line: 'Every loss in this record, stated once', cat: p.cat, id: 'h-loss' })}
-  ${losses.length ? html`<ul class="limits">${losses.map((l) => html`<li>${l.sec && (e.sections || []).length ? html`<a href="#${l.sec.id}">${l.sec.title}</a>: ` : ''}${l.text}</li>`)}</ul>` : html`<p class="prose-block">This record measures one implementation, so no other engine is faster in it.</p>`}
+  ${secHead({ title: e.lossTitle || 'What it costs', line: 'Every loss in this record, stated once', cat: p.cat, id: 'h-loss' })}
+  ${losses.length ? html`<ul class="limits">${losses.map((l) => html`<li>${l.sec && (e.sections || []).length ? html`<a href="#${l.sec.id}">${l.sec.title}</a>: ` : ''}${l.text}</li>`)}</ul>` : html`<p class="prose-block">Nothing in this record went against the library.</p>`}
 </div></section>
 
 <section class="sec method" aria-labelledby="h-method"><div class="wrap">
@@ -81,7 +71,7 @@ ${sections.map((s) => html`<section class="sec" aria-labelledby="${s.id}"><div c
   ${secHead({ title: s.title, cat: p.cat, id: s.id })}
   ${(s.intro || []).length ? html`<div class="prose-block">${s.intro.map((t) => html`<p>${t}</p>`)}</div>` : ''}
   ${sectionFigure(s)}
-  ${(s.tables || []).map((tb) => (tb.kind === 'matrix' ? matrixTable(tb) : timingFigure(s, tb)))}
+  ${(s.tables || []).map((tb) => matrixTable(tb))}
   ${(s.notes || []).length ? html`<div class="prose-block">${s.notes.map((t) => html`<p>${t}</p>`)}</div>` : ''}
 </div></section>`)}
 

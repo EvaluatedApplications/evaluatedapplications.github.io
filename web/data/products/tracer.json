@@ -7,37 +7,98 @@
     "tool": "doctrine",
     "mechanismTitle": "More than pathfinding",
     "stats": [
-      { "value": "{foundCrowd} of {agents}", "label": "agents given a path in one crowd tick on the recorded level", "cite": ["diagrams/tracer-field.json"] },
-      { "value": "{foundBlocked} of {agents}", "label": "still given a path after a doorway is closed", "cite": ["diagrams/tracer-field.json"] },
-      { "value": "{rerouted} of {agents}", "label": "agents that took a new route around the closed doorway", "cite": ["diagrams/tracer-field.json"] },
-      { "value": "{goals}", "label": "goals for {agents} agents. Agents that share a goal share one solve", "cite": ["diagrams/tracer-field.json"] }
+      {
+        "value": "{foundCrowd} of {agents}",
+        "label": "agents given a path in one crowd tick on the recorded level",
+        "cite": [
+          "diagrams/tracer-field.json"
+        ]
+      },
+      {
+        "value": "{foundBlocked} of {agents}",
+        "label": "still given a path after a doorway is closed",
+        "cite": [
+          "diagrams/tracer-field.json"
+        ]
+      },
+      {
+        "value": "{rerouted} of {agents}",
+        "label": "agents that took a new route around the closed doorway",
+        "cite": [
+          "diagrams/tracer-field.json"
+        ]
+      },
+      {
+        "value": "{goals}",
+        "label": "goals for {agents} agents. Agents that share a goal share one solve",
+        "cite": [
+          "diagrams/tracer-field.json"
+        ]
+      }
     ],
     "numbers": {
       "summary": "See the numbers",
       "items": [
-        { "claim": "One recorded level, every path the package's own", "text": "A level of {triangles} navmesh triangles with two walls and two doorways each, {agents} agents and {goals} goals. The paths were returned by the published package and are drawn as they came back." },
-        { "claim": "A closed doorway reroutes, it does not break", "text": "Closing the upper doorway in the first wall leaves the mesh at {triangles} triangles. {rerouted} of {agents} agents take a new route and {foundBlocked} of {agents} still find a path." },
-        { "claim": "Corner clearance", "text": "Crowd waypoints are shared guidance. On this level they cut doorway corners by up to {crowdCorner} of a cell, and single-agent queries stay within {singleCorner} of a cell. Use single queries where exact corner clearance matters." }
+        {
+          "claim": "One recorded level, every path the package's own",
+          "text": "A level of {triangles} navmesh triangles with two walls and two doorways each, {agents} agents and {goals} goals. The paths were returned by the published package and are drawn as they came back."
+        },
+        {
+          "claim": "A closed doorway reroutes, it does not break",
+          "text": "Closing the upper doorway in the first wall leaves the mesh at {triangles} triangles. {rerouted} of {agents} agents take a new route and {foundBlocked} of {agents} still find a path."
+        },
+        {
+          "claim": "Corner clearance",
+          "text": "Crowd waypoints are shared guidance. On this level they cut doorway corners by up to {crowdCorner} of a cell, and single-agent queries stay within {singleCorner} of a cell. Use single queries where exact corner clearance matters."
+        }
       ]
     },
     "build": {
       "title": "What you can build",
       "line": "Each one is in the package today.",
       "items": [
-        { "title": "A crowd that shares the work", "text": "Agents that share a goal share one solve, and adaptive path budgeting keeps a large crowd inside your frame-time budget under pressure." },
-        { "title": "A map that changes mid-game", "text": "Block and unblock regions of a baked mesh while the game runs, with no re-bake. Swap the new mesh in between ticks." },
-        { "title": "Units that see and fight", "text": "Line of sight, fog of war, influence maps and combat resolution with pluggable damage, dodge and block formulas, in the same package." },
-        { "title": "Tile games with no bake", "text": "A separate lane gives line of sight, movement range, cover and target selection over any tilemap." },
-        { "title": "Movement that looks alive", "text": "Seek, Wander, Patrol, Flee, Queue and FlowLane steering, composed through a fluent builder." }
+        {
+          "title": "A crowd that shares the work",
+          "text": "Agents that share a goal share one solve, and adaptive path budgeting keeps a large crowd inside your frame-time budget under pressure."
+        },
+        {
+          "title": "A map that changes mid-game",
+          "text": "Block and unblock regions of a baked mesh while the game runs, with no re-bake. Swap the new mesh in between ticks."
+        },
+        {
+          "title": "Units that see and fight",
+          "text": "Line of sight, fog of war, influence maps and combat resolution with pluggable damage, dodge and block formulas, in the same package."
+        },
+        {
+          "title": "Tile games with no bake",
+          "text": "A separate lane gives line of sight, movement range, cover and target selection over any tilemap."
+        },
+        {
+          "title": "Movement that looks alive",
+          "text": "Seek, Wander, Patrol, Flee, Queue and FlowLane steering, composed through a fluent builder."
+        }
       ]
     }
   },
   "intro": "Tracer is a pathfinding and game-AI SDK for real-time simulations with many moving agents: crowds, RTS-style unit groups and tactical squads. It bakes triangle navmeshes, routes single agents and whole crowds across them, reacts to obstacles that appear or vanish mid-game, and adds the game-AI toolkit around pathfinding: line of sight, fog of war, influence maps and combat engagement.",
-  "facts": ["Triangle navmesh and a bake-free tile lane", "Self-tuning concurrency", "net8.0 and net10.0"],
+  "facts": [
+    "Triangle navmesh and a bake-free tile lane",
+    "Self-tuning concurrency",
+    "net8.0 and net10.0"
+  ],
   "why": [
-    { "title": "A crowd that shares a goal shares the work", "text": "Agents that share a goal share one guidance solve. In a measured 500-agent tick on a 1,152-triangle mesh, a shared goal with a bounded conflict radius took about 3.8 ms against about 22 ms for 500 distinct goals. Adaptive path budgeting keeps large crowds inside a frame-time budget under pressure." },
-    { "title": "Obstacles change without a re-bake", "text": "Block and unblock regions of a baked mesh while the game runs. The mesh handle is immutable, so you swap the new one in between ticks." },
-    { "title": "Everything around the path", "text": "Line of sight, fog of war, influence maps, congestion analysis, steering behaviors and combat resolution ship in the same SDK, on the same pipeline runtime." }
+    {
+      "title": "A crowd that shares a goal shares the work",
+      "text": "Agents that share a goal share one guidance solve, so a crowd bound for one exit costs one search. Adaptive path budgeting keeps large crowds inside a frame-time budget under pressure."
+    },
+    {
+      "title": "Obstacles change without a re-bake",
+      "text": "Block and unblock regions of a baked mesh while the game runs. The mesh handle is immutable, so you swap the new one in between ticks."
+    },
+    {
+      "title": "Everything around the path",
+      "text": "Line of sight, fog of war, influence maps, congestion analysis, steering behaviors and combat resolution ship in the same SDK, on the same pipeline runtime."
+    }
   ],
   "diagram": {
     "id": "tracer-field",
@@ -51,14 +112,38 @@
     "output": "snippets/tracer-quickstart.out.txt"
   },
   "capabilities": [
-    { "title": "Navmesh baking", "text": "Turn triangle geometry into a queryable navmesh, with obstacle-polygon exclusion and an optional hierarchical bake for large levels, or layered meshes for ground, air and water." },
-    { "title": "Single and multi-agent paths", "text": "One-shot smoothed paths, batches in parallel, or a crowd tick where agents with the same goal reuse one solve." },
-    { "title": "Dynamic obstacles", "text": "Block and unblock circular zones of a baked mesh at runtime without a full bake." },
-    { "title": "Line of sight, fog of war, influence maps", "text": "Visibility and area-control queries for perception and decision-making, with congestion analysis alongside." },
-    { "title": "Combat engagement", "text": "Spatially hashed attacker and defender resolution with pluggable damage, dodge and block formulas." },
-    { "title": "Steering behaviors", "text": "Seek, Wander, Patrol, Flee, Queue and FlowLane, composed through a fluent navigator builder." },
-    { "title": "Grid tactics", "text": "A separate bake-free lane for tile games: line of sight, movement range, cover and target selection over any tilemap." },
-    { "title": "Adaptive budgeting and populations", "text": "Cluster large agent counts and path only representatives when the frame budget is tight, or run several named populations under one shared budget." }
+    {
+      "title": "Navmesh baking",
+      "text": "Turn triangle geometry into a queryable navmesh, with obstacle-polygon exclusion and an optional hierarchical bake for large levels, or layered meshes for ground, air and water."
+    },
+    {
+      "title": "Single and multi-agent paths",
+      "text": "One-shot smoothed paths, batches in parallel, or a crowd tick where agents with the same goal reuse one solve."
+    },
+    {
+      "title": "Dynamic obstacles",
+      "text": "Block and unblock circular zones of a baked mesh at runtime without a full bake."
+    },
+    {
+      "title": "Line of sight, fog of war, influence maps",
+      "text": "Visibility and area-control queries for perception and decision-making, with congestion analysis alongside."
+    },
+    {
+      "title": "Combat engagement",
+      "text": "Spatially hashed attacker and defender resolution with pluggable damage, dodge and block formulas."
+    },
+    {
+      "title": "Steering behaviors",
+      "text": "Seek, Wander, Patrol, Flee, Queue and FlowLane, composed through a fluent navigator builder."
+    },
+    {
+      "title": "Grid tactics",
+      "text": "A separate bake-free lane for tile games: line of sight, movement range, cover and target selection over any tilemap."
+    },
+    {
+      "title": "Adaptive budgeting and populations",
+      "text": "Cluster large agent counts and path only representatives when the frame budget is tight, or run several named populations under one shared budget."
+    }
   ],
   "limits": [
     "The navmesh is made of triangles, not tiles. A tile game bakes two triangles per walkable cell, or uses the bake-free tile lane.",

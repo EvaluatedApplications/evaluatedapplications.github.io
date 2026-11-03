@@ -1,6 +1,5 @@
 // Generates web/data/diagrams/holovoxel-lod.json by running the published HoloVoxel package.
 //   dotnet run -c Release -- ../../data/diagrams/holovoxel-lod.json [seed] [firstChunkX] [chunkZ]
-using System.Diagnostics;
 using System.Reflection;
 using System.Text;
 using System.Text.Json;
@@ -72,7 +71,7 @@ for (int i = 0; i < Chunks; i++)
     chunkData.Add(new { cx, levels });
 }
 
-// ---- the ladder: accuracy, stored size and decode cost against the component budget (chunk 0, full build) ----
+// ---- the ladder: accuracy and stored size against the component budget (chunk 0, full build) ----
 var probe = new Chunk(firstCx, cz, world);
 int[] budgets = { 24, 48, 98, 196, 392, 784, 1568, 3136, 6272, full };
 var ladder = new List<object>();
@@ -80,12 +79,8 @@ foreach (int c in budgets)
 {
     double acc = probe.Accuracy(c);
     var (_, bytes) = world.CapacityProbe(200, 8, c, 1);
-    for (int w = 0; w < 3; w++) probe.DecodeField(1, c);
-    var times = new List<double>();
-    for (int r = 0; r < 15; r++) { var sw = Stopwatch.StartNew(); probe.DecodeField(1, c); times.Add(sw.Elapsed.TotalMilliseconds); }
-    times.Sort();
-    ladder.Add(new { components = c, accuracy = Math.Round(acc, 1), storedBytes = bytes, decodeMs = Math.Round(times[times.Count / 2], 2) });
-    Console.WriteLine($"comps {c,5}: accuracy {acc,5:F1}%  bytes {bytes,7}  decode {times[times.Count / 2],6:F2} ms");
+    ladder.Add(new { components = c, accuracy = Math.Round(acc, 1), storedBytes = bytes });
+    Console.WriteLine($"comps {c,5}: accuracy {acc,5:F1}%  bytes {bytes,7}");
 }
 
 Console.WriteLine($"palette {palette.Count} colours, {totalCells} cells; comps for levels: {string.Join(",", compsFor)}");

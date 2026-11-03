@@ -4,39 +4,102 @@
   "description": "Do a thousand things in one pass. Phasor is a .NET library for exact counts, whole-store updates in a single sweep, and replicas that sync by their differences.",
   "headline": "Do a thousand things in one pass.",
   "sub": "Build stores that answer exactly, replicas that sync by sending only what differs, and tables that repair themselves. Every item and every operator lives in one array, so one sweep moves all of it.",
-  "facts": ["No dependencies", "AOT and trim compatible", "net8.0 and net10.0", "Windows, Linux and macOS"],
+  "facts": [
+    "No dependencies",
+    "AOT and trim compatible",
+    "net8.0 and net10.0",
+    "Windows, Linux and macOS"
+  ],
   "demo": {
     "title": "Three items, two operators, one pass",
     "lede": "Step through it, or press Replay. Every number is the real store's.",
     "stageLabel": "Three items stacked in one store, two operators summed into one kernel, one pass, and the counts read back."
   },
-  "factDiagrams": ["superposition-scene", "coverage-meter", "pleroma-map", "commutation-map"],
+  "factDiagrams": [
+    "superposition-scene",
+    "coverage-meter",
+    "pleroma-map",
+    "commutation-map"
+  ],
   "stats": [
-    { "value": "{applyLo} to {applyHi} ms", "label": "for one pass that applies from 1 to {elementsMax} operators at once" },
-    { "value": "200 of 200", "label": "trials recovering 64 stored items exactly, where Plate's HRR held at least 95 percent only up to 4 items, at the same storage" },
-    { "value": "12,800 of 12,800", "label": "reads past capacity answered with a clear no. It never guesses" },
-    { "value": "0.6 ms", "label": "to read a whole 3,150-slot page, exactly" }
+    {
+      "value": "200 of 200",
+      "label": "trials recovering 64 stored items exactly from the key view"
+    },
+    {
+      "value": "12,800 of 12,800",
+      "label": "reads past capacity answered with a clear no. It never guesses"
+    },
+    {
+      "value": "300 of 300",
+      "label": "rebuilds of lost key harmonics, for each of 1 to 5 lost with 5 reserved keys"
+    },
+    {
+      "value": "10,000 of 10,000",
+      "label": "single corrupted cells detected, in either copy of a store"
+    }
   ],
   "numbers": {
     "summary": "See the numbers",
     "items": [
-      { "claim": "One pass, from 1 to {elementsMax} operators", "text": "Apply took {applyLo} to {applyHi} ms per call over two runs, with no trend in the number of elements. Building the same store from the moved items took {brute1} ms at 1 element and {brute1000} ms at 1,000. Conditions: a 10,464-cell store (GF(13,879), 6 flag bits, S_3, time period 27, joint flags by order by time, key capacity 4, a continuous component, 10 items on four keys), random kernels, the mean of 20 calls after one warm-up, Release build, a loaded i9-11950H." },
-      { "claim": "Measured against HRR", "text": "At equal storage (about 2,000 to 2,600 bits, measured at about 2,064 and 2,580 bits), the exact key view recovered 64 items in 200 of 200 trials. Plate's Holographic Reduced Representations (HRR), with the standard decoder or a stronger one, held at least 95 percent only up to 4 items. These are the figures for these budgets only. The benchmark is not part of the shipped package." },
-      { "claim": "A clear no past capacity", "text": "Past capacity (65 to 96 items), the keys-only hologram refused 12,800 of 12,800 trials with no wrong answer. Every HRR baseline answered wrongly every time." },
-      { "claim": "A whole page in 0.6 ms", "text": "With a complete key band, reading a 3,150-slot page costs about 0.6 ms (188 to 246 ns per slot). Building a page from a count vector is about 100 times faster than adding its keys one by one." }
+      {
+        "claim": "One pass, from 1 to {elementsMax} operators",
+        "text": "A kernel holds all of its operators in one table, and one pass applies the table to the whole store. The result is the store you would get by moving each item by each operator and adding the copies. The recorded example is a 10,464-cell store (GF(13,879), 6 flag bits, S_3, time period 27, joint flags by order by time, key capacity 4, a continuous component, 10 items on four keys)."
+      },
+      {
+        "claim": "Exact recovery of 64 items",
+        "text": "At about 2,000 to 2,600 bits of storage (measured at about 2,064 and 2,580 bits), the exact key view recovered 64 items in 200 of 200 trials. Every decode is re-encoded and must reproduce every stored element before it is returned."
+      },
+      {
+        "claim": "A clear no past capacity",
+        "text": "Past capacity (65 to 96 items), the keys-only hologram refused 12,800 of 12,800 trials with no wrong answer."
+      },
+      {
+        "claim": "Repair and detection",
+        "text": "With 5 reserved keys, any of 1 to 5 lost key harmonics was rebuilt, 300 of 300 times each. A check prime mirrors every cell in a second prime, and one corrupted cell in either copy was detected 10,000 of 10,000 times. A parity group rebuilt any one lost store, 100 of 100 times."
+      }
     ]
   },
   "build": {
     "title": "What you can build",
     "line": "Each one is in the package today.",
     "items": [
-      { "title": "Database answers in a millisecond", "text": "Read a whole 3,150-slot page of exact counts in about 0.6 ms. HoloDb serves COUNT, SUM, GROUP BY and joins from slices of a store like this.", "link": { "href": "/holodb/docs/#plane", "label": "See the HoloDb aggregate plane" } },
-      { "title": "Replicas that sync by their differences", "text": "Send one small message sized to what differs, not to your data. Ten thousand shared items and one different on each side take 192 bytes, and the other side reads the exact difference." },
-      { "title": "A store that repairs itself", "text": "Lose up to five values and get them back, 300 of 300 times. Catch one corrupted cell in either copy, 10,000 of 10,000 times. Rebuild a lost store from its group, 100 of 100 times." },
-      { "title": "A memory that reads exactly", "text": "Store pairs and read them back without drift. At equal storage, recall held at 100 percent from 2 to 32 pairs, where a float bundle fell to 21.9 percent at 32." },
-      { "title": "Age and reshape everything at once", "text": "Age, relabel, diffuse or bind every item in one pass. The cost follows the size of the store, not the number of items in it." },
-      { "title": "Any question, one read", "text": "Count the items that match any condition on their flags, however tangled, in one read. Ask for counts, shares and parity from one query." },
-      { "title": "Exact totals per key", "text": "Keep an exact count and a 128-bit sum for each of millions of keys, rank the top k, fold keys into groups, and move a key's totals when it changes group. A read costs the same for every key, and a saved file checks every page.", "link": { "href": "/phasor/docs/#keyed-summary", "label": "See exact sums per key" } }
+      {
+        "title": "Database answers from exact counts",
+        "text": "Read a whole page of exact counts and get the same numbers a scan would. HoloDb serves COUNT, SUM, GROUP BY and joins from slices of a store like this.",
+        "link": {
+          "href": "/holodb/docs/#plane",
+          "label": "See the HoloDb aggregate plane"
+        }
+      },
+      {
+        "title": "Replicas that sync by their differences",
+        "text": "Send one small message sized to what differs, not to your data. Ten thousand shared items and one different on each side take 192 bytes, and the other side reads the exact difference."
+      },
+      {
+        "title": "A store that repairs itself",
+        "text": "Lose up to five values and get them back, 300 of 300 times. Catch one corrupted cell in either copy, 10,000 of 10,000 times. Rebuild a lost store from its group, 100 of 100 times."
+      },
+      {
+        "title": "A memory that reads exactly",
+        "text": "Store pairs and read them back without drift. Recall held at 100 percent from 2 to 32 pairs, and past capacity the store refuses every query instead of guessing."
+      },
+      {
+        "title": "Age and reshape everything at once",
+        "text": "Age, relabel, diffuse or bind every item in one pass. The cost follows the size of the store, not the number of items in it."
+      },
+      {
+        "title": "Any question, one read",
+        "text": "Count the items that match any condition on their flags, however tangled, in one read. Ask for counts, shares and parity from one query."
+      },
+      {
+        "title": "Exact totals per key",
+        "text": "Keep an exact count and a 128-bit sum for each of millions of keys, rank the top k, fold keys into groups, and move a key's totals when it changes group. A read costs the same for every key, and a saved file checks every page.",
+        "link": {
+          "href": "/phasor/docs/#keyed-summary",
+          "label": "See exact sums per key"
+        }
+      }
     ]
   },
   "code": {
@@ -51,41 +114,92 @@
     "line": "Read a few bits, grow a store, share one store between tenants",
     "lede": "The flag face is the row of yes or no bits kept with every item. These operations read just the bits you name, read them across many stores in one call, add bits to a store that already holds data, and keep several tenants apart inside one store. None of them builds a second store to do it.",
     "tiles": [
-      { "value": "26 times", "label": "faster than decode and re-add to widen a 14-bit store: 60.6 against 1,593 microseconds, with the cell map already cached (Release build, loaded machine, medians)" },
-      { "value": "4,038 of 4,038", "label": "tenant reads equal to separate per-tenant stores, cell for cell, in the recorded run of up to 32 tenants with six data bits" },
-      { "value": "0.39 to 0.62", "label": "of the per-plane time for one batched read of 4 to 49 planes (10 bits of a 14-bit plane, loaded machine)" }
+      {
+        "value": "4,038 of 4,038",
+        "label": "tenant reads equal to separate per-tenant stores, cell for cell, in the recorded run of up to 32 tenants with six data bits"
+      }
     ],
     "items": [
-      { "title": "Read only the bits you name", "text": "Flags(bits) returns the exact count of each flag pattern on the bits you name and sums out every other bit. The empty list returns the total. No store is built." },
-      { "title": "Many stores, one call", "text": "Pleroma.FlagsMany(stores, bits) reads one bit set from several stores of one shape in one batched transform per prime, cell for cell equal to one Flags(bits) per store, and FlagsUnion takes several bit sets. PleromaReadSet declares each read once and answers all of them for all stores in one call, and Run applies a kernel to clones of the stores first. Each read makes its own transform by default, and the time still grows with the number of planes, because the output does." },
-      { "title": "A few words, cheaply", "text": "ReadFlagWords returns the exact count of each word you list. Up to four words it sums the flag cells once per word, and above four it uses the whole-store transform. Both return the same numbers. Recorded at 14 flag bits (Release build, loaded machine, medians): about 134 microseconds for one word and about 90 more for each further word, against 0.66 milliseconds for the whole-store transform." },
-      { "title": "Widen a store without rebuilding it", "text": "WidenFlags(bits, at) returns a store with zero flag bits inserted at a position, and the source is unchanged. The cells are copied through a cached map, so no item is decoded or added again. It refuses continuous components, relation faces and reserved keys, and the result may hold at most 16 flag bits." },
-      { "title": "Add many flag words in one pass", "text": "AddFlagWords adds counts[j] copies of words[j] at one key in one pass over the cells, equal to one Add per word. The static overload applies one batch to several stores of one shape. Recorded at 14 flag bits: one word about 80 microseconds, sixteen words about 215 to 237 microseconds." },
-      { "title": "Tenants as flag bits", "text": "Give each tenant bits in the high end of the flag word and the data the low bits. The all-tenant total is Flags(data bits) on that store, one transform whatever the tenant count. A tenant's own counts are its slice of Flags(tenant bits + data bits), whose transform grows with the tenant count. The cap is 16 flag bits in total: six data bits leave ten tenant bits, which is 1,024 tenants by arithmetic, and ten data bits leave six, which is 64. The recorded run reached 32 tenants. Past the cap, split the tenants across stores." }
+      {
+        "title": "Read only the bits you name",
+        "text": "Flags(bits) returns the exact count of each flag pattern on the bits you name and sums out every other bit. The empty list returns the total. No store is built."
+      },
+      {
+        "title": "Many stores, one call",
+        "text": "Pleroma.FlagsMany(stores, bits) reads one bit set from several stores of one shape in one batched transform per prime, cell for cell equal to one Flags(bits) per store, and FlagsUnion takes several bit sets. PleromaReadSet declares each read once and answers all of them for all stores in one call, and Run applies a kernel to clones of the stores first. Each read makes its own transform by default, and the time still grows with the number of planes, because the output does."
+      },
+      {
+        "title": "A few words, cheaply",
+        "text": "ReadFlagWords returns the exact count of each word you list. Up to four words it sums the flag cells once per word, and above four it uses the whole-store transform. Both return the same numbers."
+      },
+      {
+        "title": "Widen a store without rebuilding it",
+        "text": "WidenFlags(bits, at) returns a store with zero flag bits inserted at a position, and the source is unchanged. The cells are copied through a cached map, so no item is decoded or added again. It refuses continuous components, relation faces and reserved keys, and the result may hold at most 16 flag bits."
+      },
+      {
+        "title": "Add many flag words in one pass",
+        "text": "AddFlagWords adds counts[j] copies of words[j] at one key in one pass over the cells, equal to one Add per word. The static overload applies one batch to several stores of one shape."
+      },
+      {
+        "title": "Tenants as flag bits",
+        "text": "Give each tenant bits in the high end of the flag word and the data the low bits. The all-tenant total is Flags(data bits) on that store, one transform whatever the tenant count. A tenant's own counts are its slice of Flags(tenant bits + data bits), whose transform grows with the tenant count. The cap is 16 flag bits in total: six data bits leave ten tenant bits, which is 1,024 tenants by arithmetic, and ten data bits leave six, which is 64. The recorded run reached 32 tenants. Past the cap, split the tenants across stores."
+      }
     ],
-    "code": { "title": "Read only the bits you name", "source": "snippets/phasor-flags-bits.cs", "output": "snippets/phasor-flags-bits.out.txt" },
-    "more": { "href": "/phasor/docs/#flags", "label": "Every flag example, with its output" }
+    "code": {
+      "title": "Read only the bits you name",
+      "source": "snippets/phasor-flags-bits.cs",
+      "output": "snippets/phasor-flags-bits.out.txt"
+    },
+    "more": {
+      "href": "/phasor/docs/#flags",
+      "label": "Every flag example, with its output"
+    }
   },
   "symmetry": {
     "title": "The kernel is the symmetry",
     "line": "Which moves mix into one pass, and which do not",
     "lede": "A symmetry here is a move you can make to every item at once, such as flipping a flag, advancing the clock or reordering the arrangement. A kernel is a weighted mix of such moves, and the store applies the whole mix in one pass instead of one pass per move. This section says which moves can be mixed that way and which cannot. The numbers are how many of the store's {members} operations fall on each side.",
     "tiles": [
-      { "value": "{commuting}", "label": "of {members} operations commute with every generator of the group, and {joinsAxes} of them join the kernel's axes" },
-      { "value": "{linearBreak}", "label": "are linear or affine and break a named symmetry, such as a bit permutation of the flags or a key scaling" },
-      { "value": "{nonlinear}", "label": "are not linear: choices, decodes, order statistics, draws and predicates" },
-      { "value": "{needDeclaration}", "label": "need an output-action declaration before a probe can classify them" }
+      {
+        "value": "{commuting}",
+        "label": "of {members} operations commute with every generator of the group, and {joinsAxes} of them join the kernel's axes"
+      },
+      {
+        "value": "{linearBreak}",
+        "label": "are linear or affine and break a named symmetry, such as a bit permutation of the flags or a key scaling"
+      },
+      {
+        "value": "{nonlinear}",
+        "label": "are not linear: choices, decodes, order statistics, draws and predicates"
+      },
+      {
+        "value": "{needDeclaration}",
+        "label": "need an output-action declaration before a probe can classify them"
+      }
     ],
-    "figure": { "title": "Which operations commute with the symmetry", "lede": "Each square is one operation. Choose a group to list its operations and what the record says about each.", "stageLabel": "Each square is one operation, coloured by how it commutes with the symmetry group." },
+    "figure": {
+      "title": "Which operations commute with the symmetry",
+      "lede": "Each square is one operation. Choose a group to list its operations and what the record says about each.",
+      "stageLabel": "Each square is one operation, coloured by how it commutes with the symmetry group."
+    },
     "define": [
       "Joins here means: commutes with the group and lies on an axis the kernel carries (flag, left arrangement, tick, and the key harmonic of a keyed kernel). The {joinsAxes} that join are {axesKernel} kernel operators (Tick, Diffuse, Apply, the four kernel methods and AddKeyed), {axesSums} store sums (Add and Subtract of another store) and {axesReads} reads of the flag face and the total, answered through a read set (Flags, Flags(bits), FlagsMany, FlagsUnion, Total, and PleromaReadSet Read and Run). The other {joinsOff} commute but lie off those axes: ShiftKeys (its kernel element is AddKeyed), Hadamard, Syndrome, and the reads on the key, arrangement, tick, joint and pair axes.",
       "Kernel membership is stricter and counts only the {kernelOps} kernel operators in {kernelOps} of {operators}. Commuting with the group is necessary for kernel membership and not sufficient: on an unkeyed kernel ShiftKeys commutes and is not an element, and a keyed kernel is what makes it one. {probeBacked} of the {members} are checked by a probe run, and the others carry their reason in the record."
     ],
     "scopeTitle": "By face",
     "scope": [
-      { "term": "Flag and tick faces", "text": "Every translation is a kernel element. Both are abelian, so their characters diagonalise every translation: a flag mask or a tick shift is one scalar on each harmonic block, and any weighted sum of them is one kernel. Bit permutations and sign flips of the flag word are not translations and are not kernel elements." },
-      { "term": "Arrangement face (S_2 to S_5 as built)", "text": "Left multiplication joins the kernel. A left arrangement element multiplies each irreducible block from the left, and weighted sums of those span every left multiplication. The right action, which relabels the other side of the block, and conjugation, which relabels both sides, are not kernel elements." },
-      { "term": "Key face", "text": "A key shift is a kernel element on a keyed kernel. PleromaKernel(shape, keyHarmonics: true) holds one factor per key harmonic, so AddKeyed puts a key shift in the same kernel as the flag, arrangement and tick elements, and one Apply runs the mix. ShiftKeys(k) gives the same store as a one-element keyed kernel. A keyed kernel holds one number per stored cell. Key scaling, Hadamard products and per-key weights are not kernel elements: each mixes key harmonics together, and no per-harmonic factor can hold that." }
+      {
+        "term": "Flag and tick faces",
+        "text": "Every translation is a kernel element. Both are abelian, so their characters diagonalise every translation: a flag mask or a tick shift is one scalar on each harmonic block, and any weighted sum of them is one kernel. Bit permutations and sign flips of the flag word are not translations and are not kernel elements."
+      },
+      {
+        "term": "Arrangement face (S_2 to S_5 as built)",
+        "text": "Left multiplication joins the kernel. A left arrangement element multiplies each irreducible block from the left, and weighted sums of those span every left multiplication. The right action, which relabels the other side of the block, and conjugation, which relabels both sides, are not kernel elements."
+      },
+      {
+        "term": "Key face",
+        "text": "A key shift is a kernel element on a keyed kernel. PleromaKernel(shape, keyHarmonics: true) holds one factor per key harmonic, so AddKeyed puts a key shift in the same kernel as the flag, arrangement and tick elements, and one Apply runs the mix. ShiftKeys(k) gives the same store as a one-element keyed kernel. A keyed kernel holds one number per stored cell. Key scaling, Hadamard products and per-key weights are not kernel elements: each mixes key harmonics together, and no per-harmonic factor can hold that."
+      }
     ],
     "meaning": {
       "summary": "What commute, probe and declaration mean",
@@ -103,13 +217,34 @@
       "title": "Data",
       "text": "Each question reads its own slice of the array, so every view comes from the same store.",
       "list": [
-        { "term": "Keys and whole items", "text": "TryKeys and TryItems return exact counts and refuse past KeyCapacity distinct keys." },
-        { "term": "Flags and closeness", "text": "Flags() counts every flag word. Near counts the items within r bits of a word, and Nearest returns the closest stored words." },
-        { "term": "Arrangements", "text": "Exact counts for every arrangement of up to 5 things, and the even-minus-odd balance." },
-        { "term": "Time", "text": "The exact count at every tick." },
-        { "term": "Joint counts", "text": "Exact counts over any mix of flags, order and time that the shape stores." },
-        { "term": "Any predicate", "text": "CountWhere counts the items whose flags satisfy any condition, with one inner product." },
-        { "term": "One query, three reads", "text": "Attend returns exact counts, shares that sum to 1 and the parity, from one contraction." }
+        {
+          "term": "Keys and whole items",
+          "text": "TryKeys and TryItems return exact counts and refuse past KeyCapacity distinct keys."
+        },
+        {
+          "term": "Flags and closeness",
+          "text": "Flags() counts every flag word. Near counts the items within r bits of a word, and Nearest returns the closest stored words."
+        },
+        {
+          "term": "Arrangements",
+          "text": "Exact counts for every arrangement of up to 5 things, and the even-minus-odd balance."
+        },
+        {
+          "term": "Time",
+          "text": "The exact count at every tick."
+        },
+        {
+          "term": "Joint counts",
+          "text": "Exact counts over any mix of flags, order and time that the shape stores."
+        },
+        {
+          "term": "Any predicate",
+          "text": "CountWhere counts the items whose flags satisfy any condition, with one inner product."
+        },
+        {
+          "term": "One query, three reads",
+          "text": "Attend returns exact counts, shares that sum to 1 and the parity, from one contraction."
+        }
       ]
     },
     "operators": {
@@ -125,7 +260,10 @@
     "ladder": {
       "summary": "The eight rungs, from pairs to circulation",
       "lede": "The Pleroma is organised as 8 rungs by 3 faces, the key cycle, the arrangements and the flag cube, plus one read-time operation. Each rung adds one thing a single pass can do.",
-      "more": { "href": "/phasor/pleroma/", "label": "Walk the pyramid" }
+      "more": {
+        "href": "/phasor/pleroma/",
+        "label": "Walk the pyramid"
+      }
     }
   },
   "meter": {
@@ -143,10 +281,34 @@
     "title": "Put it to work",
     "line": "Four uses, each with its limit",
     "items": [
-      { "title": "HoloDb aggregate plane", "text": "Database.EnablePleroma(table, options) derives a Pleroma from a table's columns and serves COUNT, SUM, GROUP BY, WHERE, COUNT DISTINCT, MIN and MAX of dimensions, HAVING, and a single equi-join COUNT or SUM from exact slices. A plane made with EnablePleroma is not persisted, so call it again after Open. A plane made with CREATE INDEX ... USING SUMMARY, or built automatically, is saved with its table, paged tables included. AVG and other shapes use the engine.", "link": { "href": "/holodb/docs/#plane", "label": "The HoloDb aggregate plane" } },
-      { "title": "Page store, larger than memory", "text": "Pages of one shape are stored as records with a check prime that verifies every record, parity groups that rebuild one lost record each, restore points, and journal numbers so replay applies each add once. It needs a complete key band, and a reader may see a batch half applied while it runs.", "link": { "href": "/holodb/docs/#plane", "label": "The HoloDb aggregate plane" } },
-      { "title": "Replica reconciliation", "text": "Two replicas each hold a CycleHologram. The one with the difference sends its hologram, and the other subtracts its own and decodes the exact signed difference. The message is sized to the difference, not to the data. It decodes when the difference has at most the capacity's worth of distinct symbols, so size the capacity to the largest difference you expect.", "code": { "source": "snippets/phasor-cyclehologram-replicas.cs", "output": "snippets/phasor-cyclehologram-replicas.out.txt" } },
-      { "title": "Batch relabel, age and diffuse", "text": "Tick, Diffuse, RelabelFlags, RelabelArrangements, ShiftKeys, ScaleKeys (on a complete key band) and Apply(kernel) each act on every stored item at once. A mix of different harmonic permutations costs one pass per term. Key shifts join a keyed kernel. Diffuse readbacks need TimeScale times the total to stay within half the field." }
+      {
+        "title": "HoloDb aggregate plane",
+        "text": "Database.EnablePleroma(table, options) derives a Pleroma from a table's columns and serves COUNT, SUM, GROUP BY, WHERE, COUNT DISTINCT, MIN and MAX of dimensions, HAVING, and a single equi-join COUNT or SUM from exact slices. A plane made with EnablePleroma is not persisted, so call it again after Open. A plane made with CREATE INDEX ... USING SUMMARY, or built automatically, is saved with its table, paged tables included. AVG and other shapes use the engine.",
+        "link": {
+          "href": "/holodb/docs/#plane",
+          "label": "The HoloDb aggregate plane"
+        }
+      },
+      {
+        "title": "Page store, larger than memory",
+        "text": "Pages of one shape are stored as records with a check prime that verifies every record, parity groups that rebuild one lost record each, restore points, and journal numbers so replay applies each add once. It needs a complete key band, and a reader may see a batch half applied while it runs.",
+        "link": {
+          "href": "/holodb/docs/#plane",
+          "label": "The HoloDb aggregate plane"
+        }
+      },
+      {
+        "title": "Replica reconciliation",
+        "text": "Two replicas each hold a CycleHologram. The one with the difference sends its hologram, and the other subtracts its own and decodes the exact signed difference. The message is sized to the difference, not to the data. It decodes when the difference has at most the capacity's worth of distinct symbols, so size the capacity to the largest difference you expect.",
+        "code": {
+          "source": "snippets/phasor-cyclehologram-replicas.cs",
+          "output": "snippets/phasor-cyclehologram-replicas.out.txt"
+        }
+      },
+      {
+        "title": "Batch relabel, age and diffuse",
+        "text": "Tick, Diffuse, RelabelFlags, RelabelArrangements, ShiftKeys, ScaleKeys (on a complete key band) and Apply(kernel) each act on every stored item at once. A mix of different harmonic permutations costs one pass per term. Key shifts join a keyed kernel. Diffuse readbacks need TimeScale times the total to stay within half the field."
+      }
     ]
   },
   "wrongTool": {
@@ -165,7 +327,6 @@
       "The key view is exact recovery of a multiset of keys, not similarity search. There is no key-addressed attention.",
       "Counts are exact within the field's signed range. A plain read does not check for a wrap. On a store with a check prime, VerifyCheck detects one within the check bound.",
       "The Pleroma runs on the CPU. There is no GPU kernel.",
-      "Exact arithmetic is not faster in general. A Pleroma read costs one or more transforms, and a float bundle read is one correlation. The Pleroma gives you exactness and many views on one array.",
       "On a store with a check prime, a kernel runs through a mirror kernel in the check prime, built from the same elements. A kernel built from a shape without that check prime is refused.",
       "Locating the contradiction on a relation face is not provided.",
       "A read set returns many reads in one call, but each read makes its own transform by default. A transform is shared between reads only inside an internal planner that is not exposed.",
@@ -181,8 +342,16 @@
     ],
     "source": "snippets/phasor-codec-minimal.cs",
     "output": "snippets/phasor-codec-minimal.out.txt",
-    "more": { "href": "/phasor/docs/", "label": "Codec and Pleroma docs" }
+    "more": {
+      "href": "/phasor/docs/",
+      "label": "Codec and Pleroma docs"
+    }
   },
   "reference": "Every public type is documented with a worked example in the package readme on NuGet.",
-  "research": [ { "id": "one-store-many-reads", "label": "How the Pleroma was built" } ]
+  "research": [
+    {
+      "id": "one-store-many-reads",
+      "label": "How the Pleroma was built"
+    }
+  ]
 }

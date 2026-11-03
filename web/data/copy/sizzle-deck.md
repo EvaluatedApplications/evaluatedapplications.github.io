@@ -2,7 +2,7 @@
 
 Pattern and rules: `docs/design-language.md` section 8, worked example `phasor-sizzle.md`. This deck is the copy. The
 generator data (`data/products/*.json` `sizzle` blocks, `data/pages/*.json`, `data/site.json`, `data/products.json`) carries
-exactly these words; edit both together. Spec-voice pages are untouched: docs, evidence (with costs), client and manual pages,
+exactly these words; edit both together. Spec-voice pages are untouched: docs, evidence, client and manual pages,
 licence, the AI summary and the five research articles.
 
 Every figure below is sourced. `cite` in the data names the record each number is checked against by `scripts/check-sizzle.mjs`.
@@ -68,7 +68,7 @@ the full feature list, limits, evidence, related.
 - H1: Many small models, one shared wave.
 - Sub: A population of small holographic language models that talk through a shared wave, in pure managed code. They never pass wires to each other. They write to the medium and read the medium.
 - Under the hero: the pond toy (computed in the page, no model)
-- Tiles (typed, each checked against the owner's site.md, and one from the cost record): 2.99 against 3.38 / 3.47 against 3.84 / 261 launches / 26 times
+- Tiles (typed, each checked against the owner's site.md): 2.99 against 3.38 / 3.47 against 3.84 / 261 launches / 3.607 against 5.661
 - Meta: A population of small holographic language models that talk through a shared wave, in pure managed code for .NET. They write to the medium and read the medium.
 
 ## /evalapp/
@@ -76,17 +76,17 @@ the full feature list, limits, evidence, related.
 - Eyebrow: EvalApp, a self-tuning async pipeline runtime for .NET
 - H1: Run it all at once without overloading anything.
 - Sub: Describe a process as plain steps. EvalApp gates every database, disk and network call at a bound you set, undoes failed work in reverse order, and can tune the bound for you. No broker, no services to stand up.
-- Under the hero: the recorded gate replay
-- Tiles (from the evidence record): 7 of 7 / 1,113 ms to 139 ms / 2.9 times
+- Hero button: goes to "What you can build" (no demo on the page)
+- Tiles: 7 of 7 (evidence record `evalapp-gate`, the bound check) / 0 dependencies (typed from site.md)
 - Meta: Run every step at once without overloading a database, disk or network. EvalApp gates each resource, undoes failures and can tune itself. No broker needed.
 
 ## /prose/
 
 - Eyebrow: Prose, a grammar-driven corpus generator for .NET
-- H1: Three novels in. Nearly two thousand checked new sentences out.
+- H1: Three novels in. Two thousand checked new sentences out.
 - Sub: Prose reads your text through the rules of grammar, keeps what it learns in HoloDb and recombines it into new sentences and question and answer pairs. Every sentence is re-parsed before you get it.
 - Tool under the hero: Prose
-- Tiles: 8,232 (sentences mined from three public-domain novels) / 1,966 (different sentences from one call that asked for 2,000) / 1,966 of 1,966 (passed the grammar gate on a fresh parse) / 1,966 of 1,966 (used only words the corpus contains)
+- Tiles: 8,232 (sentences mined from three public-domain novels) / 2,000 (different sentences from one call that asked for 2,000) / 2,000 of 2,000 (passed the grammar gate on a fresh parse) / 2,000 of 2,000 (used only words the corpus contains)
 - Meta: Mine the grammar of your text into HoloDb and recombine it into new sentences and question and answer pairs, each one re-parsed before you get it.
 
 ## /tracer/
@@ -104,15 +104,15 @@ the full feature list, limits, evidence, related.
 - H1: Crisp up close, cheap far away, and nothing ever pops.
 - Sub: Store each chunk of a voxel world once. Read it with a big budget near the viewer and a tiny one in the distance, and the detail fades smoothly. No mesh tiers to build, store or stitch.
 - Under the hero: the rotatable terrain strip
-- Tiles (from the evidence record): 98.4% / 341 times / 189 times
+- Tiles (from the evidence record): 98.4% / 341 times
 - Meta: A voxel engine where level of detail is how a read works: crisp near, soft far, no mesh tiers and no popping. Engine only, for any renderer.
 
 ## /algformer/holoformer/
 
 - Eyebrow: How HoloFormer works
-- H1: Attention that stays fast as the context grows.
+- H1: Attention that grows in step with the context.
 - Sub: HoloFormer folds everything it has read into one running memory per layer. Reading a prompt grows with its length instead of its square, and each new word costs the same however long the context is.
-- Tiles (from the AlgFormer evidence record): 26 times / 50 times / 663 times
+- Tiles (typed from AlgFormer/CLAUDE.md): 2,048 tokens / 8,192 tokens / 32,768 tokens, the derived context at widths 128, 256 and 512
 - Meta: HoloFormer folds a whole context into one running memory, so reading a prompt grows with its length, not its square. Here is how it works, in plain terms.
 
 ## /blazier/
@@ -120,9 +120,9 @@ the full feature list, limits, evidence, related.
 - Eyebrow: Blazier, lazy Blazor WebAssembly for static hosts
 - H1: Show the page now. Download .NET when they press Start.
 - Sub: Blazier turns your Blazor WebAssembly pages into real HTML at publish time. Visitors read at once, and the .NET runtime downloads only when someone presses the button that needs it. Long C# jobs run in a Web Worker behind an ordinary interface.
-- Under the hero: a pointer band to /tools/ ("Every tool on this site is a Blazier page", runtime size read from `data/generated/facts.json`), then the `blazier-boot` bars
-- Tiles (from the evidence record `blazier-boot`, derived from `data/diagrams/blazier-boot.json`): 6.8 KB / 416 to 484 ms / 14 to 19 ms / 0.49 to 0.57 ms. Sample-app figures only; no Showroom shell figure is recorded
-- Sections after the proven program: How it works, Everything in the package, What exists today (typed Web Worker bridge built and measured; EvalApp host seam not built), When another tool fits better, Know before you start
+- Under the hero: a pointer band to /tools/ ("Every tool on this site is a Blazier page", runtime size read from `data/generated/facts.json`)
+- Tiles (typed from the owner's documents): 6.8 KB before anyone acts / 0 requests for the runtime on scroll, tap or Tab / the tool runtime size
+- Sections after the proven program: How it works, Everything in the package, What exists today (typed Web Worker bridge; EvalApp host seam not built), When another tool fits better, Know before you start
 - Meta: Blazor WebAssembly pages that read at once on a static host and download .NET only when a visitor presses Start, plus a typed Web Worker bridge.
 
 ## /hologenome/
@@ -130,7 +130,7 @@ the full feature list, limits, evidence, related.
 - Eyebrow: HoloGenome, DNA as a hologram of measured helix physics
 - H1: Turn DNA into a vector that winds like the real helix.
 - Sub: HoloGenome reads a stretch of A, C, G and T and gives you one fixed-width vector. Its phase turns by the measured twist of each base pair step, so the order along the helix is in the vector. Then it is graded against laboratory measurements it never saw, with the losses published beside the wins.
-- CTA: install line, "See how it scores" (the `hologenome-scores` chart, id demo), "Get the code". No Showroom tool exists, so no tool band.
-- Tiles (evidence record `hologenome-scores`, derived from `data/diagrams/hologenome-scores.json`): 10.48 to 10.51 bases per turn / 0.529 vs 0.483 / 0.600 / 0.28 to 0.39 behind DNAcycP (a loss tile on purpose)
+- CTA: install line, "See how it scores" (the `hologenome-scores` chart, id demo; three views), "Get the code". No Showroom tool exists, so no tool band.
+- Tiles (evidence record `hologenome-scores`, derived from `data/diagrams/hologenome-scores.json`): 10.48 to 10.51 bases per turn / 0.529 vs 0.483 / 0.600
 - Sections: See the numbers, Where it did not win (`doc.losses`), What you can build, Run it yourself (proven program), How it works, Everything in the package, When another tool fits better, Know before you start (graded scores are not in the package), Data and sources (`doc.sources`), Evidence
 - Meta: Encode DNA as a fixed-width vector that follows the measured twist of the helix, graded against held-out laboratory measurements, with the losses published.

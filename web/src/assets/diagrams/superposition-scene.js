@@ -1,5 +1,5 @@
 // Phasor signature diagram: "One store, many things at once". Three items are stacked in one store, two operators are summed
-// into one kernel, one pass moves every item by both, and the counts are read back. A last view puts the measured cost beside it.
+// into one kernel, one pass moves every item by both, and the counts are read back.
 // Data in: superposition-scene.json, extracted from the Phasor map data. Every number drawn here is in that file or derived from
 // it (the stacked bars are the items moved by the kernel's elements; verify() checks them against the recorded counts).
 // Module contract: metrics / staticSvg / controlsHtml / tablesHtml / mount / verify (see docs/design-language.md).
@@ -12,7 +12,6 @@ const VIEWS = [
   { id: 'before', label: '1 Stack' },
   { id: 'kernel', label: '2 Kernel' },
   { id: 'after', label: '3 One pass' },
-  { id: 'cost', label: '4 Cost' },
 ];
 
 export function metrics(d) {
@@ -32,19 +31,17 @@ export function metrics(d) {
   const flagsBefore = sum(flagStack, (s) => s.keep), timesBefore = sum(timeStack, (s) => s.keep);
   const total = items.reduce((a, it) => a + it.count, 0);
   const maxBar = Math.max(...flagsAfter, ...timesAfter);
-  const c = d.cost;
   return {
     FB, T, W, items, mask, shift, wMove, wKeep, flagStack, timeStack, flagsAfter, timesAfter, flagsBefore, timesBefore, total,
     totalAfter: total * (wKeep + wMove), maxBar, jointCells: W * T,
-    applyLo: c.applyMs[0], applyHi: c.applyMs[1], elementsMax: c.elementsMax,
-    brute1: c.bruteForceMs['1'], brute1000: c.bruteForceMs['1000'],
+    elementsMax: d.scale.elementsMax,
   };
 }
 
 export function limitFacts(m) {
   return {
     superItems: m.items.length, superTotal: m.total, superTotalAfter: m.totalAfter, superCells: m.jointCells,
-    applyLo: m.applyLo, applyHi: m.applyHi, elementsMax: fmt(m.elementsMax), brute1: m.brute1, brute1000: fmt(m.brute1000),
+    elementsMax: fmt(m.elementsMax),
   };
 }
 
@@ -54,8 +51,7 @@ export function readoutFor(view, d, m) {
   const sentenceCounts = (a) => a.join(' ');
   if (view === 'before') return `${m.items.length} items sit in one store of ${d.store.cellCount} cells (key capacity ${d.shape.keyCapacity}). Their counts add to ${m.total} (${m.items.map((i) => i.count).join(' + ')}). Counts per flag word: ${sentenceCounts(m.flagsBefore)}. Counts per tick: ${sentenceCounts(m.timesBefore)}.`;
   if (view === 'kernel') return `Two operators are summed into one kernel: ${kernelLine(m)}. The kernel is one table of ${d.kernel.numbersPerCell} numbers (${m.W} flag words by ${m.T} ticks), whatever the elements are.`;
-  if (view === 'after') return `One pass over the ${d.store.cellCount} cells moved every item by both operators. The total went from ${m.total} to ${m.totalAfter} (${m.total} + ${m.wMove} × ${m.total}). Counts per flag word: ${sentenceCounts(m.flagsAfter)}. Counts per tick: ${sentenceCounts(m.timesAfter)}. All of them are exact.`;
-  return `Apply took ${m.applyLo} to ${m.applyHi} ms per call from 1 to ${fmt(m.elementsMax)} kernel elements, with no trend. Building the same store from the moved items took ${m.brute1} ms at 1 element and ${fmt(m.brute1000)} ms at 1,000.`;
+  return `One pass over the ${d.store.cellCount} cells moved every item by both operators. The total went from ${m.total} to ${m.totalAfter} (${m.total} + ${m.wMove} × ${m.total}). Counts per flag word: ${sentenceCounts(m.flagsAfter)}. Counts per tick: ${sentenceCounts(m.timesAfter)}. All of them are exact.`;
 }
 
 function wrap(text, n) {
@@ -66,7 +62,7 @@ function wrap(text, n) {
 }
 
 // ---------------------------------------------------------------- the scene as one SVG string (used for the page and the browser)
-// o: { view: 'before' | 'kernel' | 'after' | 'sweep' | 'cost', p: sweep progress 0..1, narrow }
+// o: { view: 'before' | 'kernel' | 'after' | 'sweep', p: sweep progress 0..1, narrow }
 export function sceneSvg(d, m, o) {
   const narrow = !!o.narrow, view = o.view;
   const W = narrow ? 360 : 760;
@@ -77,29 +73,6 @@ export function sceneSvg(d, m, o) {
   const t = (x, y, s, cls, anchor) => g.push(`<text x="${x}" y="${y}" class="${cls || ''}"${anchor ? ` text-anchor="${anchor}"` : ''}>${esc(s)}</text>`);
   const r = (x, y, w, h, cls, rx = 3, extra = '') => g.push(`<rect x="${+x.toFixed(1)}" y="${+y.toFixed(1)}" width="${+w.toFixed(1)}" height="${+Math.max(h, 0).toFixed(1)}" rx="${rx}" class="${cls}"${extra}/>`);
   let H;
-
-  if (view === 'cost') {
-    H = narrow ? 470 : 340;
-    const L = narrow ? 44 : 64, R = W - (narrow ? 30 : 22), Tp = 14, B = narrow ? 250 : 236;
-    const lx = (v) => L + (Math.log10(v) / Math.log10(m.elementsMax)) * (R - L);
-    const lo = 0.1, hi = 3000;
-    const ly = (v) => B - ((Math.log10(v) - Math.log10(lo)) / (Math.log10(hi) - Math.log10(lo))) * (B - Tp);
-    [0.1, 1, 10, 100, 1000].forEach((v) => { r(L, ly(v) - 0.5, R - L, 1, 'ss-grid', 0); t(L - 6, ly(v) + 3, String(v), 'ss-tick', 'end'); });
-    [1, 10, 100, 1000, 10000].forEach((v) => { if (v <= m.elementsMax) { r(lx(v) - 0.5, Tp, 1, B - Tp, 'ss-grid', 0); t(lx(v), B + 14, fmt(v), 'ss-tick', 'middle'); } });
-    t((L + R) / 2, B + 30, 'Kernel elements (log scale)', 'ss-lab', 'middle');
-    t(L, 10, 'ms per call (log scale)', 'ss-lab');
-    r(lx(1), ly(m.applyHi), lx(m.elementsMax) - lx(1), ly(m.applyLo) - ly(m.applyHi), 'ss-apply', 2);
-    t(lx(m.elementsMax) - 6, ly(m.applyHi) - 6, `Apply: ${m.applyLo} to ${m.applyHi} ms${narrow ? `` : `, whatever the element count`}`, 'ss-val', 'end');
-    [[1, m.brute1], [1000, m.brute1000]].forEach(([e, ms]) => {
-      g.push(`<circle cx="${+lx(e).toFixed(1)}" cy="${+ly(ms).toFixed(1)}" r="5" class="ss-brute"/>`);
-      t(lx(e) + (e === 1 ? 10 : -10), ly(ms) + 4, `${fmt(ms)} ms at ${fmt(e)} ${e === 1 ? 'element' : 'elements'}`, 'ss-val', e === 1 ? 'start' : 'end');
-    });
-    t(narrow ? 10 : L - 30, B + 50, 'Dots: building the same store from the moved items', 'ss-soft');
-    const lines = wrap(d.cost.conditions, narrow ? 54 : 120);
-    lines.forEach((ln, i) => t(narrow ? 10 : L - 30, B + 70 + i * 15, ln, 'ss-soft'));
-    H = B + 70 + lines.length * 15 + 8;
-    return `<svg class="dia-plan ss-svg" viewBox="0 0 ${W} ${H}" data-h="${H}" role="img" aria-labelledby="ss-t ss-d"><title id="ss-t">Measured cost of one kernel pass</title><desc id="ss-d">${esc(readoutFor('cost', d, m))}</desc>${g.join('')}</svg>`;
-  }
 
   // block origins
   const B1 = narrow ? { x: 10, y: 0, w: 340 } : { x: 0, y: 0, w: 220 };
@@ -189,7 +162,6 @@ export function tablesHtml(d, m) {
   return `<details class="dia-data"><summary>The same numbers as tables</summary>
 <div class="tbl-wrap"><table class="tbl"><caption>Count per flag word, before and after the pass</caption><thead><tr><th scope="col">Flag word</th><th scope="col">Before</th><th scope="col">After</th></tr></thead><tbody>${m.flagsAfter.map((v, j) => row([bin(j, m.FB), m.flagsBefore[j], v])).join('')}</tbody></table></div>
 <div class="tbl-wrap"><table class="tbl"><caption>Count per tick, before and after the pass</caption><thead><tr><th scope="col">Tick</th><th scope="col">Before</th><th scope="col">After</th></tr></thead><tbody>${m.timesAfter.map((v, j) => row([j, m.timesBefore[j], v])).join('')}</tbody></table></div>
-<div class="tbl-wrap"><table class="tbl"><caption>Recorded cost. ${esc(d.cost.conditions)}</caption><thead><tr><th scope="col">Kernel elements</th><th scope="col">Apply, ms per call</th><th scope="col">Building the store from the moved items, ms</th></tr></thead><tbody>${row(['1 to ' + fmt(m.elementsMax), `${m.applyLo} to ${m.applyHi}`, ''])}${row(['1', '', m.brute1])}${row(['1,000', '', fmt(m.brute1000)])}</tbody></table></div>
 </details>`;
 }
 
@@ -203,8 +175,6 @@ export function verify(d, body) {
   m.items.forEach((it) => { if ((d.reads.flags[bin(it.flags, m.FB)] || 0) < it.count) out.push('a recorded flag read is below an item count'); });
   m.flagsBefore.forEach((v, j) => { if (v !== (d.reads.flags[bin(j, m.FB)] || 0)) out.push('derived flag counts before differ from the recorded read'); });
   m.timesBefore.forEach((v, j) => { if (v !== (d.reads.times[String(j)] || 0)) out.push('derived tick counts before differ from the recorded read'); });
-  if (!(m.applyLo < m.applyHi) || !(m.brute1 < m.brute1000)) out.push('cost record is out of order');
-  if (!body.includes(d.cost.conditions.slice(0, 40).replace(/&/g, '&amp;'))) out.push('conditions are not stated beside the cost');
   return out;
 }
 

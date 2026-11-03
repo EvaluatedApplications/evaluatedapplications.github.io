@@ -75,11 +75,13 @@ export default function product(ctx, p) {
 <p class="licence-ribbon"><span>${ctx.licence.ribbon}</span><a href="/licence/">Licence terms</a></p>`,
   });
 
+  // the hero button goes to the live demo or tool when the page has one, and to the list of what you can build when it does not
+  const hasDemo = !!(fig || heroTool || sz?.pointer || (sz?.figures || []).some((f) => f.secId === 'demo'));
   const sizzleHero = sz ? pageHead({
     crumbs, eyebrow: sz.eyebrow || `${p.name}, ${p.tagline}`, h1: sz.headline, wide: true, lede: sz.sub,
     extra: html`
 <div class="hero-row"><div class="install-row hero-cta">${installLine(`dotnet add package ${primary.id}`)}</div>
-<div class="actions"><a class="btn btn-primary" href="#demo">${sz.cta || 'See it run'}</a>${qs ? html`<a class="btn btn-ghost" href="#quick-start">Get the code</a>` : ''}<a class="btn btn-ghost" href="${primary.nuget}" rel="noopener">View on NuGet</a></div></div>
+<div class="actions"><a class="btn btn-primary" href="${hasDemo ? '#demo' : '#build'}">${sz.cta || 'See it run'}</a>${qs ? html`<a class="btn btn-ghost" href="#quick-start">Get the code</a>` : ''}<a class="btn btn-ghost" href="${primary.nuget}" rel="noopener">View on NuGet</a></div></div>
 <p class="licence-ribbon"><span>${ctx.licence.ribbon}</span><a href="/licence/">Licence terms</a></p>`,
   }) : '';
 

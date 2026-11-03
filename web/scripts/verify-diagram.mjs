@@ -118,11 +118,10 @@ try {
   await new Promise((r) => setTimeout(r, 1200));
   ok('phasor: the scene is still on its final state after a wait under reduced motion', await b.evaluate(`document.querySelector('${SC}').dataset.view==='after'`));
   ok('phasor: the final total is the recorded total', await b.evaluate(`document.querySelector('${SC} [data-ctl=readout]').textContent.includes('to ${sceneD.result.totalCount} ')`));
-  for (const [tab, re] of [['before', 'add to ' + sceneD.store.totalCount], ['kernel', 'one kernel'], ['cost', String(sceneD.cost.applyMs[0])]]) {
+  for (const [tab, re] of [['before', 'add to ' + sceneD.store.totalCount], ['kernel', 'one kernel']]) {
     await b.evaluate(`document.querySelector('${SC} [data-mode=${tab}]').click()`);
     ok(`phasor: tab ${tab} selects and the readout follows`, await b.evaluate(`document.querySelector('${SC}').dataset.view==='${tab}' && document.querySelector('${SC} [data-mode=${tab}]').getAttribute('aria-selected')==='true' && document.querySelector('${SC} [data-ctl=readout]').textContent.includes(${JSON.stringify(re)})`));
   }
-  ok('phasor: the cost view states its conditions on the chart', await b.evaluate(`document.querySelector('${SC} svg').textContent.includes('GF(13,879)') && document.querySelector('${SC} svg').textContent.includes('warm-up')`));
   await b.evaluate(`document.querySelector('${SC} [data-mode=after]').focus()`);
   await b.key('ArrowLeft', 'ArrowLeft', 37);
   ok('phasor: arrow keys move between the tabs', await b.evaluate(`document.activeElement.dataset.mode==='kernel'`));
@@ -163,9 +162,9 @@ try {
   const pw = await b.evaluate('({sw:document.documentElement.scrollWidth,cw:document.documentElement.clientWidth})');
   ok('phasor phone 390: no horizontal overflow', pw.sw <= pw.cw, JSON.stringify(pw));
   ok('phasor phone 390: the scene uses the narrow layout', await b.evaluate(`document.querySelector('${SC} svg').viewBox.baseVal.width===360`));
-  await b.evaluate(`document.querySelector('${SC} [data-mode=cost]').click()`);
+  await b.evaluate(`document.querySelector('${SC} [data-mode=after]').click()`);
   const cr = await b.evaluate(`(()=>{const s=document.querySelector('${SC} svg').getBoundingClientRect();return [...document.querySelectorAll('${SC} svg text')].filter(t=>{const r=t.getBoundingClientRect();return r.right>s.right+1||r.left<s.left-1}).map(t=>t.textContent)})()`);
-  ok('phasor phone 390: no chart text is cut off in the cost view', cr.length === 0, JSON.stringify(cr));
+  ok('phasor phone 390: no chart text is cut off in the final view', cr.length === 0, JSON.stringify(cr));
   ok('phasor phone 390: tabs are at least 24px tall', await b.evaluate(`[...document.querySelectorAll('${SC} [role=tab]')].every(e=>e.getBoundingClientRect().height>=24)`));
 
   // ================= the Pleroma page: the pyramid, the replay, the capacity demo =================
@@ -226,52 +225,14 @@ try {
     ok(`holodb/${sp} phone 390: no horizontal overflow`, sw.sw <= sw.cw, JSON.stringify(sw));
   }
 
-  // ================= batch 4: EvalApp gate, AlgFormer cost, HoloVoxel LOD, Prose pipeline =================
+  // ================= batch 4: page fit, HoloVoxel LOD, Prose pipeline =================
   const base = `http://127.0.0.1:${port}`;
   const overflow = async (p, w = 390) => { await b.goto(base + p, { width: w, height: 844, mobile: w < 600 }); return b.evaluate('({sw:document.documentElement.scrollWidth,cw:document.documentElement.clientWidth})'); };
-  const EA = "document.querySelector('[data-diagram=evalapp-gate]').dataset.ready==='true'";
-  await b.goto(base + '/evalapp/', { width: 1280, height: 900, wait: EA });
-  ok('evalapp: gate scene mounts without console errors', b.errors.length === 0, JSON.stringify(b.errors));
-  ok('evalapp: one tab per recorded gate bound, the default selected', await b.evaluate("document.querySelectorAll('[data-diagram=evalapp-gate] [role=tab]').length>=5 && document.querySelectorAll('[data-diagram=evalapp-gate] [role=tab][aria-selected=true]').length===1"));
-  await b.evaluate("document.querySelector('[data-diagram=evalapp-gate] [role=tab][aria-selected=true]').focus()");
-  const t0 = await b.evaluate("document.activeElement.textContent");
-  await b.key('ArrowRight', 'ArrowRight', 39);
-  ok('evalapp: Right arrow selects the next gate bound', await b.evaluate("document.activeElement.textContent") !== t0 && await b.evaluate("document.activeElement.getAttribute('aria-selected')==='true'"));
-  await new Promise((r) => setTimeout(r, 7500));
-  ok('evalapp: the replay finishes and the readout reports the whole run', await b.evaluate("/all \\d+ jobs finished in [\\d,]+ ms/.test(document.querySelector('[data-diagram=evalapp-gate] [data-ctl=readout]').textContent)"));
-  await b.evaluate("(()=>{const s=document.querySelector('[data-diagram=evalapp-gate] [data-ctl=time]'); s.value='300'; s.dispatchEvent(new Event('input'));})()");
-  ok('evalapp: scrubbing to the middle of the run counts running, waiting and finished jobs that add up', await b.evaluate("(()=>{const m=document.querySelector('[data-diagram=evalapp-gate] [data-ctl=readout]').textContent.match(/(\\d+) running, (\\d+) waiting at the gate, (\\d+) finished/); return !!m && Number(m[1])+Number(m[2])+Number(m[3])===24})()"));
-  ok('evalapp: the declared bound is never exceeded in the scrubbed state', await b.evaluate("(()=>{const m=document.querySelector('[data-diagram=evalapp-gate] [data-ctl=readout]').textContent.match(/Gate bound (\\d+)[^:]*: (\\d+) running/); return !!m && Number(m[2])<=Number(m[1])})()"));
-  ok('evalapp: table alternative holds the summary and per-job times', await b.evaluate("document.querySelectorAll('[data-diagram=evalapp-gate] .dia-data table').length===2 && document.querySelectorAll('[data-diagram=evalapp-gate] .dia-data tbody tr').length>=24"));
-  await b.goto(base + '/evalapp/', { width: 1280, height: 900, reducedMotion: true, wait: EA });
-  ok('evalapp: reduced motion shows the finished run and does not replay by itself', await b.evaluate("document.querySelector('[data-diagram=evalapp-gate] [data-ctl=time]').value==='1000'"));
-  const g1 = await b.evaluate("document.querySelector('[data-diagram=evalapp-gate] .dia-canvas').toDataURL().slice(4000,4300)");
-  await new Promise((r) => setTimeout(r, 1200));
-  const g2 = await b.evaluate("document.querySelector('[data-diagram=evalapp-gate] .dia-canvas').toDataURL().slice(4000,4300)");
-  ok('evalapp: reduced motion keeps the scene still', g1 === g2);
-  await b.evaluate("document.querySelector('[data-diagram=evalapp-gate] [data-ctl=play]').click()");
-  await new Promise((r) => setTimeout(r, 600));
-  ok('evalapp: Replay starts motion only when the visitor presses it', await b.evaluate("document.querySelector('[data-diagram=evalapp-gate] [data-ctl=play]').getAttribute('aria-pressed')==='true' || document.querySelector('[data-diagram=evalapp-gate] [data-ctl=time]').value!=='1000'"));
   let ow = await overflow('/evalapp/');
   ok('evalapp phone 390: no horizontal overflow', ow.sw <= ow.cw, JSON.stringify(ow));
   ow = await overflow('/evalapp/docs/');
   ok('evalapp/docs phone 390: no horizontal overflow', ow.sw <= ow.cw, JSON.stringify(ow));
 
-  const AC = "document.querySelector('[data-diagram=algformer-cost]').dataset.ready==='true'";
-  await b.goto(base + '/algformer/', { width: 1280, height: 900, wait: AC });
-  ok('algformer: chart mounts without console errors', b.errors.length === 0, JSON.stringify(b.errors));
-  ok('algformer: the static chart is replaced by the interactive one with four tabs', await b.evaluate("document.querySelectorAll('[data-diagram=algformer-cost] [role=tab]').length===4 && !!document.querySelector('[data-diagram=algformer-cost] .ac-svg')"));
-  await b.evaluate("document.querySelector('[data-diagram=algformer-cost] [role=tab][aria-selected=true]').focus()");
-  await b.key('ArrowRight', 'ArrowRight', 39);
-  ok('algformer: Right arrow selects Each new token and the readout says so', await b.evaluate("document.activeElement.dataset.mode==='step' && /each further token takes/.test(document.querySelector('[data-diagram=algformer-cost] [data-ctl=readout]').textContent)"));
-  await b.evaluate("(()=>{const s=document.querySelector('[data-diagram=algformer-cost] [data-ctl=pos]'); s.value='2'; s.dispatchEvent(new Event('input'));})()");
-  ok('algformer: moving the length slider changes the readout to a shorter context', await b.evaluate("/At 256 tokens/.test(document.querySelector('[data-diagram=algformer-cost] [data-ctl=readout]').textContent)"));
-  await b.evaluate("(()=>{const s=document.querySelector('[data-diagram=algformer-cost] [data-ctl=scale]'); s.value='log'; s.dispatchEvent(new Event('change'));})()");
-  ok('algformer: the logarithmic scale is announced in the chart', await b.evaluate("/logarithmic scale on both axes/.test(document.querySelector('[data-diagram=algformer-cost] .ac-svg').textContent)"));
-  await b.key('End', 'End', 35);
-  await b.evaluate("document.querySelector('[data-diagram=algformer-cost] [role=tab][data-mode=capacity]').click()");
-  ok('algformer: the capacity tab reports the derived shape and disables the scale', await b.evaluate("/HoloShape derives/.test(document.querySelector('[data-diagram=algformer-cost] [data-ctl=readout]').textContent) && document.querySelector('[data-diagram=algformer-cost] [data-ctl=scale]').disabled"));
-  ok('algformer: table alternative holds the cost table and the capacity table', await b.evaluate("document.querySelectorAll('[data-diagram=algformer-cost] .dia-data table').length===2"));
   ow = await overflow('/algformer/');
   ok('algformer phone 390: no horizontal overflow', ow.sw <= ow.cw, JSON.stringify(ow));
   ow = await overflow('/algformer/holoformer/');
@@ -361,29 +322,8 @@ try {
   await b.evaluate("document.querySelector('[data-filter] [data-topic=essay]').click()");
   ok('research hub: the topic filter hides articles that do not match', await b.evaluate("[...document.querySelectorAll('.research-cards .card')].filter(c=>!c.hidden).length===1 && /1 of 2 articles about essay/.test(document.querySelector('[data-filter-count]').textContent)"));
 
-  // ================= Blazier: the boot bars =================
-  const BB = "document.querySelector('[data-diagram=blazier-boot]').dataset.ready==='true'";
-  const bbTab = (mode) => b.evaluate(`document.querySelector('[data-diagram=blazier-boot] [role=tab][data-mode="${mode}"]').click()`);
-  const bbRead = () => b.evaluate("document.querySelector('[data-diagram=blazier-boot] [data-ctl=readout]').textContent");
-  // every label and value sits inside the drawing, in every view, on desktop and on a phone
-  const bbFit = "(()=>{const s=document.querySelector('[data-diagram=blazier-boot] .bb-svg'); const vb=s.viewBox.baseVal; return [...s.querySelectorAll('text')].every(t=>{const r=t.getBBox(); return r.x>=-1 && r.x+r.width<=vb.width+1 && r.y>=-1 && r.y+r.height<=vb.height+1;});})()";
-  for (const [label, opts] of [['desktop', { width: 1280, height: 900 }], ['phone 390', { width: 390, height: 844, mobile: true }]]) {
-    await b.goto(`${base}/blazier/`, { ...opts, wait: BB });
-    ok(`blazier ${label}: bars mount without console errors`, b.errors.length === 0, JSON.stringify(b.errors));
-    ok(`blazier ${label}: first view is the bytes before anyone acts`, await bbRead().then((t) => /downloads 6\.8 KB in 6 requests/.test(t) && /2\.8 MB/.test(t)));
-    ok(`blazier ${label}: bytes view fits the drawing`, await b.evaluate(bbFit));
-    await bbTab('content');
-    ok(`blazier ${label}: content view reads both profiles`, await bbRead().then((t) => /72 to 100 ms on desktop and 416 to 484 ms on the phone profile/.test(t)) && await b.evaluate("document.querySelectorAll('[data-diagram=blazier-boot] .bb-svg .gh').length===2"));
-    ok(`blazier ${label}: content view fits the drawing`, await b.evaluate(bbFit));
-    await bbTab('working');
-    ok(`blazier ${label}: working view says the runtime still costs what it costs`, await bbRead().then((t) => /still costs what it costs/.test(t) && /12\.7 to 15\.4 s/.test(t)));
-    ok(`blazier ${label}: working view fits the drawing`, await b.evaluate(bbFit));
-    ok(`blazier ${label}: table alternative holds three measures and the worker bridge`, await b.evaluate("document.querySelectorAll('[data-diagram=blazier-boot] .dia-data table').length===4"));
-  }
   ow = await overflow('/blazier/');
   ok('blazier phone 390: no horizontal overflow', ow.sw <= ow.cw, JSON.stringify(ow));
-  ow = await overflow('/blazier/evidence/');
-  ok('blazier evidence phone 390: no horizontal overflow', ow.sw <= ow.cw, JSON.stringify(ow));
   // ================= HoloGenome: the score views =================
   const HG = "document.querySelector('[data-diagram=hologenome-scores]').dataset.ready==='true'";
   const hgTab = (mode) => b.evaluate(`document.querySelector('[data-diagram=hologenome-scores] [role=tab][data-mode="${mode}"]').click()`);
@@ -395,16 +335,13 @@ try {
     ok(`hologenome ${label}: charts mount without console errors`, b.errors.length === 0, JSON.stringify(b.errors));
     ok(`hologenome ${label}: first view reads the measured twist against the constant twist`, await hgRead().then((t) => /0\.529/.test(t) && /0\.483/.test(t)));
     ok(`hologenome ${label}: controls view fits the drawing`, await b.evaluate(hgFit));
-    await hgTab('best');
-    ok(`hologenome ${label}: best-model view states the gap`, await hgRead().then((t) => /trailing by 0\.28 to 0\.39/.test(t)) && await b.evaluate("document.querySelectorAll('[data-diagram=hologenome-scores] .hg-svg .bar').length===9"));
-    ok(`hologenome ${label}: best-model view fits the drawing`, await b.evaluate(hgFit));
     await hgTab('period');
     ok(`hologenome ${label}: period view reads the four libraries`, await hgRead().then((t) => /10\.49, 10\.51, 10\.48 and 10\.51/.test(t)) && await b.evaluate("document.querySelectorAll('[data-diagram=hologenome-scores] .hg-svg .dot.real').length>=4"));
     ok(`hologenome ${label}: period view fits the drawing`, await b.evaluate(hgFit));
     await hgTab('twist');
     ok(`hologenome ${label}: twist view draws one point per base`, await b.evaluate("document.querySelectorAll('[data-diagram=hologenome-scores] .hg-svg .pt').length===50"));
     ok(`hologenome ${label}: twist view fits the drawing`, await b.evaluate(hgFit));
-    ok(`hologenome ${label}: table alternative holds every table`, await b.evaluate("document.querySelectorAll('[data-diagram=hologenome-scores] .dia-data table').length===8"));
+    ok(`hologenome ${label}: table alternative holds every table`, await b.evaluate("document.querySelectorAll('[data-diagram=hologenome-scores] .dia-data table').length===7"));
   }
   ow = await overflow('/hologenome/');
   ok('hologenome phone 390: no horizontal overflow', ow.sw <= ow.cw, JSON.stringify(ow));

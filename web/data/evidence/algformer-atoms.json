@@ -2,101 +2,281 @@
   "id": "algformer-atoms",
   "product": "algformer",
   "slug": "/algformer/evidence/",
-  "scope": "Small-scale harness, six-atom checkpoints and the fused GPU step",
+  "scope": "Small-scale harness, six- and eight-atom checkpoints, held-out books and the fused GPU step",
   "title": "Many small models, one wave: the evidence",
-  "description": "Six atoms that each see a sixth of the text and share the medium score 2.99 bits per character, against 3.38 for one atom reading all of it and 4.33 without.",
-  "claim": "Six atoms that each see about a sixth of the text and share the medium score 2.99 bits per character. One atom that sees all of it scores 3.38, and the same six atoms without the medium score 4.33. At width 32, a pair scores 3.47 when the loss reaches the atoms through the notes they wrote and 3.84 when the writers are frozen.",
+  "description": "Six atoms that share a medium and each see a sixth of the text score 2.99 bits per character, against 3.38 for one atom reading all of it.",
+  "claim": "Six atoms that each see about a sixth of the text and share the medium score 2.99 bits per character. One atom that sees all of it scores 3.38, and the same six atoms without the medium score 4.33. At width 32, a pair scores 3.47 when the loss reaches the atoms through the notes they wrote and 3.84 when the writers are frozen. An eight-atom checkpoint scores 3.607 bits per token on 40 books outside its training lists, against 5.661 for a unigram baseline, and switching the medium off takes its atoms from about 3.7 bits to between 24 and 41.",
   "headline": [
-    { "value": "2.99 against 3.38", "label": "bits per character: six atoms with split views sharing the medium, against one atom reading the whole window" },
-    { "value": "4.33", "label": "bits per character for the same six atoms with the shared medium switched off" },
-    { "value": "3.47 against 3.84", "label": "bits per character for two width-32 atoms, with the loss reaching the atoms through the notes they wrote against the writer gradient switched off" },
-    { "value": "261 launches", "label": "per fused GPU training step for two, eight and sixteen atoms alike, against 454 for two atoms and 1,672 for eight on the per-atom path" }
+    {
+      "value": "2.99 against 3.38",
+      "label": "bits per character: six atoms with split views sharing the medium, against one atom reading the whole window"
+    },
+    {
+      "value": "4.33",
+      "label": "bits per character for the same six atoms with the shared medium switched off"
+    },
+    {
+      "value": "3.47 against 3.84",
+      "label": "bits per character for two width-32 atoms, with the loss reaching the atoms through the notes they wrote against the writer gradient switched off"
+    },
+    {
+      "value": "3.607 against 5.661",
+      "label": "bits per token for the eight-atom checkpoint on 40 held-out books, against the unigram baseline. All 40 books beat the baseline"
+    },
+    {
+      "value": "261 launches",
+      "label": "per fused GPU training step for two, eight and sixteen atoms alike, against 454 for two atoms and 1,672 for eight on the per-atom path"
+    }
   ],
   "lossTitle": "Where the evidence stops",
   "losses": [
-    "The harness results are small models on one text, two seeds, scored on windows of that text.",
+    "The harness results are small models on one text, two seeds, scored on 300 held-out windows of that text.",
+    "Greedy decoding from the eight-atom checkpoint loops on short phrases and drifts, on training prompts and on held-out prompts alike.",
     "The six-atom checkpoints are scored on windows of their training text, and their two training rounds differ, so the table is not a comparison of the two settings."
   ],
   "method": {
-    "workload": "Bits per character on 300 held-out windows of the same text, scored at the last position, drawn the same way for every arm. The text is 300,000 characters of Gutenberg prose with a 64-symbol vocabulary. Each atom is a HoloFormer with shifts equal to the width, two layers, trained with the all-positions loss, learning rate 0.01, batch 16. The width-64 rows ran 800 steps at context 64. The width-32 rows ran 500 steps at context 32. The two groups are separate runs.",
+    "workload": "Bits per character on 300 held-out windows of the same text, scored at the last position, drawn the same way for every arm. The text is 300,000 characters of Gutenberg prose with a 64-symbol vocabulary. Each atom is a HoloFormer with shifts equal to the width, two layers, trained with the all-positions loss, learning rate 0.01, batch 16. The width-64 rows ran 800 steps at context 64. The width-32 rows ran 500 steps at context 32. The two groups are separate runs. The eight-atom checkpoint is one checkpoint at training round 31,846: eight atoms at width 64 and three layers, three weight-tied passes per layer, Memory coupling with holographic locality, golden rotation of timescales, golden-angle write phases and a 320-token vocabulary. It is scored on 400 windows of 65 tokens drawn from its own training text, with all 64 transitions of each window scored, and again on 40 public-domain Gutenberg books (13.4 MB) that appear in no training list. Each book gives 10 windows of 64 tokens plus the target, starting at a random line and offset inside the book.",
     "engines": [
       "AtomField with Memory coupling (the shared medium)",
       "The same atoms with the field switched off",
-      "One HoloFormer reading the whole window"
+      "One HoloFormer reading the whole window",
+      "A unigram baseline that predicts from the token frequencies of the training text"
     ],
     "verification": "Every arm is drawn the same way and scored the same way, with the matching null beside each result.",
-    "statistic": "Two seeds per arm.",
-    "machine": "The fused GPU step ran on an A3000 GPU at width 66, three passes, window 64, batch 32, fused path."
+    "statistic": "Two seeds per arm in the harness. Standard errors are given for the held-out table.",
+    "machine": "The kernel launch counts were taken on an A3000 GPU at width 66, three passes, window 64, batch 32, fused path."
   },
   "sections": [
     {
       "id": "harness",
       "title": "Small-scale harness, character language model",
-      "intro": [ "At width 64, six atoms that each see about a sixth of the text and share the medium score 2.99 (seeds 2.96 and 3.02). One atom that sees all of it scores 3.38 (seeds 3.25 and 3.51). The same six atoms without the medium score 4.33. At width 32, the pair scores 3.47 when the loss reaches the atoms through the notes they wrote, and 3.84 when the writers are frozen." ],
+      "intro": [
+        "At width 64, six atoms that each see about a sixth of the text and share the medium score 2.99 (seeds 2.96 and 3.02). One atom that sees all of it scores 3.38 (seeds 3.25 and 3.51). The same six atoms without the medium score 4.33. At width 32, the pair scores 3.47 when the loss reaches the atoms through the notes they wrote, and 3.84 when the writers are frozen."
+      ],
       "tables": [
         {
-          "id": "harness-scores", "kind": "matrix", "caption": "Bits per character by test",
-          "columns": ["Test", "Bits per character"],
+          "id": "harness-scores",
+          "kind": "matrix",
+          "caption": "Bits per character by test",
+          "columns": [
+            "Test",
+            "Bits per character"
+          ],
           "rows": [
-            ["Width 64: six atoms, each atom sees only its own tokens (split views), field switched off", "4.33"],
-            ["Width 64: the same six atoms with the shared medium", "2.99"],
-            ["Width 64: one atom reading the whole window", "3.38"],
-            ["Width 64: six atoms, every atom reads the whole window", "2.47"],
-            ["Width 32: two atoms, split views, writers trained through the medium", "3.47"],
-            ["Width 32: the same two atoms with the writer gradient switched off", "3.84"],
-            ["Width 32: two atoms, every atom reads the whole window", "3.18"],
-            ["Width 32 run: one atom of width 46 reading the whole window", "3.48"]
+            [
+              "Width 64: six atoms, each atom sees only its own tokens (split views), field switched off",
+              "4.33"
+            ],
+            [
+              "Width 64: the same six atoms with the shared medium",
+              "2.99"
+            ],
+            [
+              "Width 64: one atom reading the whole window",
+              "3.38"
+            ],
+            [
+              "Width 64: six atoms, every atom reads the whole window",
+              "2.47"
+            ],
+            [
+              "Width 32: two atoms, split views, writers trained through the medium",
+              "3.47"
+            ],
+            [
+              "Width 32: the same two atoms with the writer gradient switched off",
+              "3.84"
+            ],
+            [
+              "Width 32: two atoms, every atom reads the whole window",
+              "3.18"
+            ],
+            [
+              "Width 32 run: one atom of width 46 reading the whole window",
+              "3.48"
+            ]
           ]
         }
       ]
     },
     {
-      "id": "checkpoints",
-      "title": "Six-atom checkpoints",
-      "intro": [ "Two six-atom checkpoints, each with six atoms at width 66 and six layers, Memory coupling and a 320-token vocabulary, scored on 400 windows of 65 tokens drawn from their training text, with all 64 transitions of each window scored. The two were stopped at different training rounds (3,510 and 9,000), so their scores are not a comparison of the two settings." ],
+      "id": "eight-atom",
+      "title": "The eight-atom checkpoint",
+      "intro": [
+        "The atoms are one system. Switch the medium off and every atom collapses from about 3.7 bits to between 24 and 41, because each was trained to listen. Every atom reads every other atom, and removing any single writer hurts every reader."
+      ],
       "tables": [
         {
-          "id": "six-atom", "kind": "matrix", "caption": "Bits per token for the two six-atom checkpoints",
-          "columns": ["Test, bits per token", "Golden ladder of timescales, round 3,510", "No golden settings, round 9,000"],
+          "id": "eight-atom-scores",
+          "kind": "matrix",
+          "caption": "The eight-atom checkpoint at training round 31,846, scored on 400 windows of its training text",
+          "columns": [
+            "Test",
+            "Result"
+          ],
           "rows": [
-            ["Mean of the six atoms, field on", "3.81", "3.45"],
-            ["Each atom alone, field switched off", "9.6 to 15.5", "15.2 to 19.6"],
-            ["Leave one atom out", "costs 0.02 to 0.79", "costs 0.09 to 0.16"],
-            ["Correlation of the atoms' next-token logits, field on / off", "0.93 / 0.68", "0.91 / 0.79"]
+            [
+              "Mean of the eight atoms, field on",
+              "3.45 bits per token (2.48 bits per character)"
+            ],
+            [
+              "Each atom's own logits, field on",
+              "3.66 to 3.72 bits per token"
+            ],
+            [
+              "Each atom alone, field switched off",
+              "24.3 to 41.3 bits per token"
+            ],
+            [
+              "Silence one writer, measure each reader (all 56 writer and reader pairs)",
+              "costs the reader 0.38 to 1.03 bits per token, every pair positive"
+            ],
+            [
+              "Leave one atom out of the average and the medium",
+              "costs 0.24 to 0.46 bits per token"
+            ],
+            [
+              "Correlation of the atoms' next-token logits, field on",
+              "0.91"
+            ],
+            [
+              "Correlation of the atoms' next-token logits, field off",
+              "0.67"
+            ]
           ]
         }
       ],
-      "notes": [ "With the golden ladder the leave-one-out cost runs from 0.79 for the first atom down to 0.02 for the fifth. Without it, the six costs sit close together." ]
+      "notes": [
+        "The trained positions barely moved. The mean displacement from the golden spiral is about 0.08, in a layout where neighbouring atoms sit about 0.87 apart. In this checkpoint the reliance between two atoms does not follow how close they sit: the rank correlation between the closeness kernel and the measured reliance over the 56 pairs is +0.12 (permutation p 0.39)."
+      ]
+    },
+    {
+      "id": "heldout",
+      "title": "Held-out books",
+      "intro": [
+        "The same checkpoint is scored on 40 public-domain Gutenberg books (13.4 MB) that appear in no training list, with no id or title overlap. The Wikisource part of the training text was not checked against it. The books are cleaned by heuristics and some residue remains. The training-text row is a fresh draw of 400 windows of the same size. Every figure is the mean of the eight atoms with the field on."
+      ],
+      "tables": [
+        {
+          "id": "heldout-scores",
+          "kind": "matrix",
+          "caption": "Eight-atom checkpoint, training text and held-out books",
+          "columns": [
+            "Set",
+            "Bits per token",
+            "Bits per character",
+            "Characters per token",
+            "Unigram baseline, bits per token"
+          ],
+          "rows": [
+            [
+              "Training text",
+              "3.538 (se 0.045)",
+              "2.509",
+              "1.410",
+              "5.642"
+            ],
+            [
+              "Held-out books",
+              "3.607 (se 0.027)",
+              "2.481",
+              "1.454",
+              "5.661"
+            ]
+          ]
+        }
+      ],
+      "notes": [
+        "The held-out score is 0.069 bits per token above the training-text score. In bits per character the held-out score is 0.029 below it, because the held-out text packs more characters into each token. All 40 books beat the unigram baseline. Book means run from 3.120 to 4.125 bits per token with a median of 3.592, and each book has only 10 windows, so a single book is noisy.",
+        "The atoms stay one system on text they never saw. All 56 writer and reader pairs cost the reader between 0.34 and 1.05 bits per token when the writer is silenced (mean 0.543), leaving one atom out costs 0.23 to 0.46 bits per token, and switching the medium off takes the averaged atoms to 20.5 bits per token. The correlation of the atoms' next-token logits is 0.910 with the field on and 0.668 with it off. The rank correlation between the closeness kernel and the reliance is +0.145 (permutation p 0.28)."
+      ]
+    },
+    {
+      "id": "checkpoints",
+      "title": "Six-atom checkpoints",
+      "intro": [
+        "Two six-atom checkpoints, each with six atoms at width 66 and six layers, Memory coupling and a 320-token vocabulary, scored on the same 400 windows of training text as the eight-atom table (no held-out scoring), with all 64 transitions of each window scored. The two were stopped at different training rounds (3,510 and 9,000), so their scores are not a comparison of the two settings."
+      ],
+      "tables": [
+        {
+          "id": "six-atom",
+          "kind": "matrix",
+          "caption": "Bits per token for the two six-atom checkpoints",
+          "columns": [
+            "Test, bits per token",
+            "Golden ladder of timescales, round 3,510",
+            "No golden settings, round 9,000"
+          ],
+          "rows": [
+            [
+              "Mean of the six atoms, field on",
+              "3.81",
+              "3.45"
+            ],
+            [
+              "Each atom alone, field switched off",
+              "9.6 to 15.5",
+              "15.2 to 19.6"
+            ],
+            [
+              "Leave one atom out",
+              "costs 0.02 to 0.79",
+              "costs 0.09 to 0.16"
+            ],
+            [
+              "Correlation of the atoms' next-token logits, field on / off",
+              "0.93 / 0.68",
+              "0.91 / 0.79"
+            ]
+          ]
+        }
+      ],
+      "notes": [
+        "With the golden ladder the leave-one-out cost runs from 0.79 for the first atom down to 0.02 for the fifth. Without it, the six costs sit close together."
+      ]
     },
     {
       "id": "gpu",
       "title": "Fused GPU step",
-      "intro": [ "AlgFormer.Gpu stacks the atoms as a batch dimension, so every layer, pass, head, reverse and Adam kernel runs once for all atoms. The number of kernel launches per step does not depend on the number of atoms." ],
+      "intro": [
+        "AlgFormer.Gpu stacks the atoms as a batch dimension, so every layer, pass, head, reverse and Adam kernel runs once for all atoms. The number of kernel launches per step does not depend on the number of atoms."
+      ],
       "tables": [
         {
-          "id": "gpu-step", "kind": "matrix", "caption": "One training step on an A3000 GPU, in milliseconds (width 66, three passes, window 64, batch 32, fused path)",
-          "columns": ["Layers", "2 atoms", "4 atoms", "8 atoms", "16 atoms"],
+          "id": "gpu-launches",
+          "kind": "matrix",
+          "caption": "Kernel launches per training step at two layers and two passes",
+          "columns": [
+            "Path",
+            "Atoms",
+            "Launches"
+          ],
           "rows": [
-            ["1 layer", "13.6", "25", "40", "75"],
-            ["3 layers", "30.6", "60", "107", "207"]
-          ]
-        },
-        {
-          "id": "gpu-launches", "kind": "matrix", "caption": "Kernel launches per training step at two layers and two passes",
-          "columns": ["Path", "Atoms", "Launches"],
-          "rows": [
-            ["Fused", "2, 8 and 16", "261"],
-            ["Per atom", "2", "454"],
-            ["Per atom", "8", "1,672"]
+            [
+              "Fused",
+              "2, 8 and 16",
+              "261"
+            ],
+            [
+              "Per atom",
+              "2",
+              "454"
+            ],
+            [
+              "Per atom",
+              "8",
+              "1,672"
+            ]
           ]
         }
       ]
     }
   ],
   "limits": [
-    "The atom field is opt-in in the library and the studio. A plain HoloFormer is what you get by default.",
+    "Held-out text: the eight-atom checkpoint is scored on 40 books outside its training lists. The harness results are scored on 300 held-out windows of their own book text. The six-atom checkpoints are scored on windows of their training text.",
+    "Default: the atom field is opt-in in the library and the studio. A plain HoloFormer is what you get by default.",
     "Cost is linear in the number of atoms with holographic locality or no locality. Dense locality is quadratic in the number of atoms.",
-    "The diversity options (golden rotation of timescales, golden-angle write phases) are off by default. In the width-64 four-atom test, rotation raised how much the atoms depend on each other (leave-one-out cost 0.16 to 0.21) without lowering their correlation or improving the score."
+    "The diversity options (golden rotation of timescales, golden-angle write phases) are off by default. In the width-64 four-atom test, rotation raised how much the atoms depend on each other (leave-one-out cost 0.16 to 0.21) without lowering their correlation or improving the score. The eight-atom checkpoint was trained with them, and no eight-atom run without them exists."
   ],
   "internal": {
     "source": "MonoRepo AlgFormer/docs/site.md, What is measured"

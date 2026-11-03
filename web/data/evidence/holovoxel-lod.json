@@ -4,8 +4,8 @@
   "slug": "/holovoxel/evidence/",
   "scope": "One chunk decoded at several budgets",
   "title": "Detail against components read",
-  "description": "One chunk stored as a single hologram decodes 98.4 percent correct at the full budget, and the read costs less as the budget falls.",
-  "claim": "One 16 by 16 chunk stored as a single hologram decodes 98.4 percent of its cells correctly at the full budget of 8,192 components, 131,072 bytes and 17.0 ms. Reading fewer components is cheaper and fuzzier: 67.1 percent at 1,568 components, and 19.5 percent at 24, which takes 384 bytes and 0.09 ms.",
+  "description": "One chunk stored as a single hologram decodes 98.4 percent correct at the full budget, and the hologram read shrinks as the budget falls.",
+  "claim": "One 16 by 16 chunk stored as a single hologram decodes 98.4 percent of its cells correctly at the full budget of 8,192 components and 131,072 bytes. Reading fewer components is smaller and fuzzier: 67.1 percent at 1,568 components, and 19.5 percent at 24, which takes 384 bytes.",
   "headline": [
     {
       "value": "98.4%",
@@ -14,10 +14,6 @@
     {
       "value": "341 times",
       "label": "less hologram read at 24 components than at the full budget"
-    },
-    {
-      "value": "189 times",
-      "label": "less decode time at the smallest budget than at the full one"
     }
   ],
   "method": {
@@ -26,7 +22,7 @@
       "HoloVoxel Chunk.DecodeField at ten component budgets"
     ],
     "verification": "Accuracy is the share of surface cells whose strongest decoded block equals the block that was stored.",
-    "statistic": "Accuracy is one measurement of one chunk. Decode time is the median of 15 runs after warm-up.",
+    "statistic": "Accuracy is one measurement of one chunk.",
     "memory": "Hologram size is sixteen bytes per component read.",
     "tie": "Eight blocks are possible, so a random guess is right 12.5 percent of the time."
   },
@@ -38,69 +34,58 @@
       "columns": [
         "Components read",
         "Cells correct (percent)",
-        "Hologram size (bytes)",
-        "Decode time (ms)"
+        "Hologram size (bytes)"
       ],
       "rows": [
         [
           "24",
           "19.5",
-          "384",
-          "0.09"
+          "384"
         ],
         [
           "48",
           "19.7",
-          "768",
-          "0.15"
+          "768"
         ],
         [
           "98",
           "23.4",
-          "1,600",
-          "0.26"
+          "1,600"
         ],
         [
           "196",
           "28.7",
-          "3,136",
-          "0.41"
+          "3,136"
         ],
         [
           "392",
           "34.0",
-          "6,272",
-          "0.71"
+          "6,272"
         ],
         [
           "784",
           "49.2",
-          "12,544",
-          "1.58"
+          "12,544"
         ],
         [
           "1,568",
           "67.1",
-          "25,088",
-          "3.19"
+          "25,088"
         ],
         [
           "3,136",
           "83.3",
-          "50,176",
-          "6.25"
+          "50,176"
         ],
         [
           "6,272",
           "96.4",
-          "100,352",
-          "13.09"
+          "100,352"
         ],
         [
           "8,192",
           "98.4",
-          "131,072",
-          "17.04"
+          "131,072"
         ]
       ]
     }
@@ -110,8 +95,7 @@
   ],
   "limits": [
     "One chunk of one world. Terrain with other block mixes will score differently.",
-    "Accuracy is measured at full resolution for each budget. The scene on the product page also coarsens the grid with distance, which this table does not measure.",
-    "Decode time is for one chunk on one machine."
+    "Accuracy is measured at full resolution for each budget. The scene on the product page also coarsens the grid with distance, which this table does not measure."
   ],
   "internal": {
     "source": "web/generators/holovoxel-lod, web/scripts/derive-evidence.mjs"

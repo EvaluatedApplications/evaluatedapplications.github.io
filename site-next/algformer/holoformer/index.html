@@ -3,19 +3,19 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>HoloFormer: attention that stays fast | Evaluated Applications</title>
+<title>HoloFormer: attention in one memory | Evaluated Applications</title>
 <meta name="description" content="HoloFormer folds a whole context into one running memory, so reading a prompt grows with its length, not its square. Here is how it works, in plain terms.">
 <link rel="canonical" href="https://evaluatedapplications.github.io/algformer/holoformer/">
 
 <meta property="og:type" content="article">
 <meta property="og:site_name" content="Evaluated Applications">
-<meta property="og:title" content="HoloFormer: attention that stays fast | Evaluated Applications">
+<meta property="og:title" content="HoloFormer: attention in one memory | Evaluated Applications">
 <meta property="og:description" content="HoloFormer folds a whole context into one running memory, so reading a prompt grows with its length, not its square. Here is how it works, in plain terms.">
 <meta property="og:url" content="https://evaluatedapplications.github.io/algformer/holoformer/">
 <meta name="twitter:card" content="summary">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%23f0796a'/%3E%3Cstop offset='.5' stop-color='%237bd86a'/%3E%3Cstop offset='1' stop-color='%23c07dff'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='32' height='32' rx='7' fill='%23050608'/%3E%3Cpath d='M16 5L27 26H5Z' fill='none' stroke='url(%23g)' stroke-width='2' stroke-linejoin='round'/%3E%3C/svg%3E">
 <script>document.documentElement.classList.add('js')</script>
-<link rel="stylesheet" href="/assets/ea.css?v=8bdfdf52">
+<link rel="stylesheet" href="/assets/ea.css?v=64c13e13">
 <script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Home","item":"https://evaluatedapplications.github.io/"},{"@type":"ListItem","position":2,"name":"Products","item":"https://evaluatedapplications.github.io/products/"},{"@type":"ListItem","position":3,"name":"AlgFormer","item":"https://evaluatedapplications.github.io/algformer/"},{"@type":"ListItem","position":4,"name":"How HoloFormer works","item":"https://evaluatedapplications.github.io/algformer/holoformer/"}]}</script>
 
 </head>
@@ -35,17 +35,17 @@
 <div class="sizzle-page"><header class="page-head"><div class="wrap">
 <nav class="crumbs" aria-label="Breadcrumb"><ol><li><a href="/">Home</a></li><li><a href="/products/">Products</a></li><li><a href="/algformer/">AlgFormer</a></li><li aria-current="page">How HoloFormer works</li></ol></nav>
 <p class="eyebrow">How HoloFormer works</p>
-<h1 class="wide">Attention that stays fast as the context grows.</h1>
+<h1 class="wide">Attention that grows in step with the context.</h1>
 <p class="lede">HoloFormer folds everything it has read into one running memory per layer. Reading a prompt grows with its length instead of its square, and each new word costs the same however long the context is.</p>
 <div class="actions"><a class="btn btn-primary" href="#numbers">See the numbers</a><a class="btn btn-ghost" href="/algformer/">AlgFormer overview</a></div>
 </div></header>
 <nav class="subnav" aria-label="AlgFormer sections"><div class="wrap"><ul><li><a href="/algformer/">Overview</a></li><li><a href="/algformer/#quick-start">Quick start</a></li><li><a href="/algformer/#gpu">AlgFormer.Gpu</a></li><li><a href="/algformer/holoformer/" aria-current="page">How HoloFormer works</a></li><li><a href="/algformer/evidence/">Evidence</a></li></ul></div></nav>
 <section class="sec doc-sec" id="numbers" aria-labelledby="numbers-h"><div class="wrap">
   <h2 class="sr-only" id="numbers-h">The numbers</h2>
-  <dl class="stats stats-big"><div class="stat"><dt>less time to read a 1,984-token prompt with holographic attention</dt><dd>26 times</dd></div><div class="stat"><dt>less time for each further token, which stays flat as the context grows</dt><dd>50 times</dd></div><div class="stat"><dt>smaller serve cache, constant in the length of the context</dt><dd>663 times</dd></div></dl>
+  <dl class="stats stats-big"><div class="stat"><dt>derived context at a width of 128, with 6 layers and 128 shifts</dt><dd>2,048 tokens</dd></div><div class="stat"><dt>derived context at a width of 256, with 8 layers and 256 shifts</dt><dd>8,192 tokens</dd></div><div class="stat"><dt>derived context at a width of 512, with 11 layers and 512 shifts</dt><dd>32,768 tokens</dd></div></dl>
   <details class="dia-data numbers-more"><summary>See the numbers</summary>
-    <ul class="numbers-list"><li><h3>Reading a prompt: 182 ms against 7.08 ms</h3><p>At 1,984 tokens, softmax attention reads the prompt in 182 ms and holographic attention in 7.08 ms. Conditions: both cores at 32 channels, 8 shifts and 2 layers, with the same parameter count, the same random tokens, a median of 7 runs, one thread.</p></li><li><h3>Flat per token, small cache</h3><p>Each further token takes 3.20 to 4.10 µs from 64 to 1,984 tokens of context, and the serve cache stays 3.40 KB. The softmax cache reaches 2,253 KB.</p></li><li><h3>What a bundle can hold</h3><p>One bundle holds a limited number of items cleanly. At a width of 128, about 983 tokens read back at least 90 percent clean, and the section on capacity says how HoloShape sizes a model to stay inside that.</p></li></ul>
-    <p class="more-link"><a href="/algformer/evidence/cost/">What attention costs</a></p>
+    <ul class="numbers-list"><li><h3>A shape from a width alone</h3><p>HoloShape.Derive turns a width into shifts, context and layers: the shifts equal the width, the context is a quarter of the crosstalk edge, and the layers follow from the width. The constants behind the derived shapes are single measurements, so treat the shape as a starting point.</p></li><li><h3>What a bundle can hold</h3><p>One bundle holds a limited number of items cleanly. The section on capacity gives the crosstalk edge and the clean capacity at a width of 128, and says how HoloShape sizes a model to stay inside them.</p></li></ul>
+    
   </details>
   
 </div></section>
@@ -138,7 +138,7 @@ HoloCodec self-similarity is positive: True</code></pre></div>
   
 </div></section><section class="sec doc-sec" aria-labelledby="memory"><div class="wrap">
   <div class="sec-head"><span class="sec-dot cat-algformer" aria-hidden="true"></span><h2 id="memory">One shared sound you tune into</h2></div>
-  <div class="prose-block"><p>This is where HoloFormer parts company with an ordinary transformer. A transformer makes every position compare itself with every earlier position: a crowded room in which everyone talks to everyone, and the effort grows with the square of the conversation.</p><p>HoloFormer folds everything it has heard into one running sound per layer. Each position binds its key to its value and adds the result to the bundle. To recall something, the query is unbound from the bundle: the matching part rings out and the rest averages toward silence, like finding one station on a radio dial.</p><p>One bundle holds the whole context, so reading a prompt grows with its length rather than its square, and each new token costs the same however long the context has become. The chart on the overview page measures both cores. The held memory can also be listened to: the inspectors read off what the final query resonated with and decode it to tokens.</p></div>
+  <div class="prose-block"><p>This is where HoloFormer parts company with an ordinary transformer. A transformer makes every position compare itself with every earlier position: a crowded room in which everyone talks to everyone, and the effort grows with the square of the conversation.</p><p>HoloFormer folds everything it has heard into one running sound per layer. Each position binds its key to its value and adds the result to the bundle. To recall something, the query is unbound from the bundle: the matching part rings out and the rest averages toward silence, like finding one station on a radio dial.</p><p>One bundle holds the whole context, so reading a prompt grows with its length rather than its square, and each new token costs the same however long the context has become. The held memory can also be listened to: the inspectors read off what the final query resonated with and decode it to tokens.</p></div>
   <dl class="term-list"><dt>In the model</dt><dd>This is holographic memory: retrieval by resonance instead of every-position-to-every-position comparison. The incremental cache of this core is one running bundle per layer.</dd></dl>
   
   

@@ -6,56 +6,131 @@
     "sub": "A population of small holographic language models that talk through a shared wave, in pure managed code. They never pass wires to each other. They write to the medium and read the medium.",
     "mechanismTitle": "The pond: sources and listeners",
     "stats": [
-      { "value": "2.99 against 3.38", "label": "bits per character: six atoms that each see about a sixth of the text and share the medium, against one atom that reads all of it. The same six atoms without the medium score 4.33", "cite": ["monorepo:AlgFormer/docs/site.md"] },
-      { "value": "3.47 against 3.84", "label": "bits per character for two width-32 atoms when the loss reaches the atoms through the notes they wrote, against the same atoms with the writer gradient switched off", "cite": ["monorepo:AlgFormer/docs/site.md"] },
-      { "value": "261 launches", "label": "per training step for two, eight and sixteen atoms alike, against 454 for two atoms and 1,672 for eight on the per-atom path (two layers, two passes)", "cite": ["monorepo:AlgFormer/docs/site.md"] },
-      { "evidence": "algformer-cost", "tile": 0 }
+      {
+        "value": "2.99 against 3.38",
+        "label": "bits per character: six atoms that each see about a sixth of the text and share the medium, against one atom that reads all of it. The same six atoms without the medium score 4.33",
+        "cite": [
+          "monorepo:AlgFormer/docs/site.md"
+        ]
+      },
+      {
+        "value": "3.47 against 3.84",
+        "label": "bits per character for two width-32 atoms when the loss reaches the atoms through the notes they wrote, against the same atoms with the writer gradient switched off",
+        "cite": [
+          "monorepo:AlgFormer/docs/site.md"
+        ]
+      },
+      {
+        "value": "261 launches",
+        "label": "per training step for two, eight and sixteen atoms alike, against 454 for two atoms and 1,672 for eight on the per-atom path (two layers, two passes)",
+        "cite": [
+          "monorepo:AlgFormer/docs/site.md"
+        ]
+      },
+      {
+        "value": "3.607 against 5.661",
+        "label": "bits per token for the eight-atom checkpoint on 40 books outside its training lists, against the unigram baseline. All 40 books beat the baseline",
+        "cite": [
+          "monorepo:AlgFormer/docs/site.md"
+        ]
+      }
     ],
     "numbers": {
       "summary": "See the numbers",
       "items": [
-        { "claim": "Six atoms with split views, 2.99 against 3.38", "text": "Scores are bits per character on 300 held-out windows of the same text, scored at the last position, drawn the same way for every arm, with two seeds per arm. The text is 300,000 characters of Gutenberg prose with a 64-symbol vocabulary. Each atom is a HoloFormer with shifts equal to the width, two layers, trained with the all-positions loss, learning rate 0.01, batch 16, 800 steps at context 64. Six atoms that each see about a sixth of the text and share the medium score 2.99 (seeds 2.96 and 3.02). One atom that sees all of it scores 3.38 (seeds 3.25 and 3.51). The same six atoms without the medium score 4.33, and with every atom reading the whole window they score 2.47." },
-        { "claim": "The writer gradient matters, 3.47 against 3.84", "text": "At width 32 (500 steps at context 32) the pair scores 3.47 when the loss reaches the atoms through the notes they wrote, and 3.84 when the writers are frozen. With every atom reading the whole window the pair scores 3.18, and one atom of width 46 reading the whole window scores 3.48." },
-        { "claim": "One fused step for all atoms", "text": "AlgFormer.Gpu stacks the atoms as a batch dimension, so every layer, pass, head, reverse and Adam kernel runs once for all atoms. On an A3000 GPU (width 66, three passes, window 64, batch 32, fused path), one training step at one layer takes 13.6, 25, 40 and 75 ms for 2, 4, 8 and 16 atoms, and at three layers 30.6, 60, 107 and 207 ms. The number of kernel launches per step does not depend on the number of atoms." }
+        {
+          "claim": "Six atoms with split views, 2.99 against 3.38",
+          "text": "Scores are bits per character on 300 held-out windows of the same text, scored at the last position, drawn the same way for every arm, with two seeds per arm. The text is 300,000 characters of Gutenberg prose with a 64-symbol vocabulary. Each atom is a HoloFormer with shifts equal to the width, two layers, trained with the all-positions loss, learning rate 0.01, batch 16, 800 steps at context 64. Six atoms that each see about a sixth of the text and share the medium score 2.99 (seeds 2.96 and 3.02). One atom that sees all of it scores 3.38 (seeds 3.25 and 3.51). The same six atoms without the medium score 4.33, and with every atom reading the whole window they score 2.47."
+        },
+        {
+          "claim": "The writer gradient matters, 3.47 against 3.84",
+          "text": "At width 32 (500 steps at context 32) the pair scores 3.47 when the loss reaches the atoms through the notes they wrote, and 3.84 when the writers are frozen. With every atom reading the whole window the pair scores 3.18, and one atom of width 46 reading the whole window scores 3.48."
+        },
+        {
+          "claim": "One fused step for all atoms",
+          "text": "AlgFormer.Gpu stacks the atoms as a batch dimension, so every layer, pass, head, reverse and Adam kernel runs once for all atoms. The number of kernel launches per step does not depend on the number of atoms: 261 for two, eight and sixteen atoms at two layers and two passes, against 454 for two atoms and 1,672 for eight on the per-atom path."
+        },
+        {
+          "claim": "The atoms are one system on text they never saw",
+          "text": "The eight-atom checkpoint scores 3.607 bits per token on 40 public-domain books outside its training lists, against 3.538 on its training text, with the unigram baseline at 5.661. All 40 books beat the baseline. Switching the medium off takes the averaged atoms to 20.5 bits per token, and silencing one writer costs every reader between 0.34 and 1.05 bits per token."
+        }
       ]
     },
     "figures": [
-      { "id": "pnd", "kind": "the-pond", "secId": "demo", "title": "The pond: one shared wave", "line": "Atoms on a golden spiral, each a source and a listener. Choose one to make it write.", "stageLabel": "Interactive toy. Choose an atom, change the ear width or the number of wave patterns, then press Play to run time.", "caption": "A toy computed in the page with no model and no weights. The motion is illustrative." }
+      {
+        "id": "pnd",
+        "kind": "the-pond",
+        "secId": "demo",
+        "title": "The pond: one shared wave",
+        "line": "Atoms on a golden spiral, each a source and a listener. Choose one to make it write.",
+        "stageLabel": "Interactive toy. Choose an atom, change the ear width or the number of wave patterns, then press Play to run time.",
+        "caption": "A toy computed in the page with no model and no weights. The motion is illustrative."
+      }
     ],
-    "late": true,
     "build": {
       "title": "What you can build",
       "line": "Each one is in the library today.",
       "items": [
-        { "title": "A population of small models that behave as one system", "text": "Several HoloFormers with no shared weights write into one bundle of damped oscillators and listen to each other's notes. The answer you serve is the average of their logits, and you can train on that combined answer or give each atom its own loss." },
-        { "title": "Parts that see different slices of the same text", "text": "Each part reads its own slice and the parts still agree on the next token through the medium." },
-        { "title": "A viewer for each atom's trajectory", "text": "AtomField.TrajectoryAllPositions returns each atom's state through its layers as plain arrays, so you can watch it move." },
-        { "title": "The same models on a GPU", "text": "AlgFormer.Gpu runs the atoms with all of them fused into each kernel launch.", "link": { "href": "#gpu", "label": "See AlgFormer.Gpu" } },
-        { "title": "A language model inside your app", "text": "Everything is plain double arrays and SIMD compiled into your project. There is no ONNX Runtime, no libtorch, no CUDA toolkit and no Python to ship." },
-        { "title": "Models that grow instead of restarting", "text": "Helpers extend a trained model to a longer context or a bigger vocabulary without training from scratch." }
+        {
+          "title": "A population of small models that behave as one system",
+          "text": "Several HoloFormers with no shared weights write into one bundle of damped oscillators and listen to each other's notes. The answer you serve is the average of their logits, and you can train on that combined answer or give each atom its own loss."
+        },
+        {
+          "title": "Parts that see different slices of the same text",
+          "text": "Each part reads its own slice and the parts still agree on the next token through the medium."
+        },
+        {
+          "title": "A viewer for each atom's trajectory",
+          "text": "AtomField.TrajectoryAllPositions returns each atom's state through its layers as plain arrays, so you can watch it move."
+        },
+        {
+          "title": "The same models on a GPU",
+          "text": "AlgFormer.Gpu runs the atoms with all of them fused into each kernel launch.",
+          "link": {
+            "href": "#gpu",
+            "label": "See AlgFormer.Gpu"
+          }
+        },
+        {
+          "title": "A language model inside your app",
+          "text": "Everything is plain double arrays and SIMD compiled into your project. There is no ONNX Runtime, no libtorch, no CUDA toolkit and no Python to ship."
+        },
+        {
+          "title": "Models that grow instead of restarting",
+          "text": "Helpers extend a trained model to a longer context or a bigger vocabulary without training from scratch."
+        }
       ]
     }
   },
   "intro": [
-    "AlgFormer is a .NET library for defining, training and running transformer-style language models, built on the Phasor codec. The atom field is the part that couples models. Several small HoloFormers, with no shared weights, write into one bundle of damped oscillators and listen to each other's notes. The answer you serve is the average of their logits, and you can train on that combined answer. The library also holds the two single-model cores, a softmax core and a holographic core, with a subword tokenizer, a data-parallel trainer, streaming generation with a cache and checkpoints. Everything is plain double arrays with SIMD. No GPU, Python or native runtime is needed, and an optional GPU package runs the same models faster.",
+    "AlgFormer is a .NET library for defining, training and running transformer-style language models, built on the Phasor codec. The atom field is the part that couples models. Several small HoloFormers, with no shared weights, write into one bundle of damped oscillators and listen to each other's notes. The answer you serve is the average of their logits, and you can train on that combined answer. The library also holds the two single-model cores, a softmax core and a holographic core, with a subword tokenizer, a data-parallel trainer, streaming generation with a cache and checkpoints. Everything is plain double arrays with SIMD. No GPU, Python or native runtime is needed, and an optional GPU package runs the same models on a GPU.",
     "Think of a pond with sources and listeners. Each atom is a small HoloFormer. At every position it writes its state into one shared bundle of damped oscillators, like dropping a pebble of its own size and phase into the water. Each atom then listens to the pond with its own note removed, so it hears only the others.",
     "Time lives in the medium itself. Each oscillator advances in phase and decays a little at every step, so recent writes ring loud and old writes fade, and fast bells and slow bells keep different spans of history. Space lives in the medium as well. With holographic locality, every atom has a trainable position and every channel a trainable wavevector. A writer binds a phase set by where it sits, and a reader unwinds the phase set by where it sits, so near atoms add up together and far atoms drift out of step.",
     "In the golden configuration the atoms start on a golden-ratio spiral with golden-angle write phases, so none sits in a privileged place, and the timescales are rotated around the golden ratio from atom to atom, so every atom owns the same mix of fast and slow bells. With holographic locality, or with no locality, the cost grows linearly with the number of atoms and with the length of the text. Dense locality, the default mode when locality is switched on, costs the square of the number of atoms."
   ],
-  "facts": ["Pure managed code", "net8.0 and net10.0", "No GPU needed"],
-  "why": [
-    { "title": "Holographic bundle attention, no softmax", "text": "A standard transformer scores every token against every other token with softmax, which is quadratic in the length. HoloFormer binds each key to its value, folds them into one running bundle and unbinds with the query. Reading a prompt grows in step with its length, and serving each further token through Prime and Step costs the same however long the context is." },
-    { "title": "Weight-tied depth", "text": "One layer's weights are reused for several passes, so depth is a count you choose rather than a parameter bill. The atom field runs the same K passes for every layer of every atom." },
-    { "title": "A population coupled by a medium", "text": "Standard ensembles average finished answers. Here the atoms exchange information while they compute, through one shared bundle of damped oscillators. With holographic locality or none, the cost grows linearly with their number." },
-    { "title": "Trainable geometry", "text": "Atom positions, wavevectors, decay times and write phases are learned parameters with exact gradients. Every dense map is a relation bank, so a layer carries S times d parameters rather than d squared." }
+  "facts": [
+    "Pure managed code",
+    "net8.0 and net10.0",
+    "No GPU needed"
   ],
-  "diagram": {
-    "id": "algformer-cost",
-    "title": "What a single model costs",
-    "stageLabel": "Chart of the cost of the two attention cores by context length. Use the tabs to change what is compared.",
-    "lede": "These figures compare the two single-model cores at one shape and say nothing about quality. The same shape, {dim} channels, {shifts} shifts and {layers} layers, is built with each core, so both have the same parameter count, and driven with the same tokens. At {tokens} tokens of context, reading the prompt takes {prefillSoftMs} ms with softmax attention and {prefillHoloMs} ms with holographic attention. Each further token takes {stepSoftUs} µs against {stepHoloUs} µs, and the serve cache holds {cacheSoftKb} KB against {cacheHoloKb} KB.",
-    "caption": "Measured by running the published EvaluatedApplications.AlgFormer package (release {version}) at one shape on one thread, as medians of repeated runs. The holographic core measured here is the core the atoms are built from. HoloFormer.Generate recomputes the window for each token, so use Prime and Step for constant work per token."
-  },
+  "why": [
+    {
+      "title": "Holographic bundle attention, no softmax",
+      "text": "A standard transformer scores every token against every other token with softmax, which is quadratic in the length. HoloFormer binds each key to its value, folds them into one running bundle and unbinds with the query. Reading a prompt grows in step with its length, and serving each further token through Prime and Step costs the same however long the context is."
+    },
+    {
+      "title": "Weight-tied depth",
+      "text": "One layer's weights are reused for several passes, so depth is a count you choose rather than a parameter bill. The atom field runs the same K passes for every layer of every atom."
+    },
+    {
+      "title": "A population coupled by a medium",
+      "text": "Standard ensembles average finished answers. Here the atoms exchange information while they compute, through one shared bundle of damped oscillators. With holographic locality or none, the cost grows linearly with their number."
+    },
+    {
+      "title": "Trainable geometry",
+      "text": "Atom positions, wavevectors, decay times and write phases are learned parameters with exact gradients. Every dense map is a relation bank, so a layer carries S times d parameters rather than d squared."
+    }
+  ],
   "quickstart": {
     "lede": "Two atoms coupled through the shared memory, trained for twenty steps on one window and read back as the mean of their logits.",
     "source": "snippets/algformer-atoms.cs",
@@ -75,35 +150,91 @@
     ]
   },
   "capabilities": [
-    { "title": "Two comparable single-model cores", "text": "AlgFormer (softmax) and HoloFormer (holographic) share a model shape, a training loop, a checkpoint format and a serving API. The atom field builds a population out of HoloFormer models." },
-    { "title": "AtomField", "text": "Opt-in, Memory coupling: N HoloFormers with no shared weights coupled through one damped-oscillator bundle, each reading the others with its own note removed, serving the mean of the atoms' logits. Training can use per-atom loss or the combined loss (CombinedLoss) on the mean of the logits. Weight-tied passes (Iters) per layer." },
-    { "title": "Locality", "text": "Trainable atom positions and per-channel wavevectors (MemoryLocality, holographic and dense modes; holographic is linear in the number of atoms, dense is quadratic), with a golden-spiral start (SpiralPositions)." },
-    { "title": "Diversity options", "text": "All off by default: golden rotation of timescales (MemoryTauRotation, GoldenTauRotations), a fast-to-slow scale ladder (MemoryTauScale) and golden-angle write phases (MemoryWritePhaseDeg)." },
-    { "title": "Molecules", "text": "MemoryMoleculeSize groups atoms so each hears its group in one amplitude and the rest in another. It runs on the CPU only." },
-    { "title": "Trajectory accessor and checkpoints", "text": "TrajectoryAllPositions for viewers, and checkpoints for the whole field (SerializeMemory, LoadMemory)." },
-    { "title": "Data-parallel training", "text": "Through an EvalApp pipeline (PrismTrainer)." },
-    { "title": "Streaming inference", "text": "Prime and Step with an incremental cache, constant work per token for HoloFormer." },
-    { "title": "Growth and sizing", "text": "In-place model growth, a capacity-law sizing module (HoloShape, including HoloShape.Derive), a built-in subword tokenizer and data-source adapters." },
-    { "title": "Preference training", "text": "Preference (DPO) training on the CPU HoloFormer." },
-    { "title": "ADAM and EVE", "text": "An opt-in per-layer Adam gate for HoloFormer, default off." },
-    { "title": "Gradient-check oracles", "text": "Built-in checks let you verify the training maths instead of assuming it is right." },
-    { "title": "Interpretability hooks", "text": "AlgFormer.AttentionWeights and HoloFormer.InspectAttention." },
-    { "title": "Relay components", "text": "MQTT relay components (MqttRelay, MqttJobRelay, JobSource and a peer gossip component) can move batches, or position manifests with no data, between machines. They are separate from the atom field, which has no relay." }
+    {
+      "title": "Two comparable single-model cores",
+      "text": "AlgFormer (softmax) and HoloFormer (holographic) share a model shape, a training loop, a checkpoint format and a serving API. The atom field builds a population out of HoloFormer models."
+    },
+    {
+      "title": "AtomField",
+      "text": "Opt-in, Memory coupling: N HoloFormers with no shared weights coupled through one damped-oscillator bundle, each reading the others with its own note removed, serving the mean of the atoms' logits. Training can use per-atom loss or the combined loss (CombinedLoss) on the mean of the logits. Weight-tied passes (Iters) per layer."
+    },
+    {
+      "title": "Locality",
+      "text": "Trainable atom positions and per-channel wavevectors (MemoryLocality, holographic and dense modes; holographic is linear in the number of atoms, dense is quadratic), with a golden-spiral start (SpiralPositions)."
+    },
+    {
+      "title": "Diversity options",
+      "text": "All off by default: golden rotation of timescales (MemoryTauRotation, GoldenTauRotations), a fast-to-slow scale ladder (MemoryTauScale) and golden-angle write phases (MemoryWritePhaseDeg)."
+    },
+    {
+      "title": "Molecules",
+      "text": "MemoryMoleculeSize groups atoms so each hears its group in one amplitude and the rest in another. It runs on the CPU only."
+    },
+    {
+      "title": "Trajectory accessor and checkpoints",
+      "text": "TrajectoryAllPositions for viewers, and checkpoints for the whole field (SerializeMemory, LoadMemory)."
+    },
+    {
+      "title": "Data-parallel training",
+      "text": "Through an EvalApp pipeline (PrismTrainer)."
+    },
+    {
+      "title": "Streaming inference",
+      "text": "Prime and Step with an incremental cache, constant work per token for HoloFormer."
+    },
+    {
+      "title": "Growth and sizing",
+      "text": "In-place model growth, a capacity-law sizing module (HoloShape, including HoloShape.Derive), a built-in subword tokenizer and data-source adapters."
+    },
+    {
+      "title": "Preference training",
+      "text": "Preference (DPO) training on the CPU HoloFormer."
+    },
+    {
+      "title": "ADAM and EVE",
+      "text": "An opt-in per-layer Adam gate for HoloFormer, default off."
+    },
+    {
+      "title": "Gradient-check oracles",
+      "text": "Built-in checks let you verify the training maths instead of assuming it is right."
+    },
+    {
+      "title": "Interpretability hooks",
+      "text": "AlgFormer.AttentionWeights and HoloFormer.InspectAttention."
+    },
+    {
+      "title": "Relay components",
+      "text": "MQTT relay components (MqttRelay, MqttJobRelay, JobSource and a peer gossip component) can move batches, or position manifests with no data, between machines. They are separate from the atom field, which has no relay."
+    }
   ],
   "extensions": [
     {
-      "id": "gpu", "nav": "AlgFormer.Gpu", "packageId": "EvaluatedApplications.AlgFormer.Gpu",
-      "title": "AlgFormer.Gpu: the same models, faster",
+      "id": "gpu",
+      "nav": "AlgFormer.Gpu",
+      "packageId": "EvaluatedApplications.AlgFormer.Gpu",
+      "title": "AlgFormer.Gpu: the same models on a GPU",
       "line": "Optional GPU acceleration for HoloFormer and the atom field",
       "paragraphs": [
         "AlgFormer.Gpu adds ILGPU and CUDA backed training and inference for HoloFormer. It builds device kernels straight from a CPU HoloFormer's serialized weights, so there is no separate model format and no retraining to switch devices.",
         "For the atom field it stacks the atoms as a batch dimension, so every layer, pass, head, reverse and Adam kernel runs once for all atoms. The number of kernel launches per step does not depend on the number of atoms."
       ],
       "points": [
-        { "title": "A drop-in, not a rewrite", "text": "Point it at an existing CPU HoloFormer. It trains and serves against the same serialized weights, and the CPU model stays the source of truth." },
-        { "title": "One build for both machines", "text": "Device detection runs once per process. On a machine without a CUDA GPU the same kernels run on ILGPU's CPU backend, slower but identical in behaviour." },
-        { "title": "Checked against the CPU engine", "text": "Every kernel is gradient-checked against the CPU HoloFormer, which computes in double precision. GPU results run in single precision for speed, so they are close to the CPU reference rather than bit-identical." },
-        { "title": "Adam on the device", "text": "The optimiser step runs next to the forward and backward kernels, which avoids a round trip to the CPU on every batch." }
+        {
+          "title": "A drop-in, not a rewrite",
+          "text": "Point it at an existing CPU HoloFormer. It trains and serves against the same serialized weights, and the CPU model stays the source of truth."
+        },
+        {
+          "title": "One build for both machines",
+          "text": "Device detection runs once per process. On a machine without a CUDA GPU the same kernels run on ILGPU's CPU backend, slower but identical in behaviour."
+        },
+        {
+          "title": "Checked against the CPU engine",
+          "text": "Every kernel is gradient-checked against the CPU HoloFormer, which computes in double precision. GPU results run in single precision for speed, so they are close to the CPU reference rather than bit-identical."
+        },
+        {
+          "title": "Adam on the device",
+          "text": "The optimiser step runs next to the forward and backward kernels, which avoids a round trip to the CPU on every batch."
+        }
       ],
       "snippet": {
         "lede": "A small HoloFormer wrapped by the GPU trainer. This run fell back to the CPU backend; with a CUDA device the first line names it.",
@@ -119,14 +250,23 @@
     }
   ],
   "limits": [
-    "Held-out text: the harness results are scored on 300 held-out windows of their own book text. The six-atom checkpoints are scored on windows of their training text.",
+    "Held-out text: the eight-atom checkpoint is scored on 40 books outside its training lists. The harness results are scored on 300 held-out windows of their own book text. The six-atom checkpoints are scored on windows of their training text.",
+    "Generated text: greedy decoding from the eight-atom checkpoint loops and drifts, on training prompts and on held-out prompts alike.",
     "Default: the atom field is opt-in in the library and the studio. A plain HoloFormer is what you get by default.",
     "Scale: the harness results are small models on one text, two seeds.",
-    "Diversity: the diversity options (golden rotation of timescales, golden-angle write phases) are off by default. In the width-64 four-atom test, rotation raised how much the atoms depend on each other (leave-one-out cost 0.16 to 0.21) without lowering their correlation or improving the score.",
+    "Diversity: the diversity options (golden rotation of timescales, golden-angle write phases) are off by default. In the width-64 four-atom test, rotation raised how much the atoms depend on each other (leave-one-out cost 0.16 to 0.21) without lowering their correlation or improving the score. The eight-atom checkpoint was trained with them, and no eight-atom run without them exists.",
     "Cost: linear in the number of atoms with holographic locality or no locality. Dense locality is quadratic in the number of atoms.",
     "Molecules: MemoryMoleculeSize runs on the CPU only. The GPU package ignores it.",
     "Holographic capacity: a holographic bundle holds a limited number of items cleanly, and HoloShape reports how many for a shape."
   ],
-  "related": { "title": "More on this page", "links": [ { "href": "/algformer/evidence/cost/", "label": "What attention costs" }, { "href": "/algformer/holoformer/", "label": "How HoloFormer works" } ] },
+  "related": {
+    "title": "More on this page",
+    "links": [
+      {
+        "href": "/algformer/holoformer/",
+        "label": "How HoloFormer works"
+      }
+    ]
+  },
   "reference": "Every public type is documented with a worked example in the package readme on NuGet."
 }

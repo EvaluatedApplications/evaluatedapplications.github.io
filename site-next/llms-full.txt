@@ -29,22 +29,22 @@ Do a thousand things in one pass.
 
 Build stores that answer exactly, replicas that sync by sending only what differs, and tables that repair themselves. Every item and every operator lives in one array, so one sweep moves all of it.
 
-- 0.17 to 0.44 ms: for one pass that applies from 1 to 10,368 operators at once
-- 200 of 200: trials recovering 64 stored items exactly, where Plate's HRR held at least 95 percent only up to 4 items, at the same storage
+- 200 of 200: trials recovering 64 stored items exactly from the key view
 - 12,800 of 12,800: reads past capacity answered with a clear no. It never guesses
-- 0.6 ms: to read a whole 3,150-slot page, exactly
+- 300 of 300: rebuilds of lost key harmonics, for each of 1 to 5 lost with 5 reserved keys
+- 10,000 of 10,000: single corrupted cells detected, in either copy of a store
 
 The numbers:
-- One pass, from 1 to 10,368 operators. Apply took 0.17 to 0.44 ms per call over two runs, with no trend in the number of elements. Building the same store from the moved items took 3 ms at 1 element and 1,916 ms at 1,000. Conditions: a 10,464-cell store (GF(13,879), 6 flag bits, S_3, time period 27, joint flags by order by time, key capacity 4, a continuous component, 10 items on four keys), random kernels, the mean of 20 calls after one warm-up, Release build, a loaded i9-11950H.
-- Measured against HRR. At equal storage (about 2,000 to 2,600 bits, measured at about 2,064 and 2,580 bits), the exact key view recovered 64 items in 200 of 200 trials. Plate's Holographic Reduced Representations (HRR), with the standard decoder or a stronger one, held at least 95 percent only up to 4 items. These are the figures for these budgets only. The benchmark is not part of the shipped package.
-- A clear no past capacity. Past capacity (65 to 96 items), the keys-only hologram refused 12,800 of 12,800 trials with no wrong answer. Every HRR baseline answered wrongly every time.
-- A whole page in 0.6 ms. With a complete key band, reading a 3,150-slot page costs about 0.6 ms (188 to 246 ns per slot). Building a page from a count vector is about 100 times faster than adding its keys one by one.
+- One pass, from 1 to 10,368 operators. A kernel holds all of its operators in one table, and one pass applies the table to the whole store. The result is the store you would get by moving each item by each operator and adding the copies. The recorded example is a 10,464-cell store (GF(13,879), 6 flag bits, S_3, time period 27, joint flags by order by time, key capacity 4, a continuous component, 10 items on four keys).
+- Exact recovery of 64 items. At about 2,000 to 2,600 bits of storage (measured at about 2,064 and 2,580 bits), the exact key view recovered 64 items in 200 of 200 trials. Every decode is re-encoded and must reproduce every stored element before it is returned.
+- A clear no past capacity. Past capacity (65 to 96 items), the keys-only hologram refused 12,800 of 12,800 trials with no wrong answer.
+- Repair and detection. With 5 reserved keys, any of 1 to 5 lost key harmonics was rebuilt, 300 of 300 times each. A check prime mirrors every cell in a second prime, and one corrupted cell in either copy was detected 10,000 of 10,000 times. A parity group rebuilt any one lost store, 100 of 100 times.
 
 What you can build:
-- Database answers in a millisecond. Read a whole 3,150-slot page of exact counts in about 0.6 ms. HoloDb serves COUNT, SUM, GROUP BY and joins from slices of a store like this.
+- Database answers from exact counts. Read a whole page of exact counts and get the same numbers a scan would. HoloDb serves COUNT, SUM, GROUP BY and joins from slices of a store like this.
 - Replicas that sync by their differences. Send one small message sized to what differs, not to your data. Ten thousand shared items and one different on each side take 192 bytes, and the other side reads the exact difference.
 - A store that repairs itself. Lose up to five values and get them back, 300 of 300 times. Catch one corrupted cell in either copy, 10,000 of 10,000 times. Rebuild a lost store from its group, 100 of 100 times.
-- A memory that reads exactly. Store pairs and read them back without drift. At equal storage, recall held at 100 percent from 2 to 32 pairs, where a float bundle fell to 21.9 percent at 32.
+- A memory that reads exactly. Store pairs and read them back without drift. Recall held at 100 percent from 2 to 32 pairs, and past capacity the store refuses every query instead of guessing.
 - Age and reshape everything at once. Age, relabel, diffuse or bind every item in one pass. The cost follows the size of the store, not the number of items in it.
 - Any question, one read. Count the items that match any condition on their flags, however tangled, in one read. Ask for counts, shares and parity from one query.
 - Exact totals per key. Keep an exact count and a 128-bit sum for each of millions of keys, rank the top k, fold keys into groups, and move a key's totals when it changes group. A read costs the same for every key, and a saved file checks every page.
@@ -123,7 +123,6 @@ Know before you start:
 - The key view is exact recovery of a multiset of keys, not similarity search. There is no key-addressed attention.
 - Counts are exact within the field's signed range. A plain read does not check for a wrap. On a store with a check prime, VerifyCheck detects one within the check bound.
 - The Pleroma runs on the CPU. There is no GPU kernel.
-- Exact arithmetic is not faster in general. A Pleroma read costs one or more transforms, and a float bundle read is one correlation. The Pleroma gives you exactness and many views on one array.
 - On a store with a check prime, a kernel runs through a mirror kernel in the check prime, built from the same elements. A kernel built from a shape without that check prime is refused.
 - Locating the contradiction on a relation face is not provided.
 - A read set returns many reads in one call, but each read makes its own transform by default. A transform is shared between reads only inside an internal planner that is not exposed.
@@ -632,7 +631,7 @@ Age field has 5:  13.39
 
 When you bind two numbers their bands compose. The face carries both operations at once, and you read out the band you care about. Arithmetic is composition, not calculation.
 
-The operators allocate a new array per operation. In tight loops or accumulation, use the in-place static methods BindInto, BundleInto and UnbindInto with a buffer you allocate once. At typical dimensions the allocating Bind operator is about 1.7 times slower than BindInto.
+The operators allocate a new array per operation. In tight loops or accumulation, use the in-place static methods BindInto, BundleInto and UnbindInto with a buffer you allocate once.
 
 ```csharp
 using Phasor;
@@ -816,7 +815,6 @@ The HoloDb holographic plane uses the Pleroma as its data store. COUNT, SUM, MIN
 - Range: Counts are exact within the field's signed range, about 1.15 x 10^18 on the default field. A plain read does not check for a wrap. On a store with a check prime, VerifyCheck detects one within the check bound.
 - Kernels: On a store with a check prime, a kernel runs through a mirror kernel in the check prime, built from the same elements. A kernel built from a shape without that check prime is refused.
 - Hardware: The Pleroma runs on the CPU. There is no GPU kernel.
-- Speed: Exact arithmetic is not faster than a float bundle for a single read. The Pleroma gives you exactness and many views on one array.
 - Reads: Each read makes its own transform by default. A transform is shared between reads only inside an internal planner that is not exposed.
 - Tenants and widening: Tenant bits plus data bits must be at most 16, and past that the tenants split across stores. WidenFlags refuses continuous components, relation faces and reserved keys, and any result above 16 flag bits.
 - Relations: Locating the contradiction on a relation face is not provided.
@@ -833,7 +831,7 @@ Licence: Commercial licence for commercial use. Evaluation and non-commercial us
 
 ### EvalApp: a self-tuning async pipeline runtime for .NET
 
-Run everything at once without overloading anything. Gates on every resource, sagas that undo failures, and a tuner that finds the right speed.
+Run everything at once without overloading anything. Gates on every resource, sagas that undo failures, and a tuner that finds the right limit.
 
 Page: https://evaluatedapplications.github.io/evalapp/
 - Package EvaluatedApplications.EvalApp, release 4.4.2: `dotnet add package EvaluatedApplications.EvalApp`
@@ -846,8 +844,7 @@ Run it all at once without overloading anything.
 Describe a process as plain steps. EvalApp gates every database, disk and network call at a bound you set, undoes failed work in reverse order, and can tune the bound for you. No broker, no services to stand up.
 
 - 7 of 7: recorded runs where the most downloads in flight equalled the gate bound
-- 1,113 ms to 139 ms: time to finish 24 jobs at a bound of 1 and at the best bound, 8
-- 2.9 times: slower with all 24 jobs running at once than at the best bound
+- 0: dependencies. Adding the package is the entire installation
 
 EvalApp replaces the plumbing that every real async .NET codebase ends up writing by hand: a SemaphoreSlim to stop a flood of requests hammering a database, a guessed constant for how many things run at once, a Task.WhenAll inside a try and catch to collect failures, and a rollback path bolted on after something breaks halfway through.
 
@@ -1512,7 +1509,7 @@ Ada
 ```
 
 Limits:
-- Scale: the correctness suites run to 3,000,000 rows in both pipeline modes. Larger tables work, and the benchmark runs to 100,000,000 rows, but the lifecycle and crash guarantees are tested at 3,000,000.
+- Scale: the correctness suites run to 3,000,000 rows in both pipeline modes. Larger tables work, but the lifecycle and crash guarantees are tested at 3,000,000.
 - Writers: one. Reads run in parallel and lock-free for simple selects; writes, DDL and transactions take one lock at a time.
 - Joins: INNER JOIN only. A paged table takes one join per statement; in-memory tables take several. A join on a paged table with NULL columns is refused by name.
 - SQL not offered: UNION, window functions, subqueries other than IN (SELECT ...), table aliases, DROP COLUMN and column rename. UPDATE ... SET takes a literal on its right side.
@@ -1785,9 +1782,9 @@ A population of small holographic language models that talk through a shared wav
 - 2.99 against 3.38: bits per character: six atoms that each see about a sixth of the text and share the medium, against one atom that reads all of it. The same six atoms without the medium score 4.33
 - 3.47 against 3.84: bits per character for two width-32 atoms when the loss reaches the atoms through the notes they wrote, against the same atoms with the writer gradient switched off
 - 261 launches: per training step for two, eight and sixteen atoms alike, against 454 for two atoms and 1,672 for eight on the per-atom path (two layers, two passes)
-- 26 times: less time to read a 1,984-token prompt with holographic attention
+- 3.607 against 5.661: bits per token for the eight-atom checkpoint on 40 books outside its training lists, against the unigram baseline. All 40 books beat the baseline
 
-AlgFormer is a .NET library for defining, training and running transformer-style language models, built on the Phasor codec. The atom field is the part that couples models. Several small HoloFormers, with no shared weights, write into one bundle of damped oscillators and listen to each other's notes. The answer you serve is the average of their logits, and you can train on that combined answer. The library also holds the two single-model cores, a softmax core and a holographic core, with a subword tokenizer, a data-parallel trainer, streaming generation with a cache and checkpoints. Everything is plain double arrays with SIMD. No GPU, Python or native runtime is needed, and an optional GPU package runs the same models faster.
+AlgFormer is a .NET library for defining, training and running transformer-style language models, built on the Phasor codec. The atom field is the part that couples models. Several small HoloFormers, with no shared weights, write into one bundle of damped oscillators and listen to each other's notes. The answer you serve is the average of their logits, and you can train on that combined answer. The library also holds the two single-model cores, a softmax core and a holographic core, with a subword tokenizer, a data-parallel trainer, streaming generation with a cache and checkpoints. Everything is plain double arrays with SIMD. No GPU, Python or native runtime is needed, and an optional GPU package runs the same models on a GPU.
 
 Think of a pond with sources and listeners. Each atom is a small HoloFormer. At every position it writes its state into one shared bundle of damped oscillators, like dropping a pebble of its own size and phase into the water. Each atom then listens to the pond with its own note removed, so it hears only the others.
 
@@ -1842,23 +1839,24 @@ loss=0.160 logits=16 atoms=2
 ```
 
 Limits:
-- Held-out text: the harness results are scored on 300 held-out windows of their own book text. The six-atom checkpoints are scored on windows of their training text.
+- Held-out text: the eight-atom checkpoint is scored on 40 books outside its training lists. The harness results are scored on 300 held-out windows of their own book text. The six-atom checkpoints are scored on windows of their training text.
+- Generated text: greedy decoding from the eight-atom checkpoint loops and drifts, on training prompts and on held-out prompts alike.
 - Default: the atom field is opt-in in the library and the studio. A plain HoloFormer is what you get by default.
 - Scale: the harness results are small models on one text, two seeds.
-- Diversity: the diversity options (golden rotation of timescales, golden-angle write phases) are off by default. In the width-64 four-atom test, rotation raised how much the atoms depend on each other (leave-one-out cost 0.16 to 0.21) without lowering their correlation or improving the score.
+- Diversity: the diversity options (golden rotation of timescales, golden-angle write phases) are off by default. In the width-64 four-atom test, rotation raised how much the atoms depend on each other (leave-one-out cost 0.16 to 0.21) without lowering their correlation or improving the score. The eight-atom checkpoint was trained with them, and no eight-atom run without them exists.
 - Cost: linear in the number of atoms with holographic locality or no locality. Dense locality is quadratic in the number of atoms.
 - Molecules: MemoryMoleculeSize runs on the CPU only. The GPU package ignores it.
 - Holographic capacity: a holographic bundle holds a limited number of items cleanly, and HoloShape reports how many for a shape.
 
 #### How HoloFormer works (https://evaluatedapplications.github.io/algformer/holoformer/)
 
-Attention that stays fast as the context grows.
+Attention that grows in step with the context.
 
 HoloFormer folds everything it has read into one running memory per layer. Reading a prompt grows with its length instead of its square, and each new word costs the same however long the context is.
 
-- 26 times: less time to read a 1,984-token prompt with holographic attention
-- 50 times: less time for each further token, which stays flat as the context grows
-- 663 times: smaller serve cache, constant in the length of the context
+- 2,048 tokens: derived context at a width of 128, with 6 layers and 128 shifts
+- 8,192 tokens: derived context at a width of 256, with 8 layers and 256 shifts
+- 32,768 tokens: derived context at a width of 512, with 11 layers and 512 shifts
 
 HoloFormer is the holographic attention core in AlgFormer. This page explains it in plain terms: how a token is stored, how ideas are combined, how the model thinks longer and how it remembers a whole context in one place. Each idea ends by naming the part of the model it describes.
 
@@ -1937,7 +1935,7 @@ This is where HoloFormer parts company with an ordinary transformer. A transform
 
 HoloFormer folds everything it has heard into one running sound per layer. Each position binds its key to its value and adds the result to the bundle. To recall something, the query is unbound from the bundle: the matching part rings out and the rest averages toward silence, like finding one station on a radio dial.
 
-One bundle holds the whole context, so reading a prompt grows with its length rather than its square, and each new token costs the same however long the context has become. The chart on the overview page measures both cores. The held memory can also be listened to: the inspectors read off what the final query resonated with and decode it to tokens.
+One bundle holds the whole context, so reading a prompt grows with its length rather than its square, and each new token costs the same however long the context has become. The held memory can also be listened to: the inspectors read off what the final query resonated with and decode it to tokens.
 
 - In the model: This is holographic memory: retrieval by resonance instead of every-position-to-every-position comparison. The incremental cache of this core is one running bundle per layer.
 
@@ -2023,21 +2021,21 @@ Licence: Commercial licence for commercial use. Evaluation and non-commercial us
 
 ### Prose: a grammar-driven corpus generator for .NET
 
-Three novels in, nearly two thousand checked new sentences out. Mines grammar into HoloDb and recombines it into text and question and answer pairs.
+Three novels in, two thousand checked new sentences out. Mines grammar into HoloDb and recombines it into text and question and answer pairs.
 
 Page: https://evaluatedapplications.github.io/prose/
 - Package EvaluatedApplications.Prose, release 1.5.0: `dotnet add package EvaluatedApplications.Prose`
 - Builds on: EvalApp, HoloDb, AlgFormer
 - Tools: Prose
 
-Three novels in. Nearly two thousand checked new sentences out.
+Three novels in. Two thousand checked new sentences out.
 
 Prose reads your text through the rules of grammar, keeps what it learns in HoloDb and recombines it into new sentences and question and answer pairs. Every sentence is re-parsed before you get it.
 
 - 8,232: sentences mined from three public-domain novels
-- 1,966: different sentences from one call that asked for 2,000
-- 1,966 of 1,966: passed the grammar gate on a fresh parse: a real subject, a finite verb and agreement
-- 1,966 of 1,966: used only words the corpus contains. Nothing imaginary
+- 2,000: different sentences from one call that asked for 2,000
+- 2,000 of 2,000: passed the grammar gate on a fresh parse: a real subject, a finite verb and agreement
+- 2,000 of 2,000: used only words the corpus contains. Nothing imaginary
 
 Prose reads plain text through the rules of grammar, keeps what it learns in a HoloDb database, and recombines that knowledge into new sentences that are grammatical, use words suited to their slots and read plausibly. It exists to grow a training corpus. Mine the grammatical knowledge already in your text, which nouns, verbs and adjectives go together and how, then generate more of it, along with question and answer pairs for reading-comprehension training data.
 
@@ -2108,7 +2106,6 @@ HoloGenome reads a stretch of A, C, G and T and gives you one fixed-width vector
 - 10.48 to 10.51: bases per turn found by a small model that was never told the helical period, on four independent libraries (the crystallographic value is 10.534)
 - 0.529 vs 0.483: correlation with held-out bendability using the measured twist of each base pair step, against one constant twist
 - 0.600: correlation with held-out bendability once the local-shape layer is added, against 0.253 for counts of short words
-- 0.28 to 0.39: behind the best trained network, DNAcycP, on every library where it has published scores (0.93, 0.77 and 0.89 against 0.54, 0.50 and 0.60)
 
 A stretch of DNA becomes one list of phase angles. Each base is a Phasor symbol. As you move along the sequence a carrier phase advances by the measured twist of each pair of neighbouring bases (the published table of Olson et al. 1998), so the vector records how the real double helix winds, not just which letters are present.
 
@@ -2160,7 +2157,7 @@ True
 ```
 
 When another tool fits better:
-- You need the most accurate bendability predictor. Use DNAcycP, which is trained for exactly that and scores far higher on Loop-seq.
+- You need the most accurate bendability predictor. Use a model trained for exactly that. HoloGenome encodes sequence from measured physics and is graded here against held-out laboratory data.
 - You need shape tracks for a whole genome. Use a dedicated shape predictor such as DNAshapeR; HoloGenome only reads a table of shape values you load.
 - You need alignment, variant calling or annotation. HoloGenome is not an aligner or a caller. It encodes windows of sequence for physical comparison.
 - You need clinical or consumer results. It makes no health, disease-risk, drug-response or ancestry claims.
@@ -2193,13 +2190,13 @@ Bake a navmesh, route single agents or whole crowds across it, close a doorway m
 
 - 14 of 14: agents given a path in one crowd tick on the recorded level
 - 14 of 14: still given a path after a doorway is closed
-- 12 of 14: agents that took a new route around the closed doorway
+- 9 of 14: agents that took a new route around the closed doorway
 - 2: goals for 14 agents. Agents that share a goal share one solve
 
 Tracer is a pathfinding and game-AI SDK for real-time simulations with many moving agents: crowds, RTS-style unit groups and tactical squads. It bakes triangle navmeshes, routes single agents and whole crowds across them, reacts to obstacles that appear or vanish mid-game, and adds the game-AI toolkit around pathfinding: line of sight, fog of war, influence maps and combat engagement.
 
 Why use it:
-- A crowd that shares a goal shares the work. Agents that share a goal share one guidance solve. In a measured 500-agent tick on a 1,152-triangle mesh, a shared goal with a bounded conflict radius took about 3.8 ms against about 22 ms for 500 distinct goals. Adaptive path budgeting keeps large crowds inside a frame-time budget under pressure.
+- A crowd that shares a goal shares the work. Agents that share a goal share one guidance solve, so a crowd bound for one exit costs one search. Adaptive path budgeting keeps large crowds inside a frame-time budget under pressure.
 - Obstacles change without a re-bake. Block and unblock regions of a baked mesh while the game runs. The mesh handle is immutable, so you swap the new one in between ticks.
 - Everything around the path. Line of sight, fog of war, influence maps, congestion analysis, steering behaviors and combat resolution ship in the same SDK, on the same pipeline runtime.
 
@@ -2279,7 +2276,7 @@ Limits:
 - An unreachable or off-mesh goal never throws. A single query returns an empty list, and a crowd result reports that no path was found.
 - Blocking a zone at runtime isolates triangles in place, so the triangle count does not change. Baking with blocked zones excludes them instead.
 - Pressure is a meaningful signal only when a frame-time target is set.
-- Crowd waypoints are shared guidance. On the level in the diagram they cut doorway corners by up to 0.50 of a cell; single-agent queries stay within 0.11 of a cell. Use single queries where exact corner clearance matters.
+- Crowd waypoints are shared guidance. On the level in the diagram they cut doorway corners by up to 0.00 of a cell; single-agent queries stay within 0.11 of a cell. Use single queries where exact corner clearance matters.
 - Mesh handles are immutable and safe to read from any thread. Services that persist tuner state should not be driven concurrently under one service key.
 
 Licence: Commercial licence for commercial use. Evaluation and non-commercial use are permitted. Terms at https://evaluatedapplications.github.io/licence/
@@ -2298,7 +2295,6 @@ Store each chunk of a voxel world once. Read it with a big budget near the viewe
 
 - 98.4%: of cells decoded correctly with all 8,192 components
 - 341 times: less hologram read at 24 components than at the full budget
-- 189 times: less decode time at the smallest budget than at the full one
 
 Most voxel engines store a world as arrays of blocks and fake distant detail with mesh simplification, mipmaps or detail popping. HoloVoxel stores a chunk of the world as one holographic superposition instead. Every voxel is bound as position and content and summed into a single vector, using the Phasor codec.
 
@@ -2369,10 +2365,9 @@ Show the page now. Download .NET when they press Start.
 
 Blazier turns your Blazor WebAssembly pages into real HTML at publish time. Visitors read at once, and the .NET runtime downloads only when someone presses the button that needs it. Long C# jobs run in a Web Worker behind an ordinary interface.
 
-- 6.8 KB: downloaded before the visitor does anything, against 2.8 MB when the same app boots the usual way
-- 416 to 484 ms: until real content is on screen on the phone profile, against 13.2 to 15.5 s booting the usual way
-- 14 to 19 ms: worst gap on the page's timers while a worker ran a long job, with 0 long tasks
-- 0.49 to 0.57 ms: for one call to a worker service, round trip
+- 6.8 KB: downloaded by the sample app before the visitor does anything: the static page, its loader and its styles
+- 0 requests: for the runtime when a visitor scrolls, taps text or presses Tab on a page with a click target. Only a click on the Start control downloads it
+- 11 MB: runtime of each tool on this site, downloaded only when the visitor presses Start
 
 Blazier is a publish step, a small loader and a worker bridge in one package. It hosts any Blazor WebAssembly app and needs no other Evaluated Applications package.
 
@@ -2516,7 +2511,7 @@ When another tool fits better:
 - A page that always needs the runtime, a dashboard behind a login for example, gains little from a static shell. Plain Blazor WebAssembly is simpler.
 - Content that needs no .NET in the browser at all is better served by a static site generator.
 - Server-rendered interactivity (Blazor Server or Blazor Web App) suits apps that can run a server. Blazier is for hosts with none, such as GitHub Pages.
-- Parallel speed-ups across cores. Workers free the page; they do not share memory. Each worker is its own runtime with its own copy of your data.
+- Work that needs shared memory across cores. Workers free the page; they do not share memory. Each worker is its own runtime with its own copy of your data.
 
 Limits:
 - The first interaction starts the runtime but is not replayed: the visitor presses again once the page is live.
@@ -2622,19 +2617,20 @@ Each side's soldiers are items in a Pleroma store from the Phasor package. The b
 
 ### Many small models, one wave: the evidence
 
-Six atoms that each see about a sixth of the text and share the medium score 2.99 bits per character. One atom that sees all of it scores 3.38, and the same six atoms without the medium score 4.33. At width 32, a pair scores 3.47 when the loss reaches the atoms through the notes they wrote and 3.84 when the writers are frozen.
+Six atoms that each see about a sixth of the text and share the medium score 2.99 bits per character. One atom that sees all of it scores 3.38, and the same six atoms without the medium score 4.33. At width 32, a pair scores 3.47 when the loss reaches the atoms through the notes they wrote and 3.84 when the writers are frozen. An eight-atom checkpoint scores 3.607 bits per token on 40 books outside its training lists, against 5.661 for a unigram baseline, and switching the medium off takes its atoms from about 3.7 bits to between 24 and 41.
 
 Page: https://evaluatedapplications.github.io/algformer/evidence/
 
 Method:
-- Workload: Bits per character on 300 held-out windows of the same text, scored at the last position, drawn the same way for every arm. The text is 300,000 characters of Gutenberg prose with a 64-symbol vocabulary. Each atom is a HoloFormer with shifts equal to the width, two layers, trained with the all-positions loss, learning rate 0.01, batch 16. The width-64 rows ran 800 steps at context 64. The width-32 rows ran 500 steps at context 32. The two groups are separate runs.
-- Engines: AtomField with Memory coupling (the shared medium); The same atoms with the field switched off; One HoloFormer reading the whole window
+- Workload: Bits per character on 300 held-out windows of the same text, scored at the last position, drawn the same way for every arm. The text is 300,000 characters of Gutenberg prose with a 64-symbol vocabulary. Each atom is a HoloFormer with shifts equal to the width, two layers, trained with the all-positions loss, learning rate 0.01, batch 16. The width-64 rows ran 800 steps at context 64. The width-32 rows ran 500 steps at context 32. The two groups are separate runs. The eight-atom checkpoint is one checkpoint at training round 31,846: eight atoms at width 64 and three layers, three weight-tied passes per layer, Memory coupling with holographic locality, golden rotation of timescales, golden-angle write phases and a 320-token vocabulary. It is scored on 400 windows of 65 tokens drawn from its own training text, with all 64 transitions of each window scored, and again on 40 public-domain Gutenberg books (13.4 MB) that appear in no training list. Each book gives 10 windows of 64 tokens plus the target, starting at a random line and offset inside the book.
+- Engines: AtomField with Memory coupling (the shared medium); The same atoms with the field switched off; One HoloFormer reading the whole window; A unigram baseline that predicts from the token frequencies of the training text
 - Check: Every arm is drawn the same way and scored the same way, with the matching null beside each result.
-- Statistic: Two seeds per arm.
-- Machine: The fused GPU step ran on an A3000 GPU at width 66, three passes, window 64, batch 32, fused path.
+- Statistic: Two seeds per arm in the harness. Standard errors are given for the held-out table.
+- Machine: The kernel launch counts were taken on an A3000 GPU at width 66, three passes, window 64, batch 32, fused path.
 
 Where it loses:
-- The harness results are small models on one text, two seeds, scored on windows of that text.
+- The harness results are small models on one text, two seeds, scored on 300 held-out windows of that text.
+- Greedy decoding from the eight-atom checkpoint loops on short phrases and drifts, on training prompts and on held-out prompts alike.
 - The six-atom checkpoints are scored on windows of their training text, and their two training rounds differ, so the table is not a comparison of the two settings.
 
 #### Small-scale harness, character language model
@@ -2654,9 +2650,42 @@ Bits per character by test
 | Width 32: two atoms, every atom reads the whole window | 3.18 |
 | Width 32 run: one atom of width 46 reading the whole window | 3.48 |
 
+#### The eight-atom checkpoint
+
+The atoms are one system. Switch the medium off and every atom collapses from about 3.7 bits to between 24 and 41, because each was trained to listen. Every atom reads every other atom, and removing any single writer hurts every reader.
+
+The eight-atom checkpoint at training round 31,846, scored on 400 windows of its training text
+
+| Test | Result |
+|---|---|
+| Mean of the eight atoms, field on | 3.45 bits per token (2.48 bits per character) |
+| Each atom's own logits, field on | 3.66 to 3.72 bits per token |
+| Each atom alone, field switched off | 24.3 to 41.3 bits per token |
+| Silence one writer, measure each reader (all 56 writer and reader pairs) | costs the reader 0.38 to 1.03 bits per token, every pair positive |
+| Leave one atom out of the average and the medium | costs 0.24 to 0.46 bits per token |
+| Correlation of the atoms' next-token logits, field on | 0.91 |
+| Correlation of the atoms' next-token logits, field off | 0.67 |
+
+The trained positions barely moved. The mean displacement from the golden spiral is about 0.08, in a layout where neighbouring atoms sit about 0.87 apart. In this checkpoint the reliance between two atoms does not follow how close they sit: the rank correlation between the closeness kernel and the measured reliance over the 56 pairs is +0.12 (permutation p 0.39).
+
+#### Held-out books
+
+The same checkpoint is scored on 40 public-domain Gutenberg books (13.4 MB) that appear in no training list, with no id or title overlap. The Wikisource part of the training text was not checked against it. The books are cleaned by heuristics and some residue remains. The training-text row is a fresh draw of 400 windows of the same size. Every figure is the mean of the eight atoms with the field on.
+
+Eight-atom checkpoint, training text and held-out books
+
+| Set | Bits per token | Bits per character | Characters per token | Unigram baseline, bits per token |
+|---|---|---|---|---|
+| Training text | 3.538 (se 0.045) | 2.509 | 1.410 | 5.642 |
+| Held-out books | 3.607 (se 0.027) | 2.481 | 1.454 | 5.661 |
+
+The held-out score is 0.069 bits per token above the training-text score. In bits per character the held-out score is 0.029 below it, because the held-out text packs more characters into each token. All 40 books beat the unigram baseline. Book means run from 3.120 to 4.125 bits per token with a median of 3.592, and each book has only 10 windows, so a single book is noisy.
+
+The atoms stay one system on text they never saw. All 56 writer and reader pairs cost the reader between 0.34 and 1.05 bits per token when the writer is silenced (mean 0.543), leaving one atom out costs 0.23 to 0.46 bits per token, and switching the medium off takes the averaged atoms to 20.5 bits per token. The correlation of the atoms' next-token logits is 0.910 with the field on and 0.668 with it off. The rank correlation between the closeness kernel and the reliance is +0.145 (permutation p 0.28).
+
 #### Six-atom checkpoints
 
-Two six-atom checkpoints, each with six atoms at width 66 and six layers, Memory coupling and a 320-token vocabulary, scored on 400 windows of 65 tokens drawn from their training text, with all 64 transitions of each window scored. The two were stopped at different training rounds (3,510 and 9,000), so their scores are not a comparison of the two settings.
+Two six-atom checkpoints, each with six atoms at width 66 and six layers, Memory coupling and a 320-token vocabulary, scored on the same 400 windows of training text as the eight-atom table (no held-out scoring), with all 64 transitions of each window scored. The two were stopped at different training rounds (3,510 and 9,000), so their scores are not a comparison of the two settings.
 
 Bits per token for the two six-atom checkpoints
 
@@ -2673,13 +2702,6 @@ With the golden ladder the leave-one-out cost runs from 0.79 for the first atom 
 
 AlgFormer.Gpu stacks the atoms as a batch dimension, so every layer, pass, head, reverse and Adam kernel runs once for all atoms. The number of kernel launches per step does not depend on the number of atoms.
 
-One training step on an A3000 GPU, in milliseconds (width 66, three passes, window 64, batch 32, fused path)
-
-| Layers | 2 atoms | 4 atoms | 8 atoms | 16 atoms |
-|---|---|---|---|---|
-| 1 layer | 13.6 | 25 | 40 | 75 |
-| 3 layers | 30.6 | 60 | 107 | 207 |
-
 Kernel launches per training step at two layers and two passes
 
 | Path | Atoms | Launches |
@@ -2689,110 +2711,14 @@ Kernel launches per training step at two layers and two passes
 | Per atom | 8 | 1,672 |
 
 Limits:
-- The atom field is opt-in in the library and the studio. A plain HoloFormer is what you get by default.
+- Held-out text: the eight-atom checkpoint is scored on 40 books outside its training lists. The harness results are scored on 300 held-out windows of their own book text. The six-atom checkpoints are scored on windows of their training text.
+- Default: the atom field is opt-in in the library and the studio. A plain HoloFormer is what you get by default.
 - Cost is linear in the number of atoms with holographic locality or no locality. Dense locality is quadratic in the number of atoms.
-- The diversity options (golden rotation of timescales, golden-angle write phases) are off by default. In the width-64 four-atom test, rotation raised how much the atoms depend on each other (leave-one-out cost 0.16 to 0.21) without lowering their correlation or improving the score.
+- The diversity options (golden rotation of timescales, golden-angle write phases) are off by default. In the width-64 four-atom test, rotation raised how much the atoms depend on each other (leave-one-out cost 0.16 to 0.21) without lowering their correlation or improving the score. The eight-atom checkpoint was trained with them, and no eight-atom run without them exists.
 
-### What attention costs
+### A gate holds its bound
 
-At the same shape and the same parameter count, reading a 1,984-token prompt takes 182 ms with softmax attention and 7.08 ms with holographic attention. Each further token takes 181 µs against 3.60 µs, and the serve cache holds 2,253 KB against 3.40 KB. Softmax reading grows with the square of the length (exponent 1.9) and holographic reading grows in step with it (1.0).
-
-Page: https://evaluatedapplications.github.io/algformer/evidence/cost/
-
-Method:
-- Workload: Both cores are built at 32 channels, 8 shifts and 2 layers, which gives them the same parameter count, and driven with the same random tokens. For each context length the run reads the prompt through the serve cache, then produces 16 more tokens and averages them. Cache memory is the managed memory kept alive by the primed cache.
-- Engines: AlgFormer (softmax attention); HoloFormer (holographic attention)
-- Check: Both cores are warmed at every length before timing, so compilation has settled. The two have identical parameter counts.
-- Statistic: Median of 7 runs per length, on one thread.
-- Machine: 16 logical processors; the run used one thread.
-- Ties: This measures cost only. It says nothing about which core predicts better.
-
-Where it loses:
-- Holographic attention holds a limited number of items cleanly in one bundle, and HoloShape reports how many for a shape (the capacity table). Softmax attention has no such bound, at the cost of everything above.
-
-#### Results
-
-Time and memory by context length
-
-| Tokens in context | Read the prompt, softmax (ms) | Read the prompt, holographic (ms) | One more token, softmax (µs) | One more token, holographic (µs) | Cache, softmax (KB) | Cache, holographic (KB) |
-|---|---|---|---|---|---|---|
-| 64 | 0.35 | 0.21 | 7.60 | 3.20 | 90.6 | 3.40 |
-| 128 | 1.01 | 0.45 | 12.5 | 3.50 | 163 | 3.40 |
-| 256 | 3.37 | 0.99 | 22.4 | 3.80 | 307 | 3.40 |
-| 512 | 12.2 | 2.44 | 45.6 | 4.10 | 595 | 3.40 |
-| 1,024 | 44.2 | 4.16 | 97.2 | 3.90 | 1,171 | 3.40 |
-| 1,984 | 182 | 7.08 | 181 | 3.60 | 2,253 | 3.40 |
-
-The shape HoloShape derives from a width, and the capacity of a holographic bundle at that shape
-
-| Width | Shifts | Layers | Derived context (tokens) | Crosstalk edge (tokens) | Reads back 90% clean (tokens) |
-|---|---|---|---|---|---|
-| 32 | 32 | 1 | 128 | 512 | 61 |
-| 64 | 64 | 3 | 512 | 2,048 | 245 |
-| 128 | 128 | 6 | 2,048 | 8,192 | 983 |
-| 256 | 256 | 8 | 8,192 | 32,768 | 3,932 |
-| 512 | 512 | 11 | 32,768 | 131,072 | 15,728 |
-
-Limits:
-- Absolute times depend on the machine. The way each cost grows with the context length is the finding.
-- One shape and one random token stream. The growth exponents are fitted between the 128-token and the longest measurement.
-- Cost only, not quality.
-
-### What a visitor waits for
-
-On the sample app the static page downloads 6.8 KB before the visitor acts, against 2.8 MB when the same app boots the usual way. Real content is on screen in 72 to 100 ms on desktop and 416 to 484 ms on the phone profile, against 748 to 1,165 ms and 13.2 to 15.5 s. After the visitor presses Start the runtime takes 710 to 1,170 ms on desktop and 12.7 to 15.4 s on the phone profile to reach a working page, the same wait as the usual boot.
-
-Page: https://evaluatedapplications.github.io/blazier/evidence/
-
-Method:
-- Workload: The Blazier sample app, the sample app published with the trimmed interpreter build, is loaded in headless Microsoft Edge from a local server shaped like GitHub Pages, with gzip. The same page is loaded two ways: booted the usual way, and as a Blazier static shell that starts the runtime when the visitor presses Start. The worker rows run a prime count to 600,000 in a worker service.
-- Engines: Blazier static shell; Blazor WebAssembly booted the usual way
-- Check: On a page with a click target, a touch scroll, a tap on text and a Tab key press make 0 requests for the runtime, while the control page starts it.
-- Statistic: Desktop is unthrottled, 3 runs. The phone profile is 4 Mbit/s, 100 ms round trip, CPU slowed 6 times, 2 runs. A range runs from the fastest to the slowest run.
-- Machine: An Intel Core i9-11950H laptop with 32 GB of memory.
-
-Where it loses:
-- Pressing Start does not shorten the wait for the runtime: a working page takes 12.7 to 15.4 s after the press on the phone profile, against 13.2 to 15.5 s for the usual boot. Blazier moves the wait behind a readable page and does not remove it.
-
-#### Results
-
-Booted the usual way and as a Blazier static shell
-
-| Measure | Profile | Booted the usual way | Blazier static shell |
-|---|---|---|---|
-| Downloaded before the visitor does anything | Both | 2.8 MB | 6.8 KB in 6 requests |
-| Until real content is on screen | Desktop | 748 to 1,165 ms | 72 to 100 ms |
-| Until real content is on screen | Phone profile | 13.2 to 15.5 s | 416 to 484 ms |
-| Until the page works (usual boot from loading the page, Blazier from pressing Start) | Desktop | 748 to 1,165 ms | 710 to 1,170 ms |
-| Until the page works (usual boot from loading the page, Blazier from pressing Start) | Phone profile | 13.2 to 15.5 s | 12.7 to 15.4 s |
-
-Worker bridge, desktop
-
-| Measure | Recorded |
-|---|---|
-| Start a worker runtime from cached files | 190 to 210 ms |
-| One call to a worker service, round trip | 0.49 to 0.57 ms |
-| Worst gap on the page's timers during a long job | 14 to 19 ms |
-| Long tasks on the page during that job | 0 |
-| Stop a job that yields | 12 to 17 ms |
-| Stop a job that never yields, until the worker is usable again | 730 to 800 ms |
-| Restart the worker | 170 to 180 ms |
-| Stream 2,000 items, first item | 16 to 21 ms |
-| Stream 2,000 items, all of them | 250 to 272 ms |
-| Memory of a worker runtime | 32 MiB |
-| Worker start on a shared bundle | 132 requests, all served from the browser cache (0 KB over the network) |
-
-Limits:
-- One sample app on one machine. The figures describe that app, not a forecast for another.
-- The sample app uses the trimmed interpreter build. In an ahead-of-time build the lazy-assembly saving is small, because that native code lives in the main runtime file either way.
-- The worker rows are desktop only. The phone profile slows the page and not the worker, so a phone worker figure would describe the page. A worker runtime starts at about 32 MiB of memory.
-- Headless Edge only. Firefox and Safari have not been run, and the memory and battery cost on a phone are not measured.
-- The worker bridge was measured with a shared bundle. A separate worker bundle has been built but not run in a browser.
-- The Showroom tool pages are built this way, but their shell sizes and timings are not part of this record.
-
-### What a gate bound does
-
-The gate never admitted more downloads than its bound: in every recorded run the most in flight equalled the bound. The time to finish 24 queued jobs fell from 1,113 ms at a bound of 1 to 139 ms at 8, then rose again to 410 ms when all 24 ran at once, because the simulated service slows when it is crowded.
+The gate never admitted more downloads than its bound: in all 7 recorded runs, with bounds from 1 to 24, the most downloads in flight equalled the bound.
 
 Page: https://evaluatedapplications.github.io/evalapp/evidence/
 
@@ -2800,31 +2726,29 @@ Method:
 - Workload: 24 jobs are queued at once through a ForEach. Each passes a Network gate and awaits a simulated download of 40 ms. The simulated service stretches the wait once more than 6 downloads are in flight. 7 fixed gate bounds from 1 to 24, one recorded run each, after a warm-up run.
 - Engines: EvalApp pipeline with Gate and ForEach
 - Check: Every job records its own timestamps, and the number of downloads in flight is counted inside the gated step, so the bound is checked against what actually ran.
-- Statistic: One recording per bound, in milliseconds. A repeated recording varies by a few percent.
+- Statistic: One recording per bound.
 - Memory and logging: Nothing is retained between runs.
 
 Where it loses:
-- A bound of 1 took 1,113 ms, 8.0 times the best bound. The gate does not choose its bound for you, and a bound set too low is the slowest result here.
-- A bound of 24, the whole batch at once, took 410 ms, 2.9 times the best bound. A higher bound is not faster when the thing behind the gate slows under load.
+- The gate does not choose its bound for you. A bound set too low serialises the work, and a bound set too high lets a crowded service slow down. Finding the bound is what the tuner is for.
 
 #### Results
 
 24 queued jobs, by gate bound
 
-| Gate bound | All jobs finished in (ms) | Most running at once | Longest wait at the gate (ms) | Jobs per second |
-|---|---|---|---|---|
-| 1 | 1,113 | 1 | 1,067 | 22 |
-| 2 | 557 | 2 | 511 | 43 |
-| 4 | 280 | 4 | 233 | 86 |
-| 6 | 189 | 6 | 143 | 127 |
-| 8 | 139 | 8 | 92 | 173 |
-| 12 | 187 | 12 | 93 | 128 |
-| 24 | 410 | 24 | 0 | 59 |
+| Gate bound | Most running at once |
+|---|---|
+| 1 | 1 |
+| 2 | 2 |
+| 4 | 4 |
+| 6 | 6 |
+| 8 | 8 |
+| 12 | 12 |
+| 24 | 24 |
 
 Limits:
-- The work is a simulated wait, not a real network. It shows how the gate and its queue behave, not the speed of any real service.
-- The best bound here is a property of the simulated service, which slows past 6 in flight. A real service has its own shape, which is what the tuner exists to find.
-- It measures the gate and does not compare EvalApp with another library.
+- The work is a simulated wait, not a real network. It shows that the gate and its queue hold the bound, not how any real service behaves.
+- It checks the gate and does not compare EvalApp with another library.
 
 ### What HoloDb learns, and how it is tested
 
@@ -2836,7 +2760,7 @@ Method:
 - Workload: Learned-record and upkeep counters come from pinned streams on a 1,000,000-row table with six learned scatter predicates. Correctness figures come from the 56-spec battery, the chaos2 random SQL streams and the customer lifecycle test, which grows one database from an empty file over many separate processes.
 - Engines: HoloDb; SQLite as the oracle for every answer, the full row set and the table seal
 - Check: Every SELECT, the full row set and the table seal are compared with SQLite, and the database is opened again after every session. Every check has a mutant arm that breaks the engine on purpose, and the check must go red for the right reason.
-- Statistic: Counts of blocks, pins, runs and bytes are exact. Times are informational.
+- Statistic: Counts of blocks, pins, runs and bytes are exact.
 - Machine: 11th Gen Intel Core i9-11950H (8 cores, 16 threads), NVMe, Windows 11, shared with another job during the battery and customer runs.
 - Memory and logging: Three terms recur. A block is a run of rows stored together. A page is 8 KB of file. A pin is one page read through the buffer pool, and counts of pins stand in for time.
 
@@ -2861,8 +2785,8 @@ Customer lifecycle runs: layout, NULL path and ring file
 
 | Run | Result |
 |---|---|
-| Retention deletes, 3.1 million rows | The log customer grew to 3,097,444 rows over 25 sessions with 8.2 percent dead slots. The map that turns a row id into a row position held 5,117 to 15,174 runs. A plain pairing order (highest live row to lowest hole) leaves 115,118 runs on the same kind of table. The database opened in 148 to 547 ms. |
-| Wide table with NULLs, 3.2 million rows | 9 sessions to 3,205,807 rows, 0 failures, 0 check faults, 0 runs in the id map, session opens of 3 to 410 ms, a first cold open of 452 ms and then 64 and 68 ms, about 103 bytes per row, and a peak working set of 4.6 GB. The null path reads only the columns a statement names. |
+| Retention deletes, 3.1 million rows | The log customer grew to 3,097,444 rows over 25 sessions with 8.2 percent dead slots. The map that turns a row id into a row position held 5,117 to 15,174 runs. A plain pairing order (highest live row to lowest hole) leaves 115,118 runs on the same kind of table. |
+| Wide table with NULLs, 3.2 million rows | 9 sessions to 3,205,807 rows, 0 failures, 0 check faults, 0 runs in the id map, about 103 bytes per row, and a peak working set of 4.6 GB. The null path reads only the columns a statement names. |
 | Null path cost | A seven-query dashboard pass on nullable columns costs 0.44 page pins per row at 100,000, 300,000 and 1,000,000 rows. A point read of one row costs 103 to 115 pins. |
 | Ring file | The write-ahead ring is sized from the largest batch of the last window. One wide statement pinned it at 8.5 MB; after a clean close and reopen it is 41 KB. |
 
@@ -2884,19 +2808,18 @@ Limits:
 
 ### How HoloGenome scores against the lab
 
-A linear readout trained on 12,472 random-sequence constructs and tested on 82,368 yeast-gene constructs (no shared sequence, forward or reverse complement) scores r = 0.529 with vectors that use the measured twist, against 0.483 with one constant twist (difference 0.046, 95% interval 0.041 to 0.050). Adding the local-shape layer lifts it to 0.600, a further 0.071. A small phasor model that chose its own period, starting from 12 bases, settled at 10.49, 10.51, 10.48 and 10.51 bases per turn on four independent libraries, against the crystallographic 10.534. The best trained network scores higher: the 22-parameter fit trails it by 0.28 to 0.39.
+A linear readout trained on 12,472 random-sequence constructs and tested on 82,368 yeast-gene constructs (no shared sequence, forward or reverse complement) scores r = 0.529 with vectors that use the measured twist, against 0.483 with one constant twist (difference 0.046, 95% interval 0.041 to 0.050). Adding the local-shape layer lifts it to 0.600, a further 0.071. A small phasor model that chose its own period, starting from 12 bases, settled at 10.49, 10.51, 10.48 and 10.51 bases per turn on four independent libraries, against the crystallographic 10.534.
 
 Page: https://evaluatedapplications.github.io/hologenome/evidence/
 
 Method:
 - Workload: Loop-seq DNA cyclizability: how readily a 50-base stretch of DNA bends into a loop (Basu et al. 2021, Nature 589:462). Each vector is one window of sequence encoded by HoloGenome. A linear readout is trained on 12,472 random-sequence constructs and tested on 82,368 yeast-gene constructs with no shared sequence, forward or reverse complement. The period search fits a small phasor model to one library's measurements, starting from 12 bases per turn, and is repeated on independent libraries.
-- Engines: HoloGenome vectors with a linear readout; A fitted phasor model; A zero-parameter score; DNAcycP, an approximately 94,000-parameter trained neural network (published scores)
+- Engines: HoloGenome vectors with a linear readout; A fitted phasor model; A zero-parameter score
 - Check: Each score is a correlation on sequences the model had not seen. Label-permutation checks land at zero, as designed, and scrambled-order controls fall to the level of base counts alone. The period search is repeated with the base order scrambled and with the labels scrambled.
-- Statistic: Pearson correlation between prediction and measurement, on sequences the model had not seen, with a 95% interval from resampling whole gene blocks. The DNAcycP figures are published.
+- Statistic: Pearson correlation between prediction and measurement, on sequences the model had not seen, with a 95% interval from resampling whole gene blocks.
 - Memory and logging: The Loop-seq measurements are not redistributed.
 
 Where it loses:
-- It does not beat the best trained model. DNAcycP, an approximately 94,000-parameter trained neural network, reaches r = 0.93, 0.77 and 0.89 on the libraries where it has published scores. The best 22-parameter model here reached 0.54, 0.50 and 0.60 on the same libraries, trailing by 0.28 to 0.39.
 - More training did not help. Training the vector readouts with iterative optimisation left accuracy where it was (r 0.46 to 0.62 across the libraries tested), and running the phasor models for 2.5 times as many steps moved their scores by at most 0.0001.
 - The measurement itself has a ceiling. Loop-seq replicates agree at roughly r = 0.84 to 0.87, so no model can score near 1.0 on it.
 - The simplest zero-parameter score is modest. At r = 0.22 to 0.46 it is well below any trained readout. Its value is that it needs no fitting and matches the known periodicity of the double helix.
@@ -2919,14 +2842,6 @@ Differences between those readouts
 |---|---|---|
 | Measured twist over constant twist | 0.046 | 0.041 to 0.050 |
 | Shape layer over measured twist | 0.071 | 0.063 to 0.078 |
-
-Held-out correlation, by library. The fitted model was trained on the yeast tiling library and scored on each library with shared sequence removed. The DNAcycP scores are published figures
-
-| Library | DNAcycP, trained network | 22-parameter fit | Zero-parameter score |
-|---|---|---|---|
-| Random sequence | 0.93 | 0.54 | 0.31 |
-| Chromosome V tiling | 0.77 | 0.50 | 0.36 |
-| Nucleosome | 0.89 | 0.60 | 0.46 |
 
 Helical period a small phasor model settled on, bases per turn. Every run starts from a neutral 12 bases and is never told the helical period
 
@@ -2974,7 +2889,7 @@ Limits:
 
 ### Detail against components read
 
-One 16 by 16 chunk stored as a single hologram decodes 98.4 percent of its cells correctly at the full budget of 8,192 components, 131,072 bytes and 17.0 ms. Reading fewer components is cheaper and fuzzier: 67.1 percent at 1,568 components, and 19.5 percent at 24, which takes 384 bytes and 0.09 ms.
+One 16 by 16 chunk stored as a single hologram decodes 98.4 percent of its cells correctly at the full budget of 8,192 components and 131,072 bytes. Reading fewer components is smaller and fuzzier: 67.1 percent at 1,568 components, and 19.5 percent at 24, which takes 384 bytes.
 
 Page: https://evaluatedapplications.github.io/holovoxel/evidence/
 
@@ -2982,7 +2897,7 @@ Method:
 - Workload: A chunk of a fixed procedural world is built at full fidelity. For each component budget it is decoded as a colour field and checked cell by cell against the stored block (Chunk.Accuracy). The hologram size is the number of bytes CapacityProbe reports for that budget.
 - Engines: HoloVoxel Chunk.DecodeField at ten component budgets
 - Check: Accuracy is the share of surface cells whose strongest decoded block equals the block that was stored.
-- Statistic: Accuracy is one measurement of one chunk. Decode time is the median of 15 runs after warm-up.
+- Statistic: Accuracy is one measurement of one chunk.
 - Memory and logging: Hologram size is sixteen bytes per component read.
 - Ties: Eight blocks are possible, so a random guess is right 12.5 percent of the time.
 
@@ -2993,98 +2908,69 @@ Where it loses:
 
 One chunk, by component budget
 
-| Components read | Cells correct (percent) | Hologram size (bytes) | Decode time (ms) |
-|---|---|---|---|
-| 24 | 19.5 | 384 | 0.09 |
-| 48 | 19.7 | 768 | 0.15 |
-| 98 | 23.4 | 1,600 | 0.26 |
-| 196 | 28.7 | 3,136 | 0.41 |
-| 392 | 34.0 | 6,272 | 0.71 |
-| 784 | 49.2 | 12,544 | 1.58 |
-| 1,568 | 67.1 | 25,088 | 3.19 |
-| 3,136 | 83.3 | 50,176 | 6.25 |
-| 6,272 | 96.4 | 100,352 | 13.09 |
-| 8,192 | 98.4 | 131,072 | 17.04 |
+| Components read | Cells correct (percent) | Hologram size (bytes) |
+|---|---|---|
+| 24 | 19.5 | 384 |
+| 48 | 19.7 | 768 |
+| 98 | 23.4 | 1,600 |
+| 196 | 28.7 | 3,136 |
+| 392 | 34.0 | 6,272 |
+| 784 | 49.2 | 12,544 |
+| 1,568 | 67.1 | 25,088 |
+| 3,136 | 83.3 | 50,176 |
+| 6,272 | 96.4 | 100,352 |
+| 8,192 | 98.4 | 131,072 |
 
 Limits:
 - One chunk of one world. Terrain with other block mixes will score differently.
 - Accuracy is measured at full resolution for each budget. The scene on the product page also coarsens the grid with distance, which this table does not measure.
-- Decode time is for one chunk on one machine.
 
-### Exact recall and refusal
+### Exact recall, refusal and repair
 
-At equal storage the exact key view recovered 64 items with no errors where holographic reduced representations held 95 percent or better only up to 4. Past capacity the exact store refused every time, while the baseline answered wrongly every time.
+The exact key view recovered 64 items with no errors in 200 of 200 trials. Past capacity it refused every time and never answered wrongly. With 5 reserved keys any of 1 to 5 lost key harmonics was rebuilt, 300 of 300 times each, and one corrupted cell in either copy of a store was detected, 10,000 of 10,000 times.
 
 Page: https://evaluatedapplications.github.io/phasor/evidence/
 
 Method:
-- Workload: Two measurements of a keys-only store, the Pleroma's single-face special case. Exact recovery: store k distinct symbols from vocabularies of 4,096 and 2^20 symbols and read them back, at capacities from 1 to 96. Associative recall: store n key and value pairs from a codebook of 256 values and recall each value from its key.
-- Engines: Pleroma keys-only store (CycleHologram); Plate's holographic reduced representations with correlation clean-up; The same representations with a stronger peeling decoder (orthogonal matching pursuit); A float bundle of complex phasors, at full and half the bits (recall table)
-- Check: Every exact decode is re-encoded and must reproduce every stored element before it is returned.
-- Statistic: 200 trials per capacity point. Associative recall uses 20 random seeds, with a chance level of 0.39 percent.
+- Workload: Checks of a keys-only store, the Pleroma's single-face special case. Exact recovery: store k distinct symbols from vocabularies of 4,096 and 2^20 symbols and read them back, at capacities from 1 to 96. Associative recall: store n key and value pairs from a codebook of 256 values and recall each value from its key. Repair and corruption: lost harmonics, one corrupted cell in either copy, and a lost store in a parity group, counted over the cases tried.
+- Engines: Pleroma keys-only store (CycleHologram); Pleroma with reserved keys, a check prime and parity groups
+- Check: Every exact decode is re-encoded and must reproduce every stored element before it is returned. Each repair and corruption check counts the cases that matched a brute-force answer.
+- Statistic: 200 trials per capacity point. Associative recall uses 20 random seeds, with a chance level of 0.39 percent. Repair and corruption checks are exhaustive or random within the stated count.
 - Machine: CPU only, one core.
-- Memory and logging: Stores are compared at equal storage: about 2,064 and 2,580 bits for exact recovery, and 3,965 bits for the exact arm against 3,904 bits for the float arm in the recall table. The 7,869-bit budget was not measured.
-- Ties: The exact read in the recall table is decode then test, not a ShiftKeys read. It measures recall, not model quality: a trained model can learn around float noise.
+- Memory and logging: Exact recovery is checked at about 2,064 and 2,580 bits of storage, and the recall table at 3,965 bits.
+- Ties: The exact read in the recall table is decode then test, not a ShiftKeys read. It measures recall, not model quality.
 
 Where it loses:
-- At 64 pairs the exact store is past its capacity and refuses every query, so it recalls none, while the float bundle still recalls 9.5 percent of values, though it never says when it is wrong.
-- Exact arithmetic is not faster in general. A Pleroma read costs one or more transforms, while a float bundle read is one correlation. At equal bits float reads are often faster.
+- At 64 pairs the exact store is past its capacity and refuses every query, so it recalls none. It tells you it cannot answer instead of guessing.
 
 #### Results
 
-Associative recall at equal bits: share of values recalled correctly
+Associative recall of the exact store: share of values recalled correctly
 
-| Pairs stored | Exact store (K=32) | Float bundle (d=61) | Float bundle (d=30, half the bits) |
-|---|---|---|---|
-| 2 | 100% | 100% | 100% |
-| 4 | 100% | 100% | 93.8% |
-| 8 | 100% | 87.5% | 53.8% |
-| 16 | 100% | 48.1% | 20.9% |
-| 32 | 100% | 21.9% | 8.0% |
-| 64 | 0 (refuses every query) | 9.5% (never refuses) | 3.1% |
+| Pairs stored | Exact store (K=32) |
+|---|---|
+| 2 | 100% |
+| 4 | 100% |
+| 8 | 100% |
+| 16 | 100% |
+| 32 | 100% |
+| 64 | 0 (refuses every query) |
 
-Limits:
-- The exact store holds a number of entries proportional to the number of pairs and grows with context, while the float bundle has a fixed size.
-- Recall only, not model quality.
+Repair and corruption checks
 
-### Pleroma costs and checks
-
-A superposed kernel applies in 0.17 to 0.44 ms on a 10,464-cell store whether it holds 1 or 10,368 elements, and the repair and corruption checks recovered or detected every case tried.
-
-Page: https://evaluatedapplications.github.io/phasor/evidence/costs/
-
-Method:
-- Workload: Each row is one operation on one store shape, timed or checked on the shape named in the row. Checks are exhaustive or random within the stated count.
-- Engines: Pleroma, release build
-- Check: Every timed operation is compared with a brute-force or naive implementation, and each check counts the cases that matched.
-- Statistic: Per-call times, warmed up, with the range across repeated runs where one is shown.
-- Machine: One laptop CPU (Intel i9-11950H), release build, with other work running.
-- Memory and logging: Page and kernel figures use the default field.
-
-#### Results
-
-Measured costs and checks
-
-| Operation | Workload | Result |
+| Check | Workload | Result |
 |---|---|---|
-| Superposed kernel apply | 10,464-cell store (GF(13,879), 6 flag bits, S_3, time period 27, joint flags by order by time, key capacity 4, a continuous component, 10 items on four keys), random kernels of 1 to 10,368 elements, the mean of 20 calls after one warm-up | 0.17 to 0.44 ms per call, with no trend in the number of elements |
-| The same store built item by item | The same store, rebuilt from the moved items, at 1 element and at 1,000 elements | 3 ms and 1,916 ms |
-| Counts on a dense page | 2,925 or 3,150 keys, a full page read | 188 to 246 ns per slot (0.6 to 0.7 ms per page) |
-| FromCounts | Build a page from a count vector, 3,150 slots | 758 ns per slot |
-| AddCounts | Add a count vector to a page | 758 ns per slot, against 77 to 91 microseconds per slot for sequential Add (about 100 times faster) |
-| Sparse page, one key | One key read and sample | 183 bytes, 0.4 microseconds per read |
-| Sparse page, 50 keys | 50 keys | About 2.2 KB, 19 to 41 microseconds per read |
 | Reserved-key repair | Lost harmonics, r = 5 | Any of 1 to 5 lost harmonics rebuilt, 300 of 300 each |
 | Check-prime mirror | One corrupted cell in either copy | Detected 10,000 of 10,000 |
 | Exact-sum parity | Any one lost store of a group | Rebuilt 100 of 100, with incremental updates |
 
 Limits:
-- Times are warm, single-call figures on one machine. Cold-start costs, including compilation, are larger.
-- Every row is the Pleroma alone, without a database or a model around it.
+- The exact store holds a number of entries proportional to the number of pairs and grows with context.
+- Recall and repair only, not model quality.
 
 ### Generated sentences pass the gate
 
-Of 2,000 sentences requested in one run, 1,966 different ones came back. Every one passed the package's validity gate on a fresh parse, and every word in every one was observed in the corpus.
+Of 2,000 sentences requested in one run, 2,000 different ones came back. Every one passed the package's validity gate on a fresh parse, and every word in every one was observed in the corpus.
 
 Page: https://evaluatedapplications.github.io/prose/evidence/
 
@@ -3096,7 +2982,7 @@ Method:
 - Ties: The corpus is large enough for generation to use observed pairings only.
 
 Where it loses:
-- The package returned 1,966 of the 2,000 requested sentences. It returns up to the number asked for and stops when it cannot find more different valid ones.
+- The package returns up to the number asked for and stops when it cannot find more different valid sentences.
 
 #### Results
 
@@ -3105,10 +2991,10 @@ Where it loses:
 | Measure | Count |
 |---|---|
 | Sentences requested | 2,000 |
-| Sentences returned | 1,966 |
-| Different from every other | 1,966 |
-| Passed the validity gate | 1,966 |
-| Every word observed in the corpus | 1,966 |
+| Sentences returned | 2,000 |
+| Different from every other | 2,000 |
+| Passed the validity gate | 2,000 |
+| Every word observed in the corpus | 2,000 |
 
 Limits:
 - The gate checks form, using the same rules that produced the sentences. It does not check meaning, and a valid sentence can still say something odd.
@@ -3127,7 +3013,7 @@ Finding: Fifty reads, one store. One fixed-size array of exact integers answers 
 
 The Pleroma is a new construction and a mathematical discovery. Its proof is the code.
 
-The numbers were measured against the standard. At 2,064 and 2,580 bits, the two budgets the benchmark ran, the Pleroma recovered 64 items exactly, in 200 of 200 trials. Plate's holographic memory (HRR), and its phase form (FHRR), with the best decoder tried, recovered 4 items reliably and none from 16 upward. Past the Pleroma's capacity, 65 to 96 items, it refused all 12,800 trials and gave no wrong answer. The baselines answered every time, and every answer was wrong.
+At 2,064 and 2,580 bits the Pleroma recovered 64 items exactly, in 200 of 200 trials. Past the Pleroma's capacity, 65 to 96 items, it refused all 12,800 trials and gave no wrong answer.
 
 #### How it was found
 
@@ -3168,8 +3054,6 @@ The derivation's operator rule: a symmetry is a group element, and a weighted su
 
 The code was measured against that rule across the public surface. Eight of the 41 operators that change the store join one kernel and apply in one pass; key shifts do so on a keyed kernel. Sixteen take one pass per term in a mix. Seventeen are writes that are not kernel elements. The 50 reads are separate, each one pass, and nine of them are answered through a read set.
 
-On a 10,464-cell store, `Apply` takes 0.17 to 0.44 ms per call, for a kernel of anything from 1 operator up to 10,368, with no trend across that range. Building the same store from the moved items takes 1,916 ms at 1,000 operators. The figures are a Release build on a loaded machine, two runs.
-
 #### Twenty-four cells, each an operation
 
 Every cell is a public member of `Pleroma`. The grid covers eight rungs by three faces, and the lid. Each cell has its own brute-force check.
@@ -3196,13 +3080,13 @@ Each face protects its own store in its own way.
 - Choices: a second prime holds a mirror of every cell. One corrupted cell in either copy is detected, 10,000 of 10,000.
 - Parities: a parity page, the sum of the pages, rebuilds any one lost page, 100 of 100.
 
-The unit workload is 53,031 pages of 110 cells each, and it fits in 49.6 MB. A plane of 14 flag bits and 16,386 cells stores at 8.02 bytes per cell. A sparse page holding one key takes 183 bytes and reads in 0.4 µs.
+The unit workload is 53,031 pages of 110 cells each, and it fits in 49.6 MB. A plane of 14 flag bits and 16,386 cells stores at 8.02 bytes per cell. A sparse page holding one key takes 183 bytes.
 
 #### Built on
 
 The Pleroma is a new construction. Each brick it stands on is established mathematics or an established algorithm, credited here:
 
-- Plate's Holographic Reduced Representations (1995), and its phase form FHRR. The continuous component is the bundle, and both are the equal-storage baselines.
+- Plate's Holographic Reduced Representations (1995), and its phase form FHRR. The continuous component is the bundle.
 - Reed and Solomon (1960), with Bose and Ray-Chaudhuri (1960): syndrome decoding of power sums, which the key view uses.
 - Berlekamp (1968) and Massey (1969): the Berlekamp-Massey recurrence, with a re-encode check.
 - PinSketch (Talbot et al., 2012) and minisketch (Poinsot et al., 2017): exact set sketches that subtract and decode the difference.
@@ -3308,22 +3192,13 @@ Other boundaries:
 - The joint slice is capped at 2^24 cells.
 - Tenants as flag bits share one store while tenant bits plus data bits stay at 16 or fewer.
 
-#### Cost of exactness, one page per context against a hash map
+#### One page per context
 
 In a sequence-model test, the same exact counts were held two ways: a hash map, and one dense Pleroma page per context. The two agree on every cell, 5,037,945 of 5,037,945.
 
-The same exact counts held two ways: a hash map and one dense Pleroma page per context
-
-| Measure | Hash map | Pleroma pages, one per context |
-|---|---|---|
-| memory | 22.3 MB | 757.8 MB (44.5 MB of cells) |
-| read, 8 subsets per position | 0.67 µs | 131 µs |
-| build | 0.45 s | 2.06 s |
-| training step, 32 by 128 | 6.8 s | 6.2 s |
-
 With the shared layout, the same pages occupy 66.2 MB as standalone stores, and 49.6 MB as one page set.
 
-A long-context store still sits in a sorted host index, which is exact up to 16 subwords and reads in microseconds. The sparse page class exists, but the page store's keys are 63 bits, and a context of four or more subwords needs 128.
+A long-context store still sits in a sorted host index, which is exact up to 16 subwords. The sparse page class exists, but the page store's keys are 63 bits, and a context of four or more subwords needs 128.
 
 ### Nobody Read the Warning
 

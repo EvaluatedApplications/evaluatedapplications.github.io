@@ -34,14 +34,14 @@ themselves. One pass applies a thousand operators.
 Demo heading: Three items, two operators, one pass. (Step through it, or press Replay. Every number is the real store's.)
 
 Number tiles (value, then plain claim):
-- 0.17 to 0.44 ms: for one pass that applies from 1 to 10,368 operators at once
-- 200 of 200: trials recovering 64 stored items exactly, where Plate's HRR held at least 95 percent only up to 4 items, at the same storage
+- 200 of 200: trials recovering 64 stored items exactly
 - 12,800 of 12,800: reads past capacity answered with a clear no. It never guesses
-- 0.6 ms: to read a whole 3,150-slot page, exactly
+- 300 of 300: rebuilds of lost key harmonics, for each of 1 to 5 lost
+- 10,000 of 10,000: single corrupted cells detected, in either copy
 
-"See the numbers" holds the conditions: store shape, field, run counts, machine, build.
+"See the numbers" holds the conditions: store shape, field, run counts.
 
-What you can build (headings): Database answers in a millisecond. Replicas that sync by their differences.
+What you can build (headings): Database answers from exact counts. Replicas that sync by their differences.
 A store that repairs itself. A memory that reads exactly. Age and reshape everything at once. Any question, one read.
 
 Proof headings (quieter, confident, no hedging): "Count what folds into one pass" (the coverage meter) and

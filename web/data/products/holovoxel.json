@@ -7,15 +7,14 @@
     "mechanismTitle": "Level of detail is how a read works",
     "stats": [
       { "evidence": "holovoxel-lod", "tile": 0 },
-      { "evidence": "holovoxel-lod", "tile": 1 },
-      { "evidence": "holovoxel-lod", "tile": 2 }
+      { "evidence": "holovoxel-lod", "tile": 1 }
     ],
     "numbers": {
       "summary": "See the numbers",
       "items": [
-        { "claim": "98.4 percent correct at the full budget", "text": "One 16 by 16 chunk stored as a single hologram decodes 98.4 percent of its cells correctly with all 8,192 components, which takes 131,072 bytes and 17.0 ms." },
-        { "claim": "341 times less data, 189 times less time", "text": "At 24 components the same chunk reads 384 bytes in 0.09 ms. Accuracy at the smallest budget is 19.5 percent, against 12.5 percent for a random guess among eight blocks: far terrain is a soft blend by design, not a smaller copy of the near one." },
-        { "claim": "Conditions", "text": "One chunk of a fixed procedural world, decoded at ten component budgets and checked cell by cell against the stored block. Decode time is the median of 15 runs after warm-up, on one machine. Hologram size is sixteen bytes per component read." }
+        { "claim": "98.4 percent correct at the full budget", "text": "One 16 by 16 chunk stored as a single hologram decodes 98.4 percent of its cells correctly with all 8,192 components, which takes 131,072 bytes." },
+        { "claim": "341 times less data at the smallest budget", "text": "At 24 components the same chunk reads 384 bytes. Accuracy at the smallest budget is 19.5 percent, against 12.5 percent for a random guess among eight blocks: far terrain is a soft blend by design, not a smaller copy of the near one." },
+        { "claim": "Conditions", "text": "One chunk of a fixed procedural world, decoded at ten component budgets and checked cell by cell against the stored block. Hologram size is sixteen bytes per component read." }
       ]
     },
     "build": {
@@ -47,7 +46,7 @@
     "id": "holovoxel-lod",
     "title": "Detail follows the viewer",
     "stageLabel": "Interactive view of a strip of terrain chunks. Drag, or use the arrow keys to turn and tilt it.",
-    "lede": "A strip of {chunks} terrain chunks, each stored once as a single hologram, is decoded at three budgets. Near the viewer a chunk is read with {nearComps} components and is {nearAcc} percent correct. In the middle band {midComps} components give {midAcc} percent, and far away {farComps} give {farAcc}. The far read takes {farMs} ms and {farBytes} bytes of hologram against {nearMs} ms and {nearBytes} bytes for the near one. Move the viewer and the bands move with it.",
+    "lede": "A strip of {chunks} terrain chunks, each stored once as a single hologram, is decoded at three budgets. Near the viewer a chunk is read with {nearComps} components and is {nearAcc} percent correct. In the middle band {midComps} components give {midAcc} percent, and far away {farComps} give {farAcc}. The far read takes {farBytes} bytes of hologram against {nearBytes} bytes for the near one. Move the viewer and the bands move with it.",
     "caption": "Decoded by running the published EvaluatedApplications.HoloVoxel package (release {version}). The terrain, the colours and the heights are the package's output for one fixed world. The three bands are this scene's choice, and each band's component count comes from Lod.Components. Accuracy is the share of one chunk's cells decoded to the right block, measured at full resolution for each budget."
   },
   "quickstart": {

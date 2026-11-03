@@ -60,30 +60,6 @@ export async function resolveVersions(products, mode = 'auto') {
   return { mode: use, data };
 }
 
-// ---------- evidence: derive counts from the rows, never typed ----------
-export const allTables = (ev) => (ev.sections ? ev.sections.flatMap((s) => s.tables || []) : ev.tables || []);
-function evidenceFacts(ev) {
-  const t = ev.tieBelow ?? 1.15;
-  const facts = {};
-  for (const tb of allTables(ev)) {
-    if (tb.kind === 'matrix') continue;
-    const rows = tb.rows;
-    // Outcome against the named rival engine, from the numbers (a difference under tieBelow is a tie).
-    const outcome = (r) => {
-      const a = Math.max(r.values[tb.rival], 0.005), b = Math.max(r.values[tb.focus], 0.005);
-      return a / b >= t ? 'win' : b / a >= t ? 'loss' : 'tie';
-    };
-    const wins = rows.filter((r) => outcome(r) === 'win').length;
-    const ties = rows.filter((r) => outcome(r) === 'tie').length;
-    const losses = rows.filter((r) => outcome(r) === 'loss').length;
-    // First column is the baseline reference engine (SQLite) when present.
-    const focus = tb.focus;
-    const beatsFirst = rows.filter((r) => r.values[focus] < r.values[0]).length;
-    facts[tb.id] = { total: rows.length, wins, ties, losses, beatsFirst, tieBelow: t };
-  }
-  return facts;
-}
-
 export async function loadAll(opts = {}) {
   const site = readJson(path.join(DATA, 'site.json'));
   const licence = readJson(path.join(DATA, 'licence.json'));
@@ -144,7 +120,6 @@ export async function loadAll(opts = {}) {
 
   const evidence = readDir(path.join(DATA, 'evidence')).map((f) => {
     const e = readJson(path.join(DATA, 'evidence', f));
-    e.facts = evidenceFacts(e);
     return e;
   });
   for (const p of products) p.evidence = evidence.filter((e) => e.product === p.id);

@@ -2,7 +2,7 @@
 // read from these files, which are read from Phasor/docs.
 //   node web/scripts/migrate/extract-superposition.mjs
 // Writes  data/diagrams/pleroma-map.json            the pyramid (rungs, cells, evidence), without the one cell that is not built
-//         data/diagrams/superposition-scene.json    the worked example, the kernel, the one pass and the measured cost
+//         data/diagrams/superposition-scene.json    the worked example, the kernel and the one pass
 //         data/diagrams/coverage-meter.json the coverage meter (headline, class counts, operations of the three scored classes, reads, bricks)
 //         data/generated/phasor-ladder.json         the rungs as a ladder table, parsed from site.md
 import fs from 'node:fs';
@@ -35,24 +35,20 @@ const pyramid = {
 write('diagrams/pleroma-map.json', pyramid);
 
 // ---- the superposition scene: only numbers from the owner's map file ----
-const sp = map.superposition, br = map.diagramBrief, ka = map.measurements.kernelApply;
+const sp = map.superposition, br = map.diagramBrief;
 const stack = br.panels.find((p) => p.id === 'stack'), kern = br.panels.find((p) => p.id === 'kernel'), pass = br.panels.find((p) => p.id === 'pass'), cost = br.panels.find((p) => p.id === 'cost');
 const harm = Number(kern.structure.match(/(\d+) numbers per cell/)[1]);
 const elementsMax = Number(cost.structure.match(/to ([\d,]+) kernel elements/)[1].replace(/,/g, ''));
-const applyRange = cost.applyMs.split(' to ').map(Number);
 const num = (re) => { const m = sp.codeExample.code.match(re); if (!m) throw new Error('shape value not found in the code example: ' + re); return Number(m[1]); };
-const plainMd = fs.readFileSync(path.join(docs, 'pleroma-site.md'), 'utf8');
-if (!/mean of 20 calls after one warm-up/.test(plainMd) || !/random kernels/.test(siteMd)) throw new Error('timing conditions not found in the owner docs');
-const timing = 'Random kernels, the mean of 20 calls after one warm-up.';
 const scene = {
-  schema: 'ea-diagram/1', kind: 'superposition-scene', package: pkg, source: 'Phasor/docs/pleroma-map.json (superposition, kernelJoins, measurements.kernelApply, diagramBrief)',
+  schema: 'ea-diagram/1', kind: 'superposition-scene', package: pkg, source: 'Phasor/docs/pleroma-map.json (superposition, kernelJoins, diagramBrief)',
   shape: { keyCapacity: num(/KeyCapacity = (\d+)/), flagBits: num(/FlagBits = (\d+)/), timePeriod: num(/TimePeriod = (\d+)/) },
   store: { capacity: sp.initialStore.capacity, cellCount: sp.initialStore.cellCount, description: sp.initialStore.description, items: sp.initialStore.items, totalCount: sp.initialStore.totalCount },
   reads: { flags: sp.reads.flagSlice, times: sp.reads.timeSlice },
-  kernel: { elements: sp.operation.kernel, description: sp.operation.description, cost: sp.operation.cost, numbersPerCell: harm, joins: map.kernelJoins.joins, doesNotJoin: map.kernelJoins.doesNotJoin, rule: map.kernelJoins.rule },
+  kernel: { elements: sp.operation.kernel, description: sp.operation.description, numbersPerCell: harm, joins: map.kernelJoins.joins, doesNotJoin: map.kernelJoins.doesNotJoin, rule: map.kernelJoins.rule },
   result: { totalCount: sp.resultCounts.totalCount, description: sp.resultCounts.description, flags: sp.resultCounts.flagCounts, times: sp.resultCounts.timeCounts },
   capacityRule: sp.capacityRule,
-  cost: { applyMs: applyRange, elementsMin: 1, elementsMax, bruteForceMs: cost.bruteForceMs, conditions: ka.description + ' ' + timing, source: ka.source, applyText: ka.applyMs, bruteText: ka.bruteForceMs },
+  scale: { elementsMin: 1, elementsMax },
   code: sp.codeExample.code,
 };
 write('diagrams/superposition-scene.json', scene);

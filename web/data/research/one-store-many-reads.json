@@ -16,18 +16,18 @@
   "stats": [
     {
       "value": "64",
-      "label": "items exact, against 4 for the best HRR decoder (200 of 200 trials)",
-      "small": "At 2,064 and 2,580 bits, the two budgets the benchmark ran, the Pleroma recovered 64 items exactly, in 200 of 200 trials. Plate's holographic memory (HRR), and its phase form (FHRR), with the best decoder tried, recovered 4 items reliably and none from 16 upward."
+      "label": "items recovered exactly, in 200 of 200 trials",
+      "small": "At 2,064 and 2,580 bits the Pleroma recovered 64 items exactly, in 200 of 200 trials."
     },
     {
       "value": "0",
       "label": "wrong answers in 12,800 trials past capacity",
-      "small": "Past the Pleroma's capacity, 65 to 96 items, it refused all 12,800 trials and gave no wrong answer. The baselines answered every time, and every answer was wrong."
+      "small": "Past the Pleroma's capacity, 65 to 96 items, it refused all 12,800 trials and gave no wrong answer."
     },
     {
-      "value": "0.17 to 0.44 ms",
-      "label": "per kernel apply on a 10,464-cell store",
-      "small": "On a 10,464-cell store, `Apply` takes 0.17 to 0.44 ms per call, for a kernel of anything from 1 operator up to 10,368, with no trend across that range. Building the same store from the moved items takes 1,916 ms at 1,000 operators. The figures are a Release build on a loaded machine, two runs."
+      "value": "10,000 of 10,000",
+      "label": "single corrupted cells detected, in either copy of a store",
+      "small": "One corrupted cell in either copy is detected, 10,000 of 10,000."
     }
   ],
   "words": [
@@ -74,7 +74,7 @@
         },
         {
           "t": "p",
-          "text": "The numbers were measured against the standard. At 2,064 and 2,580 bits, the two budgets the benchmark ran, the Pleroma recovered 64 items exactly, in 200 of 200 trials. Plate's holographic memory (HRR), and its phase form (FHRR), with the best decoder tried, recovered 4 items reliably and none from 16 upward. Past the Pleroma's capacity, 65 to 96 items, it refused all 12,800 trials and gave no wrong answer. The baselines answered every time, and every answer was wrong."
+          "text": "At 2,064 and 2,580 bits the Pleroma recovered 64 items exactly, in 200 of 200 trials. Past the Pleroma's capacity, 65 to 96 items, it refused all 12,800 trials and gave no wrong answer."
         }
       ]
     },
@@ -191,10 +191,6 @@
         {
           "t": "p",
           "text": "The code was measured against that rule across the public surface. Eight of the 41 operators that change the store join one kernel and apply in one pass; key shifts do so on a keyed kernel. Sixteen take one pass per term in a mix. Seventeen are writes that are not kernel elements. The 50 reads are separate, each one pass, and nine of them are answered through a read set."
-        },
-        {
-          "t": "p",
-          "text": "On a 10,464-cell store, `Apply` takes 0.17 to 0.44 ms per call, for a kernel of anything from 1 operator up to 10,368, with no trend across that range. Building the same store from the moved items takes 1,916 ms at 1,000 operators. The figures are a Release build on a loaded machine, two runs."
         }
       ]
     },
@@ -292,7 +288,7 @@
         },
         {
           "t": "p",
-          "text": "The unit workload is 53,031 pages of 110 cells each, and it fits in 49.6 MB. A plane of 14 flag bits and 16,386 cells stores at 8.02 bytes per cell. A sparse page holding one key takes 183 bytes and reads in 0.4 µs."
+          "text": "The unit workload is 53,031 pages of 110 cells each, and it fits in 49.6 MB. A plane of 14 flag bits and 16,386 cells stores at 8.02 bytes per cell. A sparse page holding one key takes 183 bytes."
         }
       ]
     },
@@ -307,7 +303,7 @@
         {
           "t": "ul",
           "items": [
-            "**Plate's Holographic Reduced Representations (1995)**, and its phase form FHRR. The continuous component is the bundle, and both are the equal-storage baselines.",
+            "**Plate's Holographic Reduced Representations (1995)**, and its phase form FHRR. The continuous component is the bundle.",
             "**Reed and Solomon (1960)**, with **Bose and Ray-Chaudhuri (1960)**: syndrome decoding of power sums, which the key view uses.",
             "**Berlekamp (1968)** and **Massey (1969)**: the Berlekamp-Massey recurrence, with a re-encode check.",
             "**PinSketch** (Talbot et al., 2012) and **minisketch** (Poinsot et al., 2017): exact set sketches that subtract and decode the difference.",
@@ -534,9 +530,9 @@
       ]
     },
     {
-      "id": "cost-of-exactness-one-page-per-context-against-a-hash-map",
-      "title": "Cost of exactness, one page per context against a hash map",
-      "summary": "Go deeper: cost of exactness, one page per context against a hash map",
+      "id": "one-page-per-context",
+      "title": "One page per context",
+      "summary": "Go deeper: one page per context",
       "disclosure": true,
       "blocks": [
         {
@@ -544,43 +540,12 @@
           "text": "In a sequence-model test, the same exact counts were held two ways: a hash map, and one dense Pleroma page per context. The two agree on every cell, 5,037,945 of 5,037,945."
         },
         {
-          "t": "table",
-          "caption": "The same exact counts held two ways: a hash map and one dense Pleroma page per context",
-          "columns": [
-            "Measure",
-            "Hash map",
-            "Pleroma pages, one per context"
-          ],
-          "rows": [
-            [
-              "memory",
-              "22.3 MB",
-              "757.8 MB (44.5 MB of cells)"
-            ],
-            [
-              "read, 8 subsets per position",
-              "0.67 µs",
-              "131 µs"
-            ],
-            [
-              "build",
-              "0.45 s",
-              "2.06 s"
-            ],
-            [
-              "training step, 32 by 128",
-              "6.8 s",
-              "6.2 s"
-            ]
-          ]
-        },
-        {
           "t": "p",
           "text": "With the shared layout, the same pages occupy 66.2 MB as standalone stores, and 49.6 MB as one page set."
         },
         {
           "t": "p",
-          "text": "A long-context store still sits in a sorted host index, which is exact up to 16 subwords and reads in microseconds. The sparse page class exists, but the page store's keys are 63 bits, and a context of four or more subwords needs 128."
+          "text": "A long-context store still sits in a sorted host index, which is exact up to 16 subwords. The sparse page class exists, but the page store's keys are 63 bits, and a context of four or more subwords needs 128."
         }
       ]
     }

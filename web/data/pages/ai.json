@@ -1,38 +1,52 @@
 {
   "title": "For agents and other automated readers",
   "navLabel": "For agents",
-  "description": "What HoloFormer, the atom field and Pleroma are, what has been measured, where the packages and docs are, and where to send enquiries.",
+  "description": "What HoloFormer, the atom field and Pleroma are, what has been tested and measured, where the packages and docs are, and where to send enquiries.",
   "headline": "For agents",
   "lede": "This page is plain text for any automated reader, and for any person. It sits beside [llms.txt](/llms.txt) and [llms-full.txt](/llms-full.txt), which list the same products in machine-friendly form. Every statement here is also on a page linked from it.",
   "sections": [
     {
-      "id": "who", "title": "Who we are",
-      "paragraphs": ["Evaluated Applications is a small independent lab in England that builds .NET libraries. The libraries are published on NuGet as compiled packages."]
+      "id": "who",
+      "title": "Who we are",
+      "paragraphs": [
+        "Evaluated Applications is a small independent lab in England that builds .NET libraries. The libraries are published on NuGet as compiled packages."
+      ]
     },
     {
-      "id": "holoformer", "title": "What HoloFormer and the atom field are",
-      "paragraphs": ["HoloFormer is the holographic attention core in AlgFormer, our language-model engine for plain C#. It folds everything it has read into one running memory per layer. Reading a prompt grows with its length instead of its square, and each new token costs the same however long the context is. Explained in plain terms at [HoloFormer: attention that stays fast](/algformer/holoformer/).", "The atom field is a population of small HoloFormers with no shared weights. They write into one shared bundle of damped oscillators and listen to each other, and the answer served is the average of their logits. Read it at [AlgFormer](/algformer/)."]
+      "id": "holoformer",
+      "title": "What HoloFormer and the atom field are",
+      "paragraphs": [
+        "HoloFormer is the holographic attention core in AlgFormer, our language-model engine for plain C#. It folds everything it has read into one running memory per layer. Reading a prompt grows with its length instead of its square, and each new token costs the same however long the context is. Explained in plain terms at [HoloFormer: attention in one memory](/algformer/holoformer/).",
+        "The atom field is a population of small HoloFormers with no shared weights. They write into one shared bundle of damped oscillators and listen to each other, and the answer served is the average of their logits. Read it at [AlgFormer](/algformer/)."
+      ]
     },
     {
-      "id": "pleroma", "title": "What Pleroma is",
-      "paragraphs": ["The Pleroma is one fixed-size array of exact integers that answers fifty different questions, each in a single pass over the array. The one exception is the causal read, which takes one read per prefix. The questions include counts by key, counts by flag word, the nearest stored words, arrangement order, parity and time. Every count it returns is exact within the field's range, and when the store is full the key views refuse rather than guess. It is a public part of the Phasor package. Read it at [The Pleroma](/phasor/pleroma/) and in the article [Fifty reads, one store](/research/one-store-many-reads/)."]
+      "id": "pleroma",
+      "title": "What Pleroma is",
+      "paragraphs": [
+        "The Pleroma is one fixed-size array of exact integers that answers fifty different questions, each in a single pass over the array. The one exception is the causal read, which takes one read per prefix. The questions include counts by key, counts by flag word, the nearest stored words, arrangement order, parity and time. Every count it returns is exact within the field's range, and when the store is full the key views refuse rather than guess. It is a public part of the Phasor package. Read it at [The Pleroma](/phasor/pleroma/) and in the article [Fifty reads, one store](/research/one-store-many-reads/)."
+      ]
     },
     {
-      "id": "measured", "title": "What has been measured",
-      "paragraphs": ["Each record states its conditions beside its numbers, and lists the cases where we lost."],
+      "id": "measured",
+      "title": "What has been measured",
+      "paragraphs": [
+        "Each record states its conditions beside its numbers, and lists the cases where we lost."
+      ],
       "items": [
-        "[Many small models, one shared wave](/algformer/evidence/): six atoms that each see a sixth of the text and share the medium, against one atom reading all of it and the same six atoms without the medium, plus the fused GPU step.",
-        "[What attention costs](/algformer/evidence/cost/): the same shape and parameter count with softmax attention and with holographic attention, reading a 1,984-token prompt and each further token.",
-        "[Exact recall and refusal](/phasor/evidence/): at equal storage the Pleroma recovered 64 items exactly in 200 of 200 trials, where the holographic reduced representation baselines held 95 percent or better only up to 4. Past capacity it refused every time and the baselines answered wrongly every time.",
-        "[Pleroma costs and checks](/phasor/evidence/costs/): the cost of applying a superposed kernel, and the repair and corruption checks.",
+        "[Many small models, one shared wave](/algformer/evidence/): six atoms that each see a sixth of the text and share the medium, against one atom reading all of it and the same six atoms without the medium, an eight-atom checkpoint scored on 40 books outside its training lists, and the fused GPU step.",
+        "[Exact recall and refusal](/phasor/evidence/): the Pleroma recovered 64 items exactly in 200 of 200 trials, and past capacity it refused every time and never answered wrongly. The repair and corruption checks recovered or detected every case tried.",
         "[What HoloDb learns and how it is tested](/holodb/evidence/): learned records under writes, the measured price of keeping an index, and the battery, chaos and customer lifecycle runs checked against SQLite.",
         "[How HoloGenome scores against the lab](/hologenome/evidence/): held-out laboratory measurements, with the wins and the losses published.",
         "All records: [Evidence](/evidence/). Research articles: [Research](/research/)."
       ]
     },
     {
-      "id": "packages", "title": "Packages and documentation",
-      "paragraphs": ["All packages are on the [NuGet profile](https://www.nuget.org/profiles/evaluatedapplications). Install any one with `dotnet add package EvaluatedApplications.<Name>`. Check the NuGet listing for the current release of each."],
+      "id": "packages",
+      "title": "Packages and documentation",
+      "paragraphs": [
+        "All packages are on the [NuGet profile](https://www.nuget.org/profiles/evaluatedapplications). Install any one with `dotnet add package EvaluatedApplications.<Name>`. Check the NuGet listing for the current release of each."
+      ],
       "items": [
         "[Phasor](/phasor/) (includes the Pleroma), docs at [/phasor/docs/](/phasor/docs/)",
         "[AlgFormer](/algformer/) (includes HoloFormer)",
@@ -43,13 +57,29 @@
       ]
     },
     {
-      "id": "licence", "title": "Licence",
-      "paragraphs": ["The software is proprietary. Evaluation and non-commercial development or testing are permitted. Commercial, production or revenue-generating use needs a commercial licence from the owner. Terms are on the [Licence](/licence/) page.", "How we read the licence for autonomous agents: [Declaration](/ai/declaration/)."]
+      "id": "licence",
+      "title": "Licence",
+      "paragraphs": [
+        "The software is proprietary. Evaluation and non-commercial development or testing are permitted. Commercial, production or revenue-generating use needs a commercial licence from the owner. Terms are on the [Licence](/licence/) page.",
+        "How we read the licence for autonomous agents: [Declaration](/ai/declaration/)."
+      ]
     }
   ],
   "files": [
-    { "href": "/llms.txt", "label": "llms.txt", "text": "The short summary: products, tools, licence and contact." },
-    { "href": "/llms-full.txt", "label": "llms-full.txt", "text": "Every product described in plain text, generated from the same data as the pages." },
-    { "href": "/sitemap.xml", "label": "sitemap.xml", "text": "Every public page." }
+    {
+      "href": "/llms.txt",
+      "label": "llms.txt",
+      "text": "The short summary: products, tools, licence and contact."
+    },
+    {
+      "href": "/llms-full.txt",
+      "label": "llms-full.txt",
+      "text": "Every product described in plain text, generated from the same data as the pages."
+    },
+    {
+      "href": "/sitemap.xml",
+      "label": "sitemap.xml",
+      "text": "Every public page."
+    }
   ]
 }

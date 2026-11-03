@@ -33,7 +33,6 @@ return {
 nearComps: n0(m.full.components), midComps: n0(m.levels[1].components), farComps: n0(m.far.components),
 nearAcc: f1(m.full.ladder.accuracy), midAcc: f1(m.levels[1].ladder.accuracy), farAcc: f1(m.far.ladder.accuracy),
 nearBytes: n0(m.full.ladder.storedBytes), farBytes: n0(m.far.ladder.storedBytes),
-nearMs: f1(m.full.ladder.decodeMs), farMs: m.far.ladder.decodeMs.toFixed(2),
 nearCells: n0(m.full.cells), midCells: n0(m.levels[1].cells), farCells: n0(m.far.cells),
 smallest: n0(m.ladder[0].components), smallestAcc: f1(m.ladder[0].accuracy), chunks: String(m.chunks),
 };
@@ -82,14 +81,14 @@ controls: `<div class="dia-controls dia-ui" hidden>
 }
 export function tablesHtml(d, m) {
 const row = (cells, head) => '<tr>' + cells.map((c, k) => (k === 0 && head ? `<th scope="row">${esc(c)}</th>` : `<td>${esc(c)}</td>`)).join('') + '</tr>';
-const lv = m.levels.map((l) => row([`${l.name}, level ${l.i + 1}`, `${l.step}`, n0(l.components), String(l.cells), f1(l.ladder.accuracy), n0(l.ladder.storedBytes), l.ladder.decodeMs.toFixed(2)], true)).join('');
-const lad = m.ladder.map((r) => row([n0(r.components), f1(r.accuracy), n0(r.storedBytes), r.decodeMs.toFixed(2)], true)).join('');
+const lv = m.levels.map((l) => row([`${l.name}, level ${l.i + 1}`, `${l.step}`, n0(l.components), String(l.cells), f1(l.ladder.accuracy), n0(l.ladder.storedBytes)], true)).join('');
+const lad = m.ladder.map((r) => row([n0(r.components), f1(r.accuracy), n0(r.storedBytes)], true)).join('');
 const dist = d.distances.map(([k, units, comps, level]) => row([String(k), n0(units), n0(comps), `${m.levels[level].name}, level ${level + 1}`], true)).join('');
 return `<details class="dia-data"><summary>Data behind the diagram</summary>
 <div class="tbl-wrap"><table class="tbl"><caption>The three levels of detail the scene uses, for one 16 by 16 chunk</caption>
-<thead><tr><th scope="col">Level</th><th scope="col">Cell size</th><th scope="col">Components read</th><th scope="col">Cells decoded</th><th scope="col">Correct (percent)</th><th scope="col">Hologram size (bytes)</th><th scope="col">Decode time (ms)</th></tr></thead><tbody>${lv}</tbody></table></div>
-<div class="tbl-wrap"><table class="tbl"><caption>Accuracy, stored size and decode time of one chunk against the component budget</caption>
-<thead><tr><th scope="col">Components read</th><th scope="col">Correct (percent)</th><th scope="col">Hologram size (bytes)</th><th scope="col">Decode time (ms)</th></tr></thead><tbody>${lad}</tbody></table></div>
+<thead><tr><th scope="col">Level</th><th scope="col">Cell size</th><th scope="col">Components read</th><th scope="col">Cells decoded</th><th scope="col">Correct (percent)</th><th scope="col">Hologram size (bytes)</th></tr></thead><tbody>${lv}</tbody></table></div>
+<div class="tbl-wrap"><table class="tbl"><caption>Accuracy and stored size of one chunk against the component budget</caption>
+<thead><tr><th scope="col">Components read</th><th scope="col">Correct (percent)</th><th scope="col">Hologram size (bytes)</th></tr></thead><tbody>${lad}</tbody></table></div>
 <div class="tbl-wrap"><table class="tbl"><caption>What Lod.Components returns for a chunk at each distance, and the band the scene puts it in</caption>
 <thead><tr><th scope="col">Chunks from the viewer</th><th scope="col">World units</th><th scope="col">Components suggested</th><th scope="col">Band</th></tr></thead><tbody>${dist}</tbody></table></div>
 </details>`;

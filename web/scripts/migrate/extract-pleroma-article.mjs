@@ -13,26 +13,35 @@ import { MONOREPO, DATA } from '../lib/data.mjs';
 
 const SRC = path.join(MONOREPO, 'Phasor', 'docs', 'pleroma-article.md');
 
-// wording changes needed to render (each is reported by the build notes; none changes a claim)
+// wording changes needed to render (each is reported by the build notes). The site carries no benchmark, race against another method or
+// timing figure, so those sentences, the timing table and their tiles are cut here; a regular expression cuts a span.
 const EDITS = [
   ['In a sequence-model prototype, the same exact counts', 'In a sequence-model test, the same exact counts'],
+  [/The numbers were measured against the standard\. At 2,064 and 2,580 bits, the two budgets the benchmark ran, the Pleroma recovered/, 'At 2,064 and 2,580 bits the Pleroma recovered'],
+  [/ Plate's holographic memory \(HRR\), and its phase form \(FHRR\), with the best decoder tried, recovered 4 items reliably and none from 16 upward\./, ''],
+  [/ The baselines answered every time, and every answer was wrong\./, ''],
+  [/\nOn a 10,464-cell store, `Apply` takes [^\n]*\n/, '\n'],
+  [/ and reads in 0\.4 [^\s]*s\./, '.'],
+  [', and both are the equal-storage baselines.', '.'],
+  [' which is exact up to 16 subwords and reads in microseconds.', ' which is exact up to 16 subwords.'],
+  ['## Go deeper: cost of exactness, one page per context against a hash map', '## Go deeper: one page per context'],
+  [/\n\| Measure \| Hash map[^\n]*\n(\|[^\n]*\n)+/, '\n'],
 ];
 const CAPTIONS = [
   'The ladder: eight rungs, each read across three faces',
   'The 24 cells: the public member for each rung and face, and the lid',
   'Where the map\'s statement and the code were checked against each other',
-  'The same exact counts held two ways: a hash map and one dense Pleroma page per context',
 ];
 const TOPICS = ['exact stores', 'Pleroma'];
 const SUB = 'One fixed-size array of exact integers. Counts, order, parity, time and nearest words, each in a single pass. When it is full, it refuses instead of guessing.';
 // tiles: value and label as the user approved them; `small` is quoted from the article and must appear in it verbatim
 const TILES = [
-  { value: '64', label: 'items exact, against 4 for the best HRR decoder (200 of 200 trials)',
-    small: "At 2,064 and 2,580 bits, the two budgets the benchmark ran, the Pleroma recovered 64 items exactly, in 200 of 200 trials. Plate's holographic memory (HRR), and its phase form (FHRR), with the best decoder tried, recovered 4 items reliably and none from 16 upward." },
+  { value: '64', label: 'items recovered exactly, in 200 of 200 trials',
+    small: 'At 2,064 and 2,580 bits the Pleroma recovered 64 items exactly, in 200 of 200 trials.' },
   { value: '0', label: 'wrong answers in 12,800 trials past capacity',
-    small: "Past the Pleroma's capacity, 65 to 96 items, it refused all 12,800 trials and gave no wrong answer. The baselines answered every time, and every answer was wrong." },
-  { value: '0.17 to 0.44 ms', label: 'per kernel apply on a 10,464-cell store',
-    small: 'On a 10,464-cell store, `Apply` takes 0.17 to 0.44 ms per call, for a kernel of anything from 1 operator up to 10,368, with no trend across that range. Building the same store from the moved items takes 1,916 ms at 1,000 operators. The figures are a Release build on a loaded machine, two runs.' },
+    small: "Past the Pleroma's capacity, 65 to 96 items, it refused all 12,800 trials and gave no wrong answer." },
+  { value: '10,000 of 10,000', label: 'single corrupted cells detected, in either copy of a store',
+    small: 'One corrupted cell in either copy is detected, 10,000 of 10,000.' },
 ];
 const CLOSING_LINKS = [{ label: 'Install the Phasor package', href: '/phasor/' }, { label: 'Walk the grid on the Pleroma page', href: '/phasor/pleroma/' }, { label: 'Partner with us', href: '/partner/' }];
 
@@ -53,13 +62,13 @@ src = src.slice(0, si);
 if (/Not cited/.test(src)) throw new Error('a "Not cited" line is left in the text');
 src = src.replace(/\s*(?:\[\d+\])+(?=\s|$)/g, '');
 if (/\[\d+\]/.test(src)) throw new Error('a bracketed reference marker is left in the text');
-for (const [from, to] of EDITS) { if (!src.includes(from)) throw new Error('edit target not found: ' + from); src = src.replace(from, to); }
+for (const [from, to] of EDITS) { if (from instanceof RegExp ? !from.test(src) : !src.includes(from)) throw new Error('edit target not found: ' + from); src = src.replace(from, to); }
 
 const flat = src.replace(/\s+/g, ' ');
 const text = (s) => s.replace(/\s+/g, ' ');
 for (const t of TILES) if (!text(flat).includes(text(t.small))) throw new Error('tile small print is not in the article: ' + t.small.slice(0, 60));
 // tile figures must be present in their own small print (the label may restate them)
-const must = [['64', 0], ['200 of 200', 0], ['12,800', 1], ['0.17 to 0.44', 2], ['10,464', 2]];
+const must = [['64', 0], ['200 of 200', 0], ['12,800', 1], ['10,000 of 10,000', 2]];
 for (const [f, i] of must) if (!TILES[i].small.includes(f)) throw new Error(`tile ${i} figure "${f}" is not in its small print`);
 
 const chunks = src.split(/\n{2,}/).map((c) => c.trim()).filter(Boolean);
@@ -160,4 +169,4 @@ for (const f of fs.readdirSync(path.join(DATA, 'research'))) {
   if (o.voice === 'owner-authored' && o.diagram && o.diagram.kind === 'pleroma-grid') { fs.rmSync(path.join(DATA, 'research', f)); console.log('removed the earlier file for this article:', f); }
 }
 console.log('wrote', path.relative(DATA, OUTF), fs.statSync(OUTF).size, 'bytes;', sections.length, 'sections (' + sections.filter((s) => s.disclosure).length + ' go-deeper), ' + words.length + ' words, ' + ti.n + ' tables');
-console.log('wording edits applied:', EDITS.map((e) => `"${e[0]}" -> "${e[1]}"`).join('; '));
+console.log('wording edits applied:', EDITS.length);

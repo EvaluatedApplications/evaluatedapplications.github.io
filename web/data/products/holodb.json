@@ -17,7 +17,7 @@
         { "claim": "Learned records under writes", "text": "After a stream of single-row UPDATEs and DELETEs over six learned scatter predicates on 1,000,000 rows, the next sweep reads 6 blocks with records that adjust, against 60 and 51 blocks when updates drop them. After consolidation it reads 6 blocks against 366. All counts, sums and zones were verified exact against the cells in every phase." },
         { "claim": "Upkeep priced from measured cost", "text": "On a mixed stream of 1,200 delete-or-update pairs each followed by a sorted count, the index with measured upkeep stayed built and read 0 blocks, using 49,306 to 54,106 page pins in all, against 1,158,839 pins when the structure was dropped at the 256th write and rebuilt by scans." },
         { "claim": "Crash recovery against SQLite", "text": "Across 8 archived customer runs and 158 sessions the customer lifecycle test compared 249 million rows against SQLite, ran 8,267 SELECTs and 1,129 checked DML statements, and recovered 46 times after a kill or a cut: 37 times to the state before the interrupted write, 9 times to the state after, and none to a state between them." },
-        { "claim": "Counts are exact, times are informational", "text": "Blocks, pins, runs and bytes are exact counts. Wall times were taken on a shared machine and are informational." }
+        { "claim": "Counts are exact", "text": "Blocks, pins, runs and bytes are exact counts. A pin is one page read through the buffer pool, and counts of pins stand in for time." }
       ]
     },
     "figures": [
@@ -79,7 +79,7 @@
     { "title": "Integration", "text": "services.AddHoloDb() for dependency injection, and an EvalApp context for pipelines." }
   ],
   "limits": [
-    "Scale: the correctness suites run to 3,000,000 rows in both pipeline modes. Larger tables work, and the benchmark runs to 100,000,000 rows, but the lifecycle and crash guarantees are tested at 3,000,000.",
+    "Scale: the correctness suites run to 3,000,000 rows in both pipeline modes. Larger tables work, but the lifecycle and crash guarantees are tested at 3,000,000.",
     "Writers: one. Reads run in parallel and lock-free for simple selects; writes, DDL and transactions take one lock at a time.",
     "Joins: INNER JOIN only. A paged table takes one join per statement; in-memory tables take several. A join on a paged table with NULL columns is refused by name.",
     "SQL not offered: UNION, window functions, subqueries other than IN (SELECT ...), table aliases, DROP COLUMN and column rename. UPDATE ... SET takes a literal on its right side.",

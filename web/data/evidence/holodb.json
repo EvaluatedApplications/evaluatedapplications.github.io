@@ -7,10 +7,22 @@
   "description": "Learned records under writes read 6 blocks against 60 and 51. Across 158 sessions HoloDb matched SQLite on 249 million rows and recovered 46 times.",
   "claim": "After single-row updates and deletes the next sweep reads 6 blocks with learned records that adjust, against 60 and 51 when updates drop them, and 6 against 366 after consolidation. A wrong answer is the one failure a database cannot afford, so the tests try to make HoloDb wrong: across 8 customer runs and 158 sessions it compared 249 million rows against SQLite and recovered 46 times after a kill or a power cut, 37 times to the state before the interrupted write, 9 times to the state after, and never to a state between.",
   "headline": [
-    { "value": "6 against 60 and 51", "label": "blocks read by the next sweep after single-row updates and deletes, with learned records that adjust against records dropped on write, on 1,000,000 rows" },
-    { "value": "61 times", "label": "fewer blocks read after consolidation: 6 against 366" },
-    { "value": "249 million rows", "label": "compared against SQLite across 8 customer runs and 158 sessions, with the database opened again after every session" },
-    { "value": "0 of 46", "label": "recoveries after a kill or a power cut ended between the state before and the state after: 37 to before, 9 to after" }
+    {
+      "value": "6 against 60 and 51",
+      "label": "blocks read by the next sweep after single-row updates and deletes, with learned records that adjust against records dropped on write, on 1,000,000 rows"
+    },
+    {
+      "value": "61 times",
+      "label": "fewer blocks read after consolidation: 6 against 366"
+    },
+    {
+      "value": "249 million rows",
+      "label": "compared against SQLite across 8 customer runs and 158 sessions, with the database opened again after every session"
+    },
+    {
+      "value": "0 of 46",
+      "label": "recoveries after a kill or a power cut ended between the state before and the state after: 37 to before, 9 to after"
+    }
   ],
   "lossTitle": "What it costs",
   "losses": [
@@ -25,7 +37,7 @@
       "SQLite as the oracle for every answer, the full row set and the table seal"
     ],
     "verification": "Every SELECT, the full row set and the table seal are compared with SQLite, and the database is opened again after every session. Every check has a mutant arm that breaks the engine on purpose, and the check must go red for the right reason.",
-    "statistic": "Counts of blocks, pins, runs and bytes are exact. Times are informational.",
+    "statistic": "Counts of blocks, pins, runs and bytes are exact.",
     "machine": "11th Gen Intel Core i9-11950H (8 cores, 16 threads), NVMe, Windows 11, shared with another job during the battery and customer runs.",
     "memory": "Three terms recur. A block is a run of rows stored together. A page is 8 KB of file. A pin is one page read through the buffer pool, and counts of pins stand in for time."
   },
@@ -33,25 +45,58 @@
     {
       "id": "learns",
       "title": "What the engine learns",
-      "intro": [ "Each row below compares the engine with a mechanism turned off, on the same stream. Every answer stayed exact." ],
+      "intro": [
+        "Each row below compares the engine with a mechanism turned off, on the same stream. Every answer stayed exact."
+      ],
       "tables": [
         {
-          "id": "learned", "kind": "matrix", "caption": "Learned records, upkeep and gather",
-          "columns": ["Measurement", "Result"],
+          "id": "learned",
+          "kind": "matrix",
+          "caption": "Learned records, upkeep and gather",
+          "columns": [
+            "Measurement",
+            "Result"
+          ],
           "rows": [
-            ["Learned records under writes", "After a stream of single-row UPDATEs and DELETEs over six learned scatter predicates on 1,000,000 rows, the next sweep reads 6 blocks with records that adjust, against 60 and 51 blocks when updates drop them: 8.5 to 10 times fewer. After consolidation it reads 6 blocks against 366: 61 times fewer. All counts, sums and zones were verified exact against the cells in every phase."],
-            ["Upkeep priced from measured cost", "On a mixed stream of 1,200 delete-or-update pairs each followed by a sorted count, the index with measured upkeep stayed built and read 0 blocks, using 49,306 to 54,106 page pins in all, against 1,158,839 pins when the structure was dropped at the 256th write and rebuilt by scans. That is 21 to 24 times fewer."],
-            ["Gather priced from measured waste", "On a repeated sum that the stored records answer, gather moves 0 rows, and in the repeat phases it reads the same 12 blocks as with gather off; the learning phase reads 390. Where scans do read the excess (a selective scatter over 20,000 rows, sums off) it cuts the blocks read per round from 288 to 30. A one-time regroup can reach a similar layout without gather."]
+            [
+              "Learned records under writes",
+              "After a stream of single-row UPDATEs and DELETEs over six learned scatter predicates on 1,000,000 rows, the next sweep reads 6 blocks with records that adjust, against 60 and 51 blocks when updates drop them: 8.5 to 10 times fewer. After consolidation it reads 6 blocks against 366: 61 times fewer. All counts, sums and zones were verified exact against the cells in every phase."
+            ],
+            [
+              "Upkeep priced from measured cost",
+              "On a mixed stream of 1,200 delete-or-update pairs each followed by a sorted count, the index with measured upkeep stayed built and read 0 blocks, using 49,306 to 54,106 page pins in all, against 1,158,839 pins when the structure was dropped at the 256th write and rebuilt by scans. That is 21 to 24 times fewer."
+            ],
+            [
+              "Gather priced from measured waste",
+              "On a repeated sum that the stored records answer, gather moves 0 rows, and in the repeat phases it reads the same 12 blocks as with gather off; the learning phase reads 390. Where scans do read the excess (a selective scatter over 20,000 rows, sums off) it cuts the blocks read per round from 288 to 30. A one-time regroup can reach a similar layout without gather."
+            ]
           ]
         },
         {
-          "id": "runs", "kind": "matrix", "caption": "Customer lifecycle runs: layout, NULL path and ring file",
-          "columns": ["Run", "Result"],
+          "id": "runs",
+          "kind": "matrix",
+          "caption": "Customer lifecycle runs: layout, NULL path and ring file",
+          "columns": [
+            "Run",
+            "Result"
+          ],
           "rows": [
-            ["Retention deletes, 3.1 million rows", "The log customer grew to 3,097,444 rows over 25 sessions with 8.2 percent dead slots. The map that turns a row id into a row position held 5,117 to 15,174 runs. A plain pairing order (highest live row to lowest hole) leaves 115,118 runs on the same kind of table. The database opened in 148 to 547 ms."],
-            ["Wide table with NULLs, 3.2 million rows", "9 sessions to 3,205,807 rows, 0 failures, 0 check faults, 0 runs in the id map, session opens of 3 to 410 ms, a first cold open of 452 ms and then 64 and 68 ms, about 103 bytes per row, and a peak working set of 4.6 GB. The null path reads only the columns a statement names."],
-            ["Null path cost", "A seven-query dashboard pass on nullable columns costs 0.44 page pins per row at 100,000, 300,000 and 1,000,000 rows. A point read of one row costs 103 to 115 pins."],
-            ["Ring file", "The write-ahead ring is sized from the largest batch of the last window. One wide statement pinned it at 8.5 MB; after a clean close and reopen it is 41 KB."]
+            [
+              "Retention deletes, 3.1 million rows",
+              "The log customer grew to 3,097,444 rows over 25 sessions with 8.2 percent dead slots. The map that turns a row id into a row position held 5,117 to 15,174 runs. A plain pairing order (highest live row to lowest hole) leaves 115,118 runs on the same kind of table."
+            ],
+            [
+              "Wide table with NULLs, 3.2 million rows",
+              "9 sessions to 3,205,807 rows, 0 failures, 0 check faults, 0 runs in the id map, about 103 bytes per row, and a peak working set of 4.6 GB. The null path reads only the columns a statement names."
+            ],
+            [
+              "Null path cost",
+              "A seven-query dashboard pass on nullable columns costs 0.44 page pins per row at 100,000, 300,000 and 1,000,000 rows. A point read of one row costs 103 to 115 pins."
+            ],
+            [
+              "Ring file",
+              "The write-ahead ring is sized from the largest batch of the last window. One wide statement pinned it at 8.5 MB; after a clean close and reopen it is 41 KB."
+            ]
           ]
         }
       ]
@@ -59,16 +104,40 @@
     {
       "id": "tested",
       "title": "What we test",
-      "intro": [ "A wrong answer is the one failure a database cannot afford, so the tests try to make HoloDb wrong and report the first time it is." ],
+      "intro": [
+        "A wrong answer is the one failure a database cannot afford, so the tests try to make HoloDb wrong and report the first time it is."
+      ],
       "tables": [
         {
-          "id": "tests", "kind": "matrix", "caption": "The four kinds of test",
-          "columns": ["Test", "What it does", "Result"],
+          "id": "tests",
+          "kind": "matrix",
+          "caption": "The four kinds of test",
+          "columns": [
+            "Test",
+            "What it does",
+            "Result"
+          ],
           "rows": [
-            ["The battery", "56 specs per mode, run in both pipeline modes: the block pipeline, which reads and learns from blocks, and the analytic executor, which answers from exact totals. A spec covers one area: NULL logic, the block map, crash points, the history log, AS OF, the sorted index, the keyed summary, the tree, learned records, gather, placement, routes, transactions and their undo, the budget, and randomized streams. Several specs run at 3,000,000 rows.", "Mode 1 passed all 56 (one spec failed once at a reopen after a simulated crash and passed on three further runs). Mode 2 passed 55 of 56; the 56th is a timing bound and was not run while the machine was loaded."],
-            ["Red arms", "Every check has a mutant arm that breaks the engine on purpose (an update that leaves a stale sum, a move that forgets a zone, a log that drops a record) and the check must go red for the right reason.", "The battery holds 276 arm runs in mode 1 and 275 in mode 2; 256 and 237 are detected. The rest are listed by name with their reason: an arm that lives in the other pipeline, an arm that by design changes no answer, or an arm that belongs to a different spec."],
-            ["Chaos runs", "chaos2 generates random SQL streams over a paged table: SELECT with filters, grouping, joins and top-k, INSERT, UPDATE, DELETE, transactions with rollback, ALTER, index DDL, reopen, power loss, a power cut at the nth durable write inside COMMIT, and a restart with builds running. SQLite is the oracle for every answer, for the full row set, and for the table seal.", "The learned-on arm ran 40 of 40 seeds green (tables up to 100,000 rows) and the learned-off arm 30 of 30 (up to 60,000 rows), in both modes. The mutant arm ran 15 seeds in mode 1 (up to 40,000 rows) and went red on 3."],
-            ["Customer lifecycle", "A simulated customer starts with an empty file and works one database across many separate processes: cold open, imports, daily batches, updates, retention deletes, ALTER, index DDL, repeated dashboards, ad hoc SQL, transactions with rollback, in-process power cuts, and hard kills of the process by its parent. A SQLite mirror is the oracle.", "Across 8 archived customer runs and 158 sessions: 249 million rows compared against SQLite, 8,267 SELECTs and 1,129 checked DML statements, and 46 recoveries after a kill or a cut: 37 to the state before the interrupted write, 9 to the state after, none to a state between. The mutant arm goes red at session 12 of one profile."]
+            [
+              "The battery",
+              "56 specs per mode, run in both pipeline modes: the block pipeline, which reads and learns from blocks, and the analytic executor, which answers from exact totals. A spec covers one area: NULL logic, the block map, crash points, the history log, AS OF, the sorted index, the keyed summary, the tree, learned records, gather, placement, routes, transactions and their undo, the budget, and randomized streams. Several specs run at 3,000,000 rows.",
+              "Mode 1 passed all 56 (one spec failed once at a reopen after a simulated crash and passed on three further runs). Mode 2 passed 55 of 56; the 56th is a timing bound and was not run while the machine was loaded."
+            ],
+            [
+              "Red arms",
+              "Every check has a mutant arm that breaks the engine on purpose (an update that leaves a stale sum, a move that forgets a zone, a log that drops a record) and the check must go red for the right reason.",
+              "The battery holds 276 arm runs in mode 1 and 275 in mode 2; 256 and 237 are detected. The rest are listed by name with their reason: an arm that lives in the other pipeline, an arm that by design changes no answer, or an arm that belongs to a different spec."
+            ],
+            [
+              "Chaos runs",
+              "chaos2 generates random SQL streams over a paged table: SELECT with filters, grouping, joins and top-k, INSERT, UPDATE, DELETE, transactions with rollback, ALTER, index DDL, reopen, power loss, a power cut at the nth durable write inside COMMIT, and a restart with builds running. SQLite is the oracle for every answer, for the full row set, and for the table seal.",
+              "The learned-on arm ran 40 of 40 seeds green (tables up to 100,000 rows) and the learned-off arm 30 of 30 (up to 60,000 rows), in both modes. The mutant arm ran 15 seeds in mode 1 (up to 40,000 rows) and went red on 3."
+            ],
+            [
+              "Customer lifecycle",
+              "A simulated customer starts with an empty file and works one database across many separate processes: cold open, imports, daily batches, updates, retention deletes, ALTER, index DDL, repeated dashboards, ad hoc SQL, transactions with rollback, in-process power cuts, and hard kills of the process by its parent. A SQLite mirror is the oracle.",
+              "Across 8 archived customer runs and 158 sessions: 249 million rows compared against SQLite, 8,267 SELECTs and 1,129 checked DML statements, and 46 recoveries after a kill or a cut: 37 to the state before the interrupted write, 9 to the state after, none to a state between. The mutant arm goes red at session 12 of one profile."
+            ]
           ]
         }
       ]

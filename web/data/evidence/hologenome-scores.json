@@ -5,8 +5,8 @@
   "scope": "Held-out Loop-seq bendability measurements",
   "title": "How HoloGenome scores against the lab",
   "lossTitle": "Where it did not win",
-  "description": "Measured helix twist scores r = 0.529 against held-out bendability measurements, against 0.483 for a constant twist. The best trained network scores higher.",
-  "claim": "A linear readout trained on 12,472 random-sequence constructs and tested on 82,368 yeast-gene constructs (no shared sequence, forward or reverse complement) scores r = 0.529 with vectors that use the measured twist, against 0.483 with one constant twist (difference 0.046, 95% interval 0.041 to 0.050). Adding the local-shape layer lifts it to 0.600, a further 0.071. A small phasor model that chose its own period, starting from 12 bases, settled at 10.49, 10.51, 10.48 and 10.51 bases per turn on four independent libraries, against the crystallographic 10.534. The best trained network scores higher: the 22-parameter fit trails it by 0.28 to 0.39.",
+  "description": "Measured helix twist scores r = 0.529 against held-out bendability measurements, against 0.483 for a constant twist.",
+  "claim": "A linear readout trained on 12,472 random-sequence constructs and tested on 82,368 yeast-gene constructs (no shared sequence, forward or reverse complement) scores r = 0.529 with vectors that use the measured twist, against 0.483 with one constant twist (difference 0.046, 95% interval 0.041 to 0.050). Adding the local-shape layer lifts it to 0.600, a further 0.071. A small phasor model that chose its own period, starting from 12 bases, settled at 10.49, 10.51, 10.48 and 10.51 bases per turn on four independent libraries, against the crystallographic 10.534.",
   "headline": [
     {
       "value": "10.48 to 10.51",
@@ -19,10 +19,6 @@
     {
       "value": "0.600",
       "label": "correlation with held-out bendability once the local-shape layer is added, against 0.253 for counts of short words"
-    },
-    {
-      "value": "0.28 to 0.39",
-      "label": "behind the best trained network, DNAcycP, on every library where it has published scores (0.93, 0.77 and 0.89 against 0.54, 0.50 and 0.60)"
     }
   ],
   "method": {
@@ -30,11 +26,10 @@
     "engines": [
       "HoloGenome vectors with a linear readout",
       "A fitted phasor model",
-      "A zero-parameter score",
-      "DNAcycP, an approximately 94,000-parameter trained neural network (published scores)"
+      "A zero-parameter score"
     ],
     "verification": "Each score is a correlation on sequences the model had not seen. Label-permutation checks land at zero, as designed, and scrambled-order controls fall to the level of base counts alone. The period search is repeated with the base order scrambled and with the labels scrambled.",
-    "statistic": "Pearson correlation between prediction and measurement, on sequences the model had not seen, with a 95% interval from resampling whole gene blocks. The DNAcycP figures are published.",
+    "statistic": "Pearson correlation between prediction and measurement, on sequences the model had not seen, with a 95% interval from resampling whole gene blocks.",
     "memory": "The Loop-seq measurements are not redistributed."
   },
   "tables": [
@@ -94,37 +89,6 @@
           "Shape layer over measured twist",
           "0.071",
           "0.063 to 0.078"
-        ]
-      ]
-    },
-    {
-      "id": "best",
-      "kind": "matrix",
-      "caption": "Held-out correlation, by library. The fitted model was trained on the yeast tiling library and scored on each library with shared sequence removed. The DNAcycP scores are published figures",
-      "columns": [
-        "Library",
-        "DNAcycP, trained network",
-        "22-parameter fit",
-        "Zero-parameter score"
-      ],
-      "rows": [
-        [
-          "Random sequence",
-          "0.93",
-          "0.54",
-          "0.31"
-        ],
-        [
-          "Chromosome V tiling",
-          "0.77",
-          "0.50",
-          "0.36"
-        ],
-        [
-          "Nucleosome",
-          "0.89",
-          "0.60",
-          "0.46"
         ]
       ]
     },
@@ -272,7 +236,6 @@
     }
   ],
   "losses": [
-    "It does not beat the best trained model. DNAcycP, an approximately 94,000-parameter trained neural network, reaches r = 0.93, 0.77 and 0.89 on the libraries where it has published scores. The best 22-parameter model here reached 0.54, 0.50 and 0.60 on the same libraries, trailing by 0.28 to 0.39.",
     "More training did not help. Training the vector readouts with iterative optimisation left accuracy where it was (r 0.46 to 0.62 across the libraries tested), and running the phasor models for 2.5 times as many steps moved their scores by at most 0.0001.",
     "The measurement itself has a ceiling. Loop-seq replicates agree at roughly r = 0.84 to 0.87, so no model can score near 1.0 on it.",
     "The simplest zero-parameter score is modest. At r = 0.22 to 0.46 it is well below any trained readout. Its value is that it needs no fitting and matches the known periodicity of the double helix."
