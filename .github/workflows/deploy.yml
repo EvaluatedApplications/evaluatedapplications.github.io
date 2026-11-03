@@ -1,13 +1,15 @@
 name: Deploy site to Pages
 
-# PROPOSED replacement for .github/workflows/deploy.yml, used at cutover (see web/CUTOVER.md, runbook step 4).
-# Assembly order matters: later copies win. web/scripts/cutover-dry-run.mjs assembles the same tree locally and checks it.
+# The live deploy. Assembly order matters: later copies win. web/scripts/cutover-dry-run.mjs assembles the same tree locally and checks it.
 #   1. Showroom/dist -> _site/tools          (tool shells, the /tools/app/ boot shell for deep links, boot files; no root index.html, the gallery is generated)
 #   2. site-next     -> _site               (the generated site, including /tools/index.html, the gallery)
-#   3. site/council-live -> _site/council-live   (unlinked client page, unchanged)
-#   4. site/assets/site.css -> _site/assets/site.css   (the LEGACY stylesheet the tool shells still link; the new site uses /assets/ea.css)
-#   5. SiteKit/tokens -> _site/SiteKit/tokens        (imported by the legacy stylesheet)
-# CI never sees MonoRepo, so it cannot regenerate versions: the guard rebuilds from committed data and fails if site-next is stale.
+#   3. umbrarium-demo -> _site/umbrarium/demo   (the full-bleed demo shell)
+#   4. site/council-live -> _site/council-live   (unlinked client page, unchanged)
+#   5. site/fem -> _site/fem                     (one byte-exact raw asset)
+#   6. site/assets/site.css -> _site/assets/site.css   (the LEGACY stylesheet the tool shells still link; the new site uses /assets/ea.css)
+#   7. SiteKit/tokens -> _site/SiteKit/tokens        (imported by the legacy stylesheet)
+# CI never sees MonoRepo, so it cannot regenerate versions: the guard rebuilds from committed data (--versions=committed) and fails if site-next is stale.
+# CI never builds Showroom either: Showroom/dist is deployed as committed.
 
 on:
   push:

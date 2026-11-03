@@ -44,7 +44,7 @@
     { "title": "No external ML runtime", "text": "Everything is plain double arrays and SIMD, compiled into your app. There is no ONNX Runtime, no libtorch, no CUDA toolkit and no Python interop." },
     { "title": "Attention that scales differently", "text": "HoloFormer reads a prompt in time that grows with its length rather than its square, and serves each further token at a constant cost through an incremental cache. That matters when context windows get long. The chart above measures both cores." },
     { "title": "Everything needed to use it", "text": "A subword tokenizer, a data-parallel trainer, streaming generation with a cache, checkpoints with format versioning, and helpers that grow a trained model to a longer context or a bigger vocabulary without retraining from scratch." },
-    { "title": "Built for swarm training", "text": "Relay components let several machines train one shared model over MQTT, exchanging either full batches or lightweight position manifests." }
+    { "title": "Built for training across machines", "text": "Relay components let several machines train one shared model over MQTT, exchanging either full batches or lightweight position manifests." }
   ],
   "diagram": {
     "id": "algformer-cost",
@@ -115,7 +115,7 @@
     "HoloFormer's serve-time knobs (Iters, IterAlphaServe, IterClean and IterTau) are not saved in a checkpoint. Set them again after loading.",
     "Step returns false when it drops a batch because the gradient was not finite. Check the result, or watch SkippedSteps, in a long training run.",
     "The ADAM and EVE gate is exercised in training only through AlgFormer.Gpu. On the CPU trainer it is covered by checks and has not been run as a training loop.",
-    "The package ships as a binary with no source. It depends on Phasor and EvalApp, and the swarm relay uses MQTTnet."
+    "The package ships as a binary with no source. It depends on Phasor and EvalApp, and the training relay uses MQTTnet."
   ],
   "reference": "Every public type is documented with a worked example in the package readme on NuGet."
 }

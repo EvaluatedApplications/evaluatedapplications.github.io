@@ -94,9 +94,9 @@ the full feature list, limits, evidence, related.
 
 - Eyebrow: Tracer, pathfinding and game AI for .NET
 - H1: Send a whole crowd to one exit with a single search.
-- Sub: Bake a navmesh, route single agents or whole swarms across it, close a doorway mid-game and watch the crowd find another way. Line of sight, fog of war and combat are in the same package.
+- Sub: Bake a navmesh, route single agents or whole crowds across it, close a doorway mid-game and watch the crowd find another way. Line of sight, fog of war and combat are in the same package.
 - Tool under the hero: Prism
-- Tiles (generated from the recorded level): paths found in the swarm tick / paths found with the doorway closed / agents that took a new route / goals for the whole crowd
+- Tiles (generated from the recorded level): paths found in the crowd tick / paths found with the doorway closed / agents that took a new route / goals for the whole crowd
 - Meta: Send a whole crowd to one exit with a single search. Navmesh pathfinding for .NET with dynamic obstacles, line of sight and combat.
 
 ## /holovoxel/

@@ -98,7 +98,7 @@ export function limitFacts(m) {
 }
 
 const MODES = [
-  { id: 'swarm', label: 'Swarm tick' },
+  { id: 'swarm', label: 'Crowd tick' },
   { id: 'blocked', label: 'Doorway closed' },
   { id: 'singles', label: 'Single queries' },
   { id: 'tile', label: 'Tile lane' },
@@ -107,7 +107,7 @@ const MODES = [
 export function statsFor(mode, m) {
   const t = (label, value) => ({ label, value: String(value) });
   if (mode === 'blocked') return [t('Triangles isolated', m.isolated), t('Agents re-routed', `${m.rerouted} of ${m.agents}`), t('Paths found', `${m.foundBlocked} of ${m.agents}`), t('Mesh triangles', m.trianglesAfter)];
-  if (mode === 'singles') return [t('Paths found', `${m.foundSingle} of ${m.agents}`), t('Mean waypoints', f1(m.totals.single.wp)), t('Corner cut, single', f2(m.singleCorner) + ' cell'), t('Corner cut, swarm', f2(m.swarmCorner) + ' cell')];
+  if (mode === 'singles') return [t('Paths found', `${m.foundSingle} of ${m.agents}`), t('Mean waypoints', f1(m.totals.single.wp)), t('Corner cut, single', f2(m.singleCorner) + ' cell'), t('Corner cut, crowd', f2(m.swarmCorner) + ' cell')];
   if (mode === 'tile') return [t('Reachable tiles', m.tile.reach), t('In line of sight', m.tile.visible), t('Beside a wall', m.tile.cover), t('Movement steps', m.tile.steps)];
   return [t('Agents', m.agents), t('Paths found', `${m.foundSwarm} of ${m.agents}`), t('Distinct goals', m.goals), t('Mesh triangles', m.triangles)];
 }
@@ -119,7 +119,7 @@ export function readoutFor(mode, m, sel) {
     return `Agent ${p.id}: ${v.wp} waypoints, ${f1(v.len)} cells long${mode === 'blocked' ? (v.rerouted ? ', route changed' : ', route unchanged') : ''}. From (${p.from.join(', ')}) to (${p.goal.join(', ')}).`;
   }
   if (mode === 'blocked') return `A circular zone closes the upper doorway in the first wall. The mesh keeps its ${m.trianglesAfter} triangles and isolates ${m.isolated} of them in place. ${m.rerouted} of ${m.agents} agents take a new route; dashed lines show the routes they left.`;
-  if (mode === 'singles') return `The same ${m.agents} start and goal pairs as single-agent queries. Paths hug corners more tightly: the deepest corner cut is ${f2(m.singleCorner)} of a cell, against ${f2(m.swarmCorner)} for the swarm tick.`;
+  if (mode === 'singles') return `The same ${m.agents} start and goal pairs as single-agent queries. Paths hug corners more tightly: the deepest corner cut is ${f2(m.singleCorner)} of a cell, against ${f2(m.swarmCorner)} for the crowd tick.`;
   if (mode === 'tile') return `The bake-free tile lane from tile (${m.tile.origin.join(', ')}): ${m.tile.reach} tiles within ${m.tile.steps} steps, ${m.tile.visible} tiles in line of sight, ${m.tile.cover} reachable tiles beside a wall. Brighter tiles cost more steps.`;
   return `${m.agents} agents head for ${m.goals} goals across two walls with two doorways each. Agents that share a goal share one solve. ${m.foundSwarm} of ${m.agents} paths found.`;
 }
@@ -142,7 +142,7 @@ export function staticSvg(d) {
   const goals = [...new Set(d.swarm.agents.map((a) => a.goal.join(',')))].map((s) => { const [x, y] = s.split(',').map(Number); return `<circle class="goal" cx="${x * S}" cy="${y * S}" r="${S * 0.45}"/>`; }).join('');
   const dots = d.swarm.agents.map((a, i) => `<circle class="a${i % 7}" cx="${a.from[0] * S}" cy="${a.from[1] * S}" r="${S * 0.22}"/>`).join('');
   return `<svg class="dia-plan" viewBox="0 0 ${W} ${H}" role="img" aria-labelledby="tf-plan-t tf-plan-d" preserveAspectRatio="xMidYMid meet">
-<title id="tf-plan-t">Plan view of the level with the swarm paths</title>
+<title id="tf-plan-t">Plan view of the level with the crowd paths</title>
 <desc id="tf-plan-d">A ${g.width} by ${g.height} level with two walls, each with two doorways. ${d.swarm.agents.length} agents start in the left room and Tracer returns a path for each toward the goals in the right rooms.</desc>
 <g class="walls">${walls.join('')}</g><g class="paths">${lines}</g><g class="goals">${goals}</g><g class="starts">${dots}</g></svg>`;
 }
@@ -169,7 +169,7 @@ export function controlsHtml(id, m) {
 export function tablesHtml(d, m) {
   const row = (cells, head) => '<tr>' + cells.map((c, i) => (i === 0 && head ? `<th scope="row">${esc(c)}</th>` : `<td>${esc(c)}</td>`)).join('') + '</tr>';
   const sum = [
-    ['Swarm tick', `${m.foundSwarm} of ${m.agents}`, f1(m.totals.swarm.wp), f1(m.totals.swarm.len), 'none', f2(m.swarmCorner)],
+    ['Crowd tick', `${m.foundSwarm} of ${m.agents}`, f1(m.totals.swarm.wp), f1(m.totals.swarm.len), 'none', f2(m.swarmCorner)],
     ['Doorway closed', `${m.foundBlocked} of ${m.agents}`, f1(m.totals.blocked.wp), f1(m.totals.blocked.len), `${m.rerouted} of ${m.agents}`, ''],
     ['Single queries', `${m.foundSingle} of ${m.agents}`, f1(m.totals.single.wp), f1(m.totals.single.len), 'none', f2(m.singleCorner)],
   ];
@@ -179,7 +179,7 @@ export function tablesHtml(d, m) {
 <thead><tr><th scope="col">View</th><th scope="col">Paths found</th><th scope="col">Mean waypoints</th><th scope="col">Total length (cells)</th><th scope="col">Agents re-routed</th><th scope="col">Deepest corner cut (cells)</th></tr></thead>
 <tbody>${sum.map((r) => row(r, true)).join('')}</tbody></table></div>
 <div class="tbl-wrap"><table class="tbl"><caption>Per agent: start, goal and the path Tracer returned in each view</caption>
-<thead><tr><th scope="col">Agent</th><th scope="col">Start</th><th scope="col">Goal</th><th scope="col">Swarm waypoints</th><th scope="col">Swarm length</th><th scope="col">Closed waypoints</th><th scope="col">Closed length</th><th scope="col">Re-routed</th><th scope="col">Single waypoints</th><th scope="col">Single length</th></tr></thead>
+<thead><tr><th scope="col">Agent</th><th scope="col">Start</th><th scope="col">Goal</th><th scope="col">Crowd waypoints</th><th scope="col">Crowd length</th><th scope="col">Closed waypoints</th><th scope="col">Closed length</th><th scope="col">Re-routed</th><th scope="col">Single waypoints</th><th scope="col">Single length</th></tr></thead>
 <tbody>${agents.map((r) => row(r, true)).join('')}</tbody></table></div>
 <div class="tbl-wrap"><table class="tbl"><caption>Tile lane from tile (${m.tile.origin.join(', ')})</caption>
 <thead><tr><th scope="col">Measure</th><th scope="col">Value</th></tr></thead>

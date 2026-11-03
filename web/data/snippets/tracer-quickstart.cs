@@ -31,13 +31,13 @@ var path = await world.CreateSingleAgentService()
     .QueryPathAsync(mesh, new Vector2(0.5f, 3.5f), new Vector2(5.5f, 3.5f));
 Console.WriteLine($"single path: {path.Count} waypoints, ends at {path[^1]}");
 
-// A swarm sharing one goal is solved once.
+// A crowd sharing one goal is solved once.
 var goal = new Vector2(5.5f, 0.5f);
 var agents = Enumerable.Range(1, 3)
     .Select(i => new AgentDto(Id: i, Position: new Vector2(0.5f, i - 0.5f), Goal: goal, GoalChanged: true))
     .ToList();
 var tick = await world.CreateMultiAgentService().TickAsync(agents, mesh, tickNumber: 0);
-Console.WriteLine($"swarm: {tick.Paths.Count(p => p.PathFound)} of {agents.Count} agents have a path");
+Console.WriteLine($"crowd: {tick.Paths.Count(p => p.PathFound)} of {agents.Count} agents have a path");
 
 // Close the doorway at runtime. No re-bake.
 var blocked = await world.CreateDynamicObstacleService()
