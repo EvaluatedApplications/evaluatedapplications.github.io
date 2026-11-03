@@ -61,7 +61,7 @@ const dg = (n) => readJson(path.join(DATA, 'diagrams', n + '.json'));
 {
   const d = dg('algformer-cost'), m = cost.metrics(d), L = m.last;
   out('algformer-cost', {
-    id: 'algformer-cost', product: 'algformer', slug: '/algformer/evidence/', scope: 'Two attention cores at one shape',
+    id: 'algformer-cost', product: 'algformer', slug: '/algformer/evidence/cost/', scope: 'Two attention cores at one shape',
     title: 'What attention costs',
     description: `At one shape, reading a ${n0(L.tokens)}-token prompt takes ${sig(L.prefillMs.softmax)} ms with softmax attention and ${sig(L.prefillMs.holographic)} ms with holographic attention.`,
     claim: `At the same shape and the same parameter count, reading a ${n0(L.tokens)}-token prompt takes ${sig(L.prefillMs.softmax)} ms with softmax attention and ${sig(L.prefillMs.holographic)} ms with holographic attention. Each further token takes ${sig(L.stepUs.softmax)} µs against ${sig(L.stepUs.holographic)} µs, and the serve cache holds ${n0(Math.round(L.cacheKb.softmax))} KB against ${sig(L.cacheKb.holographic)} KB. Softmax reading grows with the square of the length (exponent ${m.exps.prefill.softmax.toFixed(1)}) and holographic reading grows in step with it (${m.exps.prefill.holographic.toFixed(1)}).`,

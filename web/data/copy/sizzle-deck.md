@@ -15,11 +15,11 @@ the full feature list, limits, evidence, related.
 ## Home /
 
 - Eyebrow: .NET libraries and in-browser tools
-- H1: Data that answers in microseconds. Models that run in a browser tab.
+- H1: A database that learns from its workload. Small models that talk through one shared wave.
 - Sub: We build .NET libraries for data, models and games, and tools that run them live in your browser. Nothing is uploaded.
 - CTA: [Try it in your browser] (primary), [Browse the products]
-- Tiles (read from the products' own tiles): HoloDb 0.02 ms; AlgFormer 26 times; Phasor 200 of 200; HoloVoxel 341 times
-- Meta: Data that answers in microseconds and language models that run in a browser tab. .NET libraries you add with one command, and tools to try now.
+- Tiles (read from the products' own tiles): HoloDb 8.5 to 10 times; AlgFormer 2.99 against 3.38; Phasor 200 of 200; HoloVoxel 341 times
+- Meta: An embedded SQL database that learns from its queries, and small language models that talk through one shared wave. .NET libraries and tools to try now.
 
 ## /products/
 
@@ -32,45 +32,44 @@ the full feature list, limits, evidence, related.
 ## /tools/
 
 - Eyebrow: Tools
-- H1: Run a real database and train a real model in this browser tab.
+- H1: Run a real database in this browser tab.
 - Sub: Our libraries, live. Nothing is uploaded: the work happens on your machine.
 - CTA: [Start with Umbrarium]
-- Meta: Run a SQL database, train a language model in your browser tab. Nothing is uploaded; the work happens on your machine.
+- Meta: Run a SQL database, profile your own data and play a game in your browser tab. Nothing is uploaded; the work happens on your machine.
 
 ## /research/
 
 - Eyebrow: Research
-- H1: What happens inside a tiny language model, measured.
+- H1: Findings and arguments, with their sources.
 - Sub: Each article leads with its finding and names what would refute it.
 - CTA: [Start with the first finding]
-- Meta: Measured findings on tiny language models: how much context they use, how they grow, which layers do the work, and how small they can be.
+- Meta: Research articles: how one exact store answers fifty questions in a single pass, and an argument about collapsed civilisations and the design effect.
 
 ## /partner/
 
 - Eyebrow: Partner with us
 - H1: Build something with our stack, and we will pay you for it.
-- Sub: Small models that run in the browser mean no server, no GPU bill and no user data leaving the device. Our libraries are the stack for that.
+- Sub: Libraries that run in the browser mean no server, no GPU bill and no user data leaving the device. Our libraries are the stack for that.
 - CTA: [Email us] (primary), [See what is on offer]
 - Meta: We pay developers to build products on our .NET libraries, and we help you get them working. Fees are negotiable; write to us with what you have in mind.
 
 ## /holodb/
 
-- Eyebrow: HoloDb, an embeddable SQL database for .NET
-- H1: Ten million rows. Dashboard answers in microseconds.
-- Sub: Put a SQL database inside your app that rolls up a ledger in a blink, ranks rows by resemblance and keeps ACID transactions. Tables can be bigger than memory.
-- Tool under the hero: Umbrarium, preset demo (up to 3 million rows in the tab, with a SQL console)
-- Tiles: 0.02 ms (a ten-million-invoice rollup read from a maintained total; out-of-the-box DuckDB 41.63 ms) / 13 of 16 (queries faster than out-of-the-box DuckDB, in process) / 9 of 14 (compared queries where HoloDb declared beat tuned SQL Server at 100,000,000 invoices; tuned SQL Server ahead on 5) / 16 of 16 (queries returning identical results on every engine). The 1,600 times rollup ratio was retired: it compared a maintained total with a scan.
-- What you can build, added: Apply a thousand changes as one atomic step (readers never see half a batch; one commit group; the SQL upsert is ON CONFLICT). Links to /holodb/docs/#changes.
-- Meta: Put a SQL database inside your .NET app that totals ten million invoices in 0.02 ms, ranks rows by resemblance and survives a crash.
+- Eyebrow: HoloDb, an embedded SQL database for .NET
+- H1: Ask the same question twice and the second time reads almost nothing.
+- Sub: An embedded SQL database for .NET that learns from the queries it serves and keeps only what pays. Every SQL statement is answered exactly, with ACID and no index to design.
+- Under the hero: the recorded explainers (learns, rent or buy, crash and come back)
+- Tiles (typed, each checked against the owner's site.md): 8.5 to 10 times / 61 times / 21 to 24 times / 0 of 46
+- Meta: An embedded SQL database for .NET that learns from the queries it serves and keeps only what pays. Every answer is exact, with ACID and no index to design.
 
 ## /algformer/
 
-- Eyebrow: AlgFormer, a transformer engine for .NET
-- H1: Train a language model in plain C#. Nothing else to install.
-- Sub: Define, train and run transformer models with no Python, no GPU and no native runtime. Pick classic attention, or the holographic core that reads long prompts in a fraction of the time.
-- Tool under the hero: Prism
-- Tiles (from the evidence record): 26 times / 50 times / 663 times
-- Meta: Train and run language models in plain C# with no Python, GPU or native runtime. The holographic core reads long prompts in a fraction of the time.
+- Eyebrow: AlgFormer, small language models in one shared wave, for .NET
+- H1: Many small models, one shared wave.
+- Sub: A population of small holographic language models that talk through a shared wave, in pure managed code. They never pass wires to each other. They write to the medium and read the medium.
+- Under the hero: the pond toy (computed in the page, no model)
+- Tiles (typed, each checked against the owner's site.md, and one from the cost record): 2.99 against 3.38 / 3.47 against 3.84 / 261 launches / 26 times
+- Meta: A population of small holographic language models that talk through a shared wave, in pure managed code for .NET. They write to the medium and read the medium.
 
 ## /evalapp/
 
@@ -95,7 +94,7 @@ the full feature list, limits, evidence, related.
 - Eyebrow: Tracer, pathfinding and game AI for .NET
 - H1: Send a whole crowd to one exit with a single search.
 - Sub: Bake a navmesh, route single agents or whole crowds across it, close a doorway mid-game and watch the crowd find another way. Line of sight, fog of war and combat are in the same package.
-- Tool under the hero: Prism
+- Tool under the hero: Doctrine
 - Tiles (generated from the recorded level): paths found in the crowd tick / paths found with the doorway closed / agents that took a new route / goals for the whole crowd
 - Meta: Send a whole crowd to one exit with a single search. Navmesh pathfinding for .NET with dynamic obstacles, line of sight and combat.
 
@@ -107,23 +106,6 @@ the full feature list, limits, evidence, related.
 - Under the hero: the rotatable terrain strip
 - Tiles (from the evidence record): 98.4% / 341 times / 189 times
 - Meta: A voxel engine where level of detail is how a read works: crisp near, soft far, no mesh tiers and no popping. Engine only, for any renderer.
-
-## /prism/
-
-- Eyebrow: Prism, decode gate, lineage journal and growth for AlgFormer models
-- H1: A model that remembers how it grew.
-- Sub: Prism picks each next word by how confident the model is, records every time you grow the model, and works out how it stood at any past round. It is the code behind the Prism chat in your browser.
-- Tool under the hero: Prism
-- Tiles: 30,400 (parity checks of the gate against the code it replaced, zero mismatches) / 19.5 ms (to open a journal of 50,000 events)
-- Meta: Grow a language model and keep a record of every change. Prism is a .NET decode gate and lineage journal, and the code behind the Prism chat tool.
-
-## /holodb/pleroma/
-
-- Eyebrow: HoloDb, built on Pleroma
-- H1: Ask a table a question without reading the table.
-- Sub: Switch on the plane for a table and HoloDb answers filters, group-bys, distinct counts and joins from a small exact summary instead of scanning rows. It is optional, off until you ask, and every answer matches the engine's.
-- Tiles: About 600 times (an overdue-invoices rollup on ten million rows, 5.93 ms to 0.01 ms) / 121 times (median on nine ad-hoc filters over a ten-million-event dashboard) / 343 to 385 microseconds (one insert plus one group-by with the plane on, from 100,000 to 1,000,000 rows; the engine alone climbs from 1.03 to 3.54 ms)
-- Meta: Switch on the plane and HoloDb answers filters, group-bys and joins from a small exact summary instead of scanning rows. Optional, and every answer matches.
 
 ## /algformer/holoformer/
 

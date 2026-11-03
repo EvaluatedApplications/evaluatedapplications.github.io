@@ -15,7 +15,7 @@
 <meta name="twitter:card" content="summary">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%23f0796a'/%3E%3Cstop offset='.5' stop-color='%237bd86a'/%3E%3Cstop offset='1' stop-color='%23c07dff'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='32' height='32' rx='7' fill='%23050608'/%3E%3Cpath d='M16 5L27 26H5Z' fill='none' stroke='url(%23g)' stroke-width='2' stroke-linejoin='round'/%3E%3C/svg%3E">
 <script>document.documentElement.classList.add('js')</script>
-<link rel="stylesheet" href="/assets/ea.css?v=6d4d7900">
+<link rel="stylesheet" href="/assets/ea.css?v=8bdfdf52">
 <script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Home","item":"https://evaluatedapplications.github.io/"},{"@type":"ListItem","position":2,"name":"Evidence","item":"https://evaluatedapplications.github.io/evidence/"}]}</script>
 
 </head>
@@ -42,7 +42,11 @@
 </div></header>
 <section class="sec" aria-labelledby="h-all"><div class="wrap"><h2 class="sr-only" id="h-all">All measurements</h2>
   <ul class="cards"><li class="card cat-algformer">
-  <h3><a href="/algformer/evidence/">What attention costs</a></h3>
+  <h3><a href="/algformer/evidence/">Many small models, one wave: the evidence</a></h3>
+  <p>Six atoms that each see about a sixth of the text and share the medium score 2.99 bits per character. One atom that sees all of it scores 3.38, and the same six atoms without the medium score 4.33. At width 32, a pair scores 3.47 when the loss reaches the atoms through the notes they wrote and 3.84 when the writers are frozen.</p>
+  <div class="meta"><a href="/algformer/">AlgFormer</a><span class="pill">Small-scale harness, six-atom checkpoints and the fused GPU step</span></div>
+</li><li class="card cat-algformer">
+  <h3><a href="/algformer/evidence/cost/">What attention costs</a></h3>
   <p>At the same shape and the same parameter count, reading a 1,984-token prompt takes 182 ms with softmax attention and 7.08 ms with holographic attention. Each further token takes 181 µs against 3.60 µs, and the serve cache holds 2,253 KB against 3.40 KB. Softmax reading grows with the square of the length (exponent 1.9) and holographic reading grows in step with it (1.0).</p>
   <div class="meta"><a href="/algformer/">AlgFormer</a><span class="pill">Two attention cores at one shape</span></div>
 </li><li class="card cat-neutral">
@@ -54,9 +58,9 @@
   <p>The gate never admitted more downloads than its bound: in every recorded run the most in flight equalled the bound. The time to finish 24 queued jobs fell from 1,113 ms at a bound of 1 to 139 ms at 8, then rose again to 410 ms when all 24 ran at once, because the simulated service slows when it is crowded.</p>
   <div class="meta"><a href="/evalapp/">EvalApp</a><span class="pill">A resource gate on simulated downloads</span></div>
 </li><li class="card cat-holodb">
-  <h3><a href="/holodb/evidence/">HoloDb benchmarks</a></h3>
-  <p>Totals over 100,000,000 invoices in 0.12 ms and four joins to two million customers in 0.19 to 0.25 ms, against tuned DuckDB and tuned SQL Server on the same machine and data. Out of the box, scans that no structure covers are slower, and the chart shows each of them as an amber bar.</p>
-  <div class="meta"><a href="/holodb/">HoloDb</a><span class="pill">100,000,000 invoices, tuned rivals</span></div>
+  <h3><a href="/holodb/evidence/">What HoloDb learns, and how it is tested</a></h3>
+  <p>After single-row updates and deletes the next sweep reads 6 blocks with learned records that adjust, against 60 and 51 when updates drop them, and 6 against 366 after consolidation. A wrong answer is the one failure a database cannot afford, so the tests try to make HoloDb wrong: across 8 customer runs and 158 sessions it compared 249 million rows against SQLite and recovered 46 times after a kill or a power cut, 37 times to the state before the interrupted write, 9 times to the state after, and never to a state between.</p>
+  <div class="meta"><a href="/holodb/">HoloDb</a><span class="pill">Test battery, chaos runs, customer lifecycle runs and engine counters</span></div>
 </li><li class="card cat-neutral">
   <h3><a href="/hologenome/evidence/">How HoloGenome scores against the lab</a></h3>
   <p>A linear readout trained on 12,472 random-sequence constructs and tested on 82,368 yeast-gene constructs (no shared sequence, forward or reverse complement) scores r = 0.529 with vectors that use the measured twist, against 0.483 with one constant twist (difference 0.046, 95% interval 0.041 to 0.050). Adding the local-shape layer lifts it to 0.600, a further 0.071. A small phasor model that chose its own period, starting from 12 bases, settled at 10.49, 10.51, 10.48 and 10.51 bases per turn on four independent libraries, against the crystallographic 10.534. The best trained network scores higher: the 22-parameter fit trails it by 0.28 to 0.39.</p>
@@ -77,17 +81,13 @@
   <h3><a href="/prose/evidence/">Generated sentences pass the gate</a></h3>
   <p>Of 2,000 sentences requested in one run, 1,966 different ones came back. Every one passed the package&#39;s validity gate on a fresh parse, and every word in every one was observed in the corpus.</p>
   <div class="meta"><a href="/prose/">Prose</a><span class="pill">Generated sentences re-checked by the package gate</span></div>
-</li><li class="card cat-holodb">
-  <h3><a href="/holodb/evidence/deep-dive/">HoloDb deep dive</a></h3>
-  <p>The numbers behind the plane: what it serves, what it declines, how its cost grows with size, and the 10,000,000-invoice comparison against engines as they ship. These workloads are built to suit the plane, so they sit apart from the 100,000,000-invoice comparison.</p>
-  <div class="meta"><a href="/holodb/">HoloDb</a><span class="pill">The plane and constructed workloads</span></div>
 </li></ul>
 </div></section>
 </main>
 <footer class="site-footer"><div class="wrap">
   <div class="foot-grid">
-    <div><h2>Products</h2><ul><li><a href="/phasor/">Phasor</a></li><li><a href="/evalapp/">EvalApp</a></li><li><a href="/holodb/">HoloDb</a></li><li><a href="/algformer/">AlgFormer</a></li><li><a href="/prism/">Prism</a></li><li><a href="/prose/">Prose</a></li><li><a href="/hologenome/">HoloGenome</a></li><li><a href="/tracer/">Tracer</a></li><li><a href="/holovoxel/">HoloVoxel</a></li><li><a href="/blazier/">Blazier</a></li></ul></div>
-    <div><h2>Tools</h2><ul><li><a href="/umbrarium/">Umbrarium, preset demo</a></li><li><a href="/tools/doctrine/">Doctrine</a></li><li><a href="/tools/helix/">The Helix</a></li><li><a href="/tools/analyst/">The Analyst</a></li><li><a href="/tools/prism/">Prism</a></li><li><a href="/tools/prose/">Prose</a></li><li><a href="/tools/council-spending/">Council Spending Scanner</a></li></ul></div>
+    <div><h2>Products</h2><ul><li><a href="/phasor/">Phasor</a></li><li><a href="/evalapp/">EvalApp</a></li><li><a href="/holodb/">HoloDb</a></li><li><a href="/algformer/">AlgFormer</a></li><li><a href="/prose/">Prose</a></li><li><a href="/hologenome/">HoloGenome</a></li><li><a href="/tracer/">Tracer</a></li><li><a href="/holovoxel/">HoloVoxel</a></li><li><a href="/blazier/">Blazier</a></li></ul></div>
+    <div><h2>Tools</h2><ul><li><a href="/umbrarium/">Umbrarium, preset demo</a></li><li><a href="/tools/doctrine/">Doctrine</a></li><li><a href="/tools/helix/">The Helix</a></li><li><a href="/tools/analyst/">The Analyst</a></li><li><a href="/tools/prose/">Prose</a></li><li><a href="/tools/council-spending/">Council Spending Scanner</a></li></ul></div>
     <div><h2>Games</h2><ul><li><a href="/games/doctrine/">Doctrine</a></li><li><a href="/games/">All games</a></li></ul></div>
     <div><h2>Learn</h2><ul><li><a href="/evidence/">Evidence</a></li><li><a href="/research/">Research</a></li><li><a href="/products/">All products</a></li><li><a href="/tools/">All tools</a></li></ul></div>
     <div><h2>Company</h2><ul><li><a href="/about/">About</a></li><li><a href="/partner/">Partner with us</a></li><li><a href="/licence/">Licence</a></li><li><a href="/ai/">For agents</a></li><li><a href="https://www.nuget.org/profiles/evaluatedapplications" rel="noopener">NuGet</a></li></ul></div>

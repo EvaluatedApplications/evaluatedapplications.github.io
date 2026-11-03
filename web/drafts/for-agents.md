@@ -43,7 +43,7 @@ All packages are on the [NuGet profile](https://www.nuget.org/profiles/evaluated
 - [AlgFormer](/algformer/) (includes HoloFormer)
 - [HoloDb](/holodb/), docs at [/holodb/docs/](/holodb/docs/)
 - [EvalApp](/evalapp/), docs at [/evalapp/docs/](/evalapp/docs/)
-- [Prism](/prism/), [Prose](/prose/), [HoloGenome](/hologenome/), [Tracer](/tracer/), [HoloVoxel](/holovoxel/), [Blazier](/blazier/)
+- [Prose](/prose/), [HoloGenome](/hologenome/), [Tracer](/tracer/), [HoloVoxel](/holovoxel/), [Blazier](/blazier/)
 - All of them: [Products](/products/). Try some in a browser tab: [Tools](/tools/).
 
 ### Licence

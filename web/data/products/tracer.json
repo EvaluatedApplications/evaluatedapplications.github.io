@@ -4,10 +4,10 @@
   "sizzle": {
     "headline": "Send a whole crowd to one exit with a single search.",
     "sub": "Bake a navmesh, route single agents or whole crowds across it, close a doorway mid-game and watch the crowd find another way. Line of sight, fog of war and combat are in the same package.",
-    "tool": "prism",
+    "tool": "doctrine",
     "mechanismTitle": "More than pathfinding",
     "stats": [
-      { "value": "{foundSwarm} of {agents}", "label": "agents given a path in one crowd tick on the recorded level", "cite": ["diagrams/tracer-field.json"] },
+      { "value": "{foundCrowd} of {agents}", "label": "agents given a path in one crowd tick on the recorded level", "cite": ["diagrams/tracer-field.json"] },
       { "value": "{foundBlocked} of {agents}", "label": "still given a path after a doorway is closed", "cite": ["diagrams/tracer-field.json"] },
       { "value": "{rerouted} of {agents}", "label": "agents that took a new route around the closed doorway", "cite": ["diagrams/tracer-field.json"] },
       { "value": "{goals}", "label": "goals for {agents} agents. Agents that share a goal share one solve", "cite": ["diagrams/tracer-field.json"] }
@@ -17,7 +17,7 @@
       "items": [
         { "claim": "One recorded level, every path the package's own", "text": "A level of {triangles} navmesh triangles with two walls and two doorways each, {agents} agents and {goals} goals. The paths were returned by the published package and are drawn as they came back." },
         { "claim": "A closed doorway reroutes, it does not break", "text": "Closing the upper doorway in the first wall leaves the mesh at {triangles} triangles. {rerouted} of {agents} agents take a new route and {foundBlocked} of {agents} still find a path." },
-        { "claim": "Corner clearance", "text": "Crowd waypoints are shared guidance. On this level they cut doorway corners by up to {swarmCorner} of a cell, and single-agent queries stay within {singleCorner} of a cell. Use single queries where exact corner clearance matters." }
+        { "claim": "Corner clearance", "text": "Crowd waypoints are shared guidance. On this level they cut doorway corners by up to {crowdCorner} of a cell, and single-agent queries stay within {singleCorner} of a cell. Use single queries where exact corner clearance matters." }
       ]
     },
     "build": {
@@ -28,8 +28,7 @@
         { "title": "A map that changes mid-game", "text": "Block and unblock regions of a baked mesh while the game runs, with no re-bake. Swap the new mesh in between ticks." },
         { "title": "Units that see and fight", "text": "Line of sight, fog of war, influence maps and combat resolution with pluggable damage, dodge and block formulas, in the same package." },
         { "title": "Tile games with no bake", "text": "A separate lane gives line of sight, movement range, cover and target selection over any tilemap." },
-        { "title": "Movement that looks alive", "text": "Seek, Wander, Patrol, Flee, Queue and FlowLane steering, composed through a fluent builder." },
-        { "title": "Creatures that learn to navigate", "text": "Tracer's pathfinder is the answer key in the Prism tool's Creature tab." }
+        { "title": "Movement that looks alive", "text": "Seek, Wander, Patrol, Flee, Queue and FlowLane steering, composed through a fluent builder." }
       ]
     }
   },
@@ -66,7 +65,7 @@
     "An unreachable or off-mesh goal never throws. A single query returns an empty list, and a crowd result reports that no path was found.",
     "Blocking a zone at runtime isolates triangles in place, so the triangle count does not change. Baking with blocked zones excludes them instead.",
     "Pressure is a meaningful signal only when a frame-time target is set.",
-    "Crowd waypoints are shared guidance. On the level in the diagram they cut doorway corners by up to {swarmCorner} of a cell; single-agent queries stay within {singleCorner} of a cell. Use single queries where exact corner clearance matters.",
+    "Crowd waypoints are shared guidance. On the level in the diagram they cut doorway corners by up to {crowdCorner} of a cell; single-agent queries stay within {singleCorner} of a cell. Use single queries where exact corner clearance matters.",
     "Mesh handles are immutable and safe to read from any thread. Services that persist tuner state should not be driven concurrently under one service key."
   ],
   "reference": "Every public type is documented with a worked example in the package readme on NuGet."

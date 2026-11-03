@@ -1,8 +1,8 @@
 # Evaluated Applications: products, tools and evidence in full
 
-Data that answers in microseconds and language models that run in a browser tab. .NET libraries you add with one command, and tools to try now.
+An embedded SQL database that learns from its queries, and small language models that talk through one shared wave. .NET libraries and tools to try now.
 
-Updated: 2026-10-23
+Updated: 2026-11-03
 
 ## Licence
 
@@ -1445,9 +1445,9 @@ Beyond the fluent API and the step base classes, four extension points are publi
 
 Licence: Commercial licence for commercial use. Evaluation and non-commercial use are permitted. Terms at https://evaluatedapplications.github.io/licence/
 
-### HoloDb: an embeddable SQL database for .NET
+### HoloDb: an embedded SQL database for .NET
 
-A SQL database inside your app that answers dashboard queries in microseconds, with transactions, similarity search and tables bigger than memory.
+An embedded SQL database that learns from the queries it serves and keeps only what pays. Every answer is exact, with ACID and no index to design.
 
 Page: https://evaluatedapplications.github.io/holodb/
 - Package EvaluatedApplications.HoloDb, release 6.0.1: `dotnet add package EvaluatedApplications.HoloDb`
@@ -1457,684 +1457,186 @@ Page: https://evaluatedapplications.github.io/holodb/
 - Used by: Prose, HoloGenome
 - Tools: Umbrarium, preset demo, The Analyst, Prose
 
-100,000,000 invoices. Dashboard answers in under a millisecond.
+Ask the same question twice and the second time reads almost nothing.
 
-A SQL database inside your .NET app that keeps your totals ready, ranks rows by resemblance, runs in a browser tab and survives a crash. Declare what you ask often, or let it learn. Tables can be bigger than memory.
+An embedded SQL database for .NET that learns from the queries it serves and keeps only what pays. Every SQL statement is answered exactly, with ACID and no index to design.
 
-- 0.12 ms: to add up 100,000,000 invoices (HoloDb restored, warm median). Tuned DuckDB scanning them: 23.17 ms. Tuned SQL Server with an indexed view: 0.65 ms.
-- 0.19 to 0.25 ms: for the four joins to 2,000,000 customers (HoloDb restored, warm median). Tuned SQL Server: 0.62 to 0.77 ms. Tuned DuckDB: 102.06 to 603.65 ms.
-- 16 of 16: queries where HoloDb restored is ahead of tuned DuckDB, and 16 of 16 where it is ahead of tuned SQL Server. Ahead means more than 20 percent faster in both runs.
-- 10 of 16: queries where HoloDb out of the box is ahead of tuned DuckDB. It is behind on 5 and too close to call on 1: scans that no structure covers. Against tuned SQL Server it is ahead on 7 and behind on 9.
+- 8.5 to 10 times: fewer blocks read by the next sweep after single-row updates and deletes, because learned records are corrected by the exact difference: 6 blocks against 60 and 51, on 1,000,000 rows
+- 61 times: fewer blocks read after consolidation moves the rows: 6 blocks against 366
+- 21 to 24 times: fewer page pins when the ledger prices an index by its measured upkeep: 49,306 to 54,106 pins against 1,158,839 over 1,200 delete or update pairs, with 0 blocks read per count
+- 0 of 46: recoveries after a kill or a power cut ended in a state between the table before and the table after the interrupted write: 37 to before, 9 to after
 
-HoloDb is an embeddable SQL database for .NET with ACID transactions, similarity search and maintained aggregates. Rows live in typed columns, and everything else is derived from them: a holographic vector built from a row's columns powers similarity search by content, exact integer accumulators answer aggregates without a scan, and exact derived summaries answer filters and group-bys. So the same copy of the data is read three ways. Exact lookup by primary key is ordinary SQL. Similarity search by content is the NEAREST clause. Analytics read a maintained total instead of scanning.
+HoloDb is an embedded SQL database for .NET. You create tables and write SQL. Tables are typed columns, in memory or on disk. The answer to every SQL statement is exact. NEAREST ranks exactly on small tables and approximately above a size threshold. The engine watches the workload it serves and builds only the structures that repeated queries have paid for. It drops them when the workload moves on or when a write would make them cost more than they save.
 
-Applications that need relational storage, similarity search and fast dashboard rollups normally reach for three systems, a row store, a vector index and a cube or a pile of scans, and pay to keep them consistent. HoloDb is one embeddable package: a transactional store, an in-SQL similarity search, and aggregates whose response time does not grow with the table.
+One copy of the data answers three kinds of question: a lookup by key in ordinary SQL, similarity search with NEAREST, and exact aggregates that read a maintained total instead of scanning. Everything the engine builds is derived from the columns, so losing a derived structure costs time and never data.
+
+Three terms recur on these pages. A block is a run of rows stored together. A page is 8 KB of file. A pin is one page read through the buffer pool, and counts of pins stand in for time.
 
 Why use it:
-- No separate vector index. NEAREST ranks rows by resemblance to a partial description, in SQL, over the rows the table already holds. A close number or date, or a near-identical string, ranks ahead of a far or unrelated one, and the score is readable as a column.
-- Aggregates do not scan. An integer column's running total is a maintained exact accumulator, so whole-table COUNT, SUM, MIN and MAX and single-column GROUP BY read that value directly, flat as the table grows from a thousand rows to tens of millions. An INT SUM never wraps: it is held in 128 bits, and the statement throws only if the true total leaves 64 bits.
-- Real ACID, and past RAM. Write-ahead logging with an fsync on each durable commit, crash recovery bounded by live data and not by write history, reader and writer locking, and paged tables on an 8 KB buffer pool that let a table exceed memory.
-- Damage is reported, never read as an answer. The columns are the source of truth, and every hologram, summary and index is derived from them. A paged table checks every data page, so a page that fails its checksum is refused with an error that names the page. In a test that flipped 61 bits in the data file of a 91 MB paged table, none gave a silently different answer: 36 were reported and 25 were in pages never read.
+- Learned records that stay right when rows change. For a filter you ask for often, the engine writes a card for each block of rows: how many rows match, and the exact sums of the columns you total. The next time you ask, it reads the cards and opens only a block whose card a write has touched. When an UPDATE or DELETE changes rows, or consolidation moves them, the cards are corrected by the exact difference. Each card carries its own checksum lanes and is checked when it is read and when the database opens, so a wrong card is dropped and relearned and never changes an answer.
+- A ski-rental ledger decides what to build and what to drop. Renting skis is cheap for one weekend and buying wins after enough weekends. The engine keeps that ledger for every structure. Each scan that a structure would have saved is rent. The structure is built when the rent paid has reached the cost of building it, and dropped when the cost of keeping it up through writes exceeds what it saves. The cost of keeping a structure up is the time its delta path really takes on this machine, measured per write and averaged.
+- Gather, regroup and placement lay rows out by what reads waste. If the rows a filter wants are scattered over the whole table, every repeat reads many blocks to find a few rows. The engine measures that waste, in time, for each learned filter. Gather moves matching rows next to each other when the time saved by repeats is larger than the cost of the move. Regroup rewrites the whole layout once, when gather alone cannot reach it. Placement puts a newly written row in a block the repeated filters already read. A repeat that the stored counts and sums already answer reads nothing, so it pays no rent and nothing is moved.
+- A paged store with a logical block map. Every page has a logical number, and a map takes that number to a place in the file. The map changes only inside a committed log batch, so a moved or rewritten page never leaves the file half-changed, and a shrunk table keeps its freed pages and refills them. A page that fails its checksum is an error that names the page, never a changed answer.
+- ACID with crash-tested recovery. The write-ahead log holds signed page deltas in a ring file whose size follows the largest recent batch, with group commit. A failed statement inside a transaction undoes only itself. A transaction larger than the buffer pool spills to a scratch file, and a rollback or a power cut leaves the table as it was. Each commit is kept as a signed record within a retention budget.
+- Real SQL NULL on paged tables. Declare a column NULL and it holds true nulls with three-valued logic, on paged tables as well as in memory. COUNT(col), SUM, AVG, MIN and MAX skip nulls, GROUP BY makes one null group, and a join never matches one. Null counts are maintained. A point read of one row on a wide nullable table takes about 110 page pins at 100,000, 300,000 and 1,000,000 rows.
 
 Capabilities:
-- A substantial SQL dialect. CREATE TABLE, INSERT, UPDATE, DELETE, SELECT with DISTINCT, COUNT, SUM, MIN, MAX and AVG, INNER JOIN (several in one statement on in-memory tables, one on a paged table), WHERE with AND, OR, NOT, LIKE, IN, BETWEEN, IS NULL and IN (SELECT ...), GROUP BY and HAVING, ORDER BY, LIMIT, ALTER TABLE ADD COLUMN, indexes, EXPLAIN, and explicit BEGIN, COMMIT and ROLLBACK.
-- Real SQL NULL. Declare a column NULL and it holds true NULLs with three-valued logic: COUNT(col), SUM, AVG, MIN and MAX skip them, GROUP BY makes one NULL group, ORDER BY puts them first, and a join never matches one. Whole-table aggregates and one-column group-bys stay maintained answers with NULLs present: 0 rows read at 10,000 to 640,000 rows with half the values NULL. On an empty selection SUM, AVG, MIN and MAX are NULL and COUNT is 0, for a NOT NULL column as well.
-- Parameterized queries. Every Execute has a ? placeholder overload with positional binding, correctly quoted and escaped, beside the raw SQL string form.
-- Content similarity in SQL. NEAREST ranks by graded closeness for numbers, dates and text, with a score column on request. From 8,000 rows an approximate sublinear index ranks candidates, and below that or whenever the query has a WHERE the ranking is an exact scan.
-- Constant-time exact aggregates. COUNT, SUM, MIN, MAX and single-column GROUP BY over integer columns are exact, not approximate. Real-number aggregates use a fast SIMD scan.
-- Durable and larger than memory. A snapshot plus a short log gives recovery that tracks live data. Paged tables spill cold pages to disk and keep the maintained aggregates accurate there. Every 8 KB data page carries a checksum, UPDATE and DELETE move only the pages that change, and a statement may change more pages than the buffer pool holds: a rollback or a power cut still leaves the table as it was.
-- Summaries and indexes that build themselves. With nothing declared, the engine watches which aggregate statements keep scanning and, when the scanning has cost as much as a summary would cost to build, builds it, in memory or on a paged table, and drops it again if the workload moves on. A predicate that matches a small fraction of a large table earns a sorted or an equality index the same way. EXPLAIN says what answered a query and why. SET summaries and SET indexes switch this between auto, declared and off, and the answers are the same either way.
-- A table with no rows. CREATE SUMMARY TABLE makes a table that keeps only the exact plane and the position each feed has reached, so memory does not depend on how many rows passed through it. COUNT, SUM, AVG, GROUP BY, HAVING and a WHERE over the dimensions still answer exactly, and a replayed feed never counts twice. Anything that needs a row is refused with the reason.
-- Atomic change batches and upsert. ApplyChanges applies a whole batch of upserts and deletes under one write lock, as one write-ahead-log commit group, so a reader sees the table before the batch or after it and never part of it. INSERT with ON CONFLICT (key) DO UPDATE SET is the SQL upsert. Both work on in-memory tables.
-- Fast scans. A WHERE is evaluated over raw column arrays in tight loops, GROUP BY over INT and TEXT columns uses dense codes, and an equi-join on TEXT keys is a columnar hash join.
-- Metering. A per-query usage meter reports the rows and bytes actually processed, for billing or observability.
-- Embedded or networked. Use it in process, or run it as a server with a matching typed client and a columnar wire protocol. The same managed code also runs in a browser tab.
-- The optional Pleroma plane and page store. Attach an exact, derived summary to chosen columns to answer filters, group-bys, distinct counts and joins without scanning, or keep exact Pleroma pages durably as the data itself.
+- SQL. CREATE TABLE [IF NOT EXISTS], ALTER TABLE ... ADD COLUMN, CREATE INDEX (sorted, summary, keyed; automatic indexes need no declaration), DROP INDEX, SHOW INDEXES, SHOW SUMMARIES, SET summaries and SET indexes, EXPLAIN, INSERT (with ON CONFLICT ... DO UPDATE), UPDATE, DELETE, SELECT with DISTINCT, aggregates, COUNT(DISTINCT), INNER JOIN, WHERE (AND, OR, NOT, LIKE, IN, BETWEEN, IS NULL, IN (SELECT ...)), GROUP BY, HAVING, ORDER BY, LIMIT, NEAREST, and BEGIN, COMMIT, ROLLBACK.
+- Exact. INT sums are 128-bit running totals and throw only past 64 bits. Empty selections give NULL for SUM, AVG, MIN and MAX, and 0 for COUNT.
+- Learns by use. Summaries, sorted and keyed indexes, a tree of exact sums, learned block records with exact partial sums, learned routes, zones that skip blocks, top-k by zones, gather and placement. One budget covers them all and is a hard cap. EXPLAIN says which structure answered a statement, or why none did.
+- Look back. AS OF n and Seal(table, asOf: n) on paged tables.
+- Analytic SQL. Narrow column types, dictionary-coded text, CASE, CAST, EXTRACT, DATE_TRUNC, REGEXP_REPLACE, positional GROUP BY and ORDER BY, and COUNT(DISTINCT) on large cardinalities.
+- Change feeds. ApplyChanges applies a batch of upserts and deletes atomically. KeyDigest compares two key sets in modulus numbers. Seal fingerprints a table so shards add and replicas compare.
+- Aggregate plane (optional). An exact derived summary of small-domain columns, served through Phasor's Pleroma stores, with PleromaVerify to check it against the columns.
+- Metering. MeteredDatabase reports the rows and bytes each query read.
+- Integration. services.AddHoloDb() for dependency injection, and an EvalApp context for pipelines.
 
 Quick start:
 
 ```csharp
 using HoloDb;
 
-var db = new HoloDbService(new HoloDbOptions());           // in memory
+var db = new HoloDbService(new HoloDbOptions());
 db.Execute("CREATE TABLE users (id INT PRIMARY KEY, age INT, name TEXT)");
-db.Execute("INSERT INTO users VALUES (1, 30, 'Ada'), (2, 24, 'Linus'), (3, 15, 'Kid')");
+db.Execute("INSERT INTO users VALUES (1, 30, 'Ada')");
 
-var result = db.Execute("SELECT name FROM users WHERE age >= 18 ORDER BY age DESC");
-foreach (var row in result.Rows)
-    Console.WriteLine(row["name"]);
-
-var count = await db.ExecuteAsync("SELECT COUNT(*) FROM users");
-Console.WriteLine(count.Rows[0]["count(*)"]);
+var result = await db.ExecuteAsync("SELECT name FROM users WHERE age >= 18");
+foreach (var row in result.Rows) Console.WriteLine(row["name"]);
+// Ada
 ```
 
 Output:
 
 ```text
 Ada
-Linus
-3
 ```
 
 Limits:
-- Joins: INNER JOIN only. Several in one statement on in-memory tables, one on a paged table. LEFT, RIGHT, FULL, CROSS, NATURAL, USING and comma joins are refused.
-- Aliases: No AS on columns or tables. Aggregate columns are named agg(col), such as count(*).
-- ALTER TABLE: ADD COLUMN only, with a DEFAULT or NULL. No DROP COLUMN, RENAME COLUMN or RENAME TO.
-- Expressions: No CASE, LENGTH(), OFFSET or UNION, and no arithmetic in the select list or inside SUM(v * 2). COUNT(DISTINCT col), LIKE and IN (SELECT ...) work on in-memory tables.
-- Money: Constant-time totals are for INT columns. REAL SUM is a SIMD scan, and DECIMAL and NUMERIC are REAL (a double), so hold money as integer cents. There is no fixed-point type.
-- Saved summaries: A summary made with CREATE INDEX ... USING SUMMARY, or built by the planner, is saved with the table and restored on open. A plane attached with the EnablePleroma call on an in-memory table is not saved: call it again after Open.
-- Summary limits: A declared summary takes up to 4,095 distinct values per column (1,024 for one the planner builds) and a joint of 12 bits. A column over its limit goes to a scan and is never approximated.
-- Joins on paged tables: The keyed summary holds up to 4,194,304 consecutive INT keys. The 100,000,000-invoice run joins 2,000,000 customers.
-- Languages: A .NET library. The server speaks a TCP and TLS binary protocol whose only client is .NET. No JDBC, ODBC, Python, Node or Go client, and no PostgreSQL or MySQL wire.
-- Concurrency: One process per database and one writer at a time. Simple aggregate reads run off a snapshot without the lock. A second process cannot open a paged database's files, and there is no MVCC: a long transaction blocks other writers.
-- Table size: Tested to 100,000,000 rows (4.94 GB paged, 165 s to load). In-memory tables are bounded by RAM at about 110 bytes per row. A paged primary key loaded out of order keeps a RAM dictionary of about 35 bytes per row. Beyond 100,000,000 rows is untested.
-- Backup: Offline: copy the files of a closed database. There is no online backup and no point-in-time recovery.
-- Crash safety: One fsync per commit. Tests cut the log at every record boundary, flip bits in the log and the data file, and tear a page during a checkpoint. A real power cut, a disk that lies about fsync, a full disk and several processes are not tested.
-
-Also:
-- Upsert: a plain INSERT of an existing primary key throws. To insert or replace, use INSERT with ON CONFLICT (key) DO UPDATE SET column = EXCLUDED.column, or ApplyChanges with RowChange.Upsert. Both work on in-memory tables only, and a paged table refuses them.
-- Keys: a table has one PRIMARY KEY, an INT or TEXT column.
-- NULL: a column holds NULL only when it is declared NULL. An index takes NOT NULL columns only, paged tables and summary tables refuse NULL, and the Pleroma plane hands any statement that touches a column holding a NULL to the engine. A statement on a column holding NULLs that is not a maintained aggregate reads boxed rows, slower than a NOT NULL column. A table that declares a NULL column is not read lock-free.
-- Similarity: NEAREST with a WHERE filters first and then ranks the survivors, and NEAREST does not combine with GROUP BY.
-- Documentation: the package ships compiled, without XML documentation.
+- Scale: the correctness suites run to 3,000,000 rows in both pipeline modes. Larger tables work, and the benchmark runs to 100,000,000 rows, but the lifecycle and crash guarantees are tested at 3,000,000.
+- Writers: one. Reads run in parallel and lock-free for simple selects; writes, DDL and transactions take one lock at a time.
+- Joins: INNER JOIN only. A paged table takes one join per statement; in-memory tables take several. A join on a paged table with NULL columns is refused by name.
+- SQL not offered: UNION, window functions, subqueries other than IN (SELECT ...), table aliases, DROP COLUMN and column rename. UPDATE ... SET takes a literal on its right side.
+- NEAREST: does not combine with GROUP BY or with a join on a nullable table. It ranks exactly on small tables and approximately above a size threshold.
+- Keys and types: one primary key per table, INT or TEXT. Types are INT, TEXT and REAL, with narrow integer, date, timestamp and fixed-width text types on analytic tables.
+- In-memory only: ApplyChanges and the upsert form run on in-memory tables. A paged table refuses them.
+- Row order: without ORDER BY, the order of rows is unspecified and can change after a DELETE or a write that moves a row.
+- Structures: they help repeated work. A filter whose matching rows are spread evenly over every block gains nothing from learned records. The first lookup of a value no earlier read has seen is a scan, except a text value absent from the column or a number outside its range, which read no block. Moving scattered rows costs about 200 microseconds per row, so a scattered filter pays that back after about 100 uses.
+- Older data: paged tables written by older formats, older write-ahead logs, and a text-format database opened as paged all throw a named error that says to export the rows and load them into a new database. There is no in-place upgrade.
+- History: AS OF works on paged tables and reads sequences the history still holds. A sequence below the floor, inside a retained segment, or on an in-memory table is refused by name, as is a join under it.
 
 #### HoloDb docs: tables, SQL, transactions (https://evaluatedapplications.github.io/holodb/docs/)
 
-The practical guide: put data in, get answers out. Every program on this page was compiled and run against the published package, and the output shown is what it printed.
+The practical guide: put data in, get answers out. The two programs on this page are the complete code, with the output they print.
 
 ##### Install and first query
 
-Add the package from NuGet with dotnet add package EvaluatedApplications.HoloDb. It targets .NET 8 and later, and ships the compiled library only. HoloDbService is the wrapped, async-friendly entry point, and Execute runs SQL synchronously. ExecuteAsync offloads the work to the thread pool so a request thread is not blocked.
+Add the package from NuGet with dotnet add package EvaluatedApplications.HoloDb. You create tables and write SQL. Tables are typed columns, in memory or on disk.
+
+A WalPath in the options makes the database durable. For a database whose tables can be larger than memory, set both WalPath and Paged = true. Paged = true without a WalPath throws.
 
 ```csharp
 using HoloDb;
 
-var db = new HoloDbService(new HoloDbOptions());           // in memory
+var db = new HoloDbService(new HoloDbOptions());
 db.Execute("CREATE TABLE users (id INT PRIMARY KEY, age INT, name TEXT)");
-db.Execute("INSERT INTO users VALUES (1, 30, 'Ada'), (2, 24, 'Linus'), (3, 15, 'Kid')");
+db.Execute("INSERT INTO users VALUES (1, 30, 'Ada')");
 
-var result = db.Execute("SELECT name FROM users WHERE age >= 18 ORDER BY age DESC");
-foreach (var row in result.Rows)
-    Console.WriteLine(row["name"]);
-
-var count = await db.ExecuteAsync("SELECT COUNT(*) FROM users");
-Console.WriteLine(count.Rows[0]["count(*)"]);
+var result = await db.ExecuteAsync("SELECT name FROM users WHERE age >= 18");
+foreach (var row in result.Rows) Console.WriteLine(row["name"]);
+// Ada
 ```
 
 Output:
 
 ```text
 Ada
-Linus
-3
 ```
 
-##### Tables and types
+##### The SQL dialect
 
-There are three storage types, each with the usual SQL aliases.
+The answer to every SQL statement is exact. Types are INT, TEXT and REAL, with narrow integer, date, timestamp and fixed-width text types on analytic tables. A table has one primary key, INT or TEXT.
 
-- INT: A .NET long. Aliases: INTEGER.
-- REAL: A .NET double. Aliases: FLOAT, DOUBLE, DECIMAL, NUMERIC. DECIMAL and NUMERIC map to a 64-bit float, so they are not exact decimals.
-- TEXT: A .NET string. Aliases: VARCHAR, STRING.
+- Statements: CREATE TABLE [IF NOT EXISTS], ALTER TABLE ... ADD COLUMN, CREATE INDEX, DROP INDEX, SHOW INDEXES, SHOW SUMMARIES, SET summaries, SET indexes, EXPLAIN, INSERT (with ON CONFLICT ... DO UPDATE), UPDATE, DELETE, SELECT, and BEGIN, COMMIT and ROLLBACK.
+- SELECT: DISTINCT, aggregates, COUNT(DISTINCT), INNER JOIN, WHERE with AND, OR, NOT, LIKE, IN, BETWEEN, IS NULL and IN (SELECT ...), GROUP BY, HAVING, ORDER BY, LIMIT and NEAREST.
+- Joins: INNER JOIN only. A paged table takes one join per statement; in-memory tables take several. A join on a paged table with NULL columns is refused by name.
+- Exact sums: INT sums are 128-bit running totals and throw only past 64 bits. Empty selections give NULL for SUM, AVG, MIN and MAX, and 0 for COUNT.
+- Analytic SQL: Narrow column types, dictionary-coded text, CASE, CAST, EXTRACT, DATE_TRUNC, REGEXP_REPLACE, positional GROUP BY and ORDER BY, and COUNT(DISTINCT) on large cardinalities.
+- Not offered: UNION, window functions, subqueries other than IN (SELECT ...), table aliases, DROP COLUMN and column rename. UPDATE ... SET takes a literal on its right side.
+- Row order: Without ORDER BY, the order of rows is unspecified and can change after a DELETE or a write that moves a row.
 
-One column may be PRIMARY KEY, and it is enforced unique and is never NULL. A column is NOT NULL unless its definition says NULL: see the section on NULL. For money, store integer minor units, cents as an INT: it is exact, and it lets the constant-time integer aggregates serve your revenue totals.
+##### Structures that build themselves
 
-```sql
-CREATE TABLE sales (
-  id     INT PRIMARY KEY,
-  region TEXT,
-  amount REAL
-)
-```
+The engine watches the workload it serves and builds only the structures that repeated queries have paid for: summaries, sorted and keyed indexes, a tree of exact sums, learned block records with exact partial sums, learned routes, zones that skip blocks, top-k by zones, gather and placement. It drops them when the workload moves on or when a write would make them cost more than they save. One budget covers them all and is a hard cap.
 
-##### Inserting, updating and bulk loading
-
-Strings use single quotes, and a quote is escaped by doubling it. Rows go in singly or in batches, with or without a column list.
-
-Every Execute also takes positional ? placeholders. The arguments are quoted and escaped for you, before the statement is parsed. A null argument is the SQL literal NULL (a value in INSERT and UPDATE SET; in a comparison it throws, write IS NULL). A wrong argument count or an unsupported type throws.
-
-A plain INSERT of an existing primary key throws. To insert or replace, use the upsert in the section on atomic change batches.
-
-```sql
-INSERT INTO sales VALUES (1, 'EU', 42.50)
-```
-
-```sql
-INSERT INTO sales (id, region, amount) VALUES (2, 'US', 17.00), (3, 'EU', 61.10)
-```
-
-```sql
-UPDATE sales SET amount = 0 WHERE region = 'US'
-```
-
-```sql
-DELETE FROM sales WHERE amount = 0
-```
+SET indexes and SET summaries choose whether automatic indexes and summaries are built (auto), only declared ones are kept (declared), or none answers a query (off). EXPLAIN says which structure answered a statement, or why none did. The answers are the same in every setting.
 
 ##### NULL
 
-A column holds SQL NULL when it is declared NULL: CREATE TABLE orders (id INT PRIMARY KEY, region TEXT NULL, amount INT NULL, qty INT NOT NULL). Every other column is NOT NULL (the words are accepted and mean the default), and a primary key is never NULL. A NOT NULL column left out of an INSERT still gets its type zero (0, 0.0 or an empty string); a NULL column left out is NULL.
+Declare a column NULL and it holds true nulls with three-valued logic, on paged tables as well as in memory. A statement that names a nullable column takes an exact path that reads only the columns it names.
 
-NULL is a value in INSERT, UPDATE ... SET, ON CONFLICT ... SET, ALTER ... DEFAULT, Database.Bind(.., null), RowChange.Upsert (a C# null) and Database.BulkLoad (a mask per column). It is refused, with a message that says to write IS NULL, in = != < > <= >=, IN, BETWEEN, LIKE, NEAREST and a join ON, because a comparison with NULL is never true.
-
-- Three-valued logic: WHERE and HAVING keep a row only when the predicate is true. A comparison, LIKE, IN or BETWEEN on a NULL is unknown; false AND unknown is false, true OR unknown is true, NOT unknown is unknown. x NOT IN (SELECT ...) is never true when the subquery returns a NULL. IS NULL and IS NOT NULL are always true or false.
-- Aggregates skip NULL: COUNT(*) counts rows; COUNT(col), COUNT(DISTINCT col), SUM, AVG, MIN and MAX count and combine the non-NULL values. SUM, AVG, MIN and MAX of a group whose values are all NULL are NULL. Whole-table COUNT, SUM, AVG, MIN and MAX of an INT column and a one-column GROUP BY with COUNT, SUM and AVG stay maintained answers with NULLs present: no row is read. On an empty selection SUM, AVG, MIN and MAX are NULL and COUNT is 0, as for a NOT NULL column, and an aggregate without GROUP BY always answers one row.
-- Groups, order and joins: GROUP BY and DISTINCT make one group of all the NULLs, apart from 0 and the empty string. ORDER BY puts NULL first ascending and last descending. An INNER JOIN never matches a NULL key, not even another NULL. In NEAREST a NULL cell adds nothing to the row's similarity.
-- Results: A result that holds a NULL is row-form: read it with Rows or GetValue, where the cell is DBNull.Value, and QueryResult.IsNull(row, col) says so. GetLong, GetDouble and GetText serve a non-NULL cell of the matching type and throw a HoloException on a NULL.
-- Where it stops: CREATE INDEX (sorted, text, composite) takes NOT NULL columns only. A Pleroma plane stores the type zero for a NULL and declines, so the engine answers, any statement that touches a plane column holding one; it never answers wrongly. A summary table keeps no rows to fall back on and refuses a NULL, and paged tables do not take NULL columns.
-- Speed: A column that has never received a NULL has no null bitmap, and a statement that touches no column holding a NULL and has no IS [NOT] NULL takes the routes it takes for a NOT NULL column. The maintained answers above stay flat with NULLs present. Any other statement on a column that holds NULLs filters with a null-aware compiled predicate and then builds boxed rows, slower than the typed columnar result a NOT NULL column returns. A table that declares a NULL column is not read lock-free, and the live snapshot does not serve a statement that references a declared NULL column, even before it holds a NULL: declare a column NULL only where you need it.
-- Older binaries: A log with a NULL in it, or a snapshot of a table with a NULL column, is refused by an older HoloDb binary with a clear error until a newer one has opened it and called Checkpoint(). A database with no NULL column writes the same files as before.
-
-```csharp
-using HoloDb;
-
-var db = new HoloDbService(new HoloDbOptions());
-db.Execute("CREATE TABLE orders (id INT PRIMARY KEY, region TEXT NULL, amount INT NULL, qty INT NOT NULL)");
-db.Execute("INSERT INTO orders VALUES (1, 'north', 10, 1), (2, NULL, 20, 1), (3, 'north', NULL, 2)");
-var r = db.Execute("SELECT COUNT(*), COUNT(amount), SUM(amount), AVG(amount) FROM orders").Rows[0];
-Console.WriteLine($"{r["count(*)"]} rows, {r["count(amount)"]} amounts, sum {r["sum(amount)"]}, avg {r["avg(amount)"]}");
-// 3 rows, 2 amounts, sum 30, avg 15
-Console.WriteLine(db.Execute("SELECT COUNT(*) FROM orders WHERE region IS NULL").Rows[0]["count(*)"]);
-// 1
-Console.WriteLine(db.Execute("SELECT COUNT(*) FROM orders WHERE region != 'north'").Rows[0]["count(*)"]);
-// 0   (the NULL region is neither equal nor different)
-foreach (var g in db.Execute("SELECT region, COUNT(*) FROM orders GROUP BY region ORDER BY region").Rows)
-    Console.WriteLine($"{(g["region"] is DBNull ? "(null)" : g["region"])}: {g["count(*)"]}");
-// (null): 1
-// north: 2
-
-// A change feed carries NULLs as C# nulls; BulkLoad takes a mask per column (true = NULL) and a left-out nullable column is NULL.
-db.ApplyChanges("orders", new[] { RowChange.Upsert(new Dictionary<string, object?> { ["id"] = 4L, ["region"] = null, ["amount"] = 5L, ["qty"] = 1L }) });
-db.BulkLoad("orders", new[] { "id", "amount", "qty" }, new Array[] { new long[] { 5, 6 }, new long[] { 0, 7 }, new long[] { 1, 1 } }, 2,
-    new bool[]?[] { null, new[] { true, false }, null });
-Console.WriteLine(db.Execute("SELECT COUNT(*) FROM orders WHERE amount IS NULL").Rows[0]["count(*)"]);
-// 2   (id 3 and id 5)
-```
-
-Output:
-
-```text
-3 rows, 2 amounts, sum 30, avg 15
-1
-0
-(null): 1
-north: 2
-2
-```
-
-##### Parameterized queries
-
-Use ? placeholders instead of building SQL text yourself.
-
-```csharp
-using HoloDb;
-
-var db = new HoloDbService(new HoloDbOptions());
-db.Execute("CREATE TABLE people (id INT PRIMARY KEY, name TEXT, age INT)");
-db.Execute("INSERT INTO people VALUES (?, ?, ?)", 1, "O'Neil", 41);   // quoted and escaped for you
-db.Execute("INSERT INTO people VALUES (?, ?, ?)", 2, "Ada", 36);
-
-var r = db.Execute("SELECT name FROM people WHERE age > ? ORDER BY name", 30);
-foreach (var row in r.Rows) Console.WriteLine(row["name"]);
-```
-
-Output:
-
-```text
-Ada
-O'Neil
-```
-
-##### Bulk loading
-
-For large loads, skip the SQL parser and hand the engine one typed array per column (long[], double[] or string[]). It is atomic and validates primary-key uniqueness before committing. Load in chunks for very large data sets, as The Analyst does with a large paste.
-
-```csharp
-using HoloDb;
-
-var db = new HoloDbService(new HoloDbOptions());
-db.Execute("CREATE TABLE sales (id INT PRIMARY KEY, region TEXT, amount REAL)");
-
-// Typed column arrays skip the SQL parser: the fast path for large loads.
-var ids = new long[] { 1, 2, 3 };
-var regions = new string[] { "EU", "US", "EU" };
-var amounts = new double[] { 42.50, 17.00, 61.10 };
-db.BulkLoad("sales", new[] { "id", "region", "amount" }, new Array[] { ids, regions, amounts }, count: 3);
-
-var r = db.Execute("SELECT region, COUNT(*), SUM(amount) FROM sales GROUP BY region ORDER BY region");
-foreach (var row in r.Rows) Console.WriteLine($"{row["region"]}: {row["count(*)"]} rows, {row["sum(amount)"]}");
-```
-
-Output:
-
-```text
-EU: 2 rows, 103.6
-US: 1 rows, 17
-```
-
-##### Querying: the dialect
-
-A SELECT supports aggregates (COUNT, SUM, AVG, MIN, MAX), a full boolean WHERE (AND, OR, NOT, parentheses, the comparisons = != < > <= >=, LIKE, IN, IN (SELECT ...), BETWEEN ... AND ... and IS [NOT] NULL), GROUP BY with HAVING, ORDER BY with several keys, LIMIT, DISTINCT and INNER JOIN.
-
-Qualify joined columns with the table name, as above. Table aliases are not supported. A join is INNER JOIN only: LEFT, RIGHT, FULL, CROSS and NATURAL joins, USING and comma joins are refused with an error, never answered as an inner join. Several INNER JOINs may share one statement on in-memory tables, and a paged table takes one.
-
-SUM, AVG, MIN and MAX over no rows are NULL, COUNT is 0, and an aggregate without GROUP BY always returns one row. If your code read the SUM or AVG of an empty selection as 0, test QueryResult.IsNull first: GetLong and GetDouble throw on a NULL cell. An INT SUM is exact: it is held in 128 bits, and the statement throws only if the true total leaves 64 bits, on in-memory and paged tables alike. Without ORDER BY the row order, and so which rows a LIMIT keeps, is unspecified.
-
-```sql
-SELECT region, COUNT(*), SUM(amount), AVG(amount)
-FROM sales
-WHERE amount BETWEEN 10 AND 1000
-GROUP BY region
-HAVING SUM(amount) > 50
-ORDER BY sum(amount) DESC
-LIMIT 10
-```
-
-```sql
-SELECT orders.id, customers.name, orders.total
-FROM orders
-INNER JOIN customers ON orders.customer_id = customers.id
-WHERE orders.total > 100
-ORDER BY orders.total DESC
-```
-
-##### Reading results
-
-Execute returns a QueryResult. The simplest way to read it is row by row as dictionaries keyed by column name, through Rows. Aggregate columns are named by the function applied, in lower case: count(*), sum(amount), avg(amount), min(amount) and max(amount). Columns lists the result's column names in order, and for a write statement Affected is the number of rows changed.
-
-For hot paths QueryResult keeps results columnar and exposes direct accessors (GetLong, GetDouble, GetText and GetValue by row and column), so you can read values without materialising a dictionary per row.
-
-##### Three ways to ask one store
-
-Exact lookup by key, similarity by content and constant-time aggregates all read the same rows. The program below shows each, and the usage meter shows the aggregate scanned no rows.
-
-```csharp
-using HoloDb;
-
-var db = Database.Open();   // null path: in memory
-db.Execute("CREATE TABLE invoices (id INT PRIMARY KEY, customer TEXT, region TEXT, amount_cents INT)");
-db.Execute("INSERT INTO invoices VALUES (1,'Acme','north',1200),(2,'Beta','south',4500),(3,'Cyan','north',1150),(4,'Dune','east',30000),(5,'Echo','north',1300)");
-
-// 1. By key: ordinary SQL, answered from the primary-key index
-Console.WriteLine(db.Execute("SELECT customer FROM invoices WHERE id = 3").Rows[0]["customer"]);
-
-// 2. By content: rank rows by resemblance to a partial description; add score to see the ranking
-foreach (var r in db.Execute("SELECT id, region, amount_cents FROM invoices NEAREST (region = 'north', amount_cents = 1200) LIMIT 3").Rows)
-    Console.WriteLine($"{r["id"]}: {r["region"]} {r["amount_cents"]}");
-
-// 3. By aggregate: read from maintained totals, no scan
-foreach (var r in db.Execute("SELECT region, SUM(amount_cents) FROM invoices GROUP BY region ORDER BY region").Rows)
-    Console.WriteLine($"{r["region"]}: {r["sum(amount_cents)"]}");
-Console.WriteLine($"rows scanned by the aggregate: {Database.LastRowsScanned}");
-```
-
-Output:
-
-```text
-Cyan
-1: north 1200
-5: north 1300
-3: north 1150
-east: 30000
-north: 3650
-south: 4500
-rows scanned by the aggregate: 0
-```
+COUNT(col), SUM, AVG, MIN and MAX skip nulls, GROUP BY makes one null group, and a join never matches one. Null counts are maintained. A point read of one row on a wide nullable table takes about 110 page pins at 100,000, 300,000 and 1,000,000 rows.
 
 ##### Similarity search
 
-Each row's columns also feed a holographic vector derived from them, so HoloDb ranks rows by similarity to a partial description, with no separate vector index. Use the NEAREST clause with the fields you know and a LIMIT for how many neighbours you want. Add score to the projection to read the ranking metric.
-
-Similarity is graded: a close number or date, or a near-identical string, ranks ahead of a far or unrelated one. It is an exact scan below 8,000 rows and whenever the query has a WHERE, and above that an approximate sublinear index (locality-sensitive hashing) ranks candidates, so the result can differ from an exact scan. With a WHERE the filter runs first and the survivors are ranked. NEAREST does not combine with GROUP BY, and an UPDATE, DELETE or ALTER TABLE on the table forces the next NEAREST to rebuild its index.
-
-```sql
-SELECT id, title
-FROM articles
-NEAREST (title = 'holographic database')
-LIMIT 5
-```
-
-##### Transactions
-
-ACID transactions with explicit control: wrap statements in BEGIN and COMMIT, or discard them with ROLLBACK. BEGIN costs the same at any table size, because rows are journaled as they change instead of the table being copied, and ROLLBACK replays the journal. With a WalPath set, a committed transaction is durable.
+NEAREST ranks rows by how closely they match a partial description, with no separate index. It ranks exactly on small tables and approximately above a size threshold. It does not combine with GROUP BY or with a join on a nullable table.
 
 ```csharp
 using HoloDb;
 
 var db = new HoloDbService(new HoloDbOptions());
-db.Execute("CREATE TABLE accounts (id INT PRIMARY KEY, balance INT)");
-db.Execute("INSERT INTO accounts VALUES (1, 500), (2, 100)");
+db.Execute("CREATE TABLE products (id INT PRIMARY KEY, category TEXT, price INT)");
+db.Execute("INSERT INTO products VALUES (1,'electronics',100),(2,'electronics',120),(3,'furniture',300)");
 
-db.Execute("BEGIN");
-try
-{
-    db.Execute("UPDATE accounts SET balance = 400 WHERE id = 1");
-    db.Execute("UPDATE accounts SET balance = 200 WHERE id = 2");
-    db.Execute("COMMIT");
-}
-catch
-{
-    db.Execute("ROLLBACK");
-    throw;
-}
-Console.WriteLine("after commit: " + string.Join(", ", db.Execute("SELECT balance FROM accounts ORDER BY id").Rows.Select(r => r["balance"])));
-
-db.Execute("BEGIN");
-db.Execute("UPDATE accounts SET balance = 0 WHERE id = 1");
-db.Execute("ROLLBACK");
-Console.WriteLine("after rollback: " + string.Join(", ", db.Execute("SELECT balance FROM accounts ORDER BY id").Rows.Select(r => r["balance"])));
+var near = db.Execute("SELECT id, category, price, score FROM products NEAREST (category = 'electronics', price = 118) LIMIT 2");
+foreach (var row in near.Rows) Console.WriteLine($"id={row["id"]} category={row["category"]} price={row["price"]} score={row["score"]:F3}");
+// id=2 category=electronics price=120 score=0.993
+// id=1 category=electronics price=100 score=0.988
 ```
 
 Output:
 
 ```text
-after commit: 400, 200
-after rollback: 400, 200
+id=2 category=electronics price=120 score=0.993
+id=1 category=electronics price=100 score=0.988
 ```
+
+##### Transactions and durability
+
+BEGIN, COMMIT and ROLLBACK run over a write-ahead log of signed page deltas in a ring file whose size follows the largest recent batch, with group commit: a statement that has returned is on disk. A failed statement inside a transaction undoes only itself.
+
+A transaction larger than the buffer pool spills to a scratch file, and a rollback or a power cut leaves the table as it was. The tests cut the power inside COMMIT and kill the process, and the table that opens is the table before or the table after.
+
+##### AS OF and Seal
+
+Each commit is kept as a signed record within a retention budget, so SELECT ... FROM t AS OF n reads a paged table as it was after commit n for any n the history still holds. Seal(table, asOf: n) gives an order-free fingerprint that replicas can compare.
+
+AS OF works on paged tables. A sequence below the floor, inside a retained segment, or on an in-memory table is refused by name, as is a join under it.
 
 ##### Atomic change batches and upsert
 
-A live replica turns an ordered change feed from another system into one call per batch. ApplyChanges(table, changes) on Database, and ApplyChanges and ApplyChangesAsync on HoloDbService, applies upserts and deletes atomically under one write lock: a reader sees the table before the batch or after it, never part of it, on every read path including the lock-free live metrics. The batch is one write-ahead-log commit group, so on replay it applies whole or not at all, and a table with a Pleroma plane takes the whole batch in one pass.
+ApplyChanges applies a batch of upserts and deletes atomically. KeyDigest compares two key sets in modulus numbers. Seal fingerprints a table so shards add and replicas compare.
 
-- RowChange.Upsert(row): Carries a full row: every column, with case-insensitive names. INT takes any integral type, REAL a float or an integer, and TEXT a string. A C# null (or DBNull) is SQL NULL and is accepted only for a column declared NULL; there is no NaN. It inserts a new key or replaces the whole row of an existing one. A missing column throws, because there is no default for an omitted column: it would silently become 0, an empty string or NULL. For a partial update use INSERT ... ON CONFLICT.
-- RowChange.Delete(key): Deletes by primary key. A key that is not there is a counted no-op.
-- Order and result: Changes count as if applied in order, so the last change to a key wins, and only the net effect runs. ChangeResult reports Inserted, Updated, Deleted and MissingDeletes.
-- All or nothing: Everything is validated before anything changes, and a failure leaves the table, its aggregates and its plane as they were. Inside BEGIN and COMMIT the batch commits or rolls back with the transaction.
-- What is refused: A paged table refuses ApplyChanges and the SQL upsert with an error that names the table. A text value that contains a line break throws on a database with a write-ahead log, because the log holds one statement per line.
-- The log: The log holds the net effect as plain DELETE, UPDATE and INSERT lines, so an older binary can still replay it.
+INSERT with ON CONFLICT ... DO UPDATE is the SQL upsert. ApplyChanges and the upsert form run on in-memory tables, and a paged table refuses them.
 
-The SQL form is INSERT ... ON CONFLICT (key) DO UPDATE SET column = EXCLUDED.column. The SET list names the columns that change and the others keep their value, which makes it the way to change some columns of a row. It reports Affected as the rows inserted plus the rows updated, and it is allowed inside a transaction. Only EXCLUDED.column of the same column is accepted. DO NOTHING, expressions, a WHERE on the conflict, INSERT OR REPLACE, REPLACE INTO, UPSERT and a conflict target that is not the primary key are each refused with an error that names them. A plain INSERT of an existing primary key still throws.
+##### Tables larger than memory
 
-```csharp
-using HoloDb;
+Paged tables read through a buffer pool of 8 KB pages. Every page has a logical number, and a map takes that number to a place in the file. The map changes only inside a committed log batch, so a moved or rewritten page never leaves the file half-changed, and a shrunk table keeps its freed pages and refills them.
 
-var db = new HoloDbService(new HoloDbOptions());
-db.Execute("CREATE TABLE orders (id INT PRIMARY KEY, region TEXT, total INT)");
+Every log block and every data page carries a CRC-32C checksum. A page that fails its checksum is an error that names the page, never a changed answer. Paged tables written by older formats, older write-ahead logs, and a text-format database opened as paged all throw a named error that says to export the rows and load them into a new database. There is no in-place upgrade.
 
-// one atomic batch: readers see the table before it or after it, never part of it
-var r = db.ApplyChanges("orders", new[]
-{
-    RowChange.Upsert(new Dictionary<string, object?> { ["id"] = 1L, ["region"] = "north", ["total"] = 40L }),
-    RowChange.Upsert(new Dictionary<string, object?> { ["id"] = 2L, ["region"] = "south", ["total"] = 15L }),
-    RowChange.Upsert(new Dictionary<string, object?> { ["id"] = 1L, ["region"] = "north", ["total"] = 45L }),
-    RowChange.Delete(2L),
-    RowChange.Delete(99L),
-});
-Console.WriteLine($"{r.Inserted} inserted, {r.Updated} updated, {r.Deleted} deleted, {r.MissingDeletes} missing");
+##### The aggregate plane
 
-// the SQL form changes only the columns in the SET list and keeps the rest
-db.Execute("INSERT INTO orders VALUES (1, 'west', 50), (3, 'east', 7) ON CONFLICT (id) DO UPDATE SET total = EXCLUDED.total");
-foreach (var row in db.Execute("SELECT id, region, total FROM orders ORDER BY id").Rows)
-    Console.WriteLine($"{row["id"]} {row["region"]} {row["total"]}");
-```
+The plane is optional. It is an exact derived summary of small-domain columns, served through Phasor's Pleroma stores, with PleromaVerify to check it against the columns.
 
-Output:
+##### Metering and integration
 
-```text
-2 inserted, 1 updated, 1 deleted, 1 missing
-1 north 50
-3 east 7
-```
+MeteredDatabase reports the rows and bytes each query read.
 
-##### In memory or durable
+services.AddHoloDb() registers HoloDb for dependency injection, and an EvalApp context runs it inside pipelines.
 
-By default the database lives in memory and is gone when the process ends. To make writes durable, give it a write-ahead log path. Durable state is a compact snapshot of the current data plus a short log of the writes since the last checkpoint. A durable commit flushes to disk before it returns. Recovery is bounded by how much data you hold, not by how long the database has been running: reopening loads a snapshot and replays only the recent tail.
-
-The log is folded into a fresh snapshot automatically once it passes a threshold (CheckpointThresholdBytes, 8 MB by default), and you can force one with Checkpoint, for example before a clean shutdown. In WebAssembly there is no file system, so leave WalPath null and use the in-memory engine. To work with the engine directly, without the async wrapper, call Database.Open with a path, or with null for in memory.
-
-```csharp
-using HoloDb;
-
-var wal = Path.Combine(Path.GetTempPath(), "holodb-docs-" + Guid.NewGuid().ToString("N") + ".wal");
-try
-{
-    var db = new HoloDbService(new HoloDbOptions { WalPath = wal });   // writes are durable
-    db.Execute("CREATE TABLE notes (id INT PRIMARY KEY, body TEXT)");
-    db.Execute("INSERT INTO notes VALUES (1, 'first'), (2, 'second')");
-    db.Checkpoint();                                                    // fold the log into a snapshot
-    db.Execute("INSERT INTO notes VALUES (3, 'after the checkpoint')");
-    db.Database.Close();
-
-    var reopened = new HoloDbService(new HoloDbOptions { WalPath = wal });   // snapshot plus the short tail
-    Console.WriteLine(reopened.Execute("SELECT COUNT(*) FROM notes").Rows[0]["count(*)"]);
-    reopened.Database.Close();
-}
-finally
-{
-    foreach (var f in Directory.GetFiles(Path.GetTempPath(), Path.GetFileName(wal) + "*")) File.Delete(f);
-}
-```
-
-Output:
-
-```text
-3
-```
-
-##### Larger than memory: paged tables
-
-The default engine keeps everything in RAM. When a table needs to outgrow memory, create it as a paged table. It lives on an 8 KB buffer-pool page store with a redo-only write-ahead log, so cold pages spill to disk, and the constant-time aggregates stay maintained on disk. Once created, a paged table is driven through the same Execute call as an in-memory table.
-
-The buffer-pool size (bufferFrames, 8,192 frames of 8 KB by default) bounds how much stays resident. A paged table's primary-key index is built on first use. A key column loaded in increasing order is its own index, searched in place with no RAM. Any other order keeps a dictionary in RAM at about 35 bytes per row, measured at 39 and 34 bytes per entry for 1,000,000 and 10,000,000 entries, and that index, not the buffer pool, then bounds how far a single paged table can grow past memory.
-
-Every 8 KB page carries a CRC-32C, kept in a small side file of 4 bytes per page. A page that fails its checksum is refused with an error that names the page, never read as a different answer. UPDATE and DELETE find their rows through the primary key, a sorted index, a group index that proves a value absent, or the block scan, and they move only the pages that change. A statement may change more pages than the buffer pool holds: the pool spills the open transaction to a scratch file, so a DELETE that moves every later row completes, and a rollback or a power cut still leaves the table exactly as it was. Filtered scans, GROUP BY of any cardinality, top-K and GROUP BY over a join read the needed columns a page run at a time across all cores.
-
-```csharp
-using HoloDb;
-
-var dir = Path.Combine(Path.GetTempPath(), "holodb-paged-" + Guid.NewGuid().ToString("N"));
-try
-{
-    var db = new HoloDbService(new HoloDbOptions());
-    // a durable, larger-than-memory table backed by a directory
-    db.CreatePaged("CREATE TABLE events (id INT PRIMARY KEY, kind TEXT, value INT)", dir);
-    var rows = Enumerable.Range(1, 1000).Select(i => (object[])new object[] { (long)i, i % 2 == 0 ? "even" : "odd", (long)i });
-    db.PagedBulkLoad("events", rows);
-    foreach (var r in db.Execute("SELECT kind, COUNT(*), SUM(value) FROM events GROUP BY kind ORDER BY kind").Rows)
-        Console.WriteLine($"{r["kind"]}: {r["count(*)"]} rows, sum {r["sum(value)"]}");
-    db.Database.ClosePaged("events");
-
-    var again = new HoloDbService(new HoloDbOptions());
-    again.OpenPaged(dir);                                               // reopen it later
-    Console.WriteLine(again.Execute("SELECT COUNT(*) FROM events").Rows[0]["count(*)"]);
-    again.Database.ClosePaged("events");
-}
-finally { if (Directory.Exists(dir)) Directory.Delete(dir, true); }
-```
-
-Output:
-
-```text
-even: 500 rows, sum 250500
-odd: 500 rows, sum 250000
-1000
-```
-
-##### Indexes, and why aggregates are instant
-
-A sorted index speeds range and lookup queries. You rarely need one for counting: COUNT and SUM over integer columns are served from maintained accumulators in constant time, independent of how many rows the table holds, so the engine does not scan to count. An index needs an INT or TEXT column.
-
-CREATE INDEX also builds the optional aggregate plane, and on a paged table it takes USING SUMMARY, SORTED or KEYED. SHOW INDEXES and EXPLAIN report what exists and what answers a query. Those are described with the plane.
-
-You do not have to declare any of them. With the default SET summaries = auto and SET indexes = auto, the engine builds a summary, a sorted index, an equality index or a keyed summary itself when repeated scans have paid for it, and drops it when the workload moves on. SET summaries = declared or off, and the same for indexes, turn that off. The answers are the same with or without the structure.
-
-```sql
-CREATE INDEX ON sales (region)
-```
-
-##### Changing a table
-
-ALTER TABLE supports ADD COLUMN only. A NOT NULL column needs a literal DEFAULT, which backfills the rows that exist; a column declared NULL may leave the DEFAULT out, and the existing rows are NULL. There is no DROP, rename or type change.
-
-```sql
-ALTER TABLE sales ADD COLUMN note TEXT DEFAULT ''
-```
-
-##### Dependency injection and EvalApp
-
-Register HoloDb in a .NET host and inject HoloDbService wherever you need it. HoloDb also runs inside an EvalApp harness: WithHoloDb attaches a service to a pipeline, so heavy queries execute as compiled, resource-gated, self-tuning pipeline steps and any step can reach the service.
-
-```csharp
-using HoloDb;
-using Microsoft.Extensions.DependencyInjection;
-
-var services = new ServiceCollection();
-services.AddHoloDb(options => { options.WalPath = null; });   // singleton HoloDbService
-
-using var provider = services.BuildServiceProvider();
-var db = provider.GetRequiredService<HoloDbService>();
-db.Execute("CREATE TABLE sales (id INT PRIMARY KEY, region TEXT, amount INT)");
-db.Execute("INSERT INTO sales VALUES (1, 'EU', 10), (2, 'US', 5), (3, 'EU', 7)");
-var totals = await db.ExecuteAsync("SELECT region, SUM(amount) FROM sales GROUP BY region ORDER BY region");
-foreach (var r in totals.Rows) Console.WriteLine($"{r["region"]}: {r["sum(amount)"]}");
-```
-
-Output:
-
-```text
-EU: 17
-US: 5
-```
-
-##### The usage meter
-
-After each query, static per-thread readings report what the engine actually processed: LastRowsScanned, LastTableRows, LastRowBytes and LastLogicalBytes. An aggregate served from a maintained total reports zero rows scanned, which is the figure a metered API bills on.
-
-##### In the browser, and over the network
-
-HoloDb is plain managed .NET with no native dependencies, so it compiles to WebAssembly and runs client-side with no server and nothing leaving the device. The Analyst is exactly that: a real HoloDb in your browser tab, profiling and querying whatever you paste in.
+##### Over the network
 
 The same engine runs as a server, and a typed client talks to it over TLS with the same surface as the in-process engine.
-
-#### HoloDb is built with Pleroma (https://evaluatedapplications.github.io/holodb/pleroma/)
-
-Ask a table a question without reading the table.
-
-Switch on the plane for a table and HoloDb answers filters, group-bys, distinct counts and joins from a small exact summary instead of scanning rows. It is optional, off until you ask, and every answer matches the engine's.
-
-- About 600 times: faster for an overdue-invoices rollup on 10,000,000 rows with the plane on: 5.93 ms down to 0.01 ms
-- 121 times: median speed-up over the engine on nine ad-hoc filters across a 10,000,000-event dashboard
-- 343 to 385 microseconds: for one insert and one group-by with the plane on, from 100,000 to 1,000,000 rows. The engine alone climbs from 1.03 to 3.54 ms
-
-HoloDb is built with Pleroma, the exact count-and-sum structure in the Phasor package. Three parts of HoloDb are Pleroma parts. This page says what each gives you and what it costs. The first two are optional and off until you ask for them.
-
-##### Engine results and plane results
-
-The 10,000,000-invoice comparison against engines as they ship ran on the HoloDb engine alone, with no plane attached, and the 100,000,000-invoice comparison uses summaries that are declared or built by the planner. The plane is a separate, opt-in feature, measured in its own runs in the deep dive, where its costs sit beside its wins.
-
-##### The aggregate plane: exact answers from a derived summary
-
-You name a few small-domain columns (dimensions, INT or TEXT) and the INT columns to sum (measures). HoloDb keeps a Pleroma summary of them, updated by every write, and answers filters, multi-column GROUP BY, COUNT(DISTINCT), MIN and MAX of a dimension, and equi-join COUNT and SUM from it, without scanning the table.
-
-- Exact and derived: The columns stay the source of truth, and the plane is rebuilt from them. PleromaVerify rebuilds it and compares, and returns nothing when they agree. Sums are held exactly past 64 bits: the plane raises an error rather than wrap, and PleromaSumExact returns the exact 128-bit total.
-- It declines safely: Anything the plane does not hold (AVG, a column that is not a dimension or measure, a dimension over its cap of distinct values, a join over 4,095 keys) goes to the engine, so a query returns the same rows with the plane on or off. The default routing, PleromaMode.Auto, also leaves to the engine the shapes where it already reads a maintained total (whole-table counts and sums, single-column GROUP BY) and GROUP BY with a WHERE below 140,000 rows, because the engine is faster there.
-- Batches: ApplyChanges hands the plane a whole batch of upserts and deletes in one pass, as one commit group. The evidence page shows how the cost of a batch grows with its size, and that one insert followed by a group-by costs about the same at 100,000 rows as at 1,000,000.
-- What it costs: On a 1,000,000-row table the plane is slower than the engine alone on whole-table COUNT, whole-table SUM, single-column GROUP BY and MIN and MAX, because the engine reads a maintained total in microseconds there. It adds to single-row INSERT and UPDATE, and to bulk load a little. Every cost is in the evidence record beside the wins.
-- Automatic by default: With no declaration at all, the engine watches which aggregate statements keep scanning, and when the scanning has cost as much as a summary would cost to build it builds that summary itself (inline for tables up to a million rows, in the background above that while writes continue), names it auto_<table>_summary, and drops it again if the workload moves on. SET summaries = auto | declared | off and SHOW SUMMARIES control and show it, and EXPLAIN says which summary answered and why it was built. The answers are the same with or without it.
-- On paged tables too: The same rule builds the summary in the background from a paged table's pages, keeps it exact through appends, updates, deletes and transactions, and saves it beside the table, checksummed and valid only for the state it was saved from. A fresh paged table scans its first calls; after three repeats and enough scan time to pay for the build, the same statements are answered from the summary.
-- A sorted index for the big scan: A paged table can keep a sorted index on an INT column (16 bytes per row, read from disk in checksummed blocks). A range count, MIN and MAX, and the 20 largest are answered from the index whatever the table size: at 30,000,000 rows, warm, 0.002 ms against 2.7 ms for the scan. It stays exact through appends, updates and deletes, is saved with the data, and the planner builds one by itself when the scans have paid for it.
-- A keyed summary for the high-cardinality joins: For every customer id the exact count and sum, so top customers and revenue by segment are answered from the 600,000 keys instead of the 30,000,000 rows (12 ms and 13 to 30 ms cold after a restore; the scans took 120 to 1,170 ms). Joins with a dimension are kept as exact pre-grouped totals that every appended row and every new customer updates as it arrives, and a customer who changes segment moves their totals. At 100,000,000 invoices the four dimension joins answer in 0.19 to 0.25 ms warm and top customers in 0.58 ms warm (medians of three, one run, structures declared and loaded from their saved files). The planner builds the summary when the scans have paid for it, counting the writes the table has seen: a table that is mostly written to does not get one. The comparison with tuned DuckDB and tuned SQL Server is on the evidence page, with the queries HoloDb loses.
-- Restored from a backup, nothing to rebuild: Declare the summary on a paged table (CREATE INDEX ... USING SUMMARY) and it is saved beside the data with the table's group indexes and sorted key, each checksummed and trusted only for the exact table state it was saved from. A database restored from a backup opens with all of it present, and the first query is answered from the summary with no pass over the data. A stale or damaged file is discarded or rebuilt from its saved definition, and SHOW SUMMARIES says why.
-- Limits: A plane attached with EnablePleroma is for memory-resident tables and is not persisted, so call it again after Open. A plane created with SQL, or built automatically, is logged and saved with the snapshot, so Open does not rebuild it, and it survives Checkpoint. On a paged table CREATE INDEX takes USING SUMMARY, SORTED or KEYED, and the planner builds the same structures by itself. A plane serves a dimension only up to its cap of distinct values and a join of at most 4,095 keys, and declines anything else to the engine.
-
-##### Index SQL and EXPLAIN: build it and see why
-
-The plane has a SQL form, so a remote client can build it through the server like any statement. SHOW INDEXES reports its size and how many queries it served and declined, and EXPLAIN reports why a query was served or declined, without running it.
-
-EXPLAIN runs the engine's own routing code in a mode that stops before the heavy work, so what it reports is the decision the real statement takes. It does not run an IN (SELECT ...) subquery, which it shows unresolved. A binary older than the release that added this SQL cannot open a log or snapshot that contains it.
-
-```csharp
-using HoloDb;
-
-var db = Database.Open();
-db.Execute("CREATE TABLE sales (id INT PRIMARY KEY, region TEXT, tier INT, qty INT)");
-db.Execute("INSERT INTO sales (id, region, tier, qty) VALUES (1,'north',1,10),(2,'north',2,-4),(3,'south',1,7),(4,'east',3,5),(5,'south',2,9)");
-
-// build the plane from SQL: key columns are dimensions, INCLUDE columns are measures
-db.Execute("CREATE INDEX by_region ON sales (region, tier) INCLUDE (qty) USING SUMMARY");
-db.PleromaMode = PleromaMode.Always;
-
-Console.WriteLine(db.Execute("SELECT SUM(qty) FROM sales WHERE region = 'north' OR tier = 3").Rows[0]["sum(qty)"]);
-
-// why was it served, or declined?
-foreach (var r in db.Execute("EXPLAIN SELECT region, SUM(qty) FROM sales WHERE region = 'north' GROUP BY region").Rows)
-    Console.WriteLine($"{r["kind"]}: {r["route"]}");
-foreach (var r in db.Execute("EXPLAIN SELECT COUNT(*) FROM sales WHERE qty > 5").Rows)
-    Console.WriteLine($"{r["kind"]}: {r["route"]}");
-
-Console.WriteLine(db.PleromaVerify("sales") ?? "plane equals a rebuild from the columns");
-Console.WriteLine(db.PleromaSumExact("SELECT SUM(qty) FROM sales"));
-```
-
-Output:
-
-```text
-11
-route: Pleroma plane (exact aggregate from the derived plane)
-plan: Aggregate by region: sum(qty)
-plan:   Filter region[FilterEq]
-plan:     Scan sales
-summary: declared summary by_region
-index: no index: 5 rows is below the 100,000-row floor where a scan is a few milliseconds
-decline: WHERE uses a column that is not a plane dimension, a dimension over its cap, a column-to-column comparison or a subquery
-access: block-wise mask scan
-route: predicate count (block-wise byte-mask, no position list)
-plan: Aggregate count(*)
-plan:   Filter qty[FilterRange]
-plan:     Scan sales
-summary: declared summary by_region
-index: no index: 5 rows is below the 100,000-row floor where a scan is a few milliseconds
-plane equals a rebuild from the columns
-27
-```
-
-##### The Pleroma page store: durable, checksummed pages
-
-PleromaPageStore holds many exact Pleroma pages as the data itself, durably and larger than memory, with no columns behind them. PleromaSparsePageStore does the same for sparse pages over a large vocabulary.
-
-- Checksummed pages: Every page carries a check prime, a mirror of its cells in a second prime, and a header hash. Verify proves every record and parity group intact. VerifyOnLoad does the same on every load and is off by default (about 100 microseconds for a 110-key page).
-- Parity repair: Records are grouped (8 by default) with one exact-sum parity record per group, and the members of a group sit on different 8 KB pager pages. Any one lost pager page, or any one damaged record per group, is rebuilt by Repair. A rebuilt page must pass its own check before it is written, and a page whose group parity is also damaged is reported as unrecoverable, never rebuilt wrong.
-- Restore points: Checkpoint returns a restore point, and RestoreTo returns the store to exactly that state with no recount. It is copy-on-write, so a restore point costs one before-image per page changed since, not a copy of the data. Eight are kept by default.
-- Exactly-once replay: Every AddBatch is journaled (fsynced by default) before it is applied, and each page remembers the last batch applied to it, so crash recovery applies a logged add exactly once, even over pages already flushed. A torn journal tail is discarded, so a batch survives whole or not at all.
-
-Limits: one shape per store, and it must be CompleteKeys and admissible for a check prime. Shapes with a continuous component or a relation face cannot be saved. One process opens a store at a time and one writer works at a time. A batch is applied page by page, so a reader sees every page whole but may see a batch on some pages and not on others. The sparse store has no parity groups, restore points or event journal. Page-store throughput is not reported.
-
-```csharp
-using HoloDb;
-using Phasor;
-
-var shape = new HologramShape { KeyCapacity = 2, KeyCycle = 110, CompleteKeys = true };
-var dir = Path.Combine(Path.GetTempPath(), "plrstore-restore");
-if (Directory.Exists(dir)) Directory.Delete(dir, true);
-
-using (var store = PleromaPageStore.Open(dir, shape))
-{
-    store.AddBatch(new[] { new PageAdd(42, 5, 3) });
-    var point = store.Checkpoint();                       // a restore point: id and journal position
-    store.AddBatch(new[] { new PageAdd(42, 5, 10), new PageAdd(9, 1, 1) });
-    Console.WriteLine($"{store.Counts(42)[5]} {store.Contains(9)}");
-
-    store.RestoreTo(point.Id);                            // back to the point, no recount
-    Console.WriteLine($"{store.Counts(42)[5]} {store.Contains(9)}");
-
-    Console.WriteLine(store.Verify().Clean);
-    Console.WriteLine(store.Repair().Unrecoverable.Count);
-}
-Directory.Delete(dir, true);
-```
-
-Output:
-
-```text
-13 True
-3 False
-True
-0
-```
-
-##### Exactness
-
-The plane returns row-for-row the same answers as the engine and SQLite across its parity suite, including a random insert, update, delete, rollback and reopen log, and sums past 64 bits, and the page store passes its fault suite. The checks, and the deliberate mutations that turned them red, are listed with the figures.
 
 #### HoloDb over the network: the client and the wire protocol (https://evaluatedapplications.github.io/holodb/client/)
 
@@ -2265,92 +1767,88 @@ Console.WriteLine(nameof(HandleOneRequest));
 
 Licence: Commercial licence for commercial use. Evaluation and non-commercial use are permitted. Terms at https://evaluatedapplications.github.io/licence/
 
-### AlgFormer: a transformer engine for .NET
+### AlgFormer: small language models in one shared wave, for .NET
 
-Train and run language models in plain C#. The holographic attention core reads long prompts in a fraction of the time.
+A population of small holographic language models that talk through a shared wave, in pure managed code.
 
 Page: https://evaluatedapplications.github.io/algformer/
 - Package EvaluatedApplications.AlgFormer, release 3.3.0: `dotnet add package EvaluatedApplications.AlgFormer`
 - Package EvaluatedApplications.AlgFormer.Gpu, release 1.12.0: `dotnet add package EvaluatedApplications.AlgFormer.Gpu`
 - Builds on: EvalApp, Phasor
-- Used by: Prism, Prose
-- Tools: Prism, Prose
+- Used by: Prose
+- Tools: Prose
 
-Train a language model in plain C#. Nothing else to install.
+Many small models, one shared wave.
 
-Define, train and run transformer models with no Python, no GPU and no native runtime. Pick classic attention, or the holographic core that reads long prompts in a fraction of the time.
+A population of small holographic language models that talk through a shared wave, in pure managed code. They never pass wires to each other. They write to the medium and read the medium.
 
+- 2.99 against 3.38: bits per character: six atoms that each see about a sixth of the text and share the medium, against one atom that reads all of it. The same six atoms without the medium score 4.33
+- 3.47 against 3.84: bits per character for two width-32 atoms when the loss reaches the atoms through the notes they wrote, against the same atoms with the writer gradient switched off
+- 261 launches: per training step for two, eight and sixteen atoms alike, against 454 for two atoms and 1,672 for eight on the per-atom path (two layers, two passes)
 - 26 times: less time to read a 1,984-token prompt with holographic attention
-- 50 times: less time for each further token, which stays flat as the context grows
-- 663 times: smaller serve cache, constant in the length of the context
 
-AlgFormer is a .NET library for defining, training and running transformer-style language models. Give it a vocabulary and a shape, train it on your own token sequences through a data-parallel pipeline, and run inference as a single prediction, as full logits or as streaming generation with a cache.
+AlgFormer is a .NET library for defining, training and running transformer-style language models, built on the Phasor codec. The atom field is the part that couples models. Several small HoloFormers, with no shared weights, write into one bundle of damped oscillators and listen to each other's notes. The answer you serve is the average of their logits, and you can train on that combined answer. The library also holds the two single-model cores, a softmax core and a holographic core, with a subword tokenizer, a data-parallel trainer, streaming generation with a cache and checkpoints. Everything is plain double arrays with SIMD. No GPU, Python or native runtime is needed, and an optional GPU package runs the same models faster.
 
-It is a real, gradient-trained architecture written entirely in C# on double arrays with SIMD. It runs anywhere .NET runs, with no GPU, no Python and no native binary to ship. Most transformer tooling means binding into a native runtime such as ONNX, PyTorch or CUDA, or hand-rolling matrix code with no attention research behind it. AlgFormer sits between the two.
+Think of a pond with sources and listeners. Each atom is a small HoloFormer. At every position it writes its state into one shared bundle of damped oscillators, like dropping a pebble of its own size and phase into the water. Each atom then listens to the pond with its own note removed, so it hears only the others.
 
-It also lets you compare two ideas of what attention should cost. Softmax attention scores every token against every other token, which is quadratic in the length. The holographic core composes context by binding, bundling and unbinding instead. The two cores are parameter for parameter comparable, so you can train the same shape on the same data with either.
+Time lives in the medium itself. Each oscillator advances in phase and decays a little at every step, so recent writes ring loud and old writes fade, and fast bells and slow bells keep different spans of history. Space lives in the medium as well. With holographic locality, every atom has a trainable position and every channel a trainable wavevector. A writer binds a phase set by where it sits, and a reader unwinds the phase set by where it sits, so near atoms add up together and far atoms drift out of step.
+
+In the golden configuration the atoms start on a golden-ratio spiral with golden-angle write phases, so none sits in a privileged place, and the timescales are rotated around the golden ratio from atom to atom, so every atom owns the same mix of fast and slow bells. With holographic locality, or with no locality, the cost grows linearly with the number of atoms and with the length of the text. Dense locality, the default mode when locality is switched on, costs the square of the number of atoms.
 
 Why use it:
-- Two real cores, not a toy. AlgFormer (softmax dot-product attention, the well-understood baseline) and HoloFormer (holographic attention) share a model shape, a training loop, a checkpoint format and a serving API. You swap the core, not the workflow.
-- No external ML runtime. Everything is plain double arrays and SIMD, compiled into your app. There is no ONNX Runtime, no libtorch, no CUDA toolkit and no Python interop.
-- Attention that scales differently. HoloFormer reads a prompt in time that grows with its length rather than its square, and serves each further token at a constant cost through an incremental cache. That matters when context windows get long. The chart above measures both cores.
-- Everything needed to use it. A subword tokenizer, a data-parallel trainer, streaming generation with a cache, checkpoints with format versioning, and helpers that grow a trained model to a longer context or a bigger vocabulary without retraining from scratch.
-- Built for training across machines. Relay components let several machines train one shared model over MQTT, exchanging either full batches or lightweight position manifests.
+- Holographic bundle attention, no softmax. A standard transformer scores every token against every other token with softmax, which is quadratic in the length. HoloFormer binds each key to its value, folds them into one running bundle and unbinds with the query. Reading a prompt grows in step with its length, and serving each further token through Prime and Step costs the same however long the context is.
+- Weight-tied depth. One layer's weights are reused for several passes, so depth is a count you choose rather than a parameter bill. The atom field runs the same K passes for every layer of every atom.
+- A population coupled by a medium. Standard ensembles average finished answers. Here the atoms exchange information while they compute, through one shared bundle of damped oscillators. With holographic locality or none, the cost grows linearly with their number.
+- Trainable geometry. Atom positions, wavevectors, decay times and write phases are learned parameters with exact gradients. Every dense map is a relation bank, so a layer carries S times d parameters rather than d squared.
 
 Capabilities:
-- Two comparable attention cores. AlgFormer (softmax) and HoloFormer (holographic resonance), built from the same shape parameters.
-- Pure managed implementation. double arrays and SIMD, with no external ML runtime, no native dependency and no GPU required.
-- Data-parallel training. A resource-gated, adaptively tuned pipeline for full epochs over your data, built on EvalApp.
-- Streaming inference. An incremental cache for low-latency generation. HoloFormer's cache holds one running holographic memory per layer, so each token costs the same however long the context is.
-- Checkpoints that keep loading. Save and load with backward-compatible format versioning, so old checkpoints keep loading as the format evolves.
-- Growth in place. Extend the context length, the attention shifts or the vocabulary of a trained model without starting again.
-- Sizing from a measured law. HoloShape chooses model dimensions from measured trade-offs. HoloShape.Derive turns a single width into a starting set of shifts, context length and layers.
-- Tokenizer and data sources. A built-in subword tokenizer and ready-made adapters for raw corpus windows, prompt and answer pairs and source mixing.
-- Distributed training. Relay components over MQTT, from full-model relay to a data-free relay of position manifests.
-- Preference training. Direct preference optimisation on the CPU HoloFormer: sequence log-probability over a chosen span, an exact clone for the frozen reference model, a signed per-sequence weighted all-positions step and a helper that returns the loss and the two weights.
+- Two comparable single-model cores. AlgFormer (softmax) and HoloFormer (holographic) share a model shape, a training loop, a checkpoint format and a serving API. The atom field builds a population out of HoloFormer models.
+- AtomField. Opt-in, Memory coupling: N HoloFormers with no shared weights coupled through one damped-oscillator bundle, each reading the others with its own note removed, serving the mean of the atoms' logits. Training can use per-atom loss or the combined loss (CombinedLoss) on the mean of the logits. Weight-tied passes (Iters) per layer.
+- Locality. Trainable atom positions and per-channel wavevectors (MemoryLocality, holographic and dense modes; holographic is linear in the number of atoms, dense is quadratic), with a golden-spiral start (SpiralPositions).
+- Diversity options. All off by default: golden rotation of timescales (MemoryTauRotation, GoldenTauRotations), a fast-to-slow scale ladder (MemoryTauScale) and golden-angle write phases (MemoryWritePhaseDeg).
+- Molecules. MemoryMoleculeSize groups atoms so each hears its group in one amplitude and the rest in another. It runs on the CPU only.
+- Trajectory accessor and checkpoints. TrajectoryAllPositions for viewers, and checkpoints for the whole field (SerializeMemory, LoadMemory).
+- Data-parallel training. Through an EvalApp pipeline (PrismTrainer).
+- Streaming inference. Prime and Step with an incremental cache, constant work per token for HoloFormer.
+- Growth and sizing. In-place model growth, a capacity-law sizing module (HoloShape, including HoloShape.Derive), a built-in subword tokenizer and data-source adapters.
+- Preference training. Preference (DPO) training on the CPU HoloFormer.
+- ADAM and EVE. An opt-in per-layer Adam gate for HoloFormer, default off.
 - Gradient-check oracles. Built-in checks let you verify the training maths instead of assuming it is right.
-- ADAM and EVE. An opt-in, per-layer Adam gate for HoloFormer that nudges a layer's update toward a norm range derived from the codebook. It is off unless you enable it through HoloFormer.EveOptions.
+- Interpretability hooks. AlgFormer.AttentionWeights and HoloFormer.InspectAttention.
+- Relay components. MQTT relay components (MqttRelay, MqttJobRelay, JobSource and a peer gossip component) can move batches, or position manifests with no data, between machines. They are separate from the atom field, which has no relay.
 
 Quick start:
 
 ```csharp
 using PrismFormer;
 
-// Define a model. Tokens are ints; bring your own tokenizer or encoding.
-var model = new AlgFormer(vocab: 16, shifts: 4, layers: 2, maxContext: 6, dModel: 32, frozenPrefix: 0);
+// Two HoloFormer atoms (width 32, 2 layers, vocabulary 16, context 8), coupled through the shared memory.
+var field = AtomField.Create(atoms: 2, dim: 32, layers: 2, vocab: 16, context: 8, seed: 1);
+field.Coupling = AtomCoupling.Memory;
 
-// Train on (context tokens, target token) pairs.
-var data = new List<(int[] Ctx, int Target)>
-{
-    (new[] { 1, 2, 3 }, 4),
-    (new[] { 2, 3, 4 }, 5),
-};
-var trainer = new PrismTrainer(model);                 // data-parallel, run through EvalApp
-double loss = trainer.TrainEpoch(data, batchSize: 2, lr: 5e-2, shuffleSeed: 1);
+// One example is one token window per atom (at most context + 1 tokens, the same length for every atom).
+var examples = new List<int[][]> { new[] { new[] { 1, 2, 3, 4, 5, 6, 7, 8 }, new[] { 1, 2, 3, 4, 5, 6, 7, 8 } } };
+double loss = 0;
+for (int i = 0; i < 20; i++) loss = field.TrainStepAllPositions(examples, lr: 0.01);
 
-// Run inference.
-var context = new[] { 1, 2, 3 };
-int next        = model.Predict(context);                                    // argmax next token
-double[] logits = model.LogitsFor(context);                                  // full logits
-int[] generated = model.Generate(context, maxNewTokens: 5, temperature: 0.8, seed: 1);
-
-Console.WriteLine($"loss={loss:F3} next={next} logits.Length={logits.Length} generated=[{string.Join(",", generated)}]");
+var result = field.InferAllPositions(examples[0]);   // result.Logits is the mean of the atoms' logits
+Console.WriteLine($"loss={loss:F3} logits={result.Logits.Length} atoms={result.AtomLogits.Length}");
 ```
 
 Output:
 
 ```text
-loss=2.776 next=4 logits.Length=16 generated=[3,1,7,12,10]
+loss=0.160 logits=16 atoms=2
 ```
 
 Limits:
-- The two cores share an API, not a behaviour. HoloFormer's capacity is set by its shape: a bundle holds a limited number of items cleanly, and HoloShape reports how many. A context longer than that reads back less cleanly.
-- A shift count of 1 collapses the relation bank to a per-position diagonal and attention breaks. Keep at least two shifts and shrink the width or the layer count instead.
-- A single model instance is not safe for concurrent training steps. Serving is read-only and safe to call from several threads on a model that is not changing, but a cache belongs to one generation on one thread.
-- HoloFormer's serve-time knobs (Iters, IterAlphaServe, IterClean and IterTau) are not saved in a checkpoint. Set them again after loading.
-- Step returns false when it drops a batch because the gradient was not finite. Check the result, or watch SkippedSteps, in a long training run.
-- The ADAM and EVE gate is exercised in training only through AlgFormer.Gpu. On the CPU trainer it is covered by checks and has not been run as a training loop.
-- The package ships as a binary with no source. It depends on Phasor and EvalApp, and the training relay uses MQTTnet.
+- Held-out text: the harness results are scored on 300 held-out windows of their own book text. The six-atom checkpoints are scored on windows of their training text.
+- Default: the atom field is opt-in in the library and the studio. A plain HoloFormer is what you get by default.
+- Scale: the harness results are small models on one text, two seeds.
+- Diversity: the diversity options (golden rotation of timescales, golden-angle write phases) are off by default. In the width-64 four-atom test, rotation raised how much the atoms depend on each other (leave-one-out cost 0.16 to 0.21) without lowering their correlation or improving the score.
+- Cost: linear in the number of atoms with holographic locality or no locality. Dense locality is quadratic in the number of atoms.
+- Molecules: MemoryMoleculeSize runs on the CPU only. The GPU package ignores it.
+- Holographic capacity: a holographic bundle holds a limited number of items cleanly, and HoloShape reports how many for a shape.
 
 #### How HoloFormer works (https://evaluatedapplications.github.io/algformer/holoformer/)
 
@@ -2523,38 +2021,6 @@ resonance rows=4, positions per row=3, decoded logits=16
 
 Licence: Commercial licence for commercial use. Evaluation and non-commercial use are permitted. Terms at https://evaluatedapplications.github.io/licence/
 
-### Prism: decode gate, lineage journal and growth for AlgFormer models
-
-A model that remembers how it grew. A confidence-gated decoder and a journal of every change, behind the Prism chat tool.
-
-Page: https://evaluatedapplications.github.io/prism/
-- Package EvaluatedApplications.Prism, release 1.3.4: `dotnet add package EvaluatedApplications.Prism`
-- Builds on: AlgFormer
-- Tools: Prism
-
-A model that remembers how it grew.
-
-Prism picks each next word by how confident the model is, records every time you grow the model, and works out how it stood at any past round. It is the code behind the Prism chat in your browser.
-
-- 30,400: checks that the decode gate matches the hand-written code it replaced, with zero mismatches
-- 19.5 ms: to open a journal of 50,000 events, far more than a real model records
-
-Prism is the NuGet package that the Prism chat tool runs on. It holds three things for a model built on AlgFormer: the decode policy that chooses each next token, a lineage journal that records how the model grew, and a growth surface that changes the model and writes that record for you.
-
-Why use it:
-- One decode policy. Commit greedily when the model is confident, otherwise sample only from what clears the floor. The gate is one tested policy with an explicit floor mode: a resonance floor for the holographic core, no floor, or nucleus sampling.
-- Facts about the past stay facts. Every structural change is stamped with the parameters a later calculation needs, when it happens. Questions such as how ramped a layer is, or when the model last grew, are answered from that history and never from whatever a live constant holds today.
-- Growth that records itself. Growing context, layers, shifts or vocabulary through the growth surface stamps the journal automatically, so a model cannot grow without the record.
-
-Capabilities:
-- Lineage journal. Idempotent append, so a resumed process stamping the same event again is a no-op. Derivations AlphaAt, DepthAt, LastGrowthRound and AddRoundOf resolve against the stamped history, including layers inserted at the front.
-- Storage seam. A file-backed JSONL store with durable append, and a pure in-memory store for browser and WebAssembly hosts that have no file system.
-- Growth surface. Grow a HoloFormer's context, layers, shifts or vocabulary, correct by construction, with the lineage stamped for you.
-- Decode policy and gate. DecodePolicy, Gate and GateDecision implement the confidence-gated decode with an explicit FloorMode.
-- Degeneration guard. DegenGuard fires on a run of repeated tokens or a run of non-greedy picks, the two signs that decoding has collapsed.
-
-Licence: Commercial licence for commercial use. Evaluation and non-commercial use are permitted. Terms at https://evaluatedapplications.github.io/licence/
-
 ### Prose: a grammar-driven corpus generator for .NET
 
 Three novels in, nearly two thousand checked new sentences out. Mines grammar into HoloDb and recombines it into text and question and answer pairs.
@@ -2719,7 +2185,7 @@ Send a whole crowd to one exit with a single search. Navmesh pathfinding with dy
 Page: https://evaluatedapplications.github.io/tracer/
 - Package EvaluatedApplications.Tracer, release 2.0.2: `dotnet add package EvaluatedApplications.Tracer`
 - Builds on: EvalApp
-- Tools: Doctrine, Prism
+- Tools: Doctrine
 
 Send a whole crowd to one exit with a single search.
 
@@ -2897,7 +2363,7 @@ Blazor pages that read at once and download .NET only when a visitor presses Sta
 
 Page: https://evaluatedapplications.github.io/blazier/
 - Package EvaluatedApplications.Blazier, release 1.1.0: `dotnet add package EvaluatedApplications.Blazier`
-- Tools: Umbrarium, preset demo, Doctrine, The Helix, The Analyst, Prism, Prose, Council Spending Scanner
+- Tools: Umbrarium, preset demo, Doctrine, The Helix, The Analyst, Prose, Council Spending Scanner
 
 Show the page now. Download .NET when they press Start.
 
@@ -3092,13 +2558,6 @@ Paste any data and profile it with a real SQL database in your browser: types, d
 Page: https://evaluatedapplications.github.io/tools/analyst/
 Powered by HoloDb.
 
-### Prism
-
-A tiny language model that runs entirely in your browser: chat with it, have it write a story, watch one of its decisions on a map, then train your own copy on a foraging task or a price tape.
-
-Page: https://evaluatedapplications.github.io/tools/prism/
-Powered by AlgFormer, Prism and Tracer.
-
 ### Prose
 
 Paste in a body of text, mine its grammar in your browser, and recombine it into sentences and question and answer pairs for a training corpus.
@@ -3161,11 +2620,84 @@ Each side's soldiers are items in a Pleroma store from the Phasor package. The b
 
 ## Evidence
 
+### Many small models, one wave: the evidence
+
+Six atoms that each see about a sixth of the text and share the medium score 2.99 bits per character. One atom that sees all of it scores 3.38, and the same six atoms without the medium score 4.33. At width 32, a pair scores 3.47 when the loss reaches the atoms through the notes they wrote and 3.84 when the writers are frozen.
+
+Page: https://evaluatedapplications.github.io/algformer/evidence/
+
+Method:
+- Workload: Bits per character on 300 held-out windows of the same text, scored at the last position, drawn the same way for every arm. The text is 300,000 characters of Gutenberg prose with a 64-symbol vocabulary. Each atom is a HoloFormer with shifts equal to the width, two layers, trained with the all-positions loss, learning rate 0.01, batch 16. The width-64 rows ran 800 steps at context 64. The width-32 rows ran 500 steps at context 32. The two groups are separate runs.
+- Engines: AtomField with Memory coupling (the shared medium); The same atoms with the field switched off; One HoloFormer reading the whole window
+- Check: Every arm is drawn the same way and scored the same way, with the matching null beside each result.
+- Statistic: Two seeds per arm.
+- Machine: The fused GPU step ran on an A3000 GPU at width 66, three passes, window 64, batch 32, fused path.
+
+Where it loses:
+- The harness results are small models on one text, two seeds, scored on windows of that text.
+- The six-atom checkpoints are scored on windows of their training text, and their two training rounds differ, so the table is not a comparison of the two settings.
+
+#### Small-scale harness, character language model
+
+At width 64, six atoms that each see about a sixth of the text and share the medium score 2.99 (seeds 2.96 and 3.02). One atom that sees all of it scores 3.38 (seeds 3.25 and 3.51). The same six atoms without the medium score 4.33. At width 32, the pair scores 3.47 when the loss reaches the atoms through the notes they wrote, and 3.84 when the writers are frozen.
+
+Bits per character by test
+
+| Test | Bits per character |
+|---|---|
+| Width 64: six atoms, each atom sees only its own tokens (split views), field switched off | 4.33 |
+| Width 64: the same six atoms with the shared medium | 2.99 |
+| Width 64: one atom reading the whole window | 3.38 |
+| Width 64: six atoms, every atom reads the whole window | 2.47 |
+| Width 32: two atoms, split views, writers trained through the medium | 3.47 |
+| Width 32: the same two atoms with the writer gradient switched off | 3.84 |
+| Width 32: two atoms, every atom reads the whole window | 3.18 |
+| Width 32 run: one atom of width 46 reading the whole window | 3.48 |
+
+#### Six-atom checkpoints
+
+Two six-atom checkpoints, each with six atoms at width 66 and six layers, Memory coupling and a 320-token vocabulary, scored on 400 windows of 65 tokens drawn from their training text, with all 64 transitions of each window scored. The two were stopped at different training rounds (3,510 and 9,000), so their scores are not a comparison of the two settings.
+
+Bits per token for the two six-atom checkpoints
+
+| Test, bits per token | Golden ladder of timescales, round 3,510 | No golden settings, round 9,000 |
+|---|---|---|
+| Mean of the six atoms, field on | 3.81 | 3.45 |
+| Each atom alone, field switched off | 9.6 to 15.5 | 15.2 to 19.6 |
+| Leave one atom out | costs 0.02 to 0.79 | costs 0.09 to 0.16 |
+| Correlation of the atoms' next-token logits, field on / off | 0.93 / 0.68 | 0.91 / 0.79 |
+
+With the golden ladder the leave-one-out cost runs from 0.79 for the first atom down to 0.02 for the fifth. Without it, the six costs sit close together.
+
+#### Fused GPU step
+
+AlgFormer.Gpu stacks the atoms as a batch dimension, so every layer, pass, head, reverse and Adam kernel runs once for all atoms. The number of kernel launches per step does not depend on the number of atoms.
+
+One training step on an A3000 GPU, in milliseconds (width 66, three passes, window 64, batch 32, fused path)
+
+| Layers | 2 atoms | 4 atoms | 8 atoms | 16 atoms |
+|---|---|---|---|---|
+| 1 layer | 13.6 | 25 | 40 | 75 |
+| 3 layers | 30.6 | 60 | 107 | 207 |
+
+Kernel launches per training step at two layers and two passes
+
+| Path | Atoms | Launches |
+|---|---|---|
+| Fused | 2, 8 and 16 | 261 |
+| Per atom | 2 | 454 |
+| Per atom | 8 | 1,672 |
+
+Limits:
+- The atom field is opt-in in the library and the studio. A plain HoloFormer is what you get by default.
+- Cost is linear in the number of atoms with holographic locality or no locality. Dense locality is quadratic in the number of atoms.
+- The diversity options (golden rotation of timescales, golden-angle write phases) are off by default. In the width-64 four-atom test, rotation raised how much the atoms depend on each other (leave-one-out cost 0.16 to 0.21) without lowering their correlation or improving the score.
+
 ### What attention costs
 
 At the same shape and the same parameter count, reading a 1,984-token prompt takes 182 ms with softmax attention and 7.08 ms with holographic attention. Each further token takes 181 µs against 3.60 µs, and the serve cache holds 2,253 KB against 3.40 KB. Softmax reading grows with the square of the length (exponent 1.9) and holographic reading grows in step with it (1.0).
 
-Page: https://evaluatedapplications.github.io/algformer/evidence/
+Page: https://evaluatedapplications.github.io/algformer/evidence/cost/
 
 Method:
 - Workload: Both cores are built at 32 channels, 8 shifts and 2 layers, which gives them the same parameter count, and driven with the same random tokens. For each context length the run reads the prompt through the serve cache, then produces 16 more tokens and averages them. Cache memory is the managed memory kept alive by the primed cache.
@@ -3294,70 +2826,61 @@ Limits:
 - The best bound here is a property of the simulated service, which slows past 6 in flight. A real service has its own shape, which is what the tuner exists to find.
 - It measures the gate and does not compare EvalApp with another library.
 
-### HoloDb benchmarks
+### What HoloDb learns, and how it is tested
 
-Totals over 100,000,000 invoices in 0.12 ms and four joins to two million customers in 0.19 to 0.25 ms, against tuned DuckDB and tuned SQL Server on the same machine and data. Out of the box, scans that no structure covers are slower, and the chart shows each of them as an amber bar.
+After single-row updates and deletes the next sweep reads 6 blocks with learned records that adjust, against 60 and 51 when updates drop them, and 6 against 366 after consolidation. A wrong answer is the one failure a database cannot afford, so the tests try to make HoloDb wrong: across 8 customer runs and 158 sessions it compared 249 million rows against SQLite and recovered 46 times after a kill or a power cut, 37 times to the state before the interrupted write, 9 times to the state after, and never to a state between.
 
 Page: https://evaluatedapplications.github.io/holodb/evidence/
 
-- 0.12 ms: to add up 100,000,000 invoices (HoloDb restored, warm median). Tuned DuckDB scanning them: 23.17 ms. Tuned SQL Server with an indexed view: 0.65 ms.
-- 0.19 to 0.25 ms: for the four joins to 2,000,000 customers (HoloDb restored, warm median). Tuned SQL Server: 0.62 to 0.77 ms. Tuned DuckDB: 102.06 to 603.65 ms.
-- 16 of 16: queries where HoloDb restored is ahead of tuned DuckDB, and 16 of 16 where it is ahead of tuned SQL Server. Ahead means more than 20 percent faster in both runs.
-- 10 of 16: queries where HoloDb out of the box is ahead of tuned DuckDB. It is behind on 5 and too close to call on 1: scans that no structure covers. Against tuned SQL Server it is ahead on 7 and behind on 9.
+Method:
+- Workload: Learned-record and upkeep counters come from pinned streams on a 1,000,000-row table with six learned scatter predicates. Correctness figures come from the 56-spec battery, the chaos2 random SQL streams and the customer lifecycle test, which grows one database from an empty file over many separate processes.
+- Engines: HoloDb; SQLite as the oracle for every answer, the full row set and the table seal
+- Check: Every SELECT, the full row set and the table seal are compared with SQLite, and the database is opened again after every session. Every check has a mutant arm that breaks the engine on purpose, and the check must go red for the right reason.
+- Statistic: Counts of blocks, pins, runs and bytes are exact. Times are informational.
+- Machine: 11th Gen Intel Core i9-11950H (8 cores, 16 threads), NVMe, Windows 11, shared with another job during the battery and customer runs.
+- Memory and logging: Three terms recur. A block is a run of rows stored together. A page is 8 KB of file. A pin is one page read through the buffer pool, and counts of pins stand in for time.
 
-One size: 100,000,000 invoices and 2,000,000 customers. One machine: an Intel Core i9-11950H laptop with 16 logical cores. Warm means the median of three runs. Ahead or behind means more than 20 percent in both runs of each engine.
+Where it loses:
+- Structures help repeated work. A filter whose matching rows are spread evenly over every block gains nothing from learned records.
+- Writes pay for what the engine keeps: a delete or update is charged the measured time of each structure's delta path, and a structure is dropped when its measured upkeep exceeds its saving.
+- Moving scattered rows costs about 200 microseconds per row, so a scattered filter pays that back after about 100 uses.
 
-Warm median milliseconds at 100,000,000 invoices (HoloDb restored | HoloDb out of the box | DuckDB tuned | SQL Server tuned):
-- invoices by status: 0.15 | 0.13 | 77.60 | 1.12
-- revenue by month: 0.23 | 0.20 | 69.35 | 1.20
-- revenue by region: 0.26 | 0.13 | 67.54 | 1.06
-- total invoiced: 0.12 | 0.13 | 23.17 | 0.65
-- invoice count: 0.18 | 0.10 | 0.67 | 0.62
-- look up one invoice: 0.15 | 0.16 | 0.76 | 0.58
-- overdue outstanding: 0.26 | 198.84 | 67.76 | 0.64
-- big-ticket invoices (>$5k): 0.19 | 111.31 | 35.02 | 17.21
-- largest invoices: 0.30 | 281.64 | 6.70 | 0.81
-- top customers by revenue: 0.58 | 3087.82 | 190.14 | 38.50
-- revenue by region & status: 0.28 | 355.86 | 261.46 | 0.91
-- revenue by segment (JOIN): 0.19 | 6.62 | 488.31 | 0.65
-- enterprise revenue (JOIN): 0.20 | 7.40 | 102.06 | 0.64
-- revenue by signup cohort (JOIN): 0.23 | 9.05 | 285.55 | 0.62
-- top named customers (JOIN): 0.93 | 33.60 | 576.07 | 121.54
-- revenue by segment & status (JOIN): 0.25 | 715.47 | 603.65 | 0.77
+#### What the engine learns
 
-HoloDb restored ran in a separate session on the same machine and data, the same day as the other three arms. HoloDb restored has its summary, sorted index and keyed summary declared and saved beside the data; the tuned rivals have the matching structures built by hand. Out of the box, nothing is declared and the planner saw each statement four times.
+Each row below compares the engine with a mechanism turned off, on the same stream. Every answer stayed exact.
 
-How we measured:
-- Machine: An 11th Gen Intel Core i9-11950H at 2.60 GHz, 16 logical cores, 34.1 GB of memory, Windows 11, .NET 8.0.27. Each engine ran in its own process.
-- Data and queries: 100,000,000 invoices and 2,000,000 customers; 16 billing queries: five rollups, a lookup, five scans and five joins to the customers.
-- Tuned DuckDB: DuckDB 1.5.5: table written in customer_id order, ANALYZE, 16 threads, 12 GB memory limit.
-- Tuned SQL Server: SQL Server 2022 Developer: a columnstore index, a descending index on amount_cents and indexed views, max server memory 5,120 MB, in a container.
-- Tuning: We chose the rivals' tuning after a 10,000,000-row trial and fixed it before the 100,000,000-row build. A different tuning is untested.
-- Same answers: Before any query is timed, its rows are hashed. All four arms return identical results on all 16 queries, including where HoloDb is slower.
-- Warm and cold: Warm is the median of three runs. Cold is the first run after the file cache was cleared by reading a 34 GB file (for SQL Server, dropping its buffers).
-- Repeats: Each engine ran the whole set twice. A tilde marks a figure whose repeat differed by more than 20 percent, and a query counts as ahead or behind only when both runs agree.
+Learned records, upkeep and gather
 
-What HoloDb does not do:
-- Joins: INNER JOIN only. Several in one statement on in-memory tables, one on a paged table. LEFT, RIGHT, FULL, CROSS, NATURAL, USING and comma joins are refused.
-- Aliases: No AS on columns or tables. Aggregate columns are named agg(col), such as count(*).
-- ALTER TABLE: ADD COLUMN only, with a DEFAULT or NULL. No DROP COLUMN, RENAME COLUMN or RENAME TO.
-- Expressions: No CASE, LENGTH(), OFFSET or UNION, and no arithmetic in the select list or inside SUM(v * 2). COUNT(DISTINCT col), LIKE and IN (SELECT ...) work on in-memory tables.
-- Money: Constant-time totals are for INT columns. REAL SUM is a SIMD scan, and DECIMAL and NUMERIC are REAL (a double), so hold money as integer cents. There is no fixed-point type.
-- Saved summaries: A summary made with CREATE INDEX ... USING SUMMARY, or built by the planner, is saved with the table and restored on open. A plane attached with the EnablePleroma call on an in-memory table is not saved: call it again after Open.
-- Summary limits: A declared summary takes up to 4,095 distinct values per column (1,024 for one the planner builds) and a joint of 12 bits. A column over its limit goes to a scan and is never approximated.
-- Joins on paged tables: The keyed summary holds up to 4,194,304 consecutive INT keys. The 100,000,000-invoice run joins 2,000,000 customers.
-- Languages: A .NET library. The server speaks a TCP and TLS binary protocol whose only client is .NET. No JDBC, ODBC, Python, Node or Go client, and no PostgreSQL or MySQL wire.
-- Concurrency: One process per database and one writer at a time. Simple aggregate reads run off a snapshot without the lock. A second process cannot open a paged database's files, and there is no MVCC: a long transaction blocks other writers.
-- Table size: Tested to 100,000,000 rows (4.94 GB paged, 165 s to load). In-memory tables are bounded by RAM at about 110 bytes per row. A paged primary key loaded out of order keeps a RAM dictionary of about 35 bytes per row. Beyond 100,000,000 rows is untested.
-- Backup: Offline: copy the files of a closed database. There is no online backup and no point-in-time recovery.
-- Crash safety: One fsync per commit. Tests cut the log at every record boundary, flip bits in the log and the data file, and tear a page during a checkpoint. A real power cut, a disk that lies about fsync, a full disk and several processes are not tested.
+| Measurement | Result |
+|---|---|
+| Learned records under writes | After a stream of single-row UPDATEs and DELETEs over six learned scatter predicates on 1,000,000 rows, the next sweep reads 6 blocks with records that adjust, against 60 and 51 blocks when updates drop them: 8.5 to 10 times fewer. After consolidation it reads 6 blocks against 366: 61 times fewer. All counts, sums and zones were verified exact against the cells in every phase. |
+| Upkeep priced from measured cost | On a mixed stream of 1,200 delete-or-update pairs each followed by a sorted count, the index with measured upkeep stayed built and read 0 blocks, using 49,306 to 54,106 page pins in all, against 1,158,839 pins when the structure was dropped at the 256th write and rebuilt by scans. That is 21 to 24 times fewer. |
+| Gather priced from measured waste | On a repeated sum that the stored records answer, gather moves 0 rows, and in the repeat phases it reads the same 12 blocks as with gather off; the learning phase reads 390. Where scans do read the excess (a selective scatter over 20,000 rows, sums off) it cuts the blocks read per round from 288 to 30. A one-time regroup can reach a similar layout without gather. |
 
-When to use it: https://evaluatedapplications.github.io/holodb/#fit. Trade-offs:
-- Read speed against write cost. Reads: A total over 100,000,000 invoices reads in 0.12 ms, because totals are kept up to date as rows are written. Writes and space: Single-row INSERT, UPDATE and DELETE took 1.5 to 2.1 times SQLite's time (engine alone, in memory). The structures take space: 6.84 GB restored, 4.94 GB out of the box, 2.46 GB for tuned DuckDB.
-- Exact against approximate. Exact: Integer sums are 128-bit and identical on all four engines for all 16 queries. A sum past 64 bits throws; it never wraps. Approximate: Only similarity search: from 8,000 rows an approximate index picks the candidates. Money is integer cents, because DECIMAL is a double.
-- Automatic against hand-tuned. Automatic: The planner builds a summary or index when repeats pay for it, and drops it when writes cost more than it saves. Hand-tuned: A DBA can declare structures, which are saved and never dropped. Without them, scans no structure covers are slower than tuned DuckDB: 5 of 16 queries at 100,000,000 invoices.
-- Embedded against server. Embedded: In process: a point query takes 1 to 3 microseconds. One process owns the files and one writer runs at a time. Server: TCP and TLS with a typed .NET client: about 0.07 ms more per point query. No JDBC, ODBC or PostgreSQL wire.
-- Memory against disk. In memory: The fastest path, bounded by RAM at about 110 bytes per row. Paged: Tables bigger than memory through an 8 KB buffer pool: 100,000,000 invoices in 4.94 GB, 165 s to load, a 3.16 GB peak working set out of the box and 1.26 GB restored.
+Customer lifecycle runs: layout, NULL path and ring file
+
+| Run | Result |
+|---|---|
+| Retention deletes, 3.1 million rows | The log customer grew to 3,097,444 rows over 25 sessions with 8.2 percent dead slots. The map that turns a row id into a row position held 5,117 to 15,174 runs. A plain pairing order (highest live row to lowest hole) leaves 115,118 runs on the same kind of table. The database opened in 148 to 547 ms. |
+| Wide table with NULLs, 3.2 million rows | 9 sessions to 3,205,807 rows, 0 failures, 0 check faults, 0 runs in the id map, session opens of 3 to 410 ms, a first cold open of 452 ms and then 64 and 68 ms, about 103 bytes per row, and a peak working set of 4.6 GB. The null path reads only the columns a statement names. |
+| Null path cost | A seven-query dashboard pass on nullable columns costs 0.44 page pins per row at 100,000, 300,000 and 1,000,000 rows. A point read of one row costs 103 to 115 pins. |
+| Ring file | The write-ahead ring is sized from the largest batch of the last window. One wide statement pinned it at 8.5 MB; after a clean close and reopen it is 41 KB. |
+
+#### What we test
+
+A wrong answer is the one failure a database cannot afford, so the tests try to make HoloDb wrong and report the first time it is.
+
+The four kinds of test
+
+| Test | What it does | Result |
+|---|---|---|
+| The battery | 56 specs per mode, run in both pipeline modes: the block pipeline, which reads and learns from blocks, and the analytic executor, which answers from exact totals. A spec covers one area: NULL logic, the block map, crash points, the history log, AS OF, the sorted index, the keyed summary, the tree, learned records, gather, placement, routes, transactions and their undo, the budget, and randomized streams. Several specs run at 3,000,000 rows. | Mode 1 passed all 56 (one spec failed once at a reopen after a simulated crash and passed on three further runs). Mode 2 passed 55 of 56; the 56th is a timing bound and was not run while the machine was loaded. |
+| Red arms | Every check has a mutant arm that breaks the engine on purpose (an update that leaves a stale sum, a move that forgets a zone, a log that drops a record) and the check must go red for the right reason. | The battery holds 276 arm runs in mode 1 and 275 in mode 2; 256 and 237 are detected. The rest are listed by name with their reason: an arm that lives in the other pipeline, an arm that by design changes no answer, or an arm that belongs to a different spec. |
+| Chaos runs | chaos2 generates random SQL streams over a paged table: SELECT with filters, grouping, joins and top-k, INSERT, UPDATE, DELETE, transactions with rollback, ALTER, index DDL, reopen, power loss, a power cut at the nth durable write inside COMMIT, and a restart with builds running. SQLite is the oracle for every answer, for the full row set, and for the table seal. | The learned-on arm ran 40 of 40 seeds green (tables up to 100,000 rows) and the learned-off arm 30 of 30 (up to 60,000 rows), in both modes. The mutant arm ran 15 seeds in mode 1 (up to 40,000 rows) and went red on 3. |
+| Customer lifecycle | A simulated customer starts with an empty file and works one database across many separate processes: cold open, imports, daily batches, updates, retention deletes, ALTER, index DDL, repeated dashboards, ad hoc SQL, transactions with rollback, in-process power cuts, and hard kills of the process by its parent. A SQLite mirror is the oracle. | Across 8 archived customer runs and 158 sessions: 249 million rows compared against SQLite, 8,267 SELECTs and 1,129 checked DML statements, and 46 recoveries after a kill or a cut: 37 to the state before the interrupted write, 9 to the state after, none to a state between. The mutant arm goes red at session 12 of one profile. |
+
+Limits:
+- The lifecycle and crash guarantees are tested at 3,000,000 rows. The limits on the HoloDb page list the rest.
 
 ### How HoloGenome scores against the lab
 
@@ -3591,272 +3114,6 @@ Limits:
 - The gate checks form, using the same rules that produced the sentences. It does not check meaning, and a valid sentence can still say something odd.
 - One corpus, one seed.
 
-### HoloDb deep dive
-
-The numbers behind the plane: what it serves, what it declines, how its cost grows with size, and the 10,000,000-invoice comparison against engines as they ship. These workloads are built to suit the plane, so they sit apart from the 100,000,000-invoice comparison.
-
-Page: https://evaluatedapplications.github.io/holodb/evidence/deep-dive/
-
-Method:
-- Workload: A billing ledger (invoices joined to customers, sixteen queries) at 10,000,000 invoices with every engine out of the box, and three constructed workloads for the plane: a live dashboard, ingest while querying, and multi-tenant slices and joins.
-- Engines: SQLite (in memory, always listed first); DuckDB (in process, in memory, default settings); SQL Server 2022 LocalDB (tables in tempdb on disk, primary keys only); HoloDb embedded (in process); HoloDb server (networked over TLS on the loopback interface); HoloDb engine: the same database without a plane; HoloDb plane: a database with the optional plane attached
-- Check: Before any query is timed, its full result set is normalised and compared across the engines. Every timed result is identical. After each plane workload the plane is compared with a rebuild from the columns and found equal.
-- Statistic: Medians of repeated calls through each engine's typed client API, execute plus consume every row. A cell whose own two timing loops disagree by more than 25 percent is marked noisy, and no ratio is drawn from it. A difference under 1.15x counts as a tie.
-- Machine: One 16-core laptop CPU (Intel Core i9-11950H). The billing comparison ran with nothing else heavy open. The plane workloads ran with ordinary desktop applications and the SQL Server service open. The scaling runs used a Release build, and each point is the median of three repetitions.
-- Memory and logging: Every figure here is an in-memory HoloDb database with no write-ahead log; SQLite and DuckDB ran in memory and SQL Server LocalDB used tempdb on disk. A database opened with a write-ahead log flushes each committed statement to disk, which adds one flush per commit, set by the disk. Bulk-load rates compare unlike modes: typed arrays into memory, an appender, inserts in one transaction, and a bulk copy into tempdb.
-
-#### Billing ledger at 10,000,000 invoices, every engine out of the box
-
-The ledger has 10,000,000 invoices and 200,000 customers, about 50 invoices each, over 24 months, four regions and five statuses, with money held as integer cents. SQLite and DuckDB run in memory with default settings, SQL Server 2022 LocalDB with primary keys only, and no index or summary table is added for the queries. The optional plane is not attached.
-
-Bulk load, rows per second: DuckDB 1,159,279; HoloDb server 1,051,473; SQLite 726,050; SQL Server 693,231; HoloDb embedded 679,271.
-
-In process, 10,000,000 invoices: HoloDb embedded against DuckDB and SQLite (median milliseconds, in memory, no index or summary added to any engine)
-
-| Query | SQLite | DuckDB | HoloDb embedded | Result |
-|---|---|---|---|---|
-| invoices by status | 3719.66 | 41.63 | 0.02 | HoloDb, more than 1,600x (reads a maintained total) |
-| revenue by region | 3492.70 | 34.33 | 0.02 | HoloDb, more than 1,300x (reads a maintained total) |
-| total invoiced | 414.54 | 2.56 | 0.00 | HoloDb, more than 510x (reads a maintained total) |
-| revenue by month | 3584.01 | 5.48 | 0.04 | HoloDb, more than 120x (reads a maintained total) |
-| invoice count | 13.90 | 0.68 | 0.00 | HoloDb, more than 130x (reads a maintained total) |
-| look up one invoice | 0.01 | 0.60 | 0.02 | SQLite (in memory) ahead, 0.01 ms |
-| revenue by segment (JOIN) | 6527.97 | 49.01 | 14.71 | HoloDb 3.3x |
-| top named customers (JOIN) | 8944.31 | 291.33 | 132.35 | HoloDb 2.2x |
-| revenue by segment and status (JOIN) | 10685.41 | 77.54 | 36.17 | HoloDb 2.1x |
-| overdue outstanding | 440.80 | 11.93 | 6.12 | HoloDb 1.9x |
-| revenue by region and status | 7495.52 | 58.09 | 35.58 | HoloDb 1.6x |
-| top customers by revenue | 4346.30 | 129.61 | 89.87 | HoloDb 1.4x |
-| largest invoices | 573.94 | 3.28 | 2.42 | HoloDb 1.4x |
-| big-ticket invoices (over $5k) | 382.92 | 2.57 | 2.49 | tie (1.03x) |
-| enterprise revenue (JOIN) | 3047.43 | 8.68 | 8.97 | tie (DuckDB 1.03x) |
-| revenue by signup cohort (JOIN) | 6469.16 | 11.96 | 14.92 | DuckDB out of the box, 1.25x |
-
-Networked, 10,000,000 invoices: HoloDb server against SQL Server LocalDB and SQLite (median milliseconds, SQL Server with primary keys only)
-
-| Query | SQLite | SQL Server | HoloDb server | Result |
-|---|---|---|---|---|
-| revenue by region | 3492.70 | 2088.59 | 0.19 | HoloDb, about 11,000x (reads a maintained total) |
-| invoices by status | 3719.66 | 2178.58 | 0.20 | HoloDb, about 10,900x (reads a maintained total) |
-| revenue by month | 3584.01 | 1485.33 | 0.35 | HoloDb, about 4,200x (reads a maintained total) |
-| total invoiced | 414.54 | 943.63 | 0.25 | HoloDb, about 3,800x (reads a maintained total) |
-| invoice count | 13.90 | 470.33 | 0.17 | HoloDb, about 2,800x (reads a maintained total) |
-| largest invoices | 573.94 | 1472.47 | 2.74 | HoloDb, about 540x |
-| revenue by signup cohort (JOIN) | 6469.16 | 2562.84 | 13.88 | HoloDb, about 185x |
-| enterprise revenue (JOIN) | 3047.43 | 1550.70 | 8.55 | HoloDb, about 180x |
-| revenue by segment (JOIN) | 6527.97 | 2626.84 | 14.65 | HoloDb, about 180x |
-| revenue by segment and status (JOIN) | 10685.41 | 5089.70 | 34.35 | HoloDb, about 150x |
-| big-ticket invoices (over $5k) | 382.92 | 397.23 | 3.06 | HoloDb, about 130x |
-| overdue outstanding | 440.80 | 588.61 | 5.97 | HoloDb, about 100x |
-| revenue by region and status | 7495.52 | 2792.44 | 34.46 | HoloDb, about 81x |
-| top customers by revenue | 4346.30 | 2426.10 | 87.17 | HoloDb, about 28x |
-| top named customers (JOIN) | 8944.31 | 2616.03 | 127.51 | HoloDb, about 21x |
-| look up one invoice | 0.01 | 0.07 | 0.18 | SQL Server (primary keys only), 2.6x |
-
-HoloDb embedded is faster than in-memory SQLite on 15 of the 16 queries. Against DuckDB out of the box, counting a difference under 1.15x as a tie, it is faster on 13 queries, tied on 2 and slower on 1. The rollups and the lookup read a maintained total or the primary-key index, so they take microseconds and do not grow with the ledger, while the other engines scan. The benchmark prints two decimals, so those cells are lower bounds. The joins and scans are the rows where the engines do the same work.
-
-HoloDb server is faster than SQL Server with primary keys only on 15 of the 16 queries, including all five joins. Both are networked services paying a client and server round trip. The server figures are medians of five calls, so they include the first-call cost of the network path: a longer loop through the same client measures the rollups and the lookup at a steady 0.06 to 0.10 ms, and a point query pays a fixed 0.07 ms of client, TLS, socket and result encoding that the same query does not pay embedded (1 to 3 microseconds).
-
-Total invoiced across 10,000,000 invoices (SELECT SUM(amount_cents)): SQLite 414.54 ms, DuckDB 2.56 ms, SQL Server 943.63 ms, HoloDb under 0.01 ms, because a maintained total is read instead of 10 million rows.
-
-What it costs:
-- Look up one invoice: SQLite is ahead of embedded HoloDb, 0.01 ms against 0.02 ms at the benchmark's two-decimal resolution.
-- Revenue by signup cohort (a join): DuckDB is ahead of embedded HoloDb by 1.25x, a parallel scan of the 10 million invoices against DuckDB's columnar engine. Two other queries tie with DuckDB (big-ticket invoices and enterprise revenue).
-- Look up one invoice over the network: SQL Server answers in 0.07 ms and HoloDb server in 0.18 ms. About 0.07 ms of HoloDb's time is client, TLS and socket cost outside the engine.
-
-#### The optional plane on the billing ledger
-
-The plane is opt-in per table. This run attaches one to the invoices table: dimensions region (4 values), status (5) and month (24), a 10-bit joint, and the measure amount_cents. Building it for 10,000,000 rows takes 741 ms (749 ms on the server's database) and its cells take 34,528 bytes. All 16 results are identical across the engines.
-
-Plane off and plane on, 10,000,000 invoices, median milliseconds (SQLite and DuckDB out of the box, in memory)
-
-| Query | SQLite | DuckDB | HoloDb, plane off | HoloDb, plane on | Plane vs off |
-|---|---|---|---|---|---|
-| overdue outstanding | 429.30 | 11.43 | 5.93 | 0.01 | about 600x faster |
-| revenue by region and status | 7,381.34 | 56.66 | 32.30 | 0.18 | about 180x faster |
-
-Through the server the same two queries take 6.30 ms and 34.58 ms with the plane off and 0.11 ms and 0.45 ms with it on (SQL Server: 611.59 ms and 2,898.13 ms).
-
-What the plane serves: filters and multi-column GROUP BY over its dimension columns. What it declines, and why: the big-ticket count (the filter is on a measure, not a dimension), top customers (200,000 distinct customer ids, far over the 1,024-value dimension limit), the five joins (200,000 join keys against a limit of 4,095) and the lookup and largest-invoices queries (no aggregate). The five rollups are left to the engine on purpose, because it reads a maintained total there in microseconds and the plane is slower. Per database, 12 calls were served by the plane and 42 declined.
-
-The cells the plane does not touch run the identical engine path in both columns and differ by 1 to 13 percent typically and by up to 33 percent (big-ticket: 3.01 ms off, 2.26 ms on), so differences of that size are noise.
-
-What it costs:
-- The plane is not used for the rollups: whole-table counts and sums, single-column GROUP BY and MIN and MAX, where the engine already reads a maintained total in microseconds.
-
-#### Constructed workload: a live dashboard
-
-The filter combinations cannot be pre-indexed because nobody knows in advance which dimensions a person will cut by, the answers must be exact, and the table keeps changing while it is queried. The workload is 10,000,000 events and 32 ad-hoc slices over six small-domain dimensions (a 14-bit joint) and the measures. Building the plane takes 1,759 ms and its cells take 920,248 bytes. The slices are scalar filters (W), group-bys with and without a filter (G), HAVING (H), COUNT DISTINCT and MIN and MAX with a filter (D), queries outside the plane (X) and whole-table queries the engine already answers from a maintained total.
-
-Plane against the engine and against the best other engine (SQLite, DuckDB and SQL Server, each out of the box), by class of slice
-
-| Class (queries) | Plane vs engine, median | Plane vs best of SQLite, DuckDB, SQL Server, median |
-|---|---|---|
-| W scalar slices (9) | 121.40x | 191.5x |
-| G group by (7) | 20.90x | 27.4x |
-| H having (2) | 24.57x | 42.2x |
-| D distinct, min/max with a filter (3) | 18.42x | 36.0x |
-| X outside the plane (7) | 0.97x (tie) | 1.5x |
-
-First call of each query, median milliseconds (DuckDB and SQL Server out of the box)
-
-| Query | DuckDB | SQL Server | HoloDb engine | HoloDb plane |
-|---|---|---|---|---|
-| WHERE region = 'north' AND device = 'mobile', COUNT and SUM | 25.185 | 827.218 | 18.526 | 0.153 |
-| GROUP BY region, device, COUNT and SUM | 56.712 | 3,012.047 | 43.222 | 2.068 |
-| GROUP BY region, channel HAVING COUNT(*) > ... | 67.130 | 3,047.374 | 43.815 | 2.110 |
-| COUNT(DISTINCT channel), COUNT(DISTINCT device) with a WHERE | 37.506 | 2,336.280 | 50.189 | 0.803 |
-| (outside the plane: filter on user_id, a column that is not a dimension) | 12.139 | 486.466 | 11.300 | 11.484 |
-
-The best other engine on the W, G, H and D slices is DuckDB in every row shown, out of the box: no indexes added and no summary table built. Three of the nine W cells are noisy, because the engine's own two timing loops disagree by more than 25 percent; the class median is as printed.
-
-The first call of each query, which pays any one-time work, is also faster with the plane: the median first-call speed-up over the engine is 16.99x for W, 10.90x for G, 13.97x for H and 10.17x for D.
-
-What it costs:
-- The queries the plane declines or leaves to the engine (the X class: a filter on a non-dimension column, COUNT(DISTINCT user_id), a sum of a non-measure column, a top-10 by user, a filter on a measure, a row list and a point lookup by event id) run the engine's own path and tie with it: the seven X queries read 0.95x to 1.04x warm. On the first call five of the seven are slower with the plane attached, at 0.42x to 0.84x of the engine's first call (single samples).
-
-#### Constructed workload: ingest while querying
-
-A 2,000,000-row base table, then 20 rounds of a 10,000-row bulk load, 200 single-row INSERTs and an eight-query dashboard panel. The panel's results match in every round. How an insert followed by a query scales with the size of the table is under Scaling.
-
-Per round, median milliseconds (SQLite, DuckDB and SQL Server out of the box)
-
-| Per round (ms) | SQLite | DuckDB | SQL Server | HoloDb engine | HoloDb plane |
-|---|---|---|---|---|---|
-| panel (8 queries) | 3,794.93 | 112.30 | 3,057.90 | 137.90 | 11.53 |
-| round total (bulk load, INSERTs, panel) | 3,816.72 | 239.88 | 3,109.90 | 149.47 | 25.84 |
-
-What it costs:
-- Writes cost more with the plane attached: the 10,000-row bulk load takes 11.62 ms against 9.85 ms (1.18x), and 200 single-row INSERTs take 1.55 ms against 1.23 ms (1.26x), about 7.8 microseconds against 6.2 per INSERT.
-
-#### Constructed workload: multi-tenant slices and joins
-
-Five million events spread over six tenant tables (2,000,000 down to 150,000 rows) and a 2,000-product dimension table. A filter with a COUNT and SUM on one tenant is a median 11.70x faster than the engine and 25.0x faster than the best other engine (DuckDB, SQLite and SQL Server each out of the box). The largest tenant reads 0.171 ms with the plane, 4.263 ms for the engine, 6.312 ms for DuckDB and 195.195 ms for SQL Server.
-
-The same join repeated, median milliseconds (DuckDB and SQL Server out of the box)
-
-| Query | DuckDB | SQL Server | HoloDb engine | HoloDb plane, embedded | HoloDb plane, server |
-|---|---|---|---|---|---|
-| join COUNT, largest tenant (2,000,000 rows) | 1.749 | 307.039 | 0.380 | 0.002 | 0.078 |
-| join COUNT and two SUMs, largest tenant | 2.906 | 477.043 | 2.716 | 0.003 | 0.079 |
-| join COUNT, smallest tenant (150,000 rows) | 0.947 | 23.678 | 0.110 | 0.002 | 0.071 |
-| join COUNT and two SUMs, smallest tenant | 1.392 | 37.158 | 0.999 | 0.003 | 0.073 |
-
-The join is one statement repeated: tenant events joined to the products table on the product key (about 2,000 keys), with COUNT(*) alone or with two SUMs. The plane serves a repeat from a memo of the exact answer, valid until either of the two tables is written, so the very low figures are for a repeated identical statement with no write in between. A memo hit takes 0.001 to 0.003 ms embedded and 0.071 to 0.084 ms through the server.
-
-Joins with a WHERE or a GROUP BY on the dimension table are not served by the plane; they run the engine's path and tie with it (0.93x to 1.02x).
-
-What it costs:
-- A join that is not a memo hit usually costs more through the plane than the engine's own join. The first call of a statement costs more through the plane than through the engine in 11 of the 12 join cells: join COUNT 1.016 to 2.921 ms through the plane on the five smaller tenants against 0.179 to 0.573 ms for the engine, and join COUNT with two SUMs 2.348 to 8.134 ms against 1.364 to 3.076 ms. If the tables are written between nearly every read, expect the plane join to cost more than the engine's own join; the plane's value on such a workload comes from the filters and group-bys.
-
-#### The plane against the engine at 1,000,000 rows
-
-Seventeen query classes on a 1,000,000-row table, with the engine alone, the engine with the plane, and SQLite. The control query (one the plane declines, so both sides run the same engine path) reads 0.81, inside the band of 0.8 to 1.25. The join rows use a very small dimension table: 40 distinct join keys for the two INT joins and 4 for the TEXT join, so they say little about joins over many keys.
-
-Seventeen query classes at 1,000,000 rows (SQLite in memory; the two INT joins have 40 distinct join keys and the TEXT join has 4)
-
-| Query class | SQLite | HoloDb engine | HoloDb plane | Plane vs engine |
-|---|---|---|---|---|
-| COUNT(*) whole table | 417.4 us | 1.6 us | 3.3 us | slower (0.48x) |
-| SUM(qty) whole table | 40.25 ms | 1.8 us | 3.8 us | slower (0.47x) |
-| GROUP BY 1 column | 288.46 ms | 4.4 us | 10.2 us | slower (0.43x) |
-| GROUP BY 2 columns | 484.34 ms | 2.88 ms | 2.40 ms | tie (1.20x) |
-| WHERE = on 1 column | 48.11 ms | 1.28 ms | 3.8 us | 336x faster |
-| WHERE BETWEEN | 52.23 ms | 620.0 us | 9.2 us | noisy, no ratio |
-| WHERE on 3 columns (AND/IN) | 65.19 ms | 1.63 ms | 144.2 us | 11x faster |
-| WHERE LIKE ... OR | 61.37 ms | 1.24 ms | 37.2 us | 33x faster |
-| GROUP BY with WHERE | 126.79 ms | 3.10 ms | 2.32 ms | 1.34x faster |
-| COUNT DISTINCT whole table | 81.41 ms | 2.1 us | 1.7 us | tie (1.24x) |
-| COUNT DISTINCT with WHERE | 71.71 ms | 1.91 ms | 630.7 us | 3.0x faster |
-| MIN/MAX of an INT column | 51.34 ms | 1.8 us | 3.4 us | slower (0.53x) |
-| Range count | 44.39 ms | 343.4 us | 2.7 us | 127x faster |
-| Join COUNT | 69.68 ms | 3.75 ms | 15.9 us | noisy, no ratio |
-| Join SUM (both sides) | 108.23 ms | 4.92 ms | 85.5 us | 58x faster |
-| Join on a TEXT key | 327.89 ms | 37.36 ms | 8.0 us | 4,670x faster |
-| Query outside the plane (control) | 48.55 ms | 938.1 us | 1.16 ms (declined, engine path) | tie (0.81x) |
-
-The engine alone is faster than in-memory SQLite on every class; the whole-table classes compare a maintained total with a scan. The plane is faster than SQLite on every class it serves. Against the engine it wins where there is a real scan or join to avoid. Outcome counts for the plane against the engine: 7 classes at least 2x faster, 3 ties, 1 between 1.25x and 2x, 4 slower, 2 noisy.
-
-At 100,000 rows the engine is faster than the plane on seven of the 17 classes: the whole-table classes, the single-column GROUP BY and MIN and MAX (0.33x to 0.51x), the two-column GROUP BY (0.26x), GROUP BY with a WHERE (0.41x) and COUNT DISTINCT with a WHERE (0.58x). At 300,000 rows the plane is faster on every filter and join (24x to 1,887x) and on the two-column GROUP BY (1.77x). Default routing sends GROUP BY with a WHERE to the engine below 140,000 rows.
-
-The plane's cost when attached, against the engine alone: single-row INSERT 1.4x to 1.9x, UPDATE 1.6x to 1.8x (microseconds that move with the order the two arms run in); batch load of the whole table 1.93 s with the plane against 1.80 s without at 1,000,000 rows; rebuilding the plane from the columns 131 ms; a heap of 139.7 bytes per row with the plane against 135.2 without; the plane's cells are a flat 0.92 MB joint slice whatever the row count.
-
-The TEXT-key join is faster than SQLite in the engine alone (39.98 ms against 322.17 ms at 1,000,000 rows, rows identical). It requires both join columns to be TEXT; a join between an INT column and a TEXT column takes the general path and is much slower.
-
-What it costs:
-- With the plane attached, whole-table COUNT(*) (0.48x), whole-table SUM (0.47x), single-column GROUP BY (0.43x) and MIN and MAX (0.53x) are slower than the engine alone, because the engine reads a maintained total in microseconds.
-
-#### Scaling
-
-Each line is a recorded run on logarithmic axes, and its slope says how the cost grows: a slope of 1.00 is one step for every item, and a slope near zero is a cost that does not depend on how many items there are. Only the engine and the plane appear here; no other database is timed in this section.
-
-The control, a fixed amount of work repeated at each size, fits a slope of -0.47 because its first point includes start-up compilation (165 microseconds against 9 to 24 for the other four). The first point of every time series carries the same start-up cost, so a time slope under about 0.4 is shown as nearly flat and is not read as an exact exponent. Counts (commit groups, transform passes) carry no such noise and are exact. The write-then-read pairs are 200 repetitions of one insert followed by the same two-column group-by at each table size, one run per size, with a placebo pair beside them.
-
-Fitted slope of log cost on log size: one step per item, and one step for the whole set
-
-| What grows, and what is measured | One step per item | One step for the whole set |
-|---|---|---|
-| Changes in a batch, time | 0.96 | 0.21 (nearly flat) |
-| Changes in a batch, commit groups written | 1.00 | 0.00 |
-| Flag words added to a plane, time | 0.98 | 0.04 (nearly flat) |
-| Measures in a group-by, transform passes | 0.88 | 0.00 |
-| Measures in a group-by, time | 0.62 | 0.43 |
-| Group-bys in one refresh, transform passes | 1.00 | 1.00 |
-| Group-bys in one refresh, time | 1.03 | 0.97 |
-
-One insert, then the same two-column group-by, per pair, as the table grows
-
-| Rows in the table | Engine alone | With the plane | Placebo ratio (a query the plane declines; the band is 0.8 to 1.25) |
-|---|---|---|---|
-| 100,000 | 1.03 ms | 385 us | 1.04 |
-| 300,000 | 1.44 ms | 343 us | 1.03 |
-| 1,000,000 | 3.54 ms | 354 us | 0.97 |
-
-Write, then read. With the plane attached, one insert followed by one two-column group-by costs 385 us, 343 us and 354 us per pair at 100,000, 300,000 and 1,000,000 rows: flat across a tenfold growth in the table. The engine alone costs 1.03 ms, 1.44 ms and 3.54 ms for the same pair, a slope of 0.54, because the group-by scans the table. A placebo pair that runs a query the plane declines (so both arms take the same path) reads 1.04, 1.03, 0.97, inside its band.
-
-Changes in a batch. B changes applied one statement at a time cost one lock, one log commit and one plane update each: the time slope is 0.96, and the commit groups written equal the changes made (slope 1.00). One ApplyChanges call writes exactly one commit group at every B (slope 0.00), and its time grows far more slowly than the statements do. It keeps growing: from 512 to 2,048 changes its slope is 0.69, because the per-row work on the table remains and only the fixed costs are shared.
-
-Flag words. Adding k flag words to a 14-bit plane with k separate Add calls has a slope of 0.98. One AddFlagWords call, which is a Phasor Pleroma operation, takes 169 to 211 microseconds from k = 16 to k = 4,096, nearly flat.
-
-Measures in a group-by. A group-by that sums M measures reads 1 + 3M planes, because each measure is held as three limbs beside the count plane: 4 planes at M = 1 and 25 at M = 8. Read plane by plane, the transform passes grow with a slope of 0.88; read by one multi-plane call (Pleroma FlagsMany) they are 1 at every M (slope 0.00). Time falls from a slope of 0.62 to 0.43, and no lower, because the answer itself grows with M: a repeat that skips the transform and only builds the result takes 23 to 42 microseconds.
-
-Group-bys in one refresh. With four measures, refreshing G group-bys together still costs one transform per group-by: the passes grow with a slope of 1.00 read plane by plane and 1.00 read by one multi-plane call, and the time with 1.03 and 0.97. Each distinct group-by is its own read.
-
-What it costs:
-- Group-bys in one refresh: each distinct group-by is its own read, so the time and the transform passes grow in proportion to the number of group-bys (time slope 0.97 with the multi-plane read).
-- Measures in a group-by: the transform passes stay at one, but the time still grows (slope 0.43), because the answer grows with the number of measures.
-- Changes in a batch: a bigger batch costs more (slope 0.69 from 512 to 2,048 changes); only the fixed costs, one lock, one commit and one plane pass, are shared.
-
-#### Dashboard reads during live ingest, and opening a database
-
-Whole-table counts and sums, and GROUP BY on a column with up to 64 distinct values, are served from a snapshot republished after every write, without taking the engine's write lock. On a 16-core laptop that was not idle, 2,000,000 events ingested in 1,000-row batches at 1.16 million events a second while 4 concurrent readers queried: median read 0.009 to 0.09 ms, p99 0.8 ms (group by region), 1.1 ms (sum) and 6.6 ms (count), worst single read 6.7 ms.
-
-Opening a database of 1,000,000 rows (a 43 MB log) takes about 2.0 s by replaying its write-ahead log (1.95 to 2.05 s across two runs) and about 1.1 s from a checkpoint (1.09 to 1.11 s), with the loaded state checked correct and a heap of about 110 bytes per row, in a newly started process. This is the engine's own recovery and checkpoint; it does not use the plane or the page store.
-
-What it costs:
-- A GROUP BY with more than 64 distinct values (the per-minute series in the same test has 167) takes the normal locked path and waits behind the ingest for up to 0.9 s (p99 0.9 s).
-
-#### Checks behind the figures
-
-Every release is measured against the one before it: each benchmark cell is run twice on each build, and a cell counts as a regression only if it is worse than 25 percent (or the baseline's own spread) in both pairs. The check covers the 10,000,000-invoice comparison, the plane benchmark at 100,000, 300,000 and 1,000,000 rows, and opening a 1,000,000-row database from its log and from a checkpoint, and finds no cell slower.
-
-Queries the plane declines or leaves to the engine stay within noise: of the 16 queries that run the same path in both arms, none falls outside a band of 0.8x to 1.25x, with class medians of 0.97 and 0.99. A deliberately wrong plane (the measure column shuffled at 1,000,000 rows) is caught on every query it changes and matches on every query it does not: 0 failures of 32.
-
-The aggregate plane returns row-for-row the same answers as the engine and SQLite across the parity suite (2,853 checks at 2,000 rows, and the suite also passes at 5,000 and 100,000 rows), including a random insert, update, delete, rollback and reopen log, and sums past 64 bits. Nine deliberate mutations (a dropped carry, a missed delete, a stale join limb and others) each turn the suite red. Sums past 64 bits are never wrapped: the plane raises an error and PleromaSumExact returns the exact 128-bit total.
-
-The page store passes 72 of 72 checks: exactly-once replay after a crash, a torn journal tail discarded, restore points that rewind without recounting, and repair of a lost page from its parity group. Eight deliberate mutations and a tiny-cache case each turn the suite red.
-
-A paged table checks every 8 KB data page against a checksum kept in a small side file. In a test that flipped 61 bits in the data file of a 91 MB paged table, none gave a silently different answer: 36 were reported with an error that names the page, and 25 were in pages never read.
-
-Atomicity and crash recovery are covered by a 48-check suite (a failing log append is undone in full, a reopen from the log reproduces the committed state) and a 58-check transaction suite plus about 600 randomised comparisons against SQLite; three deliberate mutations each turn it red.
-
-Limits:
-- Each figure comes from a single run on a single machine, and the plane sections use constructed workloads: one synthetic table (9 columns, four small-domain dimensions, a 14-bit joint). The plane serves only the columns you attach. A plane made with EnablePleroma lives in RAM and is not persisted; a plane made with SQL, and the summaries the planner builds by itself, are saved with the table.
-- In the engine alone, GROUP BY with a WHERE is about 3 ms at 1,000,000 rows because the filter and the grouping are separate passes. The dense-code GROUP BY covers INT and TEXT columns whose combined distinct count is at most 65,536, and anything else uses a slower string-key path. REAL aggregates over a filter use a scan.
-- The first DDL statement inside a transaction takes a snapshot of every in-memory table, so it costs time proportional to the data. After a ROLLBACK of deleted rows the table holds the same rows but not necessarily in the same internal order.
-- The aggregate plane does not serve the billing joins at 10,000,000 invoices (200,000 join keys against its limit of 4,095) or the top-customers query; the keyed summary and the pre-grouped join totals of paged tables do. A plane join over fewer keys is served, as in the tenant workload.
-- The scaling lines are fits over four or five sizes on one machine, and the write-then-read pairs are one run per table size of one repeated group-by. Time slopes under about 0.4 are not read as exact exponents.
-
 ## Research
 
 ### Fifty reads, one store
@@ -4067,402 +3324,6 @@ The same exact counts held two ways: a hash map and one dense Pleroma page per c
 With the shared layout, the same pages occupy 66.2 MB as standalone stores, and 49.6 MB as one page set.
 
 A long-context store still sits in a sorted host index, which is exact up to 16 subwords and reads in microseconds. The sparse page class exists, but the page store's keys are 63 bits, and a context of four or more subwords needs 128.
-
-### The Four-Token Ceiling
-
-Page: https://evaluatedapplications.github.io/research/context-four/
-Topics: context length, small models
-
-Finding: A holographic language model pinned to four tokens of context stops improving its top-guess margin at about round 48,000 and stops adding spelled words between rounds 15,000 and 21,000, while calibration and the specialisation of one weight bank keep changing through more than 80,000 rounds.
-
-#### Setup
-
-The model is a fresh set of weights with the same shape and the same real corpus as the main lineage. Its context is fixed at exactly 4 tokens for the whole run, and no schedule grows it. The architecture runs one fixed weight matrix through eight refinement passes on every token, and the state after each pass can be inspected as well as the final answer.
-
-Four tokens of context cannot carry long-range coherence: a model that sees only the last four tokens has no mechanism for staying consistent with a subject from six tokens back. The run is therefore graded on spelling and on local structure, not on whether it writes a sensible paragraph.
-
-The extrapolation multiplier is the length of the longest correct stretch of output divided by the four-token window. A correct stretch longer than the window cannot be read off the input and has to be reconstructed from the weights, so the multiplier separates building from repeating within the window.
-
-A permanent battery of tests runs directly against saved checkpoints. It was run every 3,000 rounds on a fresh checkpoint out past 80,000 rounds, and every snapshot from the run is kept.
-
-#### Evidence: what stopped moving
-
-Three measures stopped moving. The primary signal is the gap between the model's top guess and its second-best guess, a proxy for whether the runner-up is still catching the winner. It plateaued at about round 48,000. Splitting the run into thirds and comparing the middle third's average with the final third's gives equal values: the signal is flat, not slowly rising.
-
-The effective vocabulary, the set of corpus words the model reliably spells, capped between rounds 15,000 and 21,000 and did not grow in the 60,000 or more rounds after. The measurement was made twice, independently, and both gave the same result.
-
-The rate at which plain generation falls into a repeat loop reached a floor. At the latest checkpoints a plain generation run falls into a repeat loop in the large majority of runs. A long-form test on this run shows the collapse rate was already high at the earliest checkpoints and stayed in that band. A lower collapse rate at larger contexts, seen in a different and longer run, does not carry over to this one.
-
-Measures that stopped moving at a context of four tokens
-
-| Measure | Behaviour | Round |
-|---|---|---|
-| Gap between top and second-best guess | Flat; middle-third average equals final-third average | about 48,000 |
-| Effective vocabulary | Capped; no growth in the following 60,000 or more rounds; confirmed by two independent measurements | 15,000 to 21,000 |
-| Collapse into a repeat loop | High at the earliest checkpoints and unchanged through the run | Present from the first checkpoint |
-
-#### Evidence: what kept moving
-
-Two things never plateaued across the 80,000 or more rounds. The first is the specialisation of one weight bank: its channels specialise harder throughout the run, with zero reversals. One channel in that bank, the no-relative-shift channel, was the most active channel in two separate investigations on two different checkpoints.
-
-That channel is consistent with a gate: it appears to decide, per token, how much of the eight-pass iterative budget is spent on real work and how much is served from an embedding-level guess. Part of the model's numeric encoding is a fixed codec that has not been trained since round one, and the model routes through it more over time. The codec does not change; the model leans on it more. This reading is an interpretation of the channel's activity, not a separately measured result.
-
-The second is calibration. When the top guess is wrong, the rank of the correct answer and the probability mass placed near it kept improving after the primary metric went flat. The model did not get better at being right; it got better at being usefully wrong.
-
-The specialisation trend is steady and linear, not accelerating. Acceleration is the signature of an approaching sudden transition of the kind called grokking, so the trend gives no sign of one approaching. The general phenomenon of a flat visible output over a reorganising interior is the grokking pattern; what this run adds is its observation in this architecture.
-
-Measures that kept changing after the primary metric went flat
-
-| Measure | Behaviour over 80,000 or more rounds |
-|---|---|
-| Specialisation of one weight bank | Rises throughout, zero reversals, linear and not accelerating |
-| No-relative-shift channel | Most active channel on two checkpoints in two separate investigations |
-| Calibration (rank and probability mass of the correct answer when the top guess is wrong) | Keeps improving after the primary metric is flat |
-
-#### Evidence: measurements that did not measure what they appeared to
-
-Raw accuracy under corrupted input rises with more training, which reads as growing robustness. It is not robustness: the model increasingly echoes the last visible token regardless of what was corrupted, and the corruption filler used coincided with the model's favourite echo target. The rise is an artefact of the test design.
-
-The reduced collapse rate remembered from a different run does not appear in this run when tested directly with a long-form test (see the plateau section).
-
-#### What this means for a small model
-
-Compare the middle and final thirds of the margin signal before deciding a size is finished; a slow climb and a plateau look alike on a curve and differ in that comparison.
-
-Once the effective vocabulary has capped, more rounds at the same context do not add spelled words. Further capability needs a change other than more rounds at that size.
-
-Track calibration separately from top-guess accuracy. It can keep improving under a flat headline metric.
-
-Do not read a rise in accuracy under corrupted input as robustness unless the filler is different from the token the model echoes.
-
-#### Limits
-
-One lineage, one shape and one corpus. The window is four tokens, so nothing here concerns long-range coherence. The extrapolation multiplier is defined here and used as the stopping test, but its measured values are not reported in this article. The gating and codec-reliance readings of the no-relative-shift channel are interpretations of activity, not isolated causal tests.
-
-#### Refuted by
-
-A longer run in which the margin between the top and second-best guess is higher in the final third than in the middle third; a count of reliably spelled words that grows after round 21,000; or a reversal in the specialisation trend of the weight bank.
-
-Related: Growing the Wrong Way https://evaluatedapplications.github.io/research/context-eight/
-
-### Growing the Wrong Way
-
-Page: https://evaluatedapplications.github.io/research/context-eight/
-Topics: context length, growth
-
-Finding: Growing a four-token model that had plateaued to eight tokens of context gave no recovery in about 100,000 rounds, and growth by appending new position slots after the most-trained one demotes that slot on every grow, whereas inserting new slots before the oldest one keeps it in place.
-
-#### Setup
-
-The starting point is the final trained weights of the four-token run described in the article The Four-Token Ceiling, whose top-guess margin had plateaued. A new model is seeded from those weights and its context is grown to eight tokens. The test is whether training a context fully at the smaller size makes the larger one easier to absorb.
-
-The main metric is the same top-guess margin used at four tokens. Other measures are calibration, long-form generation sampled at dozens of checkpoints, and the specialisation of the weight bank that kept changing at four tokens.
-
-#### Evidence: no payoff from a finished seed
-
-No recovery appeared in the first 20,000 rounds after the grow, or in the next 70,000. The margin oscillated in a wide band for the whole period, past the point where the four-token run's own training life would have finished. Calibration got worse before it improved. Long-form generation stayed collapsed into repeat loops at every checkpoint pulled, dozens of them, spread over nearly 100,000 rounds.
-
-One measure held: the weight bank that specialises at four tokens kept specialising, checkpoint after checkpoint, through the grow. It behaves as a general mechanism and not a context-specific one.
-
-Measures after growing from four to eight tokens
-
-| Measure | Outcome |
-|---|---|
-| Top-guess margin | Oscillates in a wide band; no settled recovery in about 100,000 rounds |
-| Calibration | Worse before better |
-| Long-form generation | Repeat-loop collapse at every checkpoint, dozens over nearly 100,000 rounds |
-| Specialisation of the general weight bank | Keeps rising through the grow |
-
-#### Evidence: the learning rate does not explain the stall
-
-A learning-rate boost that the training engine gives a model after a context grow did not fire in this run, because the fork bypassed the normal path that triggers it. That does not explain the stall. The four-token model produced all of its own improvement at that same floor learning rate, so a starved rate would have stopped the four-token run as well, and it did not.
-
-With the learning rate excluded, the premise is not supported: fully mining a small context before growing did not make the bigger context easier to absorb.
-
-#### Evidence: growth is not the problem
-
-The one measure that never stopped improving through the eight-token run was the general, non-position-specific structure. Content that is generic should not need a context size to be finished before it is worth having, and the record is consistent with that.
-
-On that basis the schedule was changed from a context tier every 20,000 rounds to a context tier every 200 rounds, on the reasoning that cheap early token-level structure does not need relearning at each size. Comparable capability appeared at comparable round counts to the four-token run, as generic transfer predicts. These early results are not tabulated here.
-
-#### Evidence: appending slots demotes the most important one
-
-Every position slot in the context window has its own separately trained representation. The highest-indexed slot always means the token immediately before the one being predicted, the most load-bearing position. Growing by appending capacity past that slot demotes it to the middle of the window and puts a new untrained slot in the role that matters most.
-
-This happens on every grow. Pacing the growth more slowly spreads the damage and does not remove it. After growth to a thousand tokens, the slot that reads what was just said has had less training than almost any other slot in the window. The cause is structural, not a training-procedure problem.
-
-The alternative is to insert new capacity before the oldest slot and shift every existing position up. The slot meaning immediately before prediction keeps its trained values through any number of grows, and new capacity lands on context further in the past, where starting from zero is cheapest.
-
-This is safe for a specific reason, checked against the code: the attention mechanism does not work on relative position. The model's sense of position lives in exactly one place, a lookup table added onto each token, so nothing else depends on slot order.
-
-Newly built models use front insertion by default. Existing checkpoints are pinned to the old behaviour when loaded, so a trained model does not change under itself, and old and new can coexist.
-
-#### What this means for a small model
-
-Do not expect a model converged at a small context to absorb a larger one faster. Treat context growth as its own change and measure it.
-
-Before blaming a stall on the learning rate, check whether a model that did improve ran at the same rate.
-
-When a model will grow repeatedly, insert new position slots before the oldest slot and shift existing slots up. Appending demotes the most trained slot on every grow, however slowly the model grows.
-
-Pin loaded checkpoints to the convention they were trained under, so a change of growth default does not alter a trained model.
-
-#### Limits
-
-The no-payoff result comes from one seeded run at one grow, from four to eight tokens. Whether a less-settled seed would have absorbed the grow better is a conjecture the run does not test.
-
-The effect of front insertion on the long-form repeat collapse over many grows is unmeasured. A model trained from scratch under the new convention has run for a few hundred rounds. Its generation shows cleanly space-separated word-shaped chunks with the individual words misspelled, and its raw numbers match the old approach at the same age, which is expected because the cost accrues over many grows, not the first.
-
-The faster growth schedule's results are reported in words only.
-
-#### Refuted by
-
-A grown model seeded from fully trained weights that reaches a settled margin sooner than a less-trained seed under the same learning rate; or a model grown by front insertion that still shows the long-form repeat collapse after many grows.
-
-Related: The Four-Token Ceiling https://evaluatedapplications.github.io/research/context-four/
-
-### The Model Learns Back To Front
-
-Page: https://evaluatedapplications.github.io/research/back-to-front/
-Topics: growth, layers
-
-Finding: In a holographic model grown from one layer to six, only the last layer's two passes carried information: reading every intermediate state against the vocabulary shows the earlier passes name a single token at confidence 0.9740 to 1.0000, and the four-layer and six-layer snapshots are identical to two decimal places over their last four read points.
-
-#### Setup
-
-The models grow while they train. They start as a single layer and gain layers as they go, each new layer inserted at the front and initialised to be an exact no-op so it cannot disturb what already works. One lineage went from one layer to six.
-
-Every intermediate state in this architecture can be read against the vocabulary directly, because the table that turns a state into a prediction is the same table that turns a token into a state. In a conventional transformer an intermediate activation has no privileged interpretation; here it has one, and reading it costs nothing.
-
-Two numbers are taken at every step of the computation. Confidence is how strongly the state names a single token. At 1.0000 nothing has been computed and the state is a copy of its input. Effective candidates is two to the power of the entropy of that reading: 1 means pinned to a single token, 3 means weighing three, and several hundred means the state has fallen off the vocabulary and resolves to nothing useful. Together they separate three kinds of state: a copy, a real computation and noise.
-
-The six-layer snapshot has thirteen read points: the raw embedding, then the state after each of its twelve passes (two passes per layer). A snapshot of the four-layer model from earlier in the same run is compared against it.
-
-#### Evidence: the work sits in the last layer
-
-Six-layer snapshot, confidence and effective candidates at each read point: embedding 1.0000 and 1.00; layer 0 pass 0, 1.0000 and 1.00; layer 0 pass 1, 1.0000 and 1.00; layer 1 pass 0, 1.0000 and 1.00; layer 1 pass 1, 1.0000 and 1.00; layer 2 pass 0, 0.9992 and 1.00; layer 2 pass 1, 0.9999 and 1.00; layer 3 pass 0, 0.9952 and 1.02; layer 3 pass 1, 0.9916 and 1.03; layer 4 pass 0, 0.9740 and 1.11; layer 4 pass 1, 0.9622 and 1.20; layer 5 pass 0, 0.4785 and 11.94; final, 0.3124 and 27.14.
-
-Four consecutive passes sit at 1.0000 to four decimal places. That is a copy, not an approximation of one. Two entire layers and most of a third contribute nothing measurable. The last layer's two passes take the state from naming one token to weighing 27, and everything before them is padding.
-
-Six-layer snapshot, read at each of thirteen points
-
-| Point | Confidence | Effective candidates |
-|---|---|---|
-| embedding | 1.0000 | 1.00 |
-| layer 0, pass 0 | 1.0000 | 1.00 |
-| layer 0, pass 1 | 1.0000 | 1.00 |
-| layer 1, pass 0 | 1.0000 | 1.00 |
-| layer 1, pass 1 | 1.0000 | 1.00 |
-| layer 2, pass 0 | 0.9992 | 1.00 |
-| layer 2, pass 1 | 0.9999 | 1.00 |
-| layer 3, pass 0 | 0.9952 | 1.02 |
-| layer 3, pass 1 | 0.9916 | 1.03 |
-| layer 4, pass 0 | 0.9740 | 1.11 |
-| layer 4, pass 1 | 0.9622 | 1.20 |
-| layer 5, pass 0 | 0.4785 | 11.94 |
-| final | 0.3124 | 27.14 |
-
-#### Evidence: growing added padding
-
-The last four read points of the four-layer and six-layer snapshots, as confidence and effective candidates. Fourth from last: 0.9774 and 1.11 against 0.9740 and 1.11. Third from last: 0.9592 and 1.22 against 0.9622 and 1.20. Second from last: 0.4771 and 12.35 against 0.4785 and 11.94. Final: 0.3135 and 27.03 against 0.3124 and 27.14. The two are identical to two decimal places across all four.
-
-Going from four layers to six did not make the model deeper in any sense that mattered. It reproduced the same working window and prepended four passes that did nothing. The part computing stayed the same size, and what grew was the number of weight matrices taking gradient, competing, and perturbing a stream they were contributing nothing to.
-
-Passes carrying real information: the six-layer model has 2 of 12, the four-layer model has 2 of 8, and a two-layer model has 4 of 4. The two-layer model uses every pass it has, and the six-layer model used a sixth of itself. By that measure the small model is the bigger one.
-
-Last four read points, confidence / effective candidates
-
-| Position from the end | Four-layer | Six-layer |
-|---|---|---|
-| fourth from last | 0.9774 / 1.11 | 0.9740 / 1.11 |
-| third from last | 0.9592 / 1.22 | 0.9622 / 1.20 |
-| second from last | 0.4771 / 12.35 | 0.4785 / 11.94 |
-| final | 0.3135 / 27.03 | 0.3124 / 27.14 |
-
-Passes that carry real information
-
-| Model | Passes doing work | Total passes |
-|---|---|---|
-| six layers | 2 | 12 |
-| four layers | 2 | 8 |
-| two layers | 4 | 4 |
-
-#### Evidence: the six-layer run diverged
-
-Loss spiked into the thousands and recovered, repeatedly, for about 43,000 rounds. Then in a single step every trainable parameter became NaN: 764,288 values of 829,825. The 65,537 that survived include the frozen numeric identity band of 1024 tokens by 64 fixed dimensions, which survives because nothing writes to it.
-
-Gradient clipping was switched on throughout and delivered the failure. Clipping computes the size of the gradient and scales it down if the size exceeds the limit. If any part of the gradient is NaN, the size is NaN, a NaN is not greater than anything, the test is false, and the gradient is applied at full strength. If the size overflows to infinity, the scale factor is the limit divided by infinity, which is zero, and an infinite gradient multiplied by zero is a new NaN that a skip-if-zero check does not catch.
-
-Two guards close both paths. The step is refused when the gradient size is not a finite number, so a bad batch is dropped and counted instead of being fatal, and the learning-rate schedule does not respond to a loss spike by going to maximum.
-
-The deeper cause was that half the model had never crystallised while more layers were being added.
-
-#### Evidence: a front layer that carries candidates
-
-A two-layer lineage, left alone, has a front layer unlike the front layers of the older models. Front layer, second pass: four-layer snapshot 1.0000 confidence and 1.00 candidates; six-layer snapshot 1.0000 and 1.00; two-layer model 0.8692 and 1.46. A confidence of 1.0000 is zero information, so the front layers of the two older models were absent in effect. The two-layer model's front layer carries a genuine candidate set, and it is better than the best early pass either older model had anywhere in its stack.
-
-The value is 1.46 candidates, not twelve. It has not moved since about round 99,000, so what formed, formed early and has held since. The state is far from one where adding another layer would be justified.
-
-This model is at 320,000 rounds with two layers and a parameter count of 369,664. It answers in complete sentences with correct punctuation and contractions, and loses the thread across more than about fifty characters. Its context reach did not move in three separate measurements.
-
-Front layer, second pass
-
-| Model | Confidence | Effective candidates |
-|---|---|---|
-| four-layer snapshot | 1.0000 | 1.00 |
-| six-layer snapshot | 1.0000 | 1.00 |
-| two-layer model | 0.8692 | 1.46 |
-
-#### Evidence: two measurements that misled
-
-Context reach measured with 25 sample windows showed the model still improving at the edge of the window, which implies more context would help. The identical measurement with 220 windows reverses it: the model saturates at roughly 16 tokens and everything past that carries nothing measurable. The 25-window result did not look noisy and was confidently wrong.
-
-Front-layer progress tracked by how often its output names a different token from its input more than doubled over 223,000 rounds. On the confidence and candidates measure, which separates computation from copying, it had not moved. Both are true: the front layer increasingly picks a different single token, and a single token carries no alternatives forward whichever token it is. The rate of change in the named token counts motion, not work.
-
-#### What this means for a small model
-
-Read every intermediate state against the vocabulary before adding a layer. If a pass names one token at 1.0000, it is a copy and a further layer on top of it adds nothing.
-
-Count the passes that carry real information, not the layers. A model with fewer layers all in use can out-compute a deeper one with most layers inert.
-
-Let a layer finish before another starts. The rule is not a round count or schedule: the front layer's candidate count has to stop climbing, then the pair has to settle together, and only then does a new front layer go in at zero.
-
-Check that gradient clipping tests for a finite gradient size. A clip that tests only whether the size exceeds the limit passes a NaN through at full strength and turns an infinity into a NaN.
-
-Measure context reach with hundreds of windows, not tens, and judge a front layer by candidates carried, not by how often its output differs from its input.
-
-#### Limits
-
-One lineage, with snapshots at four, six and two layers. The reading says which passes carry information, not why the front layers failed to crystallise: whether patience is enough, or whether the training data has to change before a front layer forms, is untested. The two-layer front layer sits at 1.46 candidates and has been flat since about round 99,000.
-
-#### Refuted by
-
-A grown layer that, read the same way, shows more than one effective candidate at its first pass while the final layer is unchanged; or a four-layer and a six-layer snapshot from one run that differ in their last four read points.
-
-### Smaller Than TinyStories
-
-Page: https://evaluatedapplications.github.io/research/smaller-than-tinystories/
-Topics: small models, evaluation
-
-Finding: A holographic language model with a parameter count of 107,776 is about a tenth the size of the smallest published TinyStories reference model and spells 88.5% of its words correctly, but it does not write readable stories.
-
-#### Setup
-
-The yardstick is TinyStories . That paper trains very small language models on a synthetic corpus of simple children's stories to see how small a model can be while still producing text that reads as coherent English. Its published reference models come in five sizes: 1M, 3M, 8M, 28M and 33M parameters. This lineage asks how much a model can do at a size TinyStories did not try.
-
-The checkpoint is weight-tied and runs entirely in the browser in the Prism tool at /tools/prism/, with nothing server-side. Its shape is d=96, 6 layers, 16 shifts, a context window of 192 tokens, a 256-token vocabulary, and 2 weight-tied passes over the same weights per forward step. The file is 862,244 bytes raw and about 471KB gzipped, which is what a browser downloads to load the tool.
-
-Bits per character is the measure of the model's remaining uncertainty about the next character. It is not comparable to the bits per character the TinyStories paper reports, which uses a different tokenizer and a different measure. No benchmark comparison is made on it.
-
-#### Evidence: size
-
-The checkpoint has a parameter count of 107,776. Against the five TinyStories sizes, that is roughly a tenth the size of the smallest (1M parameters) and roughly a three-hundredth the size of the largest (33M parameters). On parameter count it is smaller than anything in that lineup, by a wide margin.
-
-A second dimension is vocabulary granularity. The tokenizer has 256 entries and is a bigram vocabulary, not a word-level one. Mean token length across the vocabulary is 1.63 characters; 95 tokens are a single character, 160 are two characters, and no token is longer than two. Every word is built a couple of characters at a time, with no lookahead past the current token. The word Once is O, nc, e; upon is u, po, n; little is li, tt, le.
-
-Measured across real prose, it takes an average of 2.84 tokens to produce one word. A word-level TinyStories-style model typically spends one token per word. A five-word phrase such as going to there with them is 5 correct decisions in a row at word granularity and 15 correct token decisions in a row here, three times as many, each made without sight of the next token. Spelling a word of five or more letters takes two or three sequential blind token decisions, each consistent with the ones before it.
-
-Parameter count against the TinyStories reference sizes
-
-| Model | Parameters |
-|---|---|
-| This checkpoint | 107,776 |
-| TinyStories reference | 1M |
-| TinyStories reference | 3M |
-| TinyStories reference | 8M |
-| TinyStories reference | 28M |
-| TinyStories reference | 33M |
-
-Vocabulary granularity
-
-| Quantity | Value |
-|---|---|
-| Vocabulary entries | 256 (bigram, not word-level) |
-| Mean token length | 1.63 characters |
-| Single-character tokens | 95 |
-| Two-character tokens | 160 |
-| Longest token | 2 characters |
-| Tokens per word, real prose | 2.84 |
-| Decisions for the five-word phrase going to there with them | 15 here against 5 at word granularity |
-
-#### Evidence: an unedited sample
-
-A sample from the checkpoint at a middling temperature, unedited: "One doging the saw the started to the started to the very. They w..."
-
-This is not TinyStories-quality prose. No subject survives more than a couple of words, doging is not a word, and the text decays into a repeat loop (the started to the started to). The measured improvements below do not mean the model writes readable stories.
-
-#### Evidence: spelling, loops and bits per character
-
-Across a held-out sample, 88.5% of the words the model produces are spelled correctly. By word length: 94.1% for 3-letter words, 87.4% for 4-letter words, and 49.5% for words of 5 letters or more. Long words are the figure to watch, because short words can be right by luck or by memorising a small closed set. Long-word spelling rose from 16.6% to 49.5%, roughly a tripling.
-
-Degenerate looping, where the model falls into a short repeating cycle and stays, fell sharply. 59.0% of vocabulary-seeded generations produce no repeating loop, up from about 40%.
-
-Bits per character sat flat at 2.6 to 2.7 through several restructures of the architecture that moved it in neither direction, then dropped to about 2.3 at roughly round 190,000 of continuous training.
-
-Share of words spelled correctly on a held-out sample
-
-| Word length | Spelled correctly |
-|---|---|
-| all words | 88.5% |
-| 3 letters | 94.1% |
-| 4 letters | 87.4% |
-| 5 letters or more | 49.5% (16.6% at the earlier measurement) |
-
-Looping and bits per character
-
-| Measure | Earlier | Current |
-|---|---|---|
-| Vocabulary-seeded generations with no repeating loop | about 40% | 59.0% |
-| Bits per character | 2.6 to 2.7, flat | about 2.3 at roughly round 190,000 |
-
-#### Evidence: the weights rotated, they did not grow
-
-Six checkpoints spanning the stretch were compared on how the weights moved. In all 42 bank-and-layer combinations in the model the weights rotated and did not grow. Every combination moved 10 to 1,000 times more by rotation (a change in the direction a weight vector points) than by rescaling (a change in its size). Cosine similarity between old and new direction sits between 0.977 and 0.999, barely different in raw angle but consistently different in the same direction checkpoint after checkpoint.
-
-Magnitudes changed by under 1.5% on every weight bank across the window, and each layer's share of the total work stayed essentially flat. The token embeddings and the readout geometry stayed fixed: the effective dimensionality of the embeddings held between 14.7 and 14.9, and the readout geometry correlated between 0.996 and 0.998 across checkpoints. The model did not relearn what tokens mean or how to read its internal state back into a prediction. It reorganised how it relates things between those two fixed points, which is restructuring and not accumulation.
-
-The flat stretch of the loss curve was not a stall. Rotation rate during the plateau at 2.6 to 2.7 bits per character was 0.0198 per round, faster than the 0.0159 per round averaged over the whole window that includes the drop to 2.3. Stopping when the loss curve looked flat would have stopped training when the structure was moving fastest.
-
-Weight motion across six checkpoints, 42 bank-and-layer combinations
-
-| Quantity | Value |
-|---|---|
-| Rotation against rescaling | 10 to 1,000 times more rotation, in all 42 combinations |
-| Cosine similarity of old and new direction | 0.977 to 0.999 |
-| Magnitude change on every weight bank | under 1.5% |
-| Effective dimensionality of the embeddings | 14.7 to 14.9 |
-| Readout geometry correlation across checkpoints | 0.996 to 0.998 |
-| Rotation rate during the flat loss stretch | 0.0198 per round |
-| Rotation rate averaged over the whole window | 0.0159 per round |
-
-#### Evidence: measurements that went the wrong way
-
-Long-form coherence got worse over the same window. The longest run of valid English the model sustains shrank across the checkpoints, and a corruption test (feeding a deliberately broken input and seeing how much the model relies on the good context around the break to recover) suggests it leans less on context than before. That test runs across only 60 windows, too coarse to call either a real regression or noise.
-
-The corpus changed on the same day as some of the measurements. TinyStories data is 55% of the 3.77GB training corpus. The spelling gains predate the corpus change, so they are not an artefact of seeing more TinyStories-shaped text. A later acceleration of roughly six-fold in the rate of weight rotation sits entirely inside the window after the corpus change, and how much of it comes from the architecture and how much from the changed training mix cannot be separated.
-
-#### What this means for a small model
-
-A model under a million parameters can spell most of its words correctly on a held-out sample, while still failing at stringing words into sentences. Spelling and coherence are separate measurements and need separate reports.
-
-Compare size with vocabulary granularity in view. A bigram vocabulary needs about three token decisions where a word-level vocabulary needs one, so a parameter count compares two models only at equal granularity.
-
-Do not stop a run because the loss curve is flat. Measure weight rotation against rescaling, and read a flat loss with a fast rotation rate as reorganisation in progress.
-
-Keep a corruption test at more than 60 windows if it will carry a claim about context use, and record corpus changes against the measurement dates so they can be separated from architecture effects.
-
-#### Limits
-
-The size claim is closed and holds on parameter count and on token granularity. Nothing here shows the model writes like a TinyStories model, and the sample above shows it does not. No quality comparison against the TinyStories models was made, and bits per character is not comparable to theirs. Long-form coherence moved in the wrong direction on a coarse test, and the corpus change confounds the weight-rotation acceleration.
-
-The vocabulary is described as 256 entries but the single-character and two-character counts (95 and 160) sum to 255.
-
-#### Refuted by
-
-A checkpoint whose parameter count is not 107,776, or a TinyStories reference model smaller than 1M parameters; checkpoints from the same window showing magnitude change above 1.5% on a weight bank, or rescaling comparable to rotation; or a held-out spelling measurement on the checkpoint that gives a different rate.
-
-References:
-1. Eldan and Li, TinyStories, 2023, arXiv 2305.07759. https://arxiv.org/abs/2305.07759
 
 ### Nobody Read the Warning
 

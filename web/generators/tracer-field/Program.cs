@@ -56,7 +56,7 @@ var world = new PathfindingWorld(licenseKey: null, tunerStatePath: stateDir);
 var baker = world.CreateNavMeshBakerService();
 var mesh = await baker.BakeAsync(vertices, triangles);
 
-// ---- the swarm: 14 agents in the left room, one shared goal in the right room ----
+// ---- the crowd: 14 agents in the left room, one shared goal in the right room ----
 var goal = new Vector2(28.5f, 8.5f);
 var starts = new (float X, float Y)[]
 {
@@ -130,7 +130,7 @@ var doc = new
     grid = new { width = W, height = H, rows = map },
     mesh = new { triangles = mesh.TriangleCount, trianglesAfterObstacle = blockedMesh.TriangleCount },
     zone = new { center = new[] { R(zone.Center.X), R(zone.Center.Y) }, radius = R(zone.Radius) },
-    swarm = Scenario("swarm", agents, tick1),
+    crowd = Scenario("crowd", agents, tick1),
     blocked = Scenario("blocked", agents, tick2),
     singles = agents.Select((a, i) => new { id = a.Id, found = batch[i].Count > 0, path = Pts(batch[i]) }).ToArray(),
     tile = new
@@ -146,5 +146,5 @@ var doc = new
 var json = JsonSerializer.Serialize(doc, new JsonSerializerOptions { WriteIndented = false });
 File.WriteAllText(outPath, json, new System.Text.UTF8Encoding(false));
 Console.WriteLine($"Tracer {pkgVersion}: {mesh.TriangleCount} triangles, wrote {outPath} ({json.Length} bytes)");
-Console.WriteLine($"swarm found {tick1.Paths.Count(p => p.PathFound)}/{agents.Count}, blocked found {tick2.Paths.Count(p => p.PathFound)}/{agents.Count}");
+Console.WriteLine($"crowd found {tick1.Paths.Count(p => p.PathFound)}/{agents.Count}, blocked found {tick2.Paths.Count(p => p.PathFound)}/{agents.Count}");
 try { Directory.Delete(stateDir, true); } catch { }

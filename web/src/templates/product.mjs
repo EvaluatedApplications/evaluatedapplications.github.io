@@ -11,10 +11,6 @@ const read = (rel) => fs.readFileSync(path.join(DATA, rel), 'utf8').replace(/\r\
 // A diagram can carry a small latency block copied from an evidence record, so the numbers it shows are the record's.
 function withLatency(ctx, data, spec) {
   if (!spec) return data;
-  if (spec.race) {
-    const rd = ctx.diagrams['holodb-race'], pick = (labels) => labels.map((l) => { const q = rd.queries.find((x) => x.label === l); if (!q) throw new Error('latency row not found: ' + l); return { label: q.label, values: q.warm }; });
-    return { ...data, latency: { columns: rd.arms.map((a) => a.label), title: spec.title, ledger: `${rd.rows.toLocaleString('en-GB')} invoices`, note: spec.note, focus: 0, key: pick(spec.key), aggregate: pick(spec.aggregate) } };
-  }
   const tb = ctx.evidence.find((e) => e.id === spec.evidence).sections.flatMap((s) => s.tables).find((t) => t.id === spec.table);
   const pick = (labels) => labels.map((l) => { const r = tb.rows.find((x) => x.label === l); if (!r) throw new Error('latency row not found: ' + l); return { label: r.label, values: r.values }; });
   return { ...data, latency: { columns: tb.columns, qualifiers: tb.qualifiers, note: spec.note, focus: tb.focus, key: pick(spec.key), aggregate: pick(spec.aggregate) } };
@@ -48,7 +44,7 @@ export default function product(ctx, p) {
       data: withLatency(ctx, ctx.diagrams[doc.diagram.id], doc.diagram.latency),
       stageLabel: doc.diagram.stageLabel || 'Interactive diagram. Drag, or use the arrow keys.',
       caption: doc.diagram.caption ? captionHtml(doc.diagram.caption, ctx.diagrams[doc.diagram.id], subst) : undefined,
-      variant: sz ? 'fig-hero-demo' : undefined,
+      variant: sz && !sz.late ? 'fig-hero-demo' : undefined,
     });
   }
   const qs = doc.quickstart;
@@ -87,7 +83,7 @@ export default function product(ctx, p) {
 <p class="licence-ribbon"><span>${ctx.licence.ribbon}</span><a href="/licence/">Licence terms</a></p>`,
   }) : '';
 
-  const figSec = fig ? html`<section class="sec fig-sec doc-sec" id="${sz && !heroTool && !sz.pointer ? 'demo' : 'overview'}" aria-label="Overview"><div class="wrap">${fig.html}</div></section>` : '';
+  const figSec = fig ? html`<section class="sec fig-sec doc-sec" id="${sz && !sz.late && !heroTool && !sz.pointer ? 'demo' : 'overview'}" aria-label="Overview"><div class="wrap">${fig.html}</div></section>` : '';
   const bandSec = heroTool ? toolBand(heroTool, p, p.tools.filter((t) => t.id !== heroTool.id)) : sz?.pointer ? pointerBand(sz.pointer, subst) : '';
 
   const stats = sz ? resolveStats(ctx, sz.stats, subst) : [];
@@ -200,9 +196,10 @@ export default function product(ctx, p) {
 ${sizzleHero}
 ${productSubnav(p, 'overview')}
 ${bandSec}
-${figSec}
+${sz.late ? '' : figSec}
 ${numbersSec}
 ${figSecs}
+${sz.late ? figSec : ''}
 ${lossSec}
 ${buildSec}
 ${qsSec}

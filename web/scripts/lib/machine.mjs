@@ -125,14 +125,6 @@ export function composeLlmsFull(ctx, stamp) {
   if (ctx.evidence.length) {
     L.push('## Evidence', '');
     for (const e of ctx.evidence) {
-      if (e.layout === 'story') {
-        const r = ctx.diagrams['holodb-race'], fit = ctx.diagrams['holodb-fit'];
-        L.push(`### ${e.title}`, '', e.claim, '', `Page: ${abs(ctx, e.slug)}`, '', ...e.headline.map((t) => `- ${t.value}: ${t.label}`), '', e.story.conditions, '');
-        L.push(`Warm median milliseconds at ${r.rows.toLocaleString('en-GB')} invoices (${r.arms.map((a) => a.label).join(' | ')}):`, ...r.queries.map((q) => `- ${q.label}: ${q.warm.map((v) => v.toFixed(2)).join(' | ')}`), '', e.story.chart.caption, '');
-        L.push('How we measured:', ...e.story.method.rows.map(([k, v]) => `- ${k}: ${v}`), '', `${e.story.limits.title}:`, ...e.story.limits.table.rows.map(([k, v]) => `- ${k}: ${v}`), '');
-        L.push(`When to use it: ${abs(ctx, '/holodb/#fit')}. Trade-offs:`, ...fit.tradeoffs.map((t) => `- ${t.title}. ${t.left.label}: ${t.left.text} ${t.right.label}: ${t.right.text}`), '');
-        continue;
-      }
       L.push(`### ${e.title}`, '', e.claim, '', `Page: ${abs(ctx, e.slug)}`, '', 'Method:');
       const m = e.method;
       L.push(...[['Workload', m.workload], ['Engines', m.engines.join('; ')], ['Check', m.verification], ['Statistic', m.statistic], ['Machine', m.machine], ['Memory and logging', m.memory], ['Ties', m.tie]].filter(([, v]) => v).map(([k, v]) => `- ${k}: ${v}`), '');

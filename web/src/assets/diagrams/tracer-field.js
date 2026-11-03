@@ -58,13 +58,13 @@ const key = (p) => p.map((q) => q[0] + ',' + q[1]).join(';');
 
 export function metrics(d) {
   const g = d.grid;
-  const sw = d.swarm.agents, bl = d.blocked.agents, si = d.singles;
+  const sw = d.crowd.agents, bl = d.blocked.agents, si = d.singles;
   const goals = new Set(sw.map((a) => a.goal.join(','))).size;
   const per = sw.map((a, i) => {
     const b = bl[i], s = si[i];
     return {
       id: a.id, from: a.from, goal: a.goal,
-      swarm: { wp: a.path.length, len: pathLength(a.path), cut: cornerCut(g, a.path) },
+      crowd: { wp: a.path.length, len: pathLength(a.path), cut: cornerCut(g, a.path) },
       blocked: { wp: b.path.length, len: pathLength(b.path), rerouted: key(b.path) !== key(a.path) },
       single: { wp: s.path.length, len: pathLength(s.path), cut: cornerCut(g, s.path) },
     };
@@ -73,14 +73,14 @@ export function metrics(d) {
   const iso = isolatedTriangles(d);
   return {
     agents: sw.length, goals, triangles: d.mesh.triangles, trianglesAfter: d.mesh.trianglesAfterObstacle,
-    foundSwarm: sw.filter((a) => a.found).length, foundBlocked: bl.filter((a) => a.found).length,
+    foundCrowd: sw.filter((a) => a.found).length, foundBlocked: bl.filter((a) => a.found).length,
     foundSingle: si.filter((a) => a.found).length,
     rerouted: per.filter((p) => p.blocked.rerouted).length,
     isolated: iso.length, isolatedCells: iso,
-    swarmCorner: Math.max(...per.map((p) => p.swarm.cut)),
+    crowdCorner: Math.max(...per.map((p) => p.crowd.cut)),
     singleCorner: Math.max(...per.map((p) => p.single.cut)),
     totals: {
-      swarm: { wp: sum(per, (p) => p.swarm.wp) / per.length, len: sum(per, (p) => p.swarm.len) },
+      crowd: { wp: sum(per, (p) => p.crowd.wp) / per.length, len: sum(per, (p) => p.crowd.len) },
       blocked: { wp: sum(per, (p) => p.blocked.wp) / per.length, len: sum(per, (p) => p.blocked.len) },
       single: { wp: sum(per, (p) => p.single.wp) / per.length, len: sum(per, (p) => p.single.len) },
     },
@@ -92,13 +92,13 @@ export function metrics(d) {
 // Numbers the product page quotes in prose, taken from the data so the sentence cannot go stale.
 export function limitFacts(m) {
   return {
-    swarmCorner: f2(m.swarmCorner), singleCorner: f2(m.singleCorner),
-    agents: String(m.agents), goals: String(m.goals), foundSwarm: String(m.foundSwarm), foundBlocked: String(m.foundBlocked), rerouted: String(m.rerouted), triangles: String(m.triangles),
+    crowdCorner: f2(m.crowdCorner), singleCorner: f2(m.singleCorner),
+    agents: String(m.agents), goals: String(m.goals), foundCrowd: String(m.foundCrowd), foundBlocked: String(m.foundBlocked), rerouted: String(m.rerouted), triangles: String(m.triangles),
   };
 }
 
 const MODES = [
-  { id: 'swarm', label: 'Crowd tick' },
+  { id: 'crowd', label: 'Crowd tick' },
   { id: 'blocked', label: 'Doorway closed' },
   { id: 'singles', label: 'Single queries' },
   { id: 'tile', label: 'Tile lane' },
@@ -107,21 +107,21 @@ const MODES = [
 export function statsFor(mode, m) {
   const t = (label, value) => ({ label, value: String(value) });
   if (mode === 'blocked') return [t('Triangles isolated', m.isolated), t('Agents re-routed', `${m.rerouted} of ${m.agents}`), t('Paths found', `${m.foundBlocked} of ${m.agents}`), t('Mesh triangles', m.trianglesAfter)];
-  if (mode === 'singles') return [t('Paths found', `${m.foundSingle} of ${m.agents}`), t('Mean waypoints', f1(m.totals.single.wp)), t('Corner cut, single', f2(m.singleCorner) + ' cell'), t('Corner cut, crowd', f2(m.swarmCorner) + ' cell')];
+  if (mode === 'singles') return [t('Paths found', `${m.foundSingle} of ${m.agents}`), t('Mean waypoints', f1(m.totals.single.wp)), t('Corner cut, single', f2(m.singleCorner) + ' cell'), t('Corner cut, crowd', f2(m.crowdCorner) + ' cell')];
   if (mode === 'tile') return [t('Reachable tiles', m.tile.reach), t('In line of sight', m.tile.visible), t('Beside a wall', m.tile.cover), t('Movement steps', m.tile.steps)];
-  return [t('Agents', m.agents), t('Paths found', `${m.foundSwarm} of ${m.agents}`), t('Distinct goals', m.goals), t('Mesh triangles', m.triangles)];
+  return [t('Agents', m.agents), t('Paths found', `${m.foundCrowd} of ${m.agents}`), t('Distinct goals', m.goals), t('Mesh triangles', m.triangles)];
 }
 
 export function readoutFor(mode, m, sel) {
   if (sel >= 0 && mode !== 'tile') {
     const p = m.per[sel];
-    const v = mode === 'blocked' ? p.blocked : mode === 'singles' ? p.single : p.swarm;
+    const v = mode === 'blocked' ? p.blocked : mode === 'singles' ? p.single : p.crowd;
     return `Agent ${p.id}: ${v.wp} waypoints, ${f1(v.len)} cells long${mode === 'blocked' ? (v.rerouted ? ', route changed' : ', route unchanged') : ''}. From (${p.from.join(', ')}) to (${p.goal.join(', ')}).`;
   }
   if (mode === 'blocked') return `A circular zone closes the upper doorway in the first wall. The mesh keeps its ${m.trianglesAfter} triangles and isolates ${m.isolated} of them in place. ${m.rerouted} of ${m.agents} agents take a new route; dashed lines show the routes they left.`;
-  if (mode === 'singles') return `The same ${m.agents} start and goal pairs as single-agent queries. Paths hug corners more tightly: the deepest corner cut is ${f2(m.singleCorner)} of a cell, against ${f2(m.swarmCorner)} for the crowd tick.`;
+  if (mode === 'singles') return `The same ${m.agents} start and goal pairs as single-agent queries. Paths hug corners more tightly: the deepest corner cut is ${f2(m.singleCorner)} of a cell, against ${f2(m.crowdCorner)} for the crowd tick.`;
   if (mode === 'tile') return `The bake-free tile lane from tile (${m.tile.origin.join(', ')}): ${m.tile.reach} tiles within ${m.tile.steps} steps, ${m.tile.visible} tiles in line of sight, ${m.tile.cover} reachable tiles beside a wall. Brighter tiles cost more steps.`;
-  return `${m.agents} agents head for ${m.goals} goals across two walls with two doorways each. Agents that share a goal share one solve. ${m.foundSwarm} of ${m.agents} paths found.`;
+  return `${m.agents} agents head for ${m.goals} goals across two walls with two doorways each. Agents that share a goal share one solve. ${m.foundCrowd} of ${m.agents} paths found.`;
 }
 
 // ---------------------------------------------------------------- server-rendered pieces
@@ -138,19 +138,19 @@ export function staticSvg(d) {
     }
   }
   const pts = (p) => p.map((q) => `${f1(q[0] * S)},${f1(q[1] * S)}`).join(' ');
-  const lines = d.swarm.agents.map((a, i) => `<polyline class="a${i % 7}" points="${pts(a.path)}"/>`).join('');
-  const goals = [...new Set(d.swarm.agents.map((a) => a.goal.join(',')))].map((s) => { const [x, y] = s.split(',').map(Number); return `<circle class="goal" cx="${x * S}" cy="${y * S}" r="${S * 0.45}"/>`; }).join('');
-  const dots = d.swarm.agents.map((a, i) => `<circle class="a${i % 7}" cx="${a.from[0] * S}" cy="${a.from[1] * S}" r="${S * 0.22}"/>`).join('');
+  const lines = d.crowd.agents.map((a, i) => `<polyline class="a${i % 7}" points="${pts(a.path)}"/>`).join('');
+  const goals = [...new Set(d.crowd.agents.map((a) => a.goal.join(',')))].map((s) => { const [x, y] = s.split(',').map(Number); return `<circle class="goal" cx="${x * S}" cy="${y * S}" r="${S * 0.45}"/>`; }).join('');
+  const dots = d.crowd.agents.map((a, i) => `<circle class="a${i % 7}" cx="${a.from[0] * S}" cy="${a.from[1] * S}" r="${S * 0.22}"/>`).join('');
   return `<svg class="dia-plan" viewBox="0 0 ${W} ${H}" role="img" aria-labelledby="tf-plan-t tf-plan-d" preserveAspectRatio="xMidYMid meet">
 <title id="tf-plan-t">Plan view of the level with the crowd paths</title>
-<desc id="tf-plan-d">A ${g.width} by ${g.height} level with two walls, each with two doorways. ${d.swarm.agents.length} agents start in the left room and Tracer returns a path for each toward the goals in the right rooms.</desc>
+<desc id="tf-plan-d">A ${g.width} by ${g.height} level with two walls, each with two doorways. ${d.crowd.agents.length} agents start in the left room and Tracer returns a path for each toward the goals in the right rooms.</desc>
 <g class="walls">${walls.join('')}</g><g class="paths">${lines}</g><g class="goals">${goals}</g><g class="starts">${dots}</g></svg>`;
 }
 
 export function controlsHtml(id, m) {
   const tabs = MODES.map((md, i) => `<button type="button" role="tab" id="${id}-tab-${md.id}" data-mode="${md.id}" aria-selected="${i === 0}" aria-controls="${id}-stage" tabindex="${i === 0 ? 0 : -1}">${esc(md.label)}</button>`).join('');
   const opts = ['<option value="-1">All agents</option>'].concat(m.per.map((p, i) => `<option value="${i}">Agent ${p.id}</option>`)).join('');
-  const stats = statsFor('swarm', m).map((s) => `<div class="stat"><dt>${esc(s.label)}</dt><dd>${esc(s.value)}</dd></div>`).join('');
+  const stats = statsFor('crowd', m).map((s) => `<div class="stat"><dt>${esc(s.label)}</dt><dd>${esc(s.value)}</dd></div>`).join('');
   return {
     tabs: `<div class="dia-tabs dia-ui" role="tablist" aria-label="View" hidden>${tabs}</div>`,
     controls: `<div class="dia-controls dia-ui" hidden>
@@ -161,7 +161,7 @@ export function controlsHtml(id, m) {
 <button type="button" class="btn btn-ghost btn-sm" data-ctl="play" aria-pressed="true">Pause motion</button>
 </div>
 <p class="dia-hint dia-ui" hidden>Drag the view or use the arrow keys while it is focused to turn and tilt it.</p>
-<p class="dia-readout dia-ui" data-ctl="readout" role="status" hidden>${esc(readoutFor('swarm', m, -1))}</p>
+<p class="dia-readout dia-ui" data-ctl="readout" role="status" hidden>${esc(readoutFor('crowd', m, -1))}</p>
 <dl class="stats dia-stats dia-ui" data-ctl="stats" hidden>${stats}</dl>`,
   };
 }
@@ -169,11 +169,11 @@ export function controlsHtml(id, m) {
 export function tablesHtml(d, m) {
   const row = (cells, head) => '<tr>' + cells.map((c, i) => (i === 0 && head ? `<th scope="row">${esc(c)}</th>` : `<td>${esc(c)}</td>`)).join('') + '</tr>';
   const sum = [
-    ['Crowd tick', `${m.foundSwarm} of ${m.agents}`, f1(m.totals.swarm.wp), f1(m.totals.swarm.len), 'none', f2(m.swarmCorner)],
+    ['Crowd tick', `${m.foundCrowd} of ${m.agents}`, f1(m.totals.crowd.wp), f1(m.totals.crowd.len), 'none', f2(m.crowdCorner)],
     ['Doorway closed', `${m.foundBlocked} of ${m.agents}`, f1(m.totals.blocked.wp), f1(m.totals.blocked.len), `${m.rerouted} of ${m.agents}`, ''],
     ['Single queries', `${m.foundSingle} of ${m.agents}`, f1(m.totals.single.wp), f1(m.totals.single.len), 'none', f2(m.singleCorner)],
   ];
-  const agents = m.per.map((p) => [`Agent ${p.id}`, `(${p.from.join(', ')})`, `(${p.goal.join(', ')})`, p.swarm.wp, f1(p.swarm.len), p.blocked.wp, f1(p.blocked.len), p.blocked.rerouted ? 'yes' : 'no', p.single.wp, f1(p.single.len)]);
+  const agents = m.per.map((p) => [`Agent ${p.id}`, `(${p.from.join(', ')})`, `(${p.goal.join(', ')})`, p.crowd.wp, f1(p.crowd.len), p.blocked.wp, f1(p.blocked.len), p.blocked.rerouted ? 'yes' : 'no', p.single.wp, f1(p.single.len)]);
   return `<details class="dia-data"><summary>Data behind the diagram</summary>
 <div class="tbl-wrap"><table class="tbl"><caption>Totals by view, from ${m.agents} agents on a level baked to ${m.triangles} triangles</caption>
 <thead><tr><th scope="col">View</th><th scope="col">Paths found</th><th scope="col">Mean waypoints</th><th scope="col">Total length (cells)</th><th scope="col">Agents re-routed</th><th scope="col">Deepest corner cut (cells)</th></tr></thead>
@@ -211,7 +211,7 @@ export function mount(root, d) {
   };
 
   const narrow = stage.getBoundingClientRect().width < 560;
-  const S = { mode: 'swarm', yaw: narrow ? 90 : 0, tilt: narrow ? 52 : 54, sel: -1, playing: !reduced, moved: false, mesh: true, userPlay: false };
+  const S = { mode: 'crowd', yaw: narrow ? 90 : 0, tilt: narrow ? 52 : 54, sel: -1, playing: !reduced, moved: false, mesh: true, userPlay: false };
   const anim = () => S.playing && (!reduced || S.userPlay);   // reduced motion: nothing moves until the visitor presses Play
   ui.yaw.value = S.yaw; ui.tilt.value = S.tilt;
   ui.play.textContent = S.playing ? 'Pause motion' : 'Play motion';
@@ -225,11 +225,11 @@ export function mount(root, d) {
   const cover = new Set(d.tile.cover.map(([x, y]) => x + ',' + y));
   const isoSet = new Set(m.isolatedCells.map(([x, y, k]) => x + ',' + y + ',' + k));
   const lens = {
-    swarm: d.swarm.agents.map((a) => pathLength(a.path)),
+    crowd: d.crowd.agents.map((a) => pathLength(a.path)),
     blocked: d.blocked.agents.map((a) => pathLength(a.path)),
     singles: d.singles.map((a) => pathLength(a.path)),
   };
-  const setFor = (mode) => (mode === 'blocked' ? d.blocked.agents : mode === 'singles' ? d.singles : d.swarm.agents);
+  const setFor = (mode) => (mode === 'blocked' ? d.blocked.agents : mode === 'singles' ? d.singles : d.crowd.agents);
   const col = (i) => palette[i % palette.length];
   const wallTop = mix(tok.border2, tok.soft, 0.22), wallSideA = mix(tok.surface2, tok.border2, 0.75), wallSideB = mix(tok.surface, tok.border2, 0.55);
   const floorCol = mix(tok.bg2, tok.surface2, 0.55);
@@ -308,7 +308,7 @@ export function mount(root, d) {
       // ghosts of the routes agents left
       if (S.mode === 'blocked') {
         ctx.setLineDash([3, 4]); ctx.lineWidth = 1.5;
-        d.swarm.agents.forEach((a, i) => {
+        d.crowd.agents.forEach((a, i) => {
           if (!m.per[i].blocked.rerouted || (S.sel >= 0 && S.sel !== i)) return;
           ctx.strokeStyle = rgba(tok.faint, 0.7); ctx.beginPath();
           a.path.forEach((pt, j) => { const q = P(pt[0], pt[1], 0.02); j ? ctx.lineTo(q[0], q[1]) : ctx.moveTo(q[0], q[1]); });
@@ -445,6 +445,6 @@ if (hasDom) {
 export function verify(d, body) {
   const m = metrics(d), out = [];
   if (!/role="tablist"/.test(body)) out.push('no tablist');
-  if (!body.includes(`${m.foundSwarm} of ${m.agents}`)) out.push('table does not show the swarm result');
+  if (!body.includes(`${m.foundCrowd} of ${m.agents}`)) out.push('table does not show the crowd result');
   return out;
 }

@@ -2,206 +2,82 @@
   "id": "holodb",
   "product": "holodb",
   "slug": "/holodb/evidence/",
-  "layout": "story",
-  "scope": "100,000,000 invoices, tuned rivals",
-  "title": "HoloDb benchmarks",
-  "description": "HoloDb against tuned DuckDB and SQL Server on 100,000,000 invoices: every query charted, how the wins happen, how it was measured, what it does not do.",
-  "claim": "Totals over 100,000,000 invoices in 0.12 ms and four joins to two million customers in 0.19 to 0.25 ms, against tuned DuckDB and tuned SQL Server on the same machine and data. Out of the box, scans that no structure covers are slower, and the chart shows each of them as an amber bar.",
-  "tieBelow": 1.15,
+  "scope": "Test battery, chaos runs, customer lifecycle runs and engine counters",
+  "title": "What HoloDb learns, and how it is tested",
+  "description": "Learned records under writes read 6 blocks against 60 and 51. Across 158 sessions HoloDb matched SQLite on 249 million rows and recovered 46 times.",
+  "claim": "After single-row updates and deletes the next sweep reads 6 blocks with learned records that adjust, against 60 and 51 when updates drop them, and 6 against 366 after consolidation. A wrong answer is the one failure a database cannot afford, so the tests try to make HoloDb wrong: across 8 customer runs and 158 sessions it compared 249 million rows against SQLite and recovered 46 times after a kill or a power cut, 37 times to the state before the interrupted write, 9 times to the state after, and never to a state between.",
   "headline": [
+    { "value": "6 against 60 and 51", "label": "blocks read by the next sweep after single-row updates and deletes, with learned records that adjust against records dropped on write, on 1,000,000 rows" },
+    { "value": "61 times", "label": "fewer blocks read after consolidation: 6 against 366" },
+    { "value": "249 million rows", "label": "compared against SQLite across 8 customer runs and 158 sessions, with the database opened again after every session" },
+    { "value": "0 of 46", "label": "recoveries after a kill or a power cut ended between the state before and the state after: 37 to before, 9 to after" }
+  ],
+  "lossTitle": "What it costs",
+  "losses": [
+    "Structures help repeated work. A filter whose matching rows are spread evenly over every block gains nothing from learned records.",
+    "Writes pay for what the engine keeps: a delete or update is charged the measured time of each structure's delta path, and a structure is dropped when its measured upkeep exceeds its saving.",
+    "Moving scattered rows costs about 200 microseconds per row, so a scattered filter pays that back after about 100 uses."
+  ],
+  "method": {
+    "workload": "Learned-record and upkeep counters come from pinned streams on a 1,000,000-row table with six learned scatter predicates. Correctness figures come from the 56-spec battery, the chaos2 random SQL streams and the customer lifecycle test, which grows one database from an empty file over many separate processes.",
+    "engines": [
+      "HoloDb",
+      "SQLite as the oracle for every answer, the full row set and the table seal"
+    ],
+    "verification": "Every SELECT, the full row set and the table seal are compared with SQLite, and the database is opened again after every session. Every check has a mutant arm that breaks the engine on purpose, and the check must go red for the right reason.",
+    "statistic": "Counts of blocks, pins, runs and bytes are exact. Times are informational.",
+    "machine": "11th Gen Intel Core i9-11950H (8 cores, 16 threads), NVMe, Windows 11, shared with another job during the battery and customer runs.",
+    "memory": "Three terms recur. A block is a run of rows stored together. A page is 8 KB of file. A pin is one page read through the buffer pool, and counts of pins stand in for time."
+  },
+  "sections": [
     {
-      "value": "0.12 ms",
-      "label": "to add up 100,000,000 invoices (HoloDb restored, warm median). Tuned DuckDB scanning them: 23.17 ms. Tuned SQL Server with an indexed view: 0.65 ms."
+      "id": "learns",
+      "title": "What the engine learns",
+      "intro": [ "Each row below compares the engine with a mechanism turned off, on the same stream. Every answer stayed exact." ],
+      "tables": [
+        {
+          "id": "learned", "kind": "matrix", "caption": "Learned records, upkeep and gather",
+          "columns": ["Measurement", "Result"],
+          "rows": [
+            ["Learned records under writes", "After a stream of single-row UPDATEs and DELETEs over six learned scatter predicates on 1,000,000 rows, the next sweep reads 6 blocks with records that adjust, against 60 and 51 blocks when updates drop them: 8.5 to 10 times fewer. After consolidation it reads 6 blocks against 366: 61 times fewer. All counts, sums and zones were verified exact against the cells in every phase."],
+            ["Upkeep priced from measured cost", "On a mixed stream of 1,200 delete-or-update pairs each followed by a sorted count, the index with measured upkeep stayed built and read 0 blocks, using 49,306 to 54,106 page pins in all, against 1,158,839 pins when the structure was dropped at the 256th write and rebuilt by scans. That is 21 to 24 times fewer."],
+            ["Gather priced from measured waste", "On a repeated sum that the stored records answer, gather moves 0 rows, and in the repeat phases it reads the same 12 blocks as with gather off; the learning phase reads 390. Where scans do read the excess (a selective scatter over 20,000 rows, sums off) it cuts the blocks read per round from 288 to 30. A one-time regroup can reach a similar layout without gather."]
+          ]
+        },
+        {
+          "id": "runs", "kind": "matrix", "caption": "Customer lifecycle runs: layout, NULL path and ring file",
+          "columns": ["Run", "Result"],
+          "rows": [
+            ["Retention deletes, 3.1 million rows", "The log customer grew to 3,097,444 rows over 25 sessions with 8.2 percent dead slots. The map that turns a row id into a row position held 5,117 to 15,174 runs. A plain pairing order (highest live row to lowest hole) leaves 115,118 runs on the same kind of table. The database opened in 148 to 547 ms."],
+            ["Wide table with NULLs, 3.2 million rows", "9 sessions to 3,205,807 rows, 0 failures, 0 check faults, 0 runs in the id map, session opens of 3 to 410 ms, a first cold open of 452 ms and then 64 and 68 ms, about 103 bytes per row, and a peak working set of 4.6 GB. The null path reads only the columns a statement names."],
+            ["Null path cost", "A seven-query dashboard pass on nullable columns costs 0.44 page pins per row at 100,000, 300,000 and 1,000,000 rows. A point read of one row costs 103 to 115 pins."],
+            ["Ring file", "The write-ahead ring is sized from the largest batch of the last window. One wide statement pinned it at 8.5 MB; after a clean close and reopen it is 41 KB."]
+          ]
+        }
+      ]
     },
     {
-      "value": "0.19 to 0.25 ms",
-      "label": "for the four joins to 2,000,000 customers (HoloDb restored, warm median). Tuned SQL Server: 0.62 to 0.77 ms. Tuned DuckDB: 102.06 to 603.65 ms."
-    },
-    {
-      "value": "16 of 16",
-      "label": "queries where HoloDb restored is ahead of tuned DuckDB, and 16 of 16 where it is ahead of tuned SQL Server. Ahead means more than 20 percent faster in both runs."
-    },
-    {
-      "value": "10 of 16",
-      "label": "queries where HoloDb out of the box is ahead of tuned DuckDB. It is behind on 5 and too close to call on 1: scans that no structure covers. Against tuned SQL Server it is ahead on 7 and behind on 9."
+      "id": "tested",
+      "title": "What we test",
+      "intro": [ "A wrong answer is the one failure a database cannot afford, so the tests try to make HoloDb wrong and report the first time it is." ],
+      "tables": [
+        {
+          "id": "tests", "kind": "matrix", "caption": "The four kinds of test",
+          "columns": ["Test", "What it does", "Result"],
+          "rows": [
+            ["The battery", "56 specs per mode, run in both pipeline modes: the block pipeline, which reads and learns from blocks, and the analytic executor, which answers from exact totals. A spec covers one area: NULL logic, the block map, crash points, the history log, AS OF, the sorted index, the keyed summary, the tree, learned records, gather, placement, routes, transactions and their undo, the budget, and randomized streams. Several specs run at 3,000,000 rows.", "Mode 1 passed all 56 (one spec failed once at a reopen after a simulated crash and passed on three further runs). Mode 2 passed 55 of 56; the 56th is a timing bound and was not run while the machine was loaded."],
+            ["Red arms", "Every check has a mutant arm that breaks the engine on purpose (an update that leaves a stale sum, a move that forgets a zone, a log that drops a record) and the check must go red for the right reason.", "The battery holds 276 arm runs in mode 1 and 275 in mode 2; 256 and 237 are detected. The rest are listed by name with their reason: an arm that lives in the other pipeline, an arm that by design changes no answer, or an arm that belongs to a different spec."],
+            ["Chaos runs", "chaos2 generates random SQL streams over a paged table: SELECT with filters, grouping, joins and top-k, INSERT, UPDATE, DELETE, transactions with rollback, ALTER, index DDL, reopen, power loss, a power cut at the nth durable write inside COMMIT, and a restart with builds running. SQLite is the oracle for every answer, for the full row set, and for the table seal.", "The learned-on arm ran 40 of 40 seeds green (tables up to 100,000 rows) and the learned-off arm 30 of 30 (up to 60,000 rows), in both modes. The mutant arm ran 15 seeds in mode 1 (up to 40,000 rows) and went red on 3."],
+            ["Customer lifecycle", "A simulated customer starts with an empty file and works one database across many separate processes: cold open, imports, daily batches, updates, retention deletes, ALTER, index DDL, repeated dashboards, ad hoc SQL, transactions with rollback, in-process power cuts, and hard kills of the process by its parent. A SQLite mirror is the oracle.", "Across 8 archived customer runs and 158 sessions: 249 million rows compared against SQLite, 8,267 SELECTs and 1,129 checked DML statements, and 46 recoveries after a kill or a cut: 37 to the state before the interrupted write, 9 to the state after, none to a state between. The mutant arm goes red at session 12 of one profile."]
+          ]
+        }
+      ]
     }
   ],
-  "story": {
-    "conditions": "One size: 100,000,000 invoices and 2,000,000 customers. One machine: an Intel Core i9-11950H laptop with 16 logical cores. Warm means the median of three runs. Ahead or behind means more than 20 percent in both runs of each engine.",
-    "chart": {
-      "title": "Every query, every engine",
-      "line": "16 billing queries on a logarithmic scale. Shorter is faster; an amber HoloDb bar is a loss.",
-      "fig": "holodb-race",
-      "stageLabel": "Latency chart of the sixteen queries. Use the up and down arrows to read each row.",
-      "caption": "HoloDb restored ran in a separate session on the same machine and data, the same day as the other three arms. HoloDb restored has its summary, sorted index and keyed summary declared and saved beside the data; the tuned rivals have the matching structures built by hand. Out of the box, nothing is declared and the planner saw each statement four times."
-    },
-    "how": {
-      "title": "How the wins happen",
-      "line": "Six short scenes. The motion is schematic; the figures are measured.",
-      "fig": "holodb-how",
-      "stageLabel": "Animated explainer. Choose a scene, then press Play or drag the scrubber."
-    },
-    "fit": {
-      "title": "When to use it",
-      "line": "Every answer is a trade-off, so the decision helper names the alternative where another tool is the better choice.",
-      "href": "/holodb/#fit",
-      "label": "Open the decision helper"
-    },
-    "method": {
-      "title": "How we measured",
-      "line": "Stated once, for every figure on this page",
-      "rows": [
-        [
-          "Machine",
-          "An 11th Gen Intel Core i9-11950H at 2.60 GHz, 16 logical cores, 34.1 GB of memory, Windows 11, .NET 8.0.27. Each engine ran in its own process."
-        ],
-        [
-          "Data and queries",
-          "100,000,000 invoices and 2,000,000 customers; 16 billing queries: five rollups, a lookup, five scans and five joins to the customers."
-        ],
-        [
-          "Tuned DuckDB",
-          "DuckDB 1.5.5: table written in customer_id order, ANALYZE, 16 threads, 12 GB memory limit."
-        ],
-        [
-          "Tuned SQL Server",
-          "SQL Server 2022 Developer: a columnstore index, a descending index on amount_cents and indexed views, max server memory 5,120 MB, in a container."
-        ],
-        [
-          "Tuning",
-          "We chose the rivals' tuning after a 10,000,000-row trial and fixed it before the 100,000,000-row build. A different tuning is untested."
-        ],
-        [
-          "Same answers",
-          "Before any query is timed, its rows are hashed. All four arms return identical results on all 16 queries, including where HoloDb is slower."
-        ],
-        [
-          "Warm and cold",
-          "Warm is the median of three runs. Cold is the first run after the file cache was cleared by reading a 34 GB file (for SQL Server, dropping its buffers)."
-        ],
-        [
-          "Repeats",
-          "Each engine ran the whole set twice. A tilde marks a figure whose repeat differed by more than 20 percent, and a query counts as ahead or behind only when both runs agree."
-        ]
-      ]
-    },
-    "build": {
-      "id": "build-size",
-      "kind": "matrix",
-      "caption": "Build, size and opening, 100,000,000 invoices",
-      "columns": [
-        "Arm",
-        "Load once",
-        "On disk",
-        "Opens in",
-        "Peak memory while querying"
-      ],
-      "rows": [
-        [
-          "HoloDb restored",
-          "184 s",
-          "6.84 GB",
-          "1.62 s",
-          "1.26 GB"
-        ],
-        [
-          "HoloDb out of the box",
-          "165 s",
-          "4.94 GB",
-          "0.56 s",
-          "3.16 GB"
-        ],
-        [
-          "DuckDB tuned",
-          "168 s",
-          "2.46 GB",
-          "0.01 s",
-          "1.04 GB"
-        ],
-        [
-          "SQL Server tuned",
-          "484 s",
-          "8.88 GB",
-          "0.01 s",
-          "0.06 GB"
-        ]
-      ]
-    },
-    "limits": {
-      "title": "What HoloDb does not do",
-      "line": "Each row is true today",
-      "table": {
-        "id": "limits",
-        "kind": "matrix",
-        "caption": "What is true today",
-        "columns": [
-          "Area",
-          "What is true today"
-        ],
-        "rows": [
-          [
-            "Joins",
-            "INNER JOIN only. Several in one statement on in-memory tables, one on a paged table. LEFT, RIGHT, FULL, CROSS, NATURAL, USING and comma joins are refused."
-          ],
-          [
-            "Aliases",
-            "No AS on columns or tables. Aggregate columns are named agg(col), such as count(*)."
-          ],
-          [
-            "ALTER TABLE",
-            "ADD COLUMN only, with a DEFAULT or NULL. No DROP COLUMN, RENAME COLUMN or RENAME TO."
-          ],
-          [
-            "Expressions",
-            "No CASE, LENGTH(), OFFSET or UNION, and no arithmetic in the select list or inside SUM(v * 2). COUNT(DISTINCT col), LIKE and IN (SELECT ...) work on in-memory tables."
-          ],
-          [
-            "Money",
-            "Constant-time totals are for INT columns. REAL SUM is a SIMD scan, and DECIMAL and NUMERIC are REAL (a double), so hold money as integer cents. There is no fixed-point type."
-          ],
-          [
-            "Saved summaries",
-            "A summary made with CREATE INDEX ... USING SUMMARY, or built by the planner, is saved with the table and restored on open. A plane attached with the EnablePleroma call on an in-memory table is not saved: call it again after Open."
-          ],
-          [
-            "Summary limits",
-            "A declared summary takes up to 4,095 distinct values per column (1,024 for one the planner builds) and a joint of 12 bits. A column over its limit goes to a scan and is never approximated."
-          ],
-          [
-            "Joins on paged tables",
-            "The keyed summary holds up to 4,194,304 consecutive INT keys. The 100,000,000-invoice run joins 2,000,000 customers."
-          ],
-          [
-            "Languages",
-            "A .NET library. The server speaks a TCP and TLS binary protocol whose only client is .NET. No JDBC, ODBC, Python, Node or Go client, and no PostgreSQL or MySQL wire."
-          ],
-          [
-            "Concurrency",
-            "One process per database and one writer at a time. Simple aggregate reads run off a snapshot without the lock. A second process cannot open a paged database's files, and there is no MVCC: a long transaction blocks other writers."
-          ],
-          [
-            "Table size",
-            "Tested to 100,000,000 rows (4.94 GB paged, 165 s to load). In-memory tables are bounded by RAM at about 110 bytes per row. A paged primary key loaded out of order keeps a RAM dictionary of about 35 bytes per row. Beyond 100,000,000 rows is untested."
-          ],
-          [
-            "Backup",
-            "Offline: copy the files of a closed database. There is no online backup and no point-in-time recovery."
-          ],
-          [
-            "Crash safety",
-            "One fsync per commit. Tests cut the log at every record boundary, flip bits in the log and the data file, and tear a page during a checkpoint. A real power cut, a disk that lies about fsync, a full disk and several processes are not tested."
-          ]
-        ]
-      }
-    },
-    "deep": {
-      "title": "Go deeper",
-      "line": "The optional plane, constructed workloads, ingest, tenants, scaling slopes, and the 10,000,000-invoice comparison against engines as they ship.",
-      "href": "/holodb/evidence/deep-dive/",
-      "label": "Open the deep dive"
-    }
-  },
+  "limits": [
+    "The lifecycle and crash guarantees are tested at 3,000,000 rows. The limits on the HoloDb page list the rest."
+  ],
   "internal": {
-    "source": "C:\\HoloDbBench\\n100000000 result files and manifest"
+    "source": "MonoRepo HoloDb/docs/site.md, What we test and What the runs measured"
   }
 }

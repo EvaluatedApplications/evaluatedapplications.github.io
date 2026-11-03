@@ -66,7 +66,7 @@ ${feat ? html`<section class="sec" aria-labelledby="h-evidence"><div class="wrap
 </div></section>` : ''}
 
 <section class="sec" aria-labelledby="h-research"><div class="wrap">
-  ${secHead({ title: 'Research', line: 'What we have found about small models', more: { href: '/research/', label: 'All research' }, id: 'h-research' })}
+  ${secHead({ title: 'Research', line: 'Findings and arguments, with their sources', more: { href: '/research/', label: 'All research' }, id: 'h-research' })}
   <ul class="cards">${ctx.research.slice(0, 3).map(researchCard)}</ul>
 </div></section>
 

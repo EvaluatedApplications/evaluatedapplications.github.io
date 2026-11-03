@@ -20,7 +20,7 @@ export function limitFacts(m) {
   return {
     blocksAdjust: String(on.blocks[0]), blocksDropUpdate: String(off.blocks[0]), blocksDropDelete: String(off.blocks[1]), blocksDropConsolidate: String(off.blocks[2]),
     pinsBefore: range(m.me('pins').before), pinsAfter: range(m.me('pins').after),
-    gatherRecords: String(m.bar('records').value), gatherOld: String(m.bar('old').value), gatherNew: String(m.bar('new').value),
+    gatherRecords: String(m.bar('records').value), gatherNew: String(m.bar('new').value),
   };
 }
 
@@ -60,8 +60,8 @@ function drawUpkeep(v, t, W, narrow) {
   const p = pen(), pad = 10, bw = W - pad * 2 - (narrow ? 96 : 150);
   let y = 8;
   v.metrics.forEach((m, i) => {
-    const a = ease(ph(t, i / 3, (i + 0.8) / 3)), max = Math.max(m.before.hi, m.after.hi);
-    p.t(pad, y + 12, m.label, 'hl-lane' + (a > 0 || t >= i / 3 ? '' : ' dim')); y += 20;
+    const n = v.metrics.length, a = ease(ph(t, i / n, (i + 0.8) / n)), max = Math.max(m.before.hi, m.after.hi);
+    p.t(pad, y + 12, m.label, 'hl-lane' + (a > 0 || t >= i / n ? '' : ' dim')); y += 20;
     [['before', 'before'], ['after', 'after']].forEach(([k, cls]) => {
       const r = m[k];
       p.t(pad, y + 10, v.series[k], 'hl-note'); y += 13;
@@ -78,9 +78,9 @@ function drawGather(v, t, W, narrow) {
   const p = pen(), pad = 10, bw = W - pad * 2 - 54, max = 300;
   let y = 8;
   v.bars.forEach((b, i) => {
-    const a = ease(ph(t, i / 3, (i + 0.8) / 3));
+    const n = v.bars.length, a = ease(ph(t, i / n, (i + 0.8) / n));
     p.t(pad, y + 12, b.label, 'hl-lane'); y += 18;
-    bar(p, pad, y, bw, 18, (b.value / max) * a, b.id === 'new' ? 'after' : b.id === 'old' ? 'mid' : 'before');
+    bar(p, pad, y, bw, 18, (b.value / max) * a, b.id === 'new' ? 'after' : 'before');
     if (a > 0.02) p.t(pad + bw * (b.value / max) * a + 6, y + 14, fmt(b.value * a >= b.value - 0.5 ? b.value : b.value * a), 'hl-val');
     y += 34;
   });
@@ -111,10 +111,9 @@ ${playControls()}
 export function tablesHtml(d, m) {
   const rec = m.rec, up = m.up, ga = m.ga;
   const t1 = tbl(`${rec.tab}: ${rec.unit}`, ['Arm', ...rec.phases.map((p) => p.label)], rec.arms.map((a) => [a.label, ...a.blocks.map(fmt)]));
-  const t1b = tbl('Learned sums still held after each step', ['Arm', ...rec.phases.map((p) => p.label)], rec.arms.map((a) => [a.label, ...a.sums.map(fmt)]));
   const t2 = tbl(`${up.tab}: ${up.setup}`, ['Measure', 'Charged as a rebuild per write', 'Priced from the measured delta cost'], up.metrics.map((x) => [`${x.label} (${x.unit})`, range(x.before), range(x.after)]));
   const t3 = tbl(`${ga.tab}: ${ga.setup}`, ['Arm', 'Blocks read per round'], ga.bars.map((b) => [b.label, fmt(b.value)]));
-  return tablesWrap('Data behind the diagram', t1 + t1b + t2 + t3);
+  return tablesWrap('Data behind the diagram', t1 + t2 + t3);
 }
 
 export function verify(d, body) {
@@ -123,9 +122,9 @@ export function verify(d, body) {
   on.blocks.forEach((b, i) => { if (!(b < off.blocks[i])) out.push(`records: adjusting does not read fewer blocks than dropping at phase ${i}`); });
   const pins = m.me('pins');
   if (!(pins.after.hi < pins.before.lo)) out.push('upkeep: priced upkeep does not use fewer pins');
-  if (!(m.bar('new').value < m.bar('old').value && m.bar('old').value < m.bar('records').value)) out.push('gather: the bars are not in falling order');
+  if (!(m.bar('new').value < m.bar('records').value)) out.push('gather: the bars are not in falling order');
   for (const v of d.views) { if (!v.file || !v.promise || !v.how || !v.setup) out.push(`${v.id}: needs a file, promise, how and setup`); }
-  if ((body.match(/<tbody>/g) || []).length !== 4) out.push('table alternative needs four tables');
+  if ((body.match(/<tbody>/g) || []).length !== 3) out.push('table alternative needs three tables');
   return out;
 }
 

@@ -3,20 +3,20 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>What attention costs | Evaluated Applications</title>
-<meta name="description" content="At one shape, reading a 1,984-token prompt takes 182 ms with softmax attention and 7.08 ms with holographic attention.">
+<title>Many small models, one wave: the evidence | Evaluated Applications</title>
+<meta name="description" content="Six atoms that each see a sixth of the text and share the medium score 2.99 bits per character, against 3.38 for one atom reading all of it and 4.33 without.">
 <link rel="canonical" href="https://evaluatedapplications.github.io/algformer/evidence/">
 
 <meta property="og:type" content="article">
 <meta property="og:site_name" content="Evaluated Applications">
-<meta property="og:title" content="What attention costs | Evaluated Applications">
-<meta property="og:description" content="At one shape, reading a 1,984-token prompt takes 182 ms with softmax attention and 7.08 ms with holographic attention.">
+<meta property="og:title" content="Many small models, one wave: the evidence | Evaluated Applications">
+<meta property="og:description" content="Six atoms that each see a sixth of the text and share the medium score 2.99 bits per character, against 3.38 for one atom reading all of it and 4.33 without.">
 <meta property="og:url" content="https://evaluatedapplications.github.io/algformer/evidence/">
 <meta name="twitter:card" content="summary">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%23f0796a'/%3E%3Cstop offset='.5' stop-color='%237bd86a'/%3E%3Cstop offset='1' stop-color='%23c07dff'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='32' height='32' rx='7' fill='%23050608'/%3E%3Cpath d='M16 5L27 26H5Z' fill='none' stroke='url(%23g)' stroke-width='2' stroke-linejoin='round'/%3E%3C/svg%3E">
 <script>document.documentElement.classList.add('js')</script>
-<link rel="stylesheet" href="/assets/ea.css?v=6d4d7900">
-<script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Home","item":"https://evaluatedapplications.github.io/"},{"@type":"ListItem","position":2,"name":"Evidence","item":"https://evaluatedapplications.github.io/evidence/"},{"@type":"ListItem","position":3,"name":"What attention costs","item":"https://evaluatedapplications.github.io/algformer/evidence/"}]}</script>
+<link rel="stylesheet" href="/assets/ea.css?v=8bdfdf52">
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Home","item":"https://evaluatedapplications.github.io/"},{"@type":"ListItem","position":2,"name":"Evidence","item":"https://evaluatedapplications.github.io/evidence/"},{"@type":"ListItem","position":3,"name":"Many small models, one wave: the evidence","item":"https://evaluatedapplications.github.io/algformer/evidence/"}]}</script>
 
 </head>
 <body class="cat-algformer" data-page="evidence">
@@ -34,45 +34,63 @@
 <main id="main" tabindex="-1">
 
 <header class="page-head"><div class="wrap">
-<nav class="crumbs" aria-label="Breadcrumb"><ol><li><a href="/">Home</a></li><li><a href="/evidence/">Evidence</a></li><li aria-current="page">What attention costs</li></ol></nav>
+<nav class="crumbs" aria-label="Breadcrumb"><ol><li><a href="/">Home</a></li><li><a href="/evidence/">Evidence</a></li><li aria-current="page">Many small models, one wave: the evidence</li></ol></nav>
 <p class="eyebrow">AlgFormer evidence</p>
-<h1 class="wide">What attention costs</h1>
-<p class="lede">At the same shape and the same parameter count, reading a 1,984-token prompt takes 182 ms with softmax attention and 7.08 ms with holographic attention. Each further token takes 181 µs against 3.60 µs, and the serve cache holds 2,253 KB against 3.40 KB. Softmax reading grows with the square of the length (exponent 1.9) and holographic reading grows in step with it (1.0).</p>
-<ul class="facts"><li class="fact">Two attention cores at one shape</li><li class="fact">Losses shown</li></ul>
+<h1 class="wide">Many small models, one wave: the evidence</h1>
+<p class="lede">Six atoms that each see about a sixth of the text and share the medium score 2.99 bits per character. One atom that sees all of it scores 3.38, and the same six atoms without the medium score 4.33. At width 32, a pair scores 3.47 when the loss reaches the atoms through the notes they wrote and 3.84 when the writers are frozen.</p>
+<ul class="facts"><li class="fact">Small-scale harness, six-atom checkpoints and the fused GPU step</li><li class="fact">Losses shown</li></ul>
 </div></header>
 <nav class="subnav" aria-label="AlgFormer sections"><div class="wrap"><ul><li><a href="/algformer/">Overview</a></li><li><a href="/algformer/#quick-start">Quick start</a></li><li><a href="/algformer/#gpu">AlgFormer.Gpu</a></li><li><a href="/algformer/holoformer/">How HoloFormer works</a></li><li><a href="/algformer/evidence/" aria-current="page">Evidence</a></li></ul></div></nav>
-
+<section class="sec"><div class="wrap">
+  <nav class="toc" aria-labelledby="toc-h"><h2 id="toc-h">On this page</h2><ul><li><a href="#h-head">Headline</a></li><li><a href="#h-loss">Where the evidence stops</a></li><li><a href="#h-method">How it was measured</a></li><li><a href="#harness">Small-scale harness, character language model</a></li><li><a href="#checkpoints">Six-atom checkpoints</a></li><li><a href="#gpu">Fused GPU step</a></li><li><a href="#h-lim">Limits</a></li></ul></nav>
+</div></section>
 
 <section class="sec" aria-labelledby="h-head"><div class="wrap">
   <div class="sec-head"><span class="sec-dot cat-algformer" aria-hidden="true"></span><h2 id="h-head">Headline</h2></div>
-  <dl class="stats"><div class="stat"><dt>less time to read a 1,984-token prompt with holographic attention</dt><dd>26 times</dd></div><div class="stat"><dt>less time for each further token, which stays flat as the context grows</dt><dd>50 times</dd></div><div class="stat"><dt>smaller serve cache, constant in the length of the context</dt><dd>663 times</dd></div></dl>
+  <dl class="stats"><div class="stat"><dt>bits per character: six atoms with split views sharing the medium, against one atom reading the whole window</dt><dd>2.99 against 3.38</dd></div><div class="stat"><dt>bits per character for the same six atoms with the shared medium switched off</dt><dd>4.33</dd></div><div class="stat"><dt>bits per character for two width-32 atoms, with the loss reaching the atoms through the notes they wrote against the writer gradient switched off</dt><dd>3.47 against 3.84</dd></div><div class="stat"><dt>per fused GPU training step for two, eight and sixteen atoms alike, against 454 for two atoms and 1,672 for eight on the per-atom path</dt><dd>261 launches</dd></div></dl>
 </div></section>
 
 <section class="sec" aria-labelledby="h-loss"><div class="wrap">
-  <div class="sec-head"><span class="sec-dot cat-algformer" aria-hidden="true"></span><h2 id="h-loss">Where it is slower</h2><span class="sec-line">Every loss in this record, stated once</span></div>
-  <ul class="limits"><li>Holographic attention holds a limited number of items cleanly in one bundle, and HoloShape reports how many for a shape (the capacity table). Softmax attention has no such bound, at the cost of everything above.</li></ul>
+  <div class="sec-head"><span class="sec-dot cat-algformer" aria-hidden="true"></span><h2 id="h-loss">Where the evidence stops</h2><span class="sec-line">Every loss in this record, stated once</span></div>
+  <ul class="limits"><li>The harness results are small models on one text, two seeds, scored on windows of that text.</li><li>The six-atom checkpoints are scored on windows of their training text, and their two training rounds differ, so the table is not a comparison of the two settings.</li></ul>
 </div></section>
 
 <section class="sec method" aria-labelledby="h-method"><div class="wrap">
   <div class="sec-head"><span class="sec-dot cat-algformer" aria-hidden="true"></span><h2 id="h-method">How it was measured</h2><span class="sec-line">Stated once, for every figure on this page</span></div>
-  <dl><dt>Workload</dt><dd>Both cores are built at 32 channels, 8 shifts and 2 layers, which gives them the same parameter count, and driven with the same random tokens. For each context length the run reads the prompt through the serve cache, then produces 16 more tokens and averages them. Cache memory is the managed memory kept alive by the primed cache.</dd><dt>Engines</dt><dd>AlgFormer (softmax attention); HoloFormer (holographic attention)</dd><dt>Check</dt><dd>Both cores are warmed at every length before timing, so compilation has settled. The two have identical parameter counts.</dd><dt>Statistic</dt><dd>Median of 7 runs per length, on one thread.</dd><dt>Machine</dt><dd>16 logical processors; the run used one thread.</dd><dt>Ties</dt><dd>This measures cost only. It says nothing about which core predicts better.</dd></dl>
+  <dl><dt>Workload</dt><dd>Bits per character on 300 held-out windows of the same text, scored at the last position, drawn the same way for every arm. The text is 300,000 characters of Gutenberg prose with a 64-symbol vocabulary. Each atom is a HoloFormer with shifts equal to the width, two layers, trained with the all-positions loss, learning rate 0.01, batch 16. The width-64 rows ran 800 steps at context 64. The width-32 rows ran 500 steps at context 32. The two groups are separate runs.</dd><dt>Engines</dt><dd>AtomField with Memory coupling (the shared medium); The same atoms with the field switched off; One HoloFormer reading the whole window</dd><dt>Check</dt><dd>Every arm is drawn the same way and scored the same way, with the matching null beside each result.</dd><dt>Statistic</dt><dd>Two seeds per arm.</dd><dt>Machine</dt><dd>The fused GPU step ran on an A3000 GPU at width 66, three passes, window 64, batch 32, fused path.</dd></dl>
 </div></section>
 
-<section class="sec" aria-labelledby="results"><div class="wrap">
-  <div class="sec-head"><span class="sec-dot cat-algformer" aria-hidden="true"></span><h2 id="results">Results</h2></div>
+<section class="sec" aria-labelledby="harness"><div class="wrap">
+  <div class="sec-head"><span class="sec-dot cat-algformer" aria-hidden="true"></span><h2 id="harness">Small-scale harness, character language model</h2></div>
+  <div class="prose-block"><p>At width 64, six atoms that each see about a sixth of the text and share the medium score 2.99 (seeds 2.96 and 3.02). One atom that sees all of it scores 3.38 (seeds 3.25 and 3.51). The same six atoms without the medium score 4.33. At width 32, the pair scores 3.47 when the loss reaches the atoms through the notes they wrote, and 3.84 when the writers are frozen.</p></div>
   
+  <div class="tbl-wrap"><table class="tbl"><caption>Bits per character by test</caption>
+<thead><tr><th scope="col">Test</th><th scope="col">Bits per character</th></tr></thead>
+<tbody><tr><th scope="row">Width 64: six atoms, each atom sees only its own tokens (split views), field switched off</th><td>4.33</td></tr><tr><th scope="row">Width 64: the same six atoms with the shared medium</th><td>2.99</td></tr><tr><th scope="row">Width 64: one atom reading the whole window</th><td>3.38</td></tr><tr><th scope="row">Width 64: six atoms, every atom reads the whole window</th><td>2.47</td></tr><tr><th scope="row">Width 32: two atoms, split views, writers trained through the medium</th><td>3.47</td></tr><tr><th scope="row">Width 32: the same two atoms with the writer gradient switched off</th><td>3.84</td></tr><tr><th scope="row">Width 32: two atoms, every atom reads the whole window</th><td>3.18</td></tr><tr><th scope="row">Width 32 run: one atom of width 46 reading the whole window</th><td>3.48</td></tr></tbody></table></div>
   
-  <div class="tbl-wrap"><table class="tbl"><caption>Time and memory by context length</caption>
-<thead><tr><th scope="col">Tokens in context</th><th scope="col">Read the prompt, softmax (ms)</th><th scope="col">Read the prompt, holographic (ms)</th><th scope="col">One more token, softmax (µs)</th><th scope="col">One more token, holographic (µs)</th><th scope="col">Cache, softmax (KB)</th><th scope="col">Cache, holographic (KB)</th></tr></thead>
-<tbody><tr><th scope="row">64</th><td>0.35</td><td>0.21</td><td>7.60</td><td>3.20</td><td>90.6</td><td>3.40</td></tr><tr><th scope="row">128</th><td>1.01</td><td>0.45</td><td>12.5</td><td>3.50</td><td>163</td><td>3.40</td></tr><tr><th scope="row">256</th><td>3.37</td><td>0.99</td><td>22.4</td><td>3.80</td><td>307</td><td>3.40</td></tr><tr><th scope="row">512</th><td>12.2</td><td>2.44</td><td>45.6</td><td>4.10</td><td>595</td><td>3.40</td></tr><tr><th scope="row">1,024</th><td>44.2</td><td>4.16</td><td>97.2</td><td>3.90</td><td>1,171</td><td>3.40</td></tr><tr><th scope="row">1,984</th><td>182</td><td>7.08</td><td>181</td><td>3.60</td><td>2,253</td><td>3.40</td></tr></tbody></table></div><div class="tbl-wrap"><table class="tbl"><caption>The shape HoloShape derives from a width, and the capacity of a holographic bundle at that shape</caption>
-<thead><tr><th scope="col">Width</th><th scope="col">Shifts</th><th scope="col">Layers</th><th scope="col">Derived context (tokens)</th><th scope="col">Crosstalk edge (tokens)</th><th scope="col">Reads back 90% clean (tokens)</th></tr></thead>
-<tbody><tr><th scope="row">32</th><td>32</td><td>1</td><td>128</td><td>512</td><td>61</td></tr><tr><th scope="row">64</th><td>64</td><td>3</td><td>512</td><td>2,048</td><td>245</td></tr><tr><th scope="row">128</th><td>128</td><td>6</td><td>2,048</td><td>8,192</td><td>983</td></tr><tr><th scope="row">256</th><td>256</td><td>8</td><td>8,192</td><td>32,768</td><td>3,932</td></tr><tr><th scope="row">512</th><td>512</td><td>11</td><td>32,768</td><td>131,072</td><td>15,728</td></tr></tbody></table></div>
+</div></section><section class="sec" aria-labelledby="checkpoints"><div class="wrap">
+  <div class="sec-head"><span class="sec-dot cat-algformer" aria-hidden="true"></span><h2 id="checkpoints">Six-atom checkpoints</h2></div>
+  <div class="prose-block"><p>Two six-atom checkpoints, each with six atoms at width 66 and six layers, Memory coupling and a 320-token vocabulary, scored on 400 windows of 65 tokens drawn from their training text, with all 64 transitions of each window scored. The two were stopped at different training rounds (3,510 and 9,000), so their scores are not a comparison of the two settings.</p></div>
+  
+  <div class="tbl-wrap"><table class="tbl"><caption>Bits per token for the two six-atom checkpoints</caption>
+<thead><tr><th scope="col">Test, bits per token</th><th scope="col">Golden ladder of timescales, round 3,510</th><th scope="col">No golden settings, round 9,000</th></tr></thead>
+<tbody><tr><th scope="row">Mean of the six atoms, field on</th><td>3.81</td><td>3.45</td></tr><tr><th scope="row">Each atom alone, field switched off</th><td>9.6 to 15.5</td><td>15.2 to 19.6</td></tr><tr><th scope="row">Leave one atom out</th><td>costs 0.02 to 0.79</td><td>costs 0.09 to 0.16</td></tr><tr><th scope="row">Correlation of the atoms&#39; next-token logits, field on / off</th><td>0.93 / 0.68</td><td>0.91 / 0.79</td></tr></tbody></table></div>
+  <div class="prose-block"><p>With the golden ladder the leave-one-out cost runs from 0.79 for the first atom down to 0.02 for the fifth. Without it, the six costs sit close together.</p></div>
+</div></section><section class="sec" aria-labelledby="gpu"><div class="wrap">
+  <div class="sec-head"><span class="sec-dot cat-algformer" aria-hidden="true"></span><h2 id="gpu">Fused GPU step</h2></div>
+  <div class="prose-block"><p>AlgFormer.Gpu stacks the atoms as a batch dimension, so every layer, pass, head, reverse and Adam kernel runs once for all atoms. The number of kernel launches per step does not depend on the number of atoms.</p></div>
+  
+  <div class="tbl-wrap"><table class="tbl"><caption>One training step on an A3000 GPU, in milliseconds (width 66, three passes, window 64, batch 32, fused path)</caption>
+<thead><tr><th scope="col">Layers</th><th scope="col">2 atoms</th><th scope="col">4 atoms</th><th scope="col">8 atoms</th><th scope="col">16 atoms</th></tr></thead>
+<tbody><tr><th scope="row">1 layer</th><td>13.6</td><td>25</td><td>40</td><td>75</td></tr><tr><th scope="row">3 layers</th><td>30.6</td><td>60</td><td>107</td><td>207</td></tr></tbody></table></div><div class="tbl-wrap"><table class="tbl"><caption>Kernel launches per training step at two layers and two passes</caption>
+<thead><tr><th scope="col">Path</th><th scope="col">Atoms</th><th scope="col">Launches</th></tr></thead>
+<tbody><tr><th scope="row">Fused</th><td>2, 8 and 16</td><td>261</td></tr><tr><th scope="row">Per atom</th><td>2</td><td>454</td></tr><tr><th scope="row">Per atom</th><td>8</td><td>1,672</td></tr></tbody></table></div>
   
 </div></section>
 
 <section class="sec" aria-labelledby="h-lim"><div class="wrap">
   <div class="sec-head"><span class="sec-dot cat-algformer" aria-hidden="true"></span><h2 id="h-lim">Limits</h2></div>
-  <ul class="limits"><li>Absolute times depend on the machine. The way each cost grows with the context length is the finding.</li><li>One shape and one random token stream. The growth exponents are fitted between the 128-token and the longest measurement.</li><li>Cost only, not quality.</li></ul>
+  <ul class="limits"><li>The atom field is opt-in in the library and the studio. A plain HoloFormer is what you get by default.</li><li>Cost is linear in the number of atoms with holographic locality or no locality. Dense locality is quadratic in the number of atoms.</li><li>The diversity options (golden rotation of timescales, golden-angle write phases) are off by default. In the width-64 four-atom test, rotation raised how much the atoms depend on each other (leave-one-out cost 0.16 to 0.21) without lowering their correlation or improving the score.</li></ul>
 </div></section>
 
 <section class="sec" aria-labelledby="h-rel"><div class="wrap">
@@ -82,8 +100,8 @@
 </main>
 <footer class="site-footer"><div class="wrap">
   <div class="foot-grid">
-    <div><h2>Products</h2><ul><li><a href="/phasor/">Phasor</a></li><li><a href="/evalapp/">EvalApp</a></li><li><a href="/holodb/">HoloDb</a></li><li><a href="/algformer/">AlgFormer</a></li><li><a href="/prism/">Prism</a></li><li><a href="/prose/">Prose</a></li><li><a href="/hologenome/">HoloGenome</a></li><li><a href="/tracer/">Tracer</a></li><li><a href="/holovoxel/">HoloVoxel</a></li><li><a href="/blazier/">Blazier</a></li></ul></div>
-    <div><h2>Tools</h2><ul><li><a href="/umbrarium/">Umbrarium, preset demo</a></li><li><a href="/tools/doctrine/">Doctrine</a></li><li><a href="/tools/helix/">The Helix</a></li><li><a href="/tools/analyst/">The Analyst</a></li><li><a href="/tools/prism/">Prism</a></li><li><a href="/tools/prose/">Prose</a></li><li><a href="/tools/council-spending/">Council Spending Scanner</a></li></ul></div>
+    <div><h2>Products</h2><ul><li><a href="/phasor/">Phasor</a></li><li><a href="/evalapp/">EvalApp</a></li><li><a href="/holodb/">HoloDb</a></li><li><a href="/algformer/">AlgFormer</a></li><li><a href="/prose/">Prose</a></li><li><a href="/hologenome/">HoloGenome</a></li><li><a href="/tracer/">Tracer</a></li><li><a href="/holovoxel/">HoloVoxel</a></li><li><a href="/blazier/">Blazier</a></li></ul></div>
+    <div><h2>Tools</h2><ul><li><a href="/umbrarium/">Umbrarium, preset demo</a></li><li><a href="/tools/doctrine/">Doctrine</a></li><li><a href="/tools/helix/">The Helix</a></li><li><a href="/tools/analyst/">The Analyst</a></li><li><a href="/tools/prose/">Prose</a></li><li><a href="/tools/council-spending/">Council Spending Scanner</a></li></ul></div>
     <div><h2>Games</h2><ul><li><a href="/games/doctrine/">Doctrine</a></li><li><a href="/games/">All games</a></li></ul></div>
     <div><h2>Learn</h2><ul><li><a href="/evidence/">Evidence</a></li><li><a href="/research/">Research</a></li><li><a href="/products/">All products</a></li><li><a href="/tools/">All tools</a></li></ul></div>
     <div><h2>Company</h2><ul><li><a href="/about/">About</a></li><li><a href="/partner/">Partner with us</a></li><li><a href="/licence/">Licence</a></li><li><a href="/ai/">For agents</a></li><li><a href="https://www.nuget.org/profiles/evaluatedapplications" rel="noopener">NuGet</a></li></ul></div>

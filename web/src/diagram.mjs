@@ -10,25 +10,16 @@ import * as pleromaGrid from './assets/diagrams/pleroma-grid.js';
 import * as pleromaSuper from './assets/diagrams/pleroma-superposition.js';
 import * as pleromaCap from './assets/diagrams/pleroma-capacity.js';
 import * as latencyBars from './assets/diagrams/latency-bars.js';
-import * as holodbStore from './assets/diagrams/holodb-store.js';
 import * as evalappGate from './assets/diagrams/evalapp-gate.js';
 import * as algformerCost from './assets/diagrams/algformer-cost.js';
 import * as holovoxelLod from './assets/diagrams/holovoxel-lod.js';
 import * as prosePipeline from './assets/diagrams/prose-pipeline.js';
-import * as roundTimeline from './assets/diagrams/round-timeline.js';
-import * as slotGrow from './assets/diagrams/slot-grow.js';
-import * as layerStack from './assets/diagrams/layer-stack.js';
-import * as sizeBars from './assets/diagrams/size-bars.js';
 import * as designEffect from './assets/diagrams/design-effect.js';
 import * as superpositionScene from './assets/diagrams/superposition-scene.js';
 import * as coverageMeter from './assets/diagrams/coverage-meter.js';
 import * as commutationMap from './assets/diagrams/commutation-map.js';
 import * as blazierBoot from './assets/diagrams/blazier-boot.js';
 import * as hologenomeScores from './assets/diagrams/hologenome-scores.js';
-import * as scalingCurve from './assets/diagrams/scaling-curve.js';
-import * as holodbRace from './assets/diagrams/holodb-race.js';
-import * as holodbHow from './assets/diagrams/holodb-how.js';
-import * as holodbFit from './assets/diagrams/holodb-fit.js';
 import * as holodbLearns from './assets/diagrams/holodb-learns.js';
 import * as holodbRent from './assets/diagrams/holodb-rent.js';
 import * as holodbCrash from './assets/diagrams/holodb-crash.js';
@@ -36,11 +27,10 @@ import * as thePond from './assets/diagrams/the-pond.js';
 
 const KINDS = {
   'tracer-field': tracerField, 'stack-map': stackMap, 'pleroma-map': pleromaMap, 'pleroma-grid': pleromaGrid,
-  'pleroma-superposition': pleromaSuper, 'pleroma-capacity': pleromaCap, 'latency-bars': latencyBars, 'holodb-store': holodbStore,
+  'pleroma-superposition': pleromaSuper, 'pleroma-capacity': pleromaCap, 'latency-bars': latencyBars,
   'evalapp-gate': evalappGate, 'algformer-cost': algformerCost, 'holovoxel-lod': holovoxelLod, 'prose-pipeline': prosePipeline,
-  'round-timeline': roundTimeline, 'slot-grow': slotGrow, 'layer-stack': layerStack, 'size-bars': sizeBars, 'design-effect': designEffect,
+  'design-effect': designEffect,
   'superposition-scene': superpositionScene, 'coverage-meter': coverageMeter, 'commutation-map': commutationMap, 'blazier-boot': blazierBoot, 'hologenome-scores': hologenomeScores,
-  'scaling-curve': scalingCurve, 'holodb-race': holodbRace, 'holodb-how': holodbHow, 'holodb-fit': holodbFit,
   'holodb-learns': holodbLearns, 'holodb-rent': holodbRent, 'holodb-crash': holodbCrash, 'the-pond': thePond,
 };
 

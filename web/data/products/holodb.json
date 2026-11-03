@@ -1,89 +1,94 @@
 {
-  "title": "HoloDb: answers in under a millisecond",
-  "description": "Put a SQL database inside your .NET app that totals 100,000,000 invoices in 0.12 ms, ranks rows by resemblance and survives a crash.",
+  "title": "HoloDb: a database that learns",
+  "description": "An embedded SQL database for .NET that learns from the queries it serves and keeps only what pays. Every answer is exact, with ACID and no index to design.",
   "sizzle": {
-    "headline": "100,000,000 invoices. Dashboard answers in under a millisecond.",
-    "sub": "A SQL database inside your .NET app that keeps your totals ready, ranks rows by resemblance, runs in a browser tab and survives a crash. Declare what you ask often, or let it learn. Tables can be bigger than memory.",
-    "tool": "umbrarium",
-    "mechanismTitle": "One store, three ways to ask",
+    "headline": "Ask the same question twice and the second time reads almost nothing.",
+    "sub": "An embedded SQL database for .NET that learns from the queries it serves and keeps only what pays. Every SQL statement is answered exactly, with ACID and no index to design.",
+    "mechanismTitle": "What it is, and how it learns",
     "stats": [
-      { "evidence": "holodb", "tile": 0 },
-      { "evidence": "holodb", "tile": 1 },
-      { "evidence": "holodb", "tile": 2 },
-      { "evidence": "holodb", "tile": 3 }
+      { "value": "8.5 to 10 times", "label": "fewer blocks read by the next sweep after single-row updates and deletes, because learned records are corrected by the exact difference: 6 blocks against 60 and 51, on 1,000,000 rows", "cite": ["monorepo:HoloDb/docs/site.md"] },
+      { "value": "61 times", "label": "fewer blocks read after consolidation moves the rows: 6 blocks against 366", "cite": ["monorepo:HoloDb/docs/site.md"] },
+      { "value": "21 to 24 times", "label": "fewer page pins when the ledger prices an index by its measured upkeep: 49,306 to 54,106 pins against 1,158,839 over 1,200 delete or update pairs, with 0 blocks read per count", "cite": ["monorepo:HoloDb/docs/site.md"] },
+      { "value": "0 of 46", "label": "recoveries after a kill or a power cut ended in a state between the table before and the table after the interrupted write: 37 to before, 9 to after", "cite": ["monorepo:HoloDb/docs/site.md"] }
     ],
     "numbers": {
-      "summary": "See every query",
+      "summary": "See the numbers",
       "items": [
-        { "claim": "All sixteen queries, four engines, warm and cold", "text": "The evidence page charts every query for HoloDb restored, HoloDb out of the box, tuned DuckDB and tuned SQL Server. The queries where HoloDb is slower are the amber bars. Each tile above says its own condition." }
+        { "claim": "Learned records under writes", "text": "After a stream of single-row UPDATEs and DELETEs over six learned scatter predicates on 1,000,000 rows, the next sweep reads 6 blocks with records that adjust, against 60 and 51 blocks when updates drop them. After consolidation it reads 6 blocks against 366. All counts, sums and zones were verified exact against the cells in every phase." },
+        { "claim": "Upkeep priced from measured cost", "text": "On a mixed stream of 1,200 delete-or-update pairs each followed by a sorted count, the index with measured upkeep stayed built and read 0 blocks, using 49,306 to 54,106 page pins in all, against 1,158,839 pins when the structure was dropped at the 256th write and rebuilt by scans." },
+        { "claim": "Crash recovery against SQLite", "text": "Across 8 archived customer runs and 158 sessions the customer lifecycle test compared 249 million rows against SQLite, ran 8,267 SELECTs and 1,129 checked DML statements, and recovered 46 times after a kill or a cut: 37 times to the state before the interrupted write, 9 times to the state after, and none to a state between them." },
+        { "claim": "Counts are exact, times are informational", "text": "Blocks, pins, runs and bytes are exact counts. Wall times were taken on a shared machine and are informational." }
       ]
     },
     "figures": [
-      { "id": "hw", "kind": "holodb-how", "secId": "how", "title": "How it gets there", "line": "Six short scenes. The motion is schematic; the numbers are measured.", "stageLabel": "Animated explainer. Choose a scene, then press Play or drag the scrubber.", "caption": "The motion is schematic. The figures in each caption are measured, and each is read from the result files." },
-      { "id": "hln", "kind": "holodb-learns", "secId": "learns", "title": "The engine learns what you read", "line": "Ask the same question twice and the second time reads almost nothing, even after writes.", "stageLabel": "Recorded counters. Choose a view, then press Play or drag the scrubber.", "caption": "Counters recorded from the engine's own test streams. The motion is illustrative." },
+      { "id": "hln", "kind": "holodb-learns", "secId": "demo", "title": "The engine learns what you read", "line": "Ask the same question twice and the second time reads almost nothing, even after writes.", "stageLabel": "Recorded counters. Choose a view, then press Play or drag the scrubber.", "caption": "Counters recorded from the engine's own test streams. The motion is illustrative." },
       { "id": "hrn", "kind": "holodb-rent", "secId": "rent", "title": "Rent or buy", "line": "The engine pays for a structure or a move only when the rent has reached the price.", "stageLabel": "Rent or buy ledger. Press Play or drag the scrubber to run the uses.", "caption": "The costs are recorded. The three lines are the rule drawn as a rule, so the motion is illustrative." },
-      { "id": "hcr", "kind": "holodb-crash", "secId": "crash", "title": "Crash and come back", "line": "Cut the power in the middle of a commit. The table that opens is the table before or the table after.", "stageLabel": "Replay of recorded outcomes. Move the cut point with Play or the slider.", "caption": "A replay of recorded outcomes, not a live crash. The example rows are invented for the picture." },
-      { "id": "ft", "kind": "holodb-fit", "secId": "fit", "title": "When HoloDb fits, and when it does not", "line": "Everything is a trade-off. Set your workload and read the answer, including when to use something else.", "stageLabel": "Decision helper. Choose an answer in each row to see the verdict.", "tradeoffs": true, "tradeoffsTitle": "The five trade-offs", "caption": "The answer comes from the measured results and the list of limits. Every rule is in the table below." }
+      { "id": "hcr", "kind": "holodb-crash", "secId": "crash", "title": "Crash and come back", "line": "Cut the power in the middle of a commit. The table that opens is the table before or the table after.", "stageLabel": "Replay of recorded outcomes. Move the cut point with Play or the slider.", "caption": "A replay of recorded outcomes, not a live crash. The example rows are invented for the picture." }
     ],
     "build": {
       "title": "What you can build",
       "line": "Each one is in the package today.",
       "items": [
-        { "title": "Live dashboards with no cache layer", "text": "Totals, counts, minimums, maximums and single-column group-bys over integer columns read a maintained value, so the answer stays flat from a thousand rows to tens of millions." },
-        { "title": "Search by resemblance, in SQL", "text": "Rank rows by how closely they match a partial description, over the rows the table already holds. A close number or date, or a near-identical string, ranks ahead of a far one, with no separate vector index." },
-        { "title": "A database that survives a crash", "text": "Write-ahead logging with an fsync on each durable commit, and recovery bounded by your live data, not by how much you have ever written." },
-        { "title": "Apply a thousand changes as one atomic step", "text": "Feed an ordered stream of upserts and deletes to one call and readers never see half a batch: they see the table before it or after it. The batch is one write-ahead-log commit group, and the same upsert is a line of SQL with ON CONFLICT.", "link": { "href": "/holodb/docs/#changes", "label": "See atomic batches and upsert" } },
-        { "title": "Tables bigger than memory", "text": "Paged tables spill cold pages to disk through an 8 KB buffer pool and keep the maintained totals accurate there." },
-        { "title": "One database, in process or over the network", "text": "Use it inside your app, or run it as a server with a typed client and a columnar wire protocol. The same managed code also runs in a browser tab, which is how The Analyst works." },
-        { "title": "Exact answers from a small summary", "text": "Attach an optional plane to chosen columns and filters, group-bys and joins are answered without scanning the table.", "link": { "href": "/holodb/pleroma/", "label": "See HoloDb on the Pleroma" } }
+        { "title": "A store that tunes itself to its workload", "text": "Repeat a question and the engine builds the structure that repeated queries have paid for, and drops it when the workload moves on or when a write would make it cost more than it saves. Nothing is declared and no index is designed." },
+        { "title": "Exact aggregates that read a maintained total", "text": "One copy of the data answers a lookup by key in ordinary SQL, similarity search with NEAREST, and exact aggregates that read a maintained total instead of scanning. INT sums are 128-bit running totals." },
+        { "title": "Similarity search in one statement", "text": "Rank rows by how closely they match a partial description with NEAREST, in the same SQL, with a score column on request.", "link": { "href": "/holodb/docs/#similarity", "label": "See NEAREST" } },
+        { "title": "A database that survives a power cut", "text": "BEGIN, COMMIT and ROLLBACK run over a write-ahead log with group commit: a statement that has returned is on disk. A power cut leaves the table as it was before or as it is after, never between." },
+        { "title": "Look back with AS OF", "text": "Read a paged table as it was after any commit the history still holds, and fingerprint it with Seal so replicas can compare.", "link": { "href": "/holodb/docs/#asof", "label": "See AS OF and Seal" } },
+        { "title": "Tables bigger than memory", "text": "Paged tables read through a buffer pool of 8 KB pages, with a logical block map and a CRC-32C checksum on every log block and data page." },
+        { "title": "Apply a batch of changes atomically", "text": "ApplyChanges applies a batch of upserts and deletes as one step, and KeyDigest and Seal compare key sets and tables across replicas.", "link": { "href": "/holodb/docs/#changes", "label": "See atomic batches and upsert" } },
+        { "title": "Real SQL NULL on paged tables", "text": "Declare a column NULL and it holds true nulls with three-valued logic. A statement that names a nullable column reads only the columns it names." }
       ]
     }
   },
   "intro": [
-    "HoloDb is an embeddable SQL database for .NET with ACID transactions, similarity search and maintained aggregates. Rows live in typed columns, and everything else is derived from them: a holographic vector built from a row's columns powers similarity search by content, exact integer accumulators answer aggregates without a scan, and exact derived summaries answer filters and group-bys. So the same copy of the data is read three ways. Exact lookup by primary key is ordinary SQL. Similarity search by content is the NEAREST clause. Analytics read a maintained total instead of scanning.",
-    "Applications that need relational storage, similarity search and fast dashboard rollups normally reach for three systems, a row store, a vector index and a cube or a pile of scans, and pay to keep them consistent. HoloDb is one embeddable package: a transactional store, an in-SQL similarity search, and aggregates whose response time does not grow with the table."
+    "HoloDb is an embedded SQL database for .NET. You create tables and write SQL. Tables are typed columns, in memory or on disk. The answer to every SQL statement is exact. NEAREST ranks exactly on small tables and approximately above a size threshold. The engine watches the workload it serves and builds only the structures that repeated queries have paid for. It drops them when the workload moves on or when a write would make them cost more than they save.",
+    "One copy of the data answers three kinds of question: a lookup by key in ordinary SQL, similarity search with NEAREST, and exact aggregates that read a maintained total instead of scanning. Everything the engine builds is derived from the columns, so losing a derived structure costs time and never data.",
+    "Three terms recur on these pages. A block is a run of rows stored together. A page is 8 KB of file. A pin is one page read through the buffer pool, and counts of pins stand in for time."
   ],
-  "facts": ["ACID with a write-ahead log", "Larger-than-memory tables", "Runs in the browser", "net8.0 and net10.0"],
+  "facts": ["ACID with a write-ahead log", "Tables larger than memory", "net8.0 and net10.0"],
   "why": [
-    { "title": "No separate vector index", "text": "NEAREST ranks rows by resemblance to a partial description, in SQL, over the rows the table already holds. A close number or date, or a near-identical string, ranks ahead of a far or unrelated one, and the score is readable as a column." },
-    { "title": "Aggregates do not scan", "text": "An integer column's running total is a maintained exact accumulator, so whole-table COUNT, SUM, MIN and MAX and single-column GROUP BY read that value directly, flat as the table grows from a thousand rows to tens of millions. An INT SUM never wraps: it is held in 128 bits, and the statement throws only if the true total leaves 64 bits." },
-    { "title": "Real ACID, and past RAM", "text": "Write-ahead logging with an fsync on each durable commit, crash recovery bounded by live data and not by write history, reader and writer locking, and paged tables on an 8 KB buffer pool that let a table exceed memory." },
-    { "title": "Damage is reported, never read as an answer", "text": "The columns are the source of truth, and every hologram, summary and index is derived from them. A paged table checks every data page, so a page that fails its checksum is refused with an error that names the page. In a test that flipped 61 bits in the data file of a 91 MB paged table, none gave a silently different answer: 36 were reported and 25 were in pages never read." }
+    { "title": "Learned records that stay right when rows change", "text": "For a filter you ask for often, the engine writes a card for each block of rows: how many rows match, and the exact sums of the columns you total. The next time you ask, it reads the cards and opens only a block whose card a write has touched. When an UPDATE or DELETE changes rows, or consolidation moves them, the cards are corrected by the exact difference. Each card carries its own checksum lanes and is checked when it is read and when the database opens, so a wrong card is dropped and relearned and never changes an answer." },
+    { "title": "A ski-rental ledger decides what to build and what to drop", "text": "Renting skis is cheap for one weekend and buying wins after enough weekends. The engine keeps that ledger for every structure. Each scan that a structure would have saved is rent. The structure is built when the rent paid has reached the cost of building it, and dropped when the cost of keeping it up through writes exceeds what it saves. The cost of keeping a structure up is the time its delta path really takes on this machine, measured per write and averaged." },
+    { "title": "Gather, regroup and placement lay rows out by what reads waste", "text": "If the rows a filter wants are scattered over the whole table, every repeat reads many blocks to find a few rows. The engine measures that waste, in time, for each learned filter. Gather moves matching rows next to each other when the time saved by repeats is larger than the cost of the move. Regroup rewrites the whole layout once, when gather alone cannot reach it. Placement puts a newly written row in a block the repeated filters already read. A repeat that the stored counts and sums already answer reads nothing, so it pays no rent and nothing is moved." },
+    { "title": "A paged store with a logical block map", "text": "Every page has a logical number, and a map takes that number to a place in the file. The map changes only inside a committed log batch, so a moved or rewritten page never leaves the file half-changed, and a shrunk table keeps its freed pages and refills them. A page that fails its checksum is an error that names the page, never a changed answer." },
+    { "title": "ACID with crash-tested recovery", "text": "The write-ahead log holds signed page deltas in a ring file whose size follows the largest recent batch, with group commit. A failed statement inside a transaction undoes only itself. A transaction larger than the buffer pool spills to a scratch file, and a rollback or a power cut leaves the table as it was. Each commit is kept as a signed record within a retention budget." },
+    { "title": "Real SQL NULL on paged tables", "text": "Declare a column NULL and it holds true nulls with three-valued logic, on paged tables as well as in memory. COUNT(col), SUM, AVG, MIN and MAX skip nulls, GROUP BY makes one null group, and a join never matches one. Null counts are maintained. A point read of one row on a wide nullable table takes about 110 page pins at 100,000, 300,000 and 1,000,000 rows." }
   ],
-  "diagram": {
-    "id": "holodb-store",
-    "title": "One store, three ways to ask",
-    "stageLabel": "Interactive 3D view of the invoices table. Drag to turn it, or use the arrow keys. Choose a way to query above.",
-    "lede": "The same 24 rows answer a key lookup, a similarity ranking and an aggregate. Each answer, route and usage-meter reading was captured from a run of the package; the bars use the benchmark's own medians.",
-    "latency": { "race": true, "title": "The same question on 100,000,000 invoices", "key": ["look up one invoice"], "aggregate": ["invoices by status", "total invoiced"], "note": "Warm medians in milliseconds, one machine. HoloDb restored has its structures declared and saved; the tuned rivals have the matching structures built by hand. All sixteen queries are on the evidence page." }
-  },
   "quickstart": {
     "lede": "Create a service, run some SQL and read the rows back.",
     "source": "snippets/holodb-quickstart.cs",
-    "output": "snippets/holodb-quickstart.out.txt"
+    "output": "snippets/holodb-quickstart.out.txt",
+    "also": [
+      {
+        "lede": "Similarity search in one statement. NEAREST ranks the rows by how close they are to the description.",
+        "source": "snippets/holodb-nearest.cs",
+        "output": "snippets/holodb-nearest.out.txt"
+      }
+    ],
+    "note": "A WalPath in the options makes the database durable. For a database whose tables can be larger than memory, set both WalPath and Paged = true. Paged = true without a WalPath throws."
   },
   "capabilities": [
-    { "title": "A substantial SQL dialect", "text": "CREATE TABLE, INSERT, UPDATE, DELETE, SELECT with DISTINCT, COUNT, SUM, MIN, MAX and AVG, INNER JOIN (several in one statement on in-memory tables, one on a paged table), WHERE with AND, OR, NOT, LIKE, IN, BETWEEN, IS NULL and IN (SELECT ...), GROUP BY and HAVING, ORDER BY, LIMIT, ALTER TABLE ADD COLUMN, indexes, EXPLAIN, and explicit BEGIN, COMMIT and ROLLBACK." },
-    { "title": "Real SQL NULL", "text": "Declare a column NULL and it holds true NULLs with three-valued logic: COUNT(col), SUM, AVG, MIN and MAX skip them, GROUP BY makes one NULL group, ORDER BY puts them first, and a join never matches one. Whole-table aggregates and one-column group-bys stay maintained answers with NULLs present: 0 rows read at 10,000 to 640,000 rows with half the values NULL. On an empty selection SUM, AVG, MIN and MAX are NULL and COUNT is 0, for a NOT NULL column as well." },
-    { "title": "Parameterized queries", "text": "Every Execute has a ? placeholder overload with positional binding, correctly quoted and escaped, beside the raw SQL string form." },
-    { "title": "Content similarity in SQL", "text": "NEAREST ranks by graded closeness for numbers, dates and text, with a score column on request. From 8,000 rows an approximate sublinear index ranks candidates, and below that or whenever the query has a WHERE the ranking is an exact scan." },
-    { "title": "Constant-time exact aggregates", "text": "COUNT, SUM, MIN, MAX and single-column GROUP BY over integer columns are exact, not approximate. Real-number aggregates use a fast SIMD scan." },
-    { "title": "Durable and larger than memory", "text": "A snapshot plus a short log gives recovery that tracks live data. Paged tables spill cold pages to disk and keep the maintained aggregates accurate there. Every 8 KB data page carries a checksum, UPDATE and DELETE move only the pages that change, and a statement may change more pages than the buffer pool holds: a rollback or a power cut still leaves the table as it was." },
-    { "title": "Summaries and indexes that build themselves", "text": "With nothing declared, the engine watches which aggregate statements keep scanning and, when the scanning has cost as much as a summary would cost to build, builds it, in memory or on a paged table, and drops it again if the workload moves on. A predicate that matches a small fraction of a large table earns a sorted or an equality index the same way. EXPLAIN says what answered a query and why. SET summaries and SET indexes switch this between auto, declared and off, and the answers are the same either way." },
-    { "title": "A table with no rows", "text": "CREATE SUMMARY TABLE makes a table that keeps only the exact plane and the position each feed has reached, so memory does not depend on how many rows passed through it. COUNT, SUM, AVG, GROUP BY, HAVING and a WHERE over the dimensions still answer exactly, and a replayed feed never counts twice. Anything that needs a row is refused with the reason." },
-    { "title": "Atomic change batches and upsert", "text": "ApplyChanges applies a whole batch of upserts and deletes under one write lock, as one write-ahead-log commit group, so a reader sees the table before the batch or after it and never part of it. INSERT with ON CONFLICT (key) DO UPDATE SET is the SQL upsert. Both work on in-memory tables." },
-    { "title": "Fast scans", "text": "A WHERE is evaluated over raw column arrays in tight loops, GROUP BY over INT and TEXT columns uses dense codes, and an equi-join on TEXT keys is a columnar hash join." },
-    { "title": "Metering", "text": "A per-query usage meter reports the rows and bytes actually processed, for billing or observability." },
-    { "title": "Embedded or networked", "text": "Use it in process, or run it as a server with a matching typed client and a columnar wire protocol. The same managed code also runs in a browser tab." },
-    { "title": "The optional Pleroma plane and page store", "text": "Attach an exact, derived summary to chosen columns to answer filters, group-bys, distinct counts and joins without scanning, or keep exact Pleroma pages durably as the data itself." }
+    { "title": "SQL", "text": "CREATE TABLE [IF NOT EXISTS], ALTER TABLE ... ADD COLUMN, CREATE INDEX (sorted, summary, keyed; automatic indexes need no declaration), DROP INDEX, SHOW INDEXES, SHOW SUMMARIES, SET summaries and SET indexes, EXPLAIN, INSERT (with ON CONFLICT ... DO UPDATE), UPDATE, DELETE, SELECT with DISTINCT, aggregates, COUNT(DISTINCT), INNER JOIN, WHERE (AND, OR, NOT, LIKE, IN, BETWEEN, IS NULL, IN (SELECT ...)), GROUP BY, HAVING, ORDER BY, LIMIT, NEAREST, and BEGIN, COMMIT, ROLLBACK." },
+    { "title": "Exact", "text": "INT sums are 128-bit running totals and throw only past 64 bits. Empty selections give NULL for SUM, AVG, MIN and MAX, and 0 for COUNT." },
+    { "title": "Learns by use", "text": "Summaries, sorted and keyed indexes, a tree of exact sums, learned block records with exact partial sums, learned routes, zones that skip blocks, top-k by zones, gather and placement. One budget covers them all and is a hard cap. EXPLAIN says which structure answered a statement, or why none did." },
+    { "title": "Look back", "text": "AS OF n and Seal(table, asOf: n) on paged tables." },
+    { "title": "Analytic SQL", "text": "Narrow column types, dictionary-coded text, CASE, CAST, EXTRACT, DATE_TRUNC, REGEXP_REPLACE, positional GROUP BY and ORDER BY, and COUNT(DISTINCT) on large cardinalities." },
+    { "title": "Change feeds", "text": "ApplyChanges applies a batch of upserts and deletes atomically. KeyDigest compares two key sets in modulus numbers. Seal fingerprints a table so shards add and replicas compare." },
+    { "title": "Aggregate plane (optional)", "text": "An exact derived summary of small-domain columns, served through Phasor's Pleroma stores, with PleromaVerify to check it against the columns." },
+    { "title": "Metering", "text": "MeteredDatabase reports the rows and bytes each query read." },
+    { "title": "Integration", "text": "services.AddHoloDb() for dependency injection, and an EvalApp context for pipelines." }
   ],
-  "limitsFrom": "holodb-fit",
   "limits": [
-    "Upsert: a plain INSERT of an existing primary key throws. To insert or replace, use INSERT with ON CONFLICT (key) DO UPDATE SET column = EXCLUDED.column, or ApplyChanges with RowChange.Upsert. Both work on in-memory tables only, and a paged table refuses them.",
-    "Keys: a table has one PRIMARY KEY, an INT or TEXT column.",
-    "NULL: a column holds NULL only when it is declared NULL. An index takes NOT NULL columns only, paged tables and summary tables refuse NULL, and the Pleroma plane hands any statement that touches a column holding a NULL to the engine. A statement on a column holding NULLs that is not a maintained aggregate reads boxed rows, slower than a NOT NULL column. A table that declares a NULL column is not read lock-free.",
-    "Similarity: NEAREST with a WHERE filters first and then ranks the survivors, and NEAREST does not combine with GROUP BY.",
-    "Documentation: the package ships compiled, without XML documentation."
-  ],
-  "reference": "Every public type is documented with a worked example in the package readme on NuGet."
+    "Scale: the correctness suites run to 3,000,000 rows in both pipeline modes. Larger tables work, and the benchmark runs to 100,000,000 rows, but the lifecycle and crash guarantees are tested at 3,000,000.",
+    "Writers: one. Reads run in parallel and lock-free for simple selects; writes, DDL and transactions take one lock at a time.",
+    "Joins: INNER JOIN only. A paged table takes one join per statement; in-memory tables take several. A join on a paged table with NULL columns is refused by name.",
+    "SQL not offered: UNION, window functions, subqueries other than IN (SELECT ...), table aliases, DROP COLUMN and column rename. UPDATE ... SET takes a literal on its right side.",
+    "NEAREST: does not combine with GROUP BY or with a join on a nullable table. It ranks exactly on small tables and approximately above a size threshold.",
+    "Keys and types: one primary key per table, INT or TEXT. Types are INT, TEXT and REAL, with narrow integer, date, timestamp and fixed-width text types on analytic tables.",
+    "In-memory only: ApplyChanges and the upsert form run on in-memory tables. A paged table refuses them.",
+    "Row order: without ORDER BY, the order of rows is unspecified and can change after a DELETE or a write that moves a row.",
+    "Structures: they help repeated work. A filter whose matching rows are spread evenly over every block gains nothing from learned records. The first lookup of a value no earlier read has seen is a scan, except a text value absent from the column or a number outside its range, which read no block. Moving scattered rows costs about 200 microseconds per row, so a scattered filter pays that back after about 100 uses.",
+    "Older data: paged tables written by older formats, older write-ahead logs, and a text-format database opened as paged all throw a named error that says to export the rows and load them into a new database. There is no in-place upgrade.",
+    "History: AS OF works on paged tables and reads sequences the history still holds. A sequence below the floor, inside a retained segment, or on an in-memory table is refused by name, as is a join under it."
+  ]
 }

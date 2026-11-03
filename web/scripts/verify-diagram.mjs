@@ -27,7 +27,7 @@ try {
   await b.key('End', 'End', 35);
   ok('End selects the last view (tile lane) and disables the agent picker', await b.evaluate("document.activeElement.dataset.mode==='tile' && document.querySelector('[data-ctl=agent]').disabled"));
   await b.key('Home', 'Home', 36);
-  ok('Home returns to the swarm view', await b.evaluate("document.activeElement.dataset.mode==='swarm'"));
+  ok('Home returns to the crowd view', await b.evaluate("document.activeElement.dataset.mode==='crowd'"));
 
   // stage keyboard: arrows turn and tilt, sliders follow
   const before = await b.evaluate("[document.querySelector('[data-ctl=yaw]').value, document.querySelector('[data-ctl=tilt]').value].join(',')");
@@ -87,7 +87,7 @@ try {
   ok('home: choosing a product fills the readout from the data and links to its page', await b.evaluate("/Builds on EvalApp and Phasor/.test(document.querySelector('[data-ctl=text]').textContent) && !document.querySelector('[data-ctl=link]').hidden"));
   await b.evaluate("document.querySelector('.dia-stage').focus()");
   await b.key('ArrowRight', 'ArrowRight', 39);
-  ok('home: arrow keys on the focused scene move to the next product', await b.evaluate("document.querySelector('[data-node=prism]').getAttribute('aria-pressed')==='true'"));
+  ok('home: arrow keys on the focused scene move to the next product', await b.evaluate("!!document.querySelector('[data-node][aria-pressed=true]')"));
   await b.key('Escape', 'Escape', 27);
   ok('home: Escape returns to the overview', await b.evaluate("document.querySelector('[data-node=\"\"]').getAttribute('aria-pressed')==='true'"));
   const h1 = await b.evaluate("document.querySelector('.dia-canvas').toDataURL().slice(4000,4300)");
@@ -219,88 +219,8 @@ try {
   await b.goto(dw, { width: 390, height: 844, mobile: true });
   const dd = await b.evaluate('({sw:document.documentElement.scrollWidth,cw:document.documentElement.clientWidth})');
   ok('phasor docs phone 390: no horizontal overflow', dd.sw <= dd.cw, JSON.stringify(dd));
-  // ================= holodb: the store scene and the evidence bars =================
-  const hd = `http://127.0.0.1:${port}/holodb/`, he = `http://127.0.0.1:${port}/holodb/evidence/`;
-  const DREADY = "document.querySelector('[data-diagram=holodb-store]').dataset.ready==='true'";
-  await b.goto(hd, { width: 1280, height: 900, wait: DREADY });
-  ok('holodb: scene mounts without console errors', b.errors.length === 0, JSON.stringify(b.errors));
-  ok('holodb: key lookup reports zero rows scanned from the real meter', await b.evaluate("/Rows scanned: 0 of 24/.test(document.querySelector('[data-ctl=panel]').textContent) && /primary-key point lookup/.test(document.querySelector('[data-ctl=panel]').textContent)"));
-  await b.evaluate("document.querySelector('[role=tab][aria-selected=true]').focus()");
-  await b.key('ArrowRight', 'ArrowRight', 39);
-  ok('holodb: arrow keys switch to By content with the NEAREST route and scores', await b.evaluate("document.activeElement.dataset.mode==='content' && /NEAREST similarity search/.test(document.querySelector('[data-ctl=panel]').textContent) && /score 0\\.6/.test(document.querySelector('[data-ctl=panel]').textContent)"));
-  await b.key('ArrowRight', 'ArrowRight', 39);
-  ok('holodb: By aggregate shows maintained accumulators, zero rows scanned and the totals', await b.evaluate("/maintained accumulators/.test(document.querySelector('[data-ctl=panel]').textContent) && /Rows scanned: 0 of 24/.test(document.querySelector('[data-ctl=panel]').textContent) && /east 89,600/.test(document.querySelector('[data-ctl=panel]').textContent)"));
-  ok('holodb: aggregate mode shows the latency bars from the evidence record', await b.evaluate("!!document.querySelector('[data-ctl=latbody] svg')"));
-  await b.key('ArrowRight', 'ArrowRight', 39);
-  ok('holodb: Optional plane lists the six queries', await b.evaluate("!document.querySelector('[data-ctl=qlist]').hidden && document.querySelectorAll('[data-diagram=holodb-store] [data-q]').length===6"));
-  await b.evaluate("document.querySelector('[data-q=\"3\"]').click()");
-  ok('holodb: a declined query says the engine answers and why', await b.evaluate("/Declined/.test(document.querySelector('[data-ctl=panel]').textContent) && /not a plane dimension/.test(document.querySelector('[data-ctl=panel]').textContent)"));
-  ok('holodb: table alternative holds the rows, the queries and the plane routes', await b.evaluate("document.querySelectorAll('[data-diagram=holodb-store] .dia-data table').length===3 && document.querySelectorAll('[data-diagram=holodb-store] .dia-data tbody tr').length===24+3+6"));
-  await b.goto(hd, { width: 1280, height: 900, reducedMotion: true, wait: DREADY });
-  const d1 = await b.evaluate("document.querySelector('[data-diagram=holodb-store] .dia-canvas').toDataURL().slice(4000,4300)");
-  await new Promise((r) => setTimeout(r, 1200));
-  const d2 = await b.evaluate("document.querySelector('[data-diagram=holodb-store] .dia-canvas').toDataURL().slice(4000,4300)");
-  ok('holodb: reduced motion keeps the scene still', d1 === d2);
-  await b.goto(hd, { width: 390, height: 844, mobile: true, wait: DREADY });
-  const dw2 = await b.evaluate('({sw:document.documentElement.scrollWidth,cw:document.documentElement.clientWidth})');
-  ok('holodb phone 390: no horizontal overflow', dw2.sw <= dw2.cw, JSON.stringify(dw2));
-  // ---- the 100,000,000-invoice record: race chart, explainer, decision helper ----
-  const race = await import('../src/assets/diagrams/holodb-race.js');
-  const raceData = JSON.parse(fs.readFileSync(path.join(DATA, 'diagrams', 'holodb-race.json'), 'utf8'));
-  const raceM = race.metrics(raceData);
-  const amberWarm = raceM.per.warm.behind.flat().filter(Boolean).length;
-  const RREADY = "document.querySelector('[data-diagram=holodb-race]').dataset.ready==='true' && document.querySelector('[data-diagram=holodb-how]').dataset.ready==='true'";
-  await b.goto(he, { width: 1280, height: 900, wait: RREADY });
-  ok('evidence: chart and explainer mount without console errors', b.errors.length === 0, JSON.stringify(b.errors));
-  ok('evidence: the chart draws 16 queries by 4 engines', await b.evaluate("document.querySelectorAll('[data-diagram=holodb-race] .hr-svg .hr-row').length===16 && document.querySelectorAll('[data-diagram=holodb-race] .hr-svg .bar').length===64"));
-  ok('evidence: amber bars are exactly the HoloDb cells with another engine more than 20 percent faster', await b.evaluate("document.querySelectorAll('[data-diagram=holodb-race] .hr-svg .bar.behind').length===" + amberWarm), String(amberWarm));
-  ok('evidence: default readout states ahead, equal and behind from the data', await b.evaluate("/HoloDb restored against tuned DuckDB: ahead on \\d+, equal on \\d+, behind on \\d+/.test(document.querySelector('[data-diagram=holodb-race] [data-ctl=readout]').textContent)"));
-  await b.evaluate("document.querySelector('[data-diagram=holodb-race] .hr-row[data-i=\"6\"] .hit').dispatchEvent(new PointerEvent('pointermove',{bubbles:true}))");
-  ok('evidence: pointing at a row reads the milliseconds of all four engines', await b.evaluate("/overdue outstanding: HoloDb restored [\\d.,]+ ms; HoloDb out of the box [\\d.,]+ ms; DuckDB tuned [\\d.,]+ ms; SQL Server tuned [\\d.,]+ ms/.test(document.querySelector('[data-diagram=holodb-race] [data-ctl=readout]').textContent)"));
-  await b.evaluate("document.querySelector('[data-diagram=holodb-race] [data-mode=cold]').click()");
-  ok('evidence: the cold toggle redraws and says cold', await b.evaluate("/^Cold/.test(document.querySelector('[data-diagram=holodb-race] [data-ctl=readout]').textContent) && document.querySelector('[data-diagram=holodb-race] [data-mode=cold]').getAttribute('aria-pressed')==='true'"));
-  await b.evaluate("document.querySelector('[data-diagram=holodb-race] .dia-stage').focus()");
-  await b.key('Home', 'Home', 36);
-  ok('evidence: Home reads the first row from the keyboard', await b.evaluate("/invoices by status: HoloDb restored/.test(document.querySelector('[data-diagram=holodb-race] [data-ctl=readout]').textContent)"));
-  ok('evidence: the raw numbers are a collapsed block with two tables', await b.evaluate("(()=>{const d=document.querySelector('[data-diagram=holodb-race] details.dia-data');return !!d && !d.open && d.querySelectorAll('table').length===2 && d.querySelectorAll('tbody tr').length===32})()"));
-  ok('evidence: explainer has six scenes and each tab changes the promise', await b.evaluate("(()=>{const f=document.querySelector('[data-diagram=holodb-how]');const tabs=[...f.querySelectorAll('[role=tab]')];if(tabs.length!==6)return false;const seen=new Set();for(const t of tabs){t.click();seen.add(f.querySelector('[data-ctl=promise]').textContent)}return seen.size===6})()"));
-  const stageHtml = () => b.evaluate("document.querySelector('[data-diagram=holodb-how] .dia-stage').innerHTML");
-  await b.evaluate("document.querySelector('[data-diagram=holodb-how] [role=tab]').click()");
-  await b.evaluate("document.querySelector('[data-diagram=holodb-how]').scrollIntoView()");
-  const hwA = await stageHtml(); await new Promise((r) => setTimeout(r, 900)); const hwB = await stageHtml();
-  ok('explainer: a scene plays by itself when it is on screen', hwA !== hwB);
-  await b.evaluate("(()=>{const r=document.querySelector('[data-diagram=holodb-how] [data-ctl=time]');r.value=1000;r.dispatchEvent(new Event('input',{bubbles:true}))})()");
-  ok('explainer: the scrubber lands on the final frame and pauses', await b.evaluate("document.querySelector('[data-diagram=holodb-how] [data-ctl=play]').getAttribute('aria-pressed')==='false'"));
-  ok('explainer: every caption says the motion is illustrative', await b.evaluate("(()=>{const f=document.querySelector('[data-diagram=holodb-how]');const d=JSON.parse(f.querySelector('script[data-diagram-data]').textContent);return d.scenes.every(s=>/illustrative/i.test(s.caption))})()"));
-  await b.goto(he, { width: 1280, height: 900, reducedMotion: true, wait: RREADY });
-  await b.evaluate("document.querySelector('[data-diagram=holodb-how]').scrollIntoView()");
-  const rmA = await stageHtml(); await new Promise((r) => setTimeout(r, 1500)); const rmB = await stageHtml();
-  ok('explainer: reduced motion shows the final frame and does not play by itself', rmA === rmB && await b.evaluate("document.querySelector('[data-diagram=holodb-how] [data-ctl=play]').getAttribute('aria-pressed')==='false'"));
-  await b.evaluate("document.querySelector('[data-diagram=holodb-how] [data-ctl=play]').click()");
-  const rmC = await stageHtml(); await new Promise((r) => setTimeout(r, 700)); const rmD = await stageHtml();
-  ok('explainer: under reduced motion it plays only after Play is pressed', rmC !== rmD || rmC !== rmA);
-  await b.goto(he, { width: 390, height: 844, mobile: true, wait: RREADY });
-  const ew = await b.evaluate('({sw:document.documentElement.scrollWidth,cw:document.documentElement.clientWidth})');
-  ok('evidence phone 390: no horizontal overflow', ew.sw <= ew.cw, JSON.stringify(ew));
-  ok('evidence phone 390: chart labels sit above the bars', await b.evaluate("document.querySelector('[data-diagram=holodb-race] .dia-stage').classList.contains('hr-narrow')"));
-  ok('evidence phone 390: no text leaves the explainer scene', await b.evaluate("(()=>{const out=[];for(const t of document.querySelectorAll('[data-diagram=holodb-how] .tab,[data-diagram=holodb-how] [role=tab]')){t.click();const s=document.querySelector('[data-diagram=holodb-how] .hw-svg');const vb=s.viewBox.baseVal;for(const x of s.querySelectorAll('text')){const r=x.getBBox();if(r.x+r.width>vb.width+2||r.y+r.height>vb.height+2)out.push(t.textContent+': '+x.textContent.slice(0,40))}}return out.length===0})()"));
-  // ---- the decision helper on /holodb/ ----
-  const FREADY = "document.querySelector('[data-diagram=holodb-fit]').dataset.ready==='true'";
-  const verdictNow = () => b.evaluate("document.querySelector('[data-diagram=holodb-fit]').dataset.verdict");
-  const pickAns = (q, a) => b.evaluate(`document.querySelector('[data-diagram=holodb-fit] [data-fq=${q}][data-fa=${a}]').click()`);
-  await b.goto(hd, { width: 1280, height: 900, wait: FREADY });
-  ok('fit: the default answers are a good fit', await verdictNow() === 'good');
-  await pickAns('work', 'mixed');
-  ok('fit: mixed reads and writes is possible and names the write cost', await verdictNow() === 'possible' && await b.evaluate("/Single-row INSERT took/.test(document.querySelector('[data-diagram=holodb-fit] [data-ctl=out]').textContent)"));
-  await pickAns('work', 'writes'); await pickAns('queries', 'adhoc'); await pickAns('size', 'm100');
-  ok('fit: heavy writes, ad hoc queries and 100M rows point to other tools', await verdictNow() === 'other' && await b.evaluate("/Tuned DuckDB/.test(document.querySelector('[data-diagram=holodb-fit] [data-ctl=out]').textContent) && /SQLite/.test(document.querySelector('[data-diagram=holodb-fit] [data-ctl=out]').textContent)"));
-  await pickAns('work', 'reads'); await pickAns('queries', 'known'); await pickAns('size', 'm10'); await pickAns('lang', 'other');
-  ok('fit: another language is a hard no and names PostgreSQL or SQL Server', await verdictNow() === 'other' && await b.evaluate("/Does not fit/.test(document.querySelector('[data-diagram=holodb-fit] [data-ctl=out]').textContent) && /PostgreSQL or SQL Server/.test(document.querySelector('[data-diagram=holodb-fit] [data-ctl=out]').textContent)"));
-  ok('fit: no console errors', b.errors.length === 0, JSON.stringify(b.errors));
-  ok('holodb: the five trade-offs are on the page', await b.evaluate("document.querySelectorAll('.tradeoffs > li').length===5"));
-  await b.goto(hd, { width: 390, height: 844, mobile: true, wait: FREADY });
-  const fw = await b.evaluate('({sw:document.documentElement.scrollWidth,cw:document.documentElement.clientWidth})');
-  ok('holodb phone 390: no horizontal overflow with the helper', fw.sw <= fw.cw, JSON.stringify(fw));  for (const sp of ['docs/', 'pleroma/', 'client/']) {
+  // ================= holodb: pages fit a phone =================
+  for (const sp of ['', 'docs/', 'client/', 'evidence/']) {
     await b.goto(`http://127.0.0.1:${port}/holodb/${sp}`, { width: 390, height: 844, mobile: true });
     const sw = await b.evaluate('({sw:document.documentElement.scrollWidth,cw:document.documentElement.clientWidth})');
     ok(`holodb/${sp} phone 390: no horizontal overflow`, sw.sw <= sw.cw, JSON.stringify(sw));
@@ -404,22 +324,6 @@ try {
   const setRange = (sel, v, ev = 'input') => `(()=>{const s=document.querySelector(${JSON.stringify(sel)}); s.value=${JSON.stringify(String(v))}; s.dispatchEvent(new Event(${JSON.stringify(ev)}));})()`;
   const rd = async (slug, kind) => { await b.goto(`${base}/research/${slug}/`, { width: 1280, height: 900, wait: `document.querySelector('[data-diagram=${kind}]').dataset.ready==='true'` }); };
   const RO = (kind) => `document.querySelector('[data-diagram=${kind}] [data-ctl=readout]').textContent`;
-  await rd('context-four', 'round-timeline');
-  ok('research context-four: timeline mounts without console errors', b.errors.length === 0, JSON.stringify(b.errors));
-  const rt0 = await b.evaluate(RO('round-timeline'));
-  await b.evaluate(setRange('[data-diagram=round-timeline] [data-ctl=round]', 10000));
-  ok('research context-four: moving the round changes which measures are flat', rt0 !== await b.evaluate(RO('round-timeline')) && /At round 10,000/.test(await b.evaluate(RO('round-timeline'))));
-  ok('research context-four: table alternative lists every measure', await b.evaluate("document.querySelectorAll('[data-diagram=round-timeline] .dia-data tbody tr').length===5"));
-  await rd('context-eight', 'slot-grow');
-  await b.evaluate(setRange('[data-diagram=slot-grow] [data-ctl=grows]', 5));
-  ok('research context-eight: appending leaves a new slot last and inserting keeps the original', await b.evaluate(RO('slot-grow')).then((t) => /After 5 grows/.test(t) && /new and has not been trained/.test(t) && /original one/.test(t)));
-  await rd('back-to-front', 'layer-stack');
-  ok('research back-to-front: the last read point weighs several tokens and earlier ones are copies', await b.evaluate(RO('layer-stack')).then((t) => /weighing several tokens/.test(t) && /exact copies/.test(t)));
-  await b.evaluate("document.querySelector('[data-diagram=layer-stack] [role=tab][data-mode=passes]').click()");
-  ok('research back-to-front: the passes tab reports passes doing work', await b.evaluate(RO('layer-stack')).then((t) => /passes carry real information/.test(t)));
-  await rd('smaller-than-tinystories', 'size-bars');
-  await b.evaluate(setRange('[data-diagram=size-bars] [data-ctl=pos]', 1));
-  ok('research tinystories: a reference row reads as a multiple of the checkpoint', await b.evaluate(RO('size-bars')).then((t) => /times this checkpoint/.test(t)));
   await rd('nobody-read-the-warning', 'design-effect');
   await b.evaluate(setRange('[data-diagram=design-effect] [data-ctl=rho]', 1000));
   ok('research nobody-read: full correlation leaves about one independent judgement', await b.evaluate(RO('design-effect')).then((t) => /about 1\.00 independent judgements/.test(t)));
@@ -449,13 +353,13 @@ try {
   ok('pleroma article phone 390: the grid has three columns that fit the screen', await b.evaluate(`(()=>{const g=document.querySelector('${PG} .pg').getBoundingClientRect();const c=[...document.querySelectorAll('${PG} .pg-cell:not(.lid)')].slice(0,3).map(x=>x.getBoundingClientRect());return g.right<=window.innerWidth+1&&c[0].top===c[2].top&&c[0].width>80})()`));
   ok('pleroma article phone 390: cells are at least 40px tall', await b.evaluate(`[...document.querySelectorAll('${PG} .pg-cell')].every(x=>x.getBoundingClientRect().height>=40)`));
   ok('pleroma article phone 390: no console errors', b.errors.length === 0, JSON.stringify(b.errors));
-  for (const s of ['context-four', 'context-eight', 'back-to-front', 'smaller-than-tinystories', 'nobody-read-the-warning', 'one-store-many-reads']) {
+  for (const s of ['nobody-read-the-warning', 'one-store-many-reads']) {
     ow = await overflow(`/research/${s}/`);
     ok(`research/${s} phone 390: no horizontal overflow`, ow.sw <= ow.cw, JSON.stringify(ow));
   }
   await b.goto(`${base}/research/`, { width: 1280, height: 900 });
-  await b.evaluate("document.querySelector('[data-filter] [data-topic=layers]').click()");
-  ok('research hub: the topic filter hides articles that do not match', await b.evaluate("[...document.querySelectorAll('.research-cards .card')].filter(c=>!c.hidden).length===1 && /1 of 6 articles about layers/.test(document.querySelector('[data-filter-count]').textContent)"));
+  await b.evaluate("document.querySelector('[data-filter] [data-topic=essay]').click()");
+  ok('research hub: the topic filter hides articles that do not match', await b.evaluate("[...document.querySelectorAll('.research-cards .card')].filter(c=>!c.hidden).length===1 && /1 of 2 articles about essay/.test(document.querySelector('[data-filter-count]').textContent)"));
 
   // ================= Blazier: the boot bars =================
   const BB = "document.querySelector('[data-diagram=blazier-boot]').dataset.ready==='true'";

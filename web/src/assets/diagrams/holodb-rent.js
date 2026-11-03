@@ -1,5 +1,5 @@
 // Explainer diagram: rent or buy. The ledger behind every structure the engine builds or moves: rent while a question keeps paying for blocks it did
-// not need, buy once the rent paid reaches the price. The three costs (about 200 microseconds per moved row, about 12 page deltas, about 100 uses to
+// not need, buy once the rent paid reaches the price. The three costs (about 200 microseconds per moved row, about 100 uses to
 // pay back) are recorded in data/diagrams/holodb-rent.json with their file; the three lines are the rule, drawn as a rule, and the caption says so.
 // The figure opens on its final frame and animates only on Play. Module contract: metrics / staticSvg / controlsHtml / tablesHtml / verify / mount.
 import { hasDom } from './core.js';
@@ -7,11 +7,11 @@ import { esc, fmt, clamp, pen, svgOpen, playControls, player, tablesWrap, tbl } 
 
 export function metrics(d) {
   const c = d.cost;
-  return { rowMicros: c.rowMicros, pageDeltas: c.pageDeltas, payback: c.paybackUses, uses: d.axis.uses, pct: d.axis.percent };
+  return { rowMicros: c.rowMicros, payback: c.paybackUses, uses: d.axis.uses, pct: d.axis.percent };
 }
 
 export function limitFacts(m) {
-  return { rowMicros: String(m.rowMicros), pageDeltas: String(m.pageDeltas), paybackUses: String(m.payback) };
+  return { rowMicros: String(m.rowMicros), paybackUses: String(m.payback) };
 }
 
 // Cost so far, as a percent of the price of the move, after n uses.
@@ -51,7 +51,7 @@ export const staticSvg = (d) => chartSvg(d, metrics(d), 1, false, 'rn-' + d.id);
 export function controlsHtml(id, m, d) {
   return {
     tabs: '',
-    controls: `<div class="hw-copy"><p class="hw-promise">Moving one row costs about ${m.rowMicros} microseconds, and a scattered question pays that back in about ${m.payback} uses.</p><p class="hw-how">${esc(d.rule)} The price is about ${m.pageDeltas} page deltas per moved row.</p></div>
+    controls: `<div class="hw-copy"><p class="hw-promise">Moving one row costs about ${m.rowMicros} microseconds, and a scattered question pays that back in about ${m.payback} uses.</p><p class="hw-how">${esc(d.rule)}</p></div>
 ${playControls('Uses of the question', 'Uses')}
 <p class="dia-readout hw-caption" data-ctl="readout" role="status">${esc(readoutFor(m, m.uses))}</p>`,
   };
@@ -59,7 +59,7 @@ ${playControls('Uses of the question', 'Uses')}
 
 export function tablesHtml(d, m) {
   const c = tbl('The recorded costs', ['Cost', 'Recorded'], [
-    ['One moved row', `about ${m.rowMicros} microseconds`], ['One moved row, in page deltas', `about ${m.pageDeltas}`], ['A scattered question pays the move back in', `about ${m.payback} uses`]]);
+    ['One moved row', `about ${m.rowMicros} microseconds`], ['A scattered question pays the move back in', `about ${m.payback} uses`]]);
   const pts = [0, 50, 100, 150, 300].map((n) => { const k = costs(m, n); return [`${n} uses`, `${k.rent}%`, `${k.buy}%`, `${k.rule}%`]; });
   const t = tbl('Cost so far as a percent of the price of the move (the rule)', ['Uses', d.lines[0].label, d.lines[1].label, d.lines[2].label], pts);
   const notes = `<ul class="dia-notes">${d.notes.map((x) => `<li>${esc(x)}</li>`).join('')}</ul>`;

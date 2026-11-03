@@ -1,0 +1,104 @@
+{
+  "id": "algformer-atoms",
+  "product": "algformer",
+  "slug": "/algformer/evidence/",
+  "scope": "Small-scale harness, six-atom checkpoints and the fused GPU step",
+  "title": "Many small models, one wave: the evidence",
+  "description": "Six atoms that each see a sixth of the text and share the medium score 2.99 bits per character, against 3.38 for one atom reading all of it and 4.33 without.",
+  "claim": "Six atoms that each see about a sixth of the text and share the medium score 2.99 bits per character. One atom that sees all of it scores 3.38, and the same six atoms without the medium score 4.33. At width 32, a pair scores 3.47 when the loss reaches the atoms through the notes they wrote and 3.84 when the writers are frozen.",
+  "headline": [
+    { "value": "2.99 against 3.38", "label": "bits per character: six atoms with split views sharing the medium, against one atom reading the whole window" },
+    { "value": "4.33", "label": "bits per character for the same six atoms with the shared medium switched off" },
+    { "value": "3.47 against 3.84", "label": "bits per character for two width-32 atoms, with the loss reaching the atoms through the notes they wrote against the writer gradient switched off" },
+    { "value": "261 launches", "label": "per fused GPU training step for two, eight and sixteen atoms alike, against 454 for two atoms and 1,672 for eight on the per-atom path" }
+  ],
+  "lossTitle": "Where the evidence stops",
+  "losses": [
+    "The harness results are small models on one text, two seeds, scored on windows of that text.",
+    "The six-atom checkpoints are scored on windows of their training text, and their two training rounds differ, so the table is not a comparison of the two settings."
+  ],
+  "method": {
+    "workload": "Bits per character on 300 held-out windows of the same text, scored at the last position, drawn the same way for every arm. The text is 300,000 characters of Gutenberg prose with a 64-symbol vocabulary. Each atom is a HoloFormer with shifts equal to the width, two layers, trained with the all-positions loss, learning rate 0.01, batch 16. The width-64 rows ran 800 steps at context 64. The width-32 rows ran 500 steps at context 32. The two groups are separate runs.",
+    "engines": [
+      "AtomField with Memory coupling (the shared medium)",
+      "The same atoms with the field switched off",
+      "One HoloFormer reading the whole window"
+    ],
+    "verification": "Every arm is drawn the same way and scored the same way, with the matching null beside each result.",
+    "statistic": "Two seeds per arm.",
+    "machine": "The fused GPU step ran on an A3000 GPU at width 66, three passes, window 64, batch 32, fused path."
+  },
+  "sections": [
+    {
+      "id": "harness",
+      "title": "Small-scale harness, character language model",
+      "intro": [ "At width 64, six atoms that each see about a sixth of the text and share the medium score 2.99 (seeds 2.96 and 3.02). One atom that sees all of it scores 3.38 (seeds 3.25 and 3.51). The same six atoms without the medium score 4.33. At width 32, the pair scores 3.47 when the loss reaches the atoms through the notes they wrote, and 3.84 when the writers are frozen." ],
+      "tables": [
+        {
+          "id": "harness-scores", "kind": "matrix", "caption": "Bits per character by test",
+          "columns": ["Test", "Bits per character"],
+          "rows": [
+            ["Width 64: six atoms, each atom sees only its own tokens (split views), field switched off", "4.33"],
+            ["Width 64: the same six atoms with the shared medium", "2.99"],
+            ["Width 64: one atom reading the whole window", "3.38"],
+            ["Width 64: six atoms, every atom reads the whole window", "2.47"],
+            ["Width 32: two atoms, split views, writers trained through the medium", "3.47"],
+            ["Width 32: the same two atoms with the writer gradient switched off", "3.84"],
+            ["Width 32: two atoms, every atom reads the whole window", "3.18"],
+            ["Width 32 run: one atom of width 46 reading the whole window", "3.48"]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "checkpoints",
+      "title": "Six-atom checkpoints",
+      "intro": [ "Two six-atom checkpoints, each with six atoms at width 66 and six layers, Memory coupling and a 320-token vocabulary, scored on 400 windows of 65 tokens drawn from their training text, with all 64 transitions of each window scored. The two were stopped at different training rounds (3,510 and 9,000), so their scores are not a comparison of the two settings." ],
+      "tables": [
+        {
+          "id": "six-atom", "kind": "matrix", "caption": "Bits per token for the two six-atom checkpoints",
+          "columns": ["Test, bits per token", "Golden ladder of timescales, round 3,510", "No golden settings, round 9,000"],
+          "rows": [
+            ["Mean of the six atoms, field on", "3.81", "3.45"],
+            ["Each atom alone, field switched off", "9.6 to 15.5", "15.2 to 19.6"],
+            ["Leave one atom out", "costs 0.02 to 0.79", "costs 0.09 to 0.16"],
+            ["Correlation of the atoms' next-token logits, field on / off", "0.93 / 0.68", "0.91 / 0.79"]
+          ]
+        }
+      ],
+      "notes": [ "With the golden ladder the leave-one-out cost runs from 0.79 for the first atom down to 0.02 for the fifth. Without it, the six costs sit close together." ]
+    },
+    {
+      "id": "gpu",
+      "title": "Fused GPU step",
+      "intro": [ "AlgFormer.Gpu stacks the atoms as a batch dimension, so every layer, pass, head, reverse and Adam kernel runs once for all atoms. The number of kernel launches per step does not depend on the number of atoms." ],
+      "tables": [
+        {
+          "id": "gpu-step", "kind": "matrix", "caption": "One training step on an A3000 GPU, in milliseconds (width 66, three passes, window 64, batch 32, fused path)",
+          "columns": ["Layers", "2 atoms", "4 atoms", "8 atoms", "16 atoms"],
+          "rows": [
+            ["1 layer", "13.6", "25", "40", "75"],
+            ["3 layers", "30.6", "60", "107", "207"]
+          ]
+        },
+        {
+          "id": "gpu-launches", "kind": "matrix", "caption": "Kernel launches per training step at two layers and two passes",
+          "columns": ["Path", "Atoms", "Launches"],
+          "rows": [
+            ["Fused", "2, 8 and 16", "261"],
+            ["Per atom", "2", "454"],
+            ["Per atom", "8", "1,672"]
+          ]
+        }
+      ]
+    }
+  ],
+  "limits": [
+    "The atom field is opt-in in the library and the studio. A plain HoloFormer is what you get by default.",
+    "Cost is linear in the number of atoms with holographic locality or no locality. Dense locality is quadratic in the number of atoms.",
+    "The diversity options (golden rotation of timescales, golden-angle write phases) are off by default. In the width-64 four-atom test, rotation raised how much the atoms depend on each other (leave-one-out cost 0.16 to 0.21) without lowering their correlation or improving the score."
+  ],
+  "internal": {
+    "source": "MonoRepo AlgFormer/docs/site.md, What is measured"
+  }
+}
