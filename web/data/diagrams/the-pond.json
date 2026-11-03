@@ -1,0 +1,21 @@
+{
+  "schema": "ea-diagram/1",
+  "kind": "the-pond",
+  "id": "the-pond",
+  "source": "A toy of the mechanism's own equations. No model, no weights and no recorded measurement: the numbers on screen are computed in the page from the parameters below.",
+  "defaults": { "atoms": 12, "earWidth": 2, "patternsPow": 4, "seed": 7, "source": 0 },
+  "limits": { "atoms": [3, 24], "earWidth": [0.6, 5], "patternsPow": [0, 8] },
+  "timeMax": 60,
+  "bells": [
+    { "id": "b1", "label": "Fast bell", "tau": 3, "omega": 1.7 },
+    { "id": "b2", "label": "Quick bell", "tau": 9, "omega": 1.1 },
+    { "id": "b3", "label": "Slow bell", "tau": 27, "omega": 0.7 },
+    { "id": "b4", "label": "Slowest bell", "tau": 81, "omega": 0.4 }
+  ],
+  "equations": [
+    "Atom k sits at p_k on a golden spiral. Every atom is a source and a listener.",
+    "A write by atom j leaves, in each wave pattern m, a trace with phase kappa_m . p_j. A listener k reads it back with phase kappa_m . p_k.",
+    "Summed over the patterns, the read is the mean of cos(kappa_m . (p_k - p_j)). With wavevectors drawn at random this approaches a Gaussian of the distance between the two atoms. The ear width sets its width.",
+    "Time is a bank of damped oscillators. Each bell fades at its own rate, so fast bells carry the recent past and slow bells ring on."
+  ]
+}

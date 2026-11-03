@@ -29,6 +29,10 @@ import * as scalingCurve from './assets/diagrams/scaling-curve.js';
 import * as holodbRace from './assets/diagrams/holodb-race.js';
 import * as holodbHow from './assets/diagrams/holodb-how.js';
 import * as holodbFit from './assets/diagrams/holodb-fit.js';
+import * as holodbLearns from './assets/diagrams/holodb-learns.js';
+import * as holodbRent from './assets/diagrams/holodb-rent.js';
+import * as holodbCrash from './assets/diagrams/holodb-crash.js';
+import * as thePond from './assets/diagrams/the-pond.js';
 
 const KINDS = {
   'tracer-field': tracerField, 'stack-map': stackMap, 'pleroma-map': pleromaMap, 'pleroma-grid': pleromaGrid,
@@ -37,6 +41,7 @@ const KINDS = {
   'round-timeline': roundTimeline, 'slot-grow': slotGrow, 'layer-stack': layerStack, 'size-bars': sizeBars, 'design-effect': designEffect,
   'superposition-scene': superpositionScene, 'coverage-meter': coverageMeter, 'commutation-map': commutationMap, 'blazier-boot': blazierBoot, 'hologenome-scores': hologenomeScores,
   'scaling-curve': scalingCurve, 'holodb-race': holodbRace, 'holodb-how': holodbHow, 'holodb-fit': holodbFit,
+  'holodb-learns': holodbLearns, 'holodb-rent': holodbRent, 'holodb-crash': holodbCrash, 'the-pond': thePond,
 };
 
 export function diagramModule(kind) {

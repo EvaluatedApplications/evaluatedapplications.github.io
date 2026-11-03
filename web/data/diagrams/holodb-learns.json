@@ -1,0 +1,60 @@
+{
+  "schema": "ea-diagram/1",
+  "kind": "holodb-learns",
+  "id": "holodb-learns",
+  "source": "Typed once from the HoloDb owner's recorded counters: MonoRepo HoloDb/todo/rd-loop.md (sections E1, E3, E4). Counters are exact; wall times are not used. The page prose and the evidence record read every figure from this file.",
+  "scale": { "blocksPerPredicate": 61, "predicates": 6, "rows": 1000000 },
+  "views": [
+    {
+      "id": "records",
+      "tab": "Records under writes",
+      "file": "HoloDb/todo/rd-loop.md, E3 (Measured table)",
+      "promise": "A learned record follows the rows when they change, so the next repeat still reads almost nothing.",
+      "how": "The engine keeps, per block of a table, how many rows match a question and their exact partial sums. An update, a delete or a move of rows adjusts those records by the difference instead of dropping them.",
+      "setup": "A table of 1,000,000 rows. Six selective questions (COUNT and SUM) are learned, then 10,000 single-row UPDATEs, 10,000 DELETEs and a Consolidate. After each step the six questions run again and the blocks read are counted.",
+      "unit": "blocks read by the next run of the six questions",
+      "phases": [
+        { "id": "u", "label": "After 10,000 updates" },
+        { "id": "x", "label": "After 10,000 deletes" },
+        { "id": "f", "label": "After consolidation" }
+      ],
+      "arms": [
+        { "id": "on", "label": "Records adjust", "blocks": [6, 6, 6], "sums": [293, 293, 288] },
+        { "id": "off", "label": "Records dropped on write", "blocks": [60, 51, 366], "sums": [238, 247, 0] },
+        { "id": "none", "label": "No partial sums (control)", "blocks": [298, 298, 293], "sums": [0, 0, 0] }
+      ],
+      "note": "Every verify of counts, sums and zones against the cells was exact in every phase of every arm, and the answer hash was equal in all four arms. Adjusting beat dropping by 10 times on the blocks after updates and deletes and by 61 times after the consolidation."
+    },
+    {
+      "id": "upkeep",
+      "tab": "Upkeep priced from cost",
+      "file": "HoloDb/todo/rd-loop.md, E1 (Measured table)",
+      "promise": "An index stays built through writes because the engine charges the measured cost of keeping it, not the cost of a rebuild.",
+      "how": "Each DELETE or UPDATE is charged the measured nanoseconds of the structure's delta path. The engine drops a structure only when its measured upkeep passes what it saves.",
+      "setup": "A sorted index is built on a table of 1,000,000 rows, then 1,200 pairs of a DELETE or UPDATE followed by a sorted count.",
+      "unit": "per run of the stream",
+      "metrics": [
+        { "id": "pins", "label": "Pins in all", "before": { "lo": 1158839, "hi": 1158839 }, "after": { "lo": 49306, "hi": 54106 }, "unit": "pins" },
+        { "id": "pair", "label": "Pins per pair of writes", "before": { "lo": 1216, "hi": 1216 }, "after": { "lo": 43, "hi": 43 }, "unit": "pins" },
+        { "id": "blocks", "label": "Blocks read per count after the writes", "before": { "lo": 62, "hi": 62 }, "after": { "lo": 0, "hi": 0 }, "unit": "blocks" }
+      ],
+      "series": { "before": "Upkeep charged as a rebuild per write: the index was dropped at write 256", "after": "Upkeep priced from the measured delta cost: 0 blocks per read at every checkpoint" },
+      "note": "Pins are the counter that moves when a structure answers: 21 to 23 times fewer in all."
+    },
+    {
+      "id": "gather",
+      "tab": "Gather priced from waste",
+      "file": "HoloDb/todo/rd-loop.md, E4 (verb gather)",
+      "promise": "Rows are moved together only when the blocks a question wastes would cost more than the move.",
+      "how": "The rent of one excess block is the record's own measured scan waste. A move is bought when that rent covers the measured price of the rows and of the records its swap invalidates.",
+      "setup": "A selective scatter on a table of 20,000 rows with partial sums off, so every repeat reads the excess blocks.",
+      "unit": "blocks read per round",
+      "bars": [
+        { "id": "records", "label": "Records only, nothing moved", "value": 288 },
+        { "id": "old", "label": "Moves bought at the old price", "value": 86 },
+        { "id": "new", "label": "Moves priced from measured waste", "value": 30 }
+      ],
+      "note": "With partial sums on, a repeat already costs almost nothing, the rent is zero and no row is moved."
+    }
+  ]
+}

@@ -1,0 +1,25 @@
+{
+  "schema": "ea-diagram/1",
+  "kind": "holodb-crash",
+  "id": "holodb-crash",
+  "source": "Typed once from the HoloDb owner's customer-lifecycle record: MonoRepo HoloDb/todo/customer.md (Runs, Totals over the archived customers; One session, Crash rule) and HoloDb/CLAUDE.md (Integrity, Write path). The timeline is schematic; the tally is recorded.",
+  "run": { "customers": 8, "sessions": 158, "rowsComparedMillions": 249, "oracle": "SQLite" },
+  "recoveries": { "total": 46, "before": 37, "after": 9, "between": 0 },
+  "durableAt": 0.7,
+  "segments": [
+    { "id": "run", "from": 0, "to": 0.25, "label": "Statement runs" },
+    { "id": "log", "from": 0.25, "to": 0.7, "label": "Changes streamed to the log, checksummed" },
+    { "id": "ack", "from": 0.7, "to": 1, "label": "Commit durable, reply to the app" }
+  ],
+  "marker": "fsync returns: the commit is durable",
+  "example": {
+    "title": "Example table",
+    "cols": ["id", "balance"],
+    "before": [[1, 120], [2, 85], [3, 200]],
+    "after": [[1, 120], [2, 85], [3, 250], [4, 40]],
+    "half": [[1, 120], [2, 85], [3, 250]],
+    "statement": "One transaction: raise the balance of id 3 and insert id 4"
+  },
+  "rule": "After a hard kill or a power cut, the next open finds the table as it was before the transaction or as it is after it, with every row and id whole. The tester compares the sealed table with one built from the SQLite copy, and fails the run on anything else.",
+  "tornTail": "A log block cut in half fails its checksum and the torn tail is dropped, so a cut inside the write recovers to the table before."
+}

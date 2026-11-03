@@ -1,0 +1,23 @@
+{
+  "schema": "ea-diagram/1",
+  "kind": "holodb-rent",
+  "id": "holodb-rent",
+  "source": "Typed once from the HoloDb owner's recorded costs: MonoRepo HoloDb/CLAUDE.md (Honest limits; Upkeep and gather) and HoloDb/todo/rd-loop.md (E1, E4). The curves are the stated rule drawn as a rule; the three costs are recorded.",
+  "cost": {
+    "rowMicros": 200,
+    "pageDeltas": 12,
+    "paybackUses": 100,
+    "file": "HoloDb/CLAUDE.md, Honest limits: a row moved by gather or regroup costs about 12 page deltas (200 us); a scattered predicate pays back in about 100 uses"
+  },
+  "axis": { "uses": 300, "percent": 220 },
+  "rule": "The engine rents while a question keeps paying for blocks it did not need. When the rent paid so far reaches the price of moving the rows, it buys the move once.",
+  "lines": [
+    { "id": "rent", "label": "Rent every time, never buy" },
+    { "id": "buy", "label": "Buy at the first use" },
+    { "id": "rule", "label": "The ledger: rent, then buy at the price" }
+  ],
+  "notes": [
+    "The price of a move is measured, not guessed: gather prices a row at the measured row price plus the block reads its swap brings back, and the rent of one excess block is the record's own measured scan waste.",
+    "A repeated COUNT or SUM over a learned question does not wait for the move. The partial sums answer it from the record and it reads only the blocks a write or a move touched."
+  ]
+}
