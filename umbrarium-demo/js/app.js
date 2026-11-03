@@ -12,16 +12,28 @@ window.umbra = {
     document.body.removeChild(t);
     return ok;
   },
-  // Save text as a file through a temporary link (a Blob in this tab; nothing is sent anywhere).
+  // Save text as a file through a temporary link (a Blob in this tab; nothing is sent anywhere). A .csv gets the CSV type and a byte-order mark so Excel reads the UTF-8.
   download: function (name, text) {
-    var url = URL.createObjectURL(new Blob([text], { type: 'text/plain;charset=utf-8' }));
+    var csv = /\.csv$/i.test(name);
+    var url = URL.createObjectURL(new Blob(csv ? ['\uFEFF', text] : [text], { type: csv ? 'text/csv;charset=utf-8' : 'text/plain;charset=utf-8' }));
     var a = document.createElement('a');
     a.href = url; a.download = name; a.style.display = 'none';
     document.body.appendChild(a); a.click(); document.body.removeChild(a);
     setTimeout(function () { URL.revokeObjectURL(url); }, 2000);
   },
+  // Put the dashboard's state in the address bar without a navigation or a history entry (a shared link then opens this view). query is '' or 'a=b&c=d'. Fails quietly.
+  replaceQuery: function (query) {
+    try {
+      var u = location.pathname + (query ? '?' + query : '') + location.hash;
+      if (u !== location.pathname + location.search + location.hash) history.replaceState(history.state, '', u);
+    } catch (e) { }
+  },
+  // Open the browser's print window (the page's print stylesheet makes the paper layout; Save as PDF is a destination there). False when the browser refuses.
+  print: function () { try { window.print(); return true; } catch (e) { return false; } },
   // Minutes to add to UTC for the browser's local time.
   tzOffsetMinutes: function () { return -new Date().getTimezoneOffset(); },
+  // The browser's time zone name (an IANA id such as Europe/London); null when it does not say. Offered as the default of a digest's time zone.
+  timeZone: function () { try { return Intl.DateTimeFormat().resolvedOptions().timeZone || null; } catch (e) { return null; } },
   focus: function (selector) { var e = document.querySelector(selector); if (e) e.focus(); },
   // The SQL console's editor: Tab inserts two spaces and Ctrl/Cmd+Enter asks the page to run the query. Tab must not trap the keyboard: Shift+Tab always moves on, and so does
   // Tab right after Esc. Typing goes through execCommand where the browser allows it (keeps undo); the fallback edits the value and fires an input event so Blazor sees it.
@@ -98,7 +110,9 @@ window.umbra = {
   // The browser's local storage for one flag (the tour was seen); blocked storage is simply "not seen".
   local: {
     get: function (key) { try { return localStorage.getItem(key); } catch (e) { return null; } },
-    set: function (key, value) { try { localStorage.setItem(key, value); } catch (e) { } }
+    set: function (key, value) { try { localStorage.setItem(key, value); } catch (e) { } },
+    // like set, but says whether the browser kept it (false: blocked, or full); the saved views need to know
+    setChecked: function (key, value) { try { localStorage.setItem(key, value); return localStorage.getItem(key) === value; } catch (e) { return false; } }
   },
   // The tab's session storage (gone when the tab closes); used for the list of recent queries only.
   session: {

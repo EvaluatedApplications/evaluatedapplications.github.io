@@ -55,6 +55,13 @@ h1, h2, h3 { line-height: 1.2; }
 .app-top nav a { color: var(--ink-soft); text-decoration: none; padding: 0.25rem 0.7rem; border-radius: 8px; min-height: 2rem; display: inline-flex; align-items: center; font-size: 0.9rem; }
 .app-top nav a:hover { color: var(--ink); background: var(--surface-2); }
 .app-top nav a.active { color: var(--ink); background: color-mix(in srgb, var(--accent) 16%, var(--surface)); }
+/* single sign-on in the nav (auth.mode oidc): the signed-in name and Sign out share the link metrics (2rem tall, 0.9rem), so they line up at 390, 1280 and 2560 px */
+.app-top nav .who { color: var(--ink-soft); font-size: 0.9rem; min-height: 2rem; padding: 0.25rem 0.5rem 0.25rem 0.9rem; display: inline-flex; align-items: center; max-width: min(18rem, 46vw); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.app-top nav form.signout { display: inline-flex; margin: 0; }
+.app-top nav .signout button { font: inherit; font-size: 0.9rem; color: var(--ink-soft); background: transparent; border: 0; border-radius: 8px; padding: 0.25rem 0.7rem; min-height: 2rem; cursor: pointer; }
+.app-top nav .signout button:hover { color: var(--ink); background: var(--surface-2); }
+/* the printed-page header and the print-only notes are drawn for paper only (css/print.css shows them) */
+.print-only { display: none; }
 .skip { position: absolute; left: -999px; top: 0; background: var(--accent); color: #fff; padding: 0.5rem 1rem; z-index: 10; }
 .skip:focus { left: 0; }
 .room { max-width: 1180px; margin: 0 auto; padding: 1.6rem 24px 3rem; }
@@ -135,6 +142,18 @@ input[type=checkbox] { width: 1.15rem; height: 1.15rem; accent-color: var(--acce
 .chip { background: transparent; color: var(--ink-soft); border: 1px solid var(--border-2); border-radius: 999px; padding: 0.35rem 0.8rem; font: inherit; font-size: 0.84rem; cursor: pointer; min-height: 2.2rem; }
 .chip.on { color: var(--ink); border-color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, var(--surface)); }
 .chip b { margin-left: 0.4rem; color: var(--ink-faint); }
+/* saved views menu */
+.views { position: relative; }
+.views-panel { position: absolute; z-index: 20; top: calc(100% + 0.35rem); right: 0; width: min(30rem, 92vw); max-height: 70vh; overflow: auto; padding: 0.8rem 1rem; background: var(--surface); border: 1px solid var(--border-2); border-radius: 12px; box-shadow: var(--shadow); text-align: left; }
+.views-panel h3 { margin: 0.6rem 0 0.35rem; font-size: 0.92rem; }
+.views-panel h3:first-child { margin-top: 0; }
+.views-panel .row { margin: 0.5rem 0 0; }
+.view-list { list-style: none; margin: 0.3rem 0 0.6rem; padding: 0; display: grid; gap: 0.4rem; }
+.view-row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem 0.5rem; padding: 0.35rem 0; border-top: 1px solid var(--border); }
+.view-row:first-child { border-top: 0; }
+.view-name { font-weight: 600; overflow-wrap: anywhere; }
+.view-actions { display: inline-flex; flex-wrap: wrap; gap: 0.3rem; margin-left: auto; }
+.view-default { cursor: default; min-height: 0; padding: 0.05rem 0.55rem; }
 .seg { display: inline-flex; flex-wrap: wrap; border: 1px solid var(--border-2); border-radius: 9px; overflow: hidden; }
 .seg button { background: transparent; color: var(--ink-soft); border: none; padding: 0.45rem 0.9rem; font: inherit; font-size: 0.86rem; font-weight: 600; cursor: pointer; min-height: 2.4rem; }
 .seg button.on { background: var(--accent); color: #fff; }
@@ -249,6 +268,7 @@ details.fold > summary { cursor: pointer; font-weight: 600; min-height: 2rem; di
   .dash-bar { position: static; }
   .status .detail { display: none; }
   .app-top .demo-banner { margin-left: 0; width: 100%; border-radius: 8px; }
+  .app-top nav .who { max-width: 11rem; padding-left: 0.5rem; }
   .demo-picker { margin: 0.8rem 0; padding: 0.9rem; }
   .tile { padding: 0.6rem 0.75rem; }
 }
@@ -363,7 +383,20 @@ pre.sql-plan { max-height: 20rem; color: var(--ink); }
 .sql-list button.link:hover { text-decoration: underline; }
 .sql-list button.link.mono { font-family: var(--mono); font-size: 0.78rem; }
 .sqlbox .run-in-console { margin-top: 0.1rem; }
+/* the cheat sheet: one fold per group, a title that loads its example, the general form in code under it */
+.cheat-jump { display: none; }
+.sql-cheat details.fold { margin: 0.4rem 0; padding: 0.2rem 0.6rem; }
+.sql-cheat details.fold > summary { font-size: 0.92rem; }
+.cheat-list, .cheat-limits { list-style: none; margin: 0.2rem 0 0.3rem; padding: 0; display: grid; gap: 0.6rem; }
+.cheat-limits { gap: 0.4rem; font-size: 0.84rem; color: var(--ink-soft); }
+.cheat-entry { min-width: 0; display: grid; gap: 0.1rem; }
+.cheat-title { font-weight: 600; font-size: 0.88rem; }
+button.link.cheat-title { text-align: left; color: var(--accent-ink); text-decoration: none; }
+button.link.cheat-title:hover { text-decoration: underline; }
+.cheat-syntax { display: block; font-family: var(--mono); font-size: 0.76rem; color: var(--ink-soft); white-space: pre-wrap; overflow-wrap: anywhere; }
+.cheat-note { margin: 0.1rem 0 0; font-size: 0.8rem; }
 @media (max-width: 1000px) {
+  .cheat-jump { display: inline-flex; }
   .sqlview { grid-template-columns: minmax(0, 1fr); }
   .sql-editor-panel .feed-readout { margin-left: 0; }
 }
@@ -386,3 +419,21 @@ pre.sql-plan { max-height: 20rem; color: var(--ink); }
   @keyframes tour-in { from { transform: translateY(6px); } to { transform: none; } }
 }
 @media (max-width: 700px) { .app-top .tour-help { margin-left: auto; } }
+
+/* Alerts: the nav badge, the rule list and the notification inbox */
+.count-badge { display: inline-block; min-width: 1.35rem; margin-left: 0.4rem; padding: 0 0.4rem; border-radius: 999px; background: var(--accent); color: var(--bg); font-size: 0.74rem; font-weight: 700; line-height: 1.35rem; text-align: center; font-variant-numeric: tabular-nums; }
+.alert-form { margin: 0.8rem 0; padding: 0.7rem 0.9rem; border: 1px solid var(--border-2); border-radius: 10px; background: var(--bg-2); }
+.alert-form h3 { margin: 0 0 0.4rem; justify-content: flex-start; }
+.alert-list, .note-list { list-style: none; margin: 0.6rem 0 0; padding: 0; }
+.alert-row { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 0.4rem 0.8rem; padding: 0.6rem 0; border-top: 1px solid var(--border); }
+.alert-row:first-child { border-top: 0; }
+.alert-main { min-width: 0; flex: 1 1 22rem; }
+.alert-main p { margin: 0.2rem 0 0; }
+.alert-actions { display: inline-flex; flex-wrap: wrap; gap: 0.35rem; }
+.note { padding: 0.6rem 0.8rem; border: 1px solid var(--border); border-radius: 10px; margin: 0.5rem 0; background: var(--surface); }
+.note.unread { border-left: 4px solid var(--accent); }
+.note-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.3rem 0.6rem; }
+.note-text { margin: 0.3rem 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.rls-marker { margin: 0 0 .8rem; }
+.rls-issue { color: var(--bad); }
+#rls-policies input[type=text] { width: 100%; min-width: 9rem; } #rls-policies input.wide { min-width: 22rem; }

@@ -1,0 +1,70 @@
+/* Umbrarium print stylesheet: Print / Save as PDF uses the browser's own print pipeline (window.print), nothing is rendered on a server.
+   Loaded with media="print", so none of it touches the screen. Paper is white: the tokens are re-pointed to a print-safe palette whatever the screen theme is.
+   What reaches paper: a header block (model, filters in words, as-of, who it is for), the tiles, the panels (one or two per row, never split across pages) and the
+   rows that are loaded. What does not: the nav, the filter bar, buttons, the settings strip, the tour, status bars and SQL boxes. The access/scope banner of a limited view
+   stays (any element marked data-print-keep prints). */
+@media print {
+  @page { size: A4; margin: 14mm 12mm 16mm; @bottom-center { content: "Page " counter(page) " of " counter(pages); font: 9pt system-ui, sans-serif; color: #475066; } }
+
+  /* print-safe tokens: dark text on white, bars and lines that survive a grey printer */
+  :root, :root[data-theme="dark"], :root[data-theme="light"] {
+    --bg: #ffffff; --bg-2: #ffffff; --surface: #ffffff; --surface-2: #eef0f6;
+    --border: #b9c0d0; --border-2: #8f98ad;
+    --ink: #000000; --ink-soft: #2b3245; --ink-faint: #444c60;
+    --ok: #1f6a24; --warn: #7a5200; --bad: #a82a1d;
+    --accent: #3b2fb0; --accent-ink: #3b2fb0;
+    --bar: #3b2fb0; --bar-soft: #8f88d8; --grid: #c4cbdb;
+    --shadow: none;
+  }
+  html, body { background: #fff !important; color: #000 !important; font-size: 10.5pt; }
+  * { -webkit-print-color-adjust: exact; print-color-adjust: exact; box-shadow: none !important; text-shadow: none !important; }
+  #app, .app { min-height: 0; display: block; }
+
+  /* chrome that has no place on paper */
+  .app-top, .app-foot, .skip, .dash-side, .side-toggle, .dash-bar, .model-line, .filterbar, .tour-backdrop, .tour-spot, .tour-pop, .tour-help,
+  .btn, .seg, .views, .chip, .count-badge, .demo-banner, .sqlbox, .sql-side, .sql-copy, .tool-start, .boot, .route, .no-print, select, label.check, details.sqlbox,
+  .progress-box, .row { display: none !important; }
+  .print-only { display: block !important; }
+  [data-print-keep] { display: block !important; }
+  .room.full, .room { max-width: none; margin: 0; padding: 0; }
+  .dash, .dash.has-side, .sqlview, .sql-main { display: block; }
+
+  /* the header block on the first page */
+  .print-head { margin: 0 0 6mm; padding: 0 0 3mm; border-bottom: 1.5pt solid #000; break-after: avoid; }
+  .print-head h1 { font-size: 20pt; margin: 0 0 2mm; color: #000; }
+  .print-head p { margin: 0.6mm 0; font-size: 10pt; color: #000; }
+  .print-head .print-kind { font-size: 8.5pt; letter-spacing: 0.08em; text-transform: uppercase; color: #2b3245; }
+  .print-head .print-sim { margin-top: 2mm; padding: 1mm 2mm; border: 1pt solid #000; font-weight: 700; }
+  pre.print-sql { margin: 0 0 4mm; padding: 2mm 3mm; border: 1pt solid #8f98ad; background: #fff; color: #000; font: 9pt/1.4 ui-monospace, Consolas, monospace; white-space: pre-wrap; overflow-wrap: anywhere; break-inside: avoid; }
+
+  /* panels: two to a row on A4, a panel is never cut by a page break; the wide ones take the full row */
+  .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 5mm; margin: 0 0 5mm; align-items: start; }
+  .grid .wide { grid-column: 1 / -1; }
+  .panel, .tile, .tiles, .notice, .summary-banner, .bar, .col, .cols-wrap, .bars, [data-print-keep], .sql-result .sql-meta { break-inside: avoid; page-break-inside: avoid; }
+  .panel { border: 1pt solid #8f98ad; border-radius: 3mm; padding: 3mm 4mm; margin: 0 0 5mm; background: #fff; }
+  .grid .panel { margin: 0; }
+  .panel + .panel { margin-top: 5mm; }
+  .tiles { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 3mm; margin: 0 0 5mm; }
+  .tile { border: 1pt solid #8f98ad; border-left: 2.5pt solid var(--accent); background: #fff; }
+  h1, h2, h3 { break-after: avoid; page-break-after: avoid; color: #000; }
+  .hint, .bar .val, .bar .lbl { color: #2b3245; }
+  .bar { min-height: 0; }
+  .bar .track { background: #eef0f6; border-color: #8f98ad; }
+  .bar.on { outline: 0; background: transparent; }
+  .bar.on .fill { box-shadow: none; }
+  .cols { height: 40mm; }
+
+  /* tables: a table prints the rows that are loaded (the grid caps itself at 1,000, the rows behind a view at one page), and a SQL result stops at 500 whatever its size */
+  .table-scroll, .table-scroll.tall, .sql-scroll { overflow: visible !important; max-height: none !important; border: 0; margin-top: 2mm; }
+  table.data { width: 100%; font-size: 8.5pt; }
+  table.data th, table.data td { padding: 1mm 2mm; white-space: normal; overflow-wrap: anywhere; max-width: none; }
+  table.data thead { display: table-header-group; }
+  table.data thead th { position: static; background: #eef0f6; color: #000; }
+  table.data tr { break-inside: avoid; page-break-inside: avoid; }
+  table.data td { color: #000; }
+  table.sql-grid tbody tr:nth-child(n+501) { display: none; }
+  table.sql-grid tbody tr:nth-child(even) td { background: #f5f6fa; }
+  th button.link { text-decoration: none; color: #000; }
+  pre.code, pre.sql-plan { max-height: none; overflow: visible; white-space: pre-wrap; color: #000; background: #fff; }
+  a { color: #000; text-decoration: none; }
+}
