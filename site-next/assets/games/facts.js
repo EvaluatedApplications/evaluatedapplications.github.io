@@ -437,20 +437,20 @@ let dim; do { dim = rng.choice(DIMS); } while (dim === st.lastDim);
 const kind = st.lastKind !== 'undetermined' && rng.random() < 0.2 ? 'undetermined' : 'determined';
 st.lastDim = dim; st.lastKind = kind;
 st.item = makeItem(dim, st.n, rng, kind);
-showFact(0);
+showFacts();
 }
-function showFact(i) {
-const it = st.item, last = i === it.n - 1;
-const next = el('button', { type: 'button', class: 'btn btn-primary fa-next', 'aria-describedby': 'fa-fact-text' }, last ? 'Hide the facts and ask' : 'Next fact');
-next.addEventListener('click', () => (last ? showQuestion() : showFact(i + 1)));
+function showFacts() {
+const it = st.item;
+const hide = el('button', { type: 'button', class: 'btn btn-primary fa-next', 'aria-describedby': 'fa-facts-list' }, 'Hide the facts and ask');
+hide.addEventListener('click', showQuestion);
 show(
 el('p', { class: 'fa-meta' }, `Round ${st.round}. Holding ${it.n} facts.`),
-el('h2', { class: 'fa-h' }, `Fact ${i + 1} of ${it.n}`),
-el('p', { class: 'fa-fact', id: 'fa-fact-text' }, it.facts[i]),
-el('div', { class: 'actions' }, next),
-el('p', { class: 'fa-hint' }, 'Take your time. There is no timer. Once you move on, a fact is gone.'),
+el('h2', { class: 'fa-h' }, `All ${it.n} facts`),
+el('ol', { class: 'fa-list', id: 'fa-facts-list' }, it.facts.map((f) => el('li', {}, f))),
+el('div', { class: 'actions' }, hide),
+el('p', { class: 'fa-hint' }, 'Take your time. There is no timer. Once you hide the facts they do not come back in this round.'),
 );
-next.focus();
+hide.focus();
 }
 function showQuestion() {
 const it = st.item;
@@ -518,7 +518,7 @@ show(
 el('p', { class: 'fa-meta' }, 'Your run'),
 el('h2', { class: 'fa-h' }, 'Rank: ', a.tier.name),
 el('p', { class: 'fa-fact' }, a.best ? `Largest number of facts answered correctly: ${a.best}.` : 'No round was answered correctly.'),
-el('p', { class: 'fa-small' }, 'The rank is set by the facts you held, not by a comparison with other people. We hold no data on anyone else, and nothing you do here leaves your device. This is a game, not a test.'),
+el('p', { class: 'fa-small' }, 'The rank is set by the facts you held, not by a comparison with other people. We hold no data on anyone else, and nothing you do here leaves your device.'),
 el('h3', {}, 'Accuracy for each size'), table,
 el('h3', {}, 'Confidence beside accuracy'), chart(a.per), legend,
 el('h3', {}, 'Undetermined rounds'), el('p', {}, over),
