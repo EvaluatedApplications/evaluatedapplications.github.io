@@ -137,7 +137,6 @@ night: ['link', 'The {x} only goes out into the dark when the {y} does.', 0, 'L'
 },
 };
 const UNDETERMINED = 'undetermined';
-const DOWN = -99;
 const DIMS = WORLD.order;
 const tagSet = (s) => new Set(s ? s.split(' ') : []);
 const ENT = {};
@@ -205,11 +204,13 @@ if (state.has(c)) return state.get(c);
 return up(t);
 };
 const eff = {};
+const idle = new Set();
 for (const c of cands) {
 if (f.has(c) && f.get(c)[0] !== 'link') eff[c] = base(dim, c) + mods[f.get(c)[0]].delta;
-else eff[c] = up(c) ? base(dim, c) : DOWN;
+else { eff[c] = base(dim, c); if (!up(c)) idle.add(c); }
 }
-outcomes.add(topOf(eff));
+const top = topOf(eff);
+outcomes.add(top !== null && !idle.has(top) ? top : null);
 }
 return outcomes;
 }
@@ -260,10 +261,19 @@ return [true, 'ok'];
 if (kind === 'undetermined') {
 if (item.answer !== UNDETERMINED) return [false, 'answer must be undetermined'];
 if (!spec.some((s) => s[1] === 'link')) return [false, 'no circular fact'];
-const out = answerSet(dim, cands, spec);
-if (out.size === 1 && !out.has(null)) return [false, 'a single answer follows'];
+const f = new Map(spec.map(([e, m, t]) => [e, [m, t]]));
+const ring = cycles(f);
+if (!ring.size) return [false, 'no cycle'];
+const bases = new Set([...ring.keys()].map((c) => base(dim, c)));
+if (bases.size !== 1) return [false, 'cycle members differ in tier'];
+const shared = [...bases][0];
+for (const [e, m] of spec) {
+if (!ring.has(e) && base(dim, e) + MODBY[dim][m].delta >= shared) return [false, 'a knocked-out candidate is not below the cycle'];
+}
+if ([...answerSet(dim, cands, spec)].some((o) => o !== null)) return [false, 'a single answer follows'];
 for (let i = 0; i < spec.length; i++) {
-if (answerOf(dim, cands, spec.slice(0, i).concat(spec.slice(i + 1))) === null) return [false, `fact ${i} does not break the loop or decide`];
+const rest = spec.slice(0, i).concat(spec.slice(i + 1));
+if (cycles(new Map(rest.map(([e, m, t]) => [e, [m, t]]))).size && answerOf(dim, cands, rest) === null) return [false, `fact ${i} does not break the loop or decide`];
 }
 return [true, 'ok'];
 }
@@ -305,14 +315,15 @@ function attemptUndetermined(dim, n, rng) {
 const names = namesFor(dim);
 const k = Math.min(n, rng.choice([2, 3]));
 const pool = names.filter((x) => applies(LINK[dim], ENT[x]));
-const ring = rng.sample(pool, k);
-const bases = ring.map((x) => base(dim, x));
-if (new Set(bases).size < k) return null;
-const lo = Math.min(...bases), hi = Math.max(...bases);
+const tiers = [...new Set(pool.map((x) => base(dim, x)))]
+.filter((t) => pool.filter((y) => base(dim, y) === t).length >= k).sort((a, b) => a - b);
+if (!tiers.length) return null;
+const lo = rng.choice(tiers);
+const ring = rng.sample(pool.filter((x) => base(dim, x) === lo), k);
 const kos = MODS[dim].filter((m) => m.delta < 0);
 const options = {};
 for (const o of names) {
-if (ring.includes(o) || base(dim, o) <= hi) continue;
+if (ring.includes(o) || base(dim, o) <= lo) continue;
 const ok = kos.filter((m) => applies(m, ENT[o]) && base(dim, o) + m.delta < lo);
 if (ok.length) options[o] = ok;
 }

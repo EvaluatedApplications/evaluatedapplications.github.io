@@ -64,6 +64,42 @@ for (let n = 2; n <= 12; n++) {
   console.log(`n=${String(n).padStart(2)}: 200 items ok so far (${Date.now() - t0} ms, informational)`);
 }
 
+// undetermined items: loop members share one base tier, every other candidate sits strictly below it, no single winner
+{
+  let made = 0;
+  for (let k = 0; k < 500; k++) {
+    const dim = DIMS[k % 4];
+    const n = 2 + (k % 11);
+    const item = G.makeItem(dim, n, rng, 'undetermined');
+    made++;
+    const ring = item._spec.filter((s) => s[1] === 'link').map((s) => s[0]);
+    if (ring.length < 2 || ring.length > 3) fail(`loop size ${ring.length}`);
+    const tiers = new Set(ring.map((c) => G.tierOf(dim, c)));
+    if (tiers.size !== 1) fail(`${dim} loop members differ in tier: ${ring.join(',')}`);
+    const shared = [...tiers][0];
+    for (const [e, m] of item._spec) {
+      if (m === 'link') continue;
+      if (G.tierOf(dim, e) + G.deltaOf(dim, m) >= shared) fail(`${dim} non-member ${e} not strictly below the loop`);
+    }
+    for (const o of G.answerSet(dim, item.candidates, item._spec)) if (o !== null) fail(`${dim} undetermined item can end with winner ${o}`);
+  }
+  if (made !== 500) fail('undetermined count');
+
+  // regression: a car is faster than a goat, so a car/goat loop with the rest knocked out decides nothing the item may call undetermined
+  const bad = {
+    kind: 'undetermined', dimension: 'speed', n: 3, answer: 'undetermined',
+    candidates: ['goat', 'car', 'train'],
+    _spec: [['goat', 'link', 'car'], ['car', 'link', 'goat'], ['train', 'seized_engine', null]],
+  };
+  if (G.checkItem(bad)[0]) fail('item checker accepted the car/goat loop with different tiers');
+  const bad2 = { ...bad, candidates: ['goat', 'car', 'bicycle'], _spec: [['goat', 'link', 'car'], ['car', 'link', 'goat'], ['bicycle', 'flat_tyre', null]] };
+  if (G.checkItem(bad2)[0]) fail('item checker accepted the car/goat loop with a bicycle below');
+  // same-tier loop with a knocked-out train is accepted, and a loop member that tops the rest never wins by default
+  const good = { ...bad, candidates: ['goat', 'sheep', 'train'], _spec: [['goat', 'link', 'sheep'], ['sheep', 'link', 'goat'], ['train', 'seized_engine', null]] };
+  if (!G.checkItem(good)[0]) fail('item checker rejected a same-tier loop: ' + G.checkItem(good)[1]);
+  for (const o of G.answerSet('speed', good.candidates, good._spec)) if (o !== null) fail('idle loop produced a winner');
+}
+
 // ranks and reading
 {
   const mk = (n, correct, conf, kind = 'determined', given = 'x') => ({ n, kind, correct, conf, given });
