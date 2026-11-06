@@ -12,6 +12,16 @@ export default function game(ctx, g) {
   const main = html`
 <div class="sizzle-page">
 ${pageHead({ crumbs, eyebrow: d.eyebrow, h1: d.headline, wide: true, lede: d.sub, extra })}
+${d.app ? html`<section class="sec" id="play" aria-labelledby="h-play-app"><div class="wrap">
+  <div class="facts-app" data-facts>
+    <p class="fa-meta">${d.app.kicker}</p>
+    <h2 class="fa-h" id="h-play-app">${d.app.title}</h2>
+    <p class="fa-fact">${d.app.text}</p>
+    <div class="actions"><button type="button" class="btn btn-primary" data-facts-start>${d.app.start}</button></div>
+    <p class="fa-hint">${d.app.hint}</p>
+    <noscript><p class="fa-hint">${d.app.noscript}</p></noscript>
+  </div>
+</div></section>` : ''}
 ${d.sections.map((s) => html`<section class="sec" id="${s.id}" aria-labelledby="h-${s.id}"><div class="wrap">
   ${secHead({ title: s.title, id: 'h-' + s.id })}
   ${s.paragraphs ? html`<div class="prose-block">${s.paragraphs.map((t) => html`<p>${inline(t)}</p>`)}</div>` : ''}
@@ -27,12 +37,13 @@ ${d.sections.map((s) => html`<section class="sec" id="${s.id}" aria-labelledby="
   const ld = {
     '@context': 'https://schema.org', '@type': 'VideoGame', name: g.name, url: ctx.site.url + g.href,
     description: d.description, applicationCategory: 'Game', operatingSystem: 'Any modern web browser',
-    gamePlatform: 'Web browser', playMode: ['SinglePlayer', 'MultiPlayer'],
+    gamePlatform: 'Web browser', playMode: g.modes.includes('Two players') ? ['SinglePlayer', 'MultiPlayer'] : ['SinglePlayer'],
     publisher: { '@id': ctx.site.url + '/#org' },
   };
   return {
     url: g.slug, type: 'game', section: 'games', cat: g.cat,
     title: d.title, description: d.description,
     crumbs, jsonld: [crumbsLd(ctx, crumbs), ld], main,
+    scripts: d.app ? [`/assets/games/${d.app.script}?v=${ctx.assets.games}`] : [],
   };
 }

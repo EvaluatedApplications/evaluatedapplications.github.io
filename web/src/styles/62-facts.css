@@ -1,0 +1,42 @@
+/* Facts at Once: the in-page game on /games/facts/. One column, 44px tap targets, no motion beyond a colour change. */
+.facts-app{max-width:720px;margin:0 auto;padding:var(--sp-4);background:var(--surface);border:1px solid var(--border-2);border-radius:var(--radius)}
+.facts-app .fa-meta{margin:0;font-family:var(--mono);font-size:var(--fs-xs);color:var(--ink-faint)}
+.facts-app .fa-h{margin:var(--sp-1) 0 var(--sp-2);font-size:var(--fs-xl);line-height:1.25;color:var(--ink)}
+.facts-app .fa-h:focus{outline:none}
+.facts-app h3{margin:var(--sp-4) 0 var(--sp-1);font-size:var(--fs-lg);color:var(--ink)}
+.facts-app .fa-fact{margin:0 0 var(--sp-3);font-size:1.35rem;line-height:1.45;color:var(--ink)}
+.facts-app .fa-hint,.facts-app .fa-small{margin:var(--sp-2) 0 0;font-size:var(--fs-sm);color:var(--ink-faint)}
+.facts-app .actions{margin:var(--sp-2) 0 0}
+.facts-app .btn{min-height:44px;justify-content:center}
+.fa-choices{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:var(--sp-1);margin:var(--sp-2) 0}
+.fa-choice{min-height:44px;padding:var(--sp-1) var(--sp-2);font:inherit;font-weight:600;color:var(--ink);background:var(--bg-2);border:1px solid var(--border-2);border-radius:10px;cursor:pointer;transition:border-color .15s,background-color .15s}
+.fa-choice:hover{border-color:var(--accent)}
+.fa-choice[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:#fff}
+.fa-choice.fa-und{border-style:dashed}
+.fa-choice:focus-visible,.facts-app .btn:focus-visible,.fa-conf input:focus-visible{outline:2px solid var(--accent-ink);outline-offset:2px}
+.fa-conf{margin:var(--sp-3) 0 var(--sp-1)}
+.fa-conf label{display:block;margin-bottom:var(--sp-1);color:var(--ink-soft)}
+.fa-conf output{font-family:var(--mono);color:var(--ink);font-weight:600}
+.fa-conf input[type=range]{width:100%;min-height:44px;accent-color:var(--accent)}
+.fa-scale{display:flex;justify-content:space-between;font-size:var(--fs-xs);color:var(--ink-faint)}
+.facts-app .btn[disabled]{opacity:.45;cursor:not-allowed}
+.fa-chart{display:block;width:100%;height:auto;margin:var(--sp-1) 0}
+.fa-chart .fa-grid{stroke:var(--border-2);stroke-width:1}
+.fa-chart .fa-tick{fill:var(--ink-faint);font-size:11px;font-family:var(--mono)}
+.fa-chart .fa-val{fill:var(--ink-soft);font-size:10px;font-family:var(--mono)}
+.fa-bar-acc,.fa-key-acc{fill:var(--accent);background:var(--accent)}
+.fa-bar-conf,.fa-key-conf{fill:var(--spectrum-3);background:var(--spectrum-3)}
+.fa-legend{display:flex;flex-wrap:wrap;align-items:center;gap:var(--sp-1);margin:0;font-size:var(--fs-sm);color:var(--ink-soft)}
+.fa-key{display:inline-block;width:14px;height:14px;border-radius:3px}
+.fa-ranks{margin:0;padding-left:var(--sp-3);color:var(--ink-faint)}
+.fa-ranks li{padding:2px 0}
+.fa-ranks li[aria-current="true"]{color:var(--ink)}
+.fa-ranks li[aria-current="true"] strong{color:var(--accent-ink)}
+@media (max-width:560px){
+  .facts-app{padding:var(--sp-3)}
+  .facts-app .actions .btn{width:100%}
+  .facts-app .fa-fact{font-size:1.2rem}
+}
+@media (prefers-reduced-motion:reduce){
+  .fa-choice{transition:none}
+}

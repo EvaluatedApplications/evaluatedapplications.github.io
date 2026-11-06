@@ -95,6 +95,10 @@ async function main() {
   sizes['assets/site.js'] = write('assets/site.js', minJs(siteJs));
   const diaDir = path.join(WEB, 'src', 'assets', 'diagrams');
   for (const f of fs.readdirSync(diaDir)) sizes['assets/diagrams/' + f] = write('assets/diagrams/' + f, minJs(fs.readFileSync(path.join(diaDir, f), 'utf8')));
+  const gamesDir = path.join(WEB, 'src', 'assets', 'games');
+  const gameJs = fs.existsSync(gamesDir) ? fs.readdirSync(gamesDir).filter((f) => f.endsWith('.js')).sort() : [];
+  for (const f of gameJs) sizes['assets/games/' + f] = write('assets/games/' + f, minJs(fs.readFileSync(path.join(gamesDir, f), 'utf8')));
+  ctx.assets.games = sha(gameJs.map((f) => fs.readFileSync(path.join(gamesDir, f), 'utf8')).join('\n'));
   write('.nojekyll', '');
 
   // ---- pages ----

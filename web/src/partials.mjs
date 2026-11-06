@@ -30,7 +30,7 @@ export function gameCard(g, byId) {
   <div class="actions"><a class="btn btn-primary" href="${g.play}">Play ${g.name}</a><a class="btn btn-ghost" href="${g.href}">How it plays</a></div>
   <p>${g.teaches}</p>
   <div class="meta"><span>Modes</span>${g.modes.map((m) => html`<span class="pill">${m}</span>`)}</div>
-  <div class="meta"><span>Powered by</span>${g.poweredBy.map((id) => html`<a href="${byId[id].href}">${byId[id].name}</a>`)}</div>
+  ${g.poweredBy.length ? html`<div class="meta"><span>Powered by</span>${g.poweredBy.map((id) => html`<a href="${byId[id].href}">${byId[id].name}</a>`)}</div>` : ''}
   ${g.phone ? html`<p class="game-phone">${g.phone}</p>` : ''}
 </li>`;
 }
