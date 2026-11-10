@@ -52,7 +52,7 @@ for (int y = 0; y < H; y++)
         }
 
 var stateDir = Path.Combine(Path.GetTempPath(), "tracer-field-" + Guid.NewGuid().ToString("N"));
-var world = new PathfindingWorld(licenseKey: null, tunerStatePath: stateDir);
+var world = new PathfindingWorld(tunerStatePath: stateDir);
 var baker = world.CreateNavMeshBakerService();
 var mesh = await baker.BakeAsync(vertices, triangles);
 
