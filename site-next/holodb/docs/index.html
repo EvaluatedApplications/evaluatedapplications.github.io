@@ -4,13 +4,13 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>HoloDb docs: tables, SQL, transactions | Evaluated Applications</title>
-<meta name="description" content="How to use HoloDb: tables, SQL, learned structures, NULL, similarity search, transactions, AS OF, atomic change batches and paged tables.">
+<meta name="description" content="Install HoloDb, choose the Standard or Extended SQL dialect, and use DECIMAL, NULL, NEAREST, transactions, AS OF, change batches and paged tables.">
 <link rel="canonical" href="https://evaluatedapplications.github.io/holodb/docs/">
 
 <meta property="og:type" content="article">
 <meta property="og:site_name" content="Evaluated Applications">
 <meta property="og:title" content="HoloDb docs: tables, SQL, transactions | Evaluated Applications">
-<meta property="og:description" content="How to use HoloDb: tables, SQL, learned structures, NULL, similarity search, transactions, AS OF, atomic change batches and paged tables.">
+<meta property="og:description" content="Install HoloDb, choose the Standard or Extended SQL dialect, and use DECIMAL, NULL, NEAREST, transactions, AS OF, change batches and paged tables.">
 <meta property="og:url" content="https://evaluatedapplications.github.io/holodb/docs/">
 <meta name="twitter:card" content="summary">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%23f0796a'/%3E%3Cstop offset='.5' stop-color='%237bd86a'/%3E%3Cstop offset='1' stop-color='%23c07dff'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='32' height='32' rx='7' fill='%23050608'/%3E%3Cpath d='M16 5L27 26H5Z' fill='none' stroke='url(%23g)' stroke-width='2' stroke-linejoin='round'/%3E%3C/svg%3E">
@@ -36,18 +36,18 @@
 <nav class="crumbs" aria-label="Breadcrumb"><ol><li><a href="/">Home</a></li><li><a href="/products/">Products</a></li><li><a href="/holodb/">HoloDb</a></li><li aria-current="page">Docs</li></ol></nav>
 <p class="eyebrow">HoloDb docs</p>
 <h1 class="wide">HoloDb docs: tables, SQL, transactions</h1>
-<p class="lede">The practical guide: put data in, get answers out. The two programs on this page are the complete code, with the output they print.</p>
+<p class="lede">The practical guide: put data in, get answers out. The two programs on this page are the complete code, with the output they print. The text follows the package&#39;s reference, EvaluatedApplications.HoloDb.</p>
 
 </div></header>
 <nav class="subnav" aria-label="HoloDb sections"><div class="wrap"><ul><li><a href="/holodb/">Overview</a></li><li><a href="/holodb/#quick-start">Quick start</a></li><li><a href="/holodb/docs/" aria-current="page">Docs</a></li><li><a href="/holodb/client/">Client</a></li><li><a href="/holodb/evidence/">Evidence</a></li></ul></div></nav>
 
 
 <section class="sec"><div class="wrap">
-  <nav class="toc" aria-labelledby="toc-h"><h2 id="toc-h">On this page</h2><ul><li><a href="#install">Install and first query</a></li><li><a href="#sql">The SQL dialect</a></li><li><a href="#learns">Structures that build themselves</a></li><li><a href="#null">NULL</a></li><li><a href="#similarity">Similarity search</a></li><li><a href="#transactions">Transactions and durability</a></li><li><a href="#asof">AS OF and Seal</a></li><li><a href="#changes">Atomic change batches and upsert</a></li><li><a href="#paged">Tables larger than memory</a></li><li><a href="#plane">The aggregate plane</a></li><li><a href="#meter">Metering and integration</a></li><li><a href="#network">Over the network</a></li></ul></nav>
+  <nav class="toc" aria-labelledby="toc-h"><h2 id="toc-h">On this page</h2><ul><li><a href="#install">Install and first query</a></li><li><a href="#dialect">SQL dialect: Standard and Extended</a></li><li><a href="#sql">Tables and statements</a></li><li><a href="#decimal">Exact decimals</a></li><li><a href="#learns">Structures that build themselves</a></li><li><a href="#null">NULL</a></li><li><a href="#similarity">Similarity search</a></li><li><a href="#transactions">Transactions and durability</a></li><li><a href="#asof">AS OF and Seal</a></li><li><a href="#changes">Loading data and change batches</a></li><li><a href="#paged">Tables larger than memory</a></li><li><a href="#format">Storage format and upgrading</a></li><li><a href="#plane">Summary tables and the aggregate plane</a></li><li><a href="#meter">Statement limits, metering and integration</a></li><li><a href="#network">Over the network</a></li></ul></nav>
 </div></section>
 <section class="sec doc-sec" aria-labelledby="install"><div class="wrap">
   <div class="sec-head"><span class="sec-dot cat-holodb" aria-hidden="true"></span><h2 id="install">Install and first query</h2></div>
-  <div class="prose-block"><p>Add the package from NuGet with dotnet add package EvaluatedApplications.HoloDb. You create tables and write SQL. Tables are typed columns, in memory or on disk.</p><p>A WalPath in the options makes the database durable. For a database whose tables can be larger than memory, set both WalPath and Paged = true. Paged = true without a WalPath throws.</p></div>
+  <div class="prose-block"><p>Add the package from NuGet with dotnet add package EvaluatedApplications.HoloDb. You create tables and write SQL. Tables are typed columns, in memory or on disk.</p><p>With no WalPath the database is in memory. A WalPath in the options makes it durable. For a database whose tables can be larger than memory, set both WalPath and Paged = true. Paged = true without a WalPath throws.</p></div>
   
   
   
@@ -65,10 +65,38 @@ foreach (var row in result.Rows) Console.WriteLine(row[&quot;name&quot;]);
 // Ada</code></pre></div><div class="code out"><div class="code-bar"><span>Output</span><button class="copy" type="button" aria-label="Copy Output">copy</button></div><pre><code class="language-text">Ada</code></pre></div>
   
   
+</div></section><section class="sec doc-sec" aria-labelledby="dialect"><div class="wrap">
+  <div class="sec-head"><span class="sec-dot cat-holodb" aria-hidden="true"></span><h2 id="dialect">SQL dialect: Standard and Extended</h2></div>
+  <div class="prose-block"><p>HoloDb accepts the SQL standard and its own statements by default. This is SqlDialect.Standard, and every example on this page runs on it as written.</p><p>Vendor spellings are the Extended dialect, opt-in: new HoloDbOptions { Dialect = SqlDialect.Extended } for a HoloDbService, or Database.Dialect on the engine. The HoloDb.Server program takes --dialect extended; its default is standard. A client has no dialect setting of its own: the server decides which SQL it accepts.</p></div>
+  <dl class="term-list"><dt>Extended adds only</dt><dd>LIMIT, ILIKE, CREATE INDEX and DROP INDEX (with USING KEYED), SHOW (other than SHOW SUMMARIES and SHOW SEQUENCE), DESCRIBE, EXPLAIN, IF [NOT] EXISTS, INSERT ... ON CONFLICT (pk) DO UPDATE, BEGIN, the % operator, and the functions CONCAT, REPLACE, LENGTH, SUBSTR, LEFT, RIGHT, ROUND, TRUNC, SIGN, NOW, DATE_TRUNC, REGEXP_REPLACE, STRING_AGG, MEDIAN, BOOL_AND, BOOL_OR, STDDEV and VARIANCE.</dd><dt>Both dialects</dt><dd>HoloDb&#39;s own statements: NEAREST (with its own LIMIT k), AS OF, SET summaries, SET indexes, SHOW SUMMARIES, CREATE SUMMARY TABLE, and APPLY SUMMARY.</dd><dt>Refused by name</dt><dd>A statement that uses an extension under Standard is refused with SQLSTATE 0A000, code extension-disabled, and a message that says how to enable Extended. A name that is in neither dialect, for example STRPOS, IIF, TRY_CAST, ARG_MAX, DATE_DIFF, STRFTIME or REGEXP_MATCHES, is an unknown function.</dd><dt>Checked text</dt><dd>The check runs on the text of each statement sent to the public Execute calls. Statements the engine writes for itself and the replay of the log are not checked, so a log written by an Extended database opens under Standard.</dd></dl>
+  <div class="tbl-wrap"><table class="tbl"><caption>Standard spellings for the Extended names</caption>
+<thead><tr><th scope="col">Extended</th><th scope="col">Standard</th></tr></thead>
+<tbody><tr><th scope="row">LIMIT n</th><td>FETCH FIRST n ROWS ONLY</td></tr><tr><th scope="row">BEGIN</th><td>START TRANSACTION</td></tr><tr><th scope="row">LENGTH(x)</th><td>CHAR_LENGTH(x) or OCTET_LENGTH(x)</td></tr><tr><th scope="row">SUBSTR(x, n, m)</th><td>SUBSTRING(x FROM n FOR m)</td></tr><tr><th scope="row">CONCAT(a, b), a || b</th><td>a || b</td></tr><tr><th scope="row">LEFT(x, n), RIGHT(x, n)</th><td>SUBSTRING(x FROM 1 FOR n), SUBSTRING(x FROM n)</td></tr><tr><th scope="row">TRUNC(x)</th><td>FLOOR(x) or CEIL(x)</td></tr><tr><th scope="row">SIGN(x)</th><td>a CASE expression</td></tr><tr><th scope="row">NOW()</th><td>CURRENT_TIMESTAMP() (the parentheses are required)</td></tr><tr><th scope="row">a % b</th><td>MOD(a, b)</td></tr><tr><th scope="row">ILIKE</th><td>LOWER(x) LIKE LOWER(pattern)</td></tr><tr><th scope="row">STRING_AGG(x, s)</th><td>LISTAGG(x, s) (the separator is required)</td></tr><tr><th scope="row">MEDIAN(x)</th><td>PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY x)</td></tr><tr><th scope="row">BOOL_AND(x)</th><td>EVERY(x)</td></tr><tr><th scope="row">STDDEV(x)</th><td>STDDEV_SAMP(x)</td></tr><tr><th scope="row">VARIANCE(x)</th><td>VAR_SAMP(x)</td></tr><tr><th scope="row">ROUND, REPLACE, DATE_TRUNC, REGEXP_REPLACE</th><td>no standard spelling</td></tr><tr><th scope="row">CREATE INDEX, DROP INDEX, EXPLAIN, DESCRIBE, SHOW</th><td>none. The engine builds its own structures. Schema: information_schema.tables and information_schema.columns</td></tr><tr><th scope="row">INSERT ... ON CONFLICT (pk) DO UPDATE</th><td>none in Standard. ApplyChanges is the host upsert</td></tr><tr><th scope="row">IF [NOT] EXISTS</th><td>none</td></tr></tbody></table></div>
+  
+  
+  
+  
+  
+  
+  
 </div></section><section class="sec doc-sec" aria-labelledby="sql"><div class="wrap">
-  <div class="sec-head"><span class="sec-dot cat-holodb" aria-hidden="true"></span><h2 id="sql">The SQL dialect</h2></div>
-  <div class="prose-block"><p>The answer to every SQL statement is exact. Types are INT, TEXT and REAL, with narrow integer, date, timestamp and fixed-width text types on analytic tables. A table has one primary key, INT or TEXT.</p></div>
-  <dl class="term-list"><dt>Statements</dt><dd>CREATE TABLE [IF NOT EXISTS], ALTER TABLE ... ADD COLUMN, CREATE INDEX, DROP INDEX, SHOW INDEXES, SHOW SUMMARIES, SET summaries, SET indexes, EXPLAIN, INSERT (with ON CONFLICT ... DO UPDATE), UPDATE, DELETE, SELECT, and BEGIN, COMMIT and ROLLBACK.</dd><dt>SELECT</dt><dd>DISTINCT, aggregates, COUNT(DISTINCT), INNER JOIN, WHERE with AND, OR, NOT, LIKE, IN, BETWEEN, IS NULL and IN (SELECT ...), GROUP BY, HAVING, ORDER BY, LIMIT and NEAREST.</dd><dt>Joins</dt><dd>INNER JOIN only. A paged table takes one join per statement; in-memory tables take several. A join on a paged table with NULL columns is refused by name.</dd><dt>Exact sums</dt><dd>INT sums are 128-bit running totals and throw only past 64 bits. Empty selections give NULL for SUM, AVG, MIN and MAX, and 0 for COUNT.</dd><dt>Analytic SQL</dt><dd>Narrow column types, dictionary-coded text, CASE, CAST, EXTRACT, DATE_TRUNC, REGEXP_REPLACE, positional GROUP BY and ORDER BY, and COUNT(DISTINCT) on large cardinalities.</dd><dt>Not offered</dt><dd>UNION, window functions, subqueries other than IN (SELECT ...), table aliases, DROP COLUMN and column rename. UPDATE ... SET takes a literal on its right side.</dd><dt>Row order</dt><dd>Without ORDER BY, the order of rows is unspecified and can change after a DELETE or a write that moves a row.</dd></dl>
+  <div class="sec-head"><span class="sec-dot cat-holodb" aria-hidden="true"></span><h2 id="sql">Tables and statements</h2></div>
+  <div class="prose-block"><p>The answer to every SQL statement is exact. A table has one PRIMARY KEY, of type INT or TEXT. Type names are INT (also INTEGER), TEXT (also VARCHAR and STRING), REAL (also FLOAT, DOUBLE and DOUBLE PRECISION) and DECIMAL(p, s) or NUMERIC(p, s). A bare DECIMAL is refused. There is no BOOLEAN; use INT 0 or 1. Column DEFAULT in CREATE TABLE, UNIQUE, CHECK, REFERENCES and generated keys are refused by name. A composite key is refused.</p><p>A column holds SQL NULL only when it is declared NULL. A primary key is never NULL. An INT column takes a whole number in the 64-bit range; 2.5, a number past 64 bits or a text that is not a number throws. A REAL column takes any finite number. Integer arithmetic in a SELECT that would pass the 64-bit range throws for the rows the query keeps.</p></div>
+  <dl class="term-list"><dt>Joins</dt><dd>INNER JOIN runs on the engine&#39;s join routes: an in-memory database accepts several in one statement, a paged table one. LEFT, RIGHT, FULL, CROSS and every other join runs on the row engine. A join over a paged table with NULL columns runs with SQL NULL rules.</dd><dt>Exact sums</dt><dd>INT sums are exact 128-bit running totals, and a statement throws if the true total leaves 64 bits. Empty selections give NULL for SUM, AVG, MIN and MAX, and 0 for COUNT. COUNT(*) and AVG count the rows that exist.</dd><dt>Row order</dt><dd>Without ORDER BY, the order of rows is unspecified and can change after a DELETE or a write that moves a row.</dd><dt>Analytic tables</dt><dd>SMALLINT, INTEGER, BIGINT, DATE, TIMESTAMP, CHAR(n) and VARCHAR(n) columns, or a table with no primary key, make an analytic table. It exists only in a paged database and has no NULL columns. Load it column by column with BulkLoadColumns.</dd><dt>Refused, not reinterpreted</dt><dd>A statement that would otherwise drop one of its clauses throws. DISTINCT together with an aggregate is refused (use GROUP BY), and so is NEAREST combined with a join, GROUP BY, HAVING, ORDER BY, DISTINCT or an aggregate.</dd></dl>
+  <div class="tbl-wrap"><table class="tbl"><caption>Statements for tables and data</caption>
+<thead><tr><th scope="col">Statement</th><th scope="col">Purpose</th></tr></thead>
+<tbody><tr><th scope="row">CREATE TABLE t (col TYPE [NULL | NOT NULL] [PRIMARY KEY], ...)</th><td>Defines a table. An ordinary table has one PRIMARY KEY of type INT or TEXT. A GUID is a TEXT value.</td></tr><tr><th scope="row">ALTER TABLE t ADD [COLUMN] col TYPE [NULL] [DEFAULT literal | NULL]</th><td>Adds one column. The DEFAULT fills the rows that existed when the column was added. A DECIMAL column can be added only with DEFAULT NULL. There is no DROP, rename or type change.</td></tr><tr><th scope="row">CREATE SUMMARY TABLE t (col TYPE DIMENSION | MEASURE, ...)</th><td>Defines a table that keeps no rows (see Summary tables below).</td></tr><tr><th scope="row">CREATE TABLE t AS SELECT ...</th><td>Creates a keyless analytic table from a query result. Paged databases only. Every result column needs a name of its own, and no value may be NULL.</td></tr><tr><th scope="row">DROP TABLE t</th><td>Removes the table, its files and every structure built on it. A paged table cannot be dropped inside a transaction.</td></tr><tr><th scope="row">TRUNCATE [TABLE] t</th><td>Removes every row, the same as DELETE FROM t.</td></tr><tr><th scope="row">INSERT INTO t [(col, ...)] VALUES (...) or SELECT ...</th><td>Inserts rows or a query result. An omitted column is NULL when declared NULL, otherwise its type&#39;s zero.</td></tr><tr><th scope="row">UPDATE t SET col = expression [WHERE ...]</th><td>Updates matching rows. The expression may read the row (SET n = n + 1). The primary key cannot be updated. UPDATE validates every SET value before it changes a row.</td></tr><tr><th scope="row">DELETE FROM t [WHERE ...]</th><td>Deletes matching rows.</td></tr></tbody></table></div>
+  
+  
+  
+  
+  
+  
+  
+</div></section><section class="sec doc-sec" aria-labelledby="decimal"><div class="wrap">
+  <div class="sec-head"><span class="sec-dot cat-holodb" aria-hidden="true"></span><h2 id="decimal">Exact decimals</h2></div>
+  <div class="prose-block"><p>DECIMAL(p, s) and NUMERIC(p, s) hold exact values of at most 18 digits in total, with 1 &lt;= p &lt;= 18 and 0 &lt;= s &lt;= p. The value is stored as a scaled 64-bit integer. A decimal literal is exact up to 15 significant digits; a longer literal is refused by name.</p></div>
+  <dl class="term-list"><dt>Arithmetic</dt><dd>+, -, * and / on decimal values are exact. A result is rounded half away from zero to the scale it needs. A result that does not fit 18 digits throws SQLSTATE 22003. Division by zero throws 22012.</dd><dt>Writes</dt><dd>A value written to a decimal column is brought to the column&#39;s scale. A value that does not fit the column&#39;s digits throws 22003. Text input to a decimal column is refused.</dd><dt>Results</dt><dd>A decimal result comes back as a System.Decimal with its scale, and QueryResult.ColumnScale gives the column&#39;s scale. A decimal with an integer is a decimal. A decimal with a double is a double.</dd><dt>Works on in-memory and paged tables</dt><dd>Decimal literals and columns in expressions and WHERE; INSERT; UPDATE and DELETE whose WHERE names no decimal column; SELECT with aggregates, GROUP BY and HAVING (SUM keeps the scale, AVG returns a decimal); DROP TABLE, SHOW and DESCRIBE.</dd><dt>Refused by name for a table that holds a decimal column</dt><dd>A join over it; NEAREST over it; an UPDATE or DELETE whose WHERE names a decimal column; Seal, KeyDigest, EnablePleroma, BulkLoad, BulkLoadColumns, PagedBulkLoad, ApplyChanges, and a read AS OF a past sequence. SQLSTATE 0A000.</dd><dt>Refused at definition</dt><dd>A bare DECIMAL (0A000); p above 18 (0A000); p below 1 or a scale outside 0..p (42601); a DECIMAL primary key; a DECIMAL column in a summary table; an ADD COLUMN of a decimal with a DEFAULT other than NULL.</dd></dl>
   
   
   
@@ -79,7 +107,7 @@ foreach (var row in result.Rows) Console.WriteLine(row[&quot;name&quot;]);
   
 </div></section><section class="sec doc-sec" aria-labelledby="learns"><div class="wrap">
   <div class="sec-head"><span class="sec-dot cat-holodb" aria-hidden="true"></span><h2 id="learns">Structures that build themselves</h2></div>
-  <div class="prose-block"><p>The engine watches the workload it serves and builds only the structures that repeated queries have paid for: summaries, sorted and keyed indexes, a tree of exact sums, learned block records with exact partial sums, learned routes, zones that skip blocks, top-k by zones, gather and placement. It drops them when the workload moves on or when a write would make them cost more than they save. One budget covers them all and is a hard cap.</p><p>SET indexes and SET summaries choose whether automatic indexes and summaries are built (auto), only declared ones are kept (declared), or none answers a query (off). EXPLAIN says which structure answered a statement, or why none did. The answers are the same in every setting.</p></div>
+  <div class="prose-block"><p>Nothing here is declared. The engine watches the workload it serves and builds only the structures that repeated queries have paid for: summaries, sorted and keyed indexes, a tree of exact sums, learned block records with exact partial sums, learned routes, zones that skip blocks, top-k by zones, gather and placement. It drops them when the workload moves on or when a write would make them cost more than they save. One budget covers them all and is a hard cap.</p><p>SET indexes and SET summaries choose whether automatic indexes and summaries are built (auto), only declared ones are kept (declared), or none answers a query (off). EXPLAIN says which structure answered a statement, or why none did, and SHOW SUMMARIES reports the state of each structure and what it is waiting for. The answers are the same in every setting.</p></div>
   
   
   
@@ -88,11 +116,11 @@ foreach (var row in result.Rows) Console.WriteLine(row[&quot;name&quot;]);
   
   
   
-  <p class="more-link"><a href="/holodb/#demo">How the engine learns</a></p>
+  
 </div></section><section class="sec doc-sec" aria-labelledby="null"><div class="wrap">
   <div class="sec-head"><span class="sec-dot cat-holodb" aria-hidden="true"></span><h2 id="null">NULL</h2></div>
-  <div class="prose-block"><p>Declare a column NULL and it holds true nulls with three-valued logic, on paged tables as well as in memory. A statement that names a nullable column takes an exact path that reads only the columns it names.</p><p>COUNT(col), SUM, AVG, MIN and MAX skip nulls, GROUP BY makes one null group, and a join never matches one. Null counts are maintained. A point read of one row on a wide nullable table takes about 110 page pins at 100,000, 300,000 and 1,000,000 rows.</p></div>
-  
+  <div class="prose-block"><p>Declare a column NULL and it holds true nulls with three-valued logic, on paged tables as well as in memory. A statement that names a nullable column takes an exact path that reads only the columns it names. Null counts are maintained.</p></div>
+  <dl class="term-list"><dt>Three-valued logic</dt><dd>WHERE and HAVING keep a row only when the predicate is true. A comparison, LIKE, IN or BETWEEN on a NULL is unknown. IS NULL and IS NOT NULL are always true or false.</dd><dt>Aggregates</dt><dd>COUNT(*) counts rows. COUNT(col), COUNT(DISTINCT col), SUM, AVG, MIN and MAX use the non-NULL values, and are NULL when there are none.</dd><dt>Grouping and ordering</dt><dd>GROUP BY and DISTINCT make one group of all the NULLs. ORDER BY puts NULL first when ascending and last when descending. An INNER JOIN never matches a NULL key.</dd><dt>Results</dt><dd>Read a NULL cell with Rows or GetValue, where it is DBNull.Value, or test QueryResult.IsNull. GetLong, GetDouble and GetText throw a HoloException on a NULL.</dd><dt>Literal NULL in a comparison</dt><dd>On a SELECT, a literal NULL beside =, &lt;&gt;, &lt;, &gt;, &lt;=, &gt;=, IN, BETWEEN or LIKE is unknown. In a DELETE or UPDATE WHERE, the same literal is refused by name, with a message that says to write IS NULL.</dd></dl>
   
   
   
@@ -103,7 +131,7 @@ foreach (var row in result.Rows) Console.WriteLine(row[&quot;name&quot;]);
   
 </div></section><section class="sec doc-sec" aria-labelledby="similarity"><div class="wrap">
   <div class="sec-head"><span class="sec-dot cat-holodb" aria-hidden="true"></span><h2 id="similarity">Similarity search</h2></div>
-  <div class="prose-block"><p>NEAREST ranks rows by how closely they match a partial description, with no separate index. It ranks exactly on small tables and approximately above a size threshold. It does not combine with GROUP BY or with a join on a nullable table.</p></div>
+  <div class="prose-block"><p>NEAREST ranks rows by the cosine similarity of their holographic encoding to a partial key: any subset of columns, of any type, in the form SELECT ... FROM t NEAREST (col = value, ...) [WHERE ...] [LIMIT k]. The encoding is derived from the columns, so a row is ranked by the values it holds now. A WHERE filters the rows before they are ranked, and no index has to be declared.</p><p>Similarity is graded. A number or date close to the key ranks ahead of a far one, and a text value that is nearly the same string ranks ahead of an unrelated one, by character trigrams. Add score to the projection to read the ranking value; 1.0 is an exact match. Above a size threshold the ranking uses an approximate candidate search (locality-sensitive hashing) instead of comparing every row, so its order can differ from an exact scan. NEAREST does not combine with a join, GROUP BY, or a table with a decimal column.</p></div>
   
   
   
@@ -125,7 +153,7 @@ id=1 category=electronics price=100 score=0.988</code></pre></div>
   
 </div></section><section class="sec doc-sec" aria-labelledby="transactions"><div class="wrap">
   <div class="sec-head"><span class="sec-dot cat-holodb" aria-hidden="true"></span><h2 id="transactions">Transactions and durability</h2></div>
-  <div class="prose-block"><p>BEGIN, COMMIT and ROLLBACK run over a write-ahead log of signed page deltas in a ring file whose size follows the largest recent batch, with group commit: a statement that has returned is on disk. A failed statement inside a transaction undoes only itself.</p><p>A transaction larger than the buffer pool spills to a scratch file, and a rollback or a power cut leaves the table as it was. The tests cut the power inside COMMIT and kill the process, and the table that opens is the table before or the table after.</p></div>
+  <div class="prose-block"><p>START TRANSACTION, COMMIT and ROLLBACK (BEGIN under Extended) run over a write-ahead log of signed page deltas in a ring file whose size follows the largest recent batch, with group commit: a statement that has returned is on disk. A rolled-back transaction leaves the same rows, though their order may differ. DDL inside a transaction is allowed. BulkLoad is not, and Checkpoint() throws inside one.</p><p>On a paged table, a statement that fails inside a transaction undoes only itself, and the statements before it stay. A transaction larger than the buffer pool spills to a scratch file, and a rollback or a power cut leaves the table as it was. Every commit is checksummed, and the table that opens after a cut is the table before or the table after.</p></div>
   
   
   
@@ -134,10 +162,10 @@ id=1 category=electronics price=100 score=0.988</code></pre></div>
   
   
   
-  <p class="more-link"><a href="/holodb/evidence/">What we test</a></p>
+  <p class="more-link"><a href="/holodb/evidence/">How it is tested</a></p>
 </div></section><section class="sec doc-sec" aria-labelledby="asof"><div class="wrap">
   <div class="sec-head"><span class="sec-dot cat-holodb" aria-hidden="true"></span><h2 id="asof">AS OF and Seal</h2></div>
-  <div class="prose-block"><p>Each commit is kept as a signed record within a retention budget, so SELECT ... FROM t AS OF n reads a paged table as it was after commit n for any n the history still holds. Seal(table, asOf: n) gives an order-free fingerprint that replicas can compare.</p><p>AS OF works on paged tables. A sequence below the floor, inside a retained segment, or on an in-memory table is refused by name, as is a join under it.</p></div>
+  <div class="prose-block"><p>Paged tables keep each committed change as a signed record, so a past state is the present state with the later changes taken back out. SELECT ... FROM t AS OF n reads the table as it was after commit n, and AS OF LATEST is the present state. Seal(table, asOf: n) returns the table&#39;s seal as it was after commit n. SHOW SEQUENCE returns the current sequence and the floor.</p><p>The answers are exact at every n at or above the floor. Refused by name, never answered approximately: a join under AS OF, NEAREST, an in-memory table, n above the current sequence, n below the floor, n inside a retained segment, and a read inside a transaction that has written the table. An ALTER TABLE ... ADD COLUMN is a barrier: an AS OF read below the floor is refused by name.</p></div>
   
   
   
@@ -148,20 +176,40 @@ id=1 category=electronics price=100 score=0.988</code></pre></div>
   
   
 </div></section><section class="sec doc-sec" aria-labelledby="changes"><div class="wrap">
-  <div class="sec-head"><span class="sec-dot cat-holodb" aria-hidden="true"></span><h2 id="changes">Atomic change batches and upsert</h2></div>
-  <div class="prose-block"><p>ApplyChanges applies a batch of upserts and deletes atomically. KeyDigest compares two key sets in modulus numbers. Seal fingerprints a table so shards add and replicas compare.</p><p>INSERT with ON CONFLICT ... DO UPDATE is the SQL upsert. ApplyChanges and the upsert form run on in-memory tables, and a paged table refuses them.</p></div>
+  <div class="sec-head"><span class="sec-dot cat-holodb" aria-hidden="true"></span><h2 id="changes">Loading data and change batches</h2></div>
+  <div class="prose-block"><p>ImportCsv(table, path, header, delimiter) loads an RFC 4180 CSV file into an existing table in one atomic load. A bad field refuses the whole file by name, with its line number, and nothing is loaded. It is a method, not a statement, so a SQL client cannot make the server read a file.</p><p>BulkLoad and BulkLoadColumns append typed arrays without the SQL parser, and validate every key first, so a duplicate primary key leaves the table unchanged. The bulk load forms refuse a table that holds a decimal column.</p><p>ApplyChanges applies a batch of upserts and deletes atomically on an in-memory table: one write lock, one log commit, and a reader sees the table before the batch or after it. Changes count in order, the last change of a key wins, and only the net effect is applied. The SQL form INSERT ... ON CONFLICT (pk) DO UPDATE (Extended) changes only the listed columns of an existing row, and is in-memory only.</p><p>KeyDigest(table, modulus) returns one bucket of Count and an exact Int128 Sum for each bucket of an INT primary key, so two systems can compare modulus numbers instead of every key. Seal fingerprints a table so shards add and replicas compare.</p></div>
   
   
   
   
   
   
-  
+  <div class="code"><div class="code-bar"><span>C#</span><button class="copy" type="button" aria-label="Copy C#">copy</button></div><pre><code class="language-csharp">using HoloDb;
+
+var db = new HoloDbService(new HoloDbOptions());
+db.Execute(&quot;CREATE TABLE users (id INT PRIMARY KEY, age INT, name TEXT)&quot;);
+db.Execute(&quot;INSERT INTO users VALUES (1, 30, &#39;Ada&#39;)&quot;);
+
+var result = await db.ExecuteAsync(&quot;SELECT name FROM users WHERE age &gt;= 18&quot;);
+foreach (var row in result.Rows) Console.WriteLine(row[&quot;name&quot;]);
+// Ada</code></pre></div><div class="code out"><div class="code-bar"><span>Output</span><button class="copy" type="button" aria-label="Copy Output">copy</button></div><pre><code class="language-text">Ada</code></pre></div>
   
   
 </div></section><section class="sec doc-sec" aria-labelledby="paged"><div class="wrap">
   <div class="sec-head"><span class="sec-dot cat-holodb" aria-hidden="true"></span><h2 id="paged">Tables larger than memory</h2></div>
-  <div class="prose-block"><p>Paged tables read through a buffer pool of 8 KB pages. Every page has a logical number, and a map takes that number to a place in the file. The map changes only inside a committed log batch, so a moved or rewritten page never leaves the file half-changed, and a shrunk table keeps its freed pages and refills them.</p><p>Every log block and every data page carries a CRC-32C checksum. A page that fails its checksum is an error that names the page, never a changed answer. Paged tables written by older formats, older write-ahead logs, and a text-format database opened as paged all throw a named error that says to export the rows and load them into a new database. There is no in-place upgrade.</p></div>
+  <div class="prose-block"><p>A paged table keeps its pages in a buffer pool of 8 KB pages, and its changes in a write-ahead log. Pages that are not in the pool are read from data.pages through a read-only memory map. CreatePaged(createTableSql, dir) creates a paged table in a directory, OpenPaged(dir) reopens it and recovers committed state from its log, PagedBulkLoad streams rows and commits every so many rows, and ClosePaged(table) checkpoints and closes one table.</p><p>Every page has a logical number, and a block map takes that number to a place in the file. The map changes only inside a committed log batch, so a moved or rewritten page never leaves the file half-changed. Every log block and every data page carries a CRC-32C checksum. A page that fails its checksum throws an error that names the page and the file, with the code data-page-checksum, so a bad page is an error and never a different answer.</p><p>A DELETE marks its rows and moves nothing; the cost follows the rows deleted. Consolidation fills the holes after a statement, once the scans that read them have paid for it, and gives the freed pages back. Consolidate(table) runs it now. Rows come back in a different order afterwards unless you ORDER BY.</p><p>Whole-database paged mode: HoloDbOptions.Paged = true puts a new database on the paged engine, so a plain CREATE TABLE creates a paged table. Opening an existing text log with paged: true throws.</p></div>
+  
+  
+  
+  
+  
+  
+  
+  
+  
+</div></section><section class="sec doc-sec" aria-labelledby="format"><div class="wrap">
+  <div class="sec-head"><span class="sec-dot cat-holodb" aria-hidden="true"></span><h2 id="format">Storage format and upgrading</h2></div>
+  <div class="prose-block"><p>The write-ahead log of a paged table, wal.log, is a fixed-size ring of checksummed blocks holding signed deltas. It does not grow with history. The log is format HWAL 5. The table record, table.meta12, begins with the line HoloDb table format 15.</p><p>Format 15 records the precision and scale of each DECIMAL column. A store in format 14 opens, and its catalog is written again as format 15 on its next catalog write. A table record of format 13 or older is refused by name. The message says to export the rows with the build that wrote them and load them into a new database.</p><p>A build of major version 20 reads only format 14. It refuses a store written by this release (format 15) with a named message. Stores written by major version 20 open in this release. There is no in-place upgrade.</p></div>
   
   
   
@@ -172,8 +220,8 @@ id=1 category=electronics price=100 score=0.988</code></pre></div>
   
   
 </div></section><section class="sec doc-sec" aria-labelledby="plane"><div class="wrap">
-  <div class="sec-head"><span class="sec-dot cat-holodb" aria-hidden="true"></span><h2 id="plane">The aggregate plane</h2></div>
-  <div class="prose-block"><p>The plane is optional. It is an exact derived summary of small-domain columns, served through Phasor&#39;s Pleroma stores, with PleromaVerify to check it against the columns.</p></div>
+  <div class="sec-head"><span class="sec-dot cat-holodb" aria-hidden="true"></span><h2 id="plane">Summary tables and the aggregate plane</h2></div>
+  <div class="prose-block"><p>A summary table keeps no rows. It stores only an exact aggregate plane, the value dictionaries of its dimensions and the position each feed has reached, so its size depends on the distinct values of its dimensions. A dimension is an INT or TEXT column you filter, group or count distinct on; a measure is an INT column you SUM or AVG. ApplyPlaneChanges takes Add, Remove and Replace changes as one atomic batch, and a batch at or below the position already applied for its source is skipped.</p><p>The optional aggregate plane, held in Phasor Pleroma stores, summarises the small-domain columns of one table. It answers WHERE aggregates over its dimensions, multi-column GROUP BY with HAVING, COUNT(DISTINCT dimension), and one equi-join COUNT or SUM. Anything it does not cover goes to the engine, so a statement returns the same rows with the plane on or off. PleromaVerify rebuilds the plane from the columns and compares it. A plane attached with EnablePleroma is not kept across a restart; one created with CREATE INDEX ... USING SUMMARY (Extended) is.</p></div>
   
   
   
@@ -184,8 +232,8 @@ id=1 category=electronics price=100 score=0.988</code></pre></div>
   
   
 </div></section><section class="sec doc-sec" aria-labelledby="meter"><div class="wrap">
-  <div class="sec-head"><span class="sec-dot cat-holodb" aria-hidden="true"></span><h2 id="meter">Metering and integration</h2></div>
-  <div class="prose-block"><p>MeteredDatabase reports the rows and bytes each query read.</p><p>services.AddHoloDb() registers HoloDb for dependency injection, and an EvalApp context runs it inside pipelines.</p></div>
+  <div class="sec-head"><span class="sec-dot cat-holodb" aria-hidden="true"></span><h2 id="meter">Statement limits, metering and integration</h2></div>
+  <div class="prose-block"><p>A statement can carry a cancel token, a timeout and a result byte budget through StatementLimits. A cancelled or timed-out statement throws HoloCancelledException, and a statement the budget refuses throws HoloResultTooLargeException before the rows that would pass it are allocated. A stopped statement has no effect.</p><p>MeteredDatabase reports the rows and bytes each query read. services.AddHoloDb() registers HoloDb for dependency injection, and an EvalApp context runs it inside pipelines.</p></div>
   
   
   

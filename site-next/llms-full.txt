@@ -1447,45 +1447,48 @@ Licence: Commercial licence for commercial use. Evaluation and non-commercial us
 An embedded SQL database that learns from the queries it serves and keeps only what pays. Every answer is exact, with ACID and no index to design.
 
 Page: https://evaluatedapplications.github.io/holodb/
-- Package EvaluatedApplications.HoloDb, release 10.0.0: `dotnet add package EvaluatedApplications.HoloDb`
+- Package EvaluatedApplications.HoloDb, release 21.0.1: `dotnet add package EvaluatedApplications.HoloDb`
 - Package EvaluatedApplications.HoloDb.Client, release 1.5.3: `dotnet add package EvaluatedApplications.HoloDb.Client`
 - Package EvaluatedApplications.HoloDb.Protocol, release 1.1.3: `dotnet add package EvaluatedApplications.HoloDb.Protocol`
 - Builds on: EvalApp, Phasor
 - Used by: Prose, HoloGenome
 - Tools: Umbrarium, preset demo, The Analyst, Prose
 
-Ask the same question twice and the second time reads almost nothing.
+A SQL database for .NET that learns from the queries it serves and keeps only what pays.
 
-An embedded SQL database for .NET that learns from the queries it serves and keeps only what pays. Every SQL statement is answered exactly, with ACID and no index to design.
+Every SQL statement is answered exactly, with ACID and no index to design.
 
-- 8.5 to 10 times: fewer blocks read by the next sweep after single-row updates and deletes, because learned records are corrected by the exact difference: 6 blocks against 60 and 51, on 1,000,000 rows
-- 61 times: fewer blocks read after consolidation moves the rows: 6 blocks against 366
-- 21 to 24 times: fewer page pins when the ledger prices an index by its measured upkeep: 49,306 to 54,106 pins against 1,158,839 over 1,200 delete or update pairs, with 0 blocks read per count
-- 0 of 46: recoveries after a kill or a power cut ended in a state between the table before and the table after the interrupted write: 37 to before, 9 to after
 
-HoloDb is an embedded SQL database for .NET. You create tables and write SQL. Tables are typed columns, in memory or on disk. The answer to every SQL statement is exact. NEAREST ranks exactly on small tables and approximately above a size threshold. The engine watches the workload it serves and builds only the structures that repeated queries have paid for. It drops them when the workload moves on or when a write would make them cost more than they save.
+HoloDb is an embedded SQL database for .NET. You create tables and write SQL. Tables are typed columns, in memory or on disk. The answer to every SQL statement is exact; NEAREST ranks exactly on small tables and approximately above a size threshold. The engine watches the workload it serves and builds only the structures that repeated queries have paid for. It drops them when the workload moves on or when a write would make them cost more than they save.
+
+SQL is the standard dialect by default. Vendor spellings are opt-in with Dialect = SqlDialect.Extended, and a statement that uses one under the default is refused by name.
 
 One copy of the data answers three kinds of question: a lookup by key in ordinary SQL, similarity search with NEAREST, and exact aggregates that read a maintained total instead of scanning. Everything the engine builds is derived from the columns, so losing a derived structure costs time and never data.
 
 Three terms recur on these pages. A block is a run of rows stored together. A page is 8 KB of file. A pin is one page read through the buffer pool, and counts of pins stand in for time.
 
+SET indexes and SET summaries choose whether automatic indexes and summaries are built (auto), only declared ones are kept (declared), or none answers a query (off).
+
 Why use it:
-- Learned records that stay right when rows change. For a filter you ask for often, the engine writes a card for each block of rows: how many rows match, and the exact sums of the columns you total. The next time you ask, it reads the cards and opens only a block whose card a write has touched. When an UPDATE or DELETE changes rows, or consolidation moves them, the cards are corrected by the exact difference. Each card carries its own checksum lanes and is checked when it is read and when the database opens, so a wrong card is dropped and relearned and never changes an answer.
-- A ski-rental ledger decides what to build and what to drop. Renting skis is cheap for one weekend and buying wins after enough weekends. The engine keeps that ledger for every structure. Each scan that a structure would have saved is rent. The structure is built when the rent paid has reached the cost of building it, and dropped when the cost of keeping it up through writes exceeds what it saves. The cost of keeping a structure up is the time its delta path really takes on this machine, measured per write and averaged.
-- Gather, regroup and placement lay rows out by what reads waste. If the rows a filter wants are scattered over the whole table, every repeat reads many blocks to find a few rows. The engine measures that waste, in time, for each learned filter. Gather moves matching rows next to each other when the time saved by repeats is larger than the cost of the move. Regroup rewrites the whole layout once, when gather alone cannot reach it. Placement puts a newly written row in a block the repeated filters already read. A repeat that the stored counts and sums already answer reads nothing, so it pays no rent and nothing is moved.
-- A paged store with a logical block map. Every page has a logical number, and a map takes that number to a place in the file. The map changes only inside a committed log batch, so a moved or rewritten page never leaves the file half-changed, and a shrunk table keeps its freed pages and refills them. A page that fails its checksum is an error that names the page, never a changed answer.
-- ACID with crash-tested recovery. The write-ahead log holds signed page deltas in a ring file whose size follows the largest recent batch, with group commit. A failed statement inside a transaction undoes only itself. A transaction larger than the buffer pool spills to a scratch file, and a rollback or a power cut leaves the table as it was. Each commit is kept as a signed record within a retention budget.
-- Real SQL NULL on paged tables. Declare a column NULL and it holds true nulls with three-valued logic, on paged tables as well as in memory. COUNT(col), SUM, AVG, MIN and MAX skip nulls, GROUP BY makes one null group, and a join never matches one. Null counts are maintained. A point read of one row on a wide nullable table takes about 110 page pins at 100,000, 300,000 and 1,000,000 rows.
+- Learned records that stay right when rows change. For a filter you ask for often, the engine writes a card for each block of rows: how many rows match, and the exact sums of the columns you total. The next time you ask, it reads the cards and opens only a block whose card a write has touched. When an UPDATE or DELETE changes rows, or consolidation moves them, the cards are corrected by the exact difference. They are not thrown away. Each card carries its own checksum and is checked when it is read, so a wrong card is dropped and relearned and never changes an answer.
+- A ski-rental ledger decides what to build and what to drop. Renting skis is cheap for one weekend and buying wins after enough weekends. The engine keeps that ledger for every structure. Each scan that a structure would have saved is rent. The structure is built when the rent paid has reached the cost of building it, and dropped when the cost of keeping it up through writes exceeds what it saves. The cost of keeping a structure up is the time its delta path takes on the machine it runs on, measured per write and averaged, never an assumed rebuild per write.
+- Gather, regroup and placement lay rows out by what reads waste. If the rows a filter wants are scattered over the whole table, every repeat reads many blocks to find a few rows. The engine measures that waste for each learned filter. Gather moves matching rows next to each other when the time saved by repeats is larger than the cost of the move. Regroup rewrites the whole layout once, when gather alone cannot reach it. Placement puts a newly written row in a block the repeated filters already read. A repeat that the stored counts and sums already answer reads nothing, so it pays no rent and nothing is moved.
+- A paged store with a logical block map. Paged tables are larger than memory. They read through a buffer pool of 8 KB pages. Every page has a logical number, and a map takes that number to a place in the file. The map changes only inside a committed log batch. A moved or rewritten page therefore never leaves the file half-changed, and a shrunk table keeps its freed pages and refills them. Every log block and every data page carries a CRC-32C checksum. A page that fails its checksum is an error that names the page, never a changed answer.
+- ACID with crash-tested recovery. START TRANSACTION, COMMIT and ROLLBACK (BEGIN under Extended) run over a write-ahead log of signed page deltas in a ring file whose size follows the largest recent batch, with group commit: a statement that has returned is on disk. A failed statement inside a transaction undoes only itself. A transaction larger than the buffer pool spills to a scratch file, and a rollback or a power cut leaves the table as it was. Each commit is kept as a signed record within a retention budget, so SELECT ... FROM t AS OF n reads a paged table as it was after commit n for any n the history still holds, and Seal(table, asOf: n) gives an order-free fingerprint that replicas can compare.
+- Real SQL NULL on paged tables. Declare a column NULL and it holds true nulls with three-valued logic, on paged tables as well as in memory. A statement that names a nullable column takes an exact path that reads only the columns it names. COUNT(col), SUM, AVG, MIN and MAX skip nulls, GROUP BY makes one null group, and a join never matches one. Null counts are maintained.
+- Exact decimals. DECIMAL(p, s) with up to 18 digits is stored as a scaled integer. +, -, * and / are exact, rounding half away from zero, and an overflow or a division by zero is refused with its SQLSTATE code. Results come back with their scale.
 
 Capabilities:
-- SQL. CREATE TABLE [IF NOT EXISTS], ALTER TABLE ... ADD COLUMN, CREATE INDEX (sorted, summary, keyed; automatic indexes need no declaration), DROP INDEX, SHOW INDEXES, SHOW SUMMARIES, SET summaries and SET indexes, EXPLAIN, INSERT (with ON CONFLICT ... DO UPDATE), UPDATE, DELETE, SELECT with DISTINCT, aggregates, COUNT(DISTINCT), INNER JOIN, WHERE (AND, OR, NOT, LIKE, IN, BETWEEN, IS NULL, IN (SELECT ...)), GROUP BY, HAVING, ORDER BY, LIMIT, NEAREST, and BEGIN, COMMIT, ROLLBACK.
-- Exact. INT sums are 128-bit running totals and throw only past 64 bits. Empty selections give NULL for SUM, AVG, MIN and MAX, and 0 for COUNT.
+- SQL, Standard (the default). The SQL a first user reaches for: joins of every kind with table aliases, WITH, UNION, INTERSECT and EXCEPT, scalar, IN and EXISTS subqueries (correlated ones too), window functions with frames, CASE, CAST, the standard scalar and aggregate functions, NULL with three-valued logic, SELECT without FROM, DROP TABLE, TRUNCATE, information_schema, CREATE TABLE ... AS SELECT, INSERT ... SELECT, UPDATE with expressions, exact DECIMAL(p, s) columns, and ImportCsv for files. Also CREATE TABLE, ALTER TABLE ... ADD COLUMN, CREATE SUMMARY TABLE, SET summaries and SET indexes, SHOW SUMMARIES, DELETE, COUNT(DISTINCT), WHERE with AND, OR, NOT, LIKE, IN, BETWEEN, IS NULL and IN (SELECT ...), GROUP BY, HAVING, ORDER BY, FETCH FIRST n ROWS ONLY, NEAREST, and START TRANSACTION, COMMIT and ROLLBACK.
+- SQL, Extended (Dialect = SqlDialect.Extended). LIMIT, ILIKE, CREATE INDEX (sorted, summary, keyed) and DROP INDEX, SHOW INDEXES, EXPLAIN, IF [NOT] EXISTS, INSERT ... ON CONFLICT ... DO UPDATE, BEGIN, DESCRIBE, and the vendor functions. A statement that uses one under Standard is refused by name, with SQLSTATE 0A000.
+- Exact. INT sums are 128-bit running totals and throw only past 64 bits. DECIMAL(p, s) holds up to 18 digits exactly. Empty selections give NULL for SUM, AVG, MIN and MAX, and 0 for COUNT.
 - Learns by use. Summaries, sorted and keyed indexes, a tree of exact sums, learned block records with exact partial sums, learned routes, zones that skip blocks, top-k by zones, gather and placement. One budget covers them all and is a hard cap. EXPLAIN says which structure answered a statement, or why none did.
 - Look back. AS OF n and Seal(table, asOf: n) on paged tables.
-- Analytic SQL. Narrow column types, dictionary-coded text, CASE, CAST, EXTRACT, DATE_TRUNC, REGEXP_REPLACE, positional GROUP BY and ORDER BY, and COUNT(DISTINCT) on large cardinalities.
-- Change feeds. ApplyChanges applies a batch of upserts and deletes atomically. KeyDigest compares two key sets in modulus numbers. Seal fingerprints a table so shards add and replicas compare.
+- Analytic SQL. Narrow column types, dictionary-coded text, CASE, CAST, EXTRACT, positional GROUP BY and ORDER BY, and COUNT(DISTINCT) on large cardinalities. With Dialect = SqlDialect.Extended, also DATE_TRUNC and REGEXP_REPLACE.
+- Change feeds. ApplyChanges applies a batch of upserts and deletes atomically on in-memory tables. KeyDigest compares two key sets in modulus numbers. Seal fingerprints a table so shards add and replicas compare.
 - Aggregate plane (optional). An exact derived summary of small-domain columns, served through Phasor's Pleroma stores, with PleromaVerify to check it against the columns.
 - Metering. MeteredDatabase reports the rows and bytes each query read.
+- Statement limits. A statement can carry a cancel token, a deadline and a result byte budget. A stopped statement has no effect, and a statement the budget refuses is refused before the rows that would pass it are allocated.
 - Integration. services.AddHoloDb() for dependency injection, and an EvalApp context for pipelines.
 
 Quick start:
@@ -1509,27 +1512,30 @@ Ada
 ```
 
 Limits:
-- Scale: the correctness suites run to 3,000,000 rows in both pipeline modes. Larger tables work, but the lifecycle and crash guarantees are tested at 3,000,000.
-- Writers: one. Reads run in parallel and lock-free for simple selects; writes, DDL and transactions take one lock at a time.
-- Joins: INNER JOIN only. A paged table takes one join per statement; in-memory tables take several. A join on a paged table with NULL columns is refused by name.
-- SQL not offered: UNION, window functions, subqueries other than IN (SELECT ...), table aliases, DROP COLUMN and column rename. UPDATE ... SET takes a literal on its right side.
-- NEAREST: does not combine with GROUP BY or with a join on a nullable table. It ranks exactly on small tables and approximately above a size threshold.
-- Keys and types: one primary key per table, INT or TEXT. Types are INT, TEXT and REAL, with narrow integer, date, timestamp and fixed-width text types on analytic tables.
-- In-memory only: ApplyChanges and the upsert form run on in-memory tables. A paged table refuses them.
+- Scale: the correctness suites run to 3,000,000 rows in both pipeline modes. Larger tables work; the lifecycle and crash guarantees are tested at 3,000,000 rows.
+- Writers: one. Simple selects read without the lock and retry if a write overlaps them; writes, DDL and transactions take one lock at a time.
+- Statement budget: the budget estimates each cell (8 bytes for INT and REAL, 48 for the others) and charges the working rows of a join before its WHERE is applied, so a large join can be refused although its filter would keep few rows.
+- Joins: INNER JOIN runs on the engine's join routes (one per statement on a paged table). LEFT, RIGHT, FULL and CROSS joins run on the row engine, under its memory budget. A join over a paged table with NULL columns runs with SQL NULL rules: a NULL key never matches, and aggregates skip NULL cells.
+- SQL not offered: NATURAL JOIN, WITH RECURSIVE, GROUP BY ROLLUP, CUBE, GROUPING SETS or ALL, QUALIFY, the WINDOW clause, DISTINCT ON, LATERAL, DROP COLUMN, column rename, and CREATE INDEX ... USING NEAREST. UPDATE ... SET takes an expression on its right side.
+- Dialect: Standard by default. Vendor spellings (LIMIT, BEGIN, ILIKE, CREATE INDEX, EXPLAIN and others) need Dialect = SqlDialect.Extended, and are refused by name under Standard.
+- NEAREST: does not combine with GROUP BY, with a join on a nullable table, or over a table with a decimal column. It ranks exactly on small tables and approximately above a size threshold.
+- Keys and types: one primary key per table, INT or TEXT. Types are INT, TEXT, REAL and DECIMAL(p, s) with up to 18 digits, with narrow integer, date, timestamp and fixed-width text types on analytic tables.
+- Decimal columns: literals, columns, expressions, WHERE on SELECT, aggregates, GROUP BY and HAVING work on in-memory and paged tables. Joins, NEAREST, Seal, AS OF, host bulk loads, ApplyChanges and KeyDigest refuse a table that holds a decimal column.
+- In-memory only: ApplyChanges and the SQL upsert (Extended) run on in-memory tables. A paged table refuses them.
 - Row order: without ORDER BY, the order of rows is unspecified and can change after a DELETE or a write that moves a row.
-- Structures: they help repeated work. A filter whose matching rows are spread evenly over every block gains nothing from learned records. The first lookup of a value no earlier read has seen is a scan, except a text value absent from the column or a number outside its range, which read no block. Moving scattered rows costs about 200 microseconds per row, so a scattered filter pays that back after about 100 uses.
-- Older data: paged tables written by older formats, older write-ahead logs, and a text-format database opened as paged all throw a named error that says to export the rows and load them into a new database. There is no in-place upgrade.
+- Structures: they help repeated work. A filter whose matching rows are spread evenly over every block gains nothing from learned records. The first lookup of a value no earlier read has seen is a scan, except a text value absent from the column or a number outside its range, which read no block. Moving scattered rows costs time per row moved, so a scattered filter pays it back only after repeated use.
+- Older data: table records of format 13 and older, older write-ahead logs, and a text-format database opened as paged throw a named error that says to export the rows and load them into a new database. Format 14 stores open and are written as format 15 on their next catalog write. A build from an earlier release refuses stores written by this release. There is no in-place upgrade.
 - History: AS OF works on paged tables and reads sequences the history still holds. A sequence below the floor, inside a retained segment, or on an in-memory table is refused by name, as is a join under it.
 
 #### HoloDb docs: tables, SQL, transactions (https://evaluatedapplications.github.io/holodb/docs/)
 
-The practical guide: put data in, get answers out. The two programs on this page are the complete code, with the output they print.
+The practical guide: put data in, get answers out. The two programs on this page are the complete code, with the output they print. The text follows the package's reference, EvaluatedApplications.HoloDb.
 
 ##### Install and first query
 
 Add the package from NuGet with dotnet add package EvaluatedApplications.HoloDb. You create tables and write SQL. Tables are typed columns, in memory or on disk.
 
-A WalPath in the options makes the database durable. For a database whose tables can be larger than memory, set both WalPath and Paged = true. Paged = true without a WalPath throws.
+With no WalPath the database is in memory. A WalPath in the options makes it durable. For a database whose tables can be larger than memory, set both WalPath and Paged = true. Paged = true without a WalPath throws.
 
 ```csharp
 using HoloDb;
@@ -1549,33 +1555,61 @@ Output:
 Ada
 ```
 
-##### The SQL dialect
+##### SQL dialect: Standard and Extended
 
-The answer to every SQL statement is exact. Types are INT, TEXT and REAL, with narrow integer, date, timestamp and fixed-width text types on analytic tables. A table has one primary key, INT or TEXT.
+HoloDb accepts the SQL standard and its own statements by default. This is SqlDialect.Standard, and every example on this page runs on it as written.
 
-- Statements: CREATE TABLE [IF NOT EXISTS], ALTER TABLE ... ADD COLUMN, CREATE INDEX, DROP INDEX, SHOW INDEXES, SHOW SUMMARIES, SET summaries, SET indexes, EXPLAIN, INSERT (with ON CONFLICT ... DO UPDATE), UPDATE, DELETE, SELECT, and BEGIN, COMMIT and ROLLBACK.
-- SELECT: DISTINCT, aggregates, COUNT(DISTINCT), INNER JOIN, WHERE with AND, OR, NOT, LIKE, IN, BETWEEN, IS NULL and IN (SELECT ...), GROUP BY, HAVING, ORDER BY, LIMIT and NEAREST.
-- Joins: INNER JOIN only. A paged table takes one join per statement; in-memory tables take several. A join on a paged table with NULL columns is refused by name.
-- Exact sums: INT sums are 128-bit running totals and throw only past 64 bits. Empty selections give NULL for SUM, AVG, MIN and MAX, and 0 for COUNT.
-- Analytic SQL: Narrow column types, dictionary-coded text, CASE, CAST, EXTRACT, DATE_TRUNC, REGEXP_REPLACE, positional GROUP BY and ORDER BY, and COUNT(DISTINCT) on large cardinalities.
-- Not offered: UNION, window functions, subqueries other than IN (SELECT ...), table aliases, DROP COLUMN and column rename. UPDATE ... SET takes a literal on its right side.
+Vendor spellings are the Extended dialect, opt-in: new HoloDbOptions { Dialect = SqlDialect.Extended } for a HoloDbService, or Database.Dialect on the engine. The HoloDb.Server program takes --dialect extended; its default is standard. A client has no dialect setting of its own: the server decides which SQL it accepts.
+
+- Extended adds only: LIMIT, ILIKE, CREATE INDEX and DROP INDEX (with USING KEYED), SHOW (other than SHOW SUMMARIES and SHOW SEQUENCE), DESCRIBE, EXPLAIN, IF [NOT] EXISTS, INSERT ... ON CONFLICT (pk) DO UPDATE, BEGIN, the % operator, and the functions CONCAT, REPLACE, LENGTH, SUBSTR, LEFT, RIGHT, ROUND, TRUNC, SIGN, NOW, DATE_TRUNC, REGEXP_REPLACE, STRING_AGG, MEDIAN, BOOL_AND, BOOL_OR, STDDEV and VARIANCE.
+- Both dialects: HoloDb's own statements: NEAREST (with its own LIMIT k), AS OF, SET summaries, SET indexes, SHOW SUMMARIES, CREATE SUMMARY TABLE, and APPLY SUMMARY.
+- Refused by name: A statement that uses an extension under Standard is refused with SQLSTATE 0A000, code extension-disabled, and a message that says how to enable Extended. A name that is in neither dialect, for example STRPOS, IIF, TRY_CAST, ARG_MAX, DATE_DIFF, STRFTIME or REGEXP_MATCHES, is an unknown function.
+- Checked text: The check runs on the text of each statement sent to the public Execute calls. Statements the engine writes for itself and the replay of the log are not checked, so a log written by an Extended database opens under Standard.
+
+##### Tables and statements
+
+The answer to every SQL statement is exact. A table has one PRIMARY KEY, of type INT or TEXT. Type names are INT (also INTEGER), TEXT (also VARCHAR and STRING), REAL (also FLOAT, DOUBLE and DOUBLE PRECISION) and DECIMAL(p, s) or NUMERIC(p, s). A bare DECIMAL is refused. There is no BOOLEAN; use INT 0 or 1. Column DEFAULT in CREATE TABLE, UNIQUE, CHECK, REFERENCES and generated keys are refused by name. A composite key is refused.
+
+A column holds SQL NULL only when it is declared NULL. A primary key is never NULL. An INT column takes a whole number in the 64-bit range; 2.5, a number past 64 bits or a text that is not a number throws. A REAL column takes any finite number. Integer arithmetic in a SELECT that would pass the 64-bit range throws for the rows the query keeps.
+
+- Joins: INNER JOIN runs on the engine's join routes: an in-memory database accepts several in one statement, a paged table one. LEFT, RIGHT, FULL, CROSS and every other join runs on the row engine. A join over a paged table with NULL columns runs with SQL NULL rules.
+- Exact sums: INT sums are exact 128-bit running totals, and a statement throws if the true total leaves 64 bits. Empty selections give NULL for SUM, AVG, MIN and MAX, and 0 for COUNT. COUNT(*) and AVG count the rows that exist.
 - Row order: Without ORDER BY, the order of rows is unspecified and can change after a DELETE or a write that moves a row.
+- Analytic tables: SMALLINT, INTEGER, BIGINT, DATE, TIMESTAMP, CHAR(n) and VARCHAR(n) columns, or a table with no primary key, make an analytic table. It exists only in a paged database and has no NULL columns. Load it column by column with BulkLoadColumns.
+- Refused, not reinterpreted: A statement that would otherwise drop one of its clauses throws. DISTINCT together with an aggregate is refused (use GROUP BY), and so is NEAREST combined with a join, GROUP BY, HAVING, ORDER BY, DISTINCT or an aggregate.
+
+##### Exact decimals
+
+DECIMAL(p, s) and NUMERIC(p, s) hold exact values of at most 18 digits in total, with 1 <= p <= 18 and 0 <= s <= p. The value is stored as a scaled 64-bit integer. A decimal literal is exact up to 15 significant digits; a longer literal is refused by name.
+
+- Arithmetic: +, -, * and / on decimal values are exact. A result is rounded half away from zero to the scale it needs. A result that does not fit 18 digits throws SQLSTATE 22003. Division by zero throws 22012.
+- Writes: A value written to a decimal column is brought to the column's scale. A value that does not fit the column's digits throws 22003. Text input to a decimal column is refused.
+- Results: A decimal result comes back as a System.Decimal with its scale, and QueryResult.ColumnScale gives the column's scale. A decimal with an integer is a decimal. A decimal with a double is a double.
+- Works on in-memory and paged tables: Decimal literals and columns in expressions and WHERE; INSERT; UPDATE and DELETE whose WHERE names no decimal column; SELECT with aggregates, GROUP BY and HAVING (SUM keeps the scale, AVG returns a decimal); DROP TABLE, SHOW and DESCRIBE.
+- Refused by name for a table that holds a decimal column: A join over it; NEAREST over it; an UPDATE or DELETE whose WHERE names a decimal column; Seal, KeyDigest, EnablePleroma, BulkLoad, BulkLoadColumns, PagedBulkLoad, ApplyChanges, and a read AS OF a past sequence. SQLSTATE 0A000.
+- Refused at definition: A bare DECIMAL (0A000); p above 18 (0A000); p below 1 or a scale outside 0..p (42601); a DECIMAL primary key; a DECIMAL column in a summary table; an ADD COLUMN of a decimal with a DEFAULT other than NULL.
 
 ##### Structures that build themselves
 
-The engine watches the workload it serves and builds only the structures that repeated queries have paid for: summaries, sorted and keyed indexes, a tree of exact sums, learned block records with exact partial sums, learned routes, zones that skip blocks, top-k by zones, gather and placement. It drops them when the workload moves on or when a write would make them cost more than they save. One budget covers them all and is a hard cap.
+Nothing here is declared. The engine watches the workload it serves and builds only the structures that repeated queries have paid for: summaries, sorted and keyed indexes, a tree of exact sums, learned block records with exact partial sums, learned routes, zones that skip blocks, top-k by zones, gather and placement. It drops them when the workload moves on or when a write would make them cost more than they save. One budget covers them all and is a hard cap.
 
-SET indexes and SET summaries choose whether automatic indexes and summaries are built (auto), only declared ones are kept (declared), or none answers a query (off). EXPLAIN says which structure answered a statement, or why none did. The answers are the same in every setting.
+SET indexes and SET summaries choose whether automatic indexes and summaries are built (auto), only declared ones are kept (declared), or none answers a query (off). EXPLAIN says which structure answered a statement, or why none did, and SHOW SUMMARIES reports the state of each structure and what it is waiting for. The answers are the same in every setting.
 
 ##### NULL
 
-Declare a column NULL and it holds true nulls with three-valued logic, on paged tables as well as in memory. A statement that names a nullable column takes an exact path that reads only the columns it names.
+Declare a column NULL and it holds true nulls with three-valued logic, on paged tables as well as in memory. A statement that names a nullable column takes an exact path that reads only the columns it names. Null counts are maintained.
 
-COUNT(col), SUM, AVG, MIN and MAX skip nulls, GROUP BY makes one null group, and a join never matches one. Null counts are maintained. A point read of one row on a wide nullable table takes about 110 page pins at 100,000, 300,000 and 1,000,000 rows.
+- Three-valued logic: WHERE and HAVING keep a row only when the predicate is true. A comparison, LIKE, IN or BETWEEN on a NULL is unknown. IS NULL and IS NOT NULL are always true or false.
+- Aggregates: COUNT(*) counts rows. COUNT(col), COUNT(DISTINCT col), SUM, AVG, MIN and MAX use the non-NULL values, and are NULL when there are none.
+- Grouping and ordering: GROUP BY and DISTINCT make one group of all the NULLs. ORDER BY puts NULL first when ascending and last when descending. An INNER JOIN never matches a NULL key.
+- Results: Read a NULL cell with Rows or GetValue, where it is DBNull.Value, or test QueryResult.IsNull. GetLong, GetDouble and GetText throw a HoloException on a NULL.
+- Literal NULL in a comparison: On a SELECT, a literal NULL beside =, <>, <, >, <=, >=, IN, BETWEEN or LIKE is unknown. In a DELETE or UPDATE WHERE, the same literal is refused by name, with a message that says to write IS NULL.
 
 ##### Similarity search
 
-NEAREST ranks rows by how closely they match a partial description, with no separate index. It ranks exactly on small tables and approximately above a size threshold. It does not combine with GROUP BY or with a join on a nullable table.
+NEAREST ranks rows by the cosine similarity of their holographic encoding to a partial key: any subset of columns, of any type, in the form SELECT ... FROM t NEAREST (col = value, ...) [WHERE ...] [LIMIT k]. The encoding is derived from the columns, so a row is ranked by the values it holds now. A WHERE filters the rows before they are ranked, and no index has to be declared.
+
+Similarity is graded. A number or date close to the key ranks ahead of a far one, and a text value that is nearly the same string ranks ahead of an unrelated one, by character trigrams. Add score to the projection to read the ranking value; 1.0 is an exact match. Above a size threshold the ranking uses an approximate candidate search (locality-sensitive hashing) instead of comparing every row, so its order can differ from an exact scan. NEAREST does not combine with a join, GROUP BY, or a table with a decimal column.
 
 ```csharp
 using HoloDb;
@@ -1599,37 +1633,73 @@ id=1 category=electronics price=100 score=0.988
 
 ##### Transactions and durability
 
-BEGIN, COMMIT and ROLLBACK run over a write-ahead log of signed page deltas in a ring file whose size follows the largest recent batch, with group commit: a statement that has returned is on disk. A failed statement inside a transaction undoes only itself.
+START TRANSACTION, COMMIT and ROLLBACK (BEGIN under Extended) run over a write-ahead log of signed page deltas in a ring file whose size follows the largest recent batch, with group commit: a statement that has returned is on disk. A rolled-back transaction leaves the same rows, though their order may differ. DDL inside a transaction is allowed. BulkLoad is not, and Checkpoint() throws inside one.
 
-A transaction larger than the buffer pool spills to a scratch file, and a rollback or a power cut leaves the table as it was. The tests cut the power inside COMMIT and kill the process, and the table that opens is the table before or the table after.
+On a paged table, a statement that fails inside a transaction undoes only itself, and the statements before it stay. A transaction larger than the buffer pool spills to a scratch file, and a rollback or a power cut leaves the table as it was. Every commit is checksummed, and the table that opens after a cut is the table before or the table after.
 
 ##### AS OF and Seal
 
-Each commit is kept as a signed record within a retention budget, so SELECT ... FROM t AS OF n reads a paged table as it was after commit n for any n the history still holds. Seal(table, asOf: n) gives an order-free fingerprint that replicas can compare.
+Paged tables keep each committed change as a signed record, so a past state is the present state with the later changes taken back out. SELECT ... FROM t AS OF n reads the table as it was after commit n, and AS OF LATEST is the present state. Seal(table, asOf: n) returns the table's seal as it was after commit n. SHOW SEQUENCE returns the current sequence and the floor.
 
-AS OF works on paged tables. A sequence below the floor, inside a retained segment, or on an in-memory table is refused by name, as is a join under it.
+The answers are exact at every n at or above the floor. Refused by name, never answered approximately: a join under AS OF, NEAREST, an in-memory table, n above the current sequence, n below the floor, n inside a retained segment, and a read inside a transaction that has written the table. An ALTER TABLE ... ADD COLUMN is a barrier: an AS OF read below the floor is refused by name.
 
-##### Atomic change batches and upsert
+##### Loading data and change batches
 
-ApplyChanges applies a batch of upserts and deletes atomically. KeyDigest compares two key sets in modulus numbers. Seal fingerprints a table so shards add and replicas compare.
+ImportCsv(table, path, header, delimiter) loads an RFC 4180 CSV file into an existing table in one atomic load. A bad field refuses the whole file by name, with its line number, and nothing is loaded. It is a method, not a statement, so a SQL client cannot make the server read a file.
 
-INSERT with ON CONFLICT ... DO UPDATE is the SQL upsert. ApplyChanges and the upsert form run on in-memory tables, and a paged table refuses them.
+BulkLoad and BulkLoadColumns append typed arrays without the SQL parser, and validate every key first, so a duplicate primary key leaves the table unchanged. The bulk load forms refuse a table that holds a decimal column.
+
+ApplyChanges applies a batch of upserts and deletes atomically on an in-memory table: one write lock, one log commit, and a reader sees the table before the batch or after it. Changes count in order, the last change of a key wins, and only the net effect is applied. The SQL form INSERT ... ON CONFLICT (pk) DO UPDATE (Extended) changes only the listed columns of an existing row, and is in-memory only.
+
+KeyDigest(table, modulus) returns one bucket of Count and an exact Int128 Sum for each bucket of an INT primary key, so two systems can compare modulus numbers instead of every key. Seal fingerprints a table so shards add and replicas compare.
+
+```csharp
+using HoloDb;
+
+var db = new HoloDbService(new HoloDbOptions());
+db.Execute("CREATE TABLE users (id INT PRIMARY KEY, age INT, name TEXT)");
+db.Execute("INSERT INTO users VALUES (1, 30, 'Ada')");
+
+var result = await db.ExecuteAsync("SELECT name FROM users WHERE age >= 18");
+foreach (var row in result.Rows) Console.WriteLine(row["name"]);
+// Ada
+```
+
+Output:
+
+```text
+Ada
+```
 
 ##### Tables larger than memory
 
-Paged tables read through a buffer pool of 8 KB pages. Every page has a logical number, and a map takes that number to a place in the file. The map changes only inside a committed log batch, so a moved or rewritten page never leaves the file half-changed, and a shrunk table keeps its freed pages and refills them.
+A paged table keeps its pages in a buffer pool of 8 KB pages, and its changes in a write-ahead log. Pages that are not in the pool are read from data.pages through a read-only memory map. CreatePaged(createTableSql, dir) creates a paged table in a directory, OpenPaged(dir) reopens it and recovers committed state from its log, PagedBulkLoad streams rows and commits every so many rows, and ClosePaged(table) checkpoints and closes one table.
 
-Every log block and every data page carries a CRC-32C checksum. A page that fails its checksum is an error that names the page, never a changed answer. Paged tables written by older formats, older write-ahead logs, and a text-format database opened as paged all throw a named error that says to export the rows and load them into a new database. There is no in-place upgrade.
+Every page has a logical number, and a block map takes that number to a place in the file. The map changes only inside a committed log batch, so a moved or rewritten page never leaves the file half-changed. Every log block and every data page carries a CRC-32C checksum. A page that fails its checksum throws an error that names the page and the file, with the code data-page-checksum, so a bad page is an error and never a different answer.
 
-##### The aggregate plane
+A DELETE marks its rows and moves nothing; the cost follows the rows deleted. Consolidation fills the holes after a statement, once the scans that read them have paid for it, and gives the freed pages back. Consolidate(table) runs it now. Rows come back in a different order afterwards unless you ORDER BY.
 
-The plane is optional. It is an exact derived summary of small-domain columns, served through Phasor's Pleroma stores, with PleromaVerify to check it against the columns.
+Whole-database paged mode: HoloDbOptions.Paged = true puts a new database on the paged engine, so a plain CREATE TABLE creates a paged table. Opening an existing text log with paged: true throws.
 
-##### Metering and integration
+##### Storage format and upgrading
 
-MeteredDatabase reports the rows and bytes each query read.
+The write-ahead log of a paged table, wal.log, is a fixed-size ring of checksummed blocks holding signed deltas. It does not grow with history. The log is format HWAL 5. The table record, table.meta12, begins with the line HoloDb table format 15.
 
-services.AddHoloDb() registers HoloDb for dependency injection, and an EvalApp context runs it inside pipelines.
+Format 15 records the precision and scale of each DECIMAL column. A store in format 14 opens, and its catalog is written again as format 15 on its next catalog write. A table record of format 13 or older is refused by name. The message says to export the rows with the build that wrote them and load them into a new database.
+
+A build of major version 20 reads only format 14. It refuses a store written by this release (format 15) with a named message. Stores written by major version 20 open in this release. There is no in-place upgrade.
+
+##### Summary tables and the aggregate plane
+
+A summary table keeps no rows. It stores only an exact aggregate plane, the value dictionaries of its dimensions and the position each feed has reached, so its size depends on the distinct values of its dimensions. A dimension is an INT or TEXT column you filter, group or count distinct on; a measure is an INT column you SUM or AVG. ApplyPlaneChanges takes Add, Remove and Replace changes as one atomic batch, and a batch at or below the position already applied for its source is skipped.
+
+The optional aggregate plane, held in Phasor Pleroma stores, summarises the small-domain columns of one table. It answers WHERE aggregates over its dimensions, multi-column GROUP BY with HAVING, COUNT(DISTINCT dimension), and one equi-join COUNT or SUM. Anything it does not cover goes to the engine, so a statement returns the same rows with the plane on or off. PleromaVerify rebuilds the plane from the columns and compares it. A plane attached with EnablePleroma is not kept across a restart; one created with CREATE INDEX ... USING SUMMARY (Extended) is.
+
+##### Statement limits, metering and integration
+
+A statement can carry a cancel token, a timeout and a result byte budget through StatementLimits. A cancelled or timed-out statement throws HoloCancelledException, and a statement the budget refuses throws HoloResultTooLargeException before the rows that would pass it are allocated. A stopped statement has no effect.
+
+MeteredDatabase reports the rows and bytes each query read. services.AddHoloDb() registers HoloDb for dependency injection, and an EvalApp context runs it inside pipelines.
 
 ##### Over the network
 
@@ -2786,58 +2856,42 @@ Limits:
 - The work is a simulated wait, not a real network. It shows that the gate and its queue hold the bound, not how any real service behaves.
 - It checks the gate and does not compare EvalApp with another library.
 
-### What HoloDb learns, and how it is tested
+### How HoloDb is tested
 
-After single-row updates and deletes the next sweep reads 6 blocks with learned records that adjust, against 60 and 51 when updates drop them, and 6 against 366 after consolidation. A wrong answer is the one failure a database cannot afford, so the tests try to make HoloDb wrong: across 8 customer runs and 158 sessions it compared 249 million rows against SQLite and recovered 46 times after a kill or a power cut, 37 times to the state before the interrupted write, 9 times to the state after, and never to a state between.
+A wrong answer is the one failure a database cannot afford, so the tests try to make HoloDb wrong and report the first time it is. The page states what is tested and how to run the checks. It carries no measured figures.
 
 Page: https://evaluatedapplications.github.io/holodb/evidence/
 
 Method:
-- Workload: Learned-record and upkeep counters come from pinned streams on a 1,000,000-row table with six learned scatter predicates. Correctness figures come from the 56-spec battery, the chaos2 random SQL streams and the customer lifecycle test, which grows one database from an empty file over many separate processes.
+- Workload: The battery runs its specs in both pipeline modes. The chaos runs generate random SQL streams over a paged table. The customer lifecycle test grows one database from an empty file over many separate processes.
 - Engines: HoloDb; SQLite as the oracle for every answer, the full row set and the table seal
 - Check: Every SELECT, the full row set and the table seal are compared with SQLite, and the database is opened again after every session. Every check has a mutant arm that breaks the engine on purpose, and the check must go red for the right reason.
-- Statistic: Counts of blocks, pins, runs and bytes are exact.
-- Machine: 11th Gen Intel Core i9-11950H (8 cores, 16 threads), NVMe, Windows 11, shared with another job during the battery and customer runs.
-- Memory and logging: Three terms recur. A block is a run of rows stored together. A page is 8 KB of file. A pin is one page read through the buffer pool, and counts of pins stand in for time.
+- Statistic: Counts of blocks, pins, runs and bytes are exact. A pin is one page read through the buffer pool, and counts of pins stand in for time.
+- Memory and logging: Three terms recur. A block is a run of rows stored together. A page is 8 KB of file. A pin is one page read through the buffer pool.
 
 Where it loses:
 - Structures help repeated work. A filter whose matching rows are spread evenly over every block gains nothing from learned records.
-- Writes pay for what the engine keeps: a delete or update is charged the measured time of each structure's delta path, and a structure is dropped when its measured upkeep exceeds its saving.
-- Moving scattered rows costs about 200 microseconds per row, so a scattered filter pays that back after about 100 uses.
-
-#### What the engine learns
-
-Each row below compares the engine with a mechanism turned off, on the same stream. Every answer stayed exact.
-
-Learned records, upkeep and gather
-
-| Measurement | Result |
-|---|---|
-| Learned records under writes | After a stream of single-row UPDATEs and DELETEs over six learned scatter predicates on 1,000,000 rows, the next sweep reads 6 blocks with records that adjust, against 60 and 51 blocks when updates drop them: 8.5 to 10 times fewer. After consolidation it reads 6 blocks against 366: 61 times fewer. All counts, sums and zones were verified exact against the cells in every phase. |
-| Upkeep priced from measured cost | On a mixed stream of 1,200 delete-or-update pairs each followed by a sorted count, the index with measured upkeep stayed built and read 0 blocks, using 49,306 to 54,106 page pins in all, against 1,158,839 pins when the structure was dropped at the 256th write and rebuilt by scans. That is 21 to 24 times fewer. |
-| Gather priced from measured waste | On a repeated sum that the stored records answer, gather moves 0 rows, and in the repeat phases it reads the same 12 blocks as with gather off; the learning phase reads 390. Where scans do read the excess (a selective scatter over 20,000 rows, sums off) it cuts the blocks read per round from 288 to 30. A one-time regroup can reach a similar layout without gather. |
-
-Customer lifecycle runs: layout, NULL path and ring file
-
-| Run | Result |
-|---|---|
-| Retention deletes, 3.1 million rows | The log customer grew to 3,097,444 rows over 25 sessions with 8.2 percent dead slots. The map that turns a row id into a row position held 5,117 to 15,174 runs. A plain pairing order (highest live row to lowest hole) leaves 115,118 runs on the same kind of table. |
-| Wide table with NULLs, 3.2 million rows | 9 sessions to 3,205,807 rows, 0 failures, 0 check faults, 0 runs in the id map, about 103 bytes per row, and a peak working set of 4.6 GB. The null path reads only the columns a statement names. |
-| Null path cost | A seven-query dashboard pass on nullable columns costs 0.44 page pins per row at 100,000, 300,000 and 1,000,000 rows. A point read of one row costs 103 to 115 pins. |
-| Ring file | The write-ahead ring is sized from the largest batch of the last window. One wide statement pinned it at 8.5 MB; after a clean close and reopen it is 41 KB. |
+- Moving scattered rows costs time per row moved, so a scattered filter pays it back only after repeated use.
+- The tests check correctness. They publish no timings, so this page makes no speed claim.
 
 #### What we test
 
 A wrong answer is the one failure a database cannot afford, so the tests try to make HoloDb wrong and report the first time it is.
 
-The four kinds of test
+The kinds of test
 
-| Test | What it does | Result |
-|---|---|---|
-| The battery | 56 specs per mode, run in both pipeline modes: the block pipeline, which reads and learns from blocks, and the analytic executor, which answers from exact totals. A spec covers one area: NULL logic, the block map, crash points, the history log, AS OF, the sorted index, the keyed summary, the tree, learned records, gather, placement, routes, transactions and their undo, the budget, and randomized streams. Several specs run at 3,000,000 rows. | Mode 1 passed all 56 (one spec failed once at a reopen after a simulated crash and passed on three further runs). Mode 2 passed 55 of 56; the 56th is a timing bound and was not run while the machine was loaded. |
-| Red arms | Every check has a mutant arm that breaks the engine on purpose (an update that leaves a stale sum, a move that forgets a zone, a log that drops a record) and the check must go red for the right reason. | The battery holds 276 arm runs in mode 1 and 275 in mode 2; 256 and 237 are detected. The rest are listed by name with their reason: an arm that lives in the other pipeline, an arm that by design changes no answer, or an arm that belongs to a different spec. |
-| Chaos runs | chaos2 generates random SQL streams over a paged table: SELECT with filters, grouping, joins and top-k, INSERT, UPDATE, DELETE, transactions with rollback, ALTER, index DDL, reopen, power loss, a power cut at the nth durable write inside COMMIT, and a restart with builds running. SQLite is the oracle for every answer, for the full row set, and for the table seal. | The learned-on arm ran 40 of 40 seeds green (tables up to 100,000 rows) and the learned-off arm 30 of 30 (up to 60,000 rows), in both modes. The mutant arm ran 15 seeds in mode 1 (up to 40,000 rows) and went red on 3. |
-| Customer lifecycle | A simulated customer starts with an empty file and works one database across many separate processes: cold open, imports, daily batches, updates, retention deletes, ALTER, index DDL, repeated dashboards, ad hoc SQL, transactions with rollback, in-process power cuts, and hard kills of the process by its parent. A SQLite mirror is the oracle. | Across 8 archived customer runs and 158 sessions: 249 million rows compared against SQLite, 8,267 SELECTs and 1,129 checked DML statements, and 46 recoveries after a kill or a cut: 37 to the state before the interrupted write, 9 to the state after, none to a state between. The mutant arm goes red at session 12 of one profile. |
+| Test | What it does |
+|---|---|
+| The battery | A battery of specs runs in both pipeline modes: the block pipeline, which reads and learns from blocks, and the analytic executor, which answers from exact totals. A spec covers one area of the engine: NULL logic, the block map, crash points, the history log, AS OF, the indexes and summaries, learned records, transactions and their undo, the budget, and randomized streams. Several specs run at 3,000,000 rows. |
+| Red arms | Checks have mutant arms: a deliberately broken engine, such as an update that leaves a stale sum or a log that drops a record, that the check must catch for the right reason. |
+| Chaos runs | chaos2 generates random SQL streams over a paged table: SELECT with filters, grouping, joins and top-k, INSERT, UPDATE, DELETE, transactions with rollback, ALTER, index DDL, reopen, power loss, a power cut at a durable write inside COMMIT, and a restart with builds running. SQLite is the oracle for every answer, for the full row set, and for the table seal. |
+| Customer lifecycle | A simulated customer starts with an empty file and works one database across many separate processes: cold open, imports, daily batches, updates, retention deletes, ALTER, index DDL, repeated dashboards, ad hoc SQL, transactions with rollback, power cuts in process, and hard kills of the process by its parent. A SQLite mirror is the oracle, and the database is opened again after every session. |
+
+#### How to run the checks
+
+The checks run from the package's source repository, not from this site. The HoloDb.Bench project runs them as verbs: the verb name is its argument, for example dotnet run -c Release --project HoloDb.Bench -- sqlcore. Each verb exits 0 when its checks pass. The verbs include sqlcore, sqlsurface, sqlrefuse, asofcrash, stmtatomic, pagedcrash, walepoch, decimalcore and chaos2.
+
+The SQL surface is checked by sqlsurface, sqlcore and sqlrefuse. The history log is checked by asofcrash, the write path by stmtatomic and pagedcrash, and the DECIMAL type by decimalcore.
 
 Limits:
 - The lifecycle and crash guarantees are tested at 3,000,000 rows. The limits on the HoloDb page list the rest.

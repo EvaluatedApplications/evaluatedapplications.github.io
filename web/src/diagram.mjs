@@ -16,9 +16,6 @@ import * as superpositionScene from './assets/diagrams/superposition-scene.js';
 import * as coverageMeter from './assets/diagrams/coverage-meter.js';
 import * as commutationMap from './assets/diagrams/commutation-map.js';
 import * as hologenomeScores from './assets/diagrams/hologenome-scores.js';
-import * as holodbLearns from './assets/diagrams/holodb-learns.js';
-import * as holodbRent from './assets/diagrams/holodb-rent.js';
-import * as holodbCrash from './assets/diagrams/holodb-crash.js';
 import * as thePond from './assets/diagrams/the-pond.js';
 
 const KINDS = {
@@ -27,7 +24,7 @@ const KINDS = {
   'holovoxel-lod': holovoxelLod, 'prose-pipeline': prosePipeline,
   'design-effect': designEffect,
   'superposition-scene': superpositionScene, 'coverage-meter': coverageMeter, 'commutation-map': commutationMap, 'hologenome-scores': hologenomeScores,
-  'holodb-learns': holodbLearns, 'holodb-rent': holodbRent, 'holodb-crash': holodbCrash, 'the-pond': thePond,
+  'the-pond': thePond,
 };
 
 export function diagramModule(kind) {

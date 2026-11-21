@@ -2,105 +2,45 @@
   "id": "holodb",
   "product": "holodb",
   "slug": "/holodb/evidence/",
-  "scope": "Test battery, chaos runs, customer lifecycle runs and engine counters",
-  "title": "What HoloDb learns, and how it is tested",
-  "description": "Learned records under writes read 6 blocks against 60 and 51. Across 158 sessions HoloDb matched SQLite on 249 million rows and recovered 46 times.",
-  "claim": "After single-row updates and deletes the next sweep reads 6 blocks with learned records that adjust, against 60 and 51 when updates drop them, and 6 against 366 after consolidation. A wrong answer is the one failure a database cannot afford, so the tests try to make HoloDb wrong: across 8 customer runs and 158 sessions it compared 249 million rows against SQLite and recovered 46 times after a kill or a power cut, 37 times to the state before the interrupted write, 9 times to the state after, and never to a state between.",
+  "scope": "Test battery, chaos runs and the customer lifecycle test",
+  "title": "How HoloDb is tested",
+  "description": "HoloDb answers are checked against SQLite, every check has a mutant arm, and power cuts are tested. This page says what is tested and how to run it.",
+  "claim": "A wrong answer is the one failure a database cannot afford, so the tests try to make HoloDb wrong and report the first time it is. The page states what is tested and how to run the checks. It carries no measured figures.",
   "headline": [
     {
-      "value": "6 against 60 and 51",
-      "label": "blocks read by the next sweep after single-row updates and deletes, with learned records that adjust against records dropped on write, on 1,000,000 rows"
+      "value": "SQLite",
+      "label": "is the oracle for every answer, the full row set and the table seal in the chaos runs and the customer lifecycle test"
     },
     {
-      "value": "61 times",
-      "label": "fewer blocks read after consolidation: 6 against 366"
+      "value": "Mutant arms",
+      "label": "every check has a deliberately broken engine that the check must catch, for the right reason"
     },
     {
-      "value": "249 million rows",
-      "label": "compared against SQLite across 8 customer runs and 158 sessions, with the database opened again after every session"
+      "value": "Power cuts",
+      "label": "a cut at a durable write inside COMMIT, and a kill of the process, are recovered and compared with the oracle"
     },
     {
-      "value": "0 of 46",
-      "label": "recoveries after a kill or a power cut ended between the state before and the state after: 37 to before, 9 to after"
+      "value": "Reopened",
+      "label": "the database is opened again after every session of the customer lifecycle test"
     }
   ],
   "lossTitle": "What it costs",
   "losses": [
     "Structures help repeated work. A filter whose matching rows are spread evenly over every block gains nothing from learned records.",
-    "Writes pay for what the engine keeps: a delete or update is charged the measured time of each structure's delta path, and a structure is dropped when its measured upkeep exceeds its saving.",
-    "Moving scattered rows costs about 200 microseconds per row, so a scattered filter pays that back after about 100 uses."
+    "Moving scattered rows costs time per row moved, so a scattered filter pays it back only after repeated use.",
+    "The tests check correctness. They publish no timings, so this page makes no speed claim."
   ],
   "method": {
-    "workload": "Learned-record and upkeep counters come from pinned streams on a 1,000,000-row table with six learned scatter predicates. Correctness figures come from the 56-spec battery, the chaos2 random SQL streams and the customer lifecycle test, which grows one database from an empty file over many separate processes.",
+    "workload": "The battery runs its specs in both pipeline modes. The chaos runs generate random SQL streams over a paged table. The customer lifecycle test grows one database from an empty file over many separate processes.",
     "engines": [
       "HoloDb",
       "SQLite as the oracle for every answer, the full row set and the table seal"
     ],
     "verification": "Every SELECT, the full row set and the table seal are compared with SQLite, and the database is opened again after every session. Every check has a mutant arm that breaks the engine on purpose, and the check must go red for the right reason.",
-    "statistic": "Counts of blocks, pins, runs and bytes are exact.",
-    "machine": "11th Gen Intel Core i9-11950H (8 cores, 16 threads), NVMe, Windows 11, shared with another job during the battery and customer runs.",
-    "memory": "Three terms recur. A block is a run of rows stored together. A page is 8 KB of file. A pin is one page read through the buffer pool, and counts of pins stand in for time."
+    "statistic": "Counts of blocks, pins, runs and bytes are exact. A pin is one page read through the buffer pool, and counts of pins stand in for time.",
+    "memory": "Three terms recur. A block is a run of rows stored together. A page is 8 KB of file. A pin is one page read through the buffer pool."
   },
   "sections": [
-    {
-      "id": "learns",
-      "title": "What the engine learns",
-      "intro": [
-        "Each row below compares the engine with a mechanism turned off, on the same stream. Every answer stayed exact."
-      ],
-      "tables": [
-        {
-          "id": "learned",
-          "kind": "matrix",
-          "caption": "Learned records, upkeep and gather",
-          "columns": [
-            "Measurement",
-            "Result"
-          ],
-          "rows": [
-            [
-              "Learned records under writes",
-              "After a stream of single-row UPDATEs and DELETEs over six learned scatter predicates on 1,000,000 rows, the next sweep reads 6 blocks with records that adjust, against 60 and 51 blocks when updates drop them: 8.5 to 10 times fewer. After consolidation it reads 6 blocks against 366: 61 times fewer. All counts, sums and zones were verified exact against the cells in every phase."
-            ],
-            [
-              "Upkeep priced from measured cost",
-              "On a mixed stream of 1,200 delete-or-update pairs each followed by a sorted count, the index with measured upkeep stayed built and read 0 blocks, using 49,306 to 54,106 page pins in all, against 1,158,839 pins when the structure was dropped at the 256th write and rebuilt by scans. That is 21 to 24 times fewer."
-            ],
-            [
-              "Gather priced from measured waste",
-              "On a repeated sum that the stored records answer, gather moves 0 rows, and in the repeat phases it reads the same 12 blocks as with gather off; the learning phase reads 390. Where scans do read the excess (a selective scatter over 20,000 rows, sums off) it cuts the blocks read per round from 288 to 30. A one-time regroup can reach a similar layout without gather."
-            ]
-          ]
-        },
-        {
-          "id": "runs",
-          "kind": "matrix",
-          "caption": "Customer lifecycle runs: layout, NULL path and ring file",
-          "columns": [
-            "Run",
-            "Result"
-          ],
-          "rows": [
-            [
-              "Retention deletes, 3.1 million rows",
-              "The log customer grew to 3,097,444 rows over 25 sessions with 8.2 percent dead slots. The map that turns a row id into a row position held 5,117 to 15,174 runs. A plain pairing order (highest live row to lowest hole) leaves 115,118 runs on the same kind of table."
-            ],
-            [
-              "Wide table with NULLs, 3.2 million rows",
-              "9 sessions to 3,205,807 rows, 0 failures, 0 check faults, 0 runs in the id map, about 103 bytes per row, and a peak working set of 4.6 GB. The null path reads only the columns a statement names."
-            ],
-            [
-              "Null path cost",
-              "A seven-query dashboard pass on nullable columns costs 0.44 page pins per row at 100,000, 300,000 and 1,000,000 rows. A point read of one row costs 103 to 115 pins."
-            ],
-            [
-              "Ring file",
-              "The write-ahead ring is sized from the largest batch of the last window. One wide statement pinned it at 8.5 MB; after a clean close and reopen it is 41 KB."
-            ]
-          ]
-        }
-      ]
-    },
     {
       "id": "tested",
       "title": "What we test",
@@ -111,35 +51,40 @@
         {
           "id": "tests",
           "kind": "matrix",
-          "caption": "The four kinds of test",
+          "caption": "The kinds of test",
           "columns": [
             "Test",
-            "What it does",
-            "Result"
+            "What it does"
           ],
           "rows": [
             [
               "The battery",
-              "56 specs per mode, run in both pipeline modes: the block pipeline, which reads and learns from blocks, and the analytic executor, which answers from exact totals. A spec covers one area: NULL logic, the block map, crash points, the history log, AS OF, the sorted index, the keyed summary, the tree, learned records, gather, placement, routes, transactions and their undo, the budget, and randomized streams. Several specs run at 3,000,000 rows.",
-              "Mode 1 passed all 56 (one spec failed once at a reopen after a simulated crash and passed on three further runs). Mode 2 passed 55 of 56; the 56th is a timing bound and was not run while the machine was loaded."
+              "A battery of specs runs in both pipeline modes: the block pipeline, which reads and learns from blocks, and the analytic executor, which answers from exact totals. A spec covers one area of the engine: NULL logic, the block map, crash points, the history log, AS OF, the indexes and summaries, learned records, transactions and their undo, the budget, and randomized streams. Several specs run at 3,000,000 rows."
             ],
             [
               "Red arms",
-              "Every check has a mutant arm that breaks the engine on purpose (an update that leaves a stale sum, a move that forgets a zone, a log that drops a record) and the check must go red for the right reason.",
-              "The battery holds 276 arm runs in mode 1 and 275 in mode 2; 256 and 237 are detected. The rest are listed by name with their reason: an arm that lives in the other pipeline, an arm that by design changes no answer, or an arm that belongs to a different spec."
+              "Checks have mutant arms: a deliberately broken engine, such as an update that leaves a stale sum or a log that drops a record, that the check must catch for the right reason."
             ],
             [
               "Chaos runs",
-              "chaos2 generates random SQL streams over a paged table: SELECT with filters, grouping, joins and top-k, INSERT, UPDATE, DELETE, transactions with rollback, ALTER, index DDL, reopen, power loss, a power cut at the nth durable write inside COMMIT, and a restart with builds running. SQLite is the oracle for every answer, for the full row set, and for the table seal.",
-              "The learned-on arm ran 40 of 40 seeds green (tables up to 100,000 rows) and the learned-off arm 30 of 30 (up to 60,000 rows), in both modes. The mutant arm ran 15 seeds in mode 1 (up to 40,000 rows) and went red on 3."
+              "chaos2 generates random SQL streams over a paged table: SELECT with filters, grouping, joins and top-k, INSERT, UPDATE, DELETE, transactions with rollback, ALTER, index DDL, reopen, power loss, a power cut at a durable write inside COMMIT, and a restart with builds running. SQLite is the oracle for every answer, for the full row set, and for the table seal."
             ],
             [
               "Customer lifecycle",
-              "A simulated customer starts with an empty file and works one database across many separate processes: cold open, imports, daily batches, updates, retention deletes, ALTER, index DDL, repeated dashboards, ad hoc SQL, transactions with rollback, in-process power cuts, and hard kills of the process by its parent. A SQLite mirror is the oracle.",
-              "Across 8 archived customer runs and 158 sessions: 249 million rows compared against SQLite, 8,267 SELECTs and 1,129 checked DML statements, and 46 recoveries after a kill or a cut: 37 to the state before the interrupted write, 9 to the state after, none to a state between. The mutant arm goes red at session 12 of one profile."
+              "A simulated customer starts with an empty file and works one database across many separate processes: cold open, imports, daily batches, updates, retention deletes, ALTER, index DDL, repeated dashboards, ad hoc SQL, transactions with rollback, power cuts in process, and hard kills of the process by its parent. A SQLite mirror is the oracle, and the database is opened again after every session."
             ]
           ]
         }
+      ]
+    },
+    {
+      "id": "run",
+      "title": "How to run the checks",
+      "intro": [
+        "The checks run from the package's source repository, not from this site. The HoloDb.Bench project runs them as verbs: the verb name is its argument, for example dotnet run -c Release --project HoloDb.Bench -- sqlcore. Each verb exits 0 when its checks pass. The verbs include sqlcore, sqlsurface, sqlrefuse, asofcrash, stmtatomic, pagedcrash, walepoch, decimalcore and chaos2."
+      ],
+      "notes": [
+        "The SQL surface is checked by sqlsurface, sqlcore and sqlrefuse. The history log is checked by asofcrash, the write path by stmtatomic and pagedcrash, and the DECIMAL type by decimalcore."
       ]
     }
   ],
@@ -147,6 +92,6 @@
     "The lifecycle and crash guarantees are tested at 3,000,000 rows. The limits on the HoloDb page list the rest."
   ],
   "internal": {
-    "source": "MonoRepo HoloDb/docs/site.md, What we test and What the runs measured"
+    "source": "MonoRepo HoloDb/docs/site.md (What we test, Limits), HoloDb/PACKAGE.md (the NULL, DECIMAL and history sections) and HoloDb/CLAUDE.md (the verb names). No measured figure is published on this page until it is measured on the current release."
   }
 }
