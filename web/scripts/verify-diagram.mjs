@@ -348,8 +348,8 @@ try {
   ow = await overflow('/hologenome/evidence/');
   ok('hologenome evidence phone 390: no horizontal overflow', ow.sw <= ow.cw, JSON.stringify(ow));
 
-  // ================= explainers: holodb-learns, holodb-rent, holodb-crash (on /holodb/) and the-pond (on /algformer/) =================
-  const EX = { learns: ['holodb-learns', '/holodb/'], rent: ['holodb-rent', '/holodb/'], crash: ['holodb-crash', '/holodb/'], pond: ['the-pond', '/algformer/'] };
+  // ================= explainers: the-pond (on /algformer/). The HoloDb explainers were removed with their counters (HoloDb 21.0.1 text pass). =================
+  const EX = { pond: ['the-pond', '/algformer/'] };
   const exQ = (k) => `document.querySelector('[data-diagram=${EX[k][0]}]')`;
   const exReady = (k) => `${exQ(k)}.dataset.ready==='true'`;
   const exHtml = (k) => b.evaluate(`${exQ(k)}.querySelector('.dia-stage').innerHTML`);
@@ -371,21 +371,6 @@ try {
     await b.evaluate(`${exQ(k)}.querySelector('[data-ctl=play]').click()`);
   }
   // behaviour
-  await b.goto(`http://127.0.0.1:${port}/holodb/`, { width: 1280, height: 900, wait: exReady('learns') });
-  ok('learns: three views, each tab changes the promise', await b.evaluate(`(()=>{const f=${exQ('learns')};const tabs=[...f.querySelectorAll('[role=tab]')];if(tabs.length!==3)return false;const seen=new Set();for(const t of tabs){t.click();seen.add(f.querySelector('[data-ctl=promise]').textContent)}return seen.size===3})()`));
-  await b.evaluate(`${exQ('learns')}.querySelector('[role=tab]').click()`);
-  ok('learns: the final frame reads 6 against 366 blocks after consolidation', await b.evaluate(`(()=>{const t=[...${exQ('learns')}.querySelectorAll('.dia-stage .hl-val')].map(e=>e.textContent);return ['366','60','51'].every(v=>t.includes(v))&&t.filter(v=>v==='6').length===3})()`));
-  await b.evaluate(`${exQ('learns')}.querySelectorAll('[role=tab]')[1].click()`);
-  ok('learns: the upkeep view quotes 1,158,839 and 49,306 to 54,106 pins', await b.evaluate(`(()=>{const t=${exQ('learns')}.querySelector('.dia-stage').textContent;return t.includes('1,158,839')&&t.includes('49,306 to 54,106')})()`));
-  await exSet('rent', 'time', 167);
-  ok('rent: at 50 uses the ledger is still renting', await exRead('rent').then((t) => /After 50 uses/.test(t) && /still renting/.test(t)));
-  await exSet('rent', 'time', 1000);
-  ok('rent: at 300 uses the ledger has bought at 100 and spent twice the price', await exRead('rent').then((t) => /After 300 uses/.test(t) && /bought the move at 100 uses/.test(t) && /200%/.test(t)));
-  await exSet('crash', 'time', 300);
-  ok('crash: a cut before the commit is durable opens the table before', await exRead('crash').then((t) => /power goes before the commit is durable/.test(t) && /37 to the table before, 9 to the table after, 0 in between/.test(t)));
-  ok('crash: the table before is the one highlighted', await b.evaluate(`${exQ('crash')}.querySelectorAll('.hk-panel.on').length===1 && /opens/.test(${exQ('crash')}.querySelector('.hk-panel.on').nextSibling.textContent||'')||${exQ('crash')}.querySelectorAll('.hk-panel.on').length===1`));
-  await exSet('crash', 'time', 900);
-  ok('crash: a cut after it opens the table after', await exRead('crash').then((t) => /after the commit is durable/.test(t)));
   await b.goto(`http://127.0.0.1:${port}/algformer/`, { width: 1280, height: 900, wait: exReady('pond') });
   const atomState = () => b.evaluate(`[...${exQ('pond')}.querySelectorAll('[data-atom]')].findIndex(g=>g.getAttribute('aria-pressed')==='true')`);
   await b.evaluate(`${exQ('pond')}.querySelector('[data-atom="4"]').dispatchEvent(new MouseEvent('click',{bubbles:true}))`);

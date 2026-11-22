@@ -89,7 +89,8 @@ export default function product(ctx, p) {
   const bandSec = heroTool ? toolBand(heroTool, p, p.tools.filter((t) => t.id !== heroTool.id)) : sz?.pointer ? pointerBand(sz.pointer, subst) : '';
 
   const stats = sz ? resolveStats(ctx, sz.stats, subst) : [];
-  const numbersSec = sz ? numbersBlock({
+  // a sizzle page with no tiles and no disclosure (its words carry no measured figure) omits the numbers section entirely
+  const numbersSec = sz && (stats.length || sz.numbers) ? numbersBlock({
     stats, numbers: sz.numbers, subst, links: p.evidence,
     ribbon: html`<p class="licence-ribbon"><span>Release <b data-gen="version">${primary.version}</b></span><span>${(doc.facts || []).join(' · ')}</span></p>`,
   }) : '';
@@ -173,8 +174,8 @@ export default function product(ctx, p) {
 </div></section>` : '';
 
   const evSec = p.evidence.length ? html`<section class="sec doc-sec" aria-labelledby="h-ev"><div class="wrap">
-  ${secHead({ title: 'Evidence', cat: p.cat, id: 'h-ev', more: { href: p.evidence[0].slug, label: 'Method and every number' } })}
-  ${sz ? html`<p class="prose-block">${p.evidence[0].claim}</p>` : html`<dl class="stats">${evidenceTiles(p.evidence[0]).map((t) => stat(t.label, t.value))}</dl>`}
+  ${secHead({ title: 'Evidence', cat: p.cat, id: 'h-ev', more: { href: p.evidence[0].slug, label: (sz && sz.evidenceLabel) || 'Method and every number' } })}
+  ${sz ? html`<p class="prose-block">${sz.evidenceLine || p.evidence[0].claim}</p>` : html`<dl class="stats">${evidenceTiles(p.evidence[0]).map((t) => stat(t.label, t.value))}</dl>`}
 </div></section>` : '';
 
   const relSec = html`<section class="sec doc-sec" aria-labelledby="h-rel"><div class="wrap">
