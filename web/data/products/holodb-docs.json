@@ -103,10 +103,10 @@
     },
     {
       "id": "learns",
-      "title": "Structures that build themselves",
+      "title": "Structures the engine keeps for itself",
       "paragraphs": [
-        "Nothing here is declared. The engine watches the workload it serves and builds only the structures that repeated queries have paid for: summaries, sorted and keyed indexes, a tree of exact sums, learned block records with exact partial sums, learned routes, zones that skip blocks, top-k by zones, gather and placement. It drops them when the workload moves on or when a write would make them cost more than they save. One budget covers them all and is a hard cap.",
-        "SET indexes and SET summaries choose whether automatic indexes and summaries are built (auto), only declared ones are kept (declared), or none answers a query (off). EXPLAIN says which structure answered a statement, or why none did, and SHOW SUMMARIES reports the state of each structure and what it is waiting for. The answers are the same in every setting."
+        "Nothing here is declared. A paged table keeps exact per-column totals and zone maps beside its data, and a bulk-loaded analytic table also keeps per-value counts. They are built at load, not learned: totals answer whole-table aggregates, zone maps skip blocks, and a write makes the value counts unusable until the next clean close. Every other structure is built only when repeated queries have paid for it, and dropped when the workload moves on or when a write would make it cost more than it saves: summaries, sorted and keyed indexes, a tree of exact sums, learned block records with exact partial sums, learned routes, text predicate records, gather and placement. The planner's structures share one budget, which is a hard cap.",
+        "SET indexes and SET summaries choose whether automatic indexes and summaries are built (auto), only declared ones are kept (declared), or none answers a query (off). For in-memory tables and older paged tables, EXPLAIN names the route and the structure that answered a statement, or why none did; for an analytic table it does not report which stored structure answered. SHOW SUMMARIES reports the state of each structure and what it is waiting for. The answers are the same in every setting."
       ]
     },
     {

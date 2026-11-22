@@ -57,10 +57,10 @@ the full feature list, limits, evidence, related.
 
 - Eyebrow: HoloDb, an embedded SQL database for .NET
 - H1: Ask the same question twice and the second time reads almost nothing.
-- Sub: An embedded SQL database for .NET that learns from the queries it serves and keeps only what pays. Every SQL statement is answered exactly, with ACID and no index to design.
+- Sub: An embedded SQL database for .NET that builds structures from the queries it serves and drops those that stop paying. Every SQL statement is answered exactly, with ACID and no index to design.
 - Under the hero: the recorded explainers (learns, rent or buy, crash and come back)
 - Tiles (typed, each checked against the owner's site.md): 8.5 to 10 times / 61 times / 21 to 24 times / 0 of 46
-- Meta: An embedded SQL database for .NET that learns from the queries it serves and keeps only what pays. Every answer is exact, with ACID and no index to design.
+- Meta: An embedded SQL database for .NET that builds structures from the queries it serves and drops those that stop paying. Every answer is exact, with ACID and no index to design.
 
 ## /algformer/
 

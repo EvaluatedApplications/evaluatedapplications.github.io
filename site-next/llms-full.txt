@@ -41,7 +41,7 @@ The numbers:
 - Repair and detection. With 5 reserved keys, any of 1 to 5 lost key harmonics was rebuilt, 300 of 300 times each. A check prime mirrors every cell in a second prime, and one corrupted cell in either copy was detected 10,000 of 10,000 times. A parity group rebuilt any one lost store, 100 of 100 times.
 
 What you can build:
-- Database answers from exact counts. Read a whole page of exact counts and get the same numbers a scan would. HoloDb serves COUNT, SUM, GROUP BY and joins from slices of a store like this.
+- Database answers from exact counts. Read a whole page of exact counts and get the same numbers a scan would. The optional HoloDb aggregate plane serves COUNT, SUM, GROUP BY and joins from slices of a store like this.
 - Replicas that sync by their differences. Send one small message sized to what differs, not to your data. Ten thousand shared items and one different on each side take 192 bytes, and the other side reads the exact difference.
 - A store that repairs itself. Lose up to five values and get them back, 300 of 300 times. Catch one corrupted cell in either copy, 10,000 of 10,000 times. Rebuild a lost store from its group, 100 of 100 times.
 - A memory that reads exactly. Store pairs and read them back without drift. Recall held at 100 percent from 2 to 32 pairs, and past capacity the store refuses every query instead of guessing.
@@ -807,7 +807,7 @@ Joins here means: commutes with the group and lies on an axis the kernel carries
 
 ##### Built on the Pleroma
 
-The HoloDb holographic plane uses the Pleroma as its data store. COUNT, SUM, MIN, MAX, GROUP BY, HAVING, COUNT DISTINCT, WHERE, JOIN and any Boolean predicate are exact on it.
+The optional HoloDb aggregate plane uses the Pleroma as its data store. COUNT, SUM, MIN, MAX, GROUP BY, HAVING, COUNT DISTINCT, WHERE, JOIN and any Boolean predicate are exact on it.
 
 ##### Limits
 
@@ -1444,7 +1444,7 @@ Licence: Commercial licence for commercial use. Evaluation and non-commercial us
 
 ### HoloDb: an embedded SQL database for .NET
 
-An embedded SQL database that learns from the queries it serves and keeps only what pays. Every answer is exact, with ACID and no index to design.
+An embedded SQL database that builds structures from the queries it serves and drops those that stop paying. Every answer is exact, with ACID and no index to design.
 
 Page: https://evaluatedapplications.github.io/holodb/
 - Package EvaluatedApplications.HoloDb, release 21.0.1: `dotnet add package EvaluatedApplications.HoloDb`
@@ -1454,16 +1454,16 @@ Page: https://evaluatedapplications.github.io/holodb/
 - Used by: Prose, HoloGenome
 - Tools: Umbrarium, preset demo, The Analyst, Prose
 
-A SQL database for .NET that learns from the queries it serves and keeps only what pays.
+A SQL database for .NET that builds structures from the queries it serves and drops those that stop paying.
 
 Every SQL statement is answered exactly, with ACID and no index to design.
 
 
-HoloDb is an embedded SQL database for .NET. You create tables and write SQL. Tables are typed columns, in memory or on disk. The answer to every SQL statement is exact; NEAREST ranks exactly on small tables and approximately above a size threshold. The engine watches the workload it serves and builds only the structures that repeated queries have paid for. It drops them when the workload moves on or when a write would make them cost more than they save.
+HoloDb is an embedded SQL database for .NET. You create tables and write SQL. Tables are typed columns, in memory or on disk. The answer to every SQL statement is exact; NEAREST ranks exactly on small tables and approximately above a size threshold. A paged table keeps exact per-column totals and zone maps beside its data, and a bulk-loaded analytic table also keeps per-value counts. Every other structure is built only when repeated queries have paid for it, and dropped when the workload moves on or when a write would make it cost more than it saves.
 
 SQL is the standard dialect by default. Vendor spellings are opt-in with Dialect = SqlDialect.Extended, and a statement that uses one under the default is refused by name.
 
-One copy of the data answers three kinds of question: a lookup by key in ordinary SQL, similarity search with NEAREST, and exact aggregates that read a maintained total instead of scanning. Everything the engine builds is derived from the columns, so losing a derived structure costs time and never data.
+One copy of the data answers three kinds of question: a lookup by key in ordinary SQL, similarity search with NEAREST, and exact aggregates, some of which read a stored total or count instead of scanning (the shapes are listed below). Everything the engine builds is derived from the columns, so losing a derived structure costs time and never data.
 
 Three terms recur on these pages. A block is a run of rows stored together. A page is 8 KB of file. A pin is one page read through the buffer pool, and counts of pins stand in for time.
 
@@ -1471,7 +1471,8 @@ SET indexes and SET summaries choose whether automatic indexes and summaries are
 
 Why use it:
 - Learned records that stay right when rows change. For a filter you ask for often, the engine writes a card for each block of rows: how many rows match, and the exact sums of the columns you total. The next time you ask, it reads the cards and opens only a block whose card a write has touched. When an UPDATE or DELETE changes rows, or consolidation moves them, the cards are corrected by the exact difference. They are not thrown away. Each card carries its own checksum and is checked when it is read, so a wrong card is dropped and relearned and never changes an answer.
-- A ski-rental ledger decides what to build and what to drop. Renting skis is cheap for one weekend and buying wins after enough weekends. The engine keeps that ledger for every structure. Each scan that a structure would have saved is rent. The structure is built when the rent paid has reached the cost of building it, and dropped when the cost of keeping it up through writes exceeds what it saves. The cost of keeping a structure up is the time its delta path takes on the machine it runs on, measured per write and averaged, never an assumed rebuild per write.
+- Totals, zone maps and value counts are built at load. These three structures are not learned. A bulk load builds them. Per-column totals hold the row count, the exact sum, the minimum and the maximum, and every write keeps them current. Zone maps record the lowest and highest value of each integer-like column in each block. Value counts record the exact number of rows per value of a column; they are saved when the table is closed cleanly, and a column whose values are nearly all distinct has none. A whole-table COUNT, SUM, AVG, MIN or MAX of a numeric column with no WHERE is read from the totals. COUNT(DISTINCT col), and GROUP BY col with COUNT(*) and at most the filter col <> 0 or col <> '', are read from the value counts while they match the table. A write makes the value counts unusable until the next clean close, and a missing file is not rebuilt. Any other shape reads rows.
+- A ski-rental ledger decides what to build and what to drop. Renting skis is cheap for one weekend and buying wins after enough weekends. The engine keeps that ledger for every structure the planner builds from the workload. Each scan that a structure would have saved is rent. The structure is built when the rent paid has reached the cost of building it, and dropped when the cost of keeping it up through writes exceeds what it saves. The cost of keeping a structure up is the time its delta path takes on the machine it runs on, measured per write and averaged, never an assumed rebuild per write.
 - Gather, regroup and placement lay rows out by what reads waste. If the rows a filter wants are scattered over the whole table, every repeat reads many blocks to find a few rows. The engine measures that waste for each learned filter. Gather moves matching rows next to each other when the time saved by repeats is larger than the cost of the move. Regroup rewrites the whole layout once, when gather alone cannot reach it. Placement puts a newly written row in a block the repeated filters already read. A repeat that the stored counts and sums already answer reads nothing, so it pays no rent and nothing is moved.
 - A paged store with a logical block map. Paged tables are larger than memory. They read through a buffer pool of 8 KB pages. Every page has a logical number, and a map takes that number to a place in the file. The map changes only inside a committed log batch. A moved or rewritten page therefore never leaves the file half-changed, and a shrunk table keeps its freed pages and refills them. Every log block and every data page carries a CRC-32C checksum. A page that fails its checksum is an error that names the page, never a changed answer.
 - ACID with crash-tested recovery. START TRANSACTION, COMMIT and ROLLBACK (BEGIN under Extended) run over a write-ahead log of signed page deltas in a ring file whose size follows the largest recent batch, with group commit: a statement that has returned is on disk. A failed statement inside a transaction undoes only itself. A transaction larger than the buffer pool spills to a scratch file, and a rollback or a power cut leaves the table as it was. Each commit is kept as a signed record within a retention budget, so SELECT ... FROM t AS OF n reads a paged table as it was after commit n for any n the history still holds, and Seal(table, asOf: n) gives an order-free fingerprint that replicas can compare.
@@ -1482,7 +1483,9 @@ Capabilities:
 - SQL, Standard (the default). The SQL a first user reaches for: joins of every kind with table aliases, WITH, UNION, INTERSECT and EXCEPT, scalar, IN and EXISTS subqueries (correlated ones too), window functions with frames, CASE, CAST, the standard scalar and aggregate functions, NULL with three-valued logic, SELECT without FROM, DROP TABLE, TRUNCATE, information_schema, CREATE TABLE ... AS SELECT, INSERT ... SELECT, UPDATE with expressions, exact DECIMAL(p, s) columns, and ImportCsv for files. Also CREATE TABLE, ALTER TABLE ... ADD COLUMN, CREATE SUMMARY TABLE, SET summaries and SET indexes, SHOW SUMMARIES, DELETE, COUNT(DISTINCT), WHERE with AND, OR, NOT, LIKE, IN, BETWEEN, IS NULL and IN (SELECT ...), GROUP BY, HAVING, ORDER BY, FETCH FIRST n ROWS ONLY, NEAREST, and START TRANSACTION, COMMIT and ROLLBACK.
 - SQL, Extended (Dialect = SqlDialect.Extended). LIMIT, ILIKE, CREATE INDEX (sorted, summary, keyed) and DROP INDEX, SHOW INDEXES, EXPLAIN, IF [NOT] EXISTS, INSERT ... ON CONFLICT ... DO UPDATE, BEGIN, DESCRIBE, and the vendor functions. A statement that uses one under Standard is refused by name, with SQLSTATE 0A000.
 - Exact. INT sums are 128-bit running totals and throw only past 64 bits. DECIMAL(p, s) holds up to 18 digits exactly. Empty selections give NULL for SUM, AVG, MIN and MAX, and 0 for COUNT.
-- Learns by use. Summaries, sorted and keyed indexes, a tree of exact sums, learned block records with exact partial sums, learned routes, zones that skip blocks, top-k by zones, gather and placement. One budget covers them all and is a hard cap. EXPLAIN says which structure answered a statement, or why none did.
+- Built at load. Per-column totals, zone maps (which skip blocks and bound top-k) and, for bulk-loaded analytic tables, value counts. Writes keep the totals current; a write makes the value counts unusable until the next clean close.
+- Learns by use. Summaries, sorted and keyed indexes, a tree of exact sums, learned block records with exact partial sums, learned routes, text predicate records, gather and placement. The planner's structures share one budget, which is a hard cap.
+- Inspection. EXPLAIN reports the route of a statement without running it. For in-memory tables and older paged tables it names the route and the structure that answered, or the reason none did. For an analytic table it does not report which stored structure answered.
 - Look back. AS OF n and Seal(table, asOf: n) on paged tables.
 - Analytic SQL. Narrow column types, dictionary-coded text, CASE, CAST, EXTRACT, positional GROUP BY and ORDER BY, and COUNT(DISTINCT) on large cardinalities. With Dialect = SqlDialect.Extended, also DATE_TRUNC and REGEXP_REPLACE.
 - Change feeds. ApplyChanges applies a batch of upserts and deletes atomically on in-memory tables. KeyDigest compares two key sets in modulus numbers. Seal fingerprints a table so shards add and replicas compare.
@@ -1589,11 +1592,11 @@ DECIMAL(p, s) and NUMERIC(p, s) hold exact values of at most 18 digits in total,
 - Refused by name for a table that holds a decimal column: A join over it; NEAREST over it; an UPDATE or DELETE whose WHERE names a decimal column; Seal, KeyDigest, EnablePleroma, BulkLoad, BulkLoadColumns, PagedBulkLoad, ApplyChanges, and a read AS OF a past sequence. SQLSTATE 0A000.
 - Refused at definition: A bare DECIMAL (0A000); p above 18 (0A000); p below 1 or a scale outside 0..p (42601); a DECIMAL primary key; a DECIMAL column in a summary table; an ADD COLUMN of a decimal with a DEFAULT other than NULL.
 
-##### Structures that build themselves
+##### Structures the engine keeps for itself
 
-Nothing here is declared. The engine watches the workload it serves and builds only the structures that repeated queries have paid for: summaries, sorted and keyed indexes, a tree of exact sums, learned block records with exact partial sums, learned routes, zones that skip blocks, top-k by zones, gather and placement. It drops them when the workload moves on or when a write would make them cost more than they save. One budget covers them all and is a hard cap.
+Nothing here is declared. A paged table keeps exact per-column totals and zone maps beside its data, and a bulk-loaded analytic table also keeps per-value counts. They are built at load, not learned: totals answer whole-table aggregates, zone maps skip blocks, and a write makes the value counts unusable until the next clean close. Every other structure is built only when repeated queries have paid for it, and dropped when the workload moves on or when a write would make it cost more than it saves: summaries, sorted and keyed indexes, a tree of exact sums, learned block records with exact partial sums, learned routes, text predicate records, gather and placement. The planner's structures share one budget, which is a hard cap.
 
-SET indexes and SET summaries choose whether automatic indexes and summaries are built (auto), only declared ones are kept (declared), or none answers a query (off). EXPLAIN says which structure answered a statement, or why none did, and SHOW SUMMARIES reports the state of each structure and what it is waiting for. The answers are the same in every setting.
+SET indexes and SET summaries choose whether automatic indexes and summaries are built (auto), only declared ones are kept (declared), or none answers a query (off). For in-memory tables and older paged tables, EXPLAIN names the route and the structure that answered a statement, or why none did; for an analytic table it does not report which stored structure answered. SHOW SUMMARIES reports the state of each structure and what it is waiting for. The answers are the same in every setting.
 
 ##### NULL
 
@@ -2882,7 +2885,7 @@ The kinds of test
 
 | Test | What it does |
 |---|---|
-| The battery | A battery of specs runs in both pipeline modes: the block pipeline, which reads and learns from blocks, and the analytic executor, which answers from exact totals. A spec covers one area of the engine: NULL logic, the block map, crash points, the history log, AS OF, the indexes and summaries, learned records, transactions and their undo, the budget, and randomized streams. Several specs run at 3,000,000 rows. |
+| The battery | A battery of specs runs in both pipeline modes: the block pipeline, which reads and learns from blocks, and the analytic executor, which reads stored totals or value counts for the shapes listed on the HoloDb page and reads rows for every other shape. A spec covers one area of the engine: NULL logic, the block map, crash points, the history log, AS OF, the indexes and summaries, learned records, transactions and their undo, the budget, and randomized streams. Several specs run at 3,000,000 rows. |
 | Red arms | Checks have mutant arms: a deliberately broken engine, such as an update that leaves a stale sum or a log that drops a record, that the check must catch for the right reason. |
 | Chaos runs | chaos2 generates random SQL streams over a paged table: SELECT with filters, grouping, joins and top-k, INSERT, UPDATE, DELETE, transactions with rollback, ALTER, index DDL, reopen, power loss, a power cut at a durable write inside COMMIT, and a restart with builds running. SQLite is the oracle for every answer, for the full row set, and for the table seal. |
 | Customer lifecycle | A simulated customer starts with an empty file and works one database across many separate processes: cold open, imports, daily batches, updates, retention deletes, ALTER, index DDL, repeated dashboards, ad hoc SQL, transactions with rollback, power cuts in process, and hard kills of the process by its parent. A SQLite mirror is the oracle, and the database is opened again after every session. |
